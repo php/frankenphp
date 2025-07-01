@@ -7,8 +7,14 @@ on:
   pull_request:
     branches:
       - main
-    paths-ignore:
-      - "docs/**"
+    paths:
+      - "*.c"
+      - "*.h"
+      - "*.stub.php"
+      - "*Dockerfile"
+      - "docker-bake.hcl"
+      - "*.sh"
+      - ".github/workflows/static.yaml"
   push:
     branches:
       - main

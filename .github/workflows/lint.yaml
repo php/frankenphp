@@ -1,5 +1,8 @@
 ---
 name: Lint Code Base
+concurrency:
+  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
 on:
   pull_request:
     branches:
