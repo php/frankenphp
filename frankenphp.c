@@ -748,6 +748,15 @@ void frankenphp_register_variable_safe(char *key, char *val, size_t val_len,
   }
 }
 
+static inline void register_server_variable_filtered(const char *key,
+                                                     char **val,
+                                                     size_t *val_len,
+                                                     zval *track_vars_array) {
+  if (sapi_module.input_filter(PARSE_SERVER, key, val, *val_len, val_len)) {
+    php_register_variable_safe(key, *val, *val_len, track_vars_array);
+  }
+}
+
 static void frankenphp_register_variables(zval *track_vars_array) {
   /* https://www.php.net/manual/en/reserved.variables.server.php */
 
@@ -1067,7 +1076,7 @@ static void cli_register_file_handles(bool no_close) /* {{{ */
 
 static void sapi_cli_register_variables(zval *track_vars_array) /* {{{ */
 {
-  size_t len;
+  size_t len = strlen(cli_script);
   char *docroot = "";
 
   /*
@@ -1077,33 +1086,21 @@ static void sapi_cli_register_variables(zval *track_vars_array) /* {{{ */
   php_import_environment_variables(track_vars_array);
 
   /* Build the special-case PHP_SELF variable for the CLI version */
-  len = strlen(cli_script);
-  if (sapi_module.input_filter(PARSE_SERVER, "PHP_SELF", &cli_script, len,
-                               &len)) {
-    php_register_variable_safe("PHP_SELF", cli_script, len, track_vars_array);
-  }
-  if (sapi_module.input_filter(PARSE_SERVER, "SCRIPT_NAME", &cli_script, len,
-                               &len)) {
-    php_register_variable_safe("SCRIPT_NAME", cli_script, len,
-                               track_vars_array);
-  }
+  register_server_variable_filtered("PHP_SELF", &cli_script, &len,
+                                    track_vars_array);
+  register_server_variable_filtered("SCRIPT_NAME", &cli_script, &len,
+                                    track_vars_array);
+
   /* filenames are empty for stdin */
-  if (sapi_module.input_filter(PARSE_SERVER, "SCRIPT_FILENAME", &cli_script,
-                               len, &len)) {
-    php_register_variable_safe("SCRIPT_FILENAME", cli_script, len,
-                               track_vars_array);
-  }
-  if (sapi_module.input_filter(PARSE_SERVER, "PATH_TRANSLATED", &cli_script,
-                               len, &len)) {
-    php_register_variable_safe("PATH_TRANSLATED", cli_script, len,
-                               track_vars_array);
-  }
+  register_server_variable_filtered("SCRIPT_FILENAME", &cli_script, &len,
+                                    track_vars_array);
+  register_server_variable_filtered("PATH_TRANSLATED", &cli_script, &len,
+                                    track_vars_array);
+
   /* just make it available */
   len = 0U;
-  if (sapi_module.input_filter(PARSE_SERVER, "DOCUMENT_ROOT", &docroot, len,
-                               &len)) {
-    php_register_variable_safe("DOCUMENT_ROOT", docroot, len, track_vars_array);
-  }
+  register_server_variable_filtered("DOCUMENT_ROOT", &docroot, &len,
+                                    track_vars_array);
 }
 /* }}} */
 
