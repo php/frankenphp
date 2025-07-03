@@ -134,7 +134,7 @@ const FalseConstant = false`,
 			tmpFile := filepath.Join(tmpDir, tt.name+".go")
 			require.NoError(t, os.WriteFile(tmpFile, []byte(tt.input), 0644))
 
-			parser := NewConstantParserWithDefRegex()
+			parser := &ConstantParser{}
 			constants, err := parser.parse(tmpFile)
 			assert.NoError(t, err, "parse() error")
 
@@ -200,7 +200,7 @@ const InvalidSyntax`,
 			tmpFile := filepath.Join(tmpDir, tt.name+".go")
 			require.NoError(t, os.WriteFile(tmpFile, []byte(tt.input), 0644))
 
-			parser := NewConstantParserWithDefRegex()
+			parser := &ConstantParser{}
 			_, err := parser.parse(tmpFile)
 			require.NotNil(t, err)
 
@@ -231,7 +231,7 @@ const ThirdIota = iota`
 	fileName := filepath.Join(tmpDir, "test.go")
 	require.NoError(t, os.WriteFile(fileName, []byte(input), 0644))
 
-	parser := NewConstantParserWithDefRegex()
+	parser := &ConstantParser{}
 	constants, err := parser.parse(fileName)
 	assert.NoError(t, err, "parse() error")
 
@@ -343,7 +343,7 @@ const INVALID = "missing class name"`,
 			tmpFile := filepath.Join(tmpDir, tt.name+".go")
 			require.NoError(t, os.WriteFile(tmpFile, []byte(tt.input), 0644))
 
-			parser := NewConstantParserWithDefRegex()
+			parser := &ConstantParser{}
 			constants, err := parser.parse(tmpFile)
 			assert.NoError(t, err, "parse() error")
 
@@ -379,8 +379,6 @@ const INVALID = "missing class name"`,
 }
 
 func TestConstantParserRegexMatch(t *testing.T) {
-	parser := NewConstantParserWithDefRegex()
-
 	testCases := []struct {
 		line     string
 		expected bool
@@ -397,15 +395,13 @@ func TestConstantParserRegexMatch(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.line, func(t *testing.T) {
-			matches := parser.constRegex.MatchString(tc.line)
+			matches := constRegex.MatchString(tc.line)
 			assert.Equal(t, tc.expected, matches, "Expected regex match for line '%s'", tc.line)
 		})
 	}
 }
 
 func TestConstantParserClassConstRegex(t *testing.T) {
-	parser := NewConstantParserWithDefRegex()
-
 	testCases := []struct {
 		line        string
 		shouldMatch bool
@@ -425,7 +421,7 @@ func TestConstantParserClassConstRegex(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.line, func(t *testing.T) {
-			matches := parser.classConstRegex.FindStringSubmatch(tc.line)
+			matches := classConstRegex.FindStringSubmatch(tc.line)
 
 			if tc.shouldMatch {
 				assert.Len(t, matches, 2, "Expected 2 matches for line '%s'", tc.line)
@@ -441,8 +437,6 @@ func TestConstantParserClassConstRegex(t *testing.T) {
 }
 
 func TestConstantParserDeclRegex(t *testing.T) {
-	parser := NewConstantParserWithDefRegex()
-
 	testCases := []struct {
 		line        string
 		shouldMatch bool
@@ -462,7 +456,7 @@ func TestConstantParserDeclRegex(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.line, func(t *testing.T) {
-			matches := parser.constDeclRegex.FindStringSubmatch(tc.line)
+			matches := constDeclRegex.FindStringSubmatch(tc.line)
 
 			if tc.shouldMatch {
 				assert.Len(t, matches, 3, "Expected 3 matches for line '%s'", tc.line)

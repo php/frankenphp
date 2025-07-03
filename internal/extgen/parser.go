@@ -4,7 +4,7 @@ type SourceParser struct{}
 
 // EXPERIMENTAL
 func (p *SourceParser) ParseFunctions(filename string) ([]phpFunction, error) {
-	functionParser := NewFuncParserDefRegex()
+	functionParser := &FuncParser{}
 	return functionParser.parse(filename)
 }
 
@@ -16,6 +16,6 @@ func (p *SourceParser) ParseClasses(filename string) ([]phpClass, error) {
 
 // EXPERIMENTAL
 func (p *SourceParser) ParseConstants(filename string) ([]phpConstant, error) {
-	constantParser := NewConstantParserWithDefRegex()
+	constantParser := &ConstantParser{}
 	return constantParser.parse(filename)
 }

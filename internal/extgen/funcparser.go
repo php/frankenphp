@@ -12,15 +12,7 @@ var phpFuncRegex = regexp.MustCompile(`//\s*export_php:function\s+([^{}\n]+)(?:\
 var signatureRegex = regexp.MustCompile(`(\w+)\s*\(([^)]*)\)\s*:\s*(\??[\w|]+)`)
 var typeNameRegex = regexp.MustCompile(`(\??[\w|]+)\s+\$?(\w+)`)
 
-type FuncParser struct {
-	phpFuncRegex *regexp.Regexp
-}
-
-func NewFuncParserDefRegex() *FuncParser {
-	return &FuncParser{
-		phpFuncRegex: phpFuncRegex,
-	}
-}
+type FuncParser struct{}
 
 func (fp *FuncParser) parse(filename string) (functions []phpFunction, err error) {
 	file, err := os.Open(filename)
@@ -43,7 +35,7 @@ func (fp *FuncParser) parse(filename string) (functions []phpFunction, err error
 		lineNumber++
 		line := strings.TrimSpace(scanner.Text())
 
-		if matches := fp.phpFuncRegex.FindStringSubmatch(line); matches != nil {
+		if matches := phpFuncRegex.FindStringSubmatch(line); matches != nil {
 			signature := strings.TrimSpace(matches[1])
 			phpFunc, err := fp.parseSignature(signature)
 			if err != nil {

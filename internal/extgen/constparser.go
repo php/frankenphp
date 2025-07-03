@@ -13,19 +13,7 @@ var constRegex = regexp.MustCompile(`//\s*export_php:const$`)
 var classConstRegex = regexp.MustCompile(`//\s*export_php:classconst\s+(\w+)$`)
 var constDeclRegex = regexp.MustCompile(`const\s+(\w+)\s*=\s*(.+)`)
 
-type ConstantParser struct {
-	constRegex      *regexp.Regexp
-	classConstRegex *regexp.Regexp
-	constDeclRegex  *regexp.Regexp
-}
-
-func NewConstantParserWithDefRegex() *ConstantParser {
-	return &ConstantParser{
-		constRegex:      constRegex,
-		classConstRegex: classConstRegex,
-		constDeclRegex:  constDeclRegex,
-	}
-}
+type ConstantParser struct{}
 
 func (cp *ConstantParser) parse(filename string) (constants []phpConstant, err error) {
 	file, err := os.Open(filename)
@@ -51,7 +39,7 @@ func (cp *ConstantParser) parse(filename string) (constants []phpConstant, err e
 		lineNumber++
 		line := strings.TrimSpace(scanner.Text())
 
-		if cp.constRegex.MatchString(line) {
+		if constRegex.MatchString(line) {
 			expectConstDecl = true
 			expectClassConstDecl = false
 			currentClassName = ""
@@ -59,7 +47,7 @@ func (cp *ConstantParser) parse(filename string) (constants []phpConstant, err e
 			continue
 		}
 
-		if matches := cp.classConstRegex.FindStringSubmatch(line); len(matches) == 2 {
+		if matches := classConstRegex.FindStringSubmatch(line); len(matches) == 2 {
 			expectClassConstDecl = true
 			expectConstDecl = false
 			currentClassName = matches[1]
@@ -68,7 +56,7 @@ func (cp *ConstantParser) parse(filename string) (constants []phpConstant, err e
 		}
 
 		if (expectConstDecl || expectClassConstDecl) && strings.HasPrefix(line, "const ") {
-			matches := cp.constDeclRegex.FindStringSubmatch(line)
+			matches := constDeclRegex.FindStringSubmatch(line)
 			if len(matches) == 3 {
 				name := matches[1]
 				value := strings.TrimSpace(matches[2])

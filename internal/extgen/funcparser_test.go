@@ -101,7 +101,7 @@ func someOtherGoName(num int64) int64 {
 			fileName := filepath.Join(tmpDir, tt.name+".go")
 			require.NoError(t, os.WriteFile(fileName, []byte(tt.input), 0644))
 
-			parser := NewFuncParserDefRegex()
+			parser := &FuncParser{}
 			functions, err := parser.parse(fileName)
 			require.NoError(t, err)
 			assert.Len(t, functions, tt.expected, "parse() got wrong number of functions")
@@ -188,7 +188,7 @@ func TestSignatureParsing(t *testing.T) {
 		},
 	}
 
-	parser := NewFuncParserDefRegex()
+	parser := &FuncParser{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fn, err := parser.parseSignature(tt.signature)
@@ -270,7 +270,7 @@ func TestParameterParsing(t *testing.T) {
 		},
 	}
 
-	parser := NewFuncParserDefRegex()
+	parser := &FuncParser{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			param, err := parser.parseParameter(tt.paramStr)
@@ -386,7 +386,7 @@ func voidFunc(message *C.zend_string) {
 			tmpFile := filepath.Join(tmpDir, tt.name+".go")
 			require.NoError(t, os.WriteFile(tmpFile, []byte(tt.input), 0644))
 
-			parser := NewFuncParserDefRegex()
+			parser := &FuncParser{}
 			functions, err := parser.parse(tmpFile)
 			require.NoError(t, err)
 
@@ -476,7 +476,7 @@ func validFloat(value float64) float64 {
 			fileName := filepath.Join(tmpDir, tt.name+".go")
 			require.NoError(t, os.WriteFile(fileName, []byte(tt.input), 0644))
 
-			parser := NewFuncParserDefRegex()
+			parser := &FuncParser{}
 			functions, err := parser.parse(fileName)
 			require.NoError(t, err)
 
