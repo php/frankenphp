@@ -44,6 +44,10 @@ func (pfg *PHPFuncGenerator) generateGoCall(fn phpFunction) string {
 		return fmt.Sprintf("    zend_string *result = %s(%s);", fn.Name, callParams)
 	}
 
+	if fn.ReturnType == "array" {
+		return fmt.Sprintf("    zend_array *result = %s(%s);", fn.Name, callParams)
+	}
+
 	return fmt.Sprintf("    %s result = %s(%s);", pfg.getCReturnType(fn.ReturnType), fn.Name, callParams)
 }
 
@@ -57,6 +61,8 @@ func (pfg *PHPFuncGenerator) getCReturnType(returnType string) string {
 		return "double"
 	case "bool":
 		return "int"
+	case "array":
+		return "zend_array*"
 	default:
 		return "void"
 	}
@@ -76,6 +82,12 @@ func (pfg *PHPFuncGenerator) generateReturnCode(returnType string) string {
 		return `    RETURN_DOUBLE(result);`
 	case "bool":
 		return `    RETURN_BOOL(result);`
+	case "array":
+		return `    if (result) {
+        RETURN_ARR(result);
+    } else {
+        array_init(return_value);
+    }`
 	default:
 		return ""
 	}

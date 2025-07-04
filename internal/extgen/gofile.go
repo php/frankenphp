@@ -96,7 +96,11 @@ func (gg *GoFileGenerator) generateMethodWrapper(method phpClassMethod, class ph
 	for _, param := range method.Params {
 		if param.PhpType == "string" {
 			builder.WriteString(fmt.Sprintf(", %s *C.zend_string", param.Name))
+			continue
+		}
 
+		if param.PhpType == "array" {
+			builder.WriteString(fmt.Sprintf(", %s *C.zval", param.Name))
 			continue
 		}
 
@@ -108,7 +112,7 @@ func (gg *GoFileGenerator) generateMethodWrapper(method phpClassMethod, class ph
 	}
 
 	if method.ReturnType != "void" {
-		if method.ReturnType == "string" {
+		if method.ReturnType == "string" || method.ReturnType == "array" {
 			builder.WriteString(") unsafe.Pointer {\n")
 		} else {
 			goReturnType := gg.phpTypeToGoType(method.ReturnType)
@@ -121,7 +125,7 @@ func (gg *GoFileGenerator) generateMethodWrapper(method phpClassMethod, class ph
 	builder.WriteString("	obj := getGoObject(handle)\n")
 	builder.WriteString("	if obj == nil {\n")
 	if method.ReturnType != "void" {
-		if method.ReturnType == "string" {
+		if method.ReturnType == "string" || method.ReturnType == "array" {
 			builder.WriteString("		return nil\n")
 		} else {
 			builder.WriteString(fmt.Sprintf("		var zero %s\n", gg.phpTypeToGoType(method.ReturnType)))
@@ -148,8 +152,8 @@ func (gg *GoFileGenerator) generateMethodWrapper(method phpClassMethod, class ph
 		builder.WriteString(param.Name)
 	}
 
-	builder.WriteString(")\n")
-	builder.WriteString("}")
+	builder.WriteString(`)
+}`)
 
 	return builder.String()
 }
@@ -171,7 +175,7 @@ func (gg *GoFileGenerator) phpTypeToGoType(phpType string) string {
 		"int":    "int64",
 		"float":  "float64",
 		"bool":   "bool",
-		"array":  "[]interface{}",
+		"array":  "*frankenphp.Array",
 		"mixed":  "interface{}",
 		"void":   "",
 	}

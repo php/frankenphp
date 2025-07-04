@@ -1,5 +1,7 @@
 #include <php.h>
 #include <Zend/zend_API.h>
+#include <Zend/zend_hash.h>
+#include <Zend/zend_types.h>
 #include <stddef.h>
 
 #include "{{.BaseName}}.h"
@@ -92,6 +94,8 @@ PHP_METHOD({{.ClassName}}, {{.PhpName}}) {
     {{- else if eq $param.PhpType "bool"}}
     zend_bool {{$param.Name}} = {{if $param.HasDefault}}{{if eq $param.DefaultValue "true"}}1{{else}}0{{end}}{{else}}0{{end}};{{if $param.IsNullable}}
     zend_bool {{$param.Name}}_is_null = 0;{{end}}
+    {{- else if eq $param.PhpType "array"}}
+    zval *{{$param.Name}} = NULL;
     {{- end}}
     {{- end}}
     
@@ -100,7 +104,7 @@ PHP_METHOD({{.ClassName}}, {{.PhpName}}) {
         {{$optionalStarted := false}}{{range .Params}}{{if .HasDefault}}{{if not $optionalStarted -}}
         Z_PARAM_OPTIONAL
         {{$optionalStarted = true}}{{end}}{{end -}}
-        {{if .IsNullable}}{{if eq .PhpType "string"}}Z_PARAM_STR_OR_NULL({{.Name}}, {{.Name}}_is_null){{else if eq .PhpType "int"}}Z_PARAM_LONG_OR_NULL({{.Name}}, {{.Name}}_is_null){{else if eq .PhpType "float"}}Z_PARAM_DOUBLE_OR_NULL({{.Name}}, {{.Name}}_is_null){{else if eq .PhpType "bool"}}Z_PARAM_BOOL_OR_NULL({{.Name}}, {{.Name}}_is_null){{end}}{{else}}{{if eq .PhpType "string"}}Z_PARAM_STR({{.Name}}){{else if eq .PhpType "int"}}Z_PARAM_LONG({{.Name}}){{else if eq .PhpType "float"}}Z_PARAM_DOUBLE({{.Name}}){{else if eq .PhpType "bool"}}Z_PARAM_BOOL({{.Name}}){{end}}{{end}}
+        {{if .IsNullable}}{{if eq .PhpType "string"}}Z_PARAM_STR_OR_NULL({{.Name}}, {{.Name}}_is_null){{else if eq .PhpType "int"}}Z_PARAM_LONG_OR_NULL({{.Name}}, {{.Name}}_is_null){{else if eq .PhpType "float"}}Z_PARAM_DOUBLE_OR_NULL({{.Name}}, {{.Name}}_is_null){{else if eq .PhpType "bool"}}Z_PARAM_BOOL_OR_NULL({{.Name}}, {{.Name}}_is_null){{else if eq .PhpType "array"}}Z_PARAM_ARRAY_OR_NULL({{.Name}}){{end}}{{else}}{{if eq .PhpType "string"}}Z_PARAM_STR({{.Name}}){{else if eq .PhpType "int"}}Z_PARAM_LONG({{.Name}}){{else if eq .PhpType "float"}}Z_PARAM_DOUBLE({{.Name}}){{else if eq .PhpType "bool"}}Z_PARAM_BOOL({{.Name}}){{else if eq .PhpType "array"}}Z_PARAM_ARRAY({{.Name}}){{end}}{{end}}
         {{end -}}
     ZEND_PARSE_PARAMETERS_END();
     {{else}}
@@ -109,20 +113,28 @@ PHP_METHOD({{.ClassName}}, {{.PhpName}}) {
     
     {{- if ne .ReturnType "void"}}
     {{- if eq .ReturnType "string"}}
-    zend_string* result = {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{end}}{{else}}{{.Name}}{{end}}{{end}}{{end}});
+    zend_string* result = {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "array"}}{{.Name}}{{end}}{{else}}{{.Name}}{{end}}{{end}}{{end}});
     RETURN_STR(result);
     {{- else if eq .ReturnType "int"}}
-    zend_long result = {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{end}}{{else}}(long){{.Name}}{{end}}{{end}}{{end}});
+    zend_long result = {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "array"}}{{.Name}}{{end}}{{else}}{{if eq .PhpType "array"}}{{.Name}}{{else}}(long){{.Name}}{{end}}{{end}}{{end}}{{end}});
     RETURN_LONG(result);
     {{- else if eq .ReturnType "float"}}
-    double result = {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{end}}{{else}}(double){{.Name}}{{end}}{{end}}{{end}});
+    double result = {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "array"}}{{.Name}}{{end}}{{else}}{{if eq .PhpType "array"}}{{.Name}}{{else}}(double){{.Name}}{{end}}{{end}}{{end}}{{end}});
     RETURN_DOUBLE(result);
     {{- else if eq .ReturnType "bool"}}
-    int result = {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{end}}{{else}}(int){{.Name}}{{end}}{{end}}{{end}});
+    int result = {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "array"}}{{.Name}}{{end}}{{else}}{{if eq .PhpType "array"}}{{.Name}}{{else}}(int){{.Name}}{{end}}{{end}}{{end}}{{end}});
     RETURN_BOOL(result);
+    {{- else if eq .ReturnType "array"}}
+    void* result = {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "array"}}{{.Name}}{{end}}{{else}}{{.Name}}{{end}}{{end}}{{end}});
+    if (result != NULL) {
+        HashTable *ht = (HashTable*)result;
+        RETURN_ARR(ht);
+    } else {
+        RETURN_NULL();
+    }
     {{- end}}
     {{- else}}
-    {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{end}}{{else}}{{if eq .PhpType "string"}}{{.Name}}{{else if eq .PhpType "int"}}(long){{.Name}}{{else if eq .PhpType "float"}}(double){{.Name}}{{else if eq .PhpType "bool"}}(int){{.Name}}{{end}}{{end}}{{end}}{{end}});
+    {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "array"}}{{.Name}}{{end}}{{else}}{{if eq .PhpType "string"}}{{.Name}}{{else if eq .PhpType "int"}}(long){{.Name}}{{else if eq .PhpType "float"}}(double){{.Name}}{{else if eq .PhpType "bool"}}(int){{.Name}}{{else if eq .PhpType "array"}}{{.Name}}{{end}}{{end}}{{end}}{{end}});
     {{- end}}
 }
 {{end}}{{end}}

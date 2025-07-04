@@ -96,6 +96,46 @@ func TestPHPFunctionGenerator_Generate(t *testing.T) {
 				"RETURN_DOUBLE(result)",
 			},
 		},
+		{
+			name: "array function with array parameter",
+			function: phpFunction{
+				Name:       "process_array",
+				ReturnType: "array",
+				Params: []phpParameter{
+					{Name: "input", PhpType: "array"},
+				},
+			},
+			contains: []string{
+				"PHP_FUNCTION(process_array)",
+				"zval *input = NULL;",
+				"Z_PARAM_ARRAY(input)",
+				"zend_array *result = process_array(input);",
+				"RETURN_ARR(result)",
+			},
+		},
+		{
+			name: "array function with mixed parameters",
+			function: phpFunction{
+				Name:       "filter_array",
+				ReturnType: "array",
+				Params: []phpParameter{
+					{Name: "data", PhpType: "array"},
+					{Name: "key", PhpType: "string"},
+					{Name: "limit", PhpType: "int", HasDefault: true, DefaultValue: "10"},
+				},
+			},
+			contains: []string{
+				"PHP_FUNCTION(filter_array)",
+				"zval *data = NULL;",
+				"zend_string *key = NULL;",
+				"zend_long limit = 10;",
+				"Z_PARAM_ARRAY(data)",
+				"Z_PARAM_STR(key)",
+				"Z_PARAM_LONG(limit)",
+				"ZEND_PARSE_PARAMETERS_START(2, 3)",
+				"Z_PARAM_OPTIONAL",
+			},
+		},
 	}
 
 	generator := PHPFuncGenerator{}
@@ -155,6 +195,28 @@ func TestPHPFunctionGenerator_GenerateParamDeclarations(t *testing.T) {
 				"double rate = 1.5;",
 			},
 		},
+		{
+			name: "array parameter",
+			params: []phpParameter{
+				{Name: "items", PhpType: "array"},
+			},
+			contains: []string{
+				"zval *items = NULL;",
+			},
+		},
+		{
+			name: "mixed types with array",
+			params: []phpParameter{
+				{Name: "name", PhpType: "string"},
+				{Name: "data", PhpType: "array"},
+				{Name: "count", PhpType: "int"},
+			},
+			contains: []string{
+				"zend_string *name = NULL;",
+				"zval *data = NULL;",
+				"zend_long count = 0;",
+			},
+		},
 	}
 
 	parser := ParameterParser{}
@@ -202,6 +264,14 @@ func TestPHPFunctionGenerator_GenerateReturnCode(t *testing.T) {
 			returnType: "float",
 			contains: []string{
 				"RETURN_DOUBLE(result)",
+			},
+		},
+		{
+			name:       "array return",
+			returnType: "array",
+			contains: []string{
+				"RETURN_ARR(result)",
+				"array_init(return_value)",
 			},
 		},
 		{
@@ -268,6 +338,22 @@ func TestPHPFunctionGenerator_GenerateGoCallParams(t *testing.T) {
 				{Name: "rate", PhpType: "float"},
 			},
 			expected: "(int) enabled, (double) rate",
+		},
+		{
+			name: "array parameter",
+			params: []phpParameter{
+				{Name: "data", PhpType: "array"},
+			},
+			expected: "data",
+		},
+		{
+			name: "mixed parameters with array",
+			params: []phpParameter{
+				{Name: "name", PhpType: "string"},
+				{Name: "items", PhpType: "array"},
+				{Name: "count", PhpType: "int"},
+			},
+			expected: "name, items, (long) count",
 		},
 	}
 

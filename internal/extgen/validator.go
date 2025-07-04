@@ -109,16 +109,16 @@ func (v *Validator) isValidType(typeStr string, validTypes []string) bool {
 
 // validateScalarTypes checks if PHP signature contains only supported scalar types
 func (v *Validator) validateScalarTypes(fn phpFunction) error {
-	supportedTypes := []string{"string", "int", "float", "bool"}
+	supportedTypes := []string{"string", "int", "float", "bool", "array"}
 
 	for i, param := range fn.Params {
 		if !v.isScalarType(param.PhpType, supportedTypes) {
-			return fmt.Errorf("parameter %d (%s) has unsupported type '%s'. Only scalar types (string, int, float, bool) and their nullable variants are supported", i+1, param.Name, param.PhpType)
+			return fmt.Errorf("parameter %d (%s) has unsupported type '%s'. Only scalar types (string, int, float, bool, array) and their nullable variants are supported", i+1, param.Name, param.PhpType)
 		}
 	}
 
 	if fn.ReturnType != "void" && !v.isScalarType(fn.ReturnType, supportedTypes) {
-		return fmt.Errorf("return type '%s' is not supported. Only scalar types (string, int, float, bool), void, and their nullable variants are supported", fn.ReturnType)
+		return fmt.Errorf("return type '%s' is not supported. Only scalar types (string, int, float, bool, array), void, and their nullable variants are supported", fn.ReturnType)
 	}
 
 	return nil
@@ -218,11 +218,13 @@ func (v *Validator) phpTypeToGoType(phpType string, isNullable bool) string {
 		baseType = "float64"
 	case "bool":
 		baseType = "bool"
+	case "array":
+		baseType = "*C.zval"
 	default:
 		baseType = "interface{}"
 	}
 
-	if isNullable && phpType != "string" {
+	if isNullable && phpType != "string" && phpType != "array" {
 		return "*" + baseType
 	}
 
@@ -259,6 +261,8 @@ func (v *Validator) phpReturnTypeToGoType(phpReturnType string, isNullable bool)
 		return "float64"
 	case "bool":
 		return "bool"
+	case "array":
+		return "unsafe.Pointer"
 	default:
 		return "interface{}"
 	}

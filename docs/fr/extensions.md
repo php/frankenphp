@@ -81,24 +81,75 @@ Alors que le premier point parle de lui-même, le second peut être plus diffici
 
 Bien que certains types de variables aient la même représentation mémoire entre C/PHP et Go, certains types nécessitent plus de logique pour être directement utilisés. C'est peut-être la partie la plus difficile quand il s'agit d'écrire des extensions car cela nécessite de comprendre les fonctionnements internes du moteur Zend et comment les variables sont stockées dans le moteur de PHP. Ce tableau résume ce que vous devez savoir :
 
-| Type PHP           | Type Go          | Conversion directe | Assistant C vers Go     | Assistant Go vers C     | Support des Méthodes de Classe |
-|--------------------|------------------|--------------------|-------------------------|-------------------------|--------------------------------|
-| `int`              | `int64`          | ✅                  | -                       | -                       | ✅                              |
-| `?int`             | `*int64`         | ✅                  | -                       | -                       | ✅                              |
-| `float`            | `float64`        | ✅                  | -                       | -                       | ✅                              |
-| `?float`           | `*float64`       | ✅                  | -                       | -                       | ✅                              |
-| `bool`             | `bool`           | ✅                  | -                       | -                       | ✅                              |
-| `?bool`            | `*bool`          | ✅                  | -                       | -                       | ✅                              |
-| `string`/`?string` | `*C.zend_string` | ❌                  | frankenphp.GoString()   | frankenphp.PHPString()  | ✅                              |
-| `array`            | `slice`/`map`    | ❌                  | _Pas encore implémenté_ | _Pas encore implémenté_ | ❌                              |
-| `object`           | `struct`         | ❌                  | _Pas encore implémenté_ | _Pas encore implémenté_ | ❌                              |
+| Type PHP           | Type Go             | Conversion directe | Assistant C vers Go     | Assistant Go vers C     | Support des Méthodes de Classe |
+|--------------------|---------------------|--------------------|-------------------------|-------------------------|--------------------------------|
+| `int`              | `int64`             | ✅                  | -                       | -                       | ✅                              |
+| `?int`             | `*int64`            | ✅                  | -                       | -                       | ✅                              |
+| `float`            | `float64`           | ✅                  | -                       | -                       | ✅                              |
+| `?float`           | `*float64`          | ✅                  | -                       | -                       | ✅                              |
+| `bool`             | `bool`              | ✅                  | -                       | -                       | ✅                              |
+| `?bool`            | `*bool`             | ✅                  | -                       | -                       | ✅                              |
+| `string`/`?string` | `*C.zend_string`    | ❌                  | frankenphp.GoString()   | frankenphp.PHPString()  | ✅                              |
+| `array`            | `*frankenphp.Array` | ❌                  | frankenphp.GoArray()    | frankenphp.PHPArray()   | ✅                              |
+| `object`           | `struct`            | ❌                  | _Pas encore implémenté_ | _Pas encore implémenté_ | ❌                              |
 
 > [!NOTE]
 > Ce tableau n'est pas encore exhaustif et sera complété au fur et à mesure que l'API de types FrankenPHP deviendra plus complète.
 >
-> Pour les méthodes de classe spécifiquement, seuls les types primitifs sont actuellement supportés. Les tableaux et objets ne peuvent pas encore être utilisés comme paramètres de méthode ou types de retour.
+> Pour les méthodes de classe spécifiquement, les types primitifs et les tableaux sont supportés. Les objets ne peuvent pas encore être utilisés comme paramètres de méthode ou types de retour.
 
 Si vous vous référez à l'extrait de code de la section précédente, vous pouvez voir que des assistants sont utilisés pour convertir le premier paramètre et la valeur de retour. Les deuxième et troisième paramètres de notre fonction `repeat_this()` n'ont pas besoin d'être convertis car la représentation mémoire des types sous-jacents est la même pour C et Go.
+
+#### Travailler avec les Tableaux
+
+FrankenPHP fournit un support natif pour les tableaux PHP à travers le type `frankenphp.Array`. Ce type représente à la fois les tableaux indexés PHP (listes) et les tableaux associatifs (hashmaps) avec des paires clé-valeur ordonnées.
+
+**Créer et manipuler des tableaux en Go :**
+
+```go
+//export_php:function process_data(array $input): array
+func process_data(arr *C.zval) unsafe.Pointer {
+    // Convertir le tableau PHP vers Go
+    goArray := frankenphp.GoArray(unsafe.Pointer(arr))
+    
+    result := &frankenphp.Array{}
+    
+    result.SetInt(0, "first")
+    result.SetInt(1, "second")
+    result.Append("third") // Assigne automatiquement la prochaine clé entière
+    
+    result.SetString("name", "John")
+    result.SetString("age", int64(30))
+    
+    for i := uint32(0); i < goArray.Len(); i++ {
+        key, value := goArray.At(i)
+        if key.Type == frankenphp.PHPStringKey {
+            result.SetString("processed_"+key.Str, value)
+        } else {
+            result.SetInt(key.Int+100, value)
+        }
+    }
+    
+    // Reconvertir vers un tableau PHP
+    return frankenphp.PHPArray(result)
+}
+```
+
+**Fonctionnalités clés de `frankenphp.Array` :**
+
+- **Paires clé-valeur ordonnées** - Maintient l'ordre d'insertion comme les tableaux PHP
+- **Types de clés mixtes** - Supporte les clés entières et chaînes dans le même tableau
+- **Sécurité de type** - Le type `PHPKey` assure une gestion appropriée des clés
+- **Détection automatique de liste** - Lors de la conversion vers PHP, détecte automatiquement si le tableau doit être une liste compacte ou un hashmap
+
+**Méthodes disponibles :**
+
+- `SetInt(key int64, value interface{})` - Définir une valeur avec une clé entière
+- `SetString(key string, value interface{})` - Définir une valeur avec une clé chaîne
+- `Append(value interface{})` - Ajouter une valeur avec la prochaine clé entière disponible
+- `Len() uint32` - Obtenir le nombre d'éléments
+- `At(index uint32) (PHPKey, interface{})` - Obtenir la paire clé-valeur à l'index
+- `frankenphp.PHPArray(arr *frankenphp.Array) unsafe.Pointer` - Convertir vers un tableau PHP
 
 ### Déclarer une Classe PHP Native
 
@@ -188,7 +239,7 @@ func (us *UserStruct) UpdateInfo(name *C.zend_string, age *int64, active *bool) 
 * **PHP `null` devient Go `nil`** - quand PHP passe `null`, votre fonction Go reçoit un pointeur `nil`
 
 > [!WARNING]
-> Actuellement, les méthodes de classe ont les limitations suivantes. **Les tableaux et objets ne sont pas supportés** comme types de paramètres ou types de retour. Seuls les types scalaires sont supportés : `string`, `int`, `float`, `bool` et `void` (pour le type de retour). **Les types de paramètres nullables sont entièrement supportés** pour tous les types scalaires (`?string`, `?int`, `?float`, `?bool`).
+> Actuellement, les méthodes de classe ont les limitations suivantes. **Les objets ne sont pas supportés** comme types de paramètres ou types de retour. **Les tableaux sont entièrement supportés** pour les paramètres et types de retour. Types supportés : `string`, `int`, `float`, `bool`, `array`, et `void` (pour le type de retour). **Les types de paramètres nullables sont entièrement supportés** pour tous les types scalaires (`?string`, `?int`, `?float`, `?bool`).
 
 Après avoir généré l'extension, vous serez autorisé à utiliser la classe et ses méthodes en PHP. Notez que vous **ne pouvez pas accéder aux propriétés directement** :
 
