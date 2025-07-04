@@ -177,6 +177,29 @@ func TestParameterParser_GenerateParamDeclarations(t *testing.T) {
 			},
 			expected: "    zval *m = NULL;",
 		},
+		{
+			name: "callable parameter",
+			params: []phpParameter{
+				{Name: "callback", PhpType: phpCallable, HasDefault: false},
+			},
+			expected: "    zval *callback_callback;",
+		},
+		{
+			name: "nullable callable parameter",
+			params: []phpParameter{
+				{Name: "callback", PhpType: phpCallable, HasDefault: false, IsNullable: true},
+			},
+			expected: "    zval *callback_callback;",
+		},
+		{
+			name: "mixed types with callable",
+			params: []phpParameter{
+				{Name: "data", PhpType: phpArray, HasDefault: false},
+				{Name: "callback", PhpType: phpCallable, HasDefault: false},
+				{Name: "options", PhpType: phpInt, HasDefault: true, DefaultValue: "0"},
+			},
+			expected: "    zval *data = NULL;\n    zval *callback_callback;\n    zend_long options = 0;",
+		},
 	}
 
 	for _, tt := range tests {
@@ -292,6 +315,29 @@ func TestParameterParser_GenerateGoCallParams(t *testing.T) {
 			},
 			expected: "name, items, (long) count",
 		},
+		{
+			name: "callable parameter",
+			params: []phpParameter{
+				{Name: "callback", PhpType: "callable"},
+			},
+			expected: "callback_callback",
+		},
+		{
+			name: "nullable callable parameter",
+			params: []phpParameter{
+				{Name: "callback", PhpType: "callable", IsNullable: true},
+			},
+			expected: "callback_callback",
+		},
+		{
+			name: "mixed parameters with callable",
+			params: []phpParameter{
+				{Name: "data", PhpType: "array"},
+				{Name: "callback", PhpType: "callable"},
+				{Name: "limit", PhpType: "int"},
+			},
+			expected: "data, callback_callback, (long) limit",
+		},
 	}
 
 	for _, tt := range tests {
@@ -369,6 +415,16 @@ func TestParameterParser_GenerateParamParsingMacro(t *testing.T) {
 			name:     "nullable mixed parameter",
 			param:    phpParameter{Name: "m", PhpType: phpMixed, IsNullable: true},
 			expected: "\n        Z_PARAM_ZVAL_OR_NULL(m)",
+		},
+		{
+			name:     "callable parameter",
+			param:    phpParameter{Name: "callback", PhpType: phpCallable},
+			expected: "\n        Z_PARAM_ZVAL(callback_callback)",
+		},
+		{
+			name:     "nullable callable parameter",
+			param:    phpParameter{Name: "callback", PhpType: phpCallable, IsNullable: true},
+			expected: "\n        Z_PARAM_ZVAL_OR_NULL(callback_callback)",
 		},
 		{
 			name:     "unknown type",
@@ -481,6 +537,16 @@ func TestParameterParser_GenerateSingleGoCallParam(t *testing.T) {
 			expected: "items",
 		},
 		{
+			name:     "callable parameter",
+			param:    phpParameter{Name: "callback", PhpType: "callable"},
+			expected: "callback_callback",
+		},
+		{
+			name:     "nullable callable parameter",
+			param:    phpParameter{Name: "callback", PhpType: "callable", IsNullable: true},
+			expected: "callback_callback",
+		},
+		{
 			name:     "unknown type",
 			param:    phpParameter{Name: "unknown", PhpType: phpType("unknown")},
 			expected: "unknown",
@@ -557,6 +623,16 @@ func TestParameterParser_GenerateSingleParamDeclaration(t *testing.T) {
 			name:     "nullable array parameter",
 			param:    phpParameter{Name: "items", PhpType: phpArray, HasDefault: false, IsNullable: true},
 			expected: []string{"zval *items = NULL;"},
+		},
+		{
+			name:     "callable parameter",
+			param:    phpParameter{Name: "callback", PhpType: "callable", HasDefault: false},
+			expected: []string{"zval *callback_callback;"},
+		},
+		{
+			name:     "nullable callable parameter",
+			param:    phpParameter{Name: "callback", PhpType: "callable", HasDefault: false, IsNullable: true},
+			expected: []string{"zval *callback_callback;"},
 		},
 	}
 
