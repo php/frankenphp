@@ -70,6 +70,8 @@ func (pp *ParameterParser) generateSingleParamDeclaration(param phpParameter) []
 		}
 	case phpArray, phpMixed:
 		decls = append(decls, fmt.Sprintf("zval *%s = NULL;", param.Name))
+	case "callable":
+		decls = append(decls, fmt.Sprintf("zval *%s_callback;", param.Name))
 	}
 
 	return decls
@@ -121,6 +123,8 @@ func (pp *ParameterParser) generateParamParsingMacro(param phpParameter) string 
 			return fmt.Sprintf("\n        Z_PARAM_ARRAY_OR_NULL(%s)", param.Name)
 		case phpMixed:
 			return fmt.Sprintf("\n        Z_PARAM_ZVAL_OR_NULL(%s)", param.Name)
+		case phpCallable:
+			return fmt.Sprintf("\n        Z_PARAM_ZVAL_OR_NULL(%s_callback)", param.Name)
 		default:
 			return ""
 		}
@@ -138,6 +142,8 @@ func (pp *ParameterParser) generateParamParsingMacro(param phpParameter) string 
 			return fmt.Sprintf("\n        Z_PARAM_ARRAY(%s)", param.Name)
 		case phpMixed:
 			return fmt.Sprintf("\n        Z_PARAM_ZVAL(%s)", param.Name)
+		case phpCallable:
+			return fmt.Sprintf("\n        Z_PARAM_ZVAL(%s_callback)", param.Name)
 		default:
 			return ""
 		}
@@ -168,6 +174,8 @@ func (pp *ParameterParser) generateSingleGoCallParam(param phpParameter) string 
 			return fmt.Sprintf("%s_is_null ? NULL : &%s", param.Name, param.Name)
 		case phpBool:
 			return fmt.Sprintf("%s_is_null ? NULL : &%s", param.Name, param.Name)
+		case phpCallable:
+			return fmt.Sprintf("%s_callback", param.Name)
 		default:
 			return param.Name
 		}
@@ -180,6 +188,8 @@ func (pp *ParameterParser) generateSingleGoCallParam(param phpParameter) string 
 		return fmt.Sprintf("(double) %s", param.Name)
 	case phpBool:
 		return fmt.Sprintf("(int) %s", param.Name)
+	case phpCallable:
+		return fmt.Sprintf("%s_callback", param.Name)
 	default:
 		return param.Name
 	}
