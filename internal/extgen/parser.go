@@ -19,3 +19,9 @@ func (p *SourceParser) ParseConstants(filename string) ([]phpConstant, error) {
 	constantParser := NewConstantParserWithDefRegex()
 	return constantParser.parse(filename)
 }
+
+// EXPERIMENTAL
+func (p *SourceParser) ParseNamespace(filename string) (string, error) {
+	namespaceParser := NamespaceParser{}
+	return namespaceParser.parse(filename)
+}

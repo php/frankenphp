@@ -22,6 +22,7 @@ type cTemplateData struct {
 	Functions []phpFunction
 	Classes   []phpClass
 	Constants []phpConstant
+	Namespace string
 }
 
 func (cg *cFileGenerator) generate() error {
@@ -44,7 +45,10 @@ func (cg *cFileGenerator) buildContent() (string, error) {
 	builder.WriteString(templateContent)
 
 	for _, fn := range cg.generator.Functions {
-		fnGen := PHPFuncGenerator{paramParser: &ParameterParser{}}
+		fnGen := PHPFuncGenerator{
+			paramParser: &ParameterParser{},
+			namespace:   cg.generator.Namespace,
+		}
 		builder.WriteString(fnGen.generate(fn))
 	}
 
@@ -52,7 +56,10 @@ func (cg *cFileGenerator) buildContent() (string, error) {
 }
 
 func (cg *cFileGenerator) getTemplateContent() (string, error) {
-	tmpl := template.Must(template.New("cfile").Funcs(sprig.FuncMap()).Parse(cFileContent))
+	funcMap := sprig.FuncMap()
+	funcMap["namespacedClassName"] = NamespacedName
+
+	tmpl := template.Must(template.New("cfile").Funcs(funcMap).Parse(cFileContent))
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, cTemplateData{
@@ -60,6 +67,7 @@ func (cg *cFileGenerator) getTemplateContent() (string, error) {
 		Functions: cg.generator.Functions,
 		Classes:   cg.generator.Classes,
 		Constants: cg.generator.Constants,
+		Namespace: cg.generator.Namespace,
 	}); err != nil {
 		return "", err
 	}

@@ -1,7 +1,9 @@
 <?php
 
 /** @generate-class-entries */
-
+{{if .Namespace}}
+namespace {{.Namespace}};
+{{end}}
 {{range .Constants}}{{if eq .ClassName ""}}{{if .IsIota}}/**
  * @var int
  * @cvalue {{.Name}}

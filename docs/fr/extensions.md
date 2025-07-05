@@ -335,6 +335,61 @@ func (sp *StringProcessorStruct) Process(input *C.zend_string, mode int64) unsaf
 }
 ```
 
+### Utilisation des Espaces de Noms
+
+Le générateur prend en charge l'organisation des fonctions, classes et constantes de votre extension PHP sous un espace de noms (namespace) en utilisant la directive `//export_php:namespace`. Cela aide à éviter les conflits de noms et fournit une meilleure organisation pour l'API de votre extension.
+
+#### Déclarer un Espace de Noms
+
+Utilisez la directive `//export_php:namespace` en haut de votre fichier Go pour placer tous les symboles exportés sous un espace de noms spécifique :
+
+```go
+//export_php:namespace My\Extension
+package main
+
+import "C"
+
+//export_php:function hello(): string
+func hello() string {
+    return "Bonjour depuis l'espace de noms My\\Extension !"
+}
+
+//export_php:class User
+type UserStruct struct {
+    // champs internes
+}
+
+//export_php:method User::getName(): string
+func (u *UserStruct) GetName() unsafe.Pointer {
+    return frankenphp.PHPString("Jean Dupont", false)
+}
+
+//export_php:const
+const STATUS_ACTIVE = 1
+```
+
+#### Utilisation de l'Extension avec Espace de Noms en PHP
+
+Quand un espace de noms est déclaré, toutes les fonctions, classes et constantes sont placées sous cet espace de noms en PHP :
+
+```php
+<?php
+
+echo My\Extension\hello(); // "Bonjour depuis l'espace de noms My\Extension !"
+
+$user = new My\Extension\User();
+echo $user->getName(); // "Jean Dupont"
+
+echo My\Extension\STATUS_ACTIVE; // 1
+```
+
+#### Notes Importantes
+
+* Seule **une** directive d'espace de noms est autorisée par fichier. Si plusieurs directives d'espace de noms sont trouvées, le générateur retournera une erreur.
+* L'espace de noms s'applique à **tous** les symboles exportés dans le fichier : fonctions, classes, méthodes et constantes.
+* Les noms d'espaces de noms suivent les conventions des espaces de noms PHP en utilisant les barres obliques inverses (`\`) comme séparateurs.
+* Si aucun espace de noms n'est déclaré, les symboles sont exportés vers l'espace de noms global comme d'habitude.
+
 ### Générer l'Extension
 
 C'est là que la magie opère, et votre extension peut maintenant être générée. Vous pouvez exécuter le générateur avec la commande suivante :

@@ -7,6 +7,7 @@ import (
 
 type PHPFuncGenerator struct {
 	paramParser *ParameterParser
+	namespace   string
 }
 
 func (pfg *PHPFuncGenerator) generate(fn phpFunction) string {
@@ -14,7 +15,8 @@ func (pfg *PHPFuncGenerator) generate(fn phpFunction) string {
 
 	paramInfo := pfg.paramParser.analyzeParameters(fn.Params)
 
-	builder.WriteString(fmt.Sprintf("PHP_FUNCTION(%s)\n{\n", fn.Name))
+	funcName := NamespacedName(pfg.namespace, fn.Name)
+	builder.WriteString(fmt.Sprintf("PHP_FUNCTION(%s)\n{\n", funcName))
 
 	if decl := pfg.paramParser.generateParamDeclarations(fn.Params); decl != "" {
 		builder.WriteString(decl + "\n")

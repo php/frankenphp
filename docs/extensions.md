@@ -335,6 +335,61 @@ func (sp *StringProcessorStruct) Process(input *C.zend_string, mode int64) unsaf
 }
 ```
 
+### Using Namespaces
+
+The generator supports organizing your PHP extension's functions, classes, and constants under a namespace using the `//export_php:namespace` directive. This helps avoid naming conflicts and provides better organization for your extension's API.
+
+#### Declaring a Namespace
+
+Use the `//export_php:namespace` directive at the top of your Go file to place all exported symbols under a specific namespace:
+
+```go
+//export_php:namespace My\Extension
+package main
+
+import "C"
+
+//export_php:function hello(): string
+func hello() string {
+    return "Hello from My\\Extension namespace!"
+}
+
+//export_php:class User
+type UserStruct struct {
+    // internal fields
+}
+
+//export_php:method User::getName(): string
+func (u *UserStruct) GetName() unsafe.Pointer {
+    return frankenphp.PHPString("John Doe", false)
+}
+
+//export_php:const
+const STATUS_ACTIVE = 1
+```
+
+#### Using Namespaced Extension in PHP
+
+When a namespace is declared, all functions, classes, and constants are placed under that namespace in PHP:
+
+```php
+<?php
+
+echo My\Extension\hello(); // "Hello from My\Extension namespace!"
+
+$user = new My\Extension\User();
+echo $user->getName(); // "John Doe"
+
+echo My\Extension\STATUS_ACTIVE; // 1
+```
+
+#### Important Notes
+
+* Only **one** namespace directive is allowed per file. If multiple namespace directives are found, the generator will return an error.
+* The namespace applies to **all** exported symbols in the file: functions, classes, methods, and constants.
+* Namespace names follow PHP namespace conventions using backslashes (`\`) as separators.
+* If no namespace is declared, symbols are exported to the global namespace as usual.
+
 ### Generating the Extension
 
 This is where the magic happens, and your extension can now be generated. You can run the generator with the following command:

@@ -14,6 +14,7 @@ type Generator struct {
 	Functions  []phpFunction
 	Classes    []phpClass
 	Constants  []phpConstant
+	Namespace  string
 }
 
 // EXPERIMENTAL
@@ -78,6 +79,12 @@ func (g *Generator) parseSource() error {
 		return fmt.Errorf("parsing constants: %w", err)
 	}
 	g.Constants = constants
+
+	ns, err := parser.ParseNamespace(g.SourceFile)
+	if err != nil {
+		return fmt.Errorf("parsing namespace: %w", err)
+	}
+	g.Namespace = ns
 
 	return nil
 }

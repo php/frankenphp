@@ -19,6 +19,17 @@ func ReadFile(filename string) (string, error) {
 	return string(content), nil
 }
 
+// NamespacedName converts a namespace and name to a C-compatible format.
+// E.g., namespace "Go\Extension" and name "MyClass" become "Go_Extension_MyClass".
+// This symbol remains exported, so it's usable in templates.
+func NamespacedName(namespace, name string) string {
+	if namespace == "" {
+		return name
+	}
+	namespacePart := strings.ReplaceAll(namespace, "\\", "_")
+	return namespacePart + "_" + name
+}
+
 // EXPERIMENTAL
 func SanitizePackageName(name string) string {
 	sanitized := strings.ReplaceAll(name, "-", "_")

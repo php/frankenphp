@@ -59,7 +59,7 @@ void init_object_handlers() {
 {{ range .Classes}}
 static zend_class_entry *{{.Name}}_ce = NULL;
 
-PHP_METHOD({{.Name}}, __construct) {
+PHP_METHOD({{namespacedClassName $.Namespace .Name}}, __construct) {
     ZEND_PARSE_PARAMETERS_NONE();
 
     {{$.BaseName}}_object *intern = {{$.BaseName}}_object_from_obj(Z_OBJ_P(ZEND_THIS));
@@ -73,7 +73,7 @@ PHP_METHOD({{.Name}}, __construct) {
 }
 
 {{ range .Methods}}
-PHP_METHOD({{.ClassName}}, {{.PhpName}}) {
+PHP_METHOD({{namespacedClassName $.Namespace .ClassName}}, {{.PhpName}}) {
     {{$.BaseName}}_object *intern = {{$.BaseName}}_object_from_obj(Z_OBJ_P(ZEND_THIS));
     
     VALIDATE_GO_HANDLE(intern);
@@ -132,7 +132,7 @@ void register_all_classes() {
     init_object_handlers();
     
     {{- range .Classes}}
-    {{.Name}}_ce = register_class_{{.Name}}();
+    {{.Name}}_ce = register_class_{{namespacedClassName $.Namespace .Name}}();
     if (!{{.Name}}_ce) {
         php_error_docref(NULL, E_ERROR, "Failed to register class {{.Name}}");
         return;
