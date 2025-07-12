@@ -242,6 +242,7 @@ func testHeaders(t *testing.T, opts *testOptions) {
 		assert.Equal(t, 201, resp.StatusCode)
 		assert.Equal(t, "bar", resp.Header.Get("Foo"))
 		assert.Equal(t, "bar2", resp.Header.Get("Foo2"))
+		assert.Equal(t, "bar3", resp.Header.Get("Foo3"), "header without whitespace after colon")
 		assert.Empty(t, resp.Header.Get("Invalid"))
 		assert.Equal(t, fmt.Sprintf("%d", i), resp.Header.Get("I"))
 	}, opts)

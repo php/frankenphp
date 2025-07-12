@@ -482,13 +482,21 @@ func go_apache_request_headers(threadIndex C.uintptr_t) (*C.go_string, C.size_t)
 
 func addHeader(fc *frankenPHPContext, cString *C.char, length C.int) {
 	parts := strings.SplitN(C.GoStringN(cString, length), ": ", 2)
-	if len(parts) != 2 {
-		fc.logger.LogAttrs(context.Background(), slog.LevelDebug, "invalid header", slog.String("header", parts[0]))
+	if len(parts) == 2 {
+		fc.responseWriter.Header().Add(parts[0], parts[1])
 
 		return
 	}
 
-	fc.responseWriter.Header().Add(parts[0], parts[1])
+	// also check for the format "Header:Value" without a space
+	parts = strings.SplitN(C.GoStringN(cString, length), ":", 2)
+	if len(parts) == 2 {
+		fc.responseWriter.Header().Add(parts[0], parts[1])
+
+		return
+	}
+
+	fc.logger.LogAttrs(context.Background(), slog.LevelDebug, "invalid header", slog.String("header", parts[0]))
 }
 
 //export go_write_headers
