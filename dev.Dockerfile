@@ -83,7 +83,9 @@ WORKDIR /go/src/app
 COPY --link . ./
 
 WORKDIR /go/src/app/caddy/frankenphp
-RUN ../../go.sh build -buildvcs=false
+RUN export CGO_CFLAGS="$(php-config --includes)" && \
+	export CGO_LDFLAGS="$(php-config --ldflags)" && \
+	 ../../go.sh build -buildvcs=false
 
 WORKDIR /go/src/app
 CMD [ "zsh" ]
