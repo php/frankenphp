@@ -17,7 +17,7 @@ if ! command -v ruby &>/dev/null; then
 fi
 
 if ! command -v fpm &>/dev/null; then
-	echo "Error: FPM (rubygem-fpm) is required to create RPM packages."
+	echo "Error: FPM (rubygem-fpm) is required to create RPM and DEB packages."
 	echo "Install it with: sudo gem install fpm"
 	exit 1
 fi
@@ -115,5 +115,26 @@ fpm -s dir -t deb -n frankenphp -v "${frankenphp_version}" \
 
 [ "$user_preexists" -eq 0 ] && sudo userdel frankenphp
 [ "$group_preexists" -eq 0 ] && (sudo groupdel frankenphp || true)
+
+echo "Creating APK package using FPM..."
+fpm -s dir -t apk -n frankenphp -v "${frankenphp_version}" \
+	--architecture "${arch}" \
+	--config-files /etc/frankenphp/Caddyfile \
+	--config-files /etc/frankenphp/php.ini \
+	--depends "musl" \
+	--depends "libstdc++" \
+	--after-install ../package/alpine/frankenphp.post-install \
+	--before-remove ../package/alpine/frankenphp.pre-deinstall \
+	--after-remove ../package/alpine/frankenphp.post-deinstall \
+	--iteration "${iteration}" \
+	"${bin}=/usr/bin/frankenphp" \
+	"../package/alpine/frankenphp.openrc=/etc/init.d/frankenphp" \
+	"../package/rhel/frankenphp.service=/usr/lib/systemd/system/frankenphp.service" \
+	"../package/Caddyfile=/etc/frankenphp/Caddyfile" \
+	"../package/content/=/usr/share/frankenphp" \
+	"../package/etc/php.ini=/etc/frankenphp/php.ini" \
+	"../package/empty/=/etc/frankenphp/php.d" \
+	"../package/empty/=/usr/lib/frankenphp/modules" \
+	"../package/empty/=/var/lib/frankenphp"
 
 cd ..
