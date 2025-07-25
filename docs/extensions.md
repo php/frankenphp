@@ -81,17 +81,18 @@ While the first point speaks for itself, the second may be harder to apprehend. 
 
 While some variable types have the same memory representation between C/PHP and Go, some types require more logic to be directly used. This is maybe the hardest part when it comes to writing extensions because it requires understanding internals of the Zend Engine and how variables are stored internally in PHP. This table summarizes what you need to know:
 
-| PHP type           | Go type             | Direct conversion | C to Go helper        | Go to C helper         | Class Methods Support |
-|--------------------|---------------------|-------------------|-----------------------|------------------------|-----------------------|
-| `int`              | `int64`             | ✅                 | -                     | -                      | ✅                     |
-| `?int`             | `*int64`            | ✅                 | -                     | -                      | ✅                     |
-| `float`            | `float64`           | ✅                 | -                     | -                      | ✅                     |
-| `?float`           | `*float64`          | ✅                 | -                     | -                      | ✅                     |
-| `bool`             | `bool`              | ✅                 | -                     | -                      | ✅                     |
-| `?bool`            | `*bool`             | ✅                 | -                     | -                      | ✅                     |
-| `string`/`?string` | `*C.zend_string`    | ❌                 | frankenphp.GoString() | frankenphp.PHPString() | ✅                     |
-| `array`            | `*frankenphp.Array` | ❌                 | frankenphp.GoArray()  | frankenphp.PHPArray()  | ✅                     |
-| `object`           | `struct`            | ❌                 | _Not yet implemented_ | _Not yet implemented_  | ❌                     |
+| PHP type           | Go type             | Direct conversion | C to Go helper        | Go to C helper               | Class Methods Support |
+|--------------------|---------------------|-------------------|-----------------------|------------------------------|-----------------------|
+| `int`              | `int64`             | ✅                 | -                     | -                            | ✅                     |
+| `?int`             | `*int64`            | ✅                 | -                     | -                            | ✅                     |
+| `float`            | `float64`           | ✅                 | -                     | -                            | ✅                     |
+| `?float`           | `*float64`          | ✅                 | -                     | -                            | ✅                     |
+| `bool`             | `bool`              | ✅                 | -                     | -                            | ✅                     |
+| `?bool`            | `*bool`             | ✅                 | -                     | -                            | ✅                     |
+| `string`/`?string` | `*C.zend_string`    | ❌                 | frankenphp.GoString() | frankenphp.PHPString()       | ✅                     |
+| `array`            | `*frankenphp.Array` | ❌                 | frankenphp.GoArray()  | frankenphp.PHPArray()        | ✅                     |
+| `callable`         | `*C.zval`           | ❌                 | -                     | frankenphp.CallPHPCallable() | ❌                     |
+| `object`           | -                   | ❌                 | _Not yet implemented_ | _Not yet implemented_        | ❌                     |
 
 > [!NOTE]
 > This table is not exhaustive yet and will be completed as the FrankenPHP types API gets more complete.
@@ -151,6 +152,54 @@ func process_data(arr *C.zval) unsafe.Pointer {
 * `Len() uint32` - Get number of elements
 * `At(index uint32) (PHPKey, interface{})` - Get key-value pair at index
 * `frankenphp.PHPArray(arr *frankenphp.Array) unsafe.Pointer` - Convert to PHP array
+
+### Working with Callables
+
+FrankenPHP provides a way to work with PHP callables using the `frankenphp.CallPHPCallable` helper. This allows you to call PHP functions or methods from Go code.
+
+To showcase this, let's create our own `array_map()` function that takes a callable and an array, applies the callable to each element of the array, and returns a new array with the results:
+
+```go
+// export_php:function my_array_map(array $data, callable $callback): array
+func my_array_map(arr *C.zval, callback *C.zval) unsafe.Pointer {
+	goArr := frankenphp.GoArray(unsafe.Pointer(arr))
+	result := &frankenphp.Array{}
+
+	for i := uint32(0); i < goArr.Len(); i++ {
+		key, value := goArr.At(i)
+
+		callbackResult := frankenphp.CallPHPCallable(unsafe.Pointer(callback), []interface{}{value})
+
+		if key.Type == frankenphp.PHPIntKey {
+			result.SetInt(key.Int, callbackResult)
+		} else {
+			result.SetString(key.Str, callbackResult)
+		}
+	}
+
+	return frankenphp.PHPArray(result)
+}
+```
+
+Notice how we use `frankenphp.CallPHPCallable()` to call the PHP callable passed as a parameter. This function takes a pointer to the callable and an array of arguments, and it returns the result of the callable execution. You can use the callable syntax you're used to:
+
+```php
+<?php
+
+$strArray = ['a' => 'hello', 'b' => 'world', 'c' => 'php'];
+$result = my_array_map($strArray, 'strtoupper'); // $result will be ['a' => 'HELLO', 'b' => 'WORLD', 'c' => 'PHP']
+
+$arr = [1, 2, 3, 4, [5, 6]];
+$result = my_array_map($arr, function($item) {
+    if (\is_array($item)) {
+        return my_array_map($item, function($subItem) {
+            return $subItem * 2;
+        });
+    }
+
+    return $item * 3;
+}); // $result will be [3, 6, 9, 12, [10, 12]]
+```
 
 ### Declaring a Native PHP Class
 

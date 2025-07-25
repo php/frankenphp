@@ -191,6 +191,43 @@ func PHPArray(arr *Array) unsafe.Pointer {
 	return unsafe.Pointer(zendArray)
 }
 
+// EXPERIMENTAL: CallPHPCallable executes a PHP callable with the given parameters.
+// Returns the result of the callable as a Go interface{}, or nil if the call failed.
+func CallPHPCallable(cb unsafe.Pointer, params []interface{}) interface{} {
+	if cb == nil {
+		return nil
+	}
+
+	callback := (*C.zval)(cb)
+	if callback == nil {
+		return nil
+	}
+
+	if C.__zend_is_callable__(callback) == 0 {
+		return nil
+	}
+
+	paramCount := len(params)
+	var paramStorage *C.zval
+	if paramCount > 0 {
+		paramStorage = (*C.zval)(C.__emalloc__(C.size_t(paramCount) * C.size_t(unsafe.Sizeof(C.zval{}))))
+		defer C.__efree__(unsafe.Pointer(paramStorage))
+
+		for i, param := range params {
+			setGoValueToZval((*C.zval)(unsafe.Pointer(uintptr(unsafe.Pointer(paramStorage))+uintptr(i)*unsafe.Sizeof(C.zval{}))), param)
+		}
+	}
+
+	var retval C.zval
+
+	result := C.__call_user_function__(callback, &retval, C.uint32_t(paramCount), paramStorage)
+	if result != C.SUCCESS {
+		return nil
+	}
+
+	return convertZvalToGo(&retval)
+}
+
 // convertZvalToGo converts a PHP zval to a Go interface{}
 func convertZvalToGo(zval *C.zval) interface{} {
 	t := C.zval_get_type(zval)
@@ -227,40 +264,37 @@ func convertZvalToGo(zval *C.zval) interface{} {
 	}
 }
 
-// convertGoToZval converts a Go interface{} to a PHP zval
-func convertGoToZval(value interface{}) *C.zval {
-	zval := (*C.zval)(C.__emalloc__(C.size_t(unsafe.Sizeof(C.zval{}))))
-	u1 := (*C.uint8_t)(unsafe.Pointer(&zval.u1[0]))
-	v0 := unsafe.Pointer(&zval.value[0])
-
+// setGoValueToZval sets a Go value to an existing zval using PHP macros
+func setGoValueToZval(zval *C.zval, value interface{}) {
 	switch v := value.(type) {
 	case nil:
-		*u1 = C.IS_NULL
+		C.__zval_null__(zval)
 	case bool:
-		if v {
-			*u1 = C.IS_TRUE
-		} else {
-			*u1 = C.IS_FALSE
-		}
+		C.__zval_bool__(zval, C._Bool(v))
 	case int:
-		*u1 = C.IS_LONG
-		*(*C.zend_long)(v0) = C.zend_long(v)
+		C.__zval_long__(zval, C.zend_long(v))
 	case int64:
-		*u1 = C.IS_LONG
-		*(*C.zend_long)(v0) = C.zend_long(v)
+		C.__zval_long__(zval, C.zend_long(v))
 	case float64:
-		*u1 = C.IS_DOUBLE
-		*(*C.double)(v0) = C.double(v)
+		C.__zval_double__(zval, C.double(v))
 	case string:
-		*u1 = C.IS_STRING
-		*(**C.zend_string)(v0) = (*C.zend_string)(PHPString(v, false))
+		cstr := C.CString(v)
+		defer C.free(unsafe.Pointer(cstr))
+		C.__zval_string__(zval, cstr)
 	case *Array:
+		u1 := (*C.uint8_t)(unsafe.Pointer(&zval.u1[0]))
+		v0 := unsafe.Pointer(&zval.value[0])
 		*u1 = C.IS_ARRAY
 		*(**C.zend_array)(v0) = (*C.zend_array)(PHPArray(v))
 	default:
-		*u1 = C.IS_NULL
+		C.__zval_null__(zval)
 	}
+}
 
+// convertGoToZval converts a Go interface{} to a PHP zval (allocates memory)
+func convertGoToZval(value interface{}) *C.zval {
+	zval := (*C.zval)(C.__emalloc__(C.size_t(unsafe.Sizeof(C.zval{}))))
+	setGoValueToZval(zval, value)
 	return zval
 }
 

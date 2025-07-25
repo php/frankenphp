@@ -10,11 +10,11 @@ import (
 )
 
 func scalarTypes() []phpType {
-	return []phpType{phpString, phpInt, phpFloat, phpBool, phpArray}
+	return []phpType{phpString, phpInt, phpFloat, phpBool, phpArray, phpCallable}
 }
 
 func paramTypes() []phpType {
-	return []phpType{phpString, phpInt, phpFloat, phpBool, phpArray, phpObject, phpMixed}
+	return []phpType{phpString, phpInt, phpFloat, phpBool, phpArray, phpObject, phpMixed, phpCallable}
 }
 
 func returnTypes() []phpType {
@@ -191,8 +191,10 @@ func (v *Validator) validateGoFunctionSignatureWithOptions(phpFunc phpFunction, 
 		effectiveGoParamCount = goParamCount - 1
 	}
 
-	if len(phpFunc.Params) != effectiveGoParamCount {
-		return fmt.Errorf("parameter count mismatch: PHP function has %d parameters but Go function has %d", len(phpFunc.Params), effectiveGoParamCount)
+	expectedGoParams := len(phpFunc.Params)
+
+	if expectedGoParams != effectiveGoParamCount {
+		return fmt.Errorf("parameter count mismatch: PHP function has %d parameters (expecting %d Go parameters) but Go function has %d", len(phpFunc.Params), expectedGoParams, effectiveGoParamCount)
 	}
 
 	if goFunc.Type.Params != nil && len(phpFunc.Params) > 0 {
@@ -236,11 +238,13 @@ func (v *Validator) phpTypeToGoType(t phpType, isNullable bool) string {
 		baseType = "bool"
 	case phpArray:
 		baseType = "*C.zval"
+	case phpCallable:
+		baseType = "*C.zval"
 	default:
 		baseType = "interface{}"
 	}
 
-	if isNullable && t != phpString && t != phpArray {
+	if isNullable && t != phpString && t != phpArray && t != phpCallable {
 		return "*" + baseType
 	}
 
