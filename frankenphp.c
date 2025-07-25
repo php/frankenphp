@@ -1213,3 +1213,13 @@ void register_extensions(zend_module_entry *m, int len) {
       php_register_internal_extensions_func;
   php_register_internal_extensions_func = register_internal_extensions;
 }
+
+/* EXPERIMENTAL */
+PHP_FUNCTION(frankenphp_info) {
+  if (zend_parse_parameters_none() == FAILURE) {
+    RETURN_THROWS();
+  }
+
+  zend_array *result = go_frankenphp_info(thread_index);
+  RETURN_ARR(result);
+}

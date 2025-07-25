@@ -1,5 +1,11 @@
 package frankenphp
 
+// #include "frankenphp.h"
+import "C"
+import (
+	"unsafe"
+)
+
 // EXPERIMENTAL: ThreadDebugState prints the state of a single PHP thread - debugging purposes only
 type ThreadDebugState struct {
 	Index                    int
@@ -43,4 +49,26 @@ func threadDebugState(thread *phpThread) ThreadDebugState {
 		IsBusy:                   !thread.state.isInWaitingState(),
 		WaitingSinceMilliseconds: thread.state.waitTime(),
 	}
+}
+
+// EXPERIMENTAL: Expose the current thread's information to PHP
+//
+//export go_frankenphp_info
+func go_frankenphp_info(threadIndex C.uintptr_t) unsafe.Pointer {
+	thread := phpThreads[threadIndex]
+
+	_, isWorker := thread.handler.(*workerThread)
+
+	return PHPArray(&Array{
+		keys: []PHPKey{
+			PHPKey{Type: PHPStringKey, Str: "thread_name"},
+			PHPKey{Type: PHPStringKey, Str: "thread_index"},
+			PHPKey{Type: PHPStringKey, Str: "is_worker_thread"},
+		},
+		values: []interface{}{
+			thread.name(),
+			int(threadIndex),
+			isWorker,
+		},
+	})
 }

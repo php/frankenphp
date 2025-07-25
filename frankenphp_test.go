@@ -1059,6 +1059,20 @@ func TestFileStreamInWorkerMode(t *testing.T) {
 	}, &testOptions{workerScript: "file-stream.php", nbParallelRequests: 1, nbWorkers: 1})
 }
 
+func TestFrankenPHPInfo_module(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		body := fetchBody("GET", "http://example.com/frankenphp_info.php", handler)
+		assert.Contains(t, body, "[is_worker_thread] => 1")
+	}, &testOptions{workerScript: "frankenphp_info.php"})
+}
+
+func TestFrankenPHPInfo_worker(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		body := fetchBody("GET", "http://example.com/frankenphp_info.php", handler)
+		assert.Contains(t, body, "[is_worker_thread] => \n")
+	}, &testOptions{})
+}
+
 // To run this fuzzing test use: go test -fuzz FuzzRequest
 // TODO: Cover more potential cases
 func FuzzRequest(f *testing.F) {
