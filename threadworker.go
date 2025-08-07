@@ -24,7 +24,7 @@ type workerThread struct {
 }
 
 func convertToWorkerThread(thread *phpThread, worker *worker) {
-	externalWorker, _ := externalWorkers[worker.name]
+	externalWorker := externalWorkers[worker.name]
 
 	thread.setHandler(&workerThread{
 		state:  thread.state,
