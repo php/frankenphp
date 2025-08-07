@@ -35,7 +35,12 @@ type WorkerExtension interface {
 	ThreadActivatedNotification(threadId int)
 	ThreadDrainNotification(threadId int)
 	ThreadDeactivatedNotification(threadId int)
-	ProvideRequest() <-chan *http.Request
+	ProvideRequest() <-chan *WorkerRequest
+}
+
+type WorkerRequest struct {
+	Request  *http.Request
+	Response http.ResponseWriter
 }
 
 var externalWorkers = make(map[string]WorkerExtension)
