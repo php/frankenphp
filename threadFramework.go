@@ -33,7 +33,7 @@ type WorkerExtension interface {
 	ThreadActivatedNotification(threadId int)
 	ThreadDrainNotification(threadId int)
 	ThreadDeactivatedNotification(threadId int)
-	ProvideRequest() <-chan *WorkerRequest
+	ProvideRequest() *WorkerRequest
 }
 
 type WorkerRequest struct {
