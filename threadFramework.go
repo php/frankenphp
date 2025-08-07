@@ -12,8 +12,7 @@ import (
 // A worker script with the provided Name and FileName will be registered, along with the provided
 // configuration. You can also provide any environment variables that you want through Env. GetMinThreads allows you to
 // reserve a minimum number of threads from the frankenphp thread pool. This number must be positive.
-// ProvideBackPressure allows you to autoscale your threads from the free threads in frankenphp's thread pool. These
-// methods are only called once at startup, so register them in an init() function.
+// These methods are only called once at startup, so register them in an init() function.
 //
 // When a thread is activated and nearly ready, ThreadActivatedNotification will be called with an opaque threadId;
 // this is a time for setting up any per-thread resources. When a thread is about to be returned to the thread pool,
