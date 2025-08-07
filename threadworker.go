@@ -19,10 +19,13 @@ type workerThread struct {
 	dummyContext    *frankenPHPContext
 	workerContext   *frankenPHPContext
 	backoff         *exponentialBackoff
+	externalWorker  WorkerExtension
 	isBootingScript bool // true if the worker has not reached frankenphp_handle_request yet
 }
 
 func convertToWorkerThread(thread *phpThread, worker *worker) {
+	externalWorker, _ := externalWorkers[worker.name]
+
 	thread.setHandler(&workerThread{
 		state:  thread.state,
 		thread: thread,
@@ -32,6 +35,7 @@ func convertToWorkerThread(thread *phpThread, worker *worker) {
 			minBackoff:             100 * time.Millisecond,
 			maxConsecutiveFailures: worker.maxConsecutiveFailures,
 		},
+		externalWorker: externalWorker,
 	})
 	worker.attachThread(thread)
 }
@@ -40,16 +44,28 @@ func convertToWorkerThread(thread *phpThread, worker *worker) {
 func (handler *workerThread) beforeScriptExecution() string {
 	switch handler.state.get() {
 	case stateTransitionRequested:
+		if handler.externalWorker != nil {
+			handler.externalWorker.ThreadDeactivatedNotification(handler.thread.threadIndex)
+		}
 		handler.worker.detachThread(handler.thread)
 		return handler.thread.transitionToNewHandler()
 	case stateRestarting:
+		if handler.externalWorker != nil {
+			handler.externalWorker.ThreadDrainNotification(handler.thread.threadIndex)
+		}
 		handler.state.set(stateYielding)
 		handler.state.waitFor(stateReady, stateShuttingDown)
 		return handler.beforeScriptExecution()
 	case stateReady, stateTransitionComplete:
+		if handler.externalWorker != nil {
+			handler.externalWorker.ThreadActivatedNotification(handler.thread.threadIndex)
+		}
 		setupWorkerScript(handler, handler.worker)
 		return handler.worker.fileName
 	case stateShuttingDown:
+		if handler.externalWorker != nil {
+			handler.externalWorker.ThreadDeactivatedNotification(handler.thread.threadIndex)
+		}
 		handler.worker.detachThread(handler.thread)
 		// signal to stop
 		return ""
