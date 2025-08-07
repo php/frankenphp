@@ -60,7 +60,7 @@ func initWorkers(opt []workerOpt) error {
 					go func(w *worker, externalWorker WorkerExtension) {
 						for {
 							// todo: handle shutdown
-							rq := <-externalWorker.ProvideRequest()
+							rq := externalWorker.ProvideRequest()
 							r := rq.Request
 							fr, err := NewRequestWithContext(r, WithOriginalRequest(r), WithWorkerName(w.name))
 							if err != nil {
