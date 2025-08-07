@@ -167,14 +167,28 @@ PHP_MINIT_FUNCTION({{.BaseName}}) {
     {{- end}}
     {{- end}}
     {{- end}}
+    
+    {{if and .Module .Module.InitFunc}}
+    {{.Module.InitFunc}}();
+    {{end}}
+    
     return SUCCESS;
 }
+
+{{if .Module}}
+{{if .Module.ShutdownFunc}}
+PHP_MSHUTDOWN_FUNCTION({{.BaseName}}) {
+    {{.Module.ShutdownFunc}}();
+    return SUCCESS;
+}
+{{end}}
+{{end}}
 
 zend_module_entry {{.BaseName}}_module_entry = {STANDARD_MODULE_HEADER,
                                          "{{.BaseName}}",
                                          ext_functions,             /* Functions */
                                          PHP_MINIT({{.BaseName}}),  /* MINIT */
-                                         NULL,                      /* MSHUTDOWN */
+                                         {{if and .Module .Module.ShutdownFunc}}PHP_MSHUTDOWN({{.BaseName}}),{{else}}NULL,{{end}}  /* MSHUTDOWN */
                                          NULL,                      /* RINIT */
                                          NULL,                      /* RSHUTDOWN */
                                          NULL,                      /* MINFO */

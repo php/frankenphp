@@ -15,6 +15,7 @@ type Generator struct {
 	Classes    []phpClass
 	Constants  []phpConstant
 	Namespace  string
+	Module     *phpModule
 }
 
 // EXPERIMENTAL
@@ -85,6 +86,12 @@ func (g *Generator) parseSource() error {
 		return fmt.Errorf("parsing namespace: %w", err)
 	}
 	g.Namespace = ns
+
+	module, err := parser.ParseModule(g.SourceFile)
+	if err != nil {
+		return fmt.Errorf("parsing module: %w", err)
+	}
+	g.Module = module
 
 	return nil
 }

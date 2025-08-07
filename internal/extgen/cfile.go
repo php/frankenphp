@@ -23,6 +23,7 @@ type cTemplateData struct {
 	Classes   []phpClass
 	Constants []phpConstant
 	Namespace string
+	Module    *phpModule
 }
 
 func (cg *cFileGenerator) generate() error {
@@ -68,6 +69,7 @@ func (cg *cFileGenerator) getTemplateContent() (string, error) {
 		Classes:   cg.generator.Classes,
 		Constants: cg.generator.Constants,
 		Namespace: cg.generator.Namespace,
+		Module:    cg.generator.Module,
 	}); err != nil {
 		return "", err
 	}

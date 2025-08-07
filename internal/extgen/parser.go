@@ -25,3 +25,9 @@ func (p *SourceParser) ParseNamespace(filename string) (string, error) {
 	namespaceParser := NamespaceParser{}
 	return namespaceParser.parse(filename)
 }
+
+// EXPERIMENTAL
+func (p *SourceParser) ParseModule(filename string) (*phpModule, error) {
+	moduleParser := &ModuleParser{}
+	return moduleParser.parse(filename)
+}
