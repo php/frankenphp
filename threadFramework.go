@@ -25,8 +25,7 @@ import (
 //
 // Note: External workers receive the lowest priority when determining thread allocations. If GetMinThreads cannot be
 // allocated, then frankenphp will panic and provide this information to the user (who will need to allocation more
-// total threads). Don't be greedy. Use ProvideBackPressure to indicate when you receive a request to trigger
-// autoscaling.
+// total threads). Don't be greedy.
 type WorkerExtension interface {
 	Name() string
 	FileName() string
