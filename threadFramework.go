@@ -49,8 +49,6 @@ type WorkerRequest struct {
 var externalWorkers = make(map[string]WorkerExtension)
 var externalWorkerMutex sync.Mutex
 
-var externalWorkerPipes = make(map[string]context.CancelFunc)
-var externalWorkerPipesMutex sync.Mutex
 
 func RegisterExternalWorker(worker WorkerExtension) {
 	externalWorkerMutex.Lock()
@@ -61,31 +59,14 @@ func RegisterExternalWorker(worker WorkerExtension) {
 
 // startExternalWorkerPipe creates a pipe from an external worker to the main worker.
 func startExternalWorkerPipe(w *worker, externalWorker WorkerExtension, thread *phpThread) {
-	ctx, cancel := context.WithCancel(context.Background())
-
-	// Register the cancel function for shutdown
-	externalWorkerPipesMutex.Lock()
-	externalWorkerPipes[w.name] = cancel
-	externalWorkerPipesMutex.Unlock()
-
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
 				logger.LogAttrs(context.Background(), slog.LevelError, "external worker pipe panicked", slog.String("worker", w.name), slog.Any("panic", r))
 			}
-			externalWorkerPipesMutex.Lock()
-			delete(externalWorkerPipes, w.name)
-			externalWorkerPipesMutex.Unlock()
 		}()
 
 		for {
-			select {
-			case <-ctx.Done():
-				logger.LogAttrs(context.Background(), slog.LevelDebug, "external worker pipe shutting down", slog.String("worker", w.name))
-				return
-			default:
-			}
-
 			var rq *WorkerRequest
 			func() {
 				defer func() {
@@ -112,40 +93,16 @@ func startExternalWorkerPipe(w *worker, externalWorker WorkerExtension, thread *
 			if fc, ok := fromContext(fr.Context()); ok {
 				fc.responseWriter = rq.Response
 
-				select {
-				case w.requestChan <- fc:
-					// Request successfully queued
-					// Wait for the request to complete and signal completion if a Done channel was provided
-					if rq.Done != nil {
-						go func() {
-							<-fc.done
-							close(rq.Done)
-						}()
-					}
-				case <-ctx.Done():
-					fc.reject(503, "Service Unavailable")
-					if rq.Done != nil {
+				// Queue the request and wait for completion if Done channel was provided
+				w.requestChan <- fc
+				if rq.Done != nil {
+					go func() {
+						<-fc.done
 						close(rq.Done)
-					}
-					return
+					}()
 				}
 			}
 		}
 	}()
 }
 
-// drainExternalWorkerPipes shuts down all external worker pipes gracefully
-func drainExternalWorkerPipes() {
-	externalWorkerPipesMutex.Lock()
-	defer externalWorkerPipesMutex.Unlock()
-
-	logger.LogAttrs(context.Background(), slog.LevelDebug, "shutting down external worker pipes", slog.Int("count", len(externalWorkerPipes)))
-
-	for workerName, cancel := range externalWorkerPipes {
-		logger.LogAttrs(context.Background(), slog.LevelDebug, "shutting down external worker pipe", slog.String("worker", workerName))
-		cancel()
-	}
-
-	// Clear the map
-	externalWorkerPipes = make(map[string]context.CancelFunc)
-}
