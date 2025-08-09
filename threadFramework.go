@@ -42,6 +42,8 @@ type WorkerExtension interface {
 type WorkerRequest struct {
 	Request  *http.Request
 	Response http.ResponseWriter
+	// Done is an optional channel that will be closed when the request processing is complete
+	Done chan struct{}
 }
 
 var externalWorkers = make(map[string]WorkerExtension)
@@ -113,8 +115,18 @@ func startExternalWorkerPipe(w *worker, externalWorker WorkerExtension, thread *
 				select {
 				case w.requestChan <- fc:
 					// Request successfully queued
+					// Wait for the request to complete and signal completion if a Done channel was provided
+					if rq.Done != nil {
+						go func() {
+							<-fc.done
+							close(rq.Done)
+						}()
+					}
 				case <-ctx.Done():
 					fc.reject(503, "Service Unavailable")
+					if rq.Done != nil {
+						close(rq.Done)
+					}
 					return
 				}
 			}
