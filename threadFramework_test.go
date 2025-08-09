@@ -1,4 +1,4 @@
-package frankenphp_test
+package frankenphp
 
 import (
 	"io"
@@ -7,18 +7,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dunglas/frankenphp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// mockWorkerExtension implements the frankenphp.WorkerExtension interface
+// mockWorkerExtension implements the WorkerExtension interface
 type mockWorkerExtension struct {
 	name             string
 	fileName         string
-	env              frankenphp.PreparedEnv
+	env              PreparedEnv
 	minThreads       int
-	requestChan      chan *frankenphp.WorkerRequest
+	requestChan      chan *WorkerRequest
 	activatedCount   int
 	drainCount       int
 	deactivatedCount int
@@ -29,9 +28,9 @@ func newMockWorkerExtension(name, fileName string, minThreads int) *mockWorkerEx
 	return &mockWorkerExtension{
 		name:        name,
 		fileName:    fileName,
-		env:         make(frankenphp.PreparedEnv),
+		env:         make(PreparedEnv),
 		minThreads:  minThreads,
-		requestChan: make(chan *frankenphp.WorkerRequest, 10), // Buffer to avoid blocking
+		requestChan: make(chan *WorkerRequest, 10), // Buffer to avoid blocking
 	}
 }
 
@@ -43,7 +42,7 @@ func (m *mockWorkerExtension) FileName() string {
 	return m.fileName
 }
 
-func (m *mockWorkerExtension) Env() frankenphp.PreparedEnv {
+func (m *mockWorkerExtension) Env() PreparedEnv {
 	return m.env
 }
 
@@ -69,11 +68,11 @@ func (m *mockWorkerExtension) ThreadDeactivatedNotification(threadId int) {
 	m.deactivatedCount++
 }
 
-func (m *mockWorkerExtension) ProvideRequest() *frankenphp.WorkerRequest {
+func (m *mockWorkerExtension) ProvideRequest() *WorkerRequest {
 	return <-m.requestChan
 }
 
-func (m *mockWorkerExtension) InjectRequest(r *frankenphp.WorkerRequest) {
+func (m *mockWorkerExtension) InjectRequest(r *WorkerRequest) {
 	m.requestChan <- r
 }
 
@@ -88,12 +87,17 @@ func TestWorkerExtension(t *testing.T) {
 	mockExt := newMockWorkerExtension("mockWorker", "testdata/worker.php", 1)
 
 	// Register the mock extension
-	frankenphp.RegisterExternalWorker(mockExt)
+	RegisterExternalWorker(mockExt)
+	
+	// Clean up external workers after test to avoid interfering with other tests
+	defer func() {
+		delete(externalWorkers, mockExt.Name())
+	}()
 
 	// Initialize FrankenPHP with a worker that has a different name than our extension
-	err := frankenphp.Init()
+	err := Init()
 	require.NoError(t, err)
-	defer frankenphp.Shutdown()
+	defer Shutdown()
 
 	// Wait a bit for the worker to be ready
 	time.Sleep(100 * time.Millisecond)
@@ -108,7 +112,7 @@ func TestWorkerExtension(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	// Inject the request into the worker through the extension
-	mockExt.InjectRequest(&frankenphp.WorkerRequest{
+	mockExt.InjectRequest(&WorkerRequest{
 		Request:  req,
 		Response: w,
 	})
