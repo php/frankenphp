@@ -88,7 +88,7 @@ func TestWorkerExtension(t *testing.T) {
 
 	// Register the mock extension
 	RegisterExternalWorker(mockExt)
-	
+
 	// Clean up external workers after test to avoid interfering with other tests
 	defer func() {
 		delete(externalWorkers, mockExt.Name())
@@ -111,16 +111,20 @@ func TestWorkerExtension(t *testing.T) {
 
 	w := httptest.NewRecorder()
 
+	// Create a channel to signal when the request is done
+	done := make(chan struct{})
+
 	// Inject the request into the worker through the extension
 	mockExt.InjectRequest(&WorkerRequest{
 		Request:  req,
 		Response: w,
+		Done:     done,
 	})
 
-	// Wait a bit for the request to be processed
-	time.Sleep(100 * time.Millisecond)
+	// Wait for the request to be fully processed
+	<-done
 
-	// Check the response
+	// Check the response - now safe from race conditions
 	resp := w.Result()
 	body, _ := io.ReadAll(resp.Body)
 
