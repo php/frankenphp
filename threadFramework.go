@@ -40,7 +40,9 @@ type WorkerExtension interface {
 }
 
 type WorkerRequest struct {
-	Request  *http.Request
+	// The request for your worker script to handle
+	Request *http.Request
+	// Response is a response writer that provides the output of the provided request
 	Response http.ResponseWriter
 	// Done is an optional channel that will be closed when the request processing is complete
 	Done chan struct{}
@@ -48,7 +50,6 @@ type WorkerRequest struct {
 
 var externalWorkers = make(map[string]WorkerExtension)
 var externalWorkerMutex sync.Mutex
-
 
 func RegisterExternalWorker(worker WorkerExtension) {
 	externalWorkerMutex.Lock()
@@ -105,4 +106,3 @@ func startExternalWorkerPipe(w *worker, externalWorker WorkerExtension, thread *
 		}
 	}()
 }
-
