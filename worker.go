@@ -3,9 +3,7 @@ package frankenphp
 // #include "frankenphp.h"
 import "C"
 import (
-	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -57,22 +55,7 @@ func initWorkers(opt []workerOpt) error {
 				// create a pipe from the external worker to the main worker
 				// note: this is locked to the initial thread size the external worker requested
 				if workerThread, ok := thread.handler.(*workerThread); ok && workerThread.externalWorker != nil {
-					go func(w *worker, externalWorker WorkerExtension) {
-						for {
-							// todo: handle shutdown
-							rq := externalWorker.ProvideRequest()
-							r := rq.Request
-							fr, err := NewRequestWithContext(r, WithOriginalRequest(r), WithWorkerName(w.name))
-							if err != nil {
-								logger.LogAttrs(context.Background(), slog.LevelError, "error creating request for external worker", slog.String("worker", w.name), slog.Any("error", err))
-								continue
-							}
-							if fc, ok := fromContext(fr.Context()); ok {
-								fc.responseWriter = rq.Response
-								w.requestChan <- fc
-							}
-						}
-					}(w, workerThread.externalWorker)
+					startExternalWorkerPipe(w, workerThread.externalWorker, thread)
 				}
 				workersReady.Done()
 			}()
