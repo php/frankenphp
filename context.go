@@ -1,7 +1,6 @@
 package frankenphp
 
 import (
-	"context"
 	"log/slog"
 	"net/http"
 	"os"
@@ -33,18 +32,13 @@ type frankenPHPContext struct {
 	startedAt time.Time
 }
 
-// fromContext extracts the frankenPHPContext from a context.
-func fromContext(ctx context.Context) (fctx *frankenPHPContext, ok bool) {
-	fctx, ok = ctx.Value(contextKey).(*frankenPHPContext)
-	return
-}
-
-// NewRequestWithContext creates a new FrankenPHP request context.
-func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Request, error) {
+// newFrankenPHPContext creates a new FrankenPHP request context.
+func newFrankenPHPContext(rw http.ResponseWriter, r *http.Request, opts ...RequestOption) (*frankenPHPContext, error) {
 	fc := &frankenPHPContext{
-		done:      make(chan any),
-		startedAt: time.Now(),
-		request:   r,
+		done:           make(chan any),
+		startedAt:      time.Now(),
+		request:        r,
+		responseWriter: rw,
 	}
 	for _, o := range opts {
 		if err := o(fc); err != nil {
@@ -99,9 +93,7 @@ func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Reques
 		fc.worker = getWorkerByPath(fc.scriptFilename)
 	}
 
-	c := context.WithValue(r.Context(), contextKey, fc)
-
-	return r.WithContext(c), nil
+	return fc, nil
 }
 
 func newDummyContext(requestPath string, opts ...RequestOption) (*frankenPHPContext, error) {
@@ -110,12 +102,10 @@ func newDummyContext(requestPath string, opts ...RequestOption) (*frankenPHPCont
 		return nil, err
 	}
 
-	fr, err := NewRequestWithContext(r, opts...)
+	fc, err := newFrankenPHPContext(nil, r, opts...)
 	if err != nil {
 		return nil, err
 	}
-
-	fc, _ := fromContext(fr.Context())
 
 	return fc, nil
 }

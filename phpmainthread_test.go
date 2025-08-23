@@ -225,9 +225,7 @@ func assertRequestBody(t *testing.T, url string, expected string) {
 	r := httptest.NewRequest("GET", url, nil)
 	w := httptest.NewRecorder()
 
-	req, err := NewRequestWithContext(r, WithRequestDocumentRoot(testDataPath, false))
-	assert.NoError(t, err)
-	err = ServeHTTP(w, req)
+	err := ServeHTTP(w, r, WithRequestDocumentRoot(testDataPath, false))
 	assert.NoError(t, err)
 	resp := w.Result()
 	body, _ := io.ReadAll(resp.Body)
