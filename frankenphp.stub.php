@@ -32,3 +32,6 @@ function frankenphp_response_headers(): array|bool {}
  */
 function apache_response_headers(): array|bool {}
 
+function cli_set_process_title(string $title): bool {}
+
+function cli_get_process_title(): ?string {}

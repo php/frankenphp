@@ -360,6 +360,183 @@ PHP_FUNCTION(frankenphp_request_headers) {
 }
 /* }}} */
 
+/* Process title implementation borrowed from sapi/cli/ps_title.c */
+#ifdef PHP_WIN32
+#include "win32/codepage.h"
+#include <process.h>
+#include <windows.h>
+#endif
+
+#ifdef HAVE_SETPROCTITLE
+#define PS_USE_SETPROCTITLE
+#elif defined(__linux__) || defined(_AIX) || defined(__sgi) ||                 \
+    (defined(sun) && !defined(BSD)) || defined(ultrix) || defined(__osf__) ||  \
+    defined(__APPLE__)
+#define PS_USE_CLOBBER_ARGV
+#elif defined(PHP_WIN32)
+#define PS_USE_WIN32
+#else
+#define PS_USE_NONE
+#endif
+
+typedef enum {
+  PS_TITLE_SUCCESS = 0,
+  PS_TITLE_NOT_AVAILABLE = 1,
+  PS_TITLE_NOT_INITIALIZED = 2,
+  PS_TITLE_BUFFER_NOT_AVAILABLE = 3,
+  PS_TITLE_WINDOWS_ERROR = 4,
+  PS_TITLE_TOO_LONG = 5,
+} ps_title_status;
+
+static char *ps_buffer = NULL;
+static size_t ps_buffer_size = 0;
+static size_t ps_buffer_cur_len = 0;
+
+static ps_title_status is_ps_title_available(void) {
+#ifdef PS_USE_NONE
+  return PS_TITLE_NOT_AVAILABLE;
+#else
+  if (!ps_buffer) {
+    return PS_TITLE_NOT_INITIALIZED;
+  }
+  return PS_TITLE_SUCCESS;
+#endif
+}
+
+static const char *ps_title_errno(ps_title_status rc) {
+  switch (rc) {
+  case PS_TITLE_SUCCESS:
+    return "Success";
+  case PS_TITLE_NOT_AVAILABLE:
+    return "Not available on this platform";
+  case PS_TITLE_NOT_INITIALIZED:
+    return "Not initialized";
+  case PS_TITLE_BUFFER_NOT_AVAILABLE:
+    return "Buffer not available";
+  case PS_TITLE_WINDOWS_ERROR:
+    return "Windows error";
+  case PS_TITLE_TOO_LONG:
+    return "Title too long";
+  default:
+    return "Unknown error";
+  }
+}
+
+static ps_title_status set_ps_title(const char *title, size_t title_len) {
+#ifdef PS_USE_NONE
+  return PS_TITLE_NOT_AVAILABLE;
+#else
+  if (title_len >= ps_buffer_size) {
+    return PS_TITLE_TOO_LONG;
+  }
+  ps_title_status rc = is_ps_title_available();
+  if (rc != PS_TITLE_SUCCESS)
+    return rc;
+
+  memcpy(ps_buffer, title, title_len);
+  ps_buffer[title_len] = '\0';
+  ps_buffer_cur_len = title_len;
+
+#ifdef PS_USE_SETPROCTITLE
+  setproctitle("%s", ps_buffer);
+#endif
+#ifdef PS_USE_WIN32
+  {
+    wchar_t *ps_buffer_w = php_win32_cp_any_to_w(ps_buffer);
+    if (!ps_buffer_w || !SetConsoleTitleW(ps_buffer_w)) {
+      if (ps_buffer_w)
+        free(ps_buffer_w);
+      return PS_TITLE_WINDOWS_ERROR;
+    }
+    free(ps_buffer_w);
+  }
+#endif
+  return PS_TITLE_SUCCESS;
+#endif
+}
+
+static ps_title_status get_ps_title(size_t *displen, const char **string) {
+  ps_title_status rc = is_ps_title_available();
+  if (rc != PS_TITLE_SUCCESS)
+    return rc;
+
+#ifdef PS_USE_WIN32
+  {
+    wchar_t ps_buffer_w[MAX_PATH];
+    char *tmp;
+
+    if (!(ps_buffer_cur_len =
+              GetConsoleTitleW(ps_buffer_w, (DWORD)sizeof(ps_buffer_w)))) {
+      return PS_TITLE_WINDOWS_ERROR;
+    }
+
+    tmp = php_win32_cp_conv_w_to_any(ps_buffer_w, PHP_WIN32_CP_IGNORE_LEN,
+                                     &ps_buffer_cur_len);
+    if (!tmp) {
+      return PS_TITLE_WINDOWS_ERROR;
+    }
+
+    ps_buffer_cur_len = ps_buffer_cur_len > ps_buffer_size - 1
+                            ? ps_buffer_size - 1
+                            : ps_buffer_cur_len;
+    memmove(ps_buffer, tmp, ps_buffer_cur_len);
+    free(tmp);
+  }
+#endif
+  *displen = ps_buffer_cur_len;
+  *string = ps_buffer;
+  return PS_TITLE_SUCCESS;
+}
+
+/* {{{ cli_set_process_title */
+PHP_FUNCTION(cli_set_process_title) {
+  char *title;
+  size_t title_len;
+  ps_title_status rc;
+
+  ZEND_PARSE_PARAMETERS_START(1, 1)
+  Z_PARAM_STRING(title, title_len)
+  ZEND_PARSE_PARAMETERS_END();
+
+  if (!ps_buffer) {
+      ps_buffer_size = 256; /* Reasonable default */
+      ps_buffer = malloc(ps_buffer_size);
+      if (ps_buffer) {
+        ps_buffer[0] = '\0';
+        ps_buffer_cur_len = 0;
+      }
+    }
+
+  rc = set_ps_title(title, title_len);
+  if (rc != PS_TITLE_SUCCESS) {
+    php_error_docref(NULL, E_WARNING, "cli_set_process_title had an error: %s",
+                     ps_title_errno(rc));
+    RETURN_FALSE;
+  }
+
+  RETURN_TRUE;
+}
+/* }}} */
+
+/* {{{ cli_get_process_title */
+PHP_FUNCTION(cli_get_process_title) {
+  const char *title = NULL;
+  size_t length = 0;
+  ps_title_status rc;
+
+  ZEND_PARSE_PARAMETERS_NONE();
+
+  rc = get_ps_title(&length, &title);
+  if (rc != PS_TITLE_SUCCESS) {
+    php_error_docref(NULL, E_WARNING, "cli_get_process_title had an error: %s",
+                     ps_title_errno(rc));
+    RETURN_NULL();
+  }
+
+  RETURN_STRINGL(title, length);
+}
+/* }}} */
+
 /* add_response_header and apache_response_headers are copied from
  * https://github.com/php/php-src/blob/master/sapi/cli/php_cli_server.c
  * Copyright (c) The PHP Group
@@ -1119,6 +1296,13 @@ static void *execute_script_cli(void *arg) {
   php_embed_init(cli_argc, cli_argv);
 
   cli_register_file_handles(false);
+
+#if PHP_VERSION_ID < 80400
+  zend_register_module_ex(&frankenphp_module);
+#else
+  zend_register_module_ex(&frankenphp_module, MODULE_PERSISTENT);
+#endif
+
   zend_first_try {
     if (eval) {
       /* evaluate the cli_script as literal PHP code (php-cli -r "...") */

@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 05ebde17137c559e891362fba6524fad1e0a2dfe */
+ * Stub hash: 1b144396ea8609321ba7fc51b6c22f0d5635197d */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_handle_request, 0, 1,
                                         _IS_BOOL, 0)
@@ -30,11 +30,22 @@ ZEND_END_ARG_INFO()
 
 #define arginfo_apache_response_headers arginfo_frankenphp_response_headers
 
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_cli_set_process_title, 0, 1,
+                                        _IS_BOOL, 0)
+ZEND_ARG_TYPE_INFO(0, title, IS_STRING, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_cli_get_process_title, 0, 0,
+                                        IS_STRING, 1)
+ZEND_END_ARG_INFO()
+
 ZEND_FUNCTION(frankenphp_handle_request);
 ZEND_FUNCTION(headers_send);
 ZEND_FUNCTION(frankenphp_finish_request);
 ZEND_FUNCTION(frankenphp_request_headers);
 ZEND_FUNCTION(frankenphp_response_headers);
+ZEND_FUNCTION(cli_set_process_title);
+ZEND_FUNCTION(cli_get_process_title);
 
 // clang-format off
 static const zend_function_entry ext_functions[] = {
@@ -47,6 +58,8 @@ static const zend_function_entry ext_functions[] = {
   ZEND_FALIAS(getallheaders, frankenphp_request_headers, arginfo_getallheaders)
   ZEND_FE(frankenphp_response_headers, arginfo_frankenphp_response_headers)
   ZEND_FALIAS(apache_response_headers, frankenphp_response_headers, arginfo_apache_response_headers)
+  ZEND_FE(cli_set_process_title, arginfo_cli_set_process_title)
+  ZEND_FE(cli_get_process_title, arginfo_cli_get_process_title)
   ZEND_FE_END
 };
 // clang-format on
