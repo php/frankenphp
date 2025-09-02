@@ -614,11 +614,11 @@ echo My\Extension\STATUS_ACTIVE; // 1
 Você pode executar o gerador com o seguinte comando:
 
 ```console
-GEN_STUB_FILE=php-src/build/gen_stub.php frankenphp extension-init my_extension.go
+GEN_STUB_SCRIPT=php-src/build/gen_stub.php frankenphp extension-init my_extension.go
 ```
 
 > [!NOTE]
-> Não se esqueça de definir a variável de ambiente `GEN_STUB_FILE` para o
+> Não se esqueça de definir a variável de ambiente `GEN_STUB_SCRIPT` para o
 > caminho do arquivo `gen_stub.php` no código-fonte PHP que você baixou
 > anteriormente.
 > Este é o mesmo script `gen_stub.php` mencionado na seção de implementação

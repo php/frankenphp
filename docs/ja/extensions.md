@@ -340,11 +340,11 @@ func (sp *StringProcessorStruct) Process(input *C.zend_string, mode int64) unsaf
 ここでいよいよ、拡張モジュールを生成できるようになります。以下のコマンドでジェネレーターを実行できます：
 
 ```console
-GEN_STUB_FILE=php-src/build/gen_stub.php frankenphp extension-init my_extension.go 
+GEN_STUB_SCRIPT=php-src/build/gen_stub.php frankenphp extension-init my_extension.go 
 ```
 
 > [!NOTE]
-> `GEN_STUB_FILE`環境変数に、先ほどダウンロードしたPHPソースの`gen_stub.php`ファイルのパスを設定するのを忘れないでください。これは手動実装セクションで言及されているのと同じ`gen_stub.php`スクリプトです。
+> `GEN_STUB_SCRIPT`環境変数に、先ほどダウンロードしたPHPソースの`gen_stub.php`ファイルのパスを設定するのを忘れないでください。これは手動実装セクションで言及されているのと同じ`gen_stub.php`スクリプトです。
 
 すべてがうまくいけば、`build`という名前の新しいディレクトリが作成されているはずです。このディレクトリには、生成されたPHP関数スタブを含む`my_extension.go`ファイルなど、拡張用の生成されたファイルが含まれています。
 

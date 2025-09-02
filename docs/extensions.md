@@ -480,11 +480,11 @@ echo My\Extension\STATUS_ACTIVE; // 1
 This is where the magic happens, and your extension can now be generated. You can run the generator with the following command:
 
 ```console
-GEN_STUB_FILE=php-src/build/gen_stub.php frankenphp extension-init my_extension.go 
+GEN_STUB_SCRIPT=php-src/build/gen_stub.php frankenphp extension-init my_extension.go 
 ```
 
 > [!NOTE]
-> Don't forget to set the `GEN_STUB_FILE` environment variable to the path of the `gen_stub.php` file in the PHP sources you downloaded earlier. This is the same `gen_stub.php` script mentioned in the manual implementation section.
+> Don't forget to set the `GEN_STUB_SCRIPT` environment variable to the path of the `gen_stub.php` file in the PHP sources you downloaded earlier. This is the same `gen_stub.php` script mentioned in the manual implementation section.
 
 If everything went well, a new directory named `build` should have been created. This directory contains the generated files for your extension, including the `my_extension.go` file with the generated PHP function stubs.
 

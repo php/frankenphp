@@ -447,11 +447,11 @@ echo My\Extension\STATUS_ACTIVE; // 1
 这就是魔法发生的地方，现在可以生成你的扩展。你可以使用以下命令运行生成器：
 
 ```console
-GEN_STUB_FILE=php-src/build/gen_stub.php frankenphp extension-init my_extension.go 
+GEN_STUB_SCRIPT=php-src/build/gen_stub.php frankenphp extension-init my_extension.go 
 ```
 
 > [!NOTE]
-> 不要忘记将 `GEN_STUB_FILE` 环境变量设置为你之前下载的 PHP 源代码中 `gen_stub.php` 文件的路径。这是在手动实现部分中提到的同一个 `gen_stub.php` 脚本。
+> 不要忘记将 `GEN_STUB_SCRIPT` 环境变量设置为你之前下载的 PHP 源代码中 `gen_stub.php` 文件的路径。这是在手动实现部分中提到的同一个 `gen_stub.php` 脚本。
 
 如果一切顺利，应该创建了一个名为 `build` 的新目录。此目录包含扩展的生成文件，包括带有生成的 PHP 函数存根的 `my_extension.go` 文件。
 
