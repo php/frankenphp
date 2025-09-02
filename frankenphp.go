@@ -214,6 +214,11 @@ func Init(options ...Option) error {
 
 	registerExtensions()
 
+	// add registered external workers
+	for _, ew := range externalWorkers {
+		options = append(options, WithWorkers(ew.Name(), ew.FileName(), ew.GetMinThreads(), WithWorkerEnv(ew.Env())))
+	}
+
 	opt := &opt{}
 	for _, o := range options {
 		if err := o(opt); err != nil {
