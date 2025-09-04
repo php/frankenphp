@@ -1,5 +1,8 @@
 package frankenphp
 
+// #include "frankenphp.h"
+import "C"
+
 // EXPERIMENTAL: ThreadDebugState prints the state of a single PHP thread - debugging purposes only
 type ThreadDebugState struct {
 	Index                    int
@@ -43,4 +46,38 @@ func threadDebugState(thread *phpThread) ThreadDebugState {
 		IsBusy:                   !thread.state.isInWaitingState(),
 		WaitingSinceMilliseconds: thread.state.waitTime(),
 	}
+}
+
+// EXPERIMENTAL: Expose the current thread's information to PHP
+//
+//export go_frankenphp_info
+func go_frankenphp_info(threadIndex C.uintptr_t) *C.zval {
+	currentThread := phpThreads[threadIndex]
+	_, isWorker := currentThread.handler.(*workerThread)
+
+	threadInfos := make([]any, 0, len(phpThreads))
+	for _, thread := range phpThreads {
+		if thread.state.is(stateReserved) {
+			continue
+		}
+		threadInfos = append(threadInfos, map[string]any{
+			"index":                      thread.threadIndex,
+			"name":                       thread.name(),
+			"state":                      thread.state.name(),
+			"is_waiting":                 thread.state.isInWaitingState(),
+			"waiting_since_milliseconds": thread.state.waitTime(),
+		})
+	}
+
+	zval := (*C.zval)(PHPMap(map[string]any{
+		"frankenphp_version": C.GoString(C.frankenphp_get_version().frankenphp_version),
+		"current_thread":     int64(threadIndex),
+		"is_worker_thread":   isWorker,
+		"threads":            threadInfos,
+	}))
+
+	// TODO: how to circumvent pinning?
+	currentThread.Pin(zval)
+
+	return zval
 }

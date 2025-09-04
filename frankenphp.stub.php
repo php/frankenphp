@@ -32,3 +32,9 @@ function frankenphp_response_headers(): array|bool {}
  */
 function apache_response_headers(): array|bool {}
 
+#[\JetBrains\PhpStorm\ArrayShape([
+    'name' => 'string',
+    'thread_index' => 'int',
+    'is_worker_thread' => 'bool',
+])]
+function frankenphp_info(): array {}
