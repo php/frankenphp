@@ -989,7 +989,7 @@ func TestMaxWaitTimeWorker(t *testing.T) {
 	wg.Add(10)
 	for range 10 {
 		go func() {
-			statusCode := getStatusCode("http://localhost:"+testPort+"/sleep.php?sleep=10000&iteration=1", t)
+			statusCode := getStatusCode("http://localhost:"+testPort+"/sleep.php?sleep=10&iteration=1", t)
 			if statusCode == http.StatusGatewayTimeout {
 				success.Store(true)
 			}

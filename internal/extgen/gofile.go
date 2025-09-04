@@ -22,6 +22,7 @@ type goTemplateData struct {
 	BaseName          string
 	Imports           []string
 	Constants         []phpConstant
+	Variables         []string
 	InternalFunctions []string
 	Functions         []phpFunction
 	Classes           []phpClass
@@ -39,7 +40,7 @@ func (gg *GoFileGenerator) generate() error {
 
 func (gg *GoFileGenerator) buildContent() (string, error) {
 	sourceAnalyzer := SourceAnalyzer{}
-	imports, internalFunctions, err := sourceAnalyzer.analyze(gg.generator.SourceFile)
+	imports, variables, internalFunctions, err := sourceAnalyzer.analyze(gg.generator.SourceFile)
 	if err != nil {
 		return "", fmt.Errorf("analyzing source file: %w", err)
 	}
@@ -59,6 +60,7 @@ func (gg *GoFileGenerator) buildContent() (string, error) {
 		BaseName:          gg.generator.BaseName,
 		Imports:           filteredImports,
 		Constants:         gg.generator.Constants,
+		Variables:         variables,
 		InternalFunctions: internalFunctions,
 		Functions:         gg.generator.Functions,
 		Classes:           classes,

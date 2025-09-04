@@ -23,10 +23,16 @@ jobs:
   tests-linux:
     name: Tests (Linux, PHP ${{ matrix.php-versions }})
     runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.experimental || false }}
     strategy:
       fail-fast: false
       matrix:
-        php-versions: ["8.2", "8.3", "8.4"]
+        include:
+          - php-versions: "8.2"
+          - php-versions: "8.3"
+          - php-versions: "8.4"
+          - php-versions: "8.5"
+            experimental: true
     env:
       GOMAXPROCS: 10
       LIBRARY_PATH: ${{ github.workspace }}/watcher/target/lib

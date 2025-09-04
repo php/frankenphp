@@ -51,15 +51,6 @@ int frankenphp_new_main_thread(int num_threads);
 bool frankenphp_new_php_thread(uintptr_t thread_index);
 
 bool frankenphp_shutdown_dummy_request(void);
-int frankenphp_update_server_context(bool is_worker_request,
-
-                                     const char *request_method,
-                                     char *query_string,
-                                     zend_long content_length,
-                                     char *path_translated, char *request_uri,
-                                     const char *content_type, char *auth_user,
-                                     char *auth_password, int proto_num);
-int frankenphp_request_startup();
 int frankenphp_execute_script(char *file_name);
 
 int frankenphp_execute_script_cli(char *script, int argc, char **argv,

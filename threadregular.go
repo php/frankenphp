@@ -75,14 +75,6 @@ func (handler *regularThread) waitForRequest() string {
 	handler.requestContext = fc
 	handler.state.markAsWaiting(false)
 
-	if err := updateServerContext(handler.thread, fc, false); err != nil {
-		fc.rejectBadRequest(err.Error())
-		handler.afterRequest()
-		handler.thread.Unpin()
-		// go back to beforeScriptExecution
-		return handler.beforeScriptExecution()
-	}
-
 	// set the scriptFilename that should be executed
 	return fc.scriptFilename
 }

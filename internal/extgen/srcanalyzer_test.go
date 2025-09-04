@@ -14,6 +14,7 @@ func TestSourceAnalyzer_Analyze(t *testing.T) {
 		name              string
 		sourceContent     string
 		expectedImports   []string
+		expectedVariables []string
 		expectedFunctions []string
 		expectError       bool
 	}{
@@ -34,7 +35,8 @@ func regularFunction() {
 func exportedFunction() string {
 	return "exported"
 }`,
-			expectedImports: []string{`"fmt"`, `"strings"`},
+			expectedImports:   []string{`"fmt"`, `"strings"`},
+			expectedVariables: nil,
 			expectedFunctions: []string{
 				`func regularFunction() {
 	fmt.Println("hello")
@@ -53,7 +55,8 @@ import (
 )
 
 func test() {}`,
-			expectedImports: []string{`custom "fmt"`, `. "strings"`, `_ "os"`},
+			expectedImports:   []string{`custom "fmt"`, `. "strings"`, `_ "os"`},
+			expectedVariables: nil,
 			expectedFunctions: []string{
 				`func test() {}`,
 			},
@@ -82,7 +85,8 @@ func internalTwo() string {
 func exportedTwo() bool {
 	return true
 }`,
-			expectedImports: []string{},
+			expectedImports:   []string{},
+			expectedVariables: nil,
 			expectedFunctions: []string{
 				`func internalOne() {
 	// some code
@@ -116,7 +120,8 @@ func exportedComplex() {
 	}
 	fmt.Println(obj)
 }`,
-			expectedImports: []string{},
+			expectedImports:   []string{},
+			expectedVariables: nil,
 			expectedFunctions: []string{
 				`func complexFunction() {
 	if true {
@@ -163,10 +168,50 @@ func shouldNotBeExported() {}
 func normalFunction() {
 	//export_php:function inside function should not count
 }`,
-			expectedImports: []string{},
+			expectedImports:   []string{},
+			expectedVariables: nil,
 			expectedFunctions: []string{
 				`func normalFunction() {
 	//export_php:function inside function should not count
+}`,
+			},
+			expectError: false,
+		},
+		{
+			name: "file with variable blocks",
+			sourceContent: `package main
+
+import (
+	"sync"
+)
+
+var (
+	mu    sync.RWMutex
+	store = map[string]struct {
+		val     string
+		expires int64
+	}{}
+)
+
+var singleVar = "test"
+
+func testFunction() {
+	// test function
+}`,
+			expectedImports: []string{`"sync"`},
+			expectedVariables: []string{
+				`var (
+	mu    sync.RWMutex
+	store = map[string]struct {
+		val     string
+		expires int64
+	}{}
+)`,
+				`var singleVar = "test"`,
+			},
+			expectedFunctions: []string{
+				`func testFunction() {
+	// test function
 }`,
 			},
 			expectError: false,
@@ -181,7 +226,7 @@ func normalFunction() {
 			require.NoError(t, os.WriteFile(filename, []byte(tt.sourceContent), 0644))
 
 			analyzer := &SourceAnalyzer{}
-			imports, functions, err := analyzer.analyze(filename)
+			imports, variables, functions, err := analyzer.analyze(filename)
 
 			if tt.expectError {
 				assert.Error(t, err, "expected error")
@@ -194,6 +239,7 @@ func normalFunction() {
 				assert.Equal(t, tt.expectedImports, imports, "imports mismatch")
 			}
 
+			assert.Equal(t, tt.expectedVariables, variables, "variables mismatch")
 			assert.Len(t, functions, len(tt.expectedFunctions), "function count mismatch")
 
 			for i, expected := range tt.expectedFunctions {
@@ -207,7 +253,7 @@ func TestSourceAnalyzer_Analyze_InvalidFile(t *testing.T) {
 	analyzer := &SourceAnalyzer{}
 
 	t.Run("nonexistent file", func(t *testing.T) {
-		_, _, err := analyzer.analyze("/nonexistent/file.go")
+		_, _, _, err := analyzer.analyze("/nonexistent/file.go")
 		assert.Error(t, err, "expected error for nonexistent file")
 	})
 
@@ -222,7 +268,7 @@ func TestSourceAnalyzer_Analyze_InvalidFile(t *testing.T) {
 
 		require.NoError(t, os.WriteFile(filename, []byte(invalidContent), 0644))
 
-		_, _, err := analyzer.analyze(filename)
+		_, _, _, err := analyzer.analyze(filename)
 		assert.Error(t, err, "expected error for invalid syntax")
 	})
 }
@@ -372,7 +418,7 @@ func internalTwo() {
 	analyzer := &SourceAnalyzer{}
 
 	for b.Loop() {
-		_, _, err := analyzer.analyze(filename)
+		_, _, _, err := analyzer.analyze(filename)
 		require.NoError(b, err)
 	}
 }
