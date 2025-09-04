@@ -36,6 +36,7 @@ typedef struct frankenphp_version {
   const char *extra_version;
   const char *version;
   unsigned long version_id;
+  const char *frankenphp_version;
 } frankenphp_version;
 frankenphp_version frankenphp_get_version();
 

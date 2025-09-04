@@ -46,6 +46,7 @@ frankenphp_version frankenphp_get_version() {
   return (frankenphp_version){
       PHP_MAJOR_VERSION, PHP_MINOR_VERSION, PHP_RELEASE_VERSION,
       PHP_EXTRA_VERSION, PHP_VERSION,       PHP_VERSION_ID,
+      TOSTRING(FRANKENPHP_VERSION)
   };
 }
 
@@ -1204,6 +1205,7 @@ PHP_FUNCTION(frankenphp_info) {
     RETURN_THROWS();
   }
 
-  zend_array *result = go_frankenphp_info(thread_index);
-  RETURN_ARR(result);
+  zval *result = go_frankenphp_info(thread_index);
+
+  RETURN_ARR(Z_ARR_P(result));
 }

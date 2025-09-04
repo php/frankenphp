@@ -970,14 +970,14 @@ func TestFileStreamInWorkerMode(t *testing.T) {
 
 func TestFrankenPHPInfo_module(t *testing.T) {
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
-		body := fetchBody("GET", "http://example.com/frankenphp_info.php", handler)
+		body, _ := testGet("http://example.com/frankenphp_info.php", handler, t)
 		assert.Contains(t, body, "[is_worker_thread] => 1")
 	}, &testOptions{workerScript: "frankenphp_info.php"})
 }
 
 func TestFrankenPHPInfo_worker(t *testing.T) {
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
-		body := fetchBody("GET", "http://example.com/frankenphp_info.php", handler)
+		body, _ := testGet("http://example.com/frankenphp_info.php", handler, t)
 		assert.Contains(t, body, "[is_worker_thread] => \n")
 	}, &testOptions{})
 }
