@@ -81,17 +81,19 @@ While the first point speaks for itself, the second may be harder to apprehend. 
 
 While some variable types have the same memory representation between C/PHP and Go, some types require more logic to be directly used. This is maybe the hardest part when it comes to writing extensions because it requires understanding internals of the Zend Engine and how variables are stored internally in PHP. This table summarizes what you need to know:
 
-| PHP type           | Go type             | Direct conversion | C to Go helper        | Go to C helper         | Class Methods Support |
-|--------------------|---------------------|-------------------|-----------------------|------------------------|-----------------------|
-| `int`              | `int64`             | ✅                 | -                     | -                      | ✅                     |
-| `?int`             | `*int64`            | ✅                 | -                     | -                      | ✅                     |
-| `float`            | `float64`           | ✅                 | -                     | -                      | ✅                     |
-| `?float`           | `*float64`          | ✅                 | -                     | -                      | ✅                     |
-| `bool`             | `bool`              | ✅                 | -                     | -                      | ✅                     |
-| `?bool`            | `*bool`             | ✅                 | -                     | -                      | ✅                     |
-| `string`/`?string` | `*C.zend_string`    | ❌                 | frankenphp.GoString() | frankenphp.PHPString() | ✅                     |
-| `array`            | `*frankenphp.Array` | ❌                 | frankenphp.GoArray()  | frankenphp.PHPArray()  | ✅                     |
-| `object`           | `struct`            | ❌                 | _Not yet implemented_ | _Not yet implemented_  | ❌                     |
+| PHP type           | Go type                       | Direct conversion | C to Go helper                  | Go to C helper                   | Class Methods Support |
+|--------------------|-------------------------------|-------------------|---------------------------------|----------------------------------|-----------------------|
+| `int`              | `int64`                       | ✅                 | -                               | -                                | ✅                     |
+| `?int`             | `*int64`                      | ✅                 | -                               | -                                | ✅                     |
+| `float`            | `float64`                     | ✅                 | -                               | -                                | ✅                     |
+| `?float`           | `*float64`                    | ✅                 | -                               | -                                | ✅                     |
+| `bool`             | `bool`                        | ✅                 | -                               | -                                | ✅                     |
+| `?bool`            | `*bool`                       | ✅                 | -                               | -                                | ✅                     |
+| `string`/`?string` | `*C.zend_string`              | ❌                 | frankenphp.GoString()           | frankenphp.PHPString()           | ✅                     |
+| `array`            | `frankenphp.AssociativeArray` | ❌                 | frankenphp.GoAssociativeArray() | frankenphp.PHPAssociativeArray() | ✅                     |
+| `array`            | `map[string]any`              | ❌                 | frankenphp.GoMap()              | frankenphp.PHPMap()              | ✅                     |
+| `array`            | `[]any`                       | ❌                 | frankenphp.GoPackedArray()      | frankenphp.PHPPackedArray()      | ✅                     |
+| `object`           | `struct`                      | ❌                 | _Not yet implemented_           | _Not yet implemented_            | ❌                     |
 
 > [!NOTE]
 > This table is not exhaustive yet and will be completed as the FrankenPHP types API gets more complete.
@@ -102,55 +104,86 @@ If you refer to the code snippet of the previous section, you can see that helpe
 
 #### Working with Arrays
 
-FrankenPHP provides native support for PHP arrays through the `frankenphp.Array` type. This type represents both PHP indexed arrays (lists) and associative arrays (hashmaps) with ordered key-value pairs.
+FrankenPHP provides native support for PHP arrays through `frankenphp.AssociativeArray` or direct conversion to a map or slice.
+
+`AssociativeArray` represents a [hash map](https://en.wikipedia.org/wiki/Hash_table) composed of a `Map: map[string]any`field and an optional `Order: []string` field (unlike PHP "associative arrays", Go maps aren't ordered).
+
+If order or association are not needed, it's also possible to directly convert to a slice `[]any` or unordered map `map[string]any`.
 
 **Creating and manipulating arrays in Go:**
 
 ```go
-//export_php:function process_data(array $input): array
-func process_data(arr *C.zval) unsafe.Pointer {
-    // Convert PHP array to Go
-    goArray := frankenphp.GoArray(unsafe.Pointer(arr))
-	
-	result := &frankenphp.Array{}
-    
-    result.SetInt(0, "first")
-    result.SetInt(1, "second")
-    result.Append("third") // Automatically assigns next integer key
-    
-    result.SetString("name", "John")
-    result.SetString("age", int64(30))
-    
-    for i := uint32(0); i < goArray.Len(); i++ {
-        key, value := goArray.At(i)
-        if key.Type == frankenphp.PHPStringKey {
-            result.SetString("processed_"+key.Str, value)
-        } else {
-            result.SetInt(key.Int+100, value)
-        }
-    }
-    
-    // Convert back to PHP array
-    return frankenphp.PHPArray(result)
+// export_php:function process_data_ordered(array $input): array
+func process_data_ordered_map(arr *C.zval) unsafe.Pointer {
+	// Convert PHP associative array to Go while keeping the order
+	associativeArray := frankenphp.GoAssociativeArray(unsafe.Pointer(arr))
+
+	// loop over the entries in order
+	for _, key := range associativeArray.Order {
+		value, _ = associativeArray.Map[key]
+		// do something with key and value
+	}
+
+	// return an ordered array
+	// if 'Order' is not empty, only the key-value paris in 'Order' will be respected
+	return frankenphp.PHPAssociativeArray(AssociativeArray{
+		Map: map[string]any{
+			"key1": "value1",
+			"key2": "value2",
+		},
+		Order: []string{"key1", "key2"},
+	})
+}
+
+// export_php:function process_data_unordered(array $input): array
+func process_data_unordered_map(arr *C.zval) unsafe.Pointer {
+	// Convert PHP associative array to a Go map without keeping the order
+	// ignoring the order will be more performant
+	goMap := frankenphp.GoMap(unsafe.Pointer(arr))
+
+	// loop over the entries in no specific order
+	for key, value := range goMap {
+		// do something with key and value
+	}
+
+	// return an unordered array
+	return frankenphp.PHPMap(map[string]any{
+		"key1": "value1",
+		"key2": "value2",
+	})
+}
+
+// export_php:function process_data_packed(array $input): array
+func process_data_packed(arr *C.zval) unsafe.Pointer {
+	// Convert PHP packed array to Go
+	goSlice := frankenphp.GoPackedArray(unsafe.Pointer(arr), false)
+
+	// loop over the slice in order
+	for index, value := range goSlice {
+		// do something with index and value
+	}
+
+	// return a packed array
+	return frankenphp.PHPackedArray([]any{"value1", "value2", "value3"})
 }
 ```
 
-**Key features of `frankenphp.Array`:**
+**Key features of array conversion:**
 
-* **Ordered key-value pairs** - Maintains insertion order like PHP arrays
-* **Mixed key types** - Supports both integer and string keys in the same array
-* **Type safety** - The `PHPKey` type ensures proper key handling
+* **Ordered key-value pairs** - Option to keep the order of the associative array
+* **Optimized for multiple cases** - Option to ditch the order for better performance or convert straight to a slice
 * **Automatic list detection** - When converting to PHP, automatically detects if array should be a packed list or hashmap
+* **Nested Arrays** - Arrays can be nested and will convert all support types automatically (`int64`,`float64`,`string`,`bool`,`nil`,`AssociativeArray`,`map[string]any`,`[]any`)
 * **Objects are not supported** - Currently, only scalar types and arrays can be used as values. Providing an object will result in a `null` value in the PHP array.
 
-**Available methods:**
+##### Available methods: Packed and Associative
 
-* `SetInt(key int64, value interface{})` - Set value with integer key
-* `SetString(key string, value interface{})` - Set value with string key  
-* `Append(value interface{})` - Add value with next available integer key
-* `Len() uint32` - Get number of elements
-* `At(index uint32) (PHPKey, interface{})` - Get key-value pair at index
-* `frankenphp.PHPArray(arr *frankenphp.Array) unsafe.Pointer` - Convert to PHP array
+* `frankenphp.PHPAssociativeArray(arr frankenphp.AssociativeArray) unsafe.Pointer` - Convert to an ordered PHP array with key-value pairs
+* `frankenphp.PHPMap(arr map[string]any) unsafe.Pointer` - Convert a map to an unordered PHP array with key-value pairs
+* `frankenphp.PHPPackedArray(slice []any) unsafe.Pointer` - Convert a slice to a PHP packed array with indexed values only
+* `frankenphp.GoAssociativeArray(arr unsafe.Pointer, ordered bool) frankenphp.AssociativeArray` - Convert a PHP array to an ordered Go AssociativeArray (map with order)
+* `frankenphp.GoMap(arr unsafe.Pointer) map[string]any` - Convert a PHP array to an unordered go map
+* `frankenphp.GoPackedArray(arr unsafe.Pointer) []any` - Convert a PHP array to a go slice
 
 ### Declaring a Native PHP Class
 

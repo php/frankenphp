@@ -307,13 +307,13 @@ jobs:
     if: fromJson(needs.prepare.outputs.push)
     steps:
       - name: Download metadata
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           pattern: metadata-static-builder-musl-*
           path: /tmp/metadata
           merge-multiple: true
       - name: Download GNU metadata
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           pattern: metadata-static-builder-gnu-*
           path: /tmp/metadata-gnu
@@ -371,7 +371,7 @@ jobs:
           ref: ${{ needs.prepare.outputs.ref }}
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.24"
+          go-version: "1.25"
           cache-dependency-path: |
             go.sum
             caddy/go.sum

@@ -127,7 +127,7 @@ error:0A000086:SSL routines::certificate verify failed
 > Веб и CLI контексты могут иметь разные настройки.  
 > Запустите `openssl_get_cert_locations()` в нужном контексте.
 
-[Сертификаты CA, извлечённые из Mozilla, можно скачать с сайта curl](https://curl.se/docs/caextract.html).
+[Сертификаты CA, извлечённые из Mozilla, можно скачать с сайта cURL](https://curl.se/docs/caextract.html).
 
 Кроме того, многие дистрибутивы, такие как Debian, Ubuntu и Alpine, предоставляют пакеты `ca-certificates`, содержащие эти сертификаты.
 

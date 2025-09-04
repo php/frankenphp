@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -29,7 +30,7 @@ type frankenPHPContext struct {
 
 	responseWriter http.ResponseWriter
 
-	done      chan interface{}
+	done      chan any
 	startedAt time.Time
 }
 
@@ -42,7 +43,7 @@ func fromContext(ctx context.Context) (fctx *frankenPHPContext, ok bool) {
 // NewRequestWithContext creates a new FrankenPHP request context.
 func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Request, error) {
 	fc := &frankenPHPContext{
-		done:      make(chan interface{}),
+		done:      make(chan any),
 		startedAt: time.Now(),
 		request:   r,
 	}
@@ -67,36 +68,13 @@ func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Reques
 		}
 	}
 
-	if fc.splitPath == nil {
-		fc.splitPath = []string{".php"}
-	}
-
-	if fc.env == nil {
-		fc.env = make(map[string]string)
-	}
-
-	if splitPos := splitPos(fc, r.URL.Path); splitPos > -1 {
-		fc.docURI = r.URL.Path[:splitPos]
-		fc.pathInfo = r.URL.Path[splitPos:]
-
-		// Strip PATH_INFO from SCRIPT_NAME
-		fc.scriptName = strings.TrimSuffix(r.URL.Path, fc.pathInfo)
-
-		// Ensure the SCRIPT_NAME has a leading slash for compliance with RFC3875
-		// Info: https://tools.ietf.org/html/rfc3875#section-4.1.13
-		if fc.scriptName != "" && !strings.HasPrefix(fc.scriptName, "/") {
-			fc.scriptName = "/" + fc.scriptName
-		}
-	}
-
-	// if a worker is assigned explicitly, use its filename
-	// determine if the filename belongs to a worker otherwise
+	// If a worker is already assigned explicitly, use its filename and skip parsing path variables
 	if fc.worker != nil {
 		fc.scriptFilename = fc.worker.fileName
 	} else {
-		// SCRIPT_FILENAME is the absolute path of SCRIPT_NAME
-		fc.scriptFilename = sanitizedPathJoin(fc.documentRoot, fc.scriptName)
-		fc.worker = getWorkerByPath(fc.scriptFilename)
+		// If no worker was assigned, split the path into the "traditional" CGI path variables.
+		// This needs to already happen here in case a worker script still matches the path.
+		splitCgiPath(fc)
 	}
 
 	c := context.WithValue(r.Context(), contextKey, fc)
@@ -104,6 +82,7 @@ func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Reques
 	return r.WithContext(c), nil
 }
 
+// newDummyContext creates a fake context from a request path
 func newDummyContext(requestPath string, opts ...RequestOption) (*frankenPHPContext, error) {
 	r, err := http.NewRequest(http.MethodGet, requestPath, nil)
 	if err != nil {
@@ -132,13 +111,22 @@ func (fc *frankenPHPContext) closeContext() {
 
 // validate checks if the request should be outright rejected
 func (fc *frankenPHPContext) validate() bool {
-	if !strings.Contains(fc.request.URL.Path, "\x00") {
-		return true
+	if strings.Contains(fc.request.URL.Path, "\x00") {
+		fc.rejectBadRequest("Invalid request path")
+
+		return false
 	}
 
-	fc.rejectBadRequest("Invalid request path")
+	contentLengthStr := fc.request.Header.Get("Content-Length")
+	if contentLengthStr != "" {
+		if contentLength, err := strconv.Atoi(contentLengthStr); err != nil || contentLength < 0 {
+			fc.rejectBadRequest("invalid Content-Length header: " + contentLengthStr)
 
-	return false
+			return false
+		}
+	}
+
+	return true
 }
 
 func (fc *frankenPHPContext) clientHasClosed() bool {

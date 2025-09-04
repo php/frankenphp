@@ -91,10 +91,7 @@ func setupWorkerScript(handler *workerThread, worker *worker) {
 		panic(err)
 	}
 
-	if err := updateServerContext(handler.thread, fc, false); err != nil {
-		panic(err)
-	}
-
+	fc.worker = worker
 	handler.dummyContext = fc
 	handler.isBootingScript = true
 	clearSandboxedEnv(handler.thread)
@@ -191,15 +188,6 @@ func (handler *workerThread) waitForWorkerRequest() bool {
 	handler.state.markAsWaiting(false)
 
 	logger.LogAttrs(ctx, slog.LevelDebug, "request handling started", slog.String("worker", handler.worker.name), slog.Int("thread", handler.thread.threadIndex), slog.String("url", fc.request.RequestURI))
-
-	if err := updateServerContext(handler.thread, fc, true); err != nil {
-		// Unexpected error or invalid request
-		logger.LogAttrs(ctx, slog.LevelDebug, "unexpected error", slog.String("worker", handler.worker.name), slog.Int("thread", handler.thread.threadIndex), slog.String("url", fc.request.RequestURI), slog.Any("error", err))
-		fc.rejectBadRequest(err.Error())
-		handler.workerContext = nil
-
-		return handler.waitForWorkerRequest()
-	}
 
 	return true
 }

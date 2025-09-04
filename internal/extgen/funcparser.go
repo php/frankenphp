@@ -128,8 +128,8 @@ func (fp *FuncParser) parseSignature(signature string) (*phpFunction, error) {
 
 	var params []phpParameter
 	if paramsStr != "" {
-		paramParts := strings.Split(paramsStr, ",")
-		for _, part := range paramParts {
+		paramParts := strings.SplitSeq(paramsStr, ",")
+		for part := range paramParts {
 			param, err := fp.parseParameter(strings.TrimSpace(part))
 			if err != nil {
 				return nil, fmt.Errorf("parsing parameter '%s': %w", part, err)

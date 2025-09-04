@@ -18,6 +18,9 @@ ENV SERVER_NAME=your-domain-name.example.com
 # 如果要禁用 HTTPS，请改用以下值：
 #ENV SERVER_NAME=:80
 
+# 如果你的项目不使用 "public" 目录作为 web 根目录，你可以在这里设置：
+# ENV SERVER_ROOT=web/
+
 # 启用 PHP 生产配置
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
@@ -124,7 +127,7 @@ git clone git@github.com:<username>/<project-name>.git
 进入包含项目 (`<project-name>`) 的目录，并在生产模式下启动应用：
 
 ```console
-docker compose up -d --wait
+docker compose up --wait
 ```
 
 你的服务器已启动并运行，并且已自动为你生成 HTTPS 证书。
@@ -132,7 +135,7 @@ docker compose up -d --wait
 
 > [!CAUTION]
 >
-> Docker 有一个缓存层，请确保每个部署都有正确的构建，或者使用 --no-cache 选项重新构建项目以避免缓存问题。
+> Docker 有一个缓存层，请确保每个部署都有正确的构建，或者使用 `--no-cache` 选项重新构建项目以避免缓存问题。
 
 ## 在多个节点上部署
 

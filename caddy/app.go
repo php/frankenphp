@@ -62,7 +62,12 @@ func (f *FrankenPHPApp) Provision(ctx caddy.Context) error {
 		}
 	} else {
 		// if the http module is not configured (this should never happen) then collect the metrics by default
-		f.metrics = frankenphp.NewPrometheusMetrics(ctx.GetMetricsRegistry())
+		if errors.Is(err, caddy.ErrNotConfigured) {
+			f.metrics = frankenphp.NewPrometheusMetrics(ctx.GetMetricsRegistry())
+		} else {
+			// the http module failed to provision due to invalid configuration
+			return fmt.Errorf("failed to provision caddy http: %w", err)
+		}
 	}
 
 	return nil
@@ -262,7 +267,7 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	return nil
 }
 
-func parseGlobalOption(d *caddyfile.Dispenser, _ interface{}) (interface{}, error) {
+func parseGlobalOption(d *caddyfile.Dispenser, _ any) (any, error) {
 	app := &FrankenPHPApp{}
 	if err := app.UnmarshalCaddyfile(d); err != nil {
 		return nil, err

@@ -17,7 +17,7 @@ docker run --cap-add=SYS_PTRACE --security-opt seccomp=unconfined -p 8080:8080 -
 - 附加配置文件: `/etc/frankenphp/php.d/*.ini`
 - php 扩展: `/usr/lib/frankenphp/modules/`
 
-如果你的 docker 版本低于 23.0，则会因为 dockerignore [pattern issue](https://github.com/moby/moby/pull/42676) 而导致构建失败。将目录添加到 `.dockerignore`。
+如果你的 Docker 版本低于 23.0，则会因为 dockerignore [pattern issue](https://github.com/moby/moby/pull/42676) 而导致构建失败。将目录添加到 `.dockerignore`。
 
 ```patch
  !testdata/*.php
@@ -42,7 +42,7 @@ go test -tags watcher -race -v ./...
 
 ```console
 cd caddy/frankenphp/
-go build
+go build -tags watcher,brotli,nobadger,nomysql,nopgx
 cd ../../
 ```
 
@@ -53,10 +53,13 @@ cd testdata/
 ../caddy/frankenphp/frankenphp run
 ```
 
-服务器正在监听 `127.0.0.1:8080`：
+服务器正在监听 `127.0.0.1:80`：
+
+> [!NOTE]
+> 如果您正在使用 Docker，您必须绑定容器的 80 端口或者在容器内部执行命令。
 
 ```console
-curl -vk https://localhost/phpinfo.php
+curl -vk http://127.0.0.1/phpinfo.php
 ```
 
 ## 最小测试服务器
@@ -149,18 +152,15 @@ docker buildx bake -f docker-bake.hcl --pull --no-cache --push
 
 3. 启用 `tmate` 以连接到容器
 
-    ```patch
-        -
-          name: Set CGO flags
-          run: echo "CGO_CFLAGS=$(php-config --includes)" >> "$GITHUB_ENV"
-    +   -
-    +     run: |
-    +       sudo apt install gdb
-    +       mkdir -p /home/runner/.config/gdb/
-    +       printf "set auto-load safe-path /\nhandle SIG34 nostop noprint pass" > /home/runner/.config/gdb/gdbinit
-    +   -
-    +     uses: mxschmitt/action-tmate@v3
-    ```
+   ```patch
+       - name: Set CGO flags
+         run: echo "CGO_CFLAGS=$(php-config --includes)" >> "$GITHUB_ENV"
+   +   - run: |
+   +       sudo apt install gdb
+   +       mkdir -p /home/runner/.config/gdb/
+   +       printf "set auto-load safe-path /\nhandle SIG34 nostop noprint pass" > /home/runner/.config/gdb/gdbinit
+   +   - uses: mxschmitt/action-tmate@v3
+   ```
 
 4. 连接到容器
 5. 打开 `frankenphp.go`
@@ -190,13 +190,12 @@ docker buildx bake -f docker-bake.hcl --pull --no-cache --push
 - [PHP 嵌入 C++](https://gist.github.com/paresy/3cbd4c6a469511ac7479aa0e7c42fea7)
 - [扩展和嵌入 PHP 作者：Sara Golemon](https://books.google.fr/books?id=zMbGvK17_tYC&pg=PA254&lpg=PA254#v=onepage&q&f=false)
 - [TSRMLS_CC到底是什么？](http://blog.golemon.com/2006/06/what-heck-is-tsrmlscc-anyway.html)
-- [Mac 上的 PHP 嵌入](https://gist.github.com/jonnywang/61427ffc0e8dde74fff40f479d147db4)
 - [SDL 绑定](https://pkg.go.dev/github.com/veandco/go-sdl2@v0.4.21/sdl#Main)
 
 ## Docker 相关资源
 
 - [Bake 文件定义](https://docs.docker.com/build/customize/bake/file-definition/)
-- [docker buildx 构建](https://docs.docker.com/engine/reference/commandline/buildx_build/)
+- [`docker buildx build`](https://docs.docker.com/engine/reference/commandline/buildx_build/)
 
 ## 有用的命令
 

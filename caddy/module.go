@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -450,12 +451,8 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 				tryPolicy = ""
 			}
 
-			for _, tf := range tryFiles {
-				if tf == dirIndex {
-					dirRedir = true
-
-					break
-				}
+			if slices.Contains(tryFiles, dirIndex) {
+				dirRedir = true
 			}
 		}
 

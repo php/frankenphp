@@ -223,7 +223,7 @@ jobs:
         target: ["builder", "runner"]
     steps:
       - name: Download metadata
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           pattern: metadata-${{ matrix.target }}-${{ matrix.variant }}-*
           path: /tmp/metadata
