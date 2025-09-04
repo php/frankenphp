@@ -44,10 +44,9 @@ static const char *MODULES_TO_RELOAD[] = {"filter", "session", NULL};
 
 frankenphp_version frankenphp_get_version() {
   return (frankenphp_version){
-      PHP_MAJOR_VERSION, PHP_MINOR_VERSION, PHP_RELEASE_VERSION,
-      PHP_EXTRA_VERSION, PHP_VERSION,       PHP_VERSION_ID,
-      TOSTRING(FRANKENPHP_VERSION)
-  };
+      PHP_MAJOR_VERSION,           PHP_MINOR_VERSION, PHP_RELEASE_VERSION,
+      PHP_EXTRA_VERSION,           PHP_VERSION,       PHP_VERSION_ID,
+      TOSTRING(FRANKENPHP_VERSION)};
 }
 
 frankenphp_config frankenphp_get_config() {
