@@ -38,6 +38,20 @@ func cmdPHPCLI(fs caddycmd.Flags) (int, error) {
 	}
 
 	var status int
+
+	if len(args) == 1 {
+		switch args[0] {
+		case "-i", "--info":
+			status = frankenphp.DisplayPHPInfo()
+			os.Exit(status)
+			return status, nil
+		case "-v", "--version":
+			status = frankenphp.DisplayPHPVersion()
+			os.Exit(status)
+			return status, nil
+		}
+	}
+
 	if len(args) >= 2 && args[0] == "-r" {
 		status = frankenphp.ExecutePHPCode(args[1])
 	} else {

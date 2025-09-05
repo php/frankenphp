@@ -589,6 +589,14 @@ func ExecutePHPCode(phpCode string) int {
 	return int(C.frankenphp_execute_script_cli(cCode, 0, nil, true))
 }
 
+func DisplayPHPInfo() int {
+	return int(C.frankenphp_print_phpinfo())
+}
+
+func DisplayPHPVersion() int {
+	return int(C.frankenphp_print_php_version())
+}
+
 func convertArgs(args []string) (C.int, []*C.char) {
 	argc := C.int(len(args))
 	argv := make([]*C.char, argc)

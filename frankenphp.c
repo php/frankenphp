@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <ext/spl/spl_exceptions.h>
 #include <ext/standard/head.h>
+#include <ext/standard/info.h>
 #include <inttypes.h>
 #include <php.h>
 #include <php_config.h>
@@ -1140,21 +1141,16 @@ static void *execute_script_cli(void *arg) {
   return exit_status;
 }
 
-int frankenphp_execute_script_cli(char *script, int argc, char **argv,
-                                  bool eval) {
+static int frankenphp_execute_in_thread(void *(*thread_func)(void *), void *arg) {
   pthread_t thread;
   int err;
   void *exit_status;
-
-  cli_script = script;
-  cli_argc = argc;
-  cli_argv = argv;
 
   /*
    * Start the script in a dedicated thread to prevent conflicts between Go and
    * PHP signal handlers
    */
-  err = pthread_create(&thread, NULL, execute_script_cli, (void *)eval);
+  err = pthread_create(&thread, NULL, thread_func, arg);
   if (err != 0) {
     return err;
   }
@@ -1165,6 +1161,80 @@ int frankenphp_execute_script_cli(char *script, int argc, char **argv,
   }
 
   return (intptr_t)exit_status;
+}
+
+int frankenphp_execute_script_cli(char *script, int argc, char **argv,
+                                  bool eval) {
+  cli_script = script;
+  cli_argc = argc;
+  cli_argv = argv;
+
+  return frankenphp_execute_in_thread(execute_script_cli, (void *)eval);
+}
+
+static void *frankenphp_execute_with_php_embed(void *arg) {
+  php_embed_context *ctx = (php_embed_context *)arg;
+  void *exit_status;
+
+  php_embed_module.name = ctx->module_name;
+  php_embed_module.pretty_name = ctx->pretty_name;
+
+  php_embed_init(ctx->argc, ctx->argv);
+
+  zend_first_try {
+    ctx->execute_func(ctx->execute_arg);
+  } zend_end_try();
+
+  exit_status = (void *)(intptr_t)EG(exit_status);
+
+  php_embed_shutdown();
+
+  return exit_status;
+}
+
+static void *frankenphp_execute_standard(void (*execute_func)(void *)) {
+  php_embed_context ctx = {
+    .module_name = "frankenphp",
+    .pretty_name = "FrankenPHP",
+    .argc = 0,
+    .argv = NULL,
+    .execute_func = execute_func,
+    .execute_arg = NULL
+  };
+  
+  return frankenphp_execute_with_php_embed(&ctx);
+}
+
+static void *standard_thread_wrapper(void *arg) {
+  void (*execute_func)(void *) = (void (*)(void *))arg;
+  return frankenphp_execute_standard(execute_func);
+}
+
+static int frankenphp_execute_standard_in_thread(void (*execute_func)(void *)) {
+  return frankenphp_execute_in_thread(standard_thread_wrapper, (void *)execute_func);
+}
+
+static void execute_phpinfo(void *arg) {
+  int as_text = sapi_module.phpinfo_as_text;
+  sapi_module.phpinfo_as_text = 1;
+
+  php_print_info(PHP_INFO_ALL);
+  php_output_end_all();
+
+  sapi_module.phpinfo_as_text = as_text;
+}
+
+static void execute_version_print(void *arg) {
+  const char *vi = php_version();
+  php_printf("%s\n", vi);
+}
+
+int frankenphp_print_phpinfo(void) {
+  return frankenphp_execute_standard_in_thread(execute_phpinfo);
+}
+
+int frankenphp_print_php_version(void) {
+    return frankenphp_execute_standard_in_thread(execute_version_print);
 }
 
 int frankenphp_reset_opcache(void) {
