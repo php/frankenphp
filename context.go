@@ -1,6 +1,7 @@
 package frankenphp
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"os"
@@ -33,6 +34,13 @@ type frankenPHPContext struct {
 	startedAt time.Time
 }
 
+// DEPRECATED: NewRequestWithContext adds RequestOptions to the request context, use ServeHTTP with options instead.
+func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Request, error) {
+	c := context.WithValue(r.Context(), contextKey, opts)
+
+	return r.WithContext(c), nil
+}
+
 // newFrankenPHPContext creates a new FrankenPHP request context.
 func newFrankenPHPContext(rw http.ResponseWriter, r *http.Request, opts ...RequestOption) (*frankenPHPContext, error) {
 	fc := &frankenPHPContext{
@@ -41,6 +49,15 @@ func newFrankenPHPContext(rw http.ResponseWriter, r *http.Request, opts ...Reque
 		request:        r,
 		responseWriter: rw,
 	}
+
+	// DEPRECATED: append all options added by NewRequestWithContext()
+	if ctx := r.Context(); ctx != nil {
+		ctxOpts, ok := ctx.Value(contextKey).([]RequestOption)
+		if ok && ctxOpts != nil {
+			opts = append(opts, ctxOpts...)
+		}
+	}
+
 	for _, o := range opts {
 		if err := o(fc); err != nil {
 			return nil, err

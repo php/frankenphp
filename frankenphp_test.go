@@ -896,6 +896,29 @@ func BenchmarkServerSuperGlobal(b *testing.B) {
 	}
 }
 
+// DEPRECATED: remove once NewRequestWithContext is removed
+func TestNewRequestWithContext(t *testing.T) {
+	customHandler := func(w http.ResponseWriter, r *http.Request) {
+		cwd, _ := os.Getwd()
+		testDataDir := cwd + "/testdata/"
+		req, err := frankenphp.NewRequestWithContext(r, frankenphp.WithRequestDocumentRoot(testDataDir, false))
+		if err != nil {
+			panic(err)
+		}
+		if err = frankenphp.ServeHTTP(w, req); err != nil {
+			panic(err)
+		}
+	}
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		req := httptest.NewRequest("GET", "http://example.com/index.php", nil)
+		body, resp := testRequest(req, customHandler, t)
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, "I am by birth a Genevese (i not set)", body)
+	}, nil)
+}
+
 func TestRejectInvalidHeaders_module(t *testing.T) { testRejectInvalidHeaders(t, &testOptions{}) }
 func TestRejectInvalidHeaders_worker(t *testing.T) {
 	testRejectInvalidHeaders(t, &testOptions{workerScript: "headers.php"})
