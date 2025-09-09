@@ -160,7 +160,7 @@ For more details, read [the dedicated Symfony documentation entry](https://symfo
 
 It is common for applications to interact with slow external services, like an
 API that tends to be unreliable under high load or consistently takes 10+ seconds to respond.
-In such cases, it can be beneficial to split the thread pool to have dedicated 'slow' pools.
+In such cases, it can be beneficial to split the thread pool to have dedicated "slow" pools.
 This prevents the slow endpoints from consuming all server resources/threads and
 limits the concurrency of requests going towards the slow endpoint, similar to a
 connection pool.
@@ -172,7 +172,7 @@ connection pool.
     }
 }
 
-https://example.com {
+example.com {
     php_server {
         root /app/public # the root of your application
         worker index.php {
