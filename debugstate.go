@@ -70,10 +70,10 @@ func go_frankenphp_info(threadIndex C.uintptr_t) *C.zval {
 	}
 
 	zval := (*C.zval)(PHPMap(map[string]any{
-		"frankenphp_version": C.GoString(C.frankenphp_get_version().frankenphp_version),
-		"current_thread":     int64(threadIndex),
-		"is_worker_thread":   isWorker,
-		"threads":            threadInfos,
+		"frankenphp_version":   C.GoString(C.frankenphp_get_version().frankenphp_version),
+		"current_thread_index": int64(threadIndex),
+		"is_worker_thread":     isWorker,
+		"threads":              threadInfos,
 	}))
 
 	// TODO: how to circumvent pinning?
