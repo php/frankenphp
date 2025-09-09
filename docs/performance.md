@@ -155,3 +155,39 @@ In particular:
 
 For more details, read [the dedicated Symfony documentation entry](https://symfony.com/doc/current/performance.html)
 (most tips are useful even if you don't use Symfony).
+
+## Splitting the thread pool
+
+It is not uncommon for applications to interact with slow external services, like an
+API that tends to be unreliable under load or consistently takes 10+ seconds to respond.
+In such cases, it can be beneficial to split the thread pool to have dedicated 'slow' pools.
+
+This prevents the slow endpoints from consuming all server resources/threads and
+limits the concurrency of requests going towards the slow endpoint, similar to a
+connection pool.
+
+```caddyfile
+
+{
+    frankenphp {
+        max_threads 100 # max 100 threads shared by all workers
+    }
+}
+
+https://example.com {
+    php_server {
+        root /app/public # the root of your application
+        worker index.php {
+            match /slow-endpoint/* # all requests with path /slow-endpoint/* are handled by this thread pool
+            num 10 # minimum 10 threads for requests matching /slow-endpoint/*
+        }
+        worker index.php {
+            match * # all other requests are handled separately
+            num 20 # minimum 20 threads for other requests, even if the slow endppoints start hanging
+        }
+    }
+}
+```
+
+Generally it's also advisable to handle very slow endpoints asynchronously, for example by using
+message queues.
