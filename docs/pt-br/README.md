@@ -1,14 +1,14 @@
-# FrankenPHP: Servidor de aplicações moderno para PHP
+# FrankenPHP: um moderno servidor de aplicações para PHP
 
 <h1 align="center"><a href="https://frankenphp.dev/pt-br"><img src="frankenphp.png" alt="FrankenPHP" width="600"></a></h1>
 
-O FrankenPHP é um servidor de aplicações moderno para PHP, construído sobre o
+O FrankenPHP é um moderno servidor de aplicações para PHP, construído sobre o
 servidor web [Caddy](https://caddyserver.com/).
 
-O FrankenPHP oferece superpoderes às suas aplicações PHP graças aos seus
-recursos impressionantes: [_Early Hints_](early-hints.md),
-[modo worker](worker.md), [recursos em tempo real](mercure.md), suporte
-automático a HTTPS, HTTP/2 e HTTP/3...
+O FrankenPHP dá superpoderes às suas aplicações PHP graças aos seus recursos
+impressionantes: [_Early Hints_](early-hints.md), [modo worker](worker.md),
+[recursos em tempo real](mercure.md), suporte automático a HTTPS, HTTP/2 e
+HTTP/3...
 
 O FrankenPHP funciona com qualquer aplicação PHP e torna seus projetos Laravel e
 Symfony mais rápidos do que nunca, graças às suas integrações oficiais com o
@@ -56,7 +56,7 @@ frankenphp php-cli /caminho/para/seu/script.php
 
 ### Docker
 
-Alternativamente, [imagens do Docker](docker.md) estão disponíveis:
+Alternativamente, [imagens Docker](docker.md) estão disponíveis:
 
 ```console
 docker run -v .:/app/public \
@@ -94,11 +94,12 @@ frankenphp php-server
 ## Documentação
 
 - [Modo clássico](classic.md)
-- [Modo Worker](worker.md)
+- [Modo worker](worker.md)
 - [Suporte a Early Hints (código de status HTTP 103)](early-hints.md)
 - [Tempo real](mercure.md)
 - [Servindo grandes arquivos estáticos com eficiência](x-sendfile.md)
 - [Configuração](config.md)
+- [Escrevendo extensões PHP em Go](extensions.md)
 - [Imagens Docker](docker.md)
 - [Implantação em produção](production.md)
 - [Otimização de desempenho](performance.md)
@@ -109,7 +110,7 @@ frankenphp php-server
 - [Integração com Laravel](laravel.md)
 - [Problemas conhecidos](known-issues.md)
 - [Aplicação de demonstração (Symfony) e benchmarks](https://github.com/dunglas/frankenphp-demo)
-- [Documentação da biblioteca Go](https://pkg.go.dev/github.com/dunglas/frankenphp)
+- [Documentação da biblioteca Go](https://pkg.go.dev/github.com/php/frankenphp)
 - [Contribuindo e depurando](CONTRIBUTING.md)
 
 ## Exemplos e esqueletos

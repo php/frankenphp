@@ -29,7 +29,7 @@ FROM dunglas/frankenphp
 COPY . /app/public
 ```
 
-Em seguida, execute estes comandos para compilar e executar a imagem do Docker:
+Em seguida, execute estes comandos para construir e executar a imagem Docker:
 
 ```console
 docker build -t minha-app-php .
@@ -55,13 +55,13 @@ RUN install-php-extensions \
 	opcache
 ```
 
-## Como instalar mais módulos do Caddy
+## Como instalar mais módulos Caddy
 
 O FrankenPHP é construído sobre o Caddy, e todos os
-[módulos do Caddy](https://caddyserver.com/docs/modules/) podem ser usados com o
+[módulos Caddy](https://caddyserver.com/docs/modules/) podem ser usados com o
 FrankenPHP.
 
-A maneira mais fácil de instalar módulos personalizados do Caddy é usar o
+A maneira mais fácil de instalar módulos Caddy personalizados é usar o
 [xcaddy](https://github.com/caddyserver/xcaddy):
 
 ```dockerfile
@@ -78,8 +78,8 @@ RUN CGO_ENABLED=1 \
     CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)" \
     xcaddy build \
         --output /usr/local/bin/frankenphp \
-        --with github.com/dunglas/frankenphp=./ \
-        --with github.com/dunglas/frankenphp/caddy=./caddy/ \
+        --with github.com/php/frankenphp=./ \
+        --with github.com/php/frankenphp/caddy=./caddy/ \
         --with github.com/dunglas/caddy-cbrotli \
         # Mercure e Vulcain estão incluídos na compilação oficial, mas sinta-se
         # à vontade para removê-los
@@ -93,10 +93,10 @@ FROM dunglas/frankenphp AS runner
 COPY --from=builder /usr/local/bin/frankenphp /usr/local/bin/frankenphp
 ```
 
-A imagem `builder` fornecida pelo FrankenPHP contém uma versão compilada de
+A imagem `builder` fornecida pelo FrankenPHP contém uma versão compilada da
 `libphp`.
 [Imagens de builder](https://hub.docker.com/r/dunglas/frankenphp/tags?name=builder)
-são fornecidas para todas as versões do FrankenPHP e PHP, tanto para Debian
+são fornecidas para todas as versões do FrankenPHP e do PHP, tanto para Debian
 quanto para Alpine.
 
 > [!TIP]
@@ -177,8 +177,8 @@ RUN \
 	useradd ${USER}; \
 	# Adiciona capacidade adicional para vincular às portas 80 e 443
 	setcap CAP_NET_BIND_SERVICE=+eip /usr/local/bin/frankenphp; \
-	# Concede acesso de escrita a /data/caddy e /config/caddy
-	chown -R ${USER}:${USER} /data/caddy && chown -R ${USER}:${USER} /config/caddy
+	# Concede acesso de escrita a /config/caddy e /data/caddy
+	chown -R ${USER}:${USER} /config/caddy /data/caddy
 
 USER ${USER}
 ```
@@ -203,8 +203,8 @@ RUN \
 	useradd ${USER}; \
 	# Remove a capacidade padrão
 	setcap -r /usr/local/bin/frankenphp; \
-	# Concede acesso de escrita a /data/caddy e /config/caddy
-	chown -R ${USER}:${USER} /data/caddy && chown -R ${USER}:${USER} /config/caddy
+	# Concede acesso de escrita a /config/caddy e /data/caddy
+	chown -R ${USER}:${USER} /config/caddy /data/caddy
 
 USER ${USER}
 ```
@@ -215,17 +215,17 @@ Exemplo: `:8000`
 
 ## Atualizações
 
-As imagens do Docker são compiladas:
+As imagens Docker são construídas:
 
-- quando uma tag de uma nova versão é criada.
-- diariamente às 4h UTC, se novas versões das imagens oficiais do PHP estiverem
+- Quando uma tag de uma nova versão é criada;
+- Diariamente às 4h UTC, se novas versões das imagens oficiais do PHP estiverem
   disponíveis.
 
 ## Versões de desenvolvimento
 
 As versões de desenvolvimento estão disponíveis no repositório Docker
 [`dunglas/frankenphp-dev`](https://hub.docker.com/repository/docker/dunglas/frankenphp-dev).
-Uma nova compilação é acionada sempre que um commit é enviado para o branch
+Uma nova construção é acionada sempre que um commit é enviado para o branch
 principal do repositório do GitHub.
 
 As tags `latest*` apontam para o HEAD do branch `main`.

@@ -3,6 +3,7 @@ name: Build binary releases
 concurrency:
   cancel-in-progress: true
   group: ${{ github.workflow }}-${{ github.ref }}
+
 on:
   pull_request:
     branches:
@@ -30,13 +31,14 @@ on:
         type: string
   schedule:
     - cron: "0 0 * * *"
+
 permissions:
-  contents: write
-  id-token: write
-  attestations: write
+  contents: read
+
 env:
   IMAGE_NAME: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.version) || startsWith(github.ref, 'refs/tags/')) && 'dunglas/frankenphp' || 'dunglas/frankenphp-dev' }}
   GOTOOLCHAIN: local
+
 jobs:
   prepare:
     runs-on: ubuntu-24.04
@@ -51,7 +53,7 @@ jobs:
         id: check
         if: github.event_name == 'schedule'
         run: |
-          ref="${{ (github.ref_type == 'tag' && github.ref_name) || (github.event_name == 'workflow_dispatch' && inputs.version) || '' }}"
+          ref="${REF}"
           if [[ -z "${ref}" ]]; then
             ref="$(gh release view --repo dunglas/frankenphp --json tagName --jq '.tagName')"
           fi
@@ -59,9 +61,11 @@ jobs:
           echo "ref=${ref}" >> "${GITHUB_OUTPUT}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/checkout@v4
+          REF: ${{ (github.ref_type == 'tag' && github.ref_name) || (github.event_name == 'workflow_dispatch' && inputs.version) || '' }}
+      - uses: actions/checkout@v5
         with:
           ref: ${{ steps.check.outputs.ref }}
+          persist-credentials: false
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Create platforms matrix
@@ -77,7 +81,12 @@ jobs:
         env:
           SHA: ${{ github.sha }}
           VERSION: ${{ steps.check.outputs.ref || 'dev' }}
+
   build-linux-musl:
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     strategy:
       fail-fast: false
       matrix:
@@ -96,12 +105,13 @@ jobs:
     steps:
       - name: Prepare
         id: prepare
-        run: |
-          platform=${{ matrix.platform }}
-          echo "sanitized_platform=${platform//\//-}" >> "${GITHUB_OUTPUT}"
-      - uses: actions/checkout@v4
+        run: echo "sanitized_platform=${PLATFORM//\//-}" >> "${GITHUB_OUTPUT}"
+        env:
+          PLATFORM: ${{ matrix.platform }}
+      - uses: actions/checkout@v5
         with:
           ref: ${{ needs.prepare.outputs.ref }}
+          persist-credentials: false
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
@@ -156,11 +166,12 @@ jobs:
         run: |
           # shellcheck disable=SC2034
           digest=$(jq -r '."static-builder-musl"."${{ (fromJson(needs.prepare.outputs.push) && !matrix.debug && !matrix.mimalloc) && 'containerimage.digest' || 'containerimage.config.digest' }}"' <<< "${METADATA}")
-          docker create --platform=${{ matrix.platform }} --name static-builder-musl "${{ (fromJson(needs.prepare.outputs.push) && !matrix.debug && !matrix.mimalloc) && '${IMAGE_NAME}@${digest}' || '${digest}' }}"
+          docker create --platform="${PLATFORM}" --name static-builder-musl "${{ (fromJson(needs.prepare.outputs.push) && !matrix.debug && !matrix.mimalloc) && '${IMAGE_NAME}@${digest}' || '${digest}' }}"
           docker cp "static-builder-musl:/go/src/app/dist/${BINARY}" "${BINARY}${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }}"
         env:
           METADATA: ${{ steps.build.outputs.metadata }}
           BINARY: frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}
+          PLATFORM: ${{ matrix.platform }}
       - name: Upload artifact
         if: ${{ !fromJson(needs.prepare.outputs.push) }}
         uses: actions/upload-artifact@v4
@@ -169,11 +180,12 @@ jobs:
           path: frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }}
       - name: Upload assets
         if: fromJson(needs.prepare.outputs.push) && (needs.prepare.outputs.ref || github.ref_type == 'tag')
-        run: gh release upload "${{ (github.ref_type == 'tag' && github.ref_name) || needs.prepare.outputs.ref }}" frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }} --repo dunglas/frankenphp --clobber
+        run: gh release upload "${REF}" frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }} --repo dunglas/frankenphp --clobber
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REF: ${{ (github.ref_type == 'tag' && github.ref_name) || needs.prepare.outputs.ref }}
       - if: fromJson(needs.prepare.outputs.push) && (needs.prepare.outputs.ref || github.ref_type == 'tag')
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v3
         with:
           subject-path: ${{ github.workspace }}/frankenphp-linux-*
       - name: Run sanity checks
@@ -190,6 +202,10 @@ jobs:
           BINARY: ./frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }}
 
   build-linux-gnu:
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     strategy:
       fail-fast: false
       matrix:
@@ -200,12 +216,13 @@ jobs:
     steps:
       - name: Prepare
         id: prepare
-        run: |
-          platform=${{ matrix.platform }}
-          echo "sanitized_platform=${platform//\//-}" >> "${GITHUB_OUTPUT}"
-      - uses: actions/checkout@v4
+        run: echo "sanitized_platform=${PLATFORM//\//-}" >> "${GITHUB_OUTPUT}"
+        env:
+          PLATFORM: ${{ matrix.platform }}
+      - uses: actions/checkout@v5
         with:
           ref: ${{ needs.prepare.outputs.ref }}
+          persist-credentials: false
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
@@ -259,7 +276,7 @@ jobs:
         run: |
           # shellcheck disable=SC2034
           digest=$(jq -r '."static-builder-gnu"."${{ fromJson(needs.prepare.outputs.push) && 'containerimage.digest' || 'containerimage.config.digest' }}"' <<< "${METADATA}")
-          container_id=$(docker create --platform=${{ matrix.platform }} "${{ fromJson(needs.prepare.outputs.push) && '${IMAGE_NAME}@${digest}' || '${digest}' }}")
+          container_id=$(docker create --platform="${PLATFORM}" "${{ fromJson(needs.prepare.outputs.push) && '${IMAGE_NAME}@${digest}' || '${digest}' }}")
           mkdir -p gh-output
           cd gh-output
           for file in $(docker run --rm "${{ fromJson(needs.prepare.outputs.push) && '${IMAGE_NAME}@${digest}' || '${digest}' }}" sh -c "ls /go/src/app/dist | grep '^frankenphp'"); do
@@ -270,6 +287,7 @@ jobs:
         env:
           METADATA: ${{ steps.build.outputs.metadata }}
           BINARY: frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}
+          PLATFORM: ${{ matrix.platform }}
       - name: Upload artifact
         if: ${{ !fromJson(needs.prepare.outputs.push) }}
         uses: actions/upload-artifact@v4
@@ -278,11 +296,12 @@ jobs:
           path: gh-output/*
       - name: Upload assets
         if: fromJson(needs.prepare.outputs.push) && (needs.prepare.outputs.ref || github.ref_type == 'tag')
-        run: gh release upload "${{ (github.ref_type == 'tag' && github.ref_name) || needs.prepare.outputs.ref }}" gh-output/* --repo dunglas/frankenphp --clobber
+        run: gh release upload "${REF}" gh-output/* --repo dunglas/frankenphp --clobber
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REF: ${{ (github.ref_type == 'tag' && github.ref_name) || needs.prepare.outputs.ref }}
       - if: fromJson(needs.prepare.outputs.push) && (needs.prepare.outputs.ref || github.ref_type == 'tag')
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v3
         with:
           subject-path: ${{ github.workspace }}/gh-output/frankenphp-linux-*-gnu
       - name: Run sanity checks
@@ -356,6 +375,10 @@ jobs:
           GNU_METADATA: ${{ needs.prepare.outputs.gnu_metadata }}
 
   build-mac:
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     strategy:
       fail-fast: false
       matrix:
@@ -366,26 +389,30 @@ jobs:
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ needs.prepare.outputs.ref }}
-      - uses: actions/setup-go@v5
+          persist-credentials: false
+      - uses: actions/setup-go@v6
         with:
           go-version: "1.25"
           cache-dependency-path: |
             go.sum
             caddy/go.sum
+          cache: false
       - name: Set FRANKENPHP_VERSION
         run: |
           if [ "${GITHUB_REF_TYPE}" == "tag" ]; then
             export FRANKENPHP_VERSION=${GITHUB_REF_NAME:1}
           elif [ "${GITHUB_EVENT_NAME}" == "schedule" ]; then
-            export FRANKENPHP_VERSION="${{ needs.prepare.outputs.ref }}"
+            export FRANKENPHP_VERSION="${REF}"
           else
             export FRANKENPHP_VERSION=${GITHUB_SHA}
           fi
 
           echo "FRANKENPHP_VERSION=${FRANKENPHP_VERSION}" >> "${GITHUB_ENV}"
+        env:
+          REF: ${{ needs.prepare.outputs.ref }}
       - name: Build FrankenPHP
         run: ./build-static.sh
         env:
@@ -393,7 +420,7 @@ jobs:
           RELEASE: ${{ (needs.prepare.outputs.ref || github.ref_type == 'tag') && '1' || '' }}
           NO_COMPRESS: ${{ github.event_name == 'pull_request' && '1' || '' }}
       - if: needs.prepare.outputs.ref || github.ref_type == 'tag'
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v3
         with:
           subject-path: ${{ github.workspace }}/dist/frankenphp-mac-*
       - name: Upload artifact

@@ -3,7 +3,7 @@
 ## Docker
 
 Servir uma aplicação web [Laravel](https://laravel.com) com FrankenPHP é tão
-fácil quanto montar o projeto no diretório `/app` da imagem oficial do Docker.
+fácil quanto montar o projeto no diretório `/app` da imagem Docker oficial.
 
 Execute este comando a partir do diretório principal da sua aplicação Laravel:
 
@@ -18,7 +18,7 @@ E divirta-se!
 Alternativamente, você pode executar seus projetos Laravel com FrankenPHP a
 partir da sua máquina local:
 
-1. [Baixe o binário correspondente ao seu sistema](../../#getting-started).
+1. [Baixe o binário correspondente ao seu sistema](../#standalone-binary).
 2. Adicione a seguinte configuração a um arquivo chamado `Caddyfile` no
    diretório raiz do seu projeto Laravel:
 
@@ -29,7 +29,7 @@ partir da sua máquina local:
 
    # O nome de domínio do seu servidor
    localhost {
-       # Define o diretório webroot/ como root public/
+       # Define o diretório raiz como public/
        root public/
        # Habilita a compressão (opcional)
        encode zstd br gzip
@@ -68,24 +68,24 @@ php artisan octane:frankenphp
 O comando `octane:frankenphp` pode receber as seguintes opções:
 
 - `--host`: O endereço IP ao qual o servidor deve se vincular (padrão:
-  `127.0.0.1`).
-- `--port`: A porta na qual o servidor deve estar disponível (padrão: `8000`).
+  `127.0.0.1`);
+- `--port`: A porta na qual o servidor deve estar disponível (padrão: `8000`);
 - `--admin-port`: A porta na qual o servidor de administração deve estar
-  disponível (padrão: `2019`).
+  disponível (padrão: `2019`);
 - `--workers`: O número de workers que devem estar disponíveis para processar
-  requisições (padrão: `auto`).
+  requisições (padrão: `auto`);
 - `--max-requests`: O número de requisições a serem processadas antes de
-  recarregar o servidor (padrão: `500`).
+  recarregar o servidor (padrão: `500`);
 - `--caddyfile`: O caminho para o arquivo `Caddyfile` do FrankenPHP (padrão:
-  [stub de `Caddyfile` no Laravel Octane](https://github.com/laravel/octane/blob/2.x/src/Commands/stubs/Caddyfile)).
+  [stub do `Caddyfile` no Laravel Octane](https://github.com/laravel/octane/blob/2.x/src/Commands/stubs/Caddyfile));
 - `--https`: Habilita HTTPS, HTTP/2 e HTTP/3 e gera e renova certificados
-  automaticamente.
+  automaticamente;
 - `--http-redirect`: Habilita o redirecionamento de HTTP para HTTPS (somente
-- habilitado se `--https` for passada).
+- habilitado se `--https` for passada);
 - `--watch`: Recarrega o servidor automaticamente quando a aplicação é
-  modificada.
+  modificada;
 - `--poll`: Usa o polling do sistema de arquivos durante a verificação para
-  monitorar arquivos em uma rede.
+  monitorar arquivos em uma rede;
 - `--log-level`: Registra mensagens de log no nível de log especificado ou acima
   dele, usando o logger nativo do Caddy.
 
@@ -98,8 +98,8 @@ Saiba mais sobre o
 
 ## Aplicações Laravel como binários independentes
 
-Usando o [recurso de incorporação de aplicativos do FrankenPHP](embed.md), é
-possível distribuir aplicativos Laravel como binários independentes.
+Usando o [recurso de incorporação de aplicações do FrankenPHP](embed.md), é
+possível distribuir aplicações Laravel como binários independentes.
 
 Siga estes passos para empacotar sua aplicação Laravel como um binário
 independente para Linux:
@@ -203,7 +203,7 @@ Para fazer isso, [instale o Octane corretamente](#laravel-octane) e siga os
 passos descritos na
 [seção anterior](#aplicações-laravel-como-binários-independentes).
 
-Em seguida, para iniciar o FrankenPHP em modo worker através do Octane, execute:
+Em seguida, para iniciar o FrankenPHP no modo worker através do Octane, execute:
 
 ```console
 PATH="$PWD:$PATH" frankenphp php-cli artisan octane:frankenphp

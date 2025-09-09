@@ -9,10 +9,10 @@ comparação com o uso direto do servidor web (sobrecarga de memória, desempenh
 reduzido...).
 
 O FrankenPHP permite delegar o envio de arquivos estáticos ao servidor web
-**após** a execução de código PHP personalizado.
+**após** a execução do código PHP personalizado.
 
-Para fazer isso, sua aplicação PHP precisa simplesmente definir um cabeçalho
-HTTP personalizado contendo o caminho do arquivo a ser servido.
+Para fazer isso, sua aplicação PHP só precisa definir um cabeçalho HTTP
+personalizado contendo o caminho do arquivo a ser servido.
 O FrankenPHP cuida do resto.
 
 Esse recurso é conhecido como **`X-Sendfile`** para Apache e

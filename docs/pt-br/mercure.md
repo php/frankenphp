@@ -16,6 +16,6 @@ Ao executar o FrankenPHP dentro do Docker, a URL de envio completa seria
 `http://php/.well-known/mercure` (com `php` sendo o nome do contêiner que
 executa o FrankenPHP).
 
-Para enviar atualizações do Mercure do seu código, recomendamos o
+Para enviar atualizações do Mercure a partir do seu código, recomendamos o
 [Componente Symfony Mercure](https://symfony.com/components/Mercure) (você não
 precisa do framework full-stack do Symfony para usá-lo).

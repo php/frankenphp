@@ -1,4 +1,4 @@
-# Compilar a partir dos fontes
+# Compilar a partir do código-fonte
 
 Este documento explica como criar um binário FrankenPHP que carregará o PHP como
 uma biblioteca dinâmica.
@@ -29,10 +29,10 @@ brew link --overwrite --force shivammathur/php/php-zts
 
 ### Compilando o PHP
 
-Alternativamente, você pode compilar o PHP a partir dos códigos-fonte com as
+Alternativamente, você pode compilar o PHP a partir do código-fonte com as
 opções necessárias para o FrankenPHP seguindo estes passos.
 
-Primeiro, [obtenha os códigos-fonte do PHP](https://www.php.net/downloads.php) e
+Primeiro, [obtenha o código-fonte do PHP](https://www.php.net/downloads.php) e
 extraia-os:
 
 ```console
@@ -91,10 +91,10 @@ devem ser instaladas.
 Alternativamente, esses recursos podem ser desabilitados passando as tags de
 compilação para o compilador Go.
 
-| Recurso                                | Dependência                                                           | Tag de compilação para desabilitá-lo |
-|----------------------------------------|-----------------------------------------------------------------------|--------------------------------------|
-| Compressão Brotli                      | [Brotli](https://github.com/google/brotli)                            | `nobrotli`                           |
-| Reiniciar workers ao alterar o arquivo | [Watcher C](https://github.com/e-dant/watcher/tree/release/watcher-c) | `nowatcher`                          |
+| Recurso                               | Dependência                                                           | Tag de compilação para desabilitá-lo |
+|---------------------------------------|-----------------------------------------------------------------------|--------------------------------------|
+| Compressão Brotli                     | [Brotli](https://github.com/google/brotli)                            | `nobrotli`                           |
+| Reiniciar workers ao alterar arquivos | [Watcher C](https://github.com/e-dant/watcher/tree/release/watcher-c) | `nowatcher`                          |
 
 ## Compilando a aplicação Go
 
@@ -115,7 +115,7 @@ CGO_CFLAGS=$(php-config --includes) \
 CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)" \
 xcaddy build \
     --output frankenphp \
-    --with github.com/dunglas/frankenphp/caddy \
+    --with github.com/php/frankenphp/caddy \
     --with github.com/dunglas/mercure/caddy \
     --with github.com/dunglas/vulcain/caddy
     # Adicione módulos Caddy e extensões FrankenPHP extras aqui
@@ -141,7 +141,7 @@ Alternativamente, é possível compilar o FrankenPHP sem o `xcaddy` usando o
 comando `go` diretamente:
 
 ```console
-curl -L https://github.com/dunglas/frankenphp/archive/refs/heads/main.tar.gz | tar xz
+curl -L https://github.com/php/frankenphp/archive/refs/heads/main.tar.gz | tar xz
 cd frankenphp-main/caddy/frankenphp
 CGO_CFLAGS=$(php-config --includes) CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)" go build -tags=nobadger,nomysql,nopgx
 ```

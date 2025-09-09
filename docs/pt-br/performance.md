@@ -31,7 +31,7 @@ diretiva `frankenphp`.
 Embora seja sempre melhor saber exatamente como será o seu tráfego, aplicações
 reais tendem a ser mais imprevisíveis.
 A [configuração](config.md#configuracao-do-caddyfile) `max_threads` permite que
-o FrankenPHP gere threads adicionais automaticamente em tempo de execução até o
+o FrankenPHP crie threads adicionais automaticamente em tempo de execução até o
 limite especificado.
 `max_threads` pode ajudar você a descobrir quantas threads são necessárias para
 lidar com seu tráfego e pode tornar o servidor mais resiliente a picos de
@@ -44,7 +44,7 @@ necessárias.
 `max_threads` é semelhante ao
 [pm.max_children](https://www.php.net/manual/pt_BR/install.fpm.configuration.php#pm.max-children)
 do PHP FPM.
-A principal diferença é que o FrankenPHP usa threads em vez de processos e os
+A principal diferença é que o FrankenPHP usa threads em vez de processos e as
 delega automaticamente entre diferentes worker scripts e o modo clássico,
 conforme necessário.
 
@@ -74,19 +74,19 @@ Em ambientes de produção, recomendamos o uso do FrankenPHP vinculado à `glibc
 
 Isso pode ser feito usando as imagens Docker do Debian (o padrão), baixando o
 binário com sufixo -gnu de nossos
-[Lançamentos](https://github.com/dunglas/frankenphp/releases) ou
-[compilando o FrankenPHP a partir dos fontes](compile.md).
+[Lançamentos](https://github.com/php/frankenphp/releases) ou
+[compilando o FrankenPHP a partir do código-fonte](compile.md).
 
 Como alternativa, fornecemos binários `musl` estáticos compilados com
 [o alocador `mimalloc`](https://github.com/microsoft/mimalloc), o que alivia os
 problemas em cenários com threads.
 
-## Configuração de Tempo de Execução do Go
+## Configuração do runtime do Go
 
 O FrankenPHP é escrito em Go.
 
-Em geral, o tempo de execução do Go não requer nenhuma configuração especial,
-mas em certas circunstâncias, configurações específicas melhoram o desempenho.
+Em geral, o runtime do Go não requer nenhuma configuração especial, mas em
+certas circunstâncias, configurações específicas melhoram o desempenho.
 
 Você provavelmente deseja definir a variável de ambiente `GODEBUG` como
 `cgocheck=0` (o padrão nas imagens Docker do FrankenPHP).
@@ -96,8 +96,8 @@ limita a memória disponível para os contêineres, defina a variável de ambien
 `GOMEMLIMIT` para a quantidade de memória disponível.
 
 Para mais detalhes,
-[a página de documentação do Go dedicada a este assunto](https://pkg.go.dev/runtime#hdr-Environment_Variables)
-é uma leitura obrigatória para aproveitar ao máximo o tempo de execução.
+[a página da documentação do Go dedicada a este assunto](https://pkg.go.dev/runtime#hdr-Environment_Variables)
+é uma leitura obrigatória para aproveitar ao máximo o runtime.
 
 ## `file_server`
 
@@ -132,7 +132,8 @@ Isso pode reduzir significativamente o número de operações desnecessárias co
 arquivos.
 
 Uma abordagem alternativa com 0 operações desnecessárias no sistema de arquivos
-seria usar a diretiva `php` e dividir os arquivos do PHP por caminho.
+seria usar a diretiva `php` e separar os arquivos estáticos do PHP usando
+caminhos.
 Essa abordagem funciona bem se toda a sua aplicação for servida por um arquivo
 de entrada.
 Um exemplo de [configuração](config.md#configuracao-do-caddyfile) que serve
@@ -200,15 +201,15 @@ FrankenPHP.
 
 Em particular:
 
-- verifique se o [OPcache](https://www.php.net/manual/pt_BR/book.opcache.php)
-  está instalado, habilitado e configurado corretamente.
-- habilite as
-  [otimizações do carregador automático do Composer](https://getcomposer.org/doc/articles/autoloader-optimization.md).
-- certifique-se de que o cache do `realpath` seja grande o suficiente para as
-  necessidades da sua aplicação.
-- use
+- Verifique se o [OPcache](https://www.php.net/manual/pt_BR/book.opcache.php)
+  está instalado, habilitado e configurado corretamente;
+- Habilite as
+  [otimizações do carregador automático do Composer](https://getcomposer.org/doc/articles/autoloader-optimization.md);
+- Certifique-se de que o cache do `realpath` seja grande o suficiente para as
+  necessidades da sua aplicação;
+- Use
   [pré-carregamento](https://www.php.net/manual/pt_BR/opcache.preloading.php).
 
 Para mais detalhes, leia
 [a entrada dedicada na documentação do Symfony](https://symfony.com/doc/current/performance.html)
-(a maioria das dicas é útil mesmo se você não usar o Symfony).
+(a maioria das dicas é útil mesmo se você não usa o Symfony).

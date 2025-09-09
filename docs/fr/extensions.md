@@ -447,11 +447,11 @@ echo My\Extension\STATUS_ACTIVE; // 1
 C'est là que la magie opère, et votre extension peut maintenant être générée. Vous pouvez exécuter le générateur avec la commande suivante :
 
 ```console
-GEN_STUB_FILE=php-src/build/gen_stub.php frankenphp extension-init my_extension.go 
+GEN_STUB_SCRIPT=php-src/build/gen_stub.php frankenphp extension-init my_extension.go 
 ```
 
 > [!NOTE]
-> N'oubliez pas de définir la variable d'environnement `GEN_STUB_FILE` sur le chemin du fichier `gen_stub.php` dans les sources PHP que vous avez téléchargées plus tôt. C'est le même script `gen_stub.php` mentionné dans la section d'implémentation manuelle.
+> N'oubliez pas de définir la variable d'environnement `GEN_STUB_SCRIPT` sur le chemin du fichier `gen_stub.php` dans les sources PHP que vous avez téléchargées plus tôt. C'est le même script `gen_stub.php` mentionné dans la section d'implémentation manuelle.
 
 Si tout s'est bien passé, un nouveau répertoire nommé `build` devrait avoir été créé. Ce répertoire contient les fichiers générés pour votre extension, incluant le fichier `my_extension.go` avec les stubs de fonction PHP générés.
 
