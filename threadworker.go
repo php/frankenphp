@@ -19,6 +19,7 @@ type workerThread struct {
 	dummyContext    *frankenPHPContext
 	workerContext   *frankenPHPContext
 	backoff         *exponentialBackoff
+	requestCount    int  // number of requests served (without restarting the worker script)
 	isBootingScript bool // true if the worker has not reached frankenphp_handle_request yet
 }
 
@@ -94,6 +95,7 @@ func setupWorkerScript(handler *workerThread, worker *worker) {
 	fc.worker = worker
 	handler.dummyContext = fc
 	handler.isBootingScript = true
+	handler.requestCount = 0
 	clearSandboxedEnv(handler.thread)
 	logger.LogAttrs(context.Background(), slog.LevelDebug, "starting", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex))
 }
@@ -166,6 +168,12 @@ func (handler *workerThread) waitForWorkerRequest() bool {
 		handler.state.set(stateReady)
 	}
 
+	// restart the worker if 'max requests' has been reached
+	if handler.worker.maxRequests > 0 && handler.requestCount >= handler.worker.maxRequests {
+		logger.LogAttrs(ctx, slog.LevelDebug, "max requests reached, restarting", slog.String("worker", handler.worker.name), slog.Int("thread", handler.thread.threadIndex), slog.Int("max_requests", handler.worker.maxRequests))
+		return false
+	}
+
 	handler.state.markAsWaiting(true)
 
 	var fc *frankenPHPContext
@@ -185,6 +193,7 @@ func (handler *workerThread) waitForWorkerRequest() bool {
 	}
 
 	handler.workerContext = fc
+	handler.requestCount++
 	handler.state.markAsWaiting(false)
 
 	logger.LogAttrs(ctx, slog.LevelDebug, "request handling started", slog.String("worker", handler.worker.name), slog.Int("thread", handler.thread.threadIndex), slog.String("url", fc.request.RequestURI))

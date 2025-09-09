@@ -37,6 +37,8 @@ type workerConfig struct {
 	MatchPath []string `json:"match_path,omitempty"`
 	// MaxConsecutiveFailures sets the maximum number of consecutive failures before panicking (defaults to 6, set to -1 to never panick)
 	MaxConsecutiveFailures int `json:"max_consecutive_failures,omitempty"`
+	// MaxRequests sets the maximum number of requests a worker will handle before being restarted (defaults to 0, meaning unlimited)
+	MaxRequests int `json:"max_requests,omitempty"`
 }
 
 func parseWorkerConfig(d *caddyfile.Dispenser) (workerConfig, error) {
@@ -122,6 +124,19 @@ func parseWorkerConfig(d *caddyfile.Dispenser) (workerConfig, error) {
 			}
 
 			wc.MaxConsecutiveFailures = int(v)
+		case "max_requests":
+			if !d.NextArg() {
+				return wc, d.ArgErr()
+			}
+			v, err := strconv.Atoi(d.Val())
+			if err != nil {
+				return wc, err
+			}
+			if v < 1 {
+				return wc, errors.New("max_requests must be >= 1")
+			}
+
+			wc.MaxRequests = int(v)
 		default:
 			allowedDirectives := "name, file, num, env, watch, match, max_consecutive_failures"
 			return wc, wrongSubDirectiveError("worker", allowedDirectives, v)
