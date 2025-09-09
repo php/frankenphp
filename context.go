@@ -34,19 +34,30 @@ type frankenPHPContext struct {
 	startedAt time.Time
 }
 
-// fromContext extracts the frankenPHPContext from a context.
-func fromContext(ctx context.Context) (fctx *frankenPHPContext, ok bool) {
-	fctx, ok = ctx.Value(contextKey).(*frankenPHPContext)
-	return
+// DEPRECATED: NewRequestWithContext adds RequestOptions to the request context, use ServeHTTP with options instead.
+func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Request, error) {
+	c := context.WithValue(r.Context(), contextKey, opts)
+
+	return r.WithContext(c), nil
 }
 
-// NewRequestWithContext creates a new FrankenPHP request context.
-func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Request, error) {
+// newFrankenPHPContext creates a new FrankenPHP request context.
+func newFrankenPHPContext(rw http.ResponseWriter, r *http.Request, opts ...RequestOption) (*frankenPHPContext, error) {
 	fc := &frankenPHPContext{
-		done:      make(chan any),
-		startedAt: time.Now(),
-		request:   r,
+		done:           make(chan any),
+		startedAt:      time.Now(),
+		request:        r,
+		responseWriter: rw,
 	}
+
+	// DEPRECATED: append all options added by NewRequestWithContext()
+	if ctx := r.Context(); ctx != nil {
+		ctxOpts, ok := ctx.Value(contextKey).([]RequestOption)
+		if ok && ctxOpts != nil {
+			opts = append(opts, ctxOpts...)
+		}
+	}
+
 	for _, o := range opts {
 		if err := o(fc); err != nil {
 			return nil, err
@@ -77,9 +88,7 @@ func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Reques
 		splitCgiPath(fc)
 	}
 
-	c := context.WithValue(r.Context(), contextKey, fc)
-
-	return r.WithContext(c), nil
+	return fc, nil
 }
 
 // newDummyContext creates a fake context from a request path
@@ -89,12 +98,10 @@ func newDummyContext(requestPath string, opts ...RequestOption) (*frankenPHPCont
 		return nil, err
 	}
 
-	fr, err := NewRequestWithContext(r, opts...)
+	fc, err := newFrankenPHPContext(nil, r, opts...)
 	if err != nil {
 		return nil, err
 	}
-
-	fc, _ := fromContext(fr.Context())
 
 	return fc, nil
 }
