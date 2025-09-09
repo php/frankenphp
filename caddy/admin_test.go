@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/dunglas/frankenphp/internal/fastabs"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
 
@@ -251,6 +251,7 @@ func TestAddModuleWorkerViaAdminApi(t *testing.T) {
 	}
 
 	// Create a Caddyfile configuration with a module worker
+	workerName := "dynamiclly added worker"
 	workerConfig := `
 	{
 		skip_install_trust
@@ -262,7 +263,10 @@ func TestAddModuleWorkerViaAdminApi(t *testing.T) {
 		route {
 			root ../testdata
 			php {
-				worker ../testdata/worker-with-counter.php 1
+				worker ../testdata/worker-with-counter.php {
+					num 1
+					name "` + workerName + `"
+				}
 			}
 		}
 	}
@@ -280,11 +284,10 @@ func TestAddModuleWorkerViaAdminApi(t *testing.T) {
 	updatedDebugState := getDebugState(t, tester)
 	updatedWorkerCount := 0
 	workerFound := false
-	filename, _ := fastabs.FastAbs("../testdata/worker-with-counter.php")
 	for _, thread := range updatedDebugState.ThreadDebugStates {
 		if thread.Name != "" && thread.Name != "ready" {
 			updatedWorkerCount++
-			if thread.Name == "Worker PHP Thread - "+filename {
+			if strings.Contains(thread.Name, workerName) {
 				workerFound = true
 			}
 		}
@@ -292,7 +295,7 @@ func TestAddModuleWorkerViaAdminApi(t *testing.T) {
 
 	// Assert that the worker was added
 	assert.Greater(t, updatedWorkerCount, initialWorkerCount, "Worker count should have increased")
-	assert.True(t, workerFound, fmt.Sprintf("Worker with name %q should be found", "Worker PHP Thread - "+filename))
+	assert.True(t, workerFound, fmt.Sprintf("Worker with name '%q' should be found", workerName))
 
 	// Make a request to the worker to verify it's working
 	tester.AssertGetResponse("http://localhost:"+testPort+"/worker-with-counter.php", http.StatusOK, "requests:1")
