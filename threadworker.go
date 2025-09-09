@@ -70,7 +70,7 @@ func (handler *workerThread) getRequestContext() *frankenPHPContext {
 }
 
 func (handler *workerThread) name() string {
-	return "Worker PHP Thread - " + handler.worker.fileName
+	return "Worker PHP Thread - " + handler.worker.name
 }
 
 func setupWorkerScript(handler *workerThread, worker *worker) {
