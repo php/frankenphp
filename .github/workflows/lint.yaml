@@ -20,11 +20,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: Lint Code Base
-        uses: super-linter/super-linter/slim@v8.0.0
+        uses: super-linter/super-linter/slim@v8
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LINTER_RULES_PATH: /
@@ -38,6 +39,7 @@ jobs:
           VALIDATE_PHP_PSALM: false
           VALIDATE_TERRAGRUNT: false
           VALIDATE_DOCKERFILE_HADOLINT: false
+          VALIDATE_TRIVY: false
           # Prettier and StandardJS are incompatible
           VALIDATE_JAVASCRIPT_PRETTIER: false
           VALIDATE_TYPESCRIPT_PRETTIER: false

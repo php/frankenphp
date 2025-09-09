@@ -8,7 +8,7 @@ You can specify a custom path with the `-c` or `--config` option.
 
 PHP itself can be configured [using a `php.ini` file](https://www.php.net/manual/en/configuration.file.php).
 
-Depending on your installation method, the PHP interpreter will look for configuration files in locations described above.
+Depending on your installation method, the PHP interpreter will look for configuration files in locations described below.
 
 ## Docker
 
@@ -55,8 +55,7 @@ localhost {
 }
 ```
 
-You can also explicitly configure FrankenPHP using the global option:
-The `frankenphp` [global option](https://caddyserver.com/docs/caddyfile/concepts#global-options) can be used to configure FrankenPHP.
+You can also explicitly configure FrankenPHP using the [global option](https://caddyserver.com/docs/caddyfile/concepts#global-options) `frankenphp`:
 
 ```caddyfile
 {

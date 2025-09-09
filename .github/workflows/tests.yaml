@@ -37,8 +37,10 @@ jobs:
       GOMAXPROCS: 10
       LIBRARY_PATH: ${{ github.workspace }}/watcher/target/lib
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v6
         with:
           go-version: "1.25"
           cache-dependency-path: |
@@ -85,14 +87,23 @@ jobs:
         if: matrix.php-versions == '8.4'
         with:
           version: latest
+      - name: Ensure go.mod is tidy
+        if: matrix.php-versions == '8.4'
+        run: go mod tidy -diff
+      - name: Ensure caddy/go.mod is tidy
+        if: matrix.php-versions == '8.4'
+        run: go mod tidy -diff
+        working-directory: caddy/
   tests-mac:
     name: Tests (macOS, PHP 8.4)
     runs-on: macos-latest
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v6
         with:
           go-version: "1.25"
           cache-dependency-path: |

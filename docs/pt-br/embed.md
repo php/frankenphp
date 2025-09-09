@@ -1,6 +1,6 @@
 # Aplicações PHP como binários independentes
 
-O FrankenPHP tem a capacidade de incorporar o código-fonte e os recursos de
+O FrankenPHP tem a capacidade de incorporar o código-fonte e os assets de
 aplicações PHP em um binário estático e independente.
 
 Graças a esse recurso, aplicações PHP podem ser distribuídas como binários
@@ -11,7 +11,7 @@ Saiba mais sobre esse recurso
 [na apresentação feita por Kévin na SymfonyCon 2023](https://dunglas.dev/2023/12/php-and-symfony-apps-as-standalone-binaries/).
 
 Para incorporar aplicações Laravel,
-[leia esta entrada específica na documentação](laravel.md#laravel-apps-as-standalone-binaries).
+[leia esta entrada específica na documentação](laravel.md#aplicacoes-laravel-como-binarios-independentes).
 
 ## Preparando sua aplicação
 
@@ -20,9 +20,9 @@ pronta para ser incorporada.
 
 Por exemplo, você provavelmente deseja:
 
-- Instalar as dependências de produção da aplicação.
-- Fazer o dump do carregador automático.
-- Habilitar o modo de produção da sua aplicação (se houver).
+- Instalar as dependências de produção da aplicação;
+- Fazer o dump do carregador automático;
+- Habilitar o modo de produção da sua aplicação (se houver);
 - Remover arquivos desnecessários, como `.git` ou testes, para reduzir o tamanho
   do seu binário final.
 
@@ -83,7 +83,7 @@ Docker que fornecemos.
    > [`.dockerignore` padrão do Docker do Symfony](https://github.com/dunglas/symfony-docker/blob/main/.dockerignore))
    > ignorarão o diretório `vendor/` e os arquivos `.env`.
    > Certifique-se de ajustar ou remover o arquivo `.dockerignore` antes da
-   > compilação.
+   > construção.
 
 2. Construa:
 
@@ -105,7 +105,7 @@ Se você não quiser usar o Docker ou quiser compilar um binário para macOS, us
 script de shell que fornecemos:
 
 ```console
-git clone https://github.com/dunglas/frankenphp
+git clone https://github.com/php/frankenphp
 cd frankenphp
 EMBED=/caminho/para/sua/aplicacao ./build-static.sh
 ```
@@ -145,8 +145,8 @@ Você também pode executar os scripts PHP CLI incorporados ao seu binário:
 
 ## Extensões PHP
 
-Por padrão, o script criará as extensões requeridas pelo arquivo `composer.json`
-do seu projeto, se houver.
+Por padrão, o script compilará as extensões requeridas pelo arquivo
+`composer.json` do seu projeto, se houver.
 Se o arquivo `composer.json` não existir, as extensões padrão serão compiladas,
 conforme documentado na [entrada de compilações estáticas](static.md).
 

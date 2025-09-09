@@ -132,7 +132,7 @@ Execute o seguinte script para criar um binário estático para macOS (você
 precisa ter o [Homebrew](https://brew.sh/) instalado):
 
 ```console
-git clone https://github.com/dunglas/frankenphp
+git clone https://github.com/php/frankenphp
 cd frankenphp
 ./build-static.sh
 ```
@@ -145,34 +145,34 @@ sistemas Unix) e é usado internamente pelas imagens Docker que fornecemos.
 As seguintes variáveis de ambiente podem ser passadas para `docker build` e para
 o script `build-static.sh` para personalizar a compilação estática:
 
-- `FRANKENPHP_VERSION`: a versão do FrankenPHP a ser usada.
-- `PHP_VERSION`: a versão do PHP a ser usada.
+- `FRANKENPHP_VERSION`: a versão do FrankenPHP a ser usada;
+- `PHP_VERSION`: a versão do PHP a ser usada;
 - `PHP_EXTENSIONS`: as extensões PHP a serem compiladas
-  ([lista de extensões suportadas](https://static-php.dev/en/guide/extensions.html)).
+  ([lista de extensões suportadas](https://static-php.dev/en/guide/extensions.html));
 - `PHP_EXTENSION_LIBS`: bibliotecas extras a serem compiladas que adicionam
-  recursos às extensões.
+  recursos às extensões;
 - `XCADDY_ARGS`: argumentos a passar para o
   [`xcaddy`](https://github.com/caddyserver/xcaddy), por exemplo, para adicionar
-  módulos Caddy extras.
-- `EMBED`: caminho da aplicação PHP a ser incorporada no binário.
+  módulos Caddy extras;
+- `EMBED`: caminho da aplicação PHP a ser incorporada no binário;
 - `CLEAN`: quando definida, a `libphp` e todas as suas dependências são
-  compiladas do zero (sem cache).
-- `NO_COMPRESS`: não compacta o binário resultante usando UPX.
+  compiladas do zero (sem cache);
+- `NO_COMPRESS`: não compacta o binário resultante usando UPX;
 - `DEBUG_SYMBOLS`: quando definida, os símbolos de depuração não serão removidos
-  e serão adicionados ao binário.
+  e serão adicionados ao binário;
 - `MIMALLOC`: (experimental, somente Linux) substitui `mallocng` da `musl` por
   [`mimalloc`](https://github.com/microsoft/mimalloc) para melhor desempenho.
   Recomendamos usar isso apenas para compilações direcionadas à `musl`; para
   `glibc`, prefira desabilitar essa opção e usar
   [`LD_PRELOAD`](https://microsoft.github.io/mimalloc/overrides.html) ao
-  executar seu binário.
+  executar seu binário;
 - `RELEASE`: (somente pessoas mantenedoras) quando definida, o binário
   resultante será enviado para o GitHub.
 
 ## Extensões
 
-Com os binários `glibc` ou baseados em macOS, você pode carregar extensões PHP
-dinamicamente.
+Com os binários baseados na `glibc` ou no macOS, você pode carregar extensões
+PHP dinamicamente.
 No entanto, essas extensões precisarão ser compiladas com suporte a ZTS.
 Como a maioria dos gerenciadores de pacotes não oferece atualmente versões ZTS
 de suas extensões, você terá que compilá-las você mesmo.

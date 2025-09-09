@@ -18,9 +18,9 @@ semelhante ao modo dinâmico do PHP-FPM.
 As conexões enfileiradas aguardarão indefinidamente até que uma thread PHP
 esteja disponível para servi-las.
 Para evitar isso, você pode usar a
-[configuração](config.md#configuracao-do-caddyfile) `max_wait_time` para limitar
-o tempo que uma requisição pode esperar por uma thread PHP livre antes de ser
-rejeitada.
+[configuração](config.md#configuracao-do-caddyfile) `max_wait_time` na
+configuração global do FrankenPHP para limitar o tempo que uma requisição pode
+esperar por uma thread PHP livre antes de ser rejeitada.
 Além disso, você pode definir um
 [tempo limite de escrita razoável no Caddy](https://caddyserver.com/docs/caddyfile/options#timeouts).
 

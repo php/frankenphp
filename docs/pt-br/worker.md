@@ -8,11 +8,11 @@ O FrankenPHP processará as requisições recebidas em poucos milissegundos.
 ### Docker
 
 Defina o valor da variável de ambiente `FRANKENPHP_CONFIG` como
-`worker /caminho/para/seu/script/worker.php`:
+`worker /caminho/para/seu/worker/script.php`:
 
 ```console
 docker run \
-    -e FRANKENPHP_CONFIG="worker /app/caminho/para/seu/script/worker.php" \
+    -e FRANKENPHP_CONFIG="worker /app/caminho/para/seu/worker/script.php" \
     -v $PWD:/app \
     -p 80:80 -p 443:443 -p 443:443/udp \
     dunglas/frankenphp
@@ -24,7 +24,7 @@ Use a opção `--worker` do comando `php-server` para servir o conteúdo do
 diretório atual usando um worker:
 
 ```console
-frankenphp php-server --worker /caminho/para/seu/script/worker.php
+frankenphp php-server --worker /caminho/para/seu/worker/script.php
 ```
 
 Se a sua aplicação PHP estiver [embutida no binário](embed.md), você pode
@@ -32,30 +32,29 @@ adicionar um `Caddyfile` personalizado no diretório raiz da aplicação.
 Ele será usado automaticamente.
 
 Também é possível
-[reiniciar o worker em caso de alterações no arquivo](config.md#monitorando-alteracoes-em-arquivos)
+[reiniciar o worker em caso de alterações em arquivos](config.md#monitorando-alteracoes-em-arquivos)
 com a opção `--watch`.
 O comando a seguir acionará uma reinicialização se qualquer arquivo terminado em
 `.php` no diretório `/caminho/para/sua/aplicacao/` ou subdiretórios for
 modificado:
 
 ```console
-frankenphp php-server --worker /caminho/para/seu/script/worker.php --watch="/caminho/para/sua/aplicacao/**/*.php"
+frankenphp php-server --worker /caminho/para/seu/worker/script.php --watch="/caminho/para/sua/aplicacao/**/*.php"
 ```
 
-## Tempo de execução do Symfony
+## Symfony Runtime
 
 O modo worker do FrankenPHP é suportado pelo
 [Componente Symfony Runtime](https://symfony.com/doc/current/components/runtime.html).
 Para iniciar qualquer aplicação Symfony em um worker, instale o pacote
-FrankenPHP do
-[tempo de execução do PHP](https://github.com/php-runtime/runtime):
+FrankenPHP do [PHP Runtime](https://github.com/php-runtime/runtime):
 
 ```console
 composer require runtime/frankenphp-symfony
 ```
 
 Inicie seu servidor de aplicações definindo a variável de ambiente `APP_RUNTIME`
-para usar o tempo de execução Symfony do FrankenPHP:
+para usar o Symfony Runtime do FrankenPHP:
 
 ```console
 docker run \
@@ -83,7 +82,7 @@ uma biblioteca de terceiros:
 // interrompida
 ignore_user_abort(true);
 
-// Inicializa sua aplicação
+// Inicializa a aplicação
 require __DIR__.'/vendor/autoload.php';
 
 $myApp = new \App\Kernel();
@@ -125,7 +124,7 @@ docker run \
     dunglas/frankenphp
 ```
 
-Por padrão, 2 workers por CPU são iniciados.
+Por padrão, são iniciados 2 workers por CPU.
 Você também pode configurar o número de workers a serem iniciados:
 
 ```console
@@ -151,7 +150,7 @@ requisições a serem processadas, definindo uma variável de ambiente chamada
 
 Embora seja possível reiniciar os workers
 [em alterações de arquivo](config.md#monitorando-alteracoes-em-arquivos), também
-é possível reiniciar todos os workers normalmente por meio da
+é possível reiniciar todos os workers graciosamente por meio da
 [API de administração do Caddy](https://caddyserver.com/docs/api).
 Se o administrador estiver habilitado no seu
 [Caddyfile](config.md#configuracao-do-caddyfile), você pode executar ping no
@@ -166,11 +165,23 @@ curl -X POST http://localhost:2019/frankenphp/workers/restart
 Se um worker script travar com um código de saída diferente de zero, o
 FrankenPHP o reiniciará com uma estratégia de backoff exponencial.
 Se o worker script permanecer ativo por mais tempo do que o último backoff \* 2,
-ele não penalizará o worker script e o reiniciará novamente.
+ele não irá penalizar o worker script e reiniciá-lo novamente.
 No entanto, se o worker script continuar a falhar com um código de saída
 diferente de zero em um curto período de tempo (por exemplo, com um erro de
 digitação em um script), o FrankenPHP travará com o erro:
 `too many consecutive failures` (muitas falhas consecutivas).
+
+O número de falhas consecutivas pode ser configurado no seu
+[Caddyfile](config.md#caddyfile-config) com a opção `max_consecutive_failures`:
+
+```caddyfile
+frankenphp {
+    worker {
+        # ...
+        max_consecutive_failures 10
+    }
+}
+```
 
 ## Comportamento das superglobais
 

@@ -7,7 +7,7 @@
 Теги следуют следующему шаблону: `dunglas/frankenphp:<frankenphp-version>-php<php-version>-<os>`.
 
 - `<frankenphp-version>` и `<php-version>` — версии FrankenPHP и PHP соответственно: от основных (например, `1`) до минорных (например, `1.2`) и патч-версий (например, `1.2.3`).
-- `<os>` может быть `bookworm` (для Debian Bookworm) или `alpine` (для последней стабильной версии Alpine).
+- `<os>` может быть `trixie` (для Debian Trixie), `bookworm` (для Debian Bookworm) или `alpine` (для последней стабильной версии Alpine).
 
 [Просмотреть доступные теги](https://hub.docker.com/r/dunglas/frankenphp/tags).
 

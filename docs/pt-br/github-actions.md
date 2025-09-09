@@ -1,7 +1,7 @@
 # Usando GitHub Actions
 
-Este repositório constrói e implementa a imagem do Docker no
-[Docker Hub](https://hub.docker.com/r/dunglas/frankenphp) em cada pull request
+Este repositório constrói e implanta a imagem Docker no
+[Docker Hub](https://hub.docker.com/r/dunglas/frankenphp) a cada pull request
 aprovado ou em seu próprio fork após a configuração.
 
 ## Configurando GitHub Actions

@@ -32,9 +32,9 @@ function "tag" {
     params = [version, os, php-version, tgt]
     result = [
         version == "" ? "" : "${IMAGE_NAME}:${trimprefix("${version}${tgt == "builder" ? "-builder" : ""}-php${php-version}-${os}", "latest-")}",
-        php-version == DEFAULT_PHP_VERSION && os == "bookworm" && version != "" ? "${IMAGE_NAME}:${trimprefix("${version}${tgt == "builder" ? "-builder" : ""}", "latest-")}" : "",
+        php-version == DEFAULT_PHP_VERSION && os == "trixie" && version != "" ? "${IMAGE_NAME}:${trimprefix("${version}${tgt == "builder" ? "-builder" : ""}", "latest-")}" : "",
         php-version == DEFAULT_PHP_VERSION && version != "" ? "${IMAGE_NAME}:${trimprefix("${version}${tgt == "builder" ? "-builder" : ""}-${os}", "latest-")}" : "",
-        os == "bookworm" && version != "" ? "${IMAGE_NAME}:${trimprefix("${version}${tgt == "builder" ? "-builder" : ""}-php${php-version}", "latest-")}" : "",
+        os == "trixie" && version != "" ? "${IMAGE_NAME}:${trimprefix("${version}${tgt == "builder" ? "-builder" : ""}-php${php-version}", "latest-")}" : "",
     ]
 }
 
@@ -76,7 +76,7 @@ function "_php_version" {
 target "default" {
     name = "${tgt}-php-${replace(php-version, ".", "-")}-${os}"
     matrix = {
-        os = ["bookworm", "alpine"]
+        os = ["trixie", "bookworm", "alpine"]
         php-version = split(",", PHP_VERSION)
         tgt = ["builder", "runner"]
     }
