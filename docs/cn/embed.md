@@ -6,6 +6,8 @@ FrankenPHP 能够将 PHP 应用程序的源代码和资源文件嵌入到静态�
 
 了解有关此功能的更多信息 [Kévin 在 SymfonyCon 上的演讲](https://dunglas.dev/2023/12/php-and-symfony-apps-as-standalone-binaries/)。
 
+有关嵌入 Laravel 应用程序，请[阅读此特定文档条目](laravel.md#laravel-apps-as-standalone-binaries)。
+
 ## 准备你的应用
 
 在创建独立二进制文件之前，请确保应用已准备好进行打包。
@@ -29,7 +31,8 @@ cd $TMPDIR/my-prepared-app
 echo APP_ENV=prod > .env.local
 echo APP_DEBUG=0 >> .env.local
 
-# 删除测试文件
+# 删除测试和其他不需要的文件以节省空间
+# 或者，将这些文件添加到您的 .gitattributes 文件中，并设置 export-ignore 属性
 rm -Rf tests/
 
 # 安装依赖项
@@ -38,6 +41,11 @@ composer install --ignore-platform-reqs --no-dev -a
 # 优化 .env
 composer dump-env prod
 ```
+
+### 自定义配置
+
+要自定义[配置](config.md)，您可以放置一个 `Caddyfile` 以及一个 `php.ini` 文件
+在应用程序的主目录中嵌入（在之前的示例中是`$TMPDIR/my-prepared-app`）。
 
 ## 创建 Linux 二进制文件
 
@@ -52,17 +60,15 @@ composer dump-env prod
     WORKDIR /go/src/app/dist/app
     COPY . .
 
-    # 构建静态二进制文件，只选择你需要的 PHP 扩展
-    WORKDIR /go/src/app/
-    RUN EMBED=dist/app/ \
-        PHP_EXTENSIONS=ctype,iconv,pdo_sqlite \
-        ./build-static.sh
-    ```
+    # 构建静态二进制文件
+   WORKDIR /go/src/app/
+   RUN EMBED=dist/app/ ./build-static.sh
+   ```
 
     > [!CAUTION]
     >
-    > 某些 .dockerignore 文件（例如默认的 [symfony-docker .dockerignore](https://github.com/dunglas/symfony-docker/blob/main/.dockerignore)）会忽略 vendor
-    > 文件夹和环境文件。在构建之前，请务必调整或删除 .dockerignore 文件。
+    > 某些 `.dockerignore` 文件（例如默认的 [Symfony Docker `.dockerignore`](https://github.com/dunglas/symfony-docker/blob/main/.dockerignore)）
+    > 会忽略 `vendor/` 文件夹和 `.env` 文件。在构建之前，请务必调整或删除 `.dockerignore` 文件。
 
 2. 构建:
 
@@ -85,9 +91,7 @@ composer dump-env prod
 ```console
 git clone https://github.com/php/frankenphp
 cd frankenphp
-EMBED=/path/to/your/app \
-    PHP_EXTENSIONS=ctype,iconv,pdo_sqlite \
-    ./build-static.sh
+EMBED=/path/to/your/app ./build-static.sh
 ```
 
 在 `dist/` 目录中生成的二进制文件名称为 `frankenphp-<os>-<arch>`。
@@ -120,13 +124,20 @@ EMBED=/path/to/your/app \
 ./my-app php-cli bin/console
 ```
 
+## PHP Extensions
+
+默认情况下，脚本将构建您项目的 `composer.json` 文件中所需的扩展（如果有的话）。
+如果 `composer.json` 文件不存在，将构建默认扩展，如 [静态构建条目](static.md) 中所述。
+
+要自定义扩展，请使用 `PHP_EXTENSIONS` 环境变量。
+
 ## 自定义构建
 
 [阅读静态构建文档](static.md) 查看如何自定义二进制文件（扩展、PHP 版本等）。
 
 ## 分发二进制文件
 
-创建的二进制文件不会被压缩。
-若要在发送文件之前减小文件的大小，可以对其进行压缩。
+在Linux上，创建的二进制文件使用[UPX](https://upx.github.io)进行压缩。
 
+在Mac上，您可以在发送文件之前压缩它以减小文件大小。
 我们推荐使用 `xz`。

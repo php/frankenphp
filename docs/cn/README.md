@@ -8,7 +8,7 @@ FrankenPHP 凭借其令人惊叹的功能为你的 PHP 应用程序提供了超�
 
 FrankenPHP 可与任何 PHP 应用程序一起使用，并且由于提供了与 worker 模式的集成，使你的 Symfony 和 Laravel 项目比以往任何时候都更快。
 
-FrankenPHP 也可以用作独立的 Go 库，将 PHP 嵌入到任何使用 net/http 的应用程序中。
+FrankenPHP 也可以用作独立的 Go 库，将 PHP 嵌入到任何使用 `net/http` 的应用程序中。
 
 [**了解更多** _frankenphp.dev_](https://frankenphp.dev/cn/) 以及查看此演示文稿：
 
@@ -56,7 +56,7 @@ docker run -v .:/app/public \
 > [!TIP]
 >
 > 不要尝试使用 `https://127.0.0.1`。使用 `https://localhost` 并接受自签名证书。
-> 使用 [`SERVER_NAME` 环境变量](config.md#环境变量) 更改要使用的域。
+> 使用 [`SERVER_NAME` 环境变量](config.md#environment-variables) 更改要使用的域。
 
 ### Homebrew
 
@@ -76,12 +76,16 @@ frankenphp php-server
 
 ## 文档
 
+- [Classic 模式](classic.md)
 - [worker 模式](worker.md)
 - [早期提示支持(103 HTTP status code)](early-hints.md)
 - [实时功能](mercure.md)
+- [高效地服务大型静态文件](x-sendfile.md)
 - [配置](config.md)
+- [用 Go 编写 PHP 扩展](extensions.md)
 - [Docker 镜像](docker.md)
 - [在生产环境中部署](production.md)
+- [性能优化](performance.md)
 - [创建独立、可自行执行的 PHP 应用程序](embed.md)
 - [创建静态二进制文件](static.md)
 - [从源代码编译](compile.md)

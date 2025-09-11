@@ -7,7 +7,7 @@ Variants for PHP 8.2, 8.3 and 8.4 are provided.
 The tags follow this pattern: `dunglas/frankenphp:<frankenphp-version>-php<php-version>-<os>`
 
 - `<frankenphp-version>` and `<php-version>` are version numbers of FrankenPHP and PHP respectively, ranging from major (e.g. `1`), minor (e.g. `1.2`) to patch versions (e.g. `1.2.3`).
-- `<os>` is either `bookworm` (for Debian Bookworm) or `alpine` (for the latest stable version of Alpine).
+- `<os>` is either `trixie` (for Debian Trixie), `bookworm` (for Debian Bookworm), or `alpine` (for the latest stable version of Alpine).
 
 [Browse tags](https://hub.docker.com/r/dunglas/frankenphp/tags).
 
@@ -156,8 +156,8 @@ RUN \
 	useradd ${USER}; \
 	# Add additional capability to bind to port 80 and 443
 	setcap CAP_NET_BIND_SERVICE=+eip /usr/local/bin/frankenphp; \
-	# Give write access to /data/caddy and /config/caddy
-	chown -R ${USER}:${USER} /data/caddy && chown -R ${USER}:${USER} /config/caddy
+	# Give write access to /config/caddy and /data/caddy
+	chown -R ${USER}:${USER} /config/caddy /data/caddy
 
 USER ${USER}
 ```
@@ -180,8 +180,8 @@ RUN \
 	useradd ${USER}; \
 	# Remove default capability
 	setcap -r /usr/local/bin/frankenphp; \
-	# Give write access to /data/caddy and /config/caddy
-	chown -R ${USER}:${USER} /data/caddy && chown -R ${USER}:${USER} /config/caddy
+	# Give write access to /config/caddy and /data/caddy
+	chown -R ${USER}:${USER} /config/caddy /data/caddy
 
 USER ${USER}
 ```

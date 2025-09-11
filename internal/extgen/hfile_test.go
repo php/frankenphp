@@ -1,10 +1,11 @@
 package extgen
 
 import (
-	"github.com/stretchr/testify/require"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -43,7 +44,7 @@ func TestHeaderGenerator_BuildContent(t *testing.T) {
 				"#ifndef _SIMPLE_H",
 				"#define _SIMPLE_H",
 				"#include <php.h>",
-				"extern zend_module_entry ext_module_entry;",
+				"extern zend_module_entry simple_module_entry;",
 				"#endif",
 			},
 		},
@@ -128,7 +129,7 @@ func TestHeaderGenerator_BasicStructure(t *testing.T) {
 
 	expectedElements := []string{
 		"#include <php.h>",
-		"extern zend_module_entry ext_module_entry;",
+		"extern zend_module_entry structtest_module_entry;",
 	}
 
 	for _, element := range expectedElements {
@@ -264,7 +265,7 @@ func TestHeaderGenerator_MinimalContent(t *testing.T) {
 		"#ifndef _MINIMAL_H",
 		"#define _MINIMAL_H",
 		"#include <php.h>",
-		"extern zend_module_entry ext_module_entry;",
+		"extern zend_module_entry minimal_module_entry;",
 		"#endif",
 	}
 
@@ -287,7 +288,7 @@ func testHeaderBasicStructure(t *testing.T, content, baseName string) {
 		"#ifndef _" + headerGuard,
 		"#define _" + headerGuard,
 		"#include <php.h>",
-		"extern zend_module_entry ext_module_entry;",
+		"extern zend_module_entry test_extension_module_entry;",
 		"#endif",
 	}
 

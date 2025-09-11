@@ -5,17 +5,21 @@ package {{.PackageName}}
 #include "{{.BaseName}}.h"
 */
 import "C"
-import "runtime/cgo"
 {{- range .Imports}}
 import {{.}}
 {{- end}}
 
 func init() {
-	frankenphp.RegisterExtension(unsafe.Pointer(&C.ext_module_entry))
+	frankenphp.RegisterExtension(unsafe.Pointer(&C.{{.BaseName}}_module_entry))
 }
-{{range .Constants}}
+{{- range .Constants}}
 const {{.Name}} = {{.Value}}
 {{- end}}
+
+{{ range .Variables}}
+{{.}}
+{{- end}}
+
 {{range .InternalFunctions}}
 {{.}}
 {{- end}}

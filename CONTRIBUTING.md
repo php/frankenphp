@@ -17,7 +17,7 @@ The image contains the usual development tools (Go, GDB, Valgrind, Neovim...) an
 - additional configuration files: `/etc/frankenphp/php.d/*.ini`
 - php extensions: `/usr/lib/frankenphp/modules/`
 
-If your docker version is lower than 23.0, the build will fail due to dockerignore [pattern issue](https://github.com/moby/moby/pull/42676). Add directories to `.dockerignore`.
+If your Docker version is lower than 23.0, the build will fail due to dockerignore [pattern issue](https://github.com/moby/moby/pull/42676). Add directories to `.dockerignore`.
 
 ```patch
  !testdata/*.php
@@ -195,7 +195,7 @@ docker buildx bake -f docker-bake.hcl --pull --no-cache --push
 ## Docker-Related Resources
 
 - [Bake file definition](https://docs.docker.com/build/customize/bake/file-definition/)
-- [docker buildx build](https://docs.docker.com/engine/reference/commandline/buildx_build/)
+- [`docker buildx build`](https://docs.docker.com/engine/reference/commandline/buildx_build/)
 
 ## Useful Command
 

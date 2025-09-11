@@ -25,8 +25,8 @@ brew link --overwrite --force shivammathur/php/php-zts
 ### By Compiling PHP
 
 Alternatively, you can compile PHP from sources with the options needed by FrankenPHP by following these steps.
-~~
-~~First, [get the PHP sources](https://www.php.net/downloads.php) and extract them:
+
+First, [get the PHP sources](https://www.php.net/downloads.php) and extract them:
 
 ```console
 tar xf php-*

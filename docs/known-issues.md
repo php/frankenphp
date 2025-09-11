@@ -23,7 +23,7 @@ The [get_browser()](https://www.php.net/manual/en/function.get-browser.php) func
 
 ## Standalone Binary and Alpine-based Docker Images
 
-The standalone binary and Alpine-based docker images (`dunglas/frankenphp:*-alpine`) use [musl libc](https://musl.libc.org/) instead of [glibc and friends](https://www.etalabs.net/compare_libcs.html), to keep a smaller binary size. This may lead to some compatibility issues. In particular, the glob flag `GLOB_BRACE` is [not available](https://www.php.net/manual/en/function.glob.php)
+The standalone binary and Alpine-based Docker images (`dunglas/frankenphp:*-alpine`) use [musl libc](https://musl.libc.org/) instead of [glibc and friends](https://www.etalabs.net/compare_libcs.html), to keep a smaller binary size. This may lead to some compatibility issues. In particular, the glob flag `GLOB_BRACE` is [not available](https://www.php.net/manual/en/function.glob.php)
 
 ## Using `https://127.0.0.1` with Docker
 
@@ -130,7 +130,7 @@ to find where CA certificates must be installed and store them at this location.
 > Web and CLI contexts may have different settings.
 > Be sure to run `openssl_get_cert_locations()` in the proper context.
 
-[CA certificates extracted from Mozilla can be downloaded on the curl site](https://curl.se/docs/caextract.html).
+[CA certificates extracted from Mozilla can be downloaded on the cURL site](https://curl.se/docs/caextract.html).
 
 Alternatively, many distributions, including Debian, Ubuntu, and Alpine provide packages named `ca-certificates` that contain these certificates.
 

@@ -26,6 +26,7 @@ body:
       label: Build Type
       description: What build of FrankenPHP do you use?
       options:
+        - Docker (Debian Trixie)
         - Docker (Debian Bookworm)
         - Docker (Alpine)
         - Official static build

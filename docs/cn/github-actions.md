@@ -7,7 +7,7 @@
 
 在存储库设置中的 `secrets` 下，添加以下字段：
 
-- `REGISTRY_LOGIN_SERVER`: 要使用的 docker registry（如 `docker.io`）。
+- `REGISTRY_LOGIN_SERVER`: 要使用的 Docker registry（如 `docker.io`）。
 - `REGISTRY_USERNAME`: 用于登录 registry 的用户名（如 `dunglas`）。
 - `REGISTRY_PASSWORD`: 用于登录 registry 的密码（如 `access key`）。
 - `IMAGE_NAME`: 镜像的名称（如 `dunglas/frankenphp`）。

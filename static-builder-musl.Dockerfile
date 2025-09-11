@@ -61,6 +61,7 @@ RUN apk update; \
 		php84-ctype \
 		php84-curl \
 		php84-dom \
+		php84-iconv \
 		php84-mbstring \
 		php84-openssl \
 		php84-pcntl \

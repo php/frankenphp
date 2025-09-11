@@ -6,6 +6,7 @@ import (
 	"go/parser"
 	"go/token"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -115,12 +116,7 @@ func (v *Validator) validateClassProperty(prop phpClassProperty) error {
 }
 
 func (v *Validator) isValidPHPType(phpType phpType, validTypes []phpType) bool {
-	for _, valid := range validTypes {
-		if phpType == valid {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(validTypes, phpType)
 }
 
 // validateScalarTypes checks if PHP signature contains only supported scalar types
@@ -141,12 +137,7 @@ func (v *Validator) validateScalarTypes(fn phpFunction) error {
 }
 
 func (v *Validator) isScalarPHPType(phpType phpType, supportedTypes []phpType) bool {
-	for _, supported := range supportedTypes {
-		if phpType == supported {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(supportedTypes, phpType)
 }
 
 // validateGoFunctionSignatureWithOptions validates with option for method vs function

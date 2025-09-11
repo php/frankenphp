@@ -9,6 +9,7 @@ Group=frankenphp
 ExecStartPre=/usr/bin/frankenphp validate --config /etc/frankenphp/Caddyfile
 ExecStart=/usr/bin/frankenphp run --environ --config /etc/frankenphp/Caddyfile
 ExecReload=/usr/bin/frankenphp reload --config /etc/frankenphp/Caddyfile
+WorkingDirectory=/var/lib/frankenphp
 TimeoutStopSec=5s
 LimitNOFILE=1048576
 LimitNPROC=512

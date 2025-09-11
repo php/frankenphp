@@ -21,6 +21,16 @@ import (
 	"github.com/dunglas/frankenphp/internal/phpheaders"
 )
 
+// Protocol versions, in Apache mod_ssl format: https://httpd.apache.org/docs/current/mod/mod_ssl.html
+// Note that these are slightly different from SupportedProtocols in caddytls/config.go
+var tlsProtocolStrings = map[uint16]string{
+	tls.VersionTLS10: "TLSv1",
+	tls.VersionTLS11: "TLSv1.1",
+	tls.VersionTLS12: "TLSv1.2",
+	tls.VersionTLS13: "TLSv1.3",
+}
+
+// Known $_SERVER keys
 var knownServerKeys = []string{
 	"CONTENT_LENGTH",
 	"DOCUMENT_ROOT",
@@ -211,18 +221,49 @@ func go_register_variables(threadIndex C.uintptr_t, trackVarsArray *C.zval) {
 	addPreparedEnvToServer(fc, trackVarsArray)
 }
 
+// splitCgiPath splits the request path into SCRIPT_NAME, SCRIPT_FILENAME, PATH_INFO, DOCUMENT_URI
+func splitCgiPath(fc *frankenPHPContext) {
+	path := fc.request.URL.Path
+	splitPath := fc.splitPath
+
+	if splitPath == nil {
+		splitPath = []string{".php"}
+	}
+
+	if splitPos := splitPos(path, splitPath); splitPos > -1 {
+		fc.docURI = path[:splitPos]
+		fc.pathInfo = path[splitPos:]
+
+		// Strip PATH_INFO from SCRIPT_NAME
+		fc.scriptName = strings.TrimSuffix(path, fc.pathInfo)
+
+		// Ensure the SCRIPT_NAME has a leading slash for compliance with RFC3875
+		// Info: https://tools.ietf.org/html/rfc3875#section-4.1.13
+		if fc.scriptName != "" && !strings.HasPrefix(fc.scriptName, "/") {
+			fc.scriptName = "/" + fc.scriptName
+		}
+	}
+
+	// TODO: is it possible to delay this and avoid saving everything in the context?
+	// SCRIPT_FILENAME is the absolute path of SCRIPT_NAME
+	fc.scriptFilename = sanitizedPathJoin(fc.documentRoot, fc.scriptName)
+	fc.worker = getWorkerByPath(fc.scriptFilename)
+}
+
 // splitPos returns the index where path should
 // be split based on SplitPath.
+// example: if splitPath is [".php"]
+// "/path/to/script.php/some/path": ("/path/to/script.php", "/some/path")
 //
 // Adapted from https://github.com/caddyserver/caddy/blob/master/modules/caddyhttp/reverseproxy/fastcgi/fastcgi.go
 // Copyright 2015 Matthew Holt and The Caddy Authors
-func splitPos(fc *frankenPHPContext, path string) int {
-	if len(fc.splitPath) == 0 {
+func splitPos(path string, splitPath []string) int {
+	if len(splitPath) == 0 {
 		return 0
 	}
 
 	lowerPath := strings.ToLower(path)
-	for _, split := range fc.splitPath {
+	for _, split := range splitPath {
 		if idx := strings.Index(lowerPath, strings.ToLower(split)); idx > -1 {
 			return idx + len(split)
 		}
@@ -230,13 +271,42 @@ func splitPos(fc *frankenPHPContext, path string) int {
 	return -1
 }
 
-// Map of supported protocols to Apache ssl_mod format
-// Note that these are slightly different from SupportedProtocols in caddytls/config.go
-var tlsProtocolStrings = map[uint16]string{
-	tls.VersionTLS10: "TLSv1",
-	tls.VersionTLS11: "TLSv1.1",
-	tls.VersionTLS12: "TLSv1.2",
-	tls.VersionTLS13: "TLSv1.3",
+// go_update_request_info updates the sapi_request_info struct
+// See: https://github.com/php/php-src/blob/345e04b619c3bc11ea17ee02cdecad6ae8ce5891/main/SAPI.h#L72
+//
+//export go_update_request_info
+func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) C.bool {
+	thread := phpThreads[threadIndex]
+	fc := thread.getRequestContext()
+	request := fc.request
+
+	authUser, authPassword, ok := request.BasicAuth()
+	if ok {
+		if authPassword != "" {
+			info.auth_password = thread.pinCString(authPassword)
+		}
+		if authUser != "" {
+			info.auth_user = thread.pinCString(authUser)
+		}
+	}
+
+	info.request_method = thread.pinCString(request.Method)
+	info.query_string = thread.pinCString(request.URL.RawQuery)
+	info.content_length = C.zend_long(request.ContentLength)
+
+	if contentType := request.Header.Get("Content-Type"); contentType != "" {
+		info.content_type = thread.pinCString(contentType)
+	}
+
+	if fc.pathInfo != "" {
+		info.path_translated = thread.pinCString(sanitizedPathJoin(fc.documentRoot, fc.pathInfo)) // See: http://www.oreilly.com/openbook/cgi/ch02_04.html
+	}
+
+	info.request_uri = thread.pinCString(request.URL.RequestURI())
+
+	info.proto_num = C.int(request.ProtoMajor*1000 + request.ProtoMinor)
+
+	return C.bool(fc.worker != nil)
 }
 
 // SanitizedPathJoin performs filepath.Join(root, reqPath) that

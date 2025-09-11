@@ -12,8 +12,6 @@ package frankenphp
 //
 // We also set these flags for hardening: https://github.com/docker-library/php/blob/master/8.2/bookworm/zts/Dockerfile#L57-L59
 
-// #cgo nocallback frankenphp_update_server_context
-// #cgo noescape frankenphp_update_server_context
 // #include <stdlib.h>
 // #include <stdint.h>
 // #include <php_variables.h>
@@ -32,7 +30,6 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -139,9 +136,6 @@ func Config() PHPConfig {
 		ZendMaxExecutionTimers: bool(cConfig.zend_max_execution_timers),
 	}
 }
-
-// MaxThreads is internally used during tests. It is written to, but never read and may go away in the future.
-var MaxThreads int
 
 func calculateMaxThreads(opt *opt) (int, int, int, error) {
 	maxProcs := runtime.GOMAXPROCS(0) * 2
@@ -253,7 +247,6 @@ func Init(options ...Option) error {
 	}
 
 	metrics.TotalThreads(totalThreadCount)
-	MaxThreads = totalThreadCount
 
 	config := Config()
 
@@ -315,66 +308,6 @@ func Shutdown() {
 
 	isRunning = false
 	logger.Debug("FrankenPHP shut down")
-}
-
-func updateServerContext(thread *phpThread, fc *frankenPHPContext, isWorkerRequest bool) error {
-	request := fc.request
-	authUser, authPassword, ok := request.BasicAuth()
-	var cAuthUser, cAuthPassword *C.char
-	if ok && authPassword != "" {
-		cAuthPassword = thread.pinCString(authPassword)
-	}
-	if ok && authUser != "" {
-		cAuthUser = thread.pinCString(authUser)
-	}
-
-	cMethod := thread.pinCString(request.Method)
-	cQueryString := thread.pinCString(request.URL.RawQuery)
-	contentLengthStr := request.Header.Get("Content-Length")
-	contentLength := 0
-	if contentLengthStr != "" {
-		var err error
-		contentLength, err = strconv.Atoi(contentLengthStr)
-		if err != nil || contentLength < 0 {
-			return fmt.Errorf("invalid Content-Length header: %w", err)
-		}
-	}
-
-	contentType := request.Header.Get("Content-Type")
-	var cContentType *C.char
-	if contentType != "" {
-		cContentType = thread.pinCString(contentType)
-	}
-
-	// compliance with the CGI specification requires that
-	// PATH_TRANSLATED should only exist if PATH_INFO is defined.
-	// Info: https://www.ietf.org/rfc/rfc3875 Page 14
-	var cPathTranslated *C.char
-	if fc.pathInfo != "" {
-		cPathTranslated = thread.pinCString(sanitizedPathJoin(fc.documentRoot, fc.pathInfo)) // Info: http://www.oreilly.com/openbook/cgi/ch02_04.html
-	}
-
-	cRequestUri := thread.pinCString(request.URL.RequestURI())
-
-	ret := C.frankenphp_update_server_context(
-		C.bool(isWorkerRequest || fc.responseWriter == nil),
-
-		cMethod,
-		cQueryString,
-		C.zend_long(contentLength),
-		cPathTranslated,
-		cRequestUri,
-		cContentType,
-		cAuthUser,
-		cAuthPassword,
-		C.int(request.ProtoMajor*1000+request.ProtoMinor),
-	)
-
-	if ret > 0 {
-		return ErrRequestContextCreation
-	}
-
-	return nil
 }
 
 // ServeHTTP executes a PHP script according to the given context.
@@ -635,6 +568,9 @@ func go_is_context_done(threadIndex C.uintptr_t) C.bool {
 // ExecuteScriptCLI executes the PHP script passed as parameter.
 // It returns the exit status code of the script.
 func ExecuteScriptCLI(script string, args []string) int {
+	// Ensure extensions are registered before CLI execution
+	registerExtensions()
+
 	cScript := C.CString(script)
 	defer C.free(unsafe.Pointer(cScript))
 
@@ -645,6 +581,9 @@ func ExecuteScriptCLI(script string, args []string) int {
 }
 
 func ExecutePHPCode(phpCode string) int {
+	// Ensure extensions are registered before CLI execution
+	registerExtensions()
+
 	cCode := C.CString(phpCode)
 	defer C.free(unsafe.Pointer(cCode))
 	return int(C.frankenphp_execute_script_cli(cCode, 0, nil, true))

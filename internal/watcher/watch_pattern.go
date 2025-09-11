@@ -150,7 +150,7 @@ func matchBracketPattern(pattern string, fileName string) bool {
 
 	// all bracket entries are checked individually, only one needs to match
 	// *.{php,twig,yaml} -> *.php, *.twig, *.yaml
-	for _, pattern := range strings.Split(betweenTheBrackets, ",") {
+	for pattern := range strings.SplitSeq(betweenTheBrackets, ",") {
 		if matchPattern(beforeTheBrackets+pattern+afterTheBrackets, fileName) {
 			return true
 		}

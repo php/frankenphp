@@ -42,14 +42,14 @@ func TestWorkersShouldNotReloadOnExcludingPattern(t *testing.T) {
 
 func pollForWorkerReset(t *testing.T, handler func(http.ResponseWriter, *http.Request), limit int) bool {
 	// first we make an initial request to start the request counter
-	body := fetchBody("GET", "http://example.com/worker-with-counter.php", handler)
+	body, _ := testGet("http://example.com/worker-with-counter.php", handler, t)
 	assert.Equal(t, "requests:1", body)
 
 	// now we spam file updates and check if the request counter resets
-	for i := 0; i < limit; i++ {
+	for range limit {
 		updateTestFile("./testdata/files/test.txt", "updated", t)
 		time.Sleep(pollingTime * time.Millisecond)
-		body := fetchBody("GET", "http://example.com/worker-with-counter.php", handler)
+		body, _ := testGet("http://example.com/worker-with-counter.php", handler, t)
 		if body == "requests:1" {
 			return true
 		}

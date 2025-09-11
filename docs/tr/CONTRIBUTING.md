@@ -196,7 +196,7 @@ docker buildx bake -f docker-bake.hcl --pull --no-cache --push
 ## Docker ile İlgili Kaynaklar
 
 - [Pişirme (bake) dosya tanımı](https://docs.docker.com/build/customize/bake/file-definition/)
-- [docker buildx build](https://docs.docker.com/engine/reference/commandline/buildx_build/)
+- [`docker buildx build`](https://docs.docker.com/engine/reference/commandline/buildx_build/)
 
 ## Faydalı Komut
 

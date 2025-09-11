@@ -75,6 +75,16 @@ __thread uintptr_t thread_index;
 __thread bool is_worker_thread = false;
 __thread zval *os_environment = NULL;
 
+static void frankenphp_update_request_context() {
+  /* the server context is stored on the go side, still SG(server_context) needs
+   * to not be NULL */
+  SG(server_context) = (void *)1;
+  /* status It is not reset by zend engine, set it to 200. */
+  SG(sapi_headers).http_response_code = 200;
+
+  is_worker_thread = go_update_request_info(thread_index, &SG(request_info));
+}
+
 static void frankenphp_free_request_context() {
   if (SG(request_info).cookie_data != NULL) {
     free(SG(request_info).cookie_data);
@@ -91,13 +101,44 @@ static void frankenphp_free_request_context() {
   SG(request_info).request_uri = NULL;
 }
 
-static void frankenphp_destroy_super_globals() {
+/* reset all 'auto globals' in worker mode except of $_ENV
+ * see: php_hash_environment() */
+static void frankenphp_reset_super_globals() {
   zend_try {
-    for (int i = 0; i < NUM_TRACK_VARS; i++) {
-      zval_ptr_dtor_nogc(&PG(http_globals)[i]);
-    }
+    /* only $_FILES needs to be flushed explicitly
+     * $_GET, $_POST, $_COOKIE and $_SERVER are flushed on reimport
+     * $_ENV is not flushed
+     * for more info see: php_startup_auto_globals()
+     */
+    zval *files = &PG(http_globals)[TRACK_VARS_FILES];
+    zval_ptr_dtor_nogc(files);
+    memset(files, 0, sizeof(*files));
   }
   zend_end_try();
+
+  zend_auto_global *auto_global;
+  zend_string *_env = ZSTR_KNOWN(ZEND_STR_AUTOGLOBAL_ENV);
+  zend_string *_server = ZSTR_KNOWN(ZEND_STR_AUTOGLOBAL_SERVER);
+  ZEND_HASH_MAP_FOREACH_PTR(CG(auto_globals), auto_global) {
+    if (auto_global->name == _env) {
+      /* skip $_ENV */
+    } else if (auto_global->name == _server) {
+      /* always reimport $_SERVER  */
+      auto_global->armed = auto_global->auto_global_callback(auto_global->name);
+    } else if (auto_global->jit) {
+      /* globals with jit are: $_SERVER, $_ENV, $_REQUEST, $GLOBALS,
+       * jit will only trigger on script parsing and therefore behaves
+       * differently in worker mode. We will skip all jit globals
+       */
+    } else if (auto_global->auto_global_callback) {
+      /* $_GET, $_POST, $_COOKIE, $_FILES are reimported here */
+      auto_global->armed = auto_global->auto_global_callback(auto_global->name);
+    } else {
+      /* $_SESSION will land here (not an http_global) */
+      auto_global->armed = 0;
+    }
+  }
+  ZEND_HASH_FOREACH_END();
 }
 
 /*
@@ -174,8 +215,9 @@ void frankenphp_add_assoc_str_ex(zval *track_vars_array, char *key,
 static int frankenphp_worker_request_startup() {
   int retval = SUCCESS;
 
+  frankenphp_update_request_context();
+
   zend_try {
-    frankenphp_destroy_super_globals();
     frankenphp_release_temporary_streams();
     php_output_activate();
 
@@ -213,21 +255,7 @@ static int frankenphp_worker_request_startup() {
       php_output_set_implicit_flush(1);
     }
 
-    php_hash_environment();
-
-    /* zend_is_auto_global will force a re-import of the $_SERVER global */
-    zend_is_auto_global(ZSTR_KNOWN(ZEND_STR_AUTOGLOBAL_SERVER));
-
-    /* disarm the $_ENV auto_global to prevent it from being reloaded in worker
-     * mode */
-    if (zend_hash_str_exists(&EG(symbol_table), "_ENV", 4)) {
-      zend_auto_global *env_global;
-      if ((env_global = zend_hash_find_ptr(
-               CG(auto_globals), ZSTR_KNOWN(ZEND_STR_AUTOGLOBAL_ENV))) !=
-          NULL) {
-        env_global->armed = 0;
-      }
-    }
+    frankenphp_reset_super_globals();
 
     const char **module_name;
     zend_module_entry *module;
@@ -502,41 +530,8 @@ static zend_module_entry frankenphp_module = {
     STANDARD_MODULE_PROPERTIES};
 
 static void frankenphp_request_shutdown() {
-  if (is_worker_thread) {
-    /* ensure $_ENV is not in an invalid state before shutdown */
-    zval_ptr_dtor_nogc(&PG(http_globals)[TRACK_VARS_ENV]);
-    array_init(&PG(http_globals)[TRACK_VARS_ENV]);
-  }
-  php_request_shutdown((void *)0);
   frankenphp_free_request_context();
-}
-
-int frankenphp_update_server_context(bool is_worker_request,
-
-                                     const char *request_method,
-                                     char *query_string,
-                                     zend_long content_length,
-                                     char *path_translated, char *request_uri,
-                                     const char *content_type, char *auth_user,
-                                     char *auth_password, int proto_num) {
-
-  SG(server_context) = (void *)1;
-  is_worker_thread = is_worker_request;
-
-  // It is not reset by zend engine, set it to 200.
-  SG(sapi_headers).http_response_code = 200;
-
-  SG(request_info).auth_password = auth_password;
-  SG(request_info).auth_user = auth_user;
-  SG(request_info).request_method = request_method;
-  SG(request_info).query_string = query_string;
-  SG(request_info).content_type = content_type;
-  SG(request_info).content_length = content_length;
-  SG(request_info).path_translated = path_translated;
-  SG(request_info).request_uri = request_uri;
-  SG(request_info).proto_num = proto_num;
-
-  return SUCCESS;
+  php_request_shutdown((void *)0);
 }
 
 static int frankenphp_startup(sapi_module_struct *sapi_module) {
@@ -775,6 +770,11 @@ static void frankenphp_register_variables(zval *track_vars_array) {
   /* In worker mode we cache the os environment */
   if (os_environment == NULL) {
     os_environment = malloc(sizeof(zval));
+    if (os_environment == NULL) {
+      php_error(E_ERROR, "Failed to allocate memory for os_environment");
+
+      return;
+    }
     array_init(os_environment);
     get_full_env(os_environment);
     // php_import_environment_variables(os_environment);
@@ -969,11 +969,13 @@ bool frankenphp_new_php_thread(uintptr_t thread_index) {
   return true;
 }
 
-int frankenphp_request_startup() {
+static int frankenphp_request_startup() {
+  frankenphp_update_request_context();
   if (php_request_startup() == SUCCESS) {
     return SUCCESS;
   }
 
+  frankenphp_free_request_context();
   php_request_shutdown((void *)0);
 
   return FAILURE;
@@ -1009,7 +1011,6 @@ int frankenphp_execute_script(char *file_name) {
 
   zend_destroy_file_handle(&file_handle);
 
-  frankenphp_free_request_context();
   frankenphp_request_shutdown();
 
   return status;

@@ -514,18 +514,17 @@ type ArrayStruct struct {
 }
 
 //export_php:method ArrayClass::processArray(array $items): array
-func (as *ArrayStruct) ProcessArray(items *frankenphp.Array) *frankenphp.Array {
-	result := &frankenphp.Array{}
-	for i := uint32(0); i < items.Len(); i++ {
-		key, value := items.At(i)
-		result.SetString(fmt.Sprintf("processed_%d", i), value)
+func (as *ArrayStruct) ProcessArray(items frankenphp.AssociativeArray) frankenphp.AssociativeArray {
+	result := frankenphp.AssociativeArray{}
+	for key, value := range items.Map {
+		result.Set("processed_"+key, value)
 	}
 	return result
 }
 
 //export_php:method ArrayClass::filterData(array $data, string $filter): array
-func (as *ArrayStruct) FilterData(data *frankenphp.Array, filter string) *frankenphp.Array {
-	result := &frankenphp.Array{}
+func (as *ArrayStruct) FilterData(data frankenphp.AssociativeArray, filter string) frankenphp.AssociativeArray {
+	result := frankenphp.AssociativeArray{}
 	// Filter logic here
 	return result
 }`
@@ -543,11 +542,10 @@ func (as *ArrayStruct) FilterData(data *frankenphp.Array, filter string) *franke
 			Params: []phpParameter{
 				{Name: "items", PhpType: phpArray, IsNullable: false},
 			},
-			GoFunction: `func (as *ArrayStruct) ProcessArray(items *frankenphp.Array) *frankenphp.Array {
-	result := &frankenphp.Array{}
-	for i := uint32(0); i < items.Len(); i++ {
-		key, value := items.At(i)
-		result.SetString(fmt.Sprintf("processed_%d", i), value)
+			GoFunction: `func (as *ArrayStruct) ProcessArray(items frankenphp.AssociativeArray) frankenphp.AssociativeArray {
+	result := frankenphp.AssociativeArray{}
+	for key, value := range items.Entries() {
+		result.Set("processed_"+key, value)
 	}
 	return result
 }`,
@@ -562,8 +560,8 @@ func (as *ArrayStruct) FilterData(data *frankenphp.Array, filter string) *franke
 				{Name: "data", PhpType: phpArray, IsNullable: false},
 				{Name: "filter", PhpType: phpString, IsNullable: false},
 			},
-			GoFunction: `func (as *ArrayStruct) FilterData(data *frankenphp.Array, filter string) *frankenphp.Array {
-	result := &frankenphp.Array{}
+			GoFunction: `func (as *ArrayStruct) FilterData(data frankenphp.AssociativeArray, filter string) frankenphp.AssociativeArray {
+	result := frankenphp.AssociativeArray{}
 	return result
 }`,
 		},
@@ -613,11 +611,8 @@ func TestGoFileGenerator_MethodWrapperWithNullableArrayParams(t *testing.T) {
 type NullableArrayStruct struct{}
 
 //export_php:method NullableArrayClass::processOptionalArray(?array $items, string $name): string
-func (nas *NullableArrayStruct) ProcessOptionalArray(items *frankenphp.Array, name string) string {
-	if items == nil {
-		return "No items: " + name
-	}
-	return fmt.Sprintf("Processing %d items for %s", items.Len(), name)
+func (nas *NullableArrayStruct) ProcessOptionalArray(items frankenphp.AssociativeArray, name string) string {
+	return fmt.Sprintf("Processing %d items for %s", len(items.Map), name)
 }`
 
 	sourceFile := filepath.Join(tmpDir, "test.go")
@@ -634,11 +629,8 @@ func (nas *NullableArrayStruct) ProcessOptionalArray(items *frankenphp.Array, na
 				{Name: "items", PhpType: phpArray, IsNullable: true},
 				{Name: "name", PhpType: phpString, IsNullable: false},
 			},
-			GoFunction: `func (nas *NullableArrayStruct) ProcessOptionalArray(items *frankenphp.Array, name string) string {
-	if items == nil {
-		return "No items: " + name
-	}
-	return fmt.Sprintf("Processing %d items for %s", items.Len(), name)
+			GoFunction: `func (nas *NullableArrayStruct) ProcessOptionalArray(items frankenphp.AssociativeArray, name string) string {
+	return fmt.Sprintf("Processing %d items for %s", len(items.Map), name)
 }`,
 		},
 	}

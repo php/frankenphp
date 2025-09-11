@@ -306,8 +306,8 @@ func (cp *classParser) parseMethodSignature(className, signature string) (*phpCl
 
 	var params []phpParameter
 	if paramsStr != "" {
-		paramParts := strings.Split(paramsStr, ",")
-		for _, part := range paramParts {
+		paramParts := strings.SplitSeq(paramsStr, ",")
+		for part := range paramParts {
 			param, err := cp.parseMethodParameter(strings.TrimSpace(part))
 			if err != nil {
 				return nil, fmt.Errorf("parsing parameter '%s': %w", part, err)
