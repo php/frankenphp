@@ -1,6 +1,6 @@
 # FrankenPHP: Modern App Server for PHP
 
-<h1 align="center"><a href="https://frankenphp.dev"><img src="frankenphp.png" alt="FrankenPHP" width="600"></a></h1>
+<h1 style="text-align: center;"><a href="https://frankenphp.dev"><img src="frankenphp.png" alt="FrankenPHP" width="600"></a></h1>
 
 FrankenPHP is a modern application server for PHP built on top of the [Caddy](https://caddyserver.com/) web server.
 
@@ -43,6 +43,38 @@ You can also run command-line scripts with:
 frankenphp php-cli /path/to/your/script.php
 ```
 
+### RPM Packages
+
+We offer RPM packages for Red Hat Enterprise Linux 8 to 10. To install, run:
+
+```console
+sudo dnf install https://rpm.henderkes.com/static-php-1-0.noarch.rpm
+sudo dnf module enable php-zts:static-8.4 # optional, defaults to 8.4, 8.2-8.4 available
+sudo dnf install frankenphp
+# to install extensions:
+sudo dnf install php-zts-xdebug
+# if an extension is not available by default, install it with pie
+sudo dnf install php-zts-devel
+sudo pie install asgrim/example-pie-extension --with-php-config=php-config-zts
+```
+
+### DEB Packages
+
+We offer DEB packages for Debian (Bookworm and Trixie) and Ubuntu (Jammy and Noble). To install, run:
+
+```console
+. /etc/os-release && \
+sudo curl -fsSL https://key.henderkes.com/static-php.gpg -o /usr/share/keyrings/static-php.gpg && \
+echo "deb [signed-by=/usr/share/keyrings/static-php.gpg] https://deb.henderkes.com/ $VERSION_CODENAME main" | sudo tee /etc/apt/sources.list.d/static-php.list && \
+sudo apt update
+sudo apt install frankenphp
+# to install extensions:
+sudo apt install php-zts-xdebug
+# if an extension is not available by default, install it with pie
+sudo apt install php-zts-devel
+sudo pie install asgrim/example-pie-extension --with-php-config=php-config-zts
+```
+
 ### Docker
 
 Alternatively, [Docker images](https://frankenphp.dev/docs/docker/) are available:
@@ -75,6 +107,8 @@ To serve the content of the current directory, run:
 ```console
 frankenphp php-server
 ```
+
+If you need extensions, you will have to install them with [pie](https://github.com/php/pie).
 
 ## Docs
 
