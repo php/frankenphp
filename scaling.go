@@ -73,6 +73,10 @@ func addWorkerThread(worker *worker) (*phpThread, error) {
 	if thread == nil {
 		return nil, ErrMaxThreadsReached
 	}
+	if isNearThreadLimit() {
+		enableLatencyTracking.Store(true)
+		thread.isLowLatencyThread = true
+	}
 	convertToWorkerThread(thread, worker)
 	thread.state.waitFor(stateReady, stateShuttingDown, stateReserved)
 	return thread, nil
@@ -220,4 +224,12 @@ func deactivateThreads() {
 		// 	continue
 		// }
 	}
+
+	if enableLatencyTracking.Load() && !isNearThreadLimit() {
+		enableLatencyTracking.Store(false)
+	}
+}
+
+func isNearThreadLimit() bool {
+	return len(autoScaledThreads) >= cap(autoScaledThreads)*slowThreadPercentile/100
 }

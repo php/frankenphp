@@ -217,6 +217,20 @@ func (worker *worker) countThreads() int {
 func (worker *worker) handleRequest(fc *frankenPHPContext) {
 	metrics.StartWorkerRequest(worker.name)
 
+	// if the server is experiencing high latency, dispatch requests that are
+	// expected to be slow directly to a number of restricted threads
+	if enableLatencyTracking.Load() && isHighLatencyRequest(fc) {
+		getRandomSlowThread(worker).requestChan <- fc
+		stallDuration := time.Since(fc.startedAt)
+		<-fc.done
+
+		requestTime := time.Since(fc.startedAt)
+		metrics.StopWorkerRequest(worker.name, requestTime)
+		recordRequestLatency(fc, requestTime-stallDuration)
+
+		return
+	}
+
 	// dispatch requests to all worker threads in order
 	worker.threadMutex.RLock()
 	for _, thread := range worker.threads {
@@ -224,7 +238,11 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) {
 		case thread.requestChan <- fc:
 			worker.threadMutex.RUnlock()
 			<-fc.done
-			metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
+
+			requestTime := time.Since(fc.startedAt)
+			metrics.StopWorkerRequest(worker.name, requestTime)
+			recordSlowRequest(fc, requestTime)
+
 			return
 		default:
 			// thread is busy, continue
@@ -238,8 +256,12 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) {
 		select {
 		case worker.requestChan <- fc:
 			metrics.DequeuedWorkerRequest(worker.name)
+			stallDuration := time.Since(fc.startedAt)
 			<-fc.done
-			metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
+			requestTime := time.Since(fc.startedAt)
+			metrics.StopWorkerRequest(worker.name, requestTime)
+			recordSlowRequest(fc, requestTime-stallDuration)
+
 			return
 		case scaleChan <- fc:
 			// the request has triggered scaling, continue to wait for a thread
