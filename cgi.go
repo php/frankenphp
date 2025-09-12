@@ -131,13 +131,6 @@ func addKnownVariablesToServer(thread *phpThread, fc *frankenPHPContext, trackVa
 	serverPort := reqPort
 	contentLength := request.Header.Get("Content-Length")
 
-	var requestURI string
-	if fc.originalRequest != nil {
-		requestURI = fc.originalRequest.URL.RequestURI()
-	} else {
-		requestURI = request.URL.RequestURI()
-	}
-
 	C.frankenphp_register_bulk(
 		trackVarsArray,
 		packCgiVariable(keys["REMOTE_ADDR"], ip),
@@ -167,7 +160,7 @@ func addKnownVariablesToServer(thread *phpThread, fc *frankenPHPContext, trackVa
 		packCgiVariable(keys["AUTH_TYPE"], ""),
 		packCgiVariable(keys["REMOTE_IDENT"], ""),
 		// Request uri of the original request
-		packCgiVariable(keys["REQUEST_URI"], requestURI),
+		packCgiVariable(keys["REQUEST_URI"], fc.getOriginalRequest().URL.RequestURI()),
 		packCgiVariable(keys["SSL_CIPHER"], sslCipher),
 	)
 

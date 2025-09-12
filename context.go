@@ -138,6 +138,14 @@ func (fc *frankenPHPContext) clientHasClosed() bool {
 	}
 }
 
+func (fc *frankenPHPContext) getOriginalRequest() *http.Request {
+	if fc.originalRequest != nil {
+		return fc.originalRequest
+	}
+
+	return fc.request
+}
+
 // reject sends a response with the given status code and message
 func (fc *frankenPHPContext) reject(statusCode int, message string) {
 	if fc.isDone {

@@ -217,6 +217,17 @@ func (worker *worker) countThreads() int {
 func (worker *worker) handleRequest(fc *frankenPHPContext) {
 	metrics.StartWorkerRequest(worker.name)
 
+	// if the server is experiencing high latency, dispatch requests that are
+	// expected to be slow directly to a number of restricted threads
+	if latencyTrackingEnabled.Load() && isHighLatencyRequest(fc) {
+		worker.threadMutex.RLock()
+		slowThread := getRandomSlowThread(worker.threads)
+		worker.threadMutex.RUnlock()
+		worker.stallRequest(fc, slowThread.requestChan, true)
+
+		return
+	}
+
 	// dispatch requests to all worker threads in order
 	worker.threadMutex.RLock()
 	for _, thread := range worker.threads {
@@ -224,7 +235,11 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) {
 		case thread.requestChan <- fc:
 			worker.threadMutex.RUnlock()
 			<-fc.done
-			metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
+
+			requestTime := time.Since(fc.startedAt)
+			metrics.StopWorkerRequest(worker.name, requestTime)
+			trackRequestLatency(fc, requestTime, false)
+
 			return
 		default:
 			// thread is busy, continue
@@ -233,13 +248,22 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) {
 	worker.threadMutex.RUnlock()
 
 	// if no thread was available, mark the request as queued and apply the scaling strategy
+	worker.stallRequest(fc, worker.requestChan, false)
+}
+
+// stall the request and trigger scaling or timeouts
+func (worker *worker) stallRequest(fc *frankenPHPContext, requestChan chan *frankenPHPContext, forceTracking bool) {
 	metrics.QueuedWorkerRequest(worker.name)
 	for {
 		select {
-		case worker.requestChan <- fc:
+		case requestChan <- fc:
 			metrics.DequeuedWorkerRequest(worker.name)
+			stallDuration := time.Since(fc.startedAt)
 			<-fc.done
-			metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
+			requestTime := time.Since(fc.startedAt)
+			metrics.StopWorkerRequest(worker.name, requestTime)
+			trackRequestLatency(fc, requestTime-stallDuration, forceTracking)
+
 			return
 		case scaleChan <- fc:
 			// the request has triggered scaling, continue to wait for a thread

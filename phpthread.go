@@ -15,13 +15,14 @@ import (
 // identified by the index in the phpThreads slice
 type phpThread struct {
 	runtime.Pinner
-	threadIndex  int
-	requestChan  chan *frankenPHPContext
-	drainChan    chan struct{}
-	handlerMu    sync.Mutex
-	handler      threadHandler
-	state        *threadState
-	sandboxedEnv map[string]*C.zend_string
+	threadIndex        int
+	requestChan        chan *frankenPHPContext
+	drainChan          chan struct{}
+	handlerMu          sync.Mutex
+	handler            threadHandler
+	state              *threadState
+	sandboxedEnv       map[string]*C.zend_string
+	isLowLatencyThread bool
 }
 
 // interface that defines how the callbacks from the C thread should be handled

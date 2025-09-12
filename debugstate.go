@@ -6,8 +6,8 @@ type ThreadDebugState struct {
 	Name                     string
 	State                    string
 	IsWaiting                bool
-	IsBusy                   bool
 	WaitingSinceMilliseconds int64
+	IsLowLatency             bool
 }
 
 // EXPERIMENTAL: FrankenPHPDebugState prints the state of all PHP threads - debugging purposes only
@@ -40,7 +40,7 @@ func threadDebugState(thread *phpThread) ThreadDebugState {
 		Name:                     thread.name(),
 		State:                    thread.state.name(),
 		IsWaiting:                thread.state.isInWaitingState(),
-		IsBusy:                   !thread.state.isInWaitingState(),
 		WaitingSinceMilliseconds: thread.state.waitTime(),
+		IsLowLatency:             thread.isLowLatencyThread,
 	}
 }

@@ -278,6 +278,8 @@ func Init(options ...Option) error {
 		return err
 	}
 
+	initLatencyTracking()
+
 	initAutoScaling(mainThread)
 
 	ctx := context.Background()
