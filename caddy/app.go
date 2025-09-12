@@ -42,7 +42,7 @@ type FrankenPHPApp struct {
 	logger  *slog.Logger
 }
 
-var iniError = errors.New("'php_ini' must be in the format: php_ini \"<key>\" \"<value>\"")
+var iniError = errors.New(`"php_ini" must be in the format: php_ini "<key>" "<value>"`)
 
 // CaddyModule returns the Caddy module information.
 func (f FrankenPHPApp) CaddyModule() caddy.ModuleInfo {
