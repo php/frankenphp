@@ -79,28 +79,25 @@ func getRandomSlowThread(threads []*phpThread) *phpThread {
 	panic("there must always be at least one slow thread")
 }
 
-func recordSlowRequest(fc *frankenPHPContext, duration time.Duration) {
-	if duration > slowRequestThreshold {
+// record a slow request path
+func trackRequestLatency(fc *frankenPHPContext, duration time.Duration, forceTracking bool) {
+	if duration < slowRequestThreshold && !forceTracking {
 		recordRequestLatency(fc, duration)
 	}
-}
 
-// record a slow request path
-func recordRequestLatency(fc *frankenPHPContext, duration time.Duration) {
 	request := fc.getOriginalRequest()
 	normalizedPath := normalizePath(request.URL.Path)
 	logger.Debug("slow request detected", "path", normalizedPath, "duration", duration)
-
 	slowRequestsMu.Lock()
 
 	// if too many slow paths are tracked, clear the map
 	if len(slowRequestPaths) > maxTrackedPaths {
 		slowRequestPaths = make(map[string]time.Duration)
 	}
-	recordedLatency, _ := slowRequestPaths[normalizedPath]
-	// average the recorded latency with the new latency
-	slowRequestPaths[normalizedPath] = duration/2 + recordedLatency/2
 
+	// record the latency as a moving average
+	recordedLatency, _ := slowRequestPaths[normalizedPath]
+	slowRequestPaths[normalizedPath] = duration/2 + recordedLatency/2
 	slowRequestsMu.Unlock()
 }
 

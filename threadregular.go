@@ -93,7 +93,7 @@ func handleRequestWithRegularPHPThreads(fc *frankenPHPContext) {
 		regularThreadMu.RLock()
 		slowThread := getRandomSlowThread(regularThreads)
 		regularThreadMu.RUnlock()
-		stallRegularPHPRequests(fc, slowThread.requestChan)
+		stallRegularPHPRequests(fc, slowThread.requestChan, true)
 
 		return
 	}
@@ -105,7 +105,7 @@ func handleRequestWithRegularPHPThreads(fc *frankenPHPContext) {
 			regularThreadMu.RUnlock()
 			<-fc.done
 			metrics.StopRequest()
-			recordSlowRequest(fc, time.Since(fc.startedAt))
+			trackRequestLatency(fc, time.Since(fc.startedAt), false)
 
 			return
 		default:
@@ -115,10 +115,11 @@ func handleRequestWithRegularPHPThreads(fc *frankenPHPContext) {
 	regularThreadMu.RUnlock()
 
 	// if no thread was available, mark the request as queued and fan it out to all threads
-	stallRegularPHPRequests(fc, regularRequestChan)
+	stallRegularPHPRequests(fc, regularRequestChan, false)
 }
 
-func stallRegularPHPRequests(fc *frankenPHPContext, requestChan chan *frankenPHPContext) {
+// stall the request and trigger scaling or timeouts
+func stallRegularPHPRequests(fc *frankenPHPContext, requestChan chan *frankenPHPContext, forceTracking bool) {
 	metrics.QueuedRequest()
 	for {
 		select {
@@ -127,7 +128,7 @@ func stallRegularPHPRequests(fc *frankenPHPContext, requestChan chan *frankenPHP
 			stallTime := time.Since(fc.startedAt)
 			<-fc.done
 			metrics.StopRequest()
-			recordSlowRequest(fc, time.Since(fc.startedAt)-stallTime)
+			trackRequestLatency(fc, time.Since(fc.startedAt)-stallTime, forceTracking)
 			return
 		case scaleChan <- fc:
 			// the request has triggered scaling, continue to wait for a thread

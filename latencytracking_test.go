@@ -44,13 +44,12 @@ func assertGetRequest(t *testing.T, url string, expectedBodyContains string, opt
 func TestTunnelLowLatencyRequest_worker(t *testing.T) {
 	assert.NoError(t, Init(
 		WithWorkers("worker", "testdata/sleep.php", 1),
-		WithNumThreads(2),
-		WithMaxThreads(3),
+		WithNumThreads(2), // one 'high latency worker thread' (and one unused regular thread)
+		WithMaxThreads(3), // one 'low latency worker thread'
 		WithLogger(slog.New(zapslog.NewHandler(zaptest.NewLogger(t).Core()))),
 	))
 	defer Shutdown()
 	opt := WithWorkerName("worker")
-	wg := sync.WaitGroup{}
 
 	// record request path as slow, manipulate thresholds to make it easy to trigger
 	slowRequestThreshold = 1 * time.Millisecond
@@ -60,6 +59,7 @@ func TestTunnelLowLatencyRequest_worker(t *testing.T) {
 	assertGetRequest(t, "/slow/123/path?sleep=5", "slept for 5 ms", opt)
 
 	// send 2 blocking requests that occupy all threads
+	wg := sync.WaitGroup{}
 	wg.Add(2)
 	for i := 0; i < 2; i++ {
 		go func() {
@@ -82,12 +82,11 @@ func TestTunnelLowLatencyRequest_worker(t *testing.T) {
 
 func TestTunnelLowLatencyRequest_module(t *testing.T) {
 	assert.NoError(t, Init(
-		WithNumThreads(1),
-		WithMaxThreads(2),
+		WithNumThreads(1), // one 'high latency thread'
+		WithMaxThreads(2), // one 'low latency thread'
 		WithLogger(slog.New(zapslog.NewHandler(zaptest.NewLogger(t).Core()))),
 	))
 	defer Shutdown()
-	wg := sync.WaitGroup{}
 
 	// record request path as slow, manipulate thresholds to make it easy to trigger
 	slowRequestThreshold = 1 * time.Millisecond
@@ -97,6 +96,7 @@ func TestTunnelLowLatencyRequest_module(t *testing.T) {
 	assertGetRequest(t, "/testdata/sleep.php?sleep=5", "slept for 5 ms")
 
 	// send 2 blocking requests that occupy all threads
+	wg := sync.WaitGroup{}
 	wg.Add(2)
 	for i := 0; i < 2; i++ {
 		go func() {

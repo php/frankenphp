@@ -223,7 +223,7 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) {
 		worker.threadMutex.RLock()
 		slowThread := getRandomSlowThread(worker.threads)
 		worker.threadMutex.RUnlock()
-		worker.stallRequest(fc, slowThread.requestChan)
+		worker.stallRequest(fc, slowThread.requestChan, true)
 
 		return
 	}
@@ -238,7 +238,7 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) {
 
 			requestTime := time.Since(fc.startedAt)
 			metrics.StopWorkerRequest(worker.name, requestTime)
-			recordSlowRequest(fc, requestTime)
+			trackRequestLatency(fc, requestTime, false)
 
 			return
 		default:
@@ -248,11 +248,11 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) {
 	worker.threadMutex.RUnlock()
 
 	// if no thread was available, mark the request as queued and apply the scaling strategy
-	worker.stallRequest(fc, worker.requestChan)
+	worker.stallRequest(fc, worker.requestChan, false)
 }
 
 // stall the request and trigger scaling or timeouts
-func (worker *worker) stallRequest(fc *frankenPHPContext, requestChan chan *frankenPHPContext) {
+func (worker *worker) stallRequest(fc *frankenPHPContext, requestChan chan *frankenPHPContext, forceTracking bool) {
 	metrics.QueuedWorkerRequest(worker.name)
 	for {
 		select {
@@ -262,7 +262,7 @@ func (worker *worker) stallRequest(fc *frankenPHPContext, requestChan chan *fran
 			<-fc.done
 			requestTime := time.Since(fc.startedAt)
 			metrics.StopWorkerRequest(worker.name, requestTime)
-			recordSlowRequest(fc, requestTime-stallDuration)
+			trackRequestLatency(fc, requestTime-stallDuration, forceTracking)
 
 			return
 		case scaleChan <- fc:
