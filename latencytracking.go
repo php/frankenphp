@@ -10,7 +10,7 @@ import (
 )
 
 // limit of tracked path children
-const childLimitPerNode = 10
+const maxTrackedPaths = 1000
 
 // path parts longer than this are considered a wildcard
 const charLimitWildcard = 50
@@ -21,67 +21,62 @@ var (
 	// % of autoscaled threads that are not marked as low latency (var for tests)
 	slowThreadPercentile = 80
 
-	rootNode              = &pathNode{children: make(map[string]*pathNode), mu: sync.RWMutex{}}
-	enableLatencyTracking = atomic.Bool{}
-	numRe                 = regexp.MustCompile(`^\d+$`)
-	uuidRe                = regexp.MustCompile(`^[a-f0-9-]{36}$`)
+	latencyTrackingEnabled = atomic.Bool{}
+	slowRequestsMu         = sync.RWMutex{}
+	slowRequestPaths       map[string]time.Duration
+	numRe                  = regexp.MustCompile(`^\d+$`)
+	uuidRe                 = regexp.MustCompile(`^[a-f0-9-]{36}$`)
 )
 
-type pathNode struct {
-	children map[string]*pathNode
-	latency  time.Duration
-	mu       sync.RWMutex
-}
-
-func (n *pathNode) commitLatency(time time.Duration) {
-	n.mu.Lock()
-	n.latency = n.latency/2 + time/2
-	n.mu.Unlock()
-}
-
-func (n *pathNode) getLatency() time.Duration {
-	n.mu.RLock()
-	defer n.mu.RUnlock()
-	return n.latency
-}
-
-func (n *pathNode) addChild(child *pathNode, path string) {
-	n.mu.Lock()
-	if len(n.children) <= childLimitPerNode {
-		n.children[path] = child
-	}
-	n.mu.Unlock()
-}
-
-func (n *pathNode) getChild(path string) (*pathNode, bool) {
-	n.mu.RLock()
-	defer n.mu.RUnlock()
-	node, ok := n.children[path]
-	return node, ok
-}
-
 func initLatencyTracking() {
-	enableLatencyTracking.Store(false)
+	latencyTrackingEnabled.Store(false)
+	slowRequestPaths = make(map[string]time.Duration)
+}
+
+// trigger latency tracking while scaling threads
+func triggerLatencyTrackingIfNeeded(thread *phpThread) {
+	if isNearThreadLimit() {
+		latencyTrackingEnabled.Store(true)
+		thread.isLowLatencyThread = true
+		logger.Debug("low latency thread spawned")
+	}
+}
+
+func stopLatencyTrackingIfNeeded() {
+	if latencyTrackingEnabled.Load() && !isNearThreadLimit() {
+		latencyTrackingEnabled.Store(false)
+		logger.Debug("latency tracking disabled")
+	}
+}
+
+func isNearThreadLimit() bool {
+	return len(autoScaledThreads) >= cap(autoScaledThreads)*slowThreadPercentile/100
 }
 
 // get a random thread that is not marked as low latency
-func getRandomSlowThread(worker *worker) *phpThread {
-	worker.threadMutex.RLock()
-	defer worker.threadMutex.RUnlock()
-
-	slowThreads := []*phpThread{}
-	for _, thread := range worker.threads {
+func getRandomSlowThread(threads []*phpThread) *phpThread {
+	slowThreadCount := 0
+	for _, thread := range threads {
 		if !thread.isLowLatencyThread {
-			slowThreads = append(slowThreads, thread)
+			slowThreadCount++
 		}
 	}
 
-	// if there are no slow threads, return a random thread
-	if len(slowThreads) == 0 {
-		return worker.threads[rand.Intn(len(worker.threads))]
+	if slowThreadCount == 0 {
+		panic("there must always be at least one slow thread")
 	}
 
-	return slowThreads[rand.Intn(len(slowThreads))]
+	slowThreadNum := rand.Intn(slowThreadCount)
+	for _, thread := range threads {
+		if !thread.isLowLatencyThread {
+			if slowThreadNum == 0 {
+				return thread
+			}
+			slowThreadNum--
+		}
+	}
+
+	panic("there must always be at least one slow thread")
 }
 
 func recordSlowRequest(fc *frankenPHPContext, duration time.Duration) {
@@ -90,68 +85,79 @@ func recordSlowRequest(fc *frankenPHPContext, duration time.Duration) {
 	}
 }
 
-// record a slow request in the path tree
+// record a slow request path
 func recordRequestLatency(fc *frankenPHPContext, duration time.Duration) {
 	request := fc.getOriginalRequest()
-	parts := strings.Split(request.URL.Path, "/")
-	node := rootNode
+	normalizedPath := normalizePath(request.URL.Path)
+	logger.Debug("slow request detected", "path", normalizedPath, "duration", duration)
 
-	logger.Debug("slow request detected", "path", request.URL.Path, "duration", duration)
+	slowRequestsMu.Lock()
 
-	for _, part := range parts {
-		if part == "" {
-			continue
-		}
-		if isWildcardPathPart(part) {
-			part = "*"
-		}
-
-		childNode, exists := node.getChild(part)
-		if !exists {
-			childNode = &pathNode{
-				children: make(map[string]*pathNode),
-				mu:       sync.RWMutex{},
-			}
-			node.addChild(childNode, part)
-		}
-		node = childNode
-		node.commitLatency(duration)
+	// if too many slow paths are tracked, clear the map
+	if len(slowRequestPaths) > maxTrackedPaths {
+		slowRequestPaths = make(map[string]time.Duration)
 	}
+	recordedLatency, _ := slowRequestPaths[normalizedPath]
+	// average the recorded latency with the new latency
+	slowRequestPaths[normalizedPath] = duration/2 + recordedLatency/2
+
+	slowRequestsMu.Unlock()
 }
 
 // determine if a request is likely to be high latency based on the request path
 func isHighLatencyRequest(fc *frankenPHPContext) bool {
 	request := fc.getOriginalRequest()
-	parts := strings.Split(request.URL.Path, "/")
-	node := rootNode
+	normalizedPath := normalizePath(request.URL.Path)
 
-	for _, part := range parts {
-		if part == "" {
-			continue
-		}
+	slowRequestsMu.RLock()
+	latency, exists := slowRequestPaths[normalizedPath]
+	slowRequestsMu.RUnlock()
 
-		childNode, exists := node.getChild(part)
-		if exists {
-			node = childNode
-			continue
-		}
-		childNode, exists = node.getChild("*")
-		if exists {
-			node = childNode
-			continue
-		}
-
-		return false
+	if exists {
+		return latency > slowRequestThreshold
 	}
 
-	return node.getLatency() > slowRequestThreshold
+	return false
+}
+
+// TODO: query?
+func normalizePath(path string) string {
+	pathLen := len(path)
+	if pathLen > 1 && path[pathLen-1] == '/' {
+		pathLen-- // ignore trailing slash for processing
+	}
+
+	var b strings.Builder
+	b.Grow(len(path)) // pre-allocate at least original size
+	start := 0
+	for i := 0; i <= pathLen; i++ {
+		if i == pathLen || path[i] == '/' {
+			if i > start {
+				seg := path[start:i]
+				b.WriteString(normalizePathPart(seg))
+			}
+			if i < pathLen {
+				b.WriteByte('/')
+			}
+			start = i + 1
+		}
+	}
+	return b.String()
 }
 
 // determine if a path part is a wildcard
-// a path part is a wildcard if:
-// - it is longer than charLimitWildcard
-// - it is a number
-// - it is a uuid
-func isWildcardPathPart(part string) bool {
-	return len(part) > charLimitWildcard || numRe.MatchString(part) || uuidRe.MatchString(part)
+func normalizePathPart(part string) string {
+	if len(part) > charLimitWildcard {
+		return ":slug"
+	}
+
+	if numRe.MatchString(part) {
+		return ":id"
+	}
+
+	if uuidRe.MatchString(part) {
+		return ":uuid"
+	}
+
+	return part
 }

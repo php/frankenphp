@@ -219,14 +219,11 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) {
 
 	// if the server is experiencing high latency, dispatch requests that are
 	// expected to be slow directly to a number of restricted threads
-	if enableLatencyTracking.Load() && isHighLatencyRequest(fc) {
-		getRandomSlowThread(worker).requestChan <- fc
-		stallDuration := time.Since(fc.startedAt)
-		<-fc.done
-
-		requestTime := time.Since(fc.startedAt)
-		metrics.StopWorkerRequest(worker.name, requestTime)
-		recordRequestLatency(fc, requestTime-stallDuration)
+	if latencyTrackingEnabled.Load() && isHighLatencyRequest(fc) {
+		worker.threadMutex.RLock()
+		slowThread := getRandomSlowThread(worker.threads)
+		worker.threadMutex.RUnlock()
+		worker.stallRequest(fc, slowThread.requestChan)
 
 		return
 	}
@@ -251,10 +248,15 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) {
 	worker.threadMutex.RUnlock()
 
 	// if no thread was available, mark the request as queued and apply the scaling strategy
+	worker.stallRequest(fc, worker.requestChan)
+}
+
+// stall the request and trigger scaling or timeouts
+func (worker *worker) stallRequest(fc *frankenPHPContext, requestChan chan *frankenPHPContext) {
 	metrics.QueuedWorkerRequest(worker.name)
 	for {
 		select {
-		case worker.requestChan <- fc:
+		case requestChan <- fc:
 			metrics.DequeuedWorkerRequest(worker.name)
 			stallDuration := time.Since(fc.startedAt)
 			<-fc.done
