@@ -96,7 +96,7 @@ func trackRequestLatency(fc *frankenPHPContext, duration time.Duration, forceTra
 	}
 
 	// record the latency as a moving average
-	recordedLatency, _ := slowRequestPaths[normalizedPath]
+	recordedLatency := slowRequestPaths[normalizedPath]
 	slowRequestPaths[normalizedPath] = duration/2 + recordedLatency/2
 	slowRequestsMu.Unlock()
 }
