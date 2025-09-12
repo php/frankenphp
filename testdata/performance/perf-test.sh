@@ -15,6 +15,7 @@ select filename in ./testdata/performance/*.js; do
 	docker run --cap-add=SYS_PTRACE --security-opt seccomp=unconfined \
 		-p 8125:80 \
 		-v "$PWD:/go/src/app" \
+		--rm \
 		--name load-test-container \
 		-e "MAX_THREADS=$maxThreads" \
 		-e "WORKER_THREADS=$workerThreads" \
