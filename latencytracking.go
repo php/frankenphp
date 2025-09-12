@@ -82,7 +82,7 @@ func getRandomSlowThread(threads []*phpThread) *phpThread {
 // record a slow request path
 func trackRequestLatency(fc *frankenPHPContext, duration time.Duration, forceTracking bool) {
 	if duration < slowRequestThreshold && !forceTracking {
-		recordRequestLatency(fc, duration)
+		return
 	}
 
 	request := fc.getOriginalRequest()
