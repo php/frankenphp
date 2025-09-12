@@ -2,6 +2,7 @@ package frankenphp
 
 import (
 	"sync"
+	"time"
 )
 
 // representation of a non-worker PHP thread
@@ -15,7 +16,7 @@ type regularThread struct {
 
 var (
 	regularThreads     []*phpThread
-	regularThreadMu    = &sync.RWMutex{}
+	regularThreadMu    = sync.RWMutex{}
 	regularRequestChan chan *frankenPHPContext
 )
 
@@ -59,16 +60,17 @@ func (handler *regularThread) name() string {
 }
 
 func (handler *regularThread) waitForRequest() string {
-	// clear any previously sandboxed env
-	clearSandboxedEnv(handler.thread)
+	thread := handler.thread
+	clearSandboxedEnv(thread) // clear any previously sandboxed env
 
 	handler.state.markAsWaiting(true)
 
 	var fc *frankenPHPContext
 	select {
-	case <-handler.thread.drainChan:
+	case <-thread.drainChan:
 		// go back to beforeScriptExecution
 		return handler.beforeScriptExecution()
+	case fc = <-thread.requestChan:
 	case fc = <-regularRequestChan:
 	}
 
@@ -86,24 +88,46 @@ func (handler *regularThread) afterRequest() {
 
 func handleRequestWithRegularPHPThreads(fc *frankenPHPContext) {
 	metrics.StartRequest()
-	select {
-	case regularRequestChan <- fc:
-		// a thread was available to handle the request immediately
-		<-fc.done
-		metrics.StopRequest()
+
+	if latencyTrackingEnabled.Load() && isHighLatencyRequest(fc) {
+		regularThreadMu.RLock()
+		slowThread := getRandomSlowThread(regularThreads)
+		regularThreadMu.RUnlock()
+		stallRegularPHPRequests(fc, slowThread.requestChan)
+
 		return
-	default:
-		// no thread was available
 	}
 
+	regularThreadMu.RLock()
+	for _, thread := range regularThreads {
+		select {
+		case thread.requestChan <- fc:
+			regularThreadMu.RUnlock()
+			<-fc.done
+			metrics.StopRequest()
+			recordSlowRequest(fc, time.Since(fc.startedAt))
+
+			return
+		default:
+			// thread is busy, continue
+		}
+	}
+	regularThreadMu.RUnlock()
+
 	// if no thread was available, mark the request as queued and fan it out to all threads
+	stallRegularPHPRequests(fc, regularRequestChan)
+}
+
+func stallRegularPHPRequests(fc *frankenPHPContext, requestChan chan *frankenPHPContext) {
 	metrics.QueuedRequest()
 	for {
 		select {
-		case regularRequestChan <- fc:
+		case requestChan <- fc:
 			metrics.DequeuedRequest()
+			stallTime := time.Since(fc.startedAt)
 			<-fc.done
 			metrics.StopRequest()
+			recordSlowRequest(fc, time.Since(fc.startedAt)-stallTime)
 			return
 		case scaleChan <- fc:
 			// the request has triggered scaling, continue to wait for a thread
