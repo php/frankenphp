@@ -33,14 +33,14 @@ func convertToWorkerThread(thread *phpThread, worker *worker) {
 			maxConsecutiveFailures: worker.maxConsecutiveFailures,
 		},
 	})
-	worker.attachThread(thread)
+	worker.threadPool.attach(thread)
 }
 
 // beforeScriptExecution returns the name of the script or an empty string on shutdown
 func (handler *workerThread) beforeScriptExecution() string {
 	switch handler.state.get() {
 	case stateTransitionRequested:
-		handler.worker.detachThread(handler.thread)
+		handler.worker.threadPool.detach(handler.thread)
 		return handler.thread.transitionToNewHandler()
 	case stateRestarting:
 		handler.state.set(stateYielding)
@@ -50,7 +50,7 @@ func (handler *workerThread) beforeScriptExecution() string {
 		setupWorkerScript(handler, handler.worker)
 		return handler.worker.fileName
 	case stateShuttingDown:
-		handler.worker.detachThread(handler.thread)
+		handler.worker.threadPool.detach(handler.thread)
 		// signal to stop
 		return ""
 	}
@@ -181,7 +181,7 @@ func (handler *workerThread) waitForWorkerRequest() bool {
 
 		return false
 	case fc = <-handler.thread.requestChan:
-	case fc = <-handler.worker.requestChan:
+	case fc = <-handler.worker.threadPool.ch:
 	}
 
 	handler.workerContext = fc

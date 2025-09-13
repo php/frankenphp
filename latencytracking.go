@@ -1,7 +1,6 @@
 package frankenphp
 
 import (
-	"math/rand"
 	"regexp"
 	"strings"
 	"sync"
@@ -19,7 +18,7 @@ var (
 	// requests taking longer than this are considered slow (var for tests)
 	slowRequestThreshold = 1000 * time.Millisecond
 	// % of autoscaled threads that are not marked as low latency (var for tests)
-	slowThreadPercentile = 80
+	slowThreadPercentile = 40
 
 	latencyTrackingEnabled = atomic.Bool{}
 	slowRequestsMu         = sync.RWMutex{}
@@ -53,32 +52,6 @@ func isNearThreadLimit() bool {
 	return len(autoScaledThreads) >= cap(autoScaledThreads)*slowThreadPercentile/100
 }
 
-// get a random thread that is not marked as low latency
-func getRandomSlowThread(threads []*phpThread) *phpThread {
-	slowThreadCount := 0
-	for _, thread := range threads {
-		if !thread.isLowLatencyThread {
-			slowThreadCount++
-		}
-	}
-
-	if slowThreadCount == 0 {
-		panic("there must always be at least one slow thread")
-	}
-
-	slowThreadNum := rand.Intn(slowThreadCount)
-	for _, thread := range threads {
-		if !thread.isLowLatencyThread {
-			if slowThreadNum == 0 {
-				return thread
-			}
-			slowThreadNum--
-		}
-	}
-
-	panic("there must always be at least one slow thread")
-}
-
 // record a slow request path
 func trackRequestLatency(fc *frankenPHPContext, duration time.Duration, forceTracking bool) {
 	if duration < slowRequestThreshold && !forceTracking {
@@ -98,13 +71,21 @@ func trackRequestLatency(fc *frankenPHPContext, duration time.Duration, forceTra
 	// record the latency as a moving average
 	recordedLatency := slowRequestPaths[normalizedPath]
 	slowRequestPaths[normalizedPath] = duration/2 + recordedLatency/2
+
+	// remove the path if it is no longer considered slow
+	if forceTracking && slowRequestPaths[normalizedPath] < slowRequestThreshold {
+		delete(slowRequestPaths, normalizedPath)
+	}
 	slowRequestsMu.Unlock()
 }
 
 // determine if a request is likely to be high latency based on the request path
 func isHighLatencyRequest(fc *frankenPHPContext) bool {
-	request := fc.getOriginalRequest()
-	normalizedPath := normalizePath(request.URL.Path)
+	if len(slowRequestPaths) == 0 {
+		return false
+	}
+
+	normalizedPath := normalizePath(fc.getOriginalRequest().URL.Path)
 
 	slowRequestsMu.RLock()
 	latency, exists := slowRequestPaths[normalizedPath]

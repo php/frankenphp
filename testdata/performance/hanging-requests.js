@@ -19,7 +19,7 @@ export const options = {
 export default function () {
   // 2% chance for a request that hangs for 15s
   if (Math.random() < 0.02) {
-    http.get(`${__ENV.CADDY_HOSTNAME}/sleep.php/slow-path?sleep=15000&work=10000&output=100`)
+    http.get(`${__ENV.CADDY_HOSTNAME}/slowpath/slow-path?sleep=15000&work=10000&output=100`)
     return
   }
 

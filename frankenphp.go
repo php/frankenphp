@@ -268,11 +268,7 @@ func Init(options ...Option) error {
 		return err
 	}
 
-	regularRequestChan = make(chan *frankenPHPContext, totalThreadCount-workerThreadCount)
-	regularThreads = make([]*phpThread, 0, totalThreadCount-workerThreadCount)
-	for i := 0; i < totalThreadCount-workerThreadCount; i++ {
-		convertToRegularThread(getInactivePHPThread())
-	}
+	initRegularPHPThreads(totalThreadCount - workerThreadCount)
 
 	if err := initWorkers(opt.workers); err != nil {
 		return err
