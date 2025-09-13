@@ -59,19 +59,19 @@ func RegisterExternalWorker(worker WorkerExtension) {
 }
 
 // startExternalWorkerPipe creates a pipe from an external worker to the main worker.
-func startExternalWorkerPipe(w *worker, externalWorker WorkerExtension) {
+func startExternalWorkerPipe(w *worker, externalWorker WorkerExtension, thread *phpThread) {
 	for {
 		rq := externalWorker.ProvideRequest()
 
 		if rq == nil || rq.Request == nil {
-			logger.LogAttrs(context.Background(), slog.LevelWarn, "external worker provided nil request", slog.String("worker", w.name))
+			logger.LogAttrs(context.Background(), slog.LevelWarn, "external worker provided nil request", slog.String("worker", w.name), slog.Int("thread", thread.threadIndex))
 			continue
 		}
 
 		r := rq.Request
 		fr, err := NewRequestWithContext(r, WithOriginalRequest(r), WithWorkerName(w.name))
 		if err != nil {
-			logger.LogAttrs(context.Background(), slog.LevelError, "error creating request for external worker", slog.String("worker", w.name), slog.Any("error", err))
+			logger.LogAttrs(context.Background(), slog.LevelError, "error creating request for external worker", slog.String("worker", w.name), slog.Int("thread", thread.threadIndex), slog.Any("error", err))
 			continue
 		}
 
@@ -79,7 +79,7 @@ func startExternalWorkerPipe(w *worker, externalWorker WorkerExtension) {
 			fc.responseWriter = rq.Response
 
 			// Queue the request and wait for completion if Done channel was provided
-			logger.LogAttrs(context.Background(), slog.LevelInfo, "queue the external worker request", slog.String("worker", w.name))
+			logger.LogAttrs(context.Background(), slog.LevelInfo, "queue the external worker request", slog.String("worker", w.name), slog.Int("thread", thread.threadIndex))
 
 			w.requestChan <- fc
 			if rq.Done != nil {
