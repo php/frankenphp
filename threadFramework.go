@@ -59,7 +59,7 @@ func RegisterExternalWorker(worker WorkerExtension) {
 }
 
 // startExternalWorkerPipe creates a pipe from an external worker to the main worker.
-func startExternalWorkerPipe(w *worker, externalWorker WorkerExtension, thread *phpThread) {
+func startExternalWorkerPipe(w *worker, externalWorker WorkerExtension) {
 	for {
 		rq := externalWorker.ProvideRequest()
 
