@@ -83,13 +83,15 @@ func trackRequestLatency(fc *frankenPHPContext, duration time.Duration, forceTra
 	if recordedLatency == 0 && latencyTrackingActive.Load() {
 		// a new path that is known to be slow is recorded,
 		// drain some requests to free up low-latency threads
+	out:
 		for i := 0; i < maxRequestDrainage; i++ {
 			select {
 			case scaleChan <- fc:
 				_ = isHighLatencyRequest(fc)
 			default:
 				// no more queued requests
-				break
+				//break outer loop
+				break out
 			}
 		}
 	}
