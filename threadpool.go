@@ -5,19 +5,21 @@ import (
 	"time"
 )
 
+// threadPool manages a pool of PHP threads
+// used for both worker and regular threads
 type threadPool struct {
-	threads  []*phpThread
-	mu       sync.RWMutex
-	ch       chan *frankenPHPContext
-	fastChan chan *frankenPHPContext
+	threads        []*phpThread
+	mu             sync.RWMutex
+	ch             chan *frankenPHPContext
+	lowLatencyChan chan *frankenPHPContext
 }
 
 func newThreadPool(capacity int) *threadPool {
 	return &threadPool{
-		threads:  make([]*phpThread, 0, capacity),
-		mu:       sync.RWMutex{},
-		ch:       make(chan *frankenPHPContext),
-		fastChan: make(chan *frankenPHPContext),
+		threads:        make([]*phpThread, 0, capacity),
+		mu:             sync.RWMutex{},
+		ch:             make(chan *frankenPHPContext),
+		lowLatencyChan: make(chan *frankenPHPContext),
 	}
 }
 
@@ -38,17 +40,10 @@ func (p *threadPool) detach(thread *phpThread) {
 	p.mu.Unlock()
 }
 
-func (p *threadPool) len() int {
-	p.mu.RLock()
-	l := len(p.threads)
-	p.mu.RUnlock()
-	return l
-}
-
 // get the correct request chan for queued requests
 func (p *threadPool) requestChan(thread *phpThread) chan *frankenPHPContext {
 	if thread.isLowLatencyThread {
-		return p.fastChan
+		return p.lowLatencyChan
 	}
 	return p.ch
 }
@@ -72,32 +67,29 @@ func (p *threadPool) dispatchRequest(fc *frankenPHPContext) bool {
 }
 
 // dispatch request to all threads, triggering scaling or timeouts as needed
-func (p *threadPool) queueRequest(fc *frankenPHPContext, isFastRequest bool) bool {
-	var fastChan chan *frankenPHPContext
-	if isFastRequest {
-		fastChan = p.fastChan
+func (p *threadPool) queueRequest(fc *frankenPHPContext, isLowLatencyRequest bool) bool {
+	var lowLatencyChan chan *frankenPHPContext
+	if isLowLatencyRequest {
+		lowLatencyChan = p.lowLatencyChan
+	}
+
+	var timeoutChan <-chan time.Time
+	if maxWaitTime > 0 {
+		timeoutChan = time.After(maxWaitTime)
 	}
 
 	for {
 		select {
 		case p.ch <- fc:
 			return true
-		case fastChan <- fc:
-			return true
+		case lowLatencyChan <- fc:
+			return true // 'low laten'
 		case scaleChan <- fc:
 			// the request has triggered scaling, continue to wait for a thread
-		case <-timeoutChan(maxWaitTime):
+		case <-timeoutChan:
 			// the request has timed out stalling
 			fc.reject(504, "Gateway Timeout")
 			return false
 		}
 	}
-}
-
-func timeoutChan(timeout time.Duration) <-chan time.Time {
-	if timeout == 0 {
-		return nil
-	}
-
-	return time.After(timeout)
 }

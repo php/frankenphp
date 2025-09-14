@@ -13,9 +13,7 @@ type regularThread struct {
 	requestContext *frankenPHPContext
 }
 
-var (
-	regularThreadPool *threadPool
-)
+var regularThreadPool *threadPool
 
 func initRegularPHPThreads(num int) {
 	regularThreadPool = newThreadPool(num)

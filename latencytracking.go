@@ -8,15 +8,15 @@ import (
 	"time"
 )
 
-// limit of tracked path children
+// hard limit of tracked paths
 const maxTrackedPaths = 1000
 
-// path parts longer than this are considered a wildcard
+// path parts longer than this are considered a slug
 const charLimitWildcard = 50
 
 var (
 	// requests taking longer than this are considered slow (var for tests)
-	slowRequestThreshold = 1000 * time.Millisecond
+	slowRequestThreshold = 1500 * time.Millisecond
 	// % of autoscaled threads that are not marked as low latency (var for tests)
 	slowThreadPercentile = 40
 
@@ -33,7 +33,7 @@ func initLatencyTracking() {
 }
 
 // trigger latency tracking while scaling threads
-func triggerLatencyTrackingIfNeeded(thread *phpThread) {
+func triggerLatencyTracking(thread *phpThread) {
 	if isNearThreadLimit() {
 		latencyTrackingEnabled.Store(true)
 		thread.isLowLatencyThread = true
@@ -41,7 +41,7 @@ func triggerLatencyTrackingIfNeeded(thread *phpThread) {
 	}
 }
 
-func stopLatencyTrackingIfNeeded() {
+func stopLatencyTracking() {
 	if latencyTrackingEnabled.Load() && !isNearThreadLimit() {
 		latencyTrackingEnabled.Store(false)
 		logger.Debug("latency tracking disabled")
@@ -98,7 +98,6 @@ func isHighLatencyRequest(fc *frankenPHPContext) bool {
 	return false
 }
 
-// TODO: query?
 func normalizePath(path string) string {
 	pathLen := len(path)
 	if pathLen > 1 && path[pathLen-1] == '/' {
@@ -126,6 +125,7 @@ func normalizePath(path string) string {
 // determine if a path part is a wildcard
 func normalizePathPart(part string) string {
 	if len(part) > charLimitWildcard {
+		// TODO: better slug detection?
 		return ":slug"
 	}
 

@@ -63,7 +63,7 @@ func addRegularThread() (*phpThread, error) {
 	if thread == nil {
 		return nil, ErrMaxThreadsReached
 	}
-	triggerLatencyTrackingIfNeeded(thread)
+	triggerLatencyTracking(thread)
 	convertToRegularThread(thread)
 	thread.state.waitFor(stateReady, stateShuttingDown, stateReserved)
 	return thread, nil
@@ -74,7 +74,7 @@ func addWorkerThread(worker *worker) (*phpThread, error) {
 	if thread == nil {
 		return nil, ErrMaxThreadsReached
 	}
-	triggerLatencyTrackingIfNeeded(thread)
+	triggerLatencyTracking(thread)
 	convertToWorkerThread(thread, worker)
 	thread.state.waitFor(stateReady, stateShuttingDown, stateReserved)
 	return thread, nil
@@ -223,5 +223,5 @@ func deactivateThreads() {
 		// }
 	}
 
-	stopLatencyTrackingIfNeeded()
+	stopLatencyTracking()
 }
