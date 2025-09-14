@@ -18,16 +18,15 @@ const maxPathPartChars = 50
 const maxRequestDrainage = 100
 
 var (
-	// TODO: test with different values
 	// requests taking longer than this are considered slow (var for tests)
-	slowRequestThreshold = 1500 * time.Millisecond
-	// % of initial threads that are  marked as low latency threads(var for tests)
-	lowLatencyPercentile = 25
+	slowRequestThreshold = 2000 * time.Millisecond
+	// % of autoscaled threads that are  marked as low latency threads(var for tests)
+	lowLatencyPercentile = 20
 
+	slowRequestPaths       map[string]time.Duration
 	latencyTrackingEnabled = false
 	latencyTrackingActive  = atomic.Bool{}
 	slowRequestsMu         = sync.RWMutex{}
-	slowRequestPaths       map[string]time.Duration
 	numRe                  = regexp.MustCompile(`^\d+$`)
 	uuidRe                 = regexp.MustCompile(`^[a-f0-9-]{36}$`)
 )
@@ -83,6 +82,7 @@ func trackRequestLatency(fc *frankenPHPContext, duration time.Duration, forceTra
 	if recordedLatency == 0 && latencyTrackingActive.Load() {
 		// a new path that is known to be slow is recorded,
 		// drain some requests to free up low-latency threads
+		// TODO: make sure this overhead is acceptable
 	out:
 		for i := 0; i < maxRequestDrainage; i++ {
 			select {
@@ -96,17 +96,18 @@ func trackRequestLatency(fc *frankenPHPContext, duration time.Duration, forceTra
 		}
 	}
 
-	// record the latency as a moving average
-	slowRequestPaths[normalizedPath] = duration/2 + recordedLatency/2
+	movingAverage := duration/2 + recordedLatency/2
+	slowRequestPaths[normalizedPath] = movingAverage
 
 	// remove the path if it is no longer considered slow
-	if forceTracking && slowRequestPaths[normalizedPath] < slowRequestThreshold {
+	if forceTracking && movingAverage < slowRequestThreshold {
 		delete(slowRequestPaths, normalizedPath)
 	}
+
 	slowRequestsMu.Unlock()
 }
 
-// determine if a request is likely to be high latency based on the request path
+// determine if a request is likely to be high latency based on previous requests with the same path
 func isHighLatencyRequest(fc *frankenPHPContext) bool {
 	if len(slowRequestPaths) == 0 {
 		return false
@@ -123,6 +124,11 @@ func isHighLatencyRequest(fc *frankenPHPContext) bool {
 	return !fc.isLowLatencyRequest
 }
 
+// normalize a path by replacing variable parts with wildcards
+// e.g. /user/123/profile -> /user/:id/profile
+//
+//	/post/550e8400-e29b-41d4-a716-446655440000 -> /post/:uuid
+//	/category/very-long-category-name -> /category/:slug
 func normalizePath(path string) string {
 	pathLen := len(path)
 	if pathLen > 1 && path[pathLen-1] == '/' {
