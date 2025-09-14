@@ -522,7 +522,6 @@ PHP_FUNCTION(frankenphp_handle_task) {
   RETURN_TRUE;
 }
 
-
 PHP_FUNCTION(frankenphp_dispatch_task) {
   char *taskString;
   size_t task_len;

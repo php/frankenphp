@@ -3,23 +3,23 @@ package frankenphp
 // #include "frankenphp.h"
 import "C"
 import (
-	"sync"
 	"path/filepath"
+	"sync"
 )
 
-type taskWorker struct{
-	threads []*phpThread
-	mu      sync.Mutex
+type taskWorker struct {
+	threads  []*phpThread
+	mu       sync.Mutex
 	filename string
 	taskChan chan string
-	name string
+	name     string
 }
 
 // representation of a thread that handles tasks directly assigned by go
 // implements the threadHandler interface
 type taskWorkerThread struct {
-	thread   *phpThread
-	taskWorker *taskWorker
+	thread       *phpThread
+	taskWorker   *taskWorker
 	dummyContext *frankenPHPContext
 }
 
@@ -28,11 +28,11 @@ var taskWorkers []*taskWorker
 func initTaskWorkers() {
 	taskWorkers = []*taskWorker{}
 	tw := &taskWorker{
-        threads:  []*phpThread{},
-        filename: "/go/src/app/testdata/task_worker.php",
-        taskChan: make(chan string),
-        name:     "Default Task Worker",
-    }
+		threads:  []*phpThread{},
+		filename: "/go/src/app/testdata/task_worker.php",
+		taskChan: make(chan string),
+		name:     "Default Task Worker",
+	}
 
 	taskWorkers = append(taskWorkers, tw)
 
@@ -41,7 +41,7 @@ func initTaskWorkers() {
 
 func convertToTaskWorkerThread(thread *phpThread, tw *taskWorker) *taskWorkerThread {
 	handler := &taskWorkerThread{
-		thread:   thread,
+		thread:     thread,
 		taskWorker: tw,
 	}
 	thread.setHandler(handler)
@@ -76,7 +76,7 @@ func (handler *taskWorkerThread) beforeScriptExecution() string {
 }
 
 func (handler *taskWorkerThread) setupWorkerScript() string {
-	fc, err := newDummyContext( filepath.Base(handler.taskWorker.filename) )
+	fc, err := newDummyContext(filepath.Base(handler.taskWorker.filename))
 
 	if err != nil {
 		panic(err)
@@ -120,17 +120,17 @@ func go_frankenphp_worker_handle_task(threadIndex C.uintptr_t) *C.char {
 	}
 
 	select {
-    case taskString := <-handler.taskWorker.taskChan:
-        return thread.pinCString(taskString)
-    case <-handler.thread.drainChan:
-        // thread is shutting down, do not execute the function
-        return nil
-    }
+	case taskString := <-handler.taskWorker.taskChan:
+		return thread.pinCString(taskString)
+	case <-handler.thread.drainChan:
+		// thread is shutting down, do not execute the function
+		return nil
+	}
 }
 
 //export go_frankenphp_worker_dispatch_task
 func go_frankenphp_worker_dispatch_task(taskWorkerIndex C.uintptr_t, taskString *C.char, taskLen C.size_t) C.bool {
-	go func(){
+	go func() {
 		taskWorkers[taskWorkerIndex].taskChan <- C.GoStringN(taskString, C.int(taskLen))
 	}()
 
