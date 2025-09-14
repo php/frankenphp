@@ -3,6 +3,7 @@
 		max_threads {$MAX_THREADS}
 		num_threads {$NUM_THREADS}
 		max_wait_time 30s
+		latency_tracking
 
 		php_ini {
 			max_execution_time 30
