@@ -472,6 +472,70 @@ PHP_FUNCTION(frankenphp_handle_request) {
   RETURN_TRUE;
 }
 
+PHP_FUNCTION(frankenphp_handle_task) {
+  zend_fcall_info fci;
+  zend_fcall_info_cache fcc;
+
+  ZEND_PARSE_PARAMETERS_START(1, 1)
+  Z_PARAM_FUNC(fci, fcc)
+  ZEND_PARSE_PARAMETERS_END();
+
+  /*if (!is_worker_thread) {
+    zend_throw_exception(
+        spl_ce_RuntimeException,
+        "frankenphp_handle_task() called while not in worker mode", 0);
+    RETURN_THROWS();
+  }*/
+
+#ifdef ZEND_MAX_EXECUTION_TIMERS
+  /* Disable timeouts while waiting for a task to handle */
+  zend_unset_timeout();
+#endif
+
+  char *task = go_frankenphp_worker_handle_task(thread_index);
+  if (task == NULL) {
+    RETURN_FALSE;
+  }
+
+  /* Call the PHP func passed to frankenphp_handle_request() */
+  zval retval = {0};
+  fci.size = sizeof fci;
+  fci.retval = &retval;
+  zval taskzv;
+  ZVAL_STRINGL(&taskzv, task, strlen(task));
+  fci.params = &taskzv;
+  fci.param_count = 1;
+  if (zend_call_function(&fci, &fcc) == SUCCESS) {
+    zval_ptr_dtor(&retval);
+  }
+
+  /*
+   * If an exception occurred, print the message to the client before
+   * closing the connection and bailout.
+   */
+  if (EG(exception) && !zend_is_unwind_exit(EG(exception)) &&
+      !zend_is_graceful_exit(EG(exception))) {
+    zend_exception_error(EG(exception), E_ERROR);
+    zend_bailout();
+  }
+
+  RETURN_TRUE;
+}
+
+
+PHP_FUNCTION(frankenphp_dispatch_task) {
+  char *taskString;
+  size_t task_len;
+
+  ZEND_PARSE_PARAMETERS_START(1, 1);
+  Z_PARAM_STRING(taskString, task_len);
+  ZEND_PARSE_PARAMETERS_END();
+
+  go_frankenphp_worker_dispatch_task(0, taskString, task_len);
+
+  RETURN_TRUE;
+}
+
 PHP_FUNCTION(headers_send) {
   zend_long response_code = 200;
 

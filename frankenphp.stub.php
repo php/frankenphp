@@ -4,6 +4,10 @@
 
 function frankenphp_handle_request(callable $callback): bool {}
 
+function frankenphp_handle_task(callable $callback): bool {}
+
+function frankenphp_dispatch_task(string $task): bool {}
+
 function headers_send(int $status = 200): int {}
 
 function frankenphp_finish_request(): bool {}
