@@ -2,18 +2,24 @@
 	frankenphp {
 		max_threads {$MAX_THREADS}
 		num_threads {$NUM_THREADS}
-		worker {
-			file /go/src/app/testdata/{$WORKER_FILE:sleep.php}
-			num {$WORKER_THREADS}
+		max_wait_time 30s
+		latency_tracking
+
+		php_ini {
+			max_execution_time 30
 		}
 	}
 }
 
 :80 {
 	route {
-		root /go/src/app/testdata
 		php {
 			root /go/src/app/testdata
+			worker {
+                file /go/src/app/testdata/{$WORKER_FILE:sleep.php}
+                num {$WORKER_THREADS}
+                match *
+            }
 		}
 	}
 }

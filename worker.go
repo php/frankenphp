@@ -18,9 +18,7 @@ type worker struct {
 	fileName               string
 	num                    int
 	env                    PreparedEnv
-	requestChan            chan *frankenPHPContext
-	threads                []*phpThread
-	threadMutex            sync.RWMutex
+	threadPool             *threadPool
 	allowPathMatching      bool
 	maxConsecutiveFailures int
 }
@@ -121,8 +119,7 @@ func newWorker(o workerOpt) (*worker, error) {
 		fileName:               absFileName,
 		num:                    o.num,
 		env:                    o.env,
-		requestChan:            make(chan *frankenPHPContext),
-		threads:                make([]*phpThread, 0, o.num),
+		threadPool:             newThreadPool(o.num),
 		allowPathMatching:      allowPathMatching,
 		maxConsecutiveFailures: o.maxConsecutiveFailures,
 	}
@@ -139,9 +136,9 @@ func drainWorkerThreads() []*phpThread {
 	ready := sync.WaitGroup{}
 	drainedThreads := make([]*phpThread, 0)
 	for _, worker := range workers {
-		worker.threadMutex.RLock()
-		ready.Add(len(worker.threads))
-		for _, thread := range worker.threads {
+		worker.threadPool.mu.RLock()
+		ready.Add(len(worker.threadPool.threads))
+		for _, thread := range worker.threadPool.threads {
 			if !thread.state.requestSafeStateChange(stateRestarting) {
 				// no state change allowed == thread is shutting down
 				// we'll proceed to restart all other threads anyways
@@ -154,7 +151,7 @@ func drainWorkerThreads() []*phpThread {
 				ready.Done()
 			}(thread)
 		}
-		worker.threadMutex.RUnlock()
+		worker.threadPool.mu.RUnlock()
 	}
 	ready.Wait()
 
@@ -189,65 +186,32 @@ func getDirectoriesToWatch(workerOpts []workerOpt) []string {
 	return directoriesToWatch
 }
 
-func (worker *worker) attachThread(thread *phpThread) {
-	worker.threadMutex.Lock()
-	worker.threads = append(worker.threads, thread)
-	worker.threadMutex.Unlock()
-}
-
-func (worker *worker) detachThread(thread *phpThread) {
-	worker.threadMutex.Lock()
-	for i, t := range worker.threads {
-		if t == thread {
-			worker.threads = append(worker.threads[:i], worker.threads[i+1:]...)
-			break
-		}
-	}
-	worker.threadMutex.Unlock()
-}
-
-func (worker *worker) countThreads() int {
-	worker.threadMutex.RLock()
-	l := len(worker.threads)
-	worker.threadMutex.RUnlock()
-
-	return l
-}
-
 func (worker *worker) handleRequest(fc *frankenPHPContext) {
 	metrics.StartWorkerRequest(worker.name)
 
-	// dispatch requests to all worker threads in order
-	worker.threadMutex.RLock()
-	for _, thread := range worker.threads {
-		select {
-		case thread.requestChan <- fc:
-			worker.threadMutex.RUnlock()
-			<-fc.done
-			metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
-			return
-		default:
-			// thread is busy, continue
-		}
-	}
-	worker.threadMutex.RUnlock()
+	isSlowRequest := latencyTrackingActive.Load() && isHighLatencyRequest(fc)
 
-	// if no thread was available, mark the request as queued and apply the scaling strategy
-	metrics.QueuedWorkerRequest(worker.name)
-	for {
-		select {
-		case worker.requestChan <- fc:
-			metrics.DequeuedWorkerRequest(worker.name)
-			<-fc.done
-			metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
-			return
-		case scaleChan <- fc:
-			// the request has triggered scaling, continue to wait for a thread
-		case <-timeoutChan(maxWaitTime):
-			metrics.DequeuedWorkerRequest(worker.name)
-			// the request has timed out stalling
-			fc.reject(504, "Gateway Timeout")
-			return
-		}
+	// dispatch requests to all worker threads in order
+	if !isSlowRequest && worker.threadPool.dispatchRequest(fc) {
+		<-fc.done
+		requestTime := time.Since(fc.startedAt)
+		metrics.StopWorkerRequest(worker.name, requestTime)
+		trackRequestLatency(fc, requestTime, false)
+
+		return
 	}
+
+	metrics.QueuedWorkerRequest(worker.name)
+	requestWasReceived := worker.threadPool.queueRequest(fc)
+	metrics.DequeuedWorkerRequest(worker.name)
+
+	if !requestWasReceived {
+		return
+	}
+
+	stallDuration := time.Since(fc.startedAt)
+	<-fc.done
+	requestTime := time.Since(fc.startedAt)
+	metrics.StopWorkerRequest(worker.name, requestTime)
+	trackRequestLatency(fc, requestTime-stallDuration, isSlowRequest)
 }

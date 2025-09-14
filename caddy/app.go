@@ -37,6 +37,8 @@ type FrankenPHPApp struct {
 	PhpIni map[string]string `json:"php_ini,omitempty"`
 	// The maximum amount of time a request may be stalled waiting for a thread
 	MaxWaitTime time.Duration `json:"max_wait_time,omitempty"`
+	// Enable latency tracking mode (experimental)
+	LatencyTracking bool          `json:"low_latency_tracking,omitempty"`
 
 	metrics frankenphp.Metrics
 	logger  *slog.Logger
@@ -117,6 +119,7 @@ func (f *FrankenPHPApp) Start() error {
 		frankenphp.WithMetrics(f.metrics),
 		frankenphp.WithPhpIni(f.PhpIni),
 		frankenphp.WithMaxWaitTime(f.MaxWaitTime),
+		frankenphp.WithLatencyTracking(f.LatencyTracking),
 	}
 	for _, w := range append(f.Workers) {
 		workerOpts := []frankenphp.WorkerOption{
@@ -253,6 +256,9 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				}
 
 				f.Workers = append(f.Workers, wc)
+
+			case "latency_tracking":
+				f.LatencyTracking = true
 			default:
 				allowedDirectives := "num_threads, max_threads, php_ini, worker, max_wait_time"
 				return wrongSubDirectiveError("frankenphp", allowedDirectives, d.Val())

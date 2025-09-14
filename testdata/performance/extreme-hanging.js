@@ -15,17 +15,14 @@ export const options = {
   }
 }
 
+/* global __VU */
 /* global __ENV */
 export default function () {
-  // 2% chance for a request that hangs for 15s
-  if (Math.random() < 0.02) {
-    http.get(`${__ENV.CADDY_HOSTNAME}/slow-path?sleep=15000&work=10000&output=100`, {
-        timeout: 500, // do not wait and continue with the next request
-        throw: false,
-    })
-    return
-  }
-
-  // a regular request
-  http.get(`${__ENV.CADDY_HOSTNAME}/sleep.php?sleep=5&work=10000&output=100`)
+    if (__VU % 50 === 0) {
+        // 50 % of VUs cause extreme hanging
+        http.get(`${__ENV.CADDY_HOSTNAME}/slow-path?sleep=60000&work=10000&output=100`)
+    } else {
+        // The other VUs do very fast requests
+        http.get(`${__ENV.CADDY_HOSTNAME}/sleep.php?sleep=3&work=1000`)
+    }
 }

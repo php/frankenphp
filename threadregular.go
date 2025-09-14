@@ -1,7 +1,7 @@
 package frankenphp
 
 import (
-	"sync"
+	"time"
 )
 
 // representation of a non-worker PHP thread
@@ -13,25 +13,29 @@ type regularThread struct {
 	requestContext *frankenPHPContext
 }
 
-var (
-	regularThreads     []*phpThread
-	regularThreadMu    = &sync.RWMutex{}
-	regularRequestChan chan *frankenPHPContext
-)
+var regularThreadPool *threadPool
+
+func initRegularPHPThreads(num int) {
+	regularThreadPool = newThreadPool(num)
+	for i := 0; i < num; i++ {
+		thread := getInactivePHPThread()
+		convertToRegularThread(thread)
+	}
+}
 
 func convertToRegularThread(thread *phpThread) {
 	thread.setHandler(&regularThread{
 		thread: thread,
 		state:  thread.state,
 	})
-	attachRegularThread(thread)
+	regularThreadPool.attach(thread)
 }
 
 // beforeScriptExecution returns the name of the script or an empty string on shutdown
 func (handler *regularThread) beforeScriptExecution() string {
 	switch handler.state.get() {
 	case stateTransitionRequested:
-		detachRegularThread(handler.thread)
+		regularThreadPool.detach(handler.thread)
 		return handler.thread.transitionToNewHandler()
 	case stateTransitionComplete:
 		handler.state.set(stateReady)
@@ -39,7 +43,7 @@ func (handler *regularThread) beforeScriptExecution() string {
 	case stateReady:
 		return handler.waitForRequest()
 	case stateShuttingDown:
-		detachRegularThread(handler.thread)
+		regularThreadPool.detach(handler.thread)
 		// signal to stop
 		return ""
 	}
@@ -59,17 +63,18 @@ func (handler *regularThread) name() string {
 }
 
 func (handler *regularThread) waitForRequest() string {
-	// clear any previously sandboxed env
-	clearSandboxedEnv(handler.thread)
+	thread := handler.thread
+	clearSandboxedEnv(thread) // clear any previously sandboxed env
 
 	handler.state.markAsWaiting(true)
 
 	var fc *frankenPHPContext
 	select {
-	case <-handler.thread.drainChan:
+	case <-thread.drainChan:
 		// go back to beforeScriptExecution
 		return handler.beforeScriptExecution()
-	case fc = <-regularRequestChan:
+	case fc = <-thread.requestChan:
+	case fc = <-regularThreadPool.requestChan(thread):
 	}
 
 	handler.requestContext = fc
@@ -86,49 +91,29 @@ func (handler *regularThread) afterRequest() {
 
 func handleRequestWithRegularPHPThreads(fc *frankenPHPContext) {
 	metrics.StartRequest()
-	select {
-	case regularRequestChan <- fc:
-		// a thread was available to handle the request immediately
+
+	trackLatency := latencyTrackingActive.Load()
+	isSlowRequest := trackLatency && isHighLatencyRequest(fc)
+
+	// dispatch requests to all regular threads in order
+	if !isSlowRequest && regularThreadPool.dispatchRequest(fc) {
 		<-fc.done
 		metrics.StopRequest()
+		trackRequestLatency(fc, time.Since(fc.startedAt), false)
+
 		return
-	default:
-		// no thread was available
 	}
 
-	// if no thread was available, mark the request as queued and fan it out to all threads
 	metrics.QueuedRequest()
-	for {
-		select {
-		case regularRequestChan <- fc:
-			metrics.DequeuedRequest()
-			<-fc.done
-			metrics.StopRequest()
-			return
-		case scaleChan <- fc:
-			// the request has triggered scaling, continue to wait for a thread
-		case <-timeoutChan(maxWaitTime):
-			// the request has timed out stalling
-			metrics.DequeuedRequest()
-			fc.reject(504, "Gateway Timeout")
-			return
-		}
-	}
-}
+	requestWasReceived := regularThreadPool.queueRequest(fc)
+	metrics.DequeuedRequest()
 
-func attachRegularThread(thread *phpThread) {
-	regularThreadMu.Lock()
-	regularThreads = append(regularThreads, thread)
-	regularThreadMu.Unlock()
-}
-
-func detachRegularThread(thread *phpThread) {
-	regularThreadMu.Lock()
-	for i, t := range regularThreads {
-		if t == thread {
-			regularThreads = append(regularThreads[:i], regularThreads[i+1:]...)
-			break
-		}
+	if !requestWasReceived {
+		return
 	}
-	regularThreadMu.Unlock()
+
+	stallTime := time.Since(fc.startedAt)
+	<-fc.done
+	metrics.StopRequest()
+	trackRequestLatency(fc, time.Since(fc.startedAt)-stallTime, isSlowRequest)
 }

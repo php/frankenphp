@@ -26,7 +26,8 @@ type frankenPHPContext struct {
 	scriptFilename string
 
 	// Whether the request is already closed by us
-	isDone bool
+	isDone              bool
+	isLowLatencyRequest bool
 
 	responseWriter http.ResponseWriter
 
@@ -136,6 +137,14 @@ func (fc *frankenPHPContext) clientHasClosed() bool {
 	default:
 		return false
 	}
+}
+
+func (fc *frankenPHPContext) getOriginalRequest() *http.Request {
+	if fc.originalRequest != nil {
+		return fc.originalRequest
+	}
+
+	return fc.request
 }
 
 // reject sends a response with the given status code and message

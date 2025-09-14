@@ -45,12 +45,12 @@ func TestTransitionRegularThreadToWorkerThread(t *testing.T) {
 	worker := getDummyWorker("transition-worker-1.php")
 	convertToWorkerThread(phpThreads[0], worker)
 	assert.IsType(t, &workerThread{}, phpThreads[0].handler)
-	assert.Len(t, worker.threads, 1)
+	assert.Len(t, worker.threadPool.threads, 1)
 
 	// transition back to inactive thread
 	convertToInactiveThread(phpThreads[0])
 	assert.IsType(t, &inactiveThread{}, phpThreads[0].handler)
-	assert.Len(t, worker.threads, 0)
+	assert.Len(t, worker.threadPool.threads, 0)
 
 	drainPHPThreads()
 	assert.Nil(t, phpThreads)
@@ -68,15 +68,15 @@ func TestTransitionAThreadBetween2DifferentWorkers(t *testing.T) {
 	convertToWorkerThread(phpThreads[0], firstWorker)
 	firstHandler := phpThreads[0].handler.(*workerThread)
 	assert.Same(t, firstWorker, firstHandler.worker)
-	assert.Len(t, firstWorker.threads, 1)
-	assert.Len(t, secondWorker.threads, 0)
+	assert.Len(t, firstWorker.threadPool.threads, 1)
+	assert.Len(t, secondWorker.threadPool.threads, 0)
 
 	// convert to second worker thread
 	convertToWorkerThread(phpThreads[0], secondWorker)
 	secondHandler := phpThreads[0].handler.(*workerThread)
 	assert.Same(t, secondWorker, secondHandler.worker)
-	assert.Len(t, firstWorker.threads, 0)
-	assert.Len(t, secondWorker.threads, 1)
+	assert.Len(t, firstWorker.threadPool.threads, 0)
+	assert.Len(t, secondWorker.threadPool.threads, 1)
 
 	drainPHPThreads()
 	assert.Nil(t, phpThreads)
