@@ -274,7 +274,7 @@ func Init(options ...Option) error {
 		return err
 	}
 
-	initLatencyTracking()
+	initLatencyTracking(opt.latencyTracking)
 
 	initAutoScaling(mainThread)
 

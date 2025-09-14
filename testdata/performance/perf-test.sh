@@ -7,8 +7,11 @@ docker build -t frankenphp-dev -f dev.Dockerfile .
 export "CADDY_HOSTNAME=http://host.docker.internal"
 
 select filename in ./testdata/performance/*.js; do
-	read -r -p "How many worker threads? " workerThreads
-	read -r -p "How many max threads? " maxThreads
+	read -r -p "How many worker threads (40)? " workerThreads
+	read -r -p "How many max threads (80)? " maxThreads
+
+	workerThreads=${workerThreads:-40}
+	maxThreads=${maxThreads:-80}
 
 	numThreads=$((workerThreads + 1))
 
@@ -36,5 +39,4 @@ select filename in ./testdata/performance/*.js; do
 	docker exec load-test-container curl "http://localhost:2019/frankenphp/threads"
 
 	docker stop load-test-container
-	docker rm load-test-container
 done

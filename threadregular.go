@@ -18,7 +18,8 @@ var regularThreadPool *threadPool
 func initRegularPHPThreads(num int) {
 	regularThreadPool = newThreadPool(num)
 	for i := 0; i < num; i++ {
-		convertToRegularThread(getInactivePHPThread())
+		thread := getInactivePHPThread()
+		convertToRegularThread(thread)
 	}
 }
 
@@ -91,7 +92,7 @@ func (handler *regularThread) afterRequest() {
 func handleRequestWithRegularPHPThreads(fc *frankenPHPContext) {
 	metrics.StartRequest()
 
-	trackLatency := latencyTrackingEnabled.Load()
+	trackLatency := latencyTrackingActive.Load()
 	isSlowRequest := trackLatency && isHighLatencyRequest(fc)
 
 	// dispatch requests to all regular threads in order
@@ -104,7 +105,7 @@ func handleRequestWithRegularPHPThreads(fc *frankenPHPContext) {
 	}
 
 	metrics.QueuedRequest()
-	requestWasReceived := regularThreadPool.queueRequest(fc, trackLatency && !isSlowRequest)
+	requestWasReceived := regularThreadPool.queueRequest(fc)
 	metrics.DequeuedRequest()
 
 	if !requestWasReceived {

@@ -53,7 +53,8 @@ func TestTunnelLowLatencyRequest_worker(t *testing.T) {
 
 	// record request path as slow, manipulate thresholds to make it easy to trigger
 	slowRequestThreshold = 1 * time.Millisecond
-	slowThreadPercentile = 0
+	latencyTrackingEnabled = true
+	lowLatencyPercentile = 100
 	scaleWorkerThread(getWorkerByName("worker")) // the scaled thread should be low-latency only
 	assertGetRequest(t, "/slow/123/path?sleep=5", "slept for 5 ms", opt)
 	assertGetRequest(t, "/slow/123/path?sleep=5", "slept for 5 ms", opt)
@@ -90,7 +91,8 @@ func TestTunnelLowLatencyRequest_module(t *testing.T) {
 
 	// record request path as slow, manipulate thresholds to make it easy to trigger
 	slowRequestThreshold = 1 * time.Millisecond
-	slowThreadPercentile = 0
+	latencyTrackingEnabled = true
+	lowLatencyPercentile = 100
 	scaleRegularThread() // the scaled thread should be low-latency only
 	assertGetRequest(t, "/testdata/sleep.php?sleep=5", "slept for 5 ms")
 	assertGetRequest(t, "/testdata/sleep.php?sleep=5", "slept for 5 ms")

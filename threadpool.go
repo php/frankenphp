@@ -67,23 +67,24 @@ func (p *threadPool) dispatchRequest(fc *frankenPHPContext) bool {
 }
 
 // dispatch request to all threads, triggering scaling or timeouts as needed
-func (p *threadPool) queueRequest(fc *frankenPHPContext, isLowLatencyRequest bool) bool {
-	var lowLatencyChan chan *frankenPHPContext
-	if isLowLatencyRequest {
-		lowLatencyChan = p.lowLatencyChan
-	}
-
+func (p *threadPool) queueRequest(fc *frankenPHPContext) bool {
 	var timeoutChan <-chan time.Time
 	if maxWaitTime > 0 {
 		timeoutChan = time.After(maxWaitTime)
 	}
 
 	for {
+		var lowLatencyChan chan *frankenPHPContext
+		if fc.isLowLatencyRequest {
+			lowLatencyChan = p.lowLatencyChan
+		}
+
 		select {
 		case p.ch <- fc:
 			return true
 		case lowLatencyChan <- fc:
-			return true // 'low laten'
+			// only low-latency requests can be sent to low-latency threads
+			return true
 		case scaleChan <- fc:
 			// the request has triggered scaling, continue to wait for a thread
 		case <-timeoutChan:

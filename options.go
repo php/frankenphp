@@ -19,13 +19,14 @@ type WorkerOption func(*workerOpt) error
 //
 // If you change this, also update the Caddy module and the documentation.
 type opt struct {
-	numThreads  int
-	maxThreads  int
-	workers     []workerOpt
-	logger      *slog.Logger
-	metrics     Metrics
-	phpIni      map[string]string
-	maxWaitTime time.Duration
+	numThreads      int
+	maxThreads      int
+	workers         []workerOpt
+	logger          *slog.Logger
+	metrics         Metrics
+	phpIni          map[string]string
+	maxWaitTime     time.Duration
+	latencyTracking bool
 }
 
 type workerOpt struct {
@@ -49,6 +50,16 @@ func WithNumThreads(numThreads int) Option {
 func WithMaxThreads(maxThreads int) Option {
 	return func(o *opt) error {
 		o.maxThreads = maxThreads
+
+		return nil
+	}
+}
+
+// TODO: is this possible without a new configuration?
+// EXPERIMENTAL: WithLowLatencyTracking enables low-latency tracking mode
+func WithLatencyTracking(enabled bool) Option {
+	return func(o *opt) error {
+		o.latencyTracking = enabled
 
 		return nil
 	}

@@ -63,7 +63,7 @@ func addRegularThread() (*phpThread, error) {
 	if thread == nil {
 		return nil, ErrMaxThreadsReached
 	}
-	triggerLatencyTracking(thread)
+	triggerLatencyTracking(thread, len(autoScaledThreads), cap(autoScaledThreads))
 	convertToRegularThread(thread)
 	thread.state.waitFor(stateReady, stateShuttingDown, stateReserved)
 	return thread, nil
@@ -74,7 +74,7 @@ func addWorkerThread(worker *worker) (*phpThread, error) {
 	if thread == nil {
 		return nil, ErrMaxThreadsReached
 	}
-	triggerLatencyTracking(thread)
+	triggerLatencyTracking(thread, len(autoScaledThreads), cap(autoScaledThreads))
 	convertToWorkerThread(thread, worker)
 	thread.state.waitFor(stateReady, stateShuttingDown, stateReserved)
 	return thread, nil
@@ -201,6 +201,11 @@ func deactivateThreads() {
 			continue
 		}
 
+		if thread.isLowLatencyThread && len(autoScaledThreads) >= cap(autoScaledThreads) {
+			// do not downscale low-latency threads if we're at the thread limit
+			continue
+		}
+
 		// convert threads to inactive if they have been idle for too long
 		if thread.state.is(stateReady) && waitTime > maxThreadIdleTime.Milliseconds() {
 			convertToInactiveThread(thread)
@@ -223,5 +228,5 @@ func deactivateThreads() {
 		// }
 	}
 
-	stopLatencyTracking()
+	stopLatencyTracking(len(autoScaledThreads), cap(autoScaledThreads))
 }

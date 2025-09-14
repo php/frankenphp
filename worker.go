@@ -189,8 +189,7 @@ func getDirectoriesToWatch(workerOpts []workerOpt) []string {
 func (worker *worker) handleRequest(fc *frankenPHPContext) {
 	metrics.StartWorkerRequest(worker.name)
 
-	trackLatency := latencyTrackingEnabled.Load()
-	isSlowRequest := trackLatency && isHighLatencyRequest(fc)
+	isSlowRequest := latencyTrackingActive.Load() && isHighLatencyRequest(fc)
 
 	// dispatch requests to all worker threads in order
 	if !isSlowRequest && worker.threadPool.dispatchRequest(fc) {
@@ -203,7 +202,7 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) {
 	}
 
 	metrics.QueuedWorkerRequest(worker.name)
-	requestWasReceived := worker.threadPool.queueRequest(fc, trackLatency && !isSlowRequest)
+	requestWasReceived := worker.threadPool.queueRequest(fc)
 	metrics.DequeuedWorkerRequest(worker.name)
 
 	if !requestWasReceived {

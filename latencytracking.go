@@ -11,45 +11,55 @@ import (
 // hard limit of tracked paths
 const maxTrackedPaths = 1000
 
-// path parts longer than this are considered a slug
-const charLimitWildcard = 50
+// path parts longer than this are considered a wildcard
+const maxPathPartChars = 50
+
+// max amount of requests being drained when a new slow path is recorded
+const maxRequestDrainage = 100
 
 var (
+	// TODO: test with different values
 	// requests taking longer than this are considered slow (var for tests)
 	slowRequestThreshold = 1500 * time.Millisecond
-	// % of autoscaled threads that are not marked as low latency (var for tests)
-	slowThreadPercentile = 40
+	// % of initial threads that are  marked as low latency threads(var for tests)
+	lowLatencyPercentile = 25
 
-	latencyTrackingEnabled = atomic.Bool{}
+	latencyTrackingEnabled = false
+	latencyTrackingActive  = atomic.Bool{}
 	slowRequestsMu         = sync.RWMutex{}
 	slowRequestPaths       map[string]time.Duration
 	numRe                  = regexp.MustCompile(`^\d+$`)
 	uuidRe                 = regexp.MustCompile(`^[a-f0-9-]{36}$`)
 )
 
-func initLatencyTracking() {
-	latencyTrackingEnabled.Store(false)
+func initLatencyTracking(enabled bool) {
+	latencyTrackingActive.Store(false)
 	slowRequestPaths = make(map[string]time.Duration)
+	latencyTrackingEnabled = enabled
 }
 
-// trigger latency tracking while scaling threads
-func triggerLatencyTracking(thread *phpThread) {
-	if isNearThreadLimit() {
-		latencyTrackingEnabled.Store(true)
-		thread.isLowLatencyThread = true
-		logger.Debug("low latency thread spawned")
+func triggerLatencyTracking(thread *phpThread, threadAmount int, threadLimit int) {
+	if !latencyTrackingEnabled || !isCloseToThreadLimit(threadAmount, threadLimit) {
+		return
+	}
+
+	thread.isLowLatencyThread = true
+
+	if !latencyTrackingActive.Load() {
+		latencyTrackingActive.Store(true)
+		logger.Info("latency tracking enabled")
 	}
 }
 
-func stopLatencyTracking() {
-	if latencyTrackingEnabled.Load() && !isNearThreadLimit() {
-		latencyTrackingEnabled.Store(false)
-		logger.Debug("latency tracking disabled")
+func stopLatencyTracking(threadAmount int, threadLimit int) {
+	if latencyTrackingActive.Load() && !isCloseToThreadLimit(threadAmount, threadLimit) {
+		latencyTrackingActive.Store(false)
+		logger.Info("latency tracking disabled")
 	}
 }
 
-func isNearThreadLimit() bool {
-	return len(autoScaledThreads) >= cap(autoScaledThreads)*slowThreadPercentile/100
+func isCloseToThreadLimit(threadAmount int, threadLimit int) bool {
+	return threadAmount >= threadLimit*(100-lowLatencyPercentile)/100
 }
 
 // record a slow request path
@@ -60,16 +70,31 @@ func trackRequestLatency(fc *frankenPHPContext, duration time.Duration, forceTra
 
 	request := fc.getOriginalRequest()
 	normalizedPath := normalizePath(request.URL.Path)
-	logger.Debug("slow request detected", "path", normalizedPath, "duration", duration)
-	slowRequestsMu.Lock()
 
+	logger.Debug("slow request detected", "path", normalizedPath, "duration", duration)
+
+	slowRequestsMu.Lock()
 	// if too many slow paths are tracked, clear the map
 	if len(slowRequestPaths) > maxTrackedPaths {
 		slowRequestPaths = make(map[string]time.Duration)
 	}
 
-	// record the latency as a moving average
 	recordedLatency := slowRequestPaths[normalizedPath]
+	if recordedLatency == 0 && latencyTrackingActive.Load() {
+		// a new path that is known to be slow is recorded,
+		// drain some requests to free up low-latency threads
+		for i := 0; i < maxRequestDrainage; i++ {
+			select {
+			case scaleChan <- fc:
+				_ = isHighLatencyRequest(fc)
+			default:
+				// no more queued requests
+				break
+			}
+		}
+	}
+
+	// record the latency as a moving average
 	slowRequestPaths[normalizedPath] = duration/2 + recordedLatency/2
 
 	// remove the path if it is no longer considered slow
@@ -88,14 +113,12 @@ func isHighLatencyRequest(fc *frankenPHPContext) bool {
 	normalizedPath := normalizePath(fc.getOriginalRequest().URL.Path)
 
 	slowRequestsMu.RLock()
-	latency, exists := slowRequestPaths[normalizedPath]
+	latency := slowRequestPaths[normalizedPath]
 	slowRequestsMu.RUnlock()
 
-	if exists {
-		return latency > slowRequestThreshold
-	}
+	fc.isLowLatencyRequest = latency < slowRequestThreshold
 
-	return false
+	return !fc.isLowLatencyRequest
 }
 
 func normalizePath(path string) string {
@@ -124,7 +147,7 @@ func normalizePath(path string) string {
 
 // determine if a path part is a wildcard
 func normalizePathPart(part string) string {
-	if len(part) > charLimitWildcard {
+	if len(part) > maxPathPartChars {
 		// TODO: better slug detection?
 		return ":slug"
 	}

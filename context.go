@@ -26,7 +26,8 @@ type frankenPHPContext struct {
 	scriptFilename string
 
 	// Whether the request is already closed by us
-	isDone bool
+	isDone              bool
+	isLowLatencyRequest bool
 
 	responseWriter http.ResponseWriter
 
