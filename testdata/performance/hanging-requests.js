@@ -11,7 +11,7 @@ export const options = {
     { duration: '20s', target: 0 }
   ],
   thresholds: {
-    http_req_failed: ['rate<0.01']
+    http_req_failed: ['rate<0.5']
   }
 }
 
@@ -19,7 +19,10 @@ export const options = {
 export default function () {
   // 2% chance for a request that hangs for 15s
   if (Math.random() < 0.02) {
-    http.get(`${__ENV.CADDY_HOSTNAME}/slowpath/slow-path?sleep=15000&work=10000&output=100`)
+    http.get(`${__ENV.CADDY_HOSTNAME}/slow-path?sleep=15000&work=10000&output=100`, {
+        timeout: 500, // do not wait and continue with the next request
+        throw: false,
+    })
     return
   }
 

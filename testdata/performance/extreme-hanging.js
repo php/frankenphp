@@ -15,10 +15,12 @@ export const options = {
   }
 }
 
+/* global __VU */
+/* global __ENV */
 export default function () {
-    if (__VU % 2 === 0) {
-        // 50 % of VUs cause hanging
-        http.get(`${__ENV.CADDY_HOSTNAME}/slow-path?sleep=15000&work=10000&output=100`)
+    if (__VU % 50 === 0) {
+        // 50 % of VUs cause extreme hanging
+        http.get(`${__ENV.CADDY_HOSTNAME}/slow-path?sleep=60000&work=10000&output=100`)
     } else {
         // The other VUs do very fast requests
         http.get(`${__ENV.CADDY_HOSTNAME}/sleep.php?sleep=3&work=1000`)
