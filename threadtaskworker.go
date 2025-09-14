@@ -36,6 +36,8 @@ func initTaskWorkers() {
 
 	taskWorkers = append(taskWorkers, tw)
 
+	// need at least max_threads >= 2 + num_threads
+	convertToTaskWorkerThread(getInactivePHPThread(), tw)
 	convertToTaskWorkerThread(getInactivePHPThread(), tw)
 }
 
@@ -61,11 +63,9 @@ func (handler *taskWorkerThread) beforeScriptExecution() string {
 		return thread.transitionToNewHandler()
 	case stateBooting, stateTransitionComplete:
 		thread.state.set(stateReady)
-		handler.waitForTasks()
 
 		return handler.setupWorkerScript()
 	case stateReady:
-		handler.waitForTasks()
 
 		return handler.setupWorkerScript()
 	case stateShuttingDown:
@@ -99,24 +99,16 @@ func (handler *taskWorkerThread) name() string {
 	return "Task PHP Thread"
 }
 
-func (handler *taskWorkerThread) waitForTasks() *C.char {
-	for {
-		select {
-		case taskString := <-handler.taskWorker.taskChan:
-			return handler.thread.pinCString(taskString)
-		case <-handler.thread.drainChan:
-			// thread is shutting down, do not execute the function
-			return nil
-		}
-	}
-}
-
 //export go_frankenphp_worker_handle_task
 func go_frankenphp_worker_handle_task(threadIndex C.uintptr_t) *C.char {
 	thread := phpThreads[threadIndex]
 	handler, ok := thread.handler.(*taskWorkerThread)
 	if !ok {
 		panic("thread is not a task thread")
+	}
+
+	if !thread.state.is(stateReady) {
+		thread.state.set(stateReady)
 	}
 
 	select {

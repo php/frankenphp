@@ -1,7 +1,6 @@
 <?php
 
 // A simple task worker example for FrankenPHP
-
 $handleFunc = function ($task) {
     // Simulate a long-running task
     sleep(2);
