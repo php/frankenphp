@@ -189,59 +189,30 @@ func getDirectoriesToWatch(workerOpts []workerOpt) []string {
 func (worker *worker) handleRequest(fc *frankenPHPContext) {
 	metrics.StartWorkerRequest(worker.name)
 
-	// if the server is experiencing high latency, dispatch requests that are
-	// expected to be slow directly to a number of restricted threads
-	if latencyTrackingEnabled.Load() && isHighLatencyRequest(fc) {
-		slowThread := worker.threadPool.getRandomSlowThread()
-		worker.stallRequest(fc, slowThread.requestChan, true)
+	trackLatency := latencyTrackingEnabled.Load()
+	isSlowRequest := trackLatency && isHighLatencyRequest(fc)
+
+	// dispatch requests to all worker threads in order
+	if !isSlowRequest && worker.threadPool.dispatchRequest(fc) {
+		<-fc.done
+		requestTime := time.Since(fc.startedAt)
+		metrics.StopWorkerRequest(worker.name, requestTime)
+		trackRequestLatency(fc, requestTime, false)
 
 		return
 	}
 
-	// dispatch requests to all worker threads in order
-	worker.threadPool.mu.RLock()
-	for _, thread := range worker.threadPool.threads {
-		select {
-		case thread.requestChan <- fc:
-			worker.threadPool.mu.RUnlock()
-			<-fc.done
-
-			requestTime := time.Since(fc.startedAt)
-			metrics.StopWorkerRequest(worker.name, requestTime)
-			trackRequestLatency(fc, requestTime, false)
-
-			return
-		default:
-			// thread is busy, continue
-		}
-	}
-	worker.threadPool.mu.RUnlock()
-
-	// if no thread was available, mark the request as queued and apply the scaling strategy
-	worker.stallRequest(fc, worker.threadPool.ch, false)
-}
-
-// stall the request and trigger scaling or timeouts
-func (worker *worker) stallRequest(fc *frankenPHPContext, requestChan chan *frankenPHPContext, forceTracking bool) {
 	metrics.QueuedWorkerRequest(worker.name)
-	for {
-		select {
-		case requestChan <- fc:
-			metrics.DequeuedWorkerRequest(worker.name)
-			stallDuration := time.Since(fc.startedAt)
-			<-fc.done
-			requestTime := time.Since(fc.startedAt)
-			metrics.StopWorkerRequest(worker.name, requestTime)
-			trackRequestLatency(fc, requestTime-stallDuration, forceTracking)
+	requestWasReceived := worker.threadPool.queueRequest(fc, trackLatency && !isSlowRequest)
+	metrics.DequeuedWorkerRequest(worker.name)
 
-			return
-		case scaleChan <- fc:
-			// the request has triggered scaling, continue to wait for a thread
-		case <-timeoutChan(maxWaitTime):
-			metrics.DequeuedWorkerRequest(worker.name)
-			// the request has timed out stalling
-			fc.reject(504, "Gateway Timeout")
-			return
-		}
+	if !requestWasReceived {
+		return
 	}
+
+	stallDuration := time.Since(fc.startedAt)
+	<-fc.done
+	requestTime := time.Since(fc.startedAt)
+	metrics.StopWorkerRequest(worker.name, requestTime)
+	trackRequestLatency(fc, requestTime-stallDuration, isSlowRequest)
 }

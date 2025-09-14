@@ -75,7 +75,7 @@ func (handler *regularThread) waitForRequest() string {
 		// go back to beforeScriptExecution
 		return handler.beforeScriptExecution()
 	case fc = <-thread.requestChan:
-	case fc = <-regularThreadPool.ch:
+	case fc = <-regularThreadPool.requestChan(thread):
 	}
 
 	handler.requestContext = fc
@@ -93,52 +93,28 @@ func (handler *regularThread) afterRequest() {
 func handleRequestWithRegularPHPThreads(fc *frankenPHPContext) {
 	metrics.StartRequest()
 
-	if latencyTrackingEnabled.Load() && isHighLatencyRequest(fc) {
-		slowThread := regularThreadPool.getRandomSlowThread()
-		stallRegularPHPRequests(fc, slowThread.requestChan, true)
+	trackLatency := latencyTrackingEnabled.Load()
+	isSlowRequest := trackLatency && isHighLatencyRequest(fc)
+
+	// dispatch requests to all regular threads in order
+	if !isSlowRequest && regularThreadPool.dispatchRequest(fc) {
+		<-fc.done
+		metrics.StopRequest()
+		trackRequestLatency(fc, time.Since(fc.startedAt), false)
 
 		return
 	}
 
-	regularThreadPool.mu.RLock()
-	for _, thread := range regularThreadPool.threads {
-		select {
-		case thread.requestChan <- fc:
-			regularThreadPool.mu.RUnlock()
-			<-fc.done
-			metrics.StopRequest()
-			trackRequestLatency(fc, time.Since(fc.startedAt), false)
-
-			return
-		default:
-			// thread is busy, continue
-		}
-	}
-	regularThreadPool.mu.RUnlock()
-
-	// if no thread was available, mark the request as queued and fan it out to all threads
-	stallRegularPHPRequests(fc, regularThreadPool.ch, false)
-}
-
-// stall the request and trigger scaling or timeouts
-func stallRegularPHPRequests(fc *frankenPHPContext, requestChan chan *frankenPHPContext, forceTracking bool) {
 	metrics.QueuedRequest()
-	for {
-		select {
-		case requestChan <- fc:
-			metrics.DequeuedRequest()
-			stallTime := time.Since(fc.startedAt)
-			<-fc.done
-			metrics.StopRequest()
-			trackRequestLatency(fc, time.Since(fc.startedAt)-stallTime, forceTracking)
-			return
-		case scaleChan <- fc:
-			// the request has triggered scaling, continue to wait for a thread
-		case <-timeoutChan(maxWaitTime):
-			// the request has timed out stalling
-			metrics.DequeuedRequest()
-			fc.reject(504, "Gateway Timeout")
-			return
-		}
+	requestWasReceived := regularThreadPool.queueRequest(fc, trackLatency && !isSlowRequest)
+	metrics.DequeuedRequest()
+
+	if !requestWasReceived {
+		return
 	}
+
+	stallTime := time.Since(fc.startedAt)
+	<-fc.done
+	metrics.StopRequest()
+	trackRequestLatency(fc, time.Since(fc.startedAt)-stallTime, isSlowRequest)
 }

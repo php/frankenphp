@@ -145,7 +145,8 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 // waitForWorkerRequest is called during frankenphp_handle_request in the php worker script.
 func (handler *workerThread) waitForWorkerRequest() bool {
 	// unpin any memory left over from previous requests
-	handler.thread.Unpin()
+	thread := handler.thread
+	thread.Unpin()
 
 	ctx := context.Background()
 	logger.LogAttrs(ctx, slog.LevelDebug, "waiting for request", slog.String("worker", handler.worker.name), slog.Int("thread", handler.thread.threadIndex))
@@ -170,8 +171,8 @@ func (handler *workerThread) waitForWorkerRequest() bool {
 
 	var fc *frankenPHPContext
 	select {
-	case <-handler.thread.drainChan:
-		logger.LogAttrs(ctx, slog.LevelDebug, "shutting down", slog.String("worker", handler.worker.name), slog.Int("thread", handler.thread.threadIndex))
+	case <-thread.drainChan:
+		logger.LogAttrs(ctx, slog.LevelDebug, "shutting down", slog.String("worker", handler.worker.name), slog.Int("thread", thread.threadIndex))
 
 		// flush the opcache when restarting due to watcher or admin api
 		// note: this is done right before frankenphp_handle_request() returns 'false'
@@ -180,14 +181,14 @@ func (handler *workerThread) waitForWorkerRequest() bool {
 		}
 
 		return false
-	case fc = <-handler.thread.requestChan:
-	case fc = <-handler.worker.threadPool.ch:
+	case fc = <-thread.requestChan:
+	case fc = <-handler.worker.threadPool.requestChan(thread):
 	}
 
 	handler.workerContext = fc
 	handler.state.markAsWaiting(false)
 
-	logger.LogAttrs(ctx, slog.LevelDebug, "request handling started", slog.String("worker", handler.worker.name), slog.Int("thread", handler.thread.threadIndex), slog.String("url", fc.request.RequestURI))
+	logger.LogAttrs(ctx, slog.LevelDebug, "request handling started", slog.String("worker", handler.worker.name), slog.Int("thread", thread.threadIndex), slog.String("url", fc.request.RequestURI))
 
 	return true
 }

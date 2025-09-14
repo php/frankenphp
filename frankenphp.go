@@ -601,11 +601,3 @@ func freeArgs(argv []*C.char) {
 		C.free(unsafe.Pointer(arg))
 	}
 }
-
-func timeoutChan(timeout time.Duration) <-chan time.Time {
-	if timeout == 0 {
-		return nil
-	}
-
-	return time.After(timeout)
-}
