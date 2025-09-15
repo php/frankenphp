@@ -115,22 +115,22 @@ docker buildx bake -f docker-bake.hcl --pull --no-cache --push
 
 1. 从 GitHub 下载 FrankenPHP 二进制文件的调试版本或创建包含调试符号的自定义静态构建：
 
-    ```console
-    docker buildx bake \
-        --load \
-        --set static-builder.args.DEBUG_SYMBOLS=1 \
-        --set "static-builder.platform=linux/amd64" \
-        static-builder
-    docker cp $(docker create --name static-builder-musl dunglas/frankenphp:static-builder-musl):/go/src/app/dist/frankenphp-linux-$(uname -m) frankenphp
-    ```
+   ```console
+   docker buildx bake \
+       --load \
+       --set static-builder.args.DEBUG_SYMBOLS=1 \
+       --set "static-builder.platform=linux/amd64" \
+       static-builder
+   docker cp $(docker create --name static-builder-musl dunglas/frankenphp:static-builder-musl):/go/src/app/dist/frankenphp-linux-$(uname -m) frankenphp
+   ```
 
 2. 将当前版本的 `frankenphp` 替换为 debug FrankenPHP 可执行文件
 3. 照常启动 FrankenPHP（或者，你可以直接使用 GDB 启动 FrankenPHP： `gdb --args frankenphp run`）
 4. 使用 GDB 附加到进程：
 
-    ```console
-    gdb -p `pidof frankenphp`
-    ```
+   ```console
+   gdb -p `pidof frankenphp`
+   ```
 
 5. 如有必要，请在 GDB shell 中输入 `continue`
 6. 使 FrankenPHP 崩溃
@@ -142,13 +142,13 @@ docker buildx bake -f docker-bake.hcl --pull --no-cache --push
 1. 打开 `.github/workflows/tests.yml`
 2. 启用 PHP 调试符号
 
-    ```patch
-        - uses: shivammathur/setup-php@v2
-          # ...
-          env:
-            phpts: ts
-    +       debug: true
-    ```
+   ```patch
+       - uses: shivammathur/setup-php@v2
+         # ...
+         env:
+           phpts: ts
+   +       debug: true
+   ```
 
 3. 启用 `tmate` 以连接到容器
 
@@ -166,18 +166,18 @@ docker buildx bake -f docker-bake.hcl --pull --no-cache --push
 5. 打开 `frankenphp.go`
 6. 启用 `cgosymbolizer`
 
-    ```patch
-    -	//_ "github.com/ianlancetaylor/cgosymbolizer"
-    +	_ "github.com/ianlancetaylor/cgosymbolizer"
-    ```
+   ```patch
+   -	//_ "github.com/ianlancetaylor/cgosymbolizer"
+   +	_ "github.com/ianlancetaylor/cgosymbolizer"
+   ```
 
 7. 下载模块： `go get`
 8. 在容器中，可以使用 GDB 和以下：
 
-    ```console
-    go test -tags watcher -c -ldflags=-w
-    gdb --args frankenphp.test -test.run ^MyTest$
-    ```
+   ```console
+   go test -tags watcher -c -ldflags=-w
+   gdb --args frankenphp.test -test.run ^MyTest$
+   ```
 
 9. 当错误修复后，恢复所有这些更改
 

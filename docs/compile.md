@@ -80,7 +80,7 @@ Some FrankenPHP features depend on optional system dependencies that must be ins
 Alternatively, these features can be disabled by passing build tags to the Go compiler.
 
 | Feature                        | Dependency                                                            | Build tag to disable it |
-|--------------------------------|-----------------------------------------------------------------------|-------------------------|
+| ------------------------------ | --------------------------------------------------------------------- | ----------------------- |
 | Brotli compression             | [Brotli](https://github.com/google/brotli)                            | nobrotli                |
 | Restart workers on file change | [Watcher C](https://github.com/e-dant/watcher/tree/release/watcher-c) | nowatcher               |
 

@@ -72,8 +72,8 @@ func repeat_this(s *C.zend_string, count int64, reverse bool) unsafe.Pointer {
 
 这里有两个重要的事情要注意：
 
-* 指令注释 `//export_php:function` 定义了 PHP 中的函数签名。这是生成器知道如何使用正确的参数和返回类型生成 PHP 函数的方式；
-* 函数必须返回 `unsafe.Pointer`。FrankenPHP 提供了一个 API 来帮助你在 C 和 Go 之间进行类型转换。
+- 指令注释 `//export_php:function` 定义了 PHP 中的函数签名。这是生成器知道如何使用正确的参数和返回类型生成 PHP 函数的方式；
+- 函数必须返回 `unsafe.Pointer`。FrankenPHP 提供了一个 API 来帮助你在 C 和 Go 之间进行类型转换。
 
 虽然第一点不言自明，但第二点可能更难理解。让我们在下一节中深入了解类型转换。
 
@@ -82,16 +82,17 @@ func repeat_this(s *C.zend_string, count int64, reverse bool) unsafe.Pointer {
 虽然一些变量类型在 C/PHP 和 Go 之间具有相同的内存表示，但某些类型需要更多逻辑才能直接使用。这可能是编写扩展时最困难的部分，因为它需要了解 Zend 引擎的内部结构以及变量在 PHP 中的内部存储方式。此表总结了你需要知道的内容：
 
 | PHP 类型           | Go 类型             | 直接转换 | C 到 Go 助手          | Go 到 C 助手           | 类方法支持 |
-|--------------------|---------------------|----------|----------------------|----------------------|------------|
-| `int`              | `int64`             | ✅        | -                    | -                    | ✅          |
-| `?int`             | `*int64`            | ✅        | -                    | -                    | ✅          |
-| `float`            | `float64`           | ✅        | -                    | -                    | ✅          |
-| `?float`           | `*float64`          | ✅        | -                    | -                    | ✅          |
-| `bool`             | `bool`              | ✅        | -                    | -                    | ✅          |
-| `?bool`            | `*bool`             | ✅        | -                    | -                    | ✅          |
-| `string`/`?string` | `*C.zend_string`    | ❌        | frankenphp.GoString() | frankenphp.PHPString() | ✅          |
-| `array`            | `*frankenphp.Array` | ❌        | frankenphp.GoArray()  | frankenphp.PHPArray()  | ✅          |
-| `object`           | `struct`            | ❌        | _尚未实现_            | _尚未实现_            | ❌          |
+| ------------------ | ------------------- | -------- | --------------------- | ---------------------- | ---------- |
+| `int`              | `int64`             | ✅       | -                     | -                      | ✅         |
+| `?int`             | `*int64`            | ✅       | -                     | -                      | ✅         |
+| `float`            | `float64`           | ✅       | -                     | -                      | ✅         |
+| `?float`           | `*float64`          | ✅       | -                     | -                      | ✅         |
+| `bool`             | `bool`              | ✅       | -                     | -                      | ✅         |
+| `?bool`            | `*bool`             | ✅       | -                     | -                      | ✅         |
+| `string`/`?string` | `*C.zend_string`    | ❌       | frankenphp.GoString() | frankenphp.PHPString() | ✅         |
+| `array`            | `*frankenphp.Array` | ❌       | frankenphp.GoArray()  | frankenphp.PHPArray()  | ✅         |
+| `mixed`            | `any`               | ❌       | `GoValue()`           | `PHPValue()`           | ❌         |
+| `object`           | `struct`            | ❌       | _尚未实现_            | _尚未实现_             | ❌         |
 
 > [!NOTE]
 > 此表尚不详尽，将随着 FrankenPHP 类型 API 变得更加完整而完善。
@@ -111,16 +112,16 @@ FrankenPHP 通过 `frankenphp.Array` 类型为 PHP 数组提供原生支持。�
 func process_data(arr *C.zval) unsafe.Pointer {
     // 将 PHP 数组转换为 Go
     goArray := frankenphp.GoArray(unsafe.Pointer(arr))
-	
+
 	result := &frankenphp.Array{}
-    
+
     result.SetInt(0, "first")
     result.SetInt(1, "second")
     result.Append("third") // 自动分配下一个整数键
-    
+
     result.SetString("name", "John")
     result.SetString("age", int64(30))
-    
+
     for i := uint32(0); i < goArray.Len(); i++ {
         key, value := goArray.At(i)
         if key.Type == frankenphp.PHPStringKey {
@@ -129,7 +130,7 @@ func process_data(arr *C.zval) unsafe.Pointer {
             result.SetInt(key.Int+100, value)
         }
     }
-    
+
     // 转换回 PHP 数组
     return frankenphp.PHPArray(result)
 }
@@ -137,20 +138,20 @@ func process_data(arr *C.zval) unsafe.Pointer {
 
 **`frankenphp.Array` 的关键特性：**
 
-* **有序键值对** - 像 PHP 数组一样维护插入顺序
-* **混合键类型** - 在同一数组中支持整数和字符串键
-* **类型安全** - `PHPKey` 类型确保正确的键处理
-* **自动列表检测** - 转换为 PHP 时，自动检测数组应该是打包列表还是哈希映射
-* **不支持对象** - 目前，只有标量类型和数组可以用作值。提供对象将导致 PHP 数组中的 `null` 值。
+- **有序键值对** - 像 PHP 数组一样维护插入顺序
+- **混合键类型** - 在同一数组中支持整数和字符串键
+- **类型安全** - `PHPKey` 类型确保正确的键处理
+- **自动列表检测** - 转换为 PHP 时，自动检测数组应该是打包列表还是哈希映射
+- **不支持对象** - 目前，只有标量类型和数组可以用作值。提供对象将导致 PHP 数组中的 `null` 值。
 
 **可用方法：**
 
-* `SetInt(key int64, value interface{})` - 使用整数键设置值
-* `SetString(key string, value interface{})` - 使用字符串键设置值  
-* `Append(value interface{})` - 使用下一个可用整数键添加值
-* `Len() uint32` - 获取元素数量
-* `At(index uint32) (PHPKey, interface{})` - 获取索引处的键值对
-* `frankenphp.PHPArray(arr *frankenphp.Array) unsafe.Pointer` - 转换为 PHP 数组
+- `SetInt(key int64, value interface{})` - 使用整数键设置值
+- `SetString(key string, value interface{})` - 使用字符串键设置值
+- `Append(value interface{})` - 使用下一个可用整数键添加值
+- `Len() uint32` - 获取元素数量
+- `At(index uint32) (PHPKey, interface{})` - 获取索引处的键值对
+- `frankenphp.PHPArray(arr *frankenphp.Array) unsafe.Pointer` - 转换为 PHP 数组
 
 ### 声明原生 PHP 类
 
@@ -168,11 +169,11 @@ type UserStruct struct {
 
 **不透明类**是内部结构（属性）对 PHP 代码隐藏的类。这意味着：
 
-* **无直接属性访问**：你不能直接从 PHP 读取或写入属性（`$user->name` 不起作用）
-* **仅方法接口** - 所有交互必须通过你定义的方法进行
-* **更好的封装** - 内部数据结构完全由 Go 代码控制
-* **类型安全** - 没有 PHP 代码使用错误类型破坏内部状态的风险
-* **更清晰的 API** - 强制设计适当的公共接口
+- **无直接属性访问**：你不能直接从 PHP 读取或写入属性（`$user->name` 不起作用）
+- **仅方法接口** - 所有交互必须通过你定义的方法进行
+- **更好的封装** - 内部数据结构完全由 Go 代码控制
+- **类型安全** - 没有 PHP 代码使用错误类型破坏内部状态的风险
+- **更清晰的 API** - 强制设计适当的公共接口
 
 这种方法提供了更好的封装，并防止 PHP 代码意外破坏 Go 对象的内部状态。与对象的所有交互都必须通过你明确定义的方法进行。
 
@@ -219,12 +220,12 @@ func (us *UserStruct) UpdateInfo(name *C.zend_string, age *int64, active *bool) 
     if name != nil {
         us.Name = frankenphp.GoString(unsafe.Pointer(name))
     }
-    
+
     // 检查是否提供了 age（不为 null）
     if age != nil {
         us.Age = int(*age)
     }
-    
+
     // 检查是否提供了 active（不为 null）
     if active != nil {
         us.Active = *active
@@ -234,10 +235,10 @@ func (us *UserStruct) UpdateInfo(name *C.zend_string, age *int64, active *bool) 
 
 **关于可空参数的要点：**
 
-* **可空原始类型**（`?int`、`?float`、`?bool`）在 Go 中变成指针（`*int64`、`*float64`、`*bool`）
-* **可空字符串**（`?string`）仍然是 `*C.zend_string`，但可以是 `nil`
-* **在解引用指针值之前检查 `nil`**
-* **PHP `null` 变成 Go `nil`** - 当 PHP 传递 `null` 时，你的 Go 函数接收 `nil` 指针
+- **可空原始类型**（`?int`、`?float`、`?bool`）在 Go 中变成指针（`*int64`、`*float64`、`*bool`）
+- **可空字符串**（`?string`）仍然是 `*C.zend_string`，但可以是 `nil`
+- **在解引用指针值之前检查 `nil`**
+- **PHP `null` 变成 Go `nil`** - 当 PHP 传递 `null` 时，你的 Go 函数接收 `nil` 指针
 
 > [!WARNING]
 > 目前，类方法有以下限制。**不支持对象**作为参数类型或返回类型。**完全支持数组**作为参数和返回类型。支持的类型：`string`、`int`、`float`、`bool`、`array` 和 `void`（用于返回类型）。**完全支持可空参数类型**，适用于所有标量类型（`?string`、`?int`、`?float`、`?bool`）。
@@ -356,7 +357,7 @@ func repeat_this(s *C.zend_string, count int64, mode int) unsafe.Pointer {
     str := frankenphp.GoString(unsafe.Pointer(s))
 
     result := strings.Repeat(str, int(count))
-    if mode == STR_REVERSE { 
+    if mode == STR_REVERSE {
         // 反转字符串
     }
 
@@ -375,14 +376,14 @@ type StringProcessorStruct struct {
 //export_php:method StringProcessor::process(string $input, int $mode): string
 func (sp *StringProcessorStruct) Process(input *C.zend_string, mode int64) unsafe.Pointer {
     str := frankenphp.GoString(unsafe.Pointer(input))
-    
+
     switch mode {
     case MODE_LOWERCASE:
         str = strings.ToLower(str)
     case MODE_UPPERCASE:
         str = strings.ToUpper(str)
     }
-    
+
     return frankenphp.PHPString(str, false)
 }
 ```
@@ -437,17 +438,17 @@ echo My\Extension\STATUS_ACTIVE; // 1
 
 #### 重要说明
 
-* 每个文件只允许**一个**命名空间指令。如果找到多个命名空间指令，生成器将返回错误。
-* 命名空间适用于文件中的**所有**导出符号：函数、类、方法和常量。
-* 命名空间名称遵循 PHP 命名空间约定，使用反斜杠（`\`）作为分隔符。
-* 如果没有声明命名空间，符号将照常导出到全局命名空间。
+- 每个文件只允许**一个**命名空间指令。如果找到多个命名空间指令，生成器将返回错误。
+- 命名空间适用于文件中的**所有**导出符号：函数、类、方法和常量。
+- 命名空间名称遵循 PHP 命名空间约定，使用反斜杠（`\`）作为分隔符。
+- 如果没有声明命名空间，符号将照常导出到全局命名空间。
 
 ### 生成扩展
 
 这就是魔法发生的地方，现在可以生成你的扩展。你可以使用以下命令运行生成器：
 
 ```console
-GEN_STUB_SCRIPT=php-src/build/gen_stub.php frankenphp extension-init my_extension.go 
+GEN_STUB_SCRIPT=php-src/build/gen_stub.php frankenphp extension-init my_extension.go
 ```
 
 > [!NOTE]
@@ -567,9 +568,9 @@ extern zend_module_entry ext_module_entry;
 
 接下来，创建一个名为 `extension.c` 的文件，该文件将执行以下步骤：
 
-* 包含 PHP 头文件；
-* 声明我们的新原生 PHP 函数 `go_print()`；
-* 声明扩展元数据。
+- 包含 PHP 头文件；
+- 声明我们的新原生 PHP 函数 `go_print()`；
+- 声明扩展元数据。
 
 让我们首先包含所需的头文件：
 
@@ -701,9 +702,9 @@ import "strings"
 //export go_upper
 func go_upper(s *C.zend_string) *C.zend_string {
     str := frankenphp.GoString(unsafe.Pointer(s))
-    
+
     upper := strings.ToUpper(str)
-    
+
     return (*C.zend_string)(frankenphp.PHPString(upper, false))
 }
 ```

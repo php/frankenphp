@@ -6,7 +6,7 @@ As seguintes extensões são conhecidas por não serem compatíveis com o
 FrankenPHP:
 
 | Nome                                                                                                        | Motivo            | Alternativas                                                                                                         |
-|-------------------------------------------------------------------------------------------------------------|-------------------|----------------------------------------------------------------------------------------------------------------------|
+| ----------------------------------------------------------------------------------------------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------- |
 | [imap](https://www.php.net/manual/pt_BR/imap.installation.php)                                              | Não é thread-safe | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap) |
 | [newrelic](https://docs.newrelic.com/docs/apm/agents/php-agent/getting-started/introduction-new-relic-php/) | Não é thread-safe | -                                                                                                                    |
 
@@ -16,7 +16,7 @@ As seguintes extensões apresentam falhas conhecidas e comportamentos inesperado
 quando usadas com o FrankenPHP:
 
 | Nome                                                             | Problema                                                                                                                                                                                                                                                                                                                    |
-|------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [ext-openssl](https://www.php.net/manual/pt_BR/book.openssl.php) | Ao usar uma versão estática do FrankenPHP (compilada com a `libc` `musl`), a extensão OpenSSL pode quebrar sob cargas pesadas. Uma solução alternativa é usar uma versão vinculada dinamicamente (como a usada em imagens Docker). Esta falha está [sendo monitorada pelo PHP](https://github.com/php/php-src/issues/13648) |
 
 ## `get_browser`

@@ -92,7 +92,7 @@ Alternativamente, esses recursos podem ser desabilitados passando as tags de
 compilação para o compilador Go.
 
 | Recurso                               | Dependência                                                           | Tag de compilação para desabilitá-lo |
-|---------------------------------------|-----------------------------------------------------------------------|--------------------------------------|
+| ------------------------------------- | --------------------------------------------------------------------- | ------------------------------------ |
 | Compressão Brotli                     | [Brotli](https://github.com/google/brotli)                            | `nobrotli`                           |
 | Reiniciar workers ao alterar arquivos | [Watcher C](https://github.com/e-dant/watcher/tree/release/watcher-c) | `nowatcher`                          |
 
@@ -126,8 +126,8 @@ xcaddy build \
 > Se você estiver usando a `libc` `musl` (o padrão no Alpine Linux) e Symfony,
 > pode ser necessário aumentar o tamanho da pilha padrão.
 > Caso contrário, você poderá receber erros como `PHP Fatal error: Maximum call
-> stack size of 83360 bytes reached during compilation.
-> Try splitting expression`.
+stack size of 83360 bytes reached during compilation.
+Try splitting expression`.
 >
 > Para fazer isso, altere a variável de ambiente `XCADDY_GO_BUILD_FLAGS` para
 > algo como
