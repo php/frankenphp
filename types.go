@@ -82,7 +82,7 @@ func goArray(arr unsafe.Pointer, ordered bool) (map[string]any, []string) {
 			v := C.get_ht_packed_data(hashTable, i)
 			if v != nil && C.zval_get_type(v) != C.IS_UNDEF {
 				strIndex := strconv.Itoa(int(i))
-				entries[strIndex] = GoValue(v)
+				entries[strIndex] = goValue(v)
 				if ordered {
 					order = append(order, strIndex)
 				}
@@ -98,7 +98,7 @@ func goArray(arr unsafe.Pointer, ordered bool) (map[string]any, []string) {
 			continue
 		}
 
-		v := GoValue(&bucket.val)
+		v := goValue(&bucket.val)
 
 		if bucket.key != nil {
 			keyStr := GoString(unsafe.Pointer(bucket.key))
@@ -141,7 +141,7 @@ func GoPackedArray(arr unsafe.Pointer) []any {
 		for i := C.uint32_t(0); i < nNumUsed; i++ {
 			v := C.get_ht_packed_data(hashTable, i)
 			if v != nil && C.zval_get_type(v) != C.IS_UNDEF {
-				result = append(result, GoValue(v))
+				result = append(result, goValue(v))
 			}
 		}
 
@@ -152,7 +152,7 @@ func GoPackedArray(arr unsafe.Pointer) []any {
 	for i := C.uint32_t(0); i < nNumUsed; i++ {
 		bucket := C.get_ht_bucket_data(hashTable, i)
 		if bucket != nil && C.zval_get_type(&bucket.val) != C.IS_UNDEF {
-			result = append(result, GoValue(&bucket.val))
+			result = append(result, goValue(&bucket.val))
 		}
 	}
 
@@ -208,7 +208,11 @@ func PHPPackedArray(slice []any) unsafe.Pointer {
 }
 
 // EXPERIMENTAL: GoValue converts a PHP zval to a Go value
-func GoValue(zval *C.zval) any {
+func GoValue(zval unsafe.Pointer) any {
+	return goValue((*C.zval)(zval))
+}
+
+func goValue(zval *C.zval) any {
 	t := C.zval_get_type(zval)
 
 	switch t {
@@ -251,7 +255,7 @@ func GoValue(zval *C.zval) any {
 	}
 }
 
-// PHPValue converts a Go any to a PHP zval
+// EXPERIMENTAL: PHPValue converts a Go any to a PHP zval
 func PHPValue(value any) unsafe.Pointer {
 	return unsafe.Pointer(phpValue(value))
 }
