@@ -1423,3 +1423,31 @@ func TestWorkerMatchDirectiveWithoutFileServer(t *testing.T) {
 	// the request should completely fall through the php_server module
 	tester.AssertGetResponse("http://localhost:"+testPort+"/static.txt", http.StatusNotFound, "Request falls through")
 }
+
+func TestWorkerMaxRequests(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	tester.InitServer(`
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		http://localhost:`+testPort+` {
+			php {
+				root ../testdata
+				worker {
+					file worker-with-counter.php
+					match *
+					num 1
+					max_requests 2
+				}
+			}
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/some-path", http.StatusOK, "requests:1")
+	tester.AssertGetResponse("http://localhost:"+testPort+"/some-path", http.StatusOK, "requests:2")
+
+	// should reset worker after 2 requests
+	tester.AssertGetResponse("http://localhost:"+testPort+"/some-path", http.StatusOK, "requests:1")
+}
