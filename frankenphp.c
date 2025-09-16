@@ -432,7 +432,8 @@ PHP_FUNCTION(frankenphp_handle_request) {
   zend_unset_timeout();
 #endif
 
-  struct go_frankenphp_worker_handle_request_start_return result = go_frankenphp_worker_handle_request_start(thread_index);
+  struct go_frankenphp_worker_handle_request_start_return result =
+      go_frankenphp_worker_handle_request_start(thread_index);
   if (frankenphp_worker_request_startup() == FAILURE
       /* Shutting down */
       || !result.r0) {
@@ -457,10 +458,7 @@ PHP_FUNCTION(frankenphp_handle_request) {
   fci.params = result.r1;
   fci.param_count = 1;
 
-  fprintf(stderr, "Calling user function\n");
   if (zend_call_function(&fci, &fcc) == SUCCESS && Z_TYPE(retval) != IS_UNDEF) {
-    fprintf(stderr, "Success\n");
-
     callback_ret = &retval;
   }
 
@@ -475,13 +473,10 @@ PHP_FUNCTION(frankenphp_handle_request) {
   }
 
   frankenphp_worker_request_shutdown();
-  fprintf(stderr, "go_frankenphp_finish_worker_request\n");
   go_frankenphp_finish_worker_request(thread_index, callback_ret);
   if (callback_ret != NULL) {
     zval_ptr_dtor(&retval);
   }
-
-  fprintf(stderr, "return\n");
 
   RETURN_TRUE;
 }
