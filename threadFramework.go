@@ -36,7 +36,7 @@ type WorkerExtension interface {
 	ThreadActivatedNotification(threadId int)
 	ThreadDrainNotification(threadId int)
 	ThreadDeactivatedNotification(threadId int)
-	ProvideRequest() *WorkerRequest
+	ProvideRequest() *WorkerRequest[any, any]
 }
 
 // EXPERIMENTAL
@@ -96,7 +96,6 @@ func startExternalWorkerPipe(w *worker, externalWorker WorkerExtension, thread *
 					}
 				}()
 			}
-
 		}
 	}
 }
