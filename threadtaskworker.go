@@ -55,8 +55,6 @@ func initTaskWorkers(opts []workerOpt) error {
 				num:      opt.num,
 			},
 		)
-
-		logger.Info("Initialized task worker", "name", opt.name, "file", filename, "num", opt.num)
 	}
 
 	ready := sync.WaitGroup{}
