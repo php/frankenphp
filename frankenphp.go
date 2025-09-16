@@ -151,6 +151,10 @@ func calculateMaxThreads(opt *opt) (int, int, int, error) {
 		numWorkers += opt.workers[i].num
 	}
 
+	for _, tw := range opt.taskWorkers {
+		numWorkers += tw.num
+	}
+
 	numThreadsIsSet := opt.numThreads > 0
 	maxThreadsIsSet := opt.maxThreads != 0
 	maxThreadsIsAuto := opt.maxThreads < 0 // maxthreads < 0 signifies auto mode (see phpmaintread.go)
@@ -278,7 +282,9 @@ func Init(options ...Option) error {
 		return err
 	}
 
-	initTaskWorkers()
+	if err := initTaskWorkers(opt.taskWorkers); err != nil {
+		return err
+	}
 
 	initAutoScaling(mainThread)
 

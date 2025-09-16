@@ -6,7 +6,7 @@ function frankenphp_handle_request(callable $callback): bool {}
 
 function frankenphp_handle_task(callable $callback): bool {}
 
-function frankenphp_dispatch_task(string $task): bool {}
+function frankenphp_dispatch_task(string $task, ?string $workerName = null): bool {}
 
 function headers_send(int $status = 200): int {}
 

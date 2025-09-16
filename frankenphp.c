@@ -480,29 +480,31 @@ PHP_FUNCTION(frankenphp_handle_task) {
   Z_PARAM_FUNC(fci, fcc)
   ZEND_PARSE_PARAMETERS_END();
 
-  /*if (!is_worker_thread) {
+  if (!go_is_task_worker_thread(thread_index)) {
     zend_throw_exception(
         spl_ce_RuntimeException,
         "frankenphp_handle_task() called while not in worker mode", 0);
     RETURN_THROWS();
-  }*/
+  }
 
 #ifdef ZEND_MAX_EXECUTION_TIMERS
   /* Disable timeouts while waiting for a task to handle */
   zend_unset_timeout();
 #endif
 
-  char *task = go_frankenphp_worker_handle_task(thread_index);
-  if (task == NULL) {
+  go_string task = go_frankenphp_worker_handle_task(thread_index);
+  if (task.data == NULL) {
     RETURN_FALSE;
   }
 
-  /* Call the PHP func passed to frankenphp_handle_request() */
+  /* Call the PHP func passed to frankenphp_handle_task() */
   zval retval = {0};
   fci.size = sizeof fci;
   fci.retval = &retval;
+
+  /* ZVAL_STRINGL_FAST will consume the string without c */
   zval taskzv;
-  ZVAL_STRINGL(&taskzv, task, strlen(task));
+  ZVAL_STRINGL_FAST(&taskzv, task.data, task.len);
   fci.params = &taskzv;
   fci.param_count = 1;
   if (zend_call_function(&fci, &fcc) == SUCCESS) {
@@ -511,7 +513,7 @@ PHP_FUNCTION(frankenphp_handle_task) {
 
   /*
    * If an exception occurred, print the message to the client before
-   * closing the connection and bailout.
+   * exiting
    */
   if (EG(exception) && !zend_is_unwind_exit(EG(exception)) &&
       !zend_is_graceful_exit(EG(exception))) {
@@ -519,18 +521,35 @@ PHP_FUNCTION(frankenphp_handle_task) {
     zend_bailout();
   }
 
+  zend_try { php_output_end_all(); }
+  zend_end_try();
+
+  go_frankenphp_finish_task(thread_index);
+
+  /* free the task string allocated in frankenphp_dispatch_task() */
+  pefree(task.data, 1);
+  zval_ptr_dtor(&taskzv);
+
   RETURN_TRUE;
 }
 
 PHP_FUNCTION(frankenphp_dispatch_task) {
-  char *taskString;
+  char *task_string;
   size_t task_len;
+  char *worker_name = NULL;
+  size_t worker_name_len = 0;
 
-  ZEND_PARSE_PARAMETERS_START(1, 1);
-  Z_PARAM_STRING(taskString, task_len);
+  ZEND_PARSE_PARAMETERS_START(1, 2);
+  Z_PARAM_STRING(task_string, task_len);
+  Z_PARAM_OPTIONAL
+  Z_PARAM_STRING(worker_name, worker_name_len);
   ZEND_PARSE_PARAMETERS_END();
 
-  go_frankenphp_worker_dispatch_task(0, taskString, task_len);
+  /* copy the task string so other threads can use it */
+  char *task_copy = pemalloc(task_len, 1); /* free in frankenphp_handle_task() */
+  memcpy(task_copy, task_string, task_len);
+
+  go_frankenphp_worker_dispatch_task(0, task_copy, task_len, worker_name, worker_name_len);
 
   RETURN_TRUE;
 }
