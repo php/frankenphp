@@ -546,10 +546,12 @@ PHP_FUNCTION(frankenphp_dispatch_task) {
   ZEND_PARSE_PARAMETERS_END();
 
   /* copy the task string so other threads can use it */
-  char *task_copy = pemalloc(task_len, 1); /* free in frankenphp_handle_task() */
+  char *task_copy =
+      pemalloc(task_len, 1); /* free in frankenphp_handle_task() */
   memcpy(task_copy, task_string, task_len);
 
-  go_frankenphp_worker_dispatch_task(0, task_copy, task_len, worker_name, worker_name_len);
+  go_frankenphp_worker_dispatch_task(0, task_copy, task_len, worker_name,
+                                     worker_name_len);
 
   RETURN_TRUE;
 }
