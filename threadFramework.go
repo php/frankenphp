@@ -40,15 +40,15 @@ type WorkerExtension interface {
 }
 
 // EXPERIMENTAL
-type WorkerRequest struct {
+type WorkerRequest[P any, R any] struct {
 	// The request for your worker script to handle
 	Request *http.Request
 	// Response is a response writer that provides the output of the provided request, it must not be nil to access the request body
 	Response http.ResponseWriter
 	// CallbackParameters is an optional field that will be converted in PHP types and passed as parameter to the PHP callback
-	CallbackParameters any
+	CallbackParameters P
 	// AfterFunc is an optional function that will be called after the request is processed with the original value, the return of the PHP callback, converted in Go types, is passed as parameter
-	AfterFunc func(callbackReturn any)
+	AfterFunc func(callbackReturn R)
 }
 
 var externalWorkers = make(map[string]WorkerExtension)
