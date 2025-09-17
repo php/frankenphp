@@ -232,7 +232,9 @@ func go_frankenphp_worker_handle_request_start(threadIndex C.uintptr_t) (C.bool,
 func go_frankenphp_finish_worker_request(threadIndex C.uintptr_t, retval *C.zval) {
 	thread := phpThreads[threadIndex]
 	fc := thread.getRequestContext()
-	fc.handlerReturn = GoValue(unsafe.Pointer(retval))
+	if retval != nil {
+		fc.handlerReturn = GoValue(unsafe.Pointer(retval))
+	}
 
 	fc.closeContext()
 	thread.handler.(*workerThread).workerContext = nil
