@@ -28,7 +28,9 @@ type frankenPHPContext struct {
 	// Whether the request is already closed by us
 	isDone bool
 
-	responseWriter http.ResponseWriter
+	responseWriter    http.ResponseWriter
+	handlerParameters any
+	handlerReturn     any
 
 	done      chan any
 	startedAt time.Time
