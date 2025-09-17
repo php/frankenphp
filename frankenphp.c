@@ -456,7 +456,7 @@ PHP_FUNCTION(frankenphp_handle_request) {
   fci.size = sizeof fci;
   fci.retval = &retval;
   fci.params = result.r1;
-  fci.param_count = result.r1 != NULL ? 1 : 0;
+  fci.param_count = result.r1 == NULL ? 0 : 1;
 
   if (zend_call_function(&fci, &fcc) == SUCCESS && Z_TYPE(retval) != IS_UNDEF) {
     callback_ret = &retval;
