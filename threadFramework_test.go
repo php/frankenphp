@@ -17,7 +17,7 @@ type mockWorkerExtension struct {
 	fileName         string
 	env              PreparedEnv
 	minThreads       int
-	requestChan      chan *WorkerRequest
+	requestChan      chan *WorkerRequest[any, any]
 	activatedCount   int
 	drainCount       int
 	deactivatedCount int
@@ -30,7 +30,7 @@ func newMockWorkerExtension(name, fileName string, minThreads int) *mockWorkerEx
 		fileName:    fileName,
 		env:         make(PreparedEnv),
 		minThreads:  minThreads,
-		requestChan: make(chan *WorkerRequest, 10), // Buffer to avoid blocking
+		requestChan: make(chan *WorkerRequest[any, any], 10), // Buffer to avoid blocking
 	}
 }
 
@@ -68,11 +68,11 @@ func (m *mockWorkerExtension) ThreadDeactivatedNotification(threadId int) {
 	m.deactivatedCount++
 }
 
-func (m *mockWorkerExtension) ProvideRequest() *WorkerRequest {
+func (m *mockWorkerExtension) ProvideRequest() *WorkerRequest[any, any] {
 	return <-m.requestChan
 }
 
-func (m *mockWorkerExtension) InjectRequest(r *WorkerRequest) {
+func (m *mockWorkerExtension) InjectRequest(r *WorkerRequest[any, any]) {
 	m.requestChan <- r
 }
 
@@ -115,10 +115,12 @@ func TestWorkerExtension(t *testing.T) {
 	done := make(chan struct{})
 
 	// Inject the request into the worker through the extension
-	mockExt.InjectRequest(&WorkerRequest{
+	mockExt.InjectRequest(&WorkerRequest[any, any]{
 		Request:  req,
 		Response: w,
-		Done:     done,
+		AfterFunc: func(callbackReturn any) {
+			close(done)
+		},
 	})
 
 	// Wait for the request to be fully processed
