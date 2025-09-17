@@ -504,7 +504,7 @@ PHP_FUNCTION(frankenphp_handle_task) {
 
   /* ZVAL_STRINGL_FAST will consume the string without c */
   zval taskzv;
-  ZVAL_STRINGL_FAST(&taskzv, task.data, task.len);
+  ZVAL_STRINGL(&taskzv, task.data, task.len);
   fci.params = &taskzv;
   fci.param_count = 1;
   if (zend_call_function(&fci, &fcc) == SUCCESS) {
@@ -526,8 +526,7 @@ PHP_FUNCTION(frankenphp_handle_task) {
 
   go_frankenphp_finish_task(thread_index);
 
-  /* free the task string allocated in frankenphp_dispatch_task() */
-  pefree(task.data, 1);
+  /* free the task zval */
   zval_ptr_dtor(&taskzv);
 
   RETURN_TRUE;
@@ -545,19 +544,12 @@ PHP_FUNCTION(frankenphp_dispatch_task) {
   Z_PARAM_STRING(worker_name, worker_name_len);
   ZEND_PARSE_PARAMETERS_END();
 
-  /* copy the task string so other threads can use it */
-  char *task_copy =
-      pemalloc(task_len, 1); /* freed in frankenphp_handle_task() */
-  memcpy(task_copy, task_string, task_len);
-
-  bool success = go_frankenphp_worker_dispatch_task(0, task_copy, task_len, worker_name,
-                                     worker_name_len);
+  bool success = go_frankenphp_worker_dispatch_task(
+      0, task_string, task_len, worker_name, worker_name_len);
   if (!success) {
-    pefree(task_copy, 1);
-	// throw
-	zend_throw_exception(spl_ce_RuntimeException,
-						 "No worker found to handle the task", 0);
-	RETURN_THROWS();
+    zend_throw_exception(spl_ce_RuntimeException,
+                         "No worker found to handle the task", 0);
+    RETURN_THROWS();
   }
 }
 

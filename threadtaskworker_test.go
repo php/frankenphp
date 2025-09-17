@@ -20,7 +20,7 @@ func assertGetRequest(t *testing.T, url string, expectedBodyContains string, opt
 	assert.Contains(t, w.Body.String(), expectedBodyContains)
 }
 
-func TestDispatchWorkToTaskWorker(t *testing.T) {
+func TestDispatchToTaskWorker(t *testing.T) {
 	var buf bytes.Buffer
 	handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
 	logger := slog.New(handler)
@@ -32,11 +32,32 @@ func TestDispatchWorkToTaskWorker(t *testing.T) {
 	))
 	defer Shutdown()
 
+	pendingTask, err := DispatchTask("go task", "worker")
+	assert.NoError(t, err)
+	pendingTask.WaitForCompletion()
+
+	logOutput := buf.String()
+	assert.Contains(t, logOutput, "go task")
+}
+
+func TestDispatchToTaskWorkerFromWorker(t *testing.T) {
+	var buf bytes.Buffer
+	handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	logger := slog.New(handler)
+
+	assert.NoError(t, Init(
+		WithWorkers("worker", "./testdata/tasks/task-worker.php", 1, AsTaskWorker(true)),
+		WithWorkers("worker", "./testdata/tasks/task-dispatcher.php", 1),
+		WithNumThreads(4),
+		WithLogger(logger),
+	))
+	defer Shutdown()
+
 	assert.Len(t, taskWorkers, 1)
 
 	assertGetRequest(t, "http://example.com/testdata/tasks/task-dispatcher.php?count=4", "dispatched 4 tasks")
 
-	time.Sleep(time.Millisecond * 200) // wait a bit for tasks to complete
+	time.Sleep(time.Millisecond * 100) // ensure all tasks are finished
 
 	logOutput := buf.String()
 	assert.Contains(t, logOutput, "task0")
