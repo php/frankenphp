@@ -547,13 +547,18 @@ PHP_FUNCTION(frankenphp_dispatch_task) {
 
   /* copy the task string so other threads can use it */
   char *task_copy =
-      pemalloc(task_len, 1); /* free in frankenphp_handle_task() */
+      pemalloc(task_len, 1); /* freed in frankenphp_handle_task() */
   memcpy(task_copy, task_string, task_len);
 
-  go_frankenphp_worker_dispatch_task(0, task_copy, task_len, worker_name,
+  bool success = go_frankenphp_worker_dispatch_task(0, task_copy, task_len, worker_name,
                                      worker_name_len);
-
-  RETURN_TRUE;
+  if (!success) {
+    pefree(task_copy, 1);
+	// throw
+	zend_throw_exception(spl_ce_RuntimeException,
+						 "No worker found to handle the task", 0);
+	RETURN_THROWS();
+  }
 }
 
 PHP_FUNCTION(headers_send) {

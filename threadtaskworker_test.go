@@ -26,7 +26,7 @@ func TestDispatchWorkToTaskWorker(t *testing.T) {
 	logger := slog.New(handler)
 
 	assert.NoError(t, Init(
-		WithWorkers("worker", "testdata/tasks/task-worker.php", 1, WithTaskWorkerMode(true)),
+		WithWorkers("worker", "./testdata/tasks/task-worker.php", 1, AsTaskWorker(true)),
 		WithNumThreads(3),
 		WithLogger(logger),
 	))

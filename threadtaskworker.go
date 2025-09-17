@@ -141,15 +141,7 @@ func (handler *taskWorkerThread) name() string {
 //export go_frankenphp_worker_handle_task
 func go_frankenphp_worker_handle_task(threadIndex C.uintptr_t) C.go_string {
 	thread := phpThreads[threadIndex]
-	handler, ok := thread.handler.(*taskWorkerThread)
-	if !ok {
-		panic("thread is not a task thread")
-	}
-
-	if !thread.state.is(stateReady) {
-		thread.state.set(stateReady)
-	}
-
+	handler, _ := thread.handler.(*taskWorkerThread)
 	thread.state.markAsWaiting(true)
 
 	select {
@@ -180,7 +172,7 @@ func go_frankenphp_finish_task(threadIndex C.uintptr_t) {
 func go_frankenphp_worker_dispatch_task(taskWorkerIndex C.uintptr_t, taskChar *C.char, taskLen C.size_t, name *C.char, nameLen C.size_t) C.bool {
 	var worker *taskWorker
 	if name != nil {
-		name := C.GoStringN(name, C.int(nameLen))
+		name := C.GoStringN(name, C.int(nameLen)) // TODO: avoid copy
 		for _, w := range taskWorkers {
 			if w.name == name {
 				worker = w
@@ -192,7 +184,7 @@ func go_frankenphp_worker_dispatch_task(taskWorkerIndex C.uintptr_t, taskChar *C
 	}
 
 	if worker == nil {
-		logger.Error("task worker does not exist", "name", C.GoStringN(name, C.int(nameLen)))
+		logger.Error("no task worker found to handle this task", "name", C.GoStringN(name, C.int(nameLen)))
 		return C.bool(false)
 	}
 
@@ -203,7 +195,7 @@ func go_frankenphp_worker_dispatch_task(taskWorkerIndex C.uintptr_t, taskChar *C
 	// dispatch immediately if available (best performance)
 	select {
 	case taskWorkers[taskWorkerIndex].taskChan <- task:
-		return C.bool(false)
+		return C.bool(true)
 	default:
 	}
 

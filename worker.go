@@ -25,8 +25,7 @@ type worker struct {
 }
 
 var (
-	workers          []*worker
-	watcherIsEnabled bool
+	workers []*worker
 )
 
 func initWorkers(opt []workerOpt) error {

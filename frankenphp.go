@@ -54,7 +54,8 @@ var (
 	ErrScriptExecution        = errors.New("error during PHP script execution")
 	ErrNotRunning             = errors.New("FrankenPHP is not running. For proper configuration visit: https://frankenphp.dev/docs/config/#caddyfile-config")
 
-	isRunning bool
+	isRunning        bool
+	watcherIsEnabled bool
 
 	loggerMu sync.RWMutex
 	logger   *slog.Logger
