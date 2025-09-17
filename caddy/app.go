@@ -34,7 +34,7 @@ type FrankenPHPApp struct {
 	// Workers configures the worker scripts to start.
 	Workers []workerConfig `json:"workers,omitempty"`
 	// TaskWorkers configures the task worker scripts to start.
-	TaskWorkers []taskWorkerConfig `json:"task_workers,omitempty"`
+	TaskWorkers []workerConfig `json:"task_workers,omitempty"`
 	// Overwrites the default php ini configuration
 	PhpIni map[string]string `json:"php_ini,omitempty"`
 	// The maximum amount of time a request may be stalled waiting for a thread
@@ -132,7 +132,8 @@ func (f *FrankenPHPApp) Start() error {
 	for _, tw := range f.TaskWorkers {
 		workerOpts := []frankenphp.WorkerOption{
 			frankenphp.WithWorkerEnv(tw.Env),
-			frankenphp.WithTaskWorkerMode(true),
+			frankenphp.WithWorkerWatchMode(tw.Watch),
+			frankenphp.WithTaskWorker(true),
 		}
 
 		opts = append(opts, frankenphp.WithWorkers(tw.Name, repl.ReplaceKnown(tw.FileName, ""), tw.Num, workerOpts...))
@@ -245,7 +246,7 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				}
 
 			case "task_worker":
-				twc, err := parseTaskWorkerConfig(d)
+				twc, err := parseWorkerConfig(d)
 				if err != nil {
 					return err
 				}

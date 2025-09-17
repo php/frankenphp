@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/dunglas/frankenphp/internal/fastabs"
-	"github.com/dunglas/frankenphp/internal/watcher"
 )
 
 // represents a worker script and can have many threads assigned to it
@@ -33,8 +32,6 @@ var (
 func initWorkers(opt []workerOpt) error {
 	workers = make([]*worker, 0, len(opt))
 	workersReady := sync.WaitGroup{}
-	directoriesToWatch := getDirectoriesToWatch(opt)
-	watcherIsEnabled = len(directoriesToWatch) > 0
 
 	for _, o := range opt {
 		w, err := newWorker(o)
@@ -57,15 +54,6 @@ func initWorkers(opt []workerOpt) error {
 	}
 
 	workersReady.Wait()
-
-	if !watcherIsEnabled {
-		return nil
-	}
-
-	watcherIsEnabled = true
-	if err := watcher.InitWatcher(directoriesToWatch, RestartWorkers, logger); err != nil {
-		return err
-	}
 
 	return nil
 }
@@ -138,33 +126,36 @@ func DrainWorkers() {
 func drainWorkerThreads() []*phpThread {
 	ready := sync.WaitGroup{}
 	drainedThreads := make([]*phpThread, 0)
+	threadsToDrain := make([]*phpThread, 0)
 	for _, worker := range workers {
 		worker.threadMutex.RLock()
-		ready.Add(len(worker.threads))
-		for _, thread := range worker.threads {
-			if !thread.state.requestSafeStateChange(stateRestarting) {
-				// no state change allowed == thread is shutting down
-				// we'll proceed to restart all other threads anyways
-				continue
-			}
-			close(thread.drainChan)
-			drainedThreads = append(drainedThreads, thread)
-			go func(thread *phpThread) {
-				thread.state.waitFor(stateYielding)
-				ready.Done()
-			}(thread)
-		}
+		threadsToDrain = append(threadsToDrain, worker.threads...)
 		worker.threadMutex.RUnlock()
+	}
+
+	for _, taskWorker := range taskWorkers {
+		taskWorker.threadMutex.RLock()
+		threadsToDrain = append(threadsToDrain, taskWorker.threads...)
+		taskWorker.threadMutex.RUnlock()
+	}
+
+	for _, thread := range threadsToDrain {
+		if !thread.state.requestSafeStateChange(stateRestarting) {
+			// no state change allowed == thread is shutting down
+			// we'll proceed to restart all other threads anyways
+			continue
+		}
+		ready.Add(1)
+		close(thread.drainChan)
+		drainedThreads = append(drainedThreads, thread)
+		go func(thread *phpThread) {
+			thread.state.waitFor(stateYielding)
+			ready.Done()
+		}(thread)
 	}
 	ready.Wait()
 
 	return drainedThreads
-}
-
-func drainWatcher() {
-	if watcherIsEnabled {
-		watcher.DrainWatcher()
-	}
 }
 
 // RestartWorkers attempts to restart all workers gracefully
@@ -179,14 +170,6 @@ func RestartWorkers() {
 		thread.drainChan = make(chan struct{})
 		thread.state.set(stateReady)
 	}
-}
-
-func getDirectoriesToWatch(workerOpts []workerOpt) []string {
-	directoriesToWatch := []string{}
-	for _, w := range workerOpts {
-		directoriesToWatch = append(directoriesToWatch, w.watch...)
-	}
-	return directoriesToWatch
 }
 
 func (worker *worker) attachThread(thread *phpThread) {

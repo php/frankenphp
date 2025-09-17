@@ -9,12 +9,12 @@ import (
 )
 
 type taskWorker struct {
-	threads  []*phpThread
-	mu       sync.Mutex
-	filename string
-	taskChan chan *dispatchedTask
-	name     string
-	num      int
+	threads     []*phpThread
+	threadMutex sync.RWMutex
+	filename    string
+	taskChan    chan *dispatchedTask
+	name        string
+	num         int
 }
 
 // representation of a thread that handles tasks directly assigned by go
@@ -82,9 +82,9 @@ func convertToTaskWorkerThread(thread *phpThread, tw *taskWorker) *taskWorkerThr
 	}
 	thread.setHandler(handler)
 
-	tw.mu.Lock()
+	tw.threadMutex.Lock()
 	tw.threads = append(tw.threads, thread)
-	tw.mu.Unlock()
+	tw.threadMutex.Unlock()
 
 	return handler
 }
@@ -102,6 +102,11 @@ func (handler *taskWorkerThread) beforeScriptExecution() string {
 	case stateReady:
 
 		return handler.setupWorkerScript()
+	case stateRestarting:
+		thread.state.set(stateYielding)
+		thread.state.waitFor(stateReady, stateShuttingDown)
+
+		return handler.beforeScriptExecution()
 	case stateShuttingDown:
 		// signal to stop
 		return ""

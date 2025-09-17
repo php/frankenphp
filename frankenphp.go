@@ -37,6 +37,8 @@ import (
 	"unsafe"
 	// debug on Linux
 	//_ "github.com/ianlancetaylor/cgosymbolizer"
+
+	"github.com/dunglas/frankenphp/internal/watcher"
 )
 
 type contextKeyStruct struct{}
@@ -278,12 +280,21 @@ func Init(options ...Option) error {
 		convertToRegularThread(getInactivePHPThread())
 	}
 
+	directoriesToWatch := getDirectoriesToWatch(append(opt.workers, opt.taskWorkers...))
+	watcherIsEnabled = len(directoriesToWatch) > 0 // watcherIsEnabled is important for initWorkers()
+
 	if err := initWorkers(opt.workers); err != nil {
 		return err
 	}
 
 	if err := initTaskWorkers(opt.taskWorkers); err != nil {
 		return err
+	}
+
+	if watcherIsEnabled {
+		if err := watcher.InitWatcher(directoriesToWatch, RestartWorkers, logger); err != nil {
+			return err
+		}
 	}
 
 	initAutoScaling(mainThread)
@@ -303,7 +314,9 @@ func Shutdown() {
 		return
 	}
 
-	drainWatcher()
+	if watcherIsEnabled {
+		watcher.DrainWatcher()
+	}
 	drainAutoScaling()
 	drainPHPThreads()
 
@@ -618,4 +631,12 @@ func timeoutChan(timeout time.Duration) <-chan time.Time {
 	}
 
 	return time.After(timeout)
+}
+
+func getDirectoriesToWatch(workerOpts []workerOpt) []string {
+	directoriesToWatch := []string{}
+	for _, w := range workerOpts {
+		directoriesToWatch = append(directoriesToWatch, w.watch...)
+	}
+	return directoriesToWatch
 }
