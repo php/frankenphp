@@ -26,7 +26,13 @@ func TestDispatchToTaskWorker(t *testing.T) {
 	logger := slog.New(handler)
 
 	assert.NoError(t, Init(
-		WithWorkers("worker", "./testdata/tasks/task-worker.php", 1, AsTaskWorker(true)),
+		WithWorkers(
+			"worker",
+			"./testdata/tasks/task-worker.php",
+			1,
+			AsTaskWorker(true),
+			WithWorkerEnv(PreparedEnv{"CUSTOM_VAR": "custom var"}),
+		),
 		WithNumThreads(3),
 		WithLogger(logger),
 	))
@@ -37,7 +43,8 @@ func TestDispatchToTaskWorker(t *testing.T) {
 	pendingTask.WaitForCompletion()
 
 	logOutput := buf.String()
-	assert.Contains(t, logOutput, "go task")
+	assert.Contains(t, logOutput, "go task", "should see the dispatched task in the logs")
+	assert.Contains(t, logOutput, "custom var", "should see the prepared env of the task worker")
 }
 
 func TestDispatchToTaskWorkerFromWorker(t *testing.T) {

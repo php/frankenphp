@@ -16,6 +16,7 @@ type taskWorker struct {
 	taskChan    chan *PendingTask
 	name        string
 	num         int
+	env         PreparedEnv
 }
 
 // representation of a thread that handles tasks directly assigned by go
@@ -69,6 +70,7 @@ func initTaskWorkers(opts []workerOpt) error {
 				taskChan: make(chan *PendingTask),
 				name:     opt.name,
 				num:      opt.num,
+				env:      opt.env,
 			},
 		)
 	}
@@ -131,7 +133,10 @@ func (handler *taskWorkerThread) beforeScriptExecution() string {
 }
 
 func (handler *taskWorkerThread) setupWorkerScript() string {
-	fc, err := newDummyContext(filepath.Base(handler.taskWorker.filename))
+	fc, err := newDummyContext(
+		filepath.Base(handler.taskWorker.filename),
+		WithRequestPreparedEnv(handler.taskWorker.env),
+	)
 
 	if err != nil {
 		panic(err)

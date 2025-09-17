@@ -2,6 +2,7 @@
 
 $handleFunc = function ($task) {
     echo "$task";
+    echo $_SERVER['CUSTOM_VAR'] ?? 'no custom var';
 };
 
 $maxRequests = 1000;
