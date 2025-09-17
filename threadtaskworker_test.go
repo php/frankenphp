@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -64,7 +63,9 @@ func TestDispatchToTaskWorkerFromWorker(t *testing.T) {
 
 	assertGetRequest(t, "http://example.com/testdata/tasks/task-dispatcher.php?count=4", "dispatched 4 tasks")
 
-	time.Sleep(time.Millisecond * 100) // ensure all tasks are finished
+    // dispatch another task to make sure the previous ones are done
+	pr, _ := DispatchTask("go task", "worker")
+	pr.WaitForCompletion()
 
 	logOutput := buf.String()
 	assert.Contains(t, logOutput, "task0")
