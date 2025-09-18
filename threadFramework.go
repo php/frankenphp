@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 )
 
-// EXPERIMENTAL: WorkerExtensionInterface allows you to register an external worker where instead of calling frankenphp handlers on
+// EXPERIMENTAL: WorkerExtension allows you to register an external worker where instead of calling frankenphp handlers on
 // frankenphp_handle_request(), the ProvideRequest method is called. You are responsible for providing a standard
 // http.Request that will be conferred to the underlying worker script.
 //
@@ -29,7 +29,7 @@ import (
 // Note: External workers receive the lowest priority when determining thread allocations. If GetMinThreads cannot be
 // allocated, then frankenphp will panic and provide this information to the user (who will need to allocate more
 // total threads). Don't be greedy.
-type WorkerExtensionInterface interface {
+type WorkerExtension interface {
 	Name() string
 	FileName() string
 	Env() PreparedEnv
@@ -52,11 +52,11 @@ type WorkerRequest[P any, R any] struct {
 	AfterFunc func(callbackReturn R)
 }
 
-var externalWorkers = make(map[string]WorkerExtensionInterface)
+var externalWorkers = make(map[string]WorkerExtension)
 var externalWorkerMutex sync.Mutex
 
 // EXPERIMENTAL
-func RegisterExternalWorker(worker WorkerExtensionInterface) {
+func RegisterExternalWorker(worker WorkerExtension) {
 	externalWorkerMutex.Lock()
 	defer externalWorkerMutex.Unlock()
 
@@ -64,7 +64,7 @@ func RegisterExternalWorker(worker WorkerExtensionInterface) {
 }
 
 // startExternalWorkerPipe creates a pipe from an external worker to the main worker.
-func startExternalWorkerPipe(w *worker, externalWorker WorkerExtensionInterface, thread *phpThread) {
+func startExternalWorkerPipe(w *worker, externalWorker WorkerExtension, thread *phpThread) {
 	for {
 		rq := externalWorker.ProvideRequest()
 
@@ -101,7 +101,7 @@ func startExternalWorkerPipe(w *worker, externalWorker WorkerExtensionInterface,
 	}
 }
 
-type WorkerExtension struct {
+type Worker struct {
 	ExtensionName  string
 	WorkerFileName string
 	WorkerEnv      PreparedEnv
@@ -111,35 +111,35 @@ type WorkerExtension struct {
 	DrainCount     atomic.Int32
 }
 
-func (w *WorkerExtension) Name() string {
+func (w *Worker) Name() string {
 	return w.ExtensionName
 }
 
-func (w *WorkerExtension) FileName() string {
+func (w *Worker) FileName() string {
 	return w.WorkerFileName
 }
 
-func (w *WorkerExtension) Env() PreparedEnv {
+func (w *Worker) Env() PreparedEnv {
 	return w.WorkerEnv
 }
 
-func (w *WorkerExtension) GetMinThreads() int {
+func (w *Worker) GetMinThreads() int {
 	return w.MinThreads
 }
 
-func (w *WorkerExtension) ThreadActivatedNotification(threadId int) {
+func (w *Worker) ThreadActivatedNotification(threadId int) {
 	w.ActivatedCount.Add(1)
 }
 
-func (w *WorkerExtension) ThreadDrainNotification(threadId int) {
+func (w *Worker) ThreadDrainNotification(threadId int) {
 	w.DrainCount.Add(1)
 }
 
-func (w *WorkerExtension) ThreadDeactivatedNotification(threadId int) {
+func (w *Worker) ThreadDeactivatedNotification(threadId int) {
 	w.DrainCount.Add(-1)
 	w.ActivatedCount.Add(-1)
 }
 
-func (w *WorkerExtension) ProvideRequest() *WorkerRequest[any, any] {
+func (w *Worker) ProvideRequest() *WorkerRequest[any, any] {
 	return <-w.RequestChan
 }

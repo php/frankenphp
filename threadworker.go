@@ -20,7 +20,7 @@ type workerThread struct {
 	dummyContext    *frankenPHPContext
 	workerContext   *frankenPHPContext
 	backoff         *exponentialBackoff
-	externalWorker  WorkerExtensionInterface
+	externalWorker  WorkerExtension
 	isBootingScript bool // true if the worker has not reached frankenphp_handle_request yet
 }
 

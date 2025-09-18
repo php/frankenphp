@@ -11,14 +11,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockWorkerExtension implements the WorkerExtensionInterface interface
+// mockWorkerExtension implements the WorkerExtension interface
 type mockWorkerExtension struct {
-	WorkerExtension
+	Worker
 }
 
 func newMockWorkerExtension(name, fileName string, minThreads int) *mockWorkerExtension {
 	return &mockWorkerExtension{
-		WorkerExtension: WorkerExtension{
+		Worker: Worker{
 			ExtensionName:  name,
 			WorkerFileName: fileName,
 			WorkerEnv:      nil,
