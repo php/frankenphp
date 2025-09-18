@@ -175,7 +175,7 @@ func (handler *taskWorkerThread) getRequestContext() *frankenPHPContext {
 }
 
 func (handler *taskWorkerThread) name() string {
-	return "Task PHP Thread"
+	return "Task Worker PHP Thread"
 }
 
 func (tw *taskWorker) detach(thread *phpThread) {
