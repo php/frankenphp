@@ -21,6 +21,7 @@ os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 # - MIMALLOC: Use mimalloc as the allocator if set to 1 (default: none)
 # - XCADDY_ARGS: Additional arguments to pass to xcaddy
 # - RELEASE: [maintainer only] Create a GitHub release if set to 1 (default: none)
+# - INCLUDE_CLI: embeds the PHP CLI in FrankenPHP and enables a command for extracting it (default: none)
 
 # - SPC_REL_TYPE: Release type to download (accept "source" and "binary", default: "source")
 # - SPC_OPT_BUILD_ARGS: Additional arguments to pass to spc build
@@ -54,6 +55,10 @@ fi
 # if we need debug symbols, disable strip
 if [ -n "${DEBUG_SYMBOLS}" ]; then
 	SPC_OPT_BUILD_ARGS="${SPC_OPT_BUILD_ARGS} --no-strip"
+fi
+# build php-cli for embedding it
+if [ -n "${INCLUDE_CLI}" ]; then
+	SPC_OPT_BUILD_ARGS="${SPC_OPT_BUILD_ARGS} --build-cli"
 fi
 # php version to build
 if [ -z "${PHP_VERSION}" ]; then
@@ -208,6 +213,10 @@ else
 	echo -n "${cache_key}" >../cache_key
 fi
 
+if [ "${INCLUDE_CLI}" ]; then
+	cp "${PWD}/buildroot/bin/php" ../../caddy/frankenphp/php-cli
+fi
+
 if ! type "go" >/dev/null 2>&1; then
 	echo "The \"go\" command must be installed."
 	exit 1
@@ -308,12 +317,17 @@ if [ "${SPC_LIBC}" = "musl" ]; then
 	muslStackSizeFix="-Wl,-z,stack-size=0x80000"
 fi
 
+INCLUDE_CLI_TAG=""
+if [ "${INCLUDE_CLI}" ]; then
+	INCLUDE_CLI_TAG="include_php_cli,"
+fi
+
 go env
 cd caddy/
 if [ -z "${SPC_LIBC}" ] || [ "${SPC_LIBC}" = "musl" ]; then
-	xcaddyGoBuildFlags="-buildmode=pie -tags cgo,netgo,osusergo,static_build,nobadger,nomysql,nopgx -ldflags \"-linkmode=external -extldflags '-static-pie ${muslStackSizeFix}' ${extraLdflags} -X 'github.com/caddyserver/caddy/v2.CustomVersion=FrankenPHP ${FRANKENPHP_VERSION} PHP ${LIBPHP_VERSION} Caddy'\""
+	xcaddyGoBuildFlags="-buildmode=pie -tags cgo,${INCLUDE_CLI_TAG}netgo,osusergo,static_build,nobadger,nomysql,nopgx -ldflags \"-linkmode=external -extldflags '-static-pie ${muslStackSizeFix}' ${extraLdflags} -X 'github.com/caddyserver/caddy/v2.CustomVersion=FrankenPHP ${FRANKENPHP_VERSION} PHP ${LIBPHP_VERSION} Caddy'\""
 elif [ "${SPC_LIBC}" = "glibc" ]; then
-	xcaddyGoBuildFlags="-buildmode=pie -tags cgo,netgo,osusergo,nobadger,nomysql,nopgx -ldflags \"-linkmode=external -extldflags '-pie' ${extraLdflags} -X 'github.com/caddyserver/caddy/v2.CustomVersion=FrankenPHP ${FRANKENPHP_VERSION} PHP ${LIBPHP_VERSION} Caddy'\""
+	xcaddyGoBuildFlags="-buildmode=pie -tags cgo,${INCLUDE_CLI_TAG}netgo,osusergo,nobadger,nomysql,nopgx -ldflags \"-linkmode=external -extldflags '-pie' ${extraLdflags} -X 'github.com/caddyserver/caddy/v2.CustomVersion=FrankenPHP ${FRANKENPHP_VERSION} PHP ${LIBPHP_VERSION} Caddy'\""
 fi
 
 # shellcheck disable=SC2086
