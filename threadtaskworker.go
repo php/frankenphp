@@ -30,7 +30,7 @@ type taskWorkerThread struct {
 	currentTask  *PendingTask
 }
 
-const maxQueueLen = 1000 // TODO: configurable?
+const maxQueueLen = 1500 // TODO: configurable or via memory limit or doesn't matter?
 var taskWorkers []*taskWorker
 
 // EXPERIMENTAL: a task dispatched to a task worker
