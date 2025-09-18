@@ -44,9 +44,9 @@ static const char *MODULES_TO_RELOAD[] = {"filter", "session", NULL};
 
 frankenphp_version frankenphp_get_version() {
   return (frankenphp_version){
-      PHP_MAJOR_VERSION, PHP_MINOR_VERSION, PHP_RELEASE_VERSION,
-      PHP_EXTRA_VERSION, PHP_VERSION,       PHP_VERSION_ID,
-  };
+      PHP_MAJOR_VERSION,           PHP_MINOR_VERSION, PHP_RELEASE_VERSION,
+      PHP_EXTRA_VERSION,           PHP_VERSION,       PHP_VERSION_ID,
+      TOSTRING(FRANKENPHP_VERSION)};
 }
 
 frankenphp_config frankenphp_get_config() {
@@ -1220,4 +1220,15 @@ void register_extensions(zend_module_entry *m, int len) {
   original_php_register_internal_extensions_func =
       php_register_internal_extensions_func;
   php_register_internal_extensions_func = register_internal_extensions;
+}
+
+/* EXPERIMENTAL */
+PHP_FUNCTION(frankenphp_info) {
+  if (zend_parse_parameters_none() == FAILURE) {
+    RETURN_THROWS();
+  }
+
+  zval *result = go_frankenphp_info(thread_index);
+
+  RETURN_ARR(Z_ARR_P(result));
 }
