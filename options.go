@@ -148,7 +148,7 @@ func WithMaxWaitTime(maxWaitTime time.Duration) Option {
 	}
 }
 
-// EXPERMIENTAL: AsTaskWorker configures the worker as a task worker instead.
+// EXPERIMENTAL: AsTaskWorker configures the worker as a task worker instead.
 func AsTaskWorker(isTaskWorker bool) WorkerOption {
 	return func(w *workerOpt) error {
 		w.isTaskWorker = isTaskWorker

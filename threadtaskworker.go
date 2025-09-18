@@ -127,6 +127,8 @@ func (handler *taskWorkerThread) beforeScriptExecution() string {
 
 	switch thread.state.get() {
 	case stateTransitionRequested:
+		handler.taskWorker.detach(thread)
+
 		return thread.transitionToNewHandler()
 	case stateBooting, stateTransitionComplete:
 		thread.state.set(stateReady)
@@ -141,6 +143,7 @@ func (handler *taskWorkerThread) beforeScriptExecution() string {
 
 		return handler.beforeScriptExecution()
 	case stateShuttingDown:
+		handler.taskWorker.detach(thread)
 		// signal to stop
 		return ""
 	}
@@ -173,6 +176,17 @@ func (handler *taskWorkerThread) getRequestContext() *frankenPHPContext {
 
 func (handler *taskWorkerThread) name() string {
 	return "Task PHP Thread"
+}
+
+func (tw *taskWorker) detach(thread *phpThread) {
+	tw.threadMutex.Lock()
+	for i, t := range tw.threads {
+		if t == thread {
+			tw.threads = append(tw.threads[:i], tw.threads[i+1:]...)
+			return
+		}
+	}
+	tw.threadMutex.Unlock()
 }
 
 func getTaskWorkerByName(name string) *taskWorker {

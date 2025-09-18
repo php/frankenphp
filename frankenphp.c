@@ -488,7 +488,10 @@ PHP_FUNCTION(frankenphp_handle_task) {
   }
 
 #ifdef ZEND_MAX_EXECUTION_TIMERS
-  /* Disable timeouts while waiting for a task to handle */
+  /*
+   * Disable timeouts while waiting for a task to handle
+   * TODO: should running forever be the default?
+   */
   zend_unset_timeout();
 #endif
 
@@ -502,9 +505,9 @@ PHP_FUNCTION(frankenphp_handle_task) {
   fci.size = sizeof fci;
   fci.retval = &retval;
 
-  /* ZVAL_STRINGL_FAST will consume the string without c */
+  /* ZVAL_STRINGL_FAST will consume the malloced char without copying it */
   zval taskzv;
-  ZVAL_STRINGL(&taskzv, task.data, task.len);
+  ZVAL_STRINGL_FAST(&taskzv, task.data, task.len);
   fci.params = &taskzv;
   fci.param_count = 1;
   if (zend_call_function(&fci, &fcc) == SUCCESS) {
@@ -545,8 +548,8 @@ PHP_FUNCTION(frankenphp_dispatch_task) {
   Z_PARAM_STRING(worker_name, worker_name_len);
   ZEND_PARSE_PARAMETERS_END();
 
-  // copy the zval to be used in the other thread safely
-  // right now we only support strings
+  /* copy the zval to be used in the other thread safely, right now only strings
+   * are supported */
   char *task_copy = malloc(task_len);
   memcpy(task_copy, task_string, task_len);
 
