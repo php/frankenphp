@@ -7,6 +7,7 @@ import (
 	"github.com/dunglas/frankenphp/internal/fastabs"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 )
 
 type taskWorker struct {
@@ -17,6 +18,7 @@ type taskWorker struct {
 	name        string
 	num         int
 	env         PreparedEnv
+	queueLen    atomic.Int32
 }
 
 // representation of a thread that handles tasks directly assigned by go
@@ -28,11 +30,13 @@ type taskWorkerThread struct {
 	currentTask  *PendingTask
 }
 
+const maxQueueLen = 1000 // TODO: configurable?
 var taskWorkers []*taskWorker
 
 // EXPERIMENTAL: a task dispatched to a task worker
 type PendingTask struct {
-	str  string
+	str  *C.char
+	len  C.size_t
 	done sync.RWMutex
 }
 
@@ -47,7 +51,7 @@ func DispatchTask(task string, workerName string) (*PendingTask, error) {
 		return nil, errors.New("no task worker found with name " + workerName)
 	}
 
-	pt := &PendingTask{str: task}
+	pt := &PendingTask{str: C.CString(task), len: C.size_t(len(task))}
 	pt.done.Lock()
 
 	tw.taskChan <- pt
@@ -91,6 +95,17 @@ func initTaskWorkers(opts []workerOpt) error {
 	ready.Wait()
 
 	return nil
+}
+
+func drainTaskWorkers() {
+	for _, tw := range taskWorkers {
+		select {
+		// make sure all tasks are done by re-queuing them until the channel is empty
+		case pt := <-tw.taskChan:
+			tw.taskChan <- pt
+		default:
+		}
+	}
 }
 
 func convertToTaskWorkerThread(thread *phpThread, tw *taskWorker) *taskWorkerThread {
@@ -143,12 +158,13 @@ func (handler *taskWorkerThread) setupWorkerScript() string {
 	}
 
 	handler.dummyContext = fc
+	clearSandboxedEnv(handler.thread)
 
 	return handler.taskWorker.filename
 }
 
 func (handler *taskWorkerThread) afterScriptExecution(int) {
-	// shutdown?
+	// potential place for cleanup after task execution
 }
 
 func (handler *taskWorkerThread) getRequestContext() *frankenPHPContext {
@@ -180,7 +196,7 @@ func go_frankenphp_worker_handle_task(threadIndex C.uintptr_t) C.go_string {
 	case task := <-handler.taskWorker.taskChan:
 		handler.currentTask = task
 		thread.state.markAsWaiting(false)
-		return C.go_string{len: C.size_t(len(task.str)), data: thread.pinString(task.str)}
+		return C.go_string{len: task.len, data: task.str}
 	case <-handler.thread.drainChan:
 		thread.state.markAsWaiting(false)
 		// send an empty task to drain the thread
@@ -201,12 +217,12 @@ func go_frankenphp_finish_task(threadIndex C.uintptr_t) {
 }
 
 //export go_frankenphp_worker_dispatch_task
-func go_frankenphp_worker_dispatch_task(taskWorkerIndex C.uintptr_t, taskChar *C.char, taskLen C.size_t, name *C.char, nameLen C.size_t) C.bool {
+func go_frankenphp_worker_dispatch_task(taskChar *C.char, taskLen C.size_t, name *C.char, nameLen C.size_t) C.bool {
 	var worker *taskWorker
-	if name != nil {
+	if name != nil && nameLen != 0 {
 		worker = getTaskWorkerByName(C.GoStringN(name, C.int(nameLen)))
-	} else {
-		worker = taskWorkers[taskWorkerIndex]
+	} else if len(taskWorkers) != 0 {
+		worker = taskWorkers[0]
 	}
 
 	if worker == nil {
@@ -215,19 +231,27 @@ func go_frankenphp_worker_dispatch_task(taskWorkerIndex C.uintptr_t, taskChar *C
 	}
 
 	// create a new task and lock it until the task is done
-	task := &PendingTask{str: C.GoStringN(taskChar, C.int(taskLen))}
+	task := &PendingTask{str: taskChar, len: taskLen}
 	task.done.Lock()
 
 	// dispatch immediately if available (best performance)
 	select {
-	case taskWorkers[taskWorkerIndex].taskChan <- task:
+	case worker.taskChan <- task:
 		return C.bool(true)
 	default:
 	}
 
+	// make sure the queue is not too full
+	if worker.queueLen.Load() >= maxQueueLen {
+		logger.Error("task worker queue is full, dropping task", "name", worker.name)
+		return C.bool(false)
+	}
+
 	// otherwise queue up in a non-blocking way
 	go func() {
-		taskWorkers[taskWorkerIndex].taskChan <- task
+		worker.queueLen.Add(1)
+		worker.taskChan <- task
+		worker.queueLen.Add(-1)
 	}()
 
 	return C.bool(true)

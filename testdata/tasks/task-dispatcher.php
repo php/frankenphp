@@ -3,9 +3,10 @@
 require_once __DIR__.'/../_executor.php';
 
 return function () {
-    $count = $_GET['count'] ?? 0;
-    for ($i = 0; $i < $count; $i++) {
-        frankenphp_dispatch_task("task$i");
+    $taskCount = $_GET['count'] ?? 0;
+    $workerName = $_GET['worker'] ?? null;
+    for ($i = 0; $i < $taskCount; $i++) {
+        frankenphp_dispatch_task("task$i", $workerName);
     }
-    echo "dispatched $count tasks\n";
+    echo "dispatched $taskCount tasks\n";
 };

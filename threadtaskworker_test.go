@@ -36,6 +36,7 @@ func TestDispatchToTaskWorker(t *testing.T) {
 		WithLogger(logger),
 	))
 	defer Shutdown()
+	assert.Len(t, taskWorkers, 1)
 
 	pendingTask, err := DispatchTask("go task", "worker")
 	assert.NoError(t, err)
@@ -54,22 +55,38 @@ func TestDispatchToTaskWorkerFromWorker(t *testing.T) {
 	assert.NoError(t, Init(
 		WithWorkers("worker", "./testdata/tasks/task-worker.php", 1, AsTaskWorker(true)),
 		WithWorkers("worker", "./testdata/tasks/task-dispatcher.php", 1),
-		WithNumThreads(4),
+		WithNumThreads(3),
 		WithLogger(logger),
 	))
-	defer Shutdown()
-
-	assert.Len(t, taskWorkers, 1)
 
 	assertGetRequest(t, "http://example.com/testdata/tasks/task-dispatcher.php?count=4", "dispatched 4 tasks")
 
-    // dispatch another task to make sure the previous ones are done
-	pr, _ := DispatchTask("go task", "worker")
-	pr.WaitForCompletion()
+	// shutdown to ensure all logs are flushed
+	Shutdown()
 
+	// task output appears in logs at info level
 	logOutput := buf.String()
 	assert.Contains(t, logOutput, "task0")
 	assert.Contains(t, logOutput, "task1")
 	assert.Contains(t, logOutput, "task2")
 	assert.Contains(t, logOutput, "task3")
+}
+
+func TestDispatchToMultipleWorkers(t *testing.T) {
+	var buf bytes.Buffer
+	handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	logger := slog.New(handler)
+
+	assert.NoError(t, Init(
+		WithWorkers("worker1", "./testdata/tasks/task-worker.php", 1, AsTaskWorker(true)),
+		WithWorkers("worker2", "./testdata/tasks/task-worker.php", 1, AsTaskWorker(true)),
+		WithNumThreads(4),
+		WithLogger(logger),
+	))
+	defer Shutdown()
+
+	script := "http://example.com/testdata/tasks/task-dispatcher.php"
+	assertGetRequest(t, script+"?count=1&worker=worker1", "dispatched 1 tasks")
+	assertGetRequest(t, script+"?count=1&worker=worker2", "dispatched 1 tasks")
+	assertGetRequest(t, script+"?count=1&worker=worker3", "No worker found to handle the task") // fail
 }

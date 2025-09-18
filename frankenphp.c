@@ -526,7 +526,8 @@ PHP_FUNCTION(frankenphp_handle_task) {
 
   go_frankenphp_finish_task(thread_index);
 
-  /* free the task zval */
+  /* free the task zval (right now always a string) */
+  free(task.data);
   zval_ptr_dtor(&taskzv);
 
   RETURN_TRUE;
@@ -544,9 +545,15 @@ PHP_FUNCTION(frankenphp_dispatch_task) {
   Z_PARAM_STRING(worker_name, worker_name_len);
   ZEND_PARSE_PARAMETERS_END();
 
+  // copy the zval to be used in the other thread safely
+  // right now we only support strings
+  char *task_copy = malloc(task_len);
+  memcpy(task_copy, task_string, task_len);
+
   bool success = go_frankenphp_worker_dispatch_task(
-      0, task_string, task_len, worker_name, worker_name_len);
+      task_copy, task_len, worker_name, worker_name_len);
   if (!success) {
+    free(task_copy);
     zend_throw_exception(spl_ce_RuntimeException,
                          "No worker found to handle the task", 0);
     RETURN_THROWS();
