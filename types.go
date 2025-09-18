@@ -313,3 +313,13 @@ func castZval(zval *C.zval, expectedType C.uint8_t) unsafe.Pointer {
 		return nil
 	}
 }
+
+func zvalPtrDtor(p unsafe.Pointer) {
+	zv := (*C.zval)(p)
+	C.zval_ptr_dtor(zv)
+}
+
+func zendStringRelease(p unsafe.Pointer) {
+	zs := (*C.zend_string)(p)
+	C.zend_string_release(zs)
+}

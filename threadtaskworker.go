@@ -35,9 +35,10 @@ var taskWorkers []*taskWorker
 
 // EXPERIMENTAL: a task dispatched to a task worker
 type PendingTask struct {
-	str  *C.char
-	len  C.size_t
-	done sync.RWMutex
+	str      *C.char
+	len      C.size_t
+	done     sync.RWMutex
+	callback func()
 }
 
 func (t *PendingTask) WaitForCompletion() {
@@ -52,6 +53,21 @@ func DispatchTask(task string, workerName string) (*PendingTask, error) {
 	}
 
 	pt := &PendingTask{str: C.CString(task), len: C.size_t(len(task))}
+	pt.done.Lock()
+
+	tw.taskChan <- pt
+
+	return pt, nil
+}
+
+// EXPERIMENTAL: ExecuteTask executes the callback func() directly on a task worker thread
+func ExecuteTask(callback func(), workerName string) (*PendingTask, error) {
+	tw := getTaskWorkerByName(workerName)
+	if tw == nil {
+		return nil, errors.New("no task worker found with name " + workerName)
+	}
+
+	pt := &PendingTask{callback: callback}
 	pt.done.Lock()
 
 	tw.taskChan <- pt
@@ -167,7 +183,7 @@ func (handler *taskWorkerThread) setupWorkerScript() string {
 }
 
 func (handler *taskWorkerThread) afterScriptExecution(int) {
-	// potential place for cleanup after task execution
+	// restart the script
 }
 
 func (handler *taskWorkerThread) getRequestContext() *frankenPHPContext {
@@ -210,6 +226,17 @@ func go_frankenphp_worker_handle_task(threadIndex C.uintptr_t) C.go_string {
 	case task := <-handler.taskWorker.taskChan:
 		handler.currentTask = task
 		thread.state.markAsWaiting(false)
+
+		// if the task has a callback, handle it directly
+		// callbacks may call into C (C -> GO -> C)
+		if task.callback != nil {
+			task.callback()
+			go_frankenphp_finish_task(threadIndex)
+
+			return go_frankenphp_worker_handle_task(threadIndex)
+		}
+
+		// if the task has no callback, forward it to PHP
 		return C.go_string{len: task.len, data: task.str}
 	case <-handler.thread.drainChan:
 		thread.state.markAsWaiting(false)
