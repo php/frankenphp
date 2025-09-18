@@ -245,7 +245,8 @@ func (cp *classParser) parseMethods(filename string) (methods []phpClassMethod, 
 			}
 
 			if err := validator.validateScalarTypes(phpFunc); err != nil {
-				fmt.Printf("Warning: Method \"%s::%s\" uses unsupported types: %v\n", className, method.Name, err)
+				fmt.Printf(`Warning: Method "%s::%s" uses unsupported types: %v
+`, className, method.Name, err)
 
 				continue
 			}
