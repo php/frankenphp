@@ -85,10 +85,10 @@ func initTaskWorkers(opts []workerOpt) error {
 		for i := 0; i < tw.num; i++ {
 			thread := getInactivePHPThread()
 			convertToTaskWorkerThread(thread, tw)
-			go func() {
+			go func(thread *phpThread) {
 				thread.state.waitFor(stateReady)
 				ready.Done()
-			}()
+			}(thread)
 		}
 	}
 
@@ -115,10 +115,6 @@ func convertToTaskWorkerThread(thread *phpThread, tw *taskWorker) *taskWorkerThr
 	}
 	thread.setHandler(handler)
 
-	tw.threadMutex.Lock()
-	tw.threads = append(tw.threads, thread)
-	tw.threadMutex.Unlock()
-
 	return handler
 }
 
@@ -131,6 +127,10 @@ func (handler *taskWorkerThread) beforeScriptExecution() string {
 
 		return thread.transitionToNewHandler()
 	case stateBooting, stateTransitionComplete:
+		tw := handler.taskWorker
+		tw.threadMutex.Lock()
+		tw.threads = append(tw.threads, thread)
+		tw.threadMutex.Unlock()
 		thread.state.set(stateReady)
 
 		return handler.setupWorkerScript()
