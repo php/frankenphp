@@ -5,9 +5,10 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
+	"sync/atomic"
 )
 
-// EXPERIMENTAL: WorkerExtension allows you to register an external worker where instead of calling frankenphp handlers on
+// EXPERIMENTAL: WorkerExtensionInterface allows you to register an external worker where instead of calling frankenphp handlers on
 // frankenphp_handle_request(), the ProvideRequest method is called. You are responsible for providing a standard
 // http.Request that will be conferred to the underlying worker script.
 //
@@ -28,7 +29,7 @@ import (
 // Note: External workers receive the lowest priority when determining thread allocations. If GetMinThreads cannot be
 // allocated, then frankenphp will panic and provide this information to the user (who will need to allocate more
 // total threads). Don't be greedy.
-type WorkerExtension interface {
+type WorkerExtensionInterface interface {
 	Name() string
 	FileName() string
 	Env() PreparedEnv
@@ -51,11 +52,11 @@ type WorkerRequest[P any, R any] struct {
 	AfterFunc func(callbackReturn R)
 }
 
-var externalWorkers = make(map[string]WorkerExtension)
+var externalWorkers = make(map[string]WorkerExtensionInterface)
 var externalWorkerMutex sync.Mutex
 
 // EXPERIMENTAL
-func RegisterExternalWorker(worker WorkerExtension) {
+func RegisterExternalWorker(worker WorkerExtensionInterface) {
 	externalWorkerMutex.Lock()
 	defer externalWorkerMutex.Unlock()
 
@@ -63,7 +64,7 @@ func RegisterExternalWorker(worker WorkerExtension) {
 }
 
 // startExternalWorkerPipe creates a pipe from an external worker to the main worker.
-func startExternalWorkerPipe(w *worker, externalWorker WorkerExtension, thread *phpThread) {
+func startExternalWorkerPipe(w *worker, externalWorker WorkerExtensionInterface, thread *phpThread) {
 	for {
 		rq := externalWorker.ProvideRequest()
 
@@ -98,4 +99,47 @@ func startExternalWorkerPipe(w *worker, externalWorker WorkerExtension, thread *
 			}
 		}
 	}
+}
+
+type WorkerExtension struct {
+	ExtensionName  string
+	WorkerFileName string
+	WorkerEnv      PreparedEnv
+	MinThreads     int
+	RequestChan    chan *WorkerRequest[any, any]
+	ActivatedCount atomic.Int32
+	DrainCount     atomic.Int32
+}
+
+func (w *WorkerExtension) Name() string {
+	return w.ExtensionName
+}
+
+func (w *WorkerExtension) FileName() string {
+	return w.WorkerFileName
+}
+
+func (w *WorkerExtension) Env() PreparedEnv {
+	return w.WorkerEnv
+}
+
+func (w *WorkerExtension) GetMinThreads() int {
+	return w.MinThreads
+}
+
+func (w *WorkerExtension) ThreadActivatedNotification(threadId int) {
+	w.ActivatedCount.Add(1)
+}
+
+func (w *WorkerExtension) ThreadDrainNotification(threadId int) {
+	w.DrainCount.Add(1)
+}
+
+func (w *WorkerExtension) ThreadDeactivatedNotification(threadId int) {
+	w.DrainCount.Add(-1)
+	w.ActivatedCount.Add(-1)
+}
+
+func (w *WorkerExtension) ProvideRequest() *WorkerRequest[any, any] {
+	return <-w.RequestChan
 }
