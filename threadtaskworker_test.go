@@ -36,8 +36,11 @@ func TestDispatchToTaskWorker(t *testing.T) {
 		WithNumThreads(3),
 		WithLogger(logger),
 	))
-	defer Shutdown()
 	assert.Len(t, taskWorkers, 1)
+	defer func() {
+		Shutdown()
+		assert.Len(t, taskWorkers[0].threads, 0, "no task-worker threads should remain after shutdown")
+	}()
 
 	pendingTask, err := DispatchTask("go task", "worker")
 	assert.NoError(t, err)

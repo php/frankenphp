@@ -61,6 +61,7 @@ func DispatchTask(task string, workerName string) (*PendingTask, error) {
 }
 
 // EXPERIMENTAL: ExecuteTask executes the callback func() directly on a task worker thread
+// this gives the callback access to PHP's memory management
 func ExecuteTask(callback func(), workerName string) (*PendingTask, error) {
 	tw := getTaskWorkerByName(workerName)
 	if tw == nil {
@@ -77,26 +78,24 @@ func ExecuteTask(callback func(), workerName string) (*PendingTask, error) {
 
 func initTaskWorkers(opts []workerOpt) error {
 	taskWorkers = make([]*taskWorker, 0, len(opts))
+	ready := sync.WaitGroup{}
 	for _, opt := range opts {
 		filename, err := fastabs.FastAbs(opt.fileName)
 		if err != nil {
 			return err
 		}
 
-		taskWorkers = append(taskWorkers,
-			&taskWorker{
-				threads:  make([]*phpThread, 0, opt.num),
-				filename: filename,
-				taskChan: make(chan *PendingTask),
-				name:     opt.name,
-				num:      opt.num,
-				env:      opt.env,
-			},
-		)
-	}
+		tw := &taskWorker{
+			threads:  make([]*phpThread, 0, opt.num),
+			filename: filename,
+			taskChan: make(chan *PendingTask),
+			name:     opt.name,
+			num:      opt.num,
+			env:      opt.env,
+		}
+		taskWorkers = append(taskWorkers, tw)
 
-	ready := sync.WaitGroup{}
-	for _, tw := range taskWorkers {
+		// start the actual PHP threads
 		ready.Add(tw.num)
 		for i := 0; i < tw.num; i++ {
 			thread := getInactivePHPThread()
@@ -107,7 +106,6 @@ func initTaskWorkers(opts []workerOpt) error {
 			}(thread)
 		}
 	}
-
 	ready.Wait()
 
 	return nil

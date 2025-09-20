@@ -188,14 +188,6 @@ func (worker *worker) detachThread(thread *phpThread) {
 	worker.threadMutex.Unlock()
 }
 
-func (worker *worker) countThreads() int {
-	worker.threadMutex.RLock()
-	l := len(worker.threads)
-	worker.threadMutex.RUnlock()
-
-	return l
-}
-
 func (worker *worker) handleRequest(fc *frankenPHPContext) {
 	metrics.StartWorkerRequest(worker.name)
 
