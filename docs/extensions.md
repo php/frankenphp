@@ -72,17 +72,18 @@ func repeat_this(s *C.zend_string, count int64, reverse bool) unsafe.Pointer {
 
 There are two important things to note here:
 
-* A directive comment `//export_php:function` defines the function signature in PHP. This is how the generator knows how to generate the PHP function with the right parameters and return type;
-* The function must return an `unsafe.Pointer`. FrankenPHP provides an API to help you with type juggling between C and Go.
+- A directive comment `//export_php:function` defines the function signature in PHP. This is how the generator knows how to generate the PHP function with the right parameters and return type;
+- The function must return an `unsafe.Pointer`. FrankenPHP provides an API to help you with type juggling between C and Go.
 
 While the first point speaks for itself, the second may be harder to apprehend. Let's take a deeper dive to type juggling in the next section.
 
 ### Type Juggling
 
-While some variable types have the same memory representation between C/PHP and Go, some types require more logic to be directly used. This is maybe the hardest part when it comes to writing extensions because it requires understanding internals of the Zend Engine and how variables are stored internally in PHP. This table summarizes what you need to know:
+While some variable types have the same memory representation between C/PHP and Go, some types require more logic to be directly used. This is maybe the hardest part when it comes to writing extensions because it requires understanding internals of the Zend Engine and how variables are stored internally in PHP.
+This table summarizes what you need to know:
 
 | PHP type           | Go type                       | Direct conversion | C to Go helper                    | Go to C helper                     | Class Methods Support |
-|--------------------|-------------------------------|-------------------|-----------------------------------|------------------------------------|-----------------------|
+| ------------------ | ----------------------------- | ----------------- | --------------------------------- | ---------------------------------- | --------------------- |
 | `int`              | `int64`                       | ✅                | -                                 | -                                  | ✅                    |
 | `?int`             | `*int64`                      | ✅                | -                                 | -                                  | ✅                    |
 | `float`            | `float64`                     | ✅                | -                                 | -                                  | ✅                    |
@@ -93,6 +94,7 @@ While some variable types have the same memory representation between C/PHP and 
 | `array`            | `frankenphp.AssociativeArray` | ❌                | `frankenphp.GoAssociativeArray()` | `frankenphp.PHPAssociativeArray()` | ✅                    |
 | `array`            | `map[string]any`              | ❌                | `frankenphp.GoMap()`              | `frankenphp.PHPMap()`              | ✅                    |
 | `array`            | `[]any`                       | ❌                | `frankenphp.GoPackedArray()`      | `frankenphp.PHPPackedArray()`      | ✅                    |
+| `mixed`            | `any`                         | ❌                | `GoValue()`                       | `PHPValue()`                       | ❌                    |
 | `object`           | `struct`                      | ❌                | _Not yet implemented_             | _Not yet implemented_              | ❌                    |
 
 > [!NOTE]
@@ -170,20 +172,20 @@ func process_data_packed(arr *C.zval) unsafe.Pointer {
 
 **Key features of array conversion:**
 
-* **Ordered key-value pairs** - Option to keep the order of the associative array
-* **Optimized for multiple cases** - Option to ditch the order for better performance or convert straight to a slice
-* **Automatic list detection** - When converting to PHP, automatically detects if array should be a packed list or hashmap
-* **Nested Arrays** - Arrays can be nested and will convert all support types automatically (`int64`,`float64`,`string`,`bool`,`nil`,`AssociativeArray`,`map[string]any`,`[]any`)
-* **Objects are not supported** - Currently, only scalar types and arrays can be used as values. Providing an object will result in a `null` value in the PHP array.
+- **Ordered key-value pairs** - Option to keep the order of the associative array
+- **Optimized for multiple cases** - Option to ditch the order for better performance or convert straight to a slice
+- **Automatic list detection** - When converting to PHP, automatically detects if array should be a packed list or hashmap
+- **Nested Arrays** - Arrays can be nested and will convert all support types automatically (`int64`,`float64`,`string`,`bool`,`nil`,`AssociativeArray`,`map[string]any`,`[]any`)
+- **Objects are not supported** - Currently, only scalar types and arrays can be used as values. Providing an object will result in a `null` value in the PHP array.
 
 ##### Available methods: Packed and Associative
 
-* `frankenphp.PHPAssociativeArray(arr frankenphp.AssociativeArray) unsafe.Pointer` - Convert to an ordered PHP array with key-value pairs
-* `frankenphp.PHPMap(arr map[string]any) unsafe.Pointer` - Convert a map to an unordered PHP array with key-value pairs
-* `frankenphp.PHPPackedArray(slice []any) unsafe.Pointer` - Convert a slice to a PHP packed array with indexed values only
-* `frankenphp.GoAssociativeArray(arr unsafe.Pointer, ordered bool) frankenphp.AssociativeArray` - Convert a PHP array to an ordered Go `AssociativeArray` (map with order)
-* `frankenphp.GoMap(arr unsafe.Pointer) map[string]any` - Convert a PHP array to an unordered Go map
-* `frankenphp.GoPackedArray(arr unsafe.Pointer) []any` - Convert a PHP array to a Go slice
+- `frankenphp.PHPAssociativeArray(arr frankenphp.AssociativeArray) unsafe.Pointer` - Convert to an ordered PHP array with key-value pairs
+- `frankenphp.PHPMap(arr map[string]any) unsafe.Pointer` - Convert a map to an unordered PHP array with key-value pairs
+- `frankenphp.PHPPackedArray(slice []any) unsafe.Pointer` - Convert a slice to a PHP packed array with indexed values only
+- `frankenphp.GoAssociativeArray(arr unsafe.Pointer, ordered bool) frankenphp.AssociativeArray` - Convert a PHP array to an ordered Go `AssociativeArray` (map with order)
+- `frankenphp.GoMap(arr unsafe.Pointer) map[string]any` - Convert a PHP array to an unordered Go map
+- `frankenphp.GoPackedArray(arr unsafe.Pointer) []any` - Convert a PHP array to a Go slice
 
 ### Declaring a Native PHP Class
 
@@ -201,11 +203,11 @@ type UserStruct struct {
 
 **Opaque classes** are classes where the internal structure (properties) is hidden from PHP code. This means:
 
-* **No direct property access**: You cannot read or write properties directly from PHP (`$user->name` won't work)
-* **Method-only interface** - All interactions must go through methods you define
-* **Better encapsulation** - Internal data structure is completely controlled by Go code
-* **Type safety** - No risk of PHP code corrupting internal state with wrong types
-* **Cleaner API** - Forces to design a proper public interface
+- **No direct property access**: You cannot read or write properties directly from PHP (`$user->name` won't work)
+- **Method-only interface** - All interactions must go through methods you define
+- **Better encapsulation** - Internal data structure is completely controlled by Go code
+- **Type safety** - No risk of PHP code corrupting internal state with wrong types
+- **Cleaner API** - Forces to design a proper public interface
 
 This approach provides better encapsulation and prevents PHP code from accidentally corrupting the internal state of your Go objects. All interactions with the object must go through the methods you explicitly define.
 
@@ -252,12 +254,12 @@ func (us *UserStruct) UpdateInfo(name *C.zend_string, age *int64, active *bool) 
     if name != nil {
         us.Name = frankenphp.GoString(unsafe.Pointer(name))
     }
-    
+
     // Check if age was provided (not null)
     if age != nil {
         us.Age = int(*age)
     }
-    
+
     // Check if active was provided (not null)
     if active != nil {
         us.Active = *active
@@ -267,10 +269,10 @@ func (us *UserStruct) UpdateInfo(name *C.zend_string, age *int64, active *bool) 
 
 **Key points about nullable parameters:**
 
-* **Nullable primitive types** (`?int`, `?float`, `?bool`) become pointers (`*int64`, `*float64`, `*bool`) in Go
-* **Nullable strings** (`?string`) remain as `*C.zend_string` but can be `nil`
-* **Check for `nil`** before dereferencing pointer values
-* **PHP `null` becomes Go `nil`** - when PHP passes `null`, your Go function receives a `nil` pointer
+- **Nullable primitive types** (`?int`, `?float`, `?bool`) become pointers (`*int64`, `*float64`, `*bool`) in Go
+- **Nullable strings** (`?string`) remain as `*C.zend_string` but can be `nil`
+- **Check for `nil`** before dereferencing pointer values
+- **PHP `null` becomes Go `nil`** - when PHP passes `null`, your Go function receives a `nil` pointer
 
 > [!WARNING]
 > Currently, class methods have the following limitations. **Objects are not supported** as parameter types or return types. **Arrays are fully supported** for both parameters and return types. Supported types: `string`, `int`, `float`, `bool`, `array`, and `void` (for return type). **Nullable parameter types are fully supported** for all scalar types (`?string`, `?int`, `?float`, `?bool`).
@@ -389,7 +391,7 @@ func repeat_this(s *C.zend_string, count int64, mode int) unsafe.Pointer {
     str := frankenphp.GoString(unsafe.Pointer(s))
 
     result := strings.Repeat(str, int(count))
-    if mode == STR_REVERSE { 
+    if mode == STR_REVERSE {
         // reverse the string
     }
 
@@ -408,14 +410,14 @@ type StringProcessorStruct struct {
 //export_php:method StringProcessor::process(string $input, int $mode): string
 func (sp *StringProcessorStruct) Process(input *C.zend_string, mode int64) unsafe.Pointer {
     str := frankenphp.GoString(unsafe.Pointer(input))
-    
+
     switch mode {
     case MODE_LOWERCASE:
         str = strings.ToLower(str)
     case MODE_UPPERCASE:
         str = strings.ToUpper(str)
     }
-    
+
     return frankenphp.PHPString(str, false)
 }
 ```
@@ -470,17 +472,17 @@ echo My\Extension\STATUS_ACTIVE; // 1
 
 #### Important Notes
 
-* Only **one** namespace directive is allowed per file. If multiple namespace directives are found, the generator will return an error.
-* The namespace applies to **all** exported symbols in the file: functions, classes, methods, and constants.
-* Namespace names follow PHP namespace conventions using backslashes (`\`) as separators.
-* If no namespace is declared, symbols are exported to the global namespace as usual.
+- Only **one** namespace directive is allowed per file. If multiple namespace directives are found, the generator will return an error.
+- The namespace applies to **all** exported symbols in the file: functions, classes, methods, and constants.
+- Namespace names follow PHP namespace conventions using backslashes (`\`) as separators.
+- If no namespace is declared, symbols are exported to the global namespace as usual.
 
 ### Generating the Extension
 
 This is where the magic happens, and your extension can now be generated. You can run the generator with the following command:
 
 ```console
-GEN_STUB_SCRIPT=php-src/build/gen_stub.php frankenphp extension-init my_extension.go 
+GEN_STUB_SCRIPT=php-src/build/gen_stub.php frankenphp extension-init my_extension.go
 ```
 
 > [!NOTE]
@@ -600,9 +602,9 @@ extern zend_module_entry ext_module_entry;
 
 Next, create a file named `extension.c` that will perform the following steps:
 
-* Include PHP headers;
-* Declare our new native PHP function `go_print()`;
-* Declare the extension metadata.
+- Include PHP headers;
+- Declare our new native PHP function `go_print()`;
+- Declare the extension metadata.
 
 Let's start by including the required headers:
 
@@ -734,9 +736,9 @@ import "strings"
 //export go_upper
 func go_upper(s *C.zend_string) *C.zend_string {
     str := frankenphp.GoString(unsafe.Pointer(s))
-    
+
     upper := strings.ToUpper(str)
-    
+
     return (*C.zend_string)(frankenphp.PHPString(upper, false))
 }
 ```

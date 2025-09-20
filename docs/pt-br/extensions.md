@@ -132,19 +132,20 @@ variáveis são armazenadas internamente no PHP.
 Esta tabela resume o que você precisa saber:
 
 | Tipo PHP           | Tipo Go                       | Conversão direta | Auxiliar de C para Go             | Auxiliar de Go para C              | Suporte a métodos de classe |
-|--------------------|-------------------------------|------------------|-----------------------------------|------------------------------------|-----------------------------|
-| `int`              | `int64`                       | ✅                | -                                 | -                                  | ✅                           |
-| `?int`             | `*int64`                      | ✅                | -                                 | -                                  | ✅                           |
-| `float`            | `float64`                     | ✅                | -                                 | -                                  | ✅                           |
-| `?float`           | `*float64`                    | ✅                | -                                 | -                                  | ✅                           |
-| `bool`             | `bool`                        | ✅                | -                                 | -                                  | ✅                           |
-| `?bool`            | `*bool`                       | ✅                | -                                 | -                                  | ✅                           |
-| `?bool`            | `*bool`                       | ✅                | -                                 | -                                  | ✅                           |
-| `string`/`?string` | `*C.zend_string`              | ❌                | `frankenphp.GoString()`           | `frankenphp.PHPString()`           | ✅                           |
-| `array`            | `frankenphp.AssociativeArray` | ❌                | `frankenphp.GoAssociativeArray()` | `frankenphp.PHPAssociativeArray()` | ✅                           |
-| `array`            | `map[string]any`              | ❌                | `frankenphp.GoMap()`              | `frankenphp.PHPMap()`              | ✅                           |
-| `array`            | `[]any`                       | ❌                | `frankenphp.GoPackedArray()`      | `frankenphp.PHPPackedArray()`      | ✅                           |
-| `object`           | `struct`                      | ❌                | _Ainda não implementado_          | _Ainda não implementado_           | ❌                           |
+| ------------------ | ----------------------------- | ---------------- | --------------------------------- | ---------------------------------- | --------------------------- |
+| `int`              | `int64`                       | ✅               | -                                 | -                                  | ✅                          |
+| `?int`             | `*int64`                      | ✅               | -                                 | -                                  | ✅                          |
+| `float`            | `float64`                     | ✅               | -                                 | -                                  | ✅                          |
+| `?float`           | `*float64`                    | ✅               | -                                 | -                                  | ✅                          |
+| `bool`             | `bool`                        | ✅               | -                                 | -                                  | ✅                          |
+| `?bool`            | `*bool`                       | ✅               | -                                 | -                                  | ✅                          |
+| `?bool`            | `*bool`                       | ✅               | -                                 | -                                  | ✅                          |
+| `string`/`?string` | `*C.zend_string`              | ❌               | `frankenphp.GoString()`           | `frankenphp.PHPString()`           | ✅                          |
+| `array`            | `frankenphp.AssociativeArray` | ❌               | `frankenphp.GoAssociativeArray()` | `frankenphp.PHPAssociativeArray()` | ✅                          |
+| `array`            | `map[string]any`              | ❌               | `frankenphp.GoMap()`              | `frankenphp.PHPMap()`              | ✅                          |
+| `array`            | `[]any`                       | ❌               | `frankenphp.GoPackedArray()`      | `frankenphp.PHPPackedArray()`      | ✅                          |
+| `mixed`            | `any`                         | ❌               | `GoValue()`                       | `PHPValue()`                       | ❌                          |
+| `object`           | `struct`                      | ❌               | _Ainda não implementado_          | _Ainda não implementado_           | ❌                          |
 
 > [!NOTE]
 > Esta tabela ainda não é exaustiva e será completada à medida que a API de

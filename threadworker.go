@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"time"
+	"unsafe"
 )
 
 // representation of a thread assigned to a worker script
@@ -19,10 +20,13 @@ type workerThread struct {
 	dummyContext    *frankenPHPContext
 	workerContext   *frankenPHPContext
 	backoff         *exponentialBackoff
+	externalWorker  WorkerExtension
 	isBootingScript bool // true if the worker has not reached frankenphp_handle_request yet
 }
 
 func convertToWorkerThread(thread *phpThread, worker *worker) {
+	externalWorker := externalWorkers[worker.name]
+
 	thread.setHandler(&workerThread{
 		state:  thread.state,
 		thread: thread,
@@ -32,6 +36,7 @@ func convertToWorkerThread(thread *phpThread, worker *worker) {
 			minBackoff:             100 * time.Millisecond,
 			maxConsecutiveFailures: worker.maxConsecutiveFailures,
 		},
+		externalWorker: externalWorker,
 	})
 	worker.attachThread(thread)
 }
@@ -40,16 +45,28 @@ func convertToWorkerThread(thread *phpThread, worker *worker) {
 func (handler *workerThread) beforeScriptExecution() string {
 	switch handler.state.get() {
 	case stateTransitionRequested:
+		if handler.externalWorker != nil {
+			handler.externalWorker.ThreadDeactivatedNotification(handler.thread.threadIndex)
+		}
 		handler.worker.detachThread(handler.thread)
 		return handler.thread.transitionToNewHandler()
 	case stateRestarting:
+		if handler.externalWorker != nil {
+			handler.externalWorker.ThreadDrainNotification(handler.thread.threadIndex)
+		}
 		handler.state.set(stateYielding)
 		handler.state.waitFor(stateReady, stateShuttingDown)
 		return handler.beforeScriptExecution()
 	case stateReady, stateTransitionComplete:
+		if handler.externalWorker != nil {
+			handler.externalWorker.ThreadActivatedNotification(handler.thread.threadIndex)
+		}
 		setupWorkerScript(handler, handler.worker)
 		return handler.worker.fileName
 	case stateShuttingDown:
+		if handler.externalWorker != nil {
+			handler.externalWorker.ThreadDeactivatedNotification(handler.thread.threadIndex)
+		}
 		handler.worker.detachThread(handler.thread)
 		// signal to stop
 		return ""
@@ -143,7 +160,7 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 }
 
 // waitForWorkerRequest is called during frankenphp_handle_request in the php worker script.
-func (handler *workerThread) waitForWorkerRequest() bool {
+func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 	// unpin any memory left over from previous requests
 	handler.thread.Unpin()
 
@@ -179,7 +196,7 @@ func (handler *workerThread) waitForWorkerRequest() bool {
 			C.frankenphp_reset_opcache()
 		}
 
-		return false
+		return false, nil
 	case fc = <-handler.thread.requestChan:
 	case fc = <-handler.worker.requestChan:
 	}
@@ -189,23 +206,35 @@ func (handler *workerThread) waitForWorkerRequest() bool {
 
 	logger.LogAttrs(ctx, slog.LevelDebug, "request handling started", slog.String("worker", handler.worker.name), slog.Int("thread", handler.thread.threadIndex), slog.String("url", fc.request.RequestURI))
 
-	return true
+	return true, fc.handlerParameters
 }
 
 // go_frankenphp_worker_handle_request_start is called at the start of every php request served.
 //
 //export go_frankenphp_worker_handle_request_start
-func go_frankenphp_worker_handle_request_start(threadIndex C.uintptr_t) C.bool {
+func go_frankenphp_worker_handle_request_start(threadIndex C.uintptr_t) (C.bool, unsafe.Pointer) {
 	handler := phpThreads[threadIndex].handler.(*workerThread)
-	return C.bool(handler.waitForWorkerRequest())
+	hasRequest, parameters := handler.waitForWorkerRequest()
+
+	if parameters != nil {
+		p := PHPValue(parameters)
+		handler.thread.Pin(p)
+
+		return C.bool(hasRequest), p
+	}
+
+	return C.bool(hasRequest), nil
 }
 
 // go_frankenphp_finish_worker_request is called at the end of every php request served.
 //
 //export go_frankenphp_finish_worker_request
-func go_frankenphp_finish_worker_request(threadIndex C.uintptr_t) {
+func go_frankenphp_finish_worker_request(threadIndex C.uintptr_t, retval *C.zval) {
 	thread := phpThreads[threadIndex]
 	fc := thread.getRequestContext()
+	if retval != nil {
+		fc.handlerReturn = GoValue(unsafe.Pointer(retval))
+	}
 
 	fc.closeContext()
 	thread.handler.(*workerThread).workerContext = nil

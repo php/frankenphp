@@ -72,8 +72,8 @@ func repeat_this(s *C.zend_string, count int64, reverse bool) unsafe.Pointer {
 
 ここで重要なポイントが2つあります：
 
-* ディレクティブコメント`//export_php:function`はPHPでの関数シグネチャを定義します。これにより、ジェネレーターは適切なパラメータと戻り値の型でPHP関数を生成する方法を知ることができます。
-* 関数は`unsafe.Pointer`を返さなければなりません。FrankenPHPはCとGo間の型変換を支援するAPIを提供しています。
+- ディレクティブコメント`//export_php:function`はPHPでの関数シグネチャを定義します。これにより、ジェネレーターは適切なパラメータと戻り値の型でPHP関数を生成する方法を知ることができます。
+- 関数は`unsafe.Pointer`を返さなければなりません。FrankenPHPはCとGo間の型変換を支援するAPIを提供しています。
 
 前者は理解しやすいですが、後者は少し複雑かもしれません。次のセクションで型変換について詳しく説明します。
 
@@ -81,17 +81,18 @@ func repeat_this(s *C.zend_string, count int64, reverse bool) unsafe.Pointer {
 
 C/PHPとGoの間でメモリ表現が同じ変数型もありますが、直接使用するにはより多くのロジックが必要な型もあります。これは拡張モジュールを書く際の最も挑戦的な部分かもしれません。Zendエンジンの内部仕組みや、変数がPHP内でどのように格納されているかを理解する必要があるためです。以下の表は、知っておくべき重要な情報をまとめています：
 
-| PHP型           | Go型          | 直接変換 | CからGoヘルパー       | GoからCヘルパー        | クラスメソッドサポート |
-|--------------------|------------------|-------------------|-----------------------|------------------------|-----------------------|
-| `int`              | `int64`          | ✅                 | -                     | -                      | ✅                     |
-| `?int`             | `*int64`         | ✅                 | -                     | -                      | ✅                     |
-| `float`            | `float64`        | ✅                 | -                     | -                      | ✅                     |
-| `?float`           | `*float64`       | ✅                 | -                     | -                      | ✅                     |
-| `bool`             | `bool`           | ✅                 | -                     | -                      | ✅                     |
-| `?bool`            | `*bool`          | ✅                 | -                     | -                      | ✅                     |
-| `string`/`?string` | `*C.zend_string` | ❌                 | frankenphp.GoString() | frankenphp.PHPString() | ✅                     |
-| `array`            | `slice`/`map`    | ❌                 | _未実装_ | _未実装_  | ❌                     |
-| `object`           | `struct`         | ❌                 | _未実装_ | _未実装_  | ❌                     |
+| PHP型              | Go型             | 直接変換 | CからGoヘルパー       | GoからCヘルパー        | クラスメソッドサポート |
+| ------------------ | ---------------- | -------- | --------------------- | ---------------------- | ---------------------- |
+| `int`              | `int64`          | ✅       | -                     | -                      | ✅                     |
+| `?int`             | `*int64`         | ✅       | -                     | -                      | ✅                     |
+| `float`            | `float64`        | ✅       | -                     | -                      | ✅                     |
+| `?float`           | `*float64`       | ✅       | -                     | -                      | ✅                     |
+| `bool`             | `bool`           | ✅       | -                     | -                      | ✅                     |
+| `?bool`            | `*bool`          | ✅       | -                     | -                      | ✅                     |
+| `string`/`?string` | `*C.zend_string` | ❌       | frankenphp.GoString() | frankenphp.PHPString() | ✅                     |
+| `array`            | `slice`/`map`    | ❌       | _未実装_              | _未実装_               | ❌                     |
+| `mixed`            | `any`            | ❌       | `GoValue()`           | `PHPValue()`           | ❌                     |
+| `object`           | `struct`         | ❌       | _未実装_              | _未実装_               | ❌                     |
 
 > [!NOTE]
 > この表はまだ完全ではなく、FrankenPHPの型APIがより完全になるにつれて完成されます。
@@ -116,11 +117,11 @@ type UserStruct struct {
 
 **不透明クラス（opaque classes）**は、内部構造（プロパティ）がPHPコードから隠されているクラスです。これは以下を意味します：
 
-* **プロパティへの直接アクセス不可** ：PHPから直接プロパティを読み書きできません（`$user->name`は機能しません）
-* **メソッド経由のみで操作** - すべてのやりとりはGoで定義したメソッドを通じて行う必要があります
-* **より良いカプセル化** - 内部データ構造は完全にGoコードによって制御されます
-* **型安全性** - PHP側から誤った型で内部状態が破壊されるリスクがありません
-* **よりクリーンなAPI** - 適切な公開インターフェースを設計することを強制します
+- **プロパティへの直接アクセス不可** ：PHPから直接プロパティを読み書きできません（`$user->name`は機能しません）
+- **メソッド経由のみで操作** - すべてのやりとりはGoで定義したメソッドを通じて行う必要があります
+- **より良いカプセル化** - 内部データ構造は完全にGoコードによって制御されます
+- **型安全性** - PHP側から誤った型で内部状態が破壊されるリスクがありません
+- **よりクリーンなAPI** - 適切な公開インターフェースを設計することを強制します
 
 このアプローチは優れたカプセル化を実現し、PHPコードがGoオブジェクトの内部状態を意図せずに破壊してしまうことを防ぎます。オブジェクトとのすべてのやりとりは、明示的に定義したメソッドを通じて行う必要があります。
 
@@ -167,12 +168,12 @@ func (us *UserStruct) UpdateInfo(name *C.zend_string, age *int64, active *bool) 
     if name != nil {
         us.Name = frankenphp.GoString(unsafe.Pointer(name))
     }
-    
+
     // ageが渡された（nullではない）かチェック
     if age != nil {
         us.Age = int(*age)
     }
-    
+
     // activeが渡された（nullではない）かチェック
     if active != nil {
         us.Active = *active
@@ -182,10 +183,10 @@ func (us *UserStruct) UpdateInfo(name *C.zend_string, age *int64, active *bool) 
 
 **Nullableパラメータの重要なポイント：**
 
-* **プリミティブ型のnullable** (`?int`, `?float`, `?bool`) はGoではそれぞれポインタ (`*int64`, `*float64`, `*bool`) になります
-* **nullable文字列** (`?string`) は `*C.zend_string` のままですが、`nil` になることがあります
-* ポインタ値を逆参照する前に **`nil`をチェック** してください
-* **PHPの`null`はGoの`nil`になります** - PHPが`null`を渡すと、Go関数は`nil`ポインタを受け取ります
+- **プリミティブ型のnullable** (`?int`, `?float`, `?bool`) はGoではそれぞれポインタ (`*int64`, `*float64`, `*bool`) になります
+- **nullable文字列** (`?string`) は `*C.zend_string` のままですが、`nil` になることがあります
+- ポインタ値を逆参照する前に **`nil`をチェック** してください
+- **PHPの`null`はGoの`nil`になります** - PHPが`null`を渡すと、Go関数は`nil`ポインタを受け取ります
 
 > [!WARNING]
 > 現在、クラスメソッドには次の制限があります。**配列とオブジェクトはパラメータ型や戻り値の型としてサポートされていません**。サポートされるのは`string`、`int`、`float`、`bool`、`void`（戻り値の型）といったスカラー型のみです。**nullableなスカラー型はすべてサポートされています** （`?string`、`?int`、`?float`、`?bool`）。
@@ -304,7 +305,7 @@ func repeat_this(s *C.zend_string, count int64, mode int) unsafe.Pointer {
     str := frankenphp.GoString(unsafe.Pointer(s))
 
     result := strings.Repeat(str, int(count))
-    if mode == STR_REVERSE { 
+    if mode == STR_REVERSE {
         // 文字列を逆転
     }
 
@@ -323,14 +324,14 @@ type StringProcessorStruct struct {
 //export_php:method StringProcessor::process(string $input, int $mode): string
 func (sp *StringProcessorStruct) Process(input *C.zend_string, mode int64) unsafe.Pointer {
     str := frankenphp.GoString(unsafe.Pointer(input))
-    
+
     switch mode {
     case MODE_LOWERCASE:
         str = strings.ToLower(str)
     case MODE_UPPERCASE:
         str = strings.ToUpper(str)
     }
-    
+
     return frankenphp.PHPString(str, false)
 }
 ```
@@ -340,11 +341,10 @@ func (sp *StringProcessorStruct) Process(input *C.zend_string, mode int64) unsaf
 ここでいよいよ、拡張モジュールを生成できるようになります。以下のコマンドでジェネレーターを実行できます：
 
 ```console
-GEN_STUB_SCRIPT=php-src/build/gen_stub.php frankenphp extension-init my_extension.go 
+GEN_STUB_SCRIPT=php-src/build/gen_stub.php frankenphp extension-init my_extension.go
 ```
 
-> [!NOTE]
-> `GEN_STUB_SCRIPT`環境変数に、先ほどダウンロードしたPHPソースの`gen_stub.php`ファイルのパスを設定するのを忘れないでください。これは手動実装セクションで言及されているのと同じ`gen_stub.php`スクリプトです。
+> [!NOTE] > `GEN_STUB_SCRIPT`環境変数に、先ほどダウンロードしたPHPソースの`gen_stub.php`ファイルのパスを設定するのを忘れないでください。これは手動実装セクションで言及されているのと同じ`gen_stub.php`スクリプトです。
 
 すべてがうまくいけば、`build`という名前の新しいディレクトリが作成されているはずです。このディレクトリには、生成されたPHP関数スタブを含む`my_extension.go`ファイルなど、拡張用の生成されたファイルが含まれています。
 
@@ -460,9 +460,9 @@ extern zend_module_entry ext_module_entry;
 
 次に、以下のステップを実行する`extension.c`という名前のファイルを作成します：
 
-* PHPヘッダーをインクルードする
-* 新しいネイティブPHP関数`go_print()`を宣言する
-* 拡張モジュールのメタデータを宣言する
+- PHPヘッダーをインクルードする
+- 新しいネイティブPHP関数`go_print()`を宣言する
+- 拡張モジュールのメタデータを宣言する
 
 まずは必要なヘッダーのインクルードから始めましょう：
 
@@ -594,9 +594,9 @@ import "strings"
 //export go_upper
 func go_upper(s *C.zend_string) *C.zend_string {
     str := frankenphp.GoString(unsafe.Pointer(s))
-    
+
     upper := strings.ToUpper(str)
-    
+
     return (*C.zend_string)(frankenphp.PHPString(upper, false))
 }
 ```

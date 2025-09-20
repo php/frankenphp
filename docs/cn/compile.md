@@ -79,10 +79,10 @@ sudo make install
 某些 FrankenPHP 功能依赖于必须安装的可选系统依赖项。
 或者，可以通过向 Go 编译器传递构建标签来禁用这些功能。
 
-| 功能                     | 依赖项                                                                   | 用于禁用的构建标签 |
-|--------------------------|------------------------------------------------------------------------|-------------------|
-| Brotli 压缩              | [Brotli](https://github.com/google/brotli)                            | nobrotli          |
-| 文件更改时重启 worker     | [Watcher C](https://github.com/e-dant/watcher/tree/release/watcher-c) | nowatcher         |
+| 功能                  | 依赖项                                                                | 用于禁用的构建标签 |
+| --------------------- | --------------------------------------------------------------------- | ------------------ |
+| Brotli 压缩           | [Brotli](https://github.com/google/brotli)                            | nobrotli           |
+| 文件更改时重启 worker | [Watcher C](https://github.com/e-dant/watcher/tree/release/watcher-c) | nowatcher          |
 
 ## 编译 Go 应用
 

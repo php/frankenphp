@@ -79,10 +79,10 @@ sudo make install
 FrankenPHPの一部の機能は、システムにインストールされているオプションの依存パッケージに依存しています。
 または、Goコンパイラにビルドタグを渡すことで、これらの機能を無効にできます。
 
-| 機能                        | 依存関係                                                            | 無効にするためのビルドタグ |
-|--------------------------------|-----------------------------------------------------------------------|-------------------------|
-| Brotli圧縮             | [Brotli](https://github.com/google/brotli)                            | nobrotli                |
-| ファイル変更時のワーカー再起動 | [Watcher C](https://github.com/e-dant/watcher/tree/release/watcher-c) | nowatcher               |
+| 機能                           | 依存関係                                                              | 無効にするためのビルドタグ |
+| ------------------------------ | --------------------------------------------------------------------- | -------------------------- |
+| Brotli圧縮                     | [Brotli](https://github.com/google/brotli)                            | nobrotli                   |
+| ファイル変更時のワーカー再起動 | [Watcher C](https://github.com/e-dant/watcher/tree/release/watcher-c) | nowatcher                  |
 
 ## Goアプリのコンパイル
 

@@ -40,13 +40,19 @@ func initWorkers(opt []workerOpt) error {
 		workers = append(workers, w)
 	}
 
-	for _, worker := range workers {
-		workersReady.Add(worker.num)
-		for i := 0; i < worker.num; i++ {
+	for _, w := range workers {
+		workersReady.Add(w.num)
+		for i := 0; i < w.num; i++ {
 			thread := getInactivePHPThread()
-			convertToWorkerThread(thread, worker)
+			convertToWorkerThread(thread, w)
 			go func() {
 				thread.state.waitFor(stateReady)
+
+				// create a pipe from the external worker to the main worker
+				// note: this is locked to the initial thread size the external worker requested
+				if workerThread, ok := thread.handler.(*workerThread); ok && workerThread.externalWorker != nil {
+					go startExternalWorkerPipe(w, workerThread.externalWorker, thread)
+				}
 				workersReady.Done()
 			}()
 		}

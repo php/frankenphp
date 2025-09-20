@@ -117,17 +117,17 @@ cd frankenphp
 以下环境变量可以传递给 `docker build` 和 `build-static.sh`
 脚本来自定义静态构建：
 
-* `FRANKENPHP_VERSION`: 要使用的 FrankenPHP 版本
-* `PHP_VERSION`: 要使用的 PHP 版本
-* `PHP_EXTENSIONS`: 要构建的 PHP 扩展（[支持的扩展列表](https://static-php.dev/zh/guide/extensions.html)）
-* `PHP_EXTENSION_LIBS`: 要构建的额外库，为扩展添加额外的功能
-* `XCADDY_ARGS`：传递给 [xcaddy](https://github.com/caddyserver/xcaddy) 的参数，例如用于添加额外的 Caddy 模块
-* `EMBED`: 要嵌入二进制文件的 PHP 应用程序的路径
-* `CLEAN`: 设置后，libphp 及其所有依赖项都是重新构建的（不使用缓存）
-* `NO_COMPRESS`: 不要使用UPX压缩生成的二进制文件
-* `DEBUG_SYMBOLS`: 设置后，调试符号将被保留在二进制文件内
-* `MIMALLOC`: (实验性，仅限Linux) 用[mimalloc](https://github.com/microsoft/mimalloc)替换musl的mallocng，以提高性能。我们仅建议在musl目标构建中使用此选项，对于glibc，建议禁用此选项，并在运行二进制文件时使用[`LD_PRELOAD`](https://microsoft.github.io/mimalloc/overrides.html)。
-* `RELEASE`: （仅限维护者）设置后，生成的二进制文件将上传到 GitHub 上
+- `FRANKENPHP_VERSION`: 要使用的 FrankenPHP 版本
+- `PHP_VERSION`: 要使用的 PHP 版本
+- `PHP_EXTENSIONS`: 要构建的 PHP 扩展（[支持的扩展列表](https://static-php.dev/zh/guide/extensions.html)）
+- `PHP_EXTENSION_LIBS`: 要构建的额外库，为扩展添加额外的功能
+- `XCADDY_ARGS`：传递给 [xcaddy](https://github.com/caddyserver/xcaddy) 的参数，例如用于添加额外的 Caddy 模块
+- `EMBED`: 要嵌入二进制文件的 PHP 应用程序的路径
+- `CLEAN`: 设置后，libphp 及其所有依赖项都是重新构建的（不使用缓存）
+- `NO_COMPRESS`: 不要使用UPX压缩生成的二进制文件
+- `DEBUG_SYMBOLS`: 设置后，调试符号将被保留在二进制文件内
+- `MIMALLOC`: (实验性，仅限Linux) 用[mimalloc](https://github.com/microsoft/mimalloc)替换musl的mallocng，以提高性能。我们仅建议在musl目标构建中使用此选项，对于glibc，建议禁用此选项，并在运行二进制文件时使用[`LD_PRELOAD`](https://microsoft.github.io/mimalloc/overrides.html)。
+- `RELEASE`: （仅限维护者）设置后，生成的二进制文件将上传到 GitHub 上
 
 ## 扩展
 

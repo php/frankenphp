@@ -19,23 +19,23 @@ docker run -p 80:80 -p 443:443 -p 443:443/udp -v $PWD:/app dunglas/frankenphp
 1. [下载与你的系统相对应的二进制文件](https://github.com/php/frankenphp/releases)
 2. 将以下配置添加到 Laravel 项目根目录中名为 `Caddyfile` 的文件中：
 
-    ```caddyfile
-    {
-    	frankenphp
-    }
+   ```caddyfile
+   {
+   	frankenphp
+   }
 
-    # 服务器的域名
-    localhost {
-    	# 将 webroot 设置为 public/ 目录
-    	root public/
-    	# 启用压缩(可选)
-    	encode zstd br gzip
-    	# 执行当前目录中的 PHP 文件并提供资源
-    	php_server {
-   		    try_files {path} index.php
-   	    }
-    }
-    ```
+   # 服务器的域名
+   localhost {
+   	# 将 webroot 设置为 public/ 目录
+   	root public/
+   	# 启用压缩(可选)
+   	encode zstd br gzip
+   	# 执行当前目录中的 PHP 文件并提供资源
+   	php_server {
+   	    try_files {path} index.php
+       }
+   }
+   ```
 
 3. 从 Laravel 项目的根目录启动 FrankenPHP：`frankenphp run`
 
@@ -61,17 +61,17 @@ php artisan octane:frankenphp
 
 `octane:frankenphp` 命令可以采用以下选项：
 
-* `--host`: 服务器应绑定到的 IP 地址（默认值: `127.0.0.1`）
-* `--port`: 服务器应可用的端口（默认值: `8000`）
-* `--admin-port`: 管理服务器应可用的端口（默认值: `2019`）
-* `--workers`: 应可用于处理请求的 worker 数（默认值: `auto`）
-* `--max-requests`: 在 worker 重启之前要处理的请求数（默认值: `500`）
-* `--caddyfile`：FrankenPHP `Caddyfile` 文件的路径（默认： [Laravel Octane 中的存根 `Caddyfile`](https://github.com/laravel/octane/blob/2.x/src/Commands/stubs/Caddyfile)）
-* `--https`: 开启 HTTPS、HTTP/2 和 HTTP/3，自动生成和延长证书
-* `--http-redirect`: 启用 HTTP 到 HTTPS 重定向（仅在使用 `--https` 时启用）
-* `--watch`: 修改应用程序时自动重新加载服务器
-* `--poll`: 在监视时使用文件系统轮询，以便通过网络监视文件
-* `--log-level`: 在指定日志级别或高于指定日志级别的日志消息
+- `--host`: 服务器应绑定到的 IP 地址（默认值: `127.0.0.1`）
+- `--port`: 服务器应可用的端口（默认值: `8000`）
+- `--admin-port`: 管理服务器应可用的端口（默认值: `2019`）
+- `--workers`: 应可用于处理请求的 worker 数（默认值: `auto`）
+- `--max-requests`: 在 worker 重启之前要处理的请求数（默认值: `500`）
+- `--caddyfile`：FrankenPHP `Caddyfile` 文件的路径（默认： [Laravel Octane 中的存根 `Caddyfile`](https://github.com/laravel/octane/blob/2.x/src/Commands/stubs/Caddyfile)）
+- `--https`: 开启 HTTPS、HTTP/2 和 HTTP/3，自动生成和延长证书
+- `--http-redirect`: 启用 HTTP 到 HTTPS 重定向（仅在使用 `--https` 时启用）
+- `--watch`: 修改应用程序时自动重新加载服务器
+- `--poll`: 在监视时使用文件系统轮询，以便通过网络监视文件
+- `--log-level`: 在指定日志级别或高于指定日志级别的日志消息
 
 > [!TIP]
 > 要获取结构化的 JSON 日志（在使用日志分析解决方案时非常有用），请明确传递 `--log-level` 选项。

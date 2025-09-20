@@ -14,10 +14,10 @@ FrankenPHP 能够将 PHP 应用程序的源代码和资源文件嵌入到静态�
 
 例如，你可能希望：
 
-* 给应用安装生产环境的依赖
-* 导出 autoloader
-* 如果可能，为应用启用生产模式
-* 丢弃不需要的文件，例如 `.git` 或测试文件，以减小最终二进制文件的大小
+- 给应用安装生产环境的依赖
+- 导出 autoloader
+- 如果可能，为应用启用生产模式
+- 丢弃不需要的文件，例如 `.git` 或测试文件，以减小最终二进制文件的大小
 
 例如，对于 Symfony 应用程序，你可以使用以下命令：
 
@@ -53,34 +53,34 @@ composer dump-env prod
 
 1. 在准备好的应用的存储库中创建一个名为 `static-build.Dockerfile` 的文件。
 
-    ```dockerfile
-    FROM --platform=linux/amd64 dunglas/frankenphp:static-builder
+   ```dockerfile
+   FROM --platform=linux/amd64 dunglas/frankenphp:static-builder
 
-    # 复制应用代码
-    WORKDIR /go/src/app/dist/app
-    COPY . .
+   # 复制应用代码
+   WORKDIR /go/src/app/dist/app
+   COPY . .
 
-    # 构建静态二进制文件
+   # 构建静态二进制文件
    WORKDIR /go/src/app/
    RUN EMBED=dist/app/ ./build-static.sh
    ```
 
-    > [!CAUTION]
-    >
-    > 某些 `.dockerignore` 文件（例如默认的 [Symfony Docker `.dockerignore`](https://github.com/dunglas/symfony-docker/blob/main/.dockerignore)）
-    > 会忽略 `vendor/` 文件夹和 `.env` 文件。在构建之前，请务必调整或删除 `.dockerignore` 文件。
+   > [!CAUTION]
+   >
+   > 某些 `.dockerignore` 文件（例如默认的 [Symfony Docker `.dockerignore`](https://github.com/dunglas/symfony-docker/blob/main/.dockerignore)）
+   > 会忽略 `vendor/` 文件夹和 `.env` 文件。在构建之前，请务必调整或删除 `.dockerignore` 文件。
 
 2. 构建:
 
-    ```console
-    docker build -t static-app -f static-build.Dockerfile .
-    ```
+   ```console
+   docker build -t static-app -f static-build.Dockerfile .
+   ```
 
 3. 提取二进制文件
 
-    ```console
-    docker cp $(docker create --name static-app-tmp static-app):/go/src/app/dist/frankenphp-linux-x86_64 my-app ; docker rm static-app-tmp
-    ```
+   ```console
+   docker cp $(docker create --name static-app-tmp static-app):/go/src/app/dist/frankenphp-linux-x86_64 my-app ; docker rm static-app-tmp
+   ```
 
 生成的二进制文件是当前目录中名为 `my-app` 的文件。
 

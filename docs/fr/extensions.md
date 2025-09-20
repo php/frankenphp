@@ -72,8 +72,8 @@ func repeat_this(s *C.zend_string, count int64, reverse bool) unsafe.Pointer {
 
 Il y a deux choses importantes à noter ici :
 
-* Une directive `//export_php:function` définit la signature de la fonction en PHP. C'est ainsi que le générateur sait comment générer la fonction PHP avec les bons paramètres et le bon type de retour ;
-* La fonction doit retourner un `unsafe.Pointer`. FrankenPHP fournit une API pour vous aider avec le jonglage de types entre C et Go.
+- Une directive `//export_php:function` définit la signature de la fonction en PHP. C'est ainsi que le générateur sait comment générer la fonction PHP avec les bons paramètres et le bon type de retour ;
+- La fonction doit retourner un `unsafe.Pointer`. FrankenPHP fournit une API pour vous aider avec le jonglage de types entre C et Go.
 
 Alors que le premier point parle de lui-même, le second peut être plus difficile à appréhender. Plongeons plus profondément dans la jonglage de types dans la section suivante.
 
@@ -82,16 +82,17 @@ Alors que le premier point parle de lui-même, le second peut être plus diffici
 Bien que certains types de variables aient la même représentation mémoire entre C/PHP et Go, certains types nécessitent plus de logique pour être directement utilisés. C'est peut-être la partie la plus difficile quand il s'agit d'écrire des extensions car cela nécessite de comprendre les fonctionnements internes du moteur Zend et comment les variables sont stockées dans le moteur de PHP. Ce tableau résume ce que vous devez savoir :
 
 | Type PHP           | Type Go             | Conversion directe | Assistant C vers Go     | Assistant Go vers C     | Support des Méthodes de Classe |
-|--------------------|---------------------|--------------------|-------------------------|-------------------------|--------------------------------|
-| `int`              | `int64`             | ✅                  | -                       | -                       | ✅                              |
-| `?int`             | `*int64`            | ✅                  | -                       | -                       | ✅                              |
-| `float`            | `float64`           | ✅                  | -                       | -                       | ✅                              |
-| `?float`           | `*float64`          | ✅                  | -                       | -                       | ✅                              |
-| `bool`             | `bool`              | ✅                  | -                       | -                       | ✅                              |
-| `?bool`            | `*bool`             | ✅                  | -                       | -                       | ✅                              |
-| `string`/`?string` | `*C.zend_string`    | ❌                  | frankenphp.GoString()   | frankenphp.PHPString()  | ✅                              |
-| `array`            | `*frankenphp.Array` | ❌                  | frankenphp.GoArray()    | frankenphp.PHPArray()   | ✅                              |
-| `object`           | `struct`            | ❌                  | _Pas encore implémenté_ | _Pas encore implémenté_ | ❌                              |
+| ------------------ | ------------------- | ------------------ | ----------------------- | ----------------------- | ------------------------------ |
+| `int`              | `int64`             | ✅                 | -                       | -                       | ✅                             |
+| `?int`             | `*int64`            | ✅                 | -                       | -                       | ✅                             |
+| `float`            | `float64`           | ✅                 | -                       | -                       | ✅                             |
+| `?float`           | `*float64`          | ✅                 | -                       | -                       | ✅                             |
+| `bool`             | `bool`              | ✅                 | -                       | -                       | ✅                             |
+| `?bool`            | `*bool`             | ✅                 | -                       | -                       | ✅                             |
+| `string`/`?string` | `*C.zend_string`    | ❌                 | frankenphp.GoString()   | frankenphp.PHPString()  | ✅                             |
+| `array`            | `*frankenphp.Array` | ❌                 | frankenphp.GoArray()    | frankenphp.PHPArray()   | ✅                             |
+| `mixed`            | `any`               | ❌                 | `GoValue()`             | `PHPValue()`            | ❌                             |
+| `object`           | `struct`            | ❌                 | _Pas encore implémenté_ | _Pas encore implémenté_ | ❌                             |
 
 > [!NOTE]
 > Ce tableau n'est pas encore exhaustif et sera complété au fur et à mesure que l'API de types FrankenPHP deviendra plus complète.
@@ -111,16 +112,16 @@ FrankenPHP fournit un support natif pour les tableaux PHP à travers le type `fr
 func process_data(arr *C.zval) unsafe.Pointer {
     // Convertir le tableau PHP vers Go
     goArray := frankenphp.GoArray(unsafe.Pointer(arr))
-    
+
     result := &frankenphp.Array{}
-    
+
     result.SetInt(0, "first")
     result.SetInt(1, "second")
     result.Append("third") // Assigne automatiquement la prochaine clé entière
-    
+
     result.SetString("name", "John")
     result.SetString("age", int64(30))
-    
+
     for i := uint32(0); i < goArray.Len(); i++ {
         key, value := goArray.At(i)
         if key.Type == frankenphp.PHPStringKey {
@@ -129,7 +130,7 @@ func process_data(arr *C.zval) unsafe.Pointer {
             result.SetInt(key.Int+100, value)
         }
     }
-    
+
     // Reconvertir vers un tableau PHP
     return frankenphp.PHPArray(result)
 }
@@ -137,20 +138,20 @@ func process_data(arr *C.zval) unsafe.Pointer {
 
 **Fonctionnalités clés de `frankenphp.Array` :**
 
-* **Paires clé-valeur ordonnées** - Maintient l'ordre d'insertion comme les tableaux PHP
-* **Types de clés mixtes** - Supporte les clés entières et chaînes dans le même tableau
-* **Sécurité de type** - Le type `PHPKey` assure une gestion appropriée des clés
-* **Détection automatique de liste** - Lors de la conversion vers PHP, détecte automatiquement si le tableau doit être une liste compacte ou un hashmap
-* **Les objets ne sont pas supportés** - Actuellement, seuls les types scalaires et les tableaux sont supportés. Passer un objet en tant qu'élément du tableau résultera d'une valeur `null` dans le tableau PHP.
+- **Paires clé-valeur ordonnées** - Maintient l'ordre d'insertion comme les tableaux PHP
+- **Types de clés mixtes** - Supporte les clés entières et chaînes dans le même tableau
+- **Sécurité de type** - Le type `PHPKey` assure une gestion appropriée des clés
+- **Détection automatique de liste** - Lors de la conversion vers PHP, détecte automatiquement si le tableau doit être une liste compacte ou un hashmap
+- **Les objets ne sont pas supportés** - Actuellement, seuls les types scalaires et les tableaux sont supportés. Passer un objet en tant qu'élément du tableau résultera d'une valeur `null` dans le tableau PHP.
 
 **Méthodes disponibles :**
 
-* `SetInt(key int64, value interface{})` - Définir une valeur avec une clé entière
-* `SetString(key string, value interface{})` - Définir une valeur avec une clé chaîne
-* `Append(value interface{})` - Ajouter une valeur avec la prochaine clé entière disponible
-* `Len() uint32` - Obtenir le nombre d'éléments
-* `At(index uint32) (PHPKey, interface{})` - Obtenir la paire clé-valeur à l'index
-* `frankenphp.PHPArray(arr *frankenphp.Array) unsafe.Pointer` - Convertir vers un tableau PHP
+- `SetInt(key int64, value interface{})` - Définir une valeur avec une clé entière
+- `SetString(key string, value interface{})` - Définir une valeur avec une clé chaîne
+- `Append(value interface{})` - Ajouter une valeur avec la prochaine clé entière disponible
+- `Len() uint32` - Obtenir le nombre d'éléments
+- `At(index uint32) (PHPKey, interface{})` - Obtenir la paire clé-valeur à l'index
+- `frankenphp.PHPArray(arr *frankenphp.Array) unsafe.Pointer` - Convertir vers un tableau PHP
 
 ### Déclarer une Classe PHP Native
 
@@ -168,11 +169,11 @@ type UserStruct struct {
 
 Les **classes opaques** sont des classes avec lesquelles la structure interne (comprendre : les propriétés) est cachée du code PHP. Cela signifie :
 
-* **Pas d'accès direct aux propriétés** : Vous ne pouvez pas lire ou écrire des propriétés directement depuis PHP (`$user->name` ne fonctionnera pas)
-* **Interface uniquement par méthodes** - Toutes les interactions doivent passer par les méthodes que vous définissez
-* **Meilleure encapsulation** - La structure de données interne est complètement contrôlée par le code Go
-* **Sécurité de type** - Aucun risque que le code PHP corrompe l'état interne avec de mauvais types
-* **API plus propre** - Force à concevoir une interface publique appropriée
+- **Pas d'accès direct aux propriétés** : Vous ne pouvez pas lire ou écrire des propriétés directement depuis PHP (`$user->name` ne fonctionnera pas)
+- **Interface uniquement par méthodes** - Toutes les interactions doivent passer par les méthodes que vous définissez
+- **Meilleure encapsulation** - La structure de données interne est complètement contrôlée par le code Go
+- **Sécurité de type** - Aucun risque que le code PHP corrompe l'état interne avec de mauvais types
+- **API plus propre** - Force à concevoir une interface publique appropriée
 
 Cette approche fournit une meilleure encapsulation et empêche le code PHP de corrompre accidentellement l'état interne de vos objets Go. Toutes les interactions avec l'objet doivent passer par les méthodes que vous définissez explicitement.
 
@@ -219,12 +220,12 @@ func (us *UserStruct) UpdateInfo(name *C.zend_string, age *int64, active *bool) 
     if name != nil {
         us.Name = frankenphp.GoString(unsafe.Pointer(name))
     }
-    
+
     // $age est null?
     if age != nil {
         us.Age = int(*age)
     }
-    
+
     // $active est null?
     if active != nil {
         us.Active = *active
@@ -234,10 +235,10 @@ func (us *UserStruct) UpdateInfo(name *C.zend_string, age *int64, active *bool) 
 
 **Points clés sur les paramètres nullables :**
 
-* **Types primitifs nullables** (`?int`, `?float`, `?bool`) deviennent des pointeurs (`*int64`, `*float64`, `*bool`) en Go
-* **Chaînes nullables** (`?string`) restent comme `*C.zend_string` mais peuvent être `nil`
-* **Vérifiez `nil`** avant de déréférencer les valeurs de pointeur
-* **PHP `null` devient Go `nil`** - quand PHP passe `null`, votre fonction Go reçoit un pointeur `nil`
+- **Types primitifs nullables** (`?int`, `?float`, `?bool`) deviennent des pointeurs (`*int64`, `*float64`, `*bool`) en Go
+- **Chaînes nullables** (`?string`) restent comme `*C.zend_string` mais peuvent être `nil`
+- **Vérifiez `nil`** avant de déréférencer les valeurs de pointeur
+- **PHP `null` devient Go `nil`** - quand PHP passe `null`, votre fonction Go reçoit un pointeur `nil`
 
 > [!WARNING]
 > Actuellement, les méthodes de classe ont les limitations suivantes. **Les objets ne sont pas supportés** comme types de paramètres ou types de retour. **Les tableaux sont entièrement supportés** pour les paramètres et types de retour. Types supportés : `string`, `int`, `float`, `bool`, `array`, et `void` (pour le type de retour). **Les types de paramètres nullables sont entièrement supportés** pour tous les types scalaires (`?string`, `?int`, `?float`, `?bool`).
@@ -356,7 +357,7 @@ func repeat_this(s *C.zend_string, count int64, mode int) unsafe.Pointer {
     str := frankenphp.GoString(unsafe.Pointer(s))
 
     result := strings.Repeat(str, int(count))
-    if mode == STR_REVERSE { 
+    if mode == STR_REVERSE {
         // inverser la chaîne
     }
 
@@ -375,14 +376,14 @@ type StringProcessorStruct struct {
 //export_php:method StringProcessor::process(string $input, int $mode): string
 func (sp *StringProcessorStruct) Process(input *C.zend_string, mode int64) unsafe.Pointer {
     str := frankenphp.GoString(unsafe.Pointer(input))
-    
+
     switch mode {
     case MODE_LOWERCASE:
         str = strings.ToLower(str)
     case MODE_UPPERCASE:
         str = strings.ToUpper(str)
     }
-    
+
     return frankenphp.PHPString(str, false)
 }
 ```
@@ -437,17 +438,17 @@ echo My\Extension\STATUS_ACTIVE; // 1
 
 #### Notes Importantes
 
-* Seule **une** directive d'espace de noms est autorisée par fichier. Si plusieurs directives d'espace de noms sont trouvées, le générateur retournera une erreur.
-* L'espace de noms s'applique à **tous** les symboles exportés dans le fichier : fonctions, classes, méthodes et constantes.
-* Les noms d'espaces de noms suivent les conventions des espaces de noms PHP en utilisant les barres obliques inverses (`\`) comme séparateurs.
-* Si aucun espace de noms n'est déclaré, les symboles sont exportés vers l'espace de noms global comme d'habitude.
+- Seule **une** directive d'espace de noms est autorisée par fichier. Si plusieurs directives d'espace de noms sont trouvées, le générateur retournera une erreur.
+- L'espace de noms s'applique à **tous** les symboles exportés dans le fichier : fonctions, classes, méthodes et constantes.
+- Les noms d'espaces de noms suivent les conventions des espaces de noms PHP en utilisant les barres obliques inverses (`\`) comme séparateurs.
+- Si aucun espace de noms n'est déclaré, les symboles sont exportés vers l'espace de noms global comme d'habitude.
 
 ### Générer l'Extension
 
 C'est là que la magie opère, et votre extension peut maintenant être générée. Vous pouvez exécuter le générateur avec la commande suivante :
 
 ```console
-GEN_STUB_SCRIPT=php-src/build/gen_stub.php frankenphp extension-init my_extension.go 
+GEN_STUB_SCRIPT=php-src/build/gen_stub.php frankenphp extension-init my_extension.go
 ```
 
 > [!NOTE]
@@ -567,9 +568,9 @@ extern zend_module_entry ext_module_entry;
 
 Ensuite, créez un fichier nommé `extension.c` qui effectuera les étapes suivantes :
 
-* Inclure les en-têtes PHP ;
-* Déclarer notre nouvelle fonction PHP native `go_print()` ;
-* Déclarer les métadonnées de l'extension.
+- Inclure les en-têtes PHP ;
+- Déclarer notre nouvelle fonction PHP native `go_print()` ;
+- Déclarer les métadonnées de l'extension.
 
 Commençons par inclure les en-têtes requis :
 
@@ -701,9 +702,9 @@ import "strings"
 //export go_upper
 func go_upper(s *C.zend_string) *C.zend_string {
     str := frankenphp.GoString(unsafe.Pointer(s))
-    
+
     upper := strings.ToUpper(str)
-    
+
     return (*C.zend_string)(frankenphp.PHPString(upper, false))
 }
 ```
