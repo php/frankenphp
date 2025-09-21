@@ -149,6 +149,7 @@ func drainWorkerThreads() []*phpThread {
 		ready.Add(len(worker.threads))
 		for _, thread := range worker.threads {
 			if !thread.state.requestSafeStateChange(stateRestarting) {
+				ready.Done()
 				// no state change allowed == thread is shutting down
 				// we'll proceed to restart all other threads anyways
 				continue
