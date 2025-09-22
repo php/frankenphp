@@ -28,9 +28,10 @@ func TestGoString(t *testing.T) {
 	testOnDummyPHPThread(t, func() {
 		originalString := "Hello, World!"
 
-		convertedString := GoString(PHPString(originalString, false))
+		phpString := PHPString(originalString, false)
+		defer zendStringRelease(phpString)
 
-		assert.Equal(t, originalString, convertedString, "string -> zend_string -> string should yield an equal string")
+		assert.Equal(t, originalString, GoString(phpString), "string -> zend_string -> string should yield an equal string")
 	})
 }
 
@@ -41,9 +42,10 @@ func TestPHPMap(t *testing.T) {
 			"foo2": "bar2",
 		}
 
-		convertedMap := GoMap(PHPMap(originalMap))
+		phpArray := arrayAsZval(PHPMap(originalMap))
+		defer zvalPtrDtor(phpArray)
 
-		assert.Equal(t, originalMap, convertedMap, "associative array should be equal after conversion")
+		assert.Equal(t, originalMap, GoMap(phpArray), "associative array should be equal after conversion")
 	})
 }
 
@@ -57,9 +59,10 @@ func TestOrderedPHPAssociativeArray(t *testing.T) {
 			Order: []string{"foo2", "foo1"},
 		}
 
-		convertedArray := GoAssociativeArray(PHPAssociativeArray(originalArray))
+		phpArray := arrayAsZval(PHPAssociativeArray(originalArray))
+		defer zvalPtrDtor(phpArray)
 
-		assert.Equal(t, originalArray, convertedArray, "associative array should be equal after conversion")
+		assert.Equal(t, originalArray, GoAssociativeArray(phpArray), "associative array should be equal after conversion")
 	})
 }
 
@@ -67,9 +70,10 @@ func TestPHPPackedArray(t *testing.T) {
 	testOnDummyPHPThread(t, func() {
 		originalSlice := []any{"bar1", "bar2"}
 
-		convertedSlice := GoPackedArray(PHPPackedArray(originalSlice))
+		phpArray := arrayAsZval(PHPPackedArray(originalSlice))
+		defer zvalPtrDtor(phpArray)
 
-		assert.Equal(t, originalSlice, convertedSlice, "slice should be equal after conversion")
+		assert.Equal(t, originalSlice, GoPackedArray(phpArray), "slice should be equal after conversion")
 	})
 }
 
@@ -81,9 +85,10 @@ func TestPHPPackedArrayToGoMap(t *testing.T) {
 			"1": "bar2",
 		}
 
-		convertedMap := GoMap(PHPPackedArray(originalSlice))
+		phpArray := arrayAsZval(PHPPackedArray(originalSlice))
+		defer zvalPtrDtor(phpArray)
 
-		assert.Equal(t, expectedMap, convertedMap, "convert a packed to an associative array")
+		assert.Equal(t, expectedMap, GoMap(phpArray), "convert a packed to an associative array")
 	})
 }
 
@@ -98,9 +103,10 @@ func TestPHPAssociativeArrayToPacked(t *testing.T) {
 		}
 		expectedSlice := []any{"bar1", "bar2"}
 
-		convertedSlice := GoPackedArray(PHPAssociativeArray(originalArray))
+		phpArray := arrayAsZval(PHPAssociativeArray(originalArray))
+		defer zvalPtrDtor(phpArray)
 
-		assert.Equal(t, expectedSlice, convertedSlice, "convert an associative array to a slice")
+		assert.Equal(t, expectedSlice, GoPackedArray(phpArray), "convert an associative array to a slice")
 	})
 }
 
@@ -120,8 +126,9 @@ func TestNestedMixedArray(t *testing.T) {
 			},
 		}
 
-		convertedArray := GoMap(PHPMap(originalArray))
+		phpArray := arrayAsZval(PHPMap(originalArray))
+		defer zvalPtrDtor(phpArray)
 
-		assert.Equal(t, originalArray, convertedArray, "nested mixed array should be equal after conversion")
+		assert.Equal(t, originalArray, GoMap(phpArray), "nested mixed array should be equal after conversion")
 	})
 }

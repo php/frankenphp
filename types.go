@@ -164,7 +164,7 @@ func PHPMap(arr map[string]any) unsafe.Pointer {
 	return phpArray(arr, nil)
 }
 
-// EXPERIMENTAL: PHPAssociativeArray converts a Go AssociativeArray to a PHP zval with a zend_array value
+// EXPERIMENTAL: PHPAssociativeArray converts a Go AssociativeArray to a PHP zend_array
 func PHPAssociativeArray(arr AssociativeArray) unsafe.Pointer {
 	return phpArray(arr.Map, arr.Order)
 }
@@ -187,13 +187,10 @@ func phpArray(entries map[string]any, order []string) unsafe.Pointer {
 		}
 	}
 
-	var zval C.zval
-	C.__zval_arr__(&zval, zendArray)
-
-	return unsafe.Pointer(&zval)
+	return unsafe.Pointer(zendArray)
 }
 
-// EXPERIMENTAL: PHPPackedArray converts a Go slice to a PHP zval with a zend_array value.
+// EXPERIMENTAL: PHPPackedArray converts a Go slice to a PHP zend_array.
 func PHPPackedArray(slice []any) unsafe.Pointer {
 	zendArray := createNewArray((uint32)(len(slice)))
 	for _, val := range slice {
@@ -201,10 +198,7 @@ func PHPPackedArray(slice []any) unsafe.Pointer {
 		C.zend_hash_next_index_insert(zendArray, zval)
 	}
 
-	var zval C.zval
-	C.__zval_arr__(&zval, zendArray)
-
-	return unsafe.Pointer(&zval)
+	return unsafe.Pointer(zendArray)
 }
 
 // EXPERIMENTAL: GoValue converts a PHP zval to a Go value
@@ -278,11 +272,11 @@ func phpValue(value any) *C.zval {
 		str := (*C.zend_string)(PHPString(v, false))
 		C.__zval_string__(&zval, str)
 	case AssociativeArray:
-		return (*C.zval)(PHPAssociativeArray(v))
+		C.__zval_arr__(&zval, (*C.HashTable)(PHPAssociativeArray(v)))
 	case map[string]any:
-		return (*C.zval)(PHPAssociativeArray(AssociativeArray{Map: v}))
+		C.__zval_arr__(&zval, (*C.HashTable)(PHPMap(v)))
 	case []any:
-		return (*C.zval)(PHPPackedArray(v))
+		C.__zval_arr__(&zval, (*C.HashTable)(PHPPackedArray(v)))
 	default:
 		C.__zval_null__(&zval)
 	}
@@ -323,4 +317,23 @@ func extractZvalValue(zval *C.zval, expectedType C.uint8_t) unsafe.Pointer {
 	default:
 		return nil
 	}
+}
+
+func zvalPtrDtor(p unsafe.Pointer) {
+	zv := (*C.zval)(p)
+	C.zval_ptr_dtor(zv)
+}
+
+func zendStringRelease(p unsafe.Pointer) {
+	zs := (*C.zend_string)(p)
+	C.zend_string_release(zs)
+}
+
+func arrayAsZval(arr unsafe.Pointer) unsafe.Pointer {
+	var zv *C.zval
+	zv = (*C.zval)(C.__emalloc__(C.size_t(unsafe.Sizeof(C.zval{}))))
+	ht := (*C.HashTable)(arr)
+	C.__zval_arr__(zv, ht)
+
+	return unsafe.Pointer(zv)
 }
