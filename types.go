@@ -346,8 +346,7 @@ func zendStringRelease(p unsafe.Pointer) {
 }
 
 func arrayAsZval(arr unsafe.Pointer) unsafe.Pointer {
-	var zv *C.zval
-	zv = (*C.zval)(C.__emalloc__(C.size_t(unsafe.Sizeof(C.zval{}))))
+	zv := (*C.zval)(C.__emalloc__(C.size_t(unsafe.Sizeof(C.zval{}))))
 	ht := (*C.HashTable)(arr)
 	C.__zval_arr__(zv, ht)
 
