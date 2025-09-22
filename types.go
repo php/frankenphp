@@ -1,6 +1,22 @@
 package frankenphp
 
 /*
+#cgo nocallback __zend_new_array__
+#cgo nocallback __zval_null__
+#cgo nocallback __zval_bool__
+#cgo nocallback __zval_long__
+#cgo nocallback __zval_double__
+#cgo nocallback __zval_string__
+#cgo nocallback __zval_arr__
+#cgo nocallback __emalloc__
+#cgo noescape __zend_new_array__
+#cgo noescape __zval_null__
+#cgo noescape __zval_bool__
+#cgo noescape __zval_long__
+#cgo noescape __zval_double__
+#cgo noescape __zval_string__
+#cgo noescape __zval_arr__
+#cgo noescape __emalloc__
 #include "types.h"
 */
 import "C"
