@@ -1,13 +1,13 @@
 package extgen
 
 import (
-	"github.com/stretchr/testify/require"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGoFileGenerator_Generate(t *testing.T) {
@@ -109,7 +109,7 @@ func test() {
 			contains: []string{
 				"package simple",
 				`#include "simple.h"`,
-				"import \"C\"",
+				`import "C"`,
 				"func init()",
 				"frankenphp.RegisterExtension(",
 				"//export test",
@@ -319,7 +319,7 @@ func test() {}`
 	}
 
 	cImportCount := strings.Count(content, `import "C"`)
-	assert.Equal(t, 1, cImportCount, "Expected exactly 1 occurrence of 'import \"C\"'")
+	assert.Equal(t, 1, cImportCount, `Expected exactly 1 occurrence of 'import "C"'`)
 
 	for _, imp := range forbiddenImports[1:] {
 		assert.NotContains(t, content, imp, "Generated content should NOT contain import: %s", imp)
