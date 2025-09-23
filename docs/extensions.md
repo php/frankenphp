@@ -126,7 +126,7 @@ func process_data_ordered_map(arr *C.zval) unsafe.Pointer {
 		// do something with key and value
 	}
 
-	// return an ordered array
+	// return an ordered zend_array
 	// if 'Order' is not empty, only the key-value pairs in 'Order' will be respected
 	return frankenphp.PHPAssociativeArray(AssociativeArray{
 		Map: map[string]any{
@@ -148,7 +148,7 @@ func process_data_unordered_map(arr *C.zval) unsafe.Pointer {
 		// do something with key and value
 	}
 
-	// return an unordered array
+	// return an unordered zend_array
 	return frankenphp.PHPMap(map[string]any{
 		"key1": "value1",
 		"key2": "value2",
@@ -165,7 +165,7 @@ func process_data_packed(arr *C.zval) unsafe.Pointer {
 		// do something with index and value
 	}
 
-	// return a packed array
+	// return a packed zend_array
 	return frankenphp.PHPackedArray([]any{"value1", "value2", "value3"})
 }
 ```
@@ -180,9 +180,9 @@ func process_data_packed(arr *C.zval) unsafe.Pointer {
 
 ##### Available methods: Packed and Associative
 
-- `frankenphp.PHPAssociativeArray(arr frankenphp.AssociativeArray) unsafe.Pointer` - Convert to an ordered PHP array with key-value pairs
-- `frankenphp.PHPMap(arr map[string]any) unsafe.Pointer` - Convert a map to an unordered PHP array with key-value pairs
-- `frankenphp.PHPPackedArray(slice []any) unsafe.Pointer` - Convert a slice to a PHP packed array with indexed values only
+- `frankenphp.PHPAssociativeArray(arr frankenphp.AssociativeArray) unsafe.Pointer` - Convert to an ordered PHP zend_array with key-value pairs
+- `frankenphp.PHPMap(arr map[string]any) unsafe.Pointer` - Convert a map to an unordered PHP zend_array with key-value pairs
+- `frankenphp.PHPPackedArray(slice []any) unsafe.Pointer` - Convert a slice to a PHP packed zend_array with indexed values only
 - `frankenphp.GoAssociativeArray(arr unsafe.Pointer, ordered bool) frankenphp.AssociativeArray` - Convert a PHP array to an ordered Go `AssociativeArray` (map with order)
 - `frankenphp.GoMap(arr unsafe.Pointer) map[string]any` - Convert a PHP array to an unordered Go map
 - `frankenphp.GoPackedArray(arr unsafe.Pointer) []any` - Convert a PHP array to a Go slice
