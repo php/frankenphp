@@ -1,6 +1,6 @@
 # FrankenPHP: Modern App Server for PHP
 
-<h1 style="text-align: center;"><a href="https://frankenphp.dev"><img src="frankenphp.png" alt="FrankenPHP" width="600"></a></h1>
+<h1 align="center"><a href="https://frankenphp.dev"><img src="frankenphp.png" alt="FrankenPHP" width="600"></a></h1>
 
 FrankenPHP is a modern application server for PHP built on top of the [Caddy](https://caddyserver.com/) web server.
 
