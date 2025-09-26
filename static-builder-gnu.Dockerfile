@@ -68,6 +68,13 @@ RUN curl -o cmake.tar.gz -fsSL https://github.com/Kitware/CMake/releases/downloa
 	tar -xzf cmake.tar.gz -C /cmake --strip-components 1 && \
 	rm cmake.tar.gz
 
+# install patchelf
+RUN curl -fsSL -o patchelf.tar.gz https://github.com/NixOS/patchelf/releases/download/0.18.0/patchelf-0.18.0-$(uname -m).tar.gz && \
+    mkdir -p /patchelf && \
+    tar -xzf patchelf.tar.gz -C /patchelf --strip-components=1 && \
+    cp /patchelf/bin/patchelf /usr/bin/ && \
+	rm patchelf.tar.gz
+
 # install build essentials
 RUN yum install -y \
 		perl \
