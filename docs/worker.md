@@ -78,9 +78,15 @@ $myApp->boot();
 
 // Handler outside the loop for better performance (doing less work)
 $handler = static function () use ($myApp) {
-    // Called when a request is received,
-    // superglobals, php://input and the like are reset
-    echo $myApp->handle($_GET, $_POST, $_COOKIE, $_FILES, $_SERVER);
+    try {
+        // Called when a request is received,
+        // superglobals, php://input and the like are reset
+        echo $myApp->handle($_GET, $_POST, $_COOKIE, $_FILES, $_SERVER);
+    } catch (\Throwable $exception) {
+        // `set_exception_handler` doesn't work as expected in worker mode
+        // Instead of registering a handler, catch the exception and handle it here
+        (new \MyCustomExceptionHandler)->handleException($exception);
+    }
 };
 
 $maxRequests = (int)($_SERVER['MAX_REQUESTS'] ?? 0);
