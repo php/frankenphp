@@ -194,7 +194,9 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 		frankenphp.WithWorkerName(workerName),
 	)
 
-	if err = frankenphp.ServeHTTP(w, fr); err != nil {
+	interceptor := &responseWriterInterceptor{ResponseWriter: w, replacer: repl}
+
+	if err = frankenphp.ServeHTTP(interceptor, fr); err != nil {
 		return caddyhttp.Error(http.StatusInternalServerError, err)
 	}
 

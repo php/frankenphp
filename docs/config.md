@@ -206,6 +206,24 @@ where the FrankenPHP process was started. You can instead also specify one or mo
 
 The file watcher is based on [e-dant/watcher](https://github.com/e-dant/watcher).
 
+### Placeholders
+
+FrankenPHP exposes some placeholders that can be used in Caddy directives like `log_append`.
+- `{http.frankenphp.status_code}`: the HTTP status code of the response
+- `{http.frankenphp.status_text}`: the HTTP status text of the response (e.g. "OK", "Not Found", etc.)
+- `{http.frankenphp.header.*}`: any HTTP header returned by the worker, e.g. `{http.frankenphp.header.X-User-Id}`
+
+```caddyfile
+http:// {
+	log
+	route {
+		# ...
+
+		log_append user {http.frankenphp.header.X-User-Id}
+	}
+}
+```
+
 ## Matching the worker to a path
 
 In traditional PHP applications, scripts are always placed in the public directory.
