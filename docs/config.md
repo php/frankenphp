@@ -209,6 +209,7 @@ The file watcher is based on [e-dant/watcher](https://github.com/e-dant/watcher)
 ### Placeholders
 
 FrankenPHP exposes some placeholders that can be used in Caddy directives like `log_append`.
+
 - `{http.frankenphp.status_code}`: the HTTP status code of the response
 - `{http.frankenphp.status_text}`: the HTTP status text of the response (e.g. "OK", "Not Found", etc.)
 - `{http.frankenphp.header.*}`: any HTTP header returned by the worker, e.g. `{http.frankenphp.header.X-User-Id}`
