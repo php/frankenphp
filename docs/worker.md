@@ -83,8 +83,8 @@ $handler = static function () use ($myApp) {
         // superglobals, php://input and the like are reset
         echo $myApp->handle($_GET, $_POST, $_COOKIE, $_FILES, $_SERVER);
     } catch (\Throwable $exception) {
-        // `set_exception_handler` doesn't work as expected in worker mode
-        // Instead of registering a handler, catch the exception and handle it here
+        // `set_exception_handler` is called only when the worker script ends,
+        // which may not be what you expect, so catch and handle exceptions here
         (new \MyCustomExceptionHandler)->handleException($exception);
     }
 };
