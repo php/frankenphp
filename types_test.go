@@ -42,8 +42,8 @@ func TestPHPMap(t *testing.T) {
 			"foo2": "bar2",
 		}
 
-		phpArray := arrayAsZval(PHPMap(originalMap))
-		defer zvalPtrDtor(phpArray)
+		phpArray := PHPMap(originalMap)
+		defer zendHashDestroy(phpArray)
 
 		assert.Equal(t, originalMap, GoMap(phpArray), "associative array should be equal after conversion")
 	})
@@ -59,8 +59,8 @@ func TestOrderedPHPAssociativeArray(t *testing.T) {
 			Order: []string{"foo2", "foo1"},
 		}
 
-		phpArray := arrayAsZval(PHPAssociativeArray(originalArray))
-		defer zvalPtrDtor(phpArray)
+		phpArray := PHPAssociativeArray(originalArray)
+		defer zendHashDestroy(phpArray)
 
 		assert.Equal(t, originalArray, GoAssociativeArray(phpArray), "associative array should be equal after conversion")
 	})
@@ -70,8 +70,8 @@ func TestPHPPackedArray(t *testing.T) {
 	testOnDummyPHPThread(t, func() {
 		originalSlice := []any{"bar1", "bar2"}
 
-		phpArray := arrayAsZval(PHPPackedArray(originalSlice))
-		defer zvalPtrDtor(phpArray)
+		phpArray := PHPPackedArray(originalSlice)
+		defer zendHashDestroy(phpArray)
 
 		assert.Equal(t, originalSlice, GoPackedArray(phpArray), "slice should be equal after conversion")
 	})
@@ -85,8 +85,8 @@ func TestPHPPackedArrayToGoMap(t *testing.T) {
 			"1": "bar2",
 		}
 
-		phpArray := arrayAsZval(PHPPackedArray(originalSlice))
-		defer zvalPtrDtor(phpArray)
+		phpArray := PHPPackedArray(originalSlice)
+		defer zendHashDestroy(phpArray)
 
 		assert.Equal(t, expectedMap, GoMap(phpArray), "convert a packed to an associative array")
 	})
@@ -103,8 +103,8 @@ func TestPHPAssociativeArrayToPacked(t *testing.T) {
 		}
 		expectedSlice := []any{"bar1", "bar2"}
 
-		phpArray := arrayAsZval(PHPAssociativeArray(originalArray))
-		defer zvalPtrDtor(phpArray)
+		phpArray := PHPAssociativeArray(originalArray)
+		defer zendHashDestroy(phpArray)
 
 		assert.Equal(t, expectedSlice, GoPackedArray(phpArray), "convert an associative array to a slice")
 	})
@@ -126,8 +126,8 @@ func TestNestedMixedArray(t *testing.T) {
 			},
 		}
 
-		phpArray := arrayAsZval(PHPMap(originalArray))
-		defer zvalPtrDtor(phpArray)
+		phpArray := PHPMap(originalArray)
+		defer zendHashDestroy(phpArray)
 
 		assert.Equal(t, originalArray, GoMap(phpArray), "nested mixed array should be equal after conversion")
 	})
