@@ -196,6 +196,47 @@ The Docker images are built:
 - when a new release is tagged
 - daily at 4 am UTC, if new versions of the official PHP images are available
 
+## Build a distroless Image
+
+It's possible to build a distroless image (read more about it [here](https://github.com/GoogleContainerTools/distroless)) by using an intermediate build stage to copy the necessary files from the official FrankenPHP image to a distroless base image.
+
+```dockerfile
+FROM dunglas/frankenphp:php8.3-bookworm AS builder
+
+# Do everything you need here, like installing PHP extensions and copying your config files
+
+FROM gcr.io/distroless/base-debian12:nonroot AS distroless
+
+WORKDIR /app
+
+# Get FrankenPHP and PHP  binary from builder image
+COPY --from=builder /usr/local/bin/frankenphp /usr/local/bin/frankenphp
+COPY --from=builder /usr/local/bin/php /usr/local/bin/php
+
+# Copy PHP extensions and configuration from builder image
+COPY --from=builder /usr/local/lib/php /usr/local/lib/php
+COPY --from=builder /usr/local/lib/libphp.so /lib/libphp.so
+COPY --from=builder /usr/local/lib/libwatcher-c.* /lib/
+COPY --from=builder /usr/local/etc/php /usr/local/etc/php
+COPY --from=builder /usr/lib/ /usr/lib/
+COPY --from=builder /lib/ /lib/
+
+USER nonroot:nonroot
+
+# Copy application files and Caddyfile
+COPY --from=builder --chown=nonroot:nonroot /app /app
+COPY --from=builder --chown=nonroot:nonroot /etc/caddy/Caddyfile /etc/caddy/Caddyfile
+
+EXPOSE 80 443
+
+ENTRYPOINT [ "frankenphp", "run", "--config", "/etc/caddy/Caddyfile" ]
+```
+
+> [!WARNING]
+> Since there is no shell in a distroless image, you won't be able to launch a script in the entrypoint. If you need to do so, consider using :
+> - an init container in Kubernetes
+> - `gcr.io/distroless/base-debian12:debug-nonroot` as base image which includes a shell to run scripts
+
 ## Development Versions
 
 Development versions are available in the [`dunglas/frankenphp-dev`](https://hub.docker.com/repository/docker/dunglas/frankenphp-dev) Docker repository.
