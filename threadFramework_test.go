@@ -3,7 +3,7 @@ package frankenphp
 import (
 	"io"
 	"net/http/httptest"
-	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -13,73 +13,29 @@ import (
 
 // mockWorkerExtension implements the WorkerExtension interface
 type mockWorkerExtension struct {
-	name             string
-	fileName         string
-	env              PreparedEnv
-	minThreads       int
-	requestChan      chan *WorkerRequest[any, any]
-	activatedCount   int
-	drainCount       int
-	deactivatedCount int
-	mu               sync.Mutex
+	Worker
 }
 
 func newMockWorkerExtension(name, fileName string, minThreads int) *mockWorkerExtension {
 	return &mockWorkerExtension{
-		name:        name,
-		fileName:    fileName,
-		env:         make(PreparedEnv),
-		minThreads:  minThreads,
-		requestChan: make(chan *WorkerRequest[any, any], 10), // Buffer to avoid blocking
+		Worker: Worker{
+			ExtensionName:  name,
+			WorkerFileName: fileName,
+			WorkerEnv:      nil,
+			MinThreads:     minThreads,
+			RequestChan:    make(chan *WorkerRequest[any, any], minThreads),
+			ActivatedCount: atomic.Int32{},
+			DrainCount:     atomic.Int32{},
+		},
 	}
 }
 
-func (m *mockWorkerExtension) Name() string {
-	return m.name
-}
-
-func (m *mockWorkerExtension) FileName() string {
-	return m.fileName
-}
-
-func (m *mockWorkerExtension) Env() PreparedEnv {
-	return m.env
-}
-
-func (m *mockWorkerExtension) GetMinThreads() int {
-	return m.minThreads
-}
-
-func (m *mockWorkerExtension) ThreadActivatedNotification(threadId int) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.activatedCount++
-}
-
-func (m *mockWorkerExtension) ThreadDrainNotification(threadId int) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.drainCount++
-}
-
-func (m *mockWorkerExtension) ThreadDeactivatedNotification(threadId int) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.deactivatedCount++
-}
-
-func (m *mockWorkerExtension) ProvideRequest() *WorkerRequest[any, any] {
-	return <-m.requestChan
-}
-
 func (m *mockWorkerExtension) InjectRequest(r *WorkerRequest[any, any]) {
-	m.requestChan <- r
+	m.RequestChan <- r
 }
 
 func (m *mockWorkerExtension) GetActivatedCount() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.activatedCount
+	return int(m.ActivatedCount.Load())
 }
 
 func TestWorkerExtension(t *testing.T) {

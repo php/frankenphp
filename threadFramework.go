@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
+	"sync/atomic"
 )
 
 // EXPERIMENTAL: WorkerExtension allows you to register an external worker where instead of calling frankenphp handlers on
@@ -98,4 +99,47 @@ func startExternalWorkerPipe(w *worker, externalWorker WorkerExtension, thread *
 			}
 		}
 	}
+}
+
+type Worker struct {
+	ExtensionName  string
+	WorkerFileName string
+	WorkerEnv      PreparedEnv
+	MinThreads     int
+	RequestChan    chan *WorkerRequest[any, any]
+	ActivatedCount atomic.Int32
+	DrainCount     atomic.Int32
+}
+
+func (w *Worker) Name() string {
+	return w.ExtensionName
+}
+
+func (w *Worker) FileName() string {
+	return w.WorkerFileName
+}
+
+func (w *Worker) Env() PreparedEnv {
+	return w.WorkerEnv
+}
+
+func (w *Worker) GetMinThreads() int {
+	return w.MinThreads
+}
+
+func (w *Worker) ThreadActivatedNotification(threadId int) {
+	w.ActivatedCount.Add(1)
+}
+
+func (w *Worker) ThreadDrainNotification(threadId int) {
+	w.DrainCount.Add(1)
+}
+
+func (w *Worker) ThreadDeactivatedNotification(threadId int) {
+	w.DrainCount.Add(-1)
+	w.ActivatedCount.Add(-1)
+}
+
+func (w *Worker) ProvideRequest() *WorkerRequest[any, any] {
+	return <-w.RequestChan
 }
