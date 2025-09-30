@@ -15,3 +15,9 @@ When [Caddy metrics](https://caddyserver.com/docs/metrics) are enabled, FrankenP
 - `frankenphp_worker_queue_depth{worker="[worker_name]"}`: The number of queued requests.
 
 For worker metrics, the `[worker_name]` placeholder is replaced by the worker name in the Caddyfile, otherwise absolute path of worker file will be used.
+
+Here is how to enable the metrics using environment variables:
+
+```sh
+CADDY_GLOBAL_OPTIONS="metrics"
+```
