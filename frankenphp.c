@@ -347,8 +347,8 @@ PHP_FUNCTION(frankenphp_set_caddy_placeholder) {
   zend_string *key, *value;
 
   ZEND_PARSE_PARAMETERS_START(2, 2)
-    Z_PARAM_STR(key)
-    Z_PARAM_STR(value)
+  Z_PARAM_STR(key)
+  Z_PARAM_STR(value)
   ZEND_PARSE_PARAMETERS_END();
 
   go_set_caddy_placeholder(thread_index, ZSTR_VAL(key), ZSTR_VAL(value));
