@@ -30,9 +30,10 @@ ZEND_END_ARG_INFO()
 
 #define arginfo_apache_response_headers arginfo_frankenphp_response_headers
 
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_set_caddy_placeholder, 0, 2, IS_VOID, 0)
-	ZEND_ARG_TYPE_INFO(0, key, IS_STRING, 0)
-	ZEND_ARG_TYPE_INFO(0, value, IS_STRING, 0)
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(
+    arginfo_frankenphp_set_caddy_placeholder, 0, 2, IS_VOID, 0)
+ZEND_ARG_TYPE_INFO(0, key, IS_STRING, 0)
+ZEND_ARG_TYPE_INFO(0, value, IS_STRING, 0)
 ZEND_END_ARG_INFO()
 
 ZEND_FUNCTION(frankenphp_handle_request);

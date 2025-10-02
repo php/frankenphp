@@ -212,6 +212,7 @@ You can set Caddy placeholders from your PHP code using the `frankenphp_set_cadd
 These placeholders can then be used in Caddy directives like `log_append`.
 
 Example usage:
+
 ```php
 frankenphp_set_caddy_placeholder('frankenphp.custom_placeholder', 'Look at my placeholder!');
 ```
