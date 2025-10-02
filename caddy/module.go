@@ -194,10 +194,14 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 		frankenphp.WithWorkerName(workerName),
 	)
 
-	interceptor := &responseWriterInterceptor{ResponseWriter: w, replacer: repl}
-
-	if err = frankenphp.ServeHTTP(interceptor, fr); err != nil {
+	if err = frankenphp.ServeHTTP(w, fr); err != nil {
 		return caddyhttp.Error(http.StatusInternalServerError, err)
+	}
+
+	placeholders := fr.Context().Value(frankenphp.PlaceholdersContextKey).(map[string]string)
+	
+	for k, v := range placeholders {
+		repl.Set(k, v)
 	}
 
 	return nil

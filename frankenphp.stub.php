@@ -32,3 +32,4 @@ function frankenphp_response_headers(): array|bool {}
  */
 function apache_response_headers(): array|bool {}
 
+function frankenphp_set_caddy_placeholder(string $key, string $value): void {}
