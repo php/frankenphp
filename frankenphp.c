@@ -1130,7 +1130,7 @@ static void *execute_script_cli(void *arg) {
 
   php_embed_init(cli_argc, cli_argv);
 
-  cli_register_file_handles(false);
+  cli_register_file_handles(true);
   zend_first_try {
     if (eval) {
       /* evaluate the cli_script as literal PHP code (php-cli -r "...") */
