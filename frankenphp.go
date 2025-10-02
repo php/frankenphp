@@ -565,6 +565,21 @@ func go_log(message *C.char, level C.int) {
 	}
 }
 
+//export go_set_caddy_placeholder
+func go_set_caddy_placeholder(threadIndex C.uintptr_t, key *C.char, value *C.char) {
+	fc := phpThreads[threadIndex].getRequestContext()
+
+	placeholders, _ := fc.request.Context().Value(PlaceholdersContextKey).(map[string]string)
+
+	if placeholders == nil {
+		logger.LogAttrs(context.Background(), slog.LevelDebug, "frankenphp_set_caddy_placeholder() called in non-HTTP context", slog.String("worker", fc.scriptFilename))
+
+		return
+	}
+
+	placeholders[C.GoString(key)] = C.GoString(value)
+}
+
 //export go_is_context_done
 func go_is_context_done(threadIndex C.uintptr_t) C.bool {
 	return C.bool(phpThreads[threadIndex].getRequestContext().isDone)
