@@ -73,6 +73,7 @@ frankenphp_config frankenphp_get_config() {
 bool should_filter_var = 0;
 __thread uintptr_t thread_index;
 __thread bool is_worker_thread = false;
+__thread bool is_task_worker_thread = false;
 __thread zval *os_environment = NULL;
 
 static void frankenphp_update_request_context() {
@@ -82,7 +83,12 @@ static void frankenphp_update_request_context() {
   /* status It is not reset by zend engine, set it to 200. */
   SG(sapi_headers).http_response_code = 200;
 
-  is_worker_thread = go_update_request_info(thread_index, &SG(request_info));
+  go_update_request_info(thread_index, &SG(request_info));
+}
+
+void frankenphp_update_thread_context(bool is_worker, bool is_task_worker) {
+  is_worker_thread = is_worker;
+  is_task_worker_thread = is_task_worker;
 }
 
 static void frankenphp_free_request_context() {
@@ -492,7 +498,7 @@ PHP_FUNCTION(frankenphp_handle_task) {
   Z_PARAM_FUNC(fci, fcc)
   ZEND_PARSE_PARAMETERS_END();
 
-  if (!go_is_task_worker_thread(thread_index)) {
+  if (!is_task_worker_thread) {
     zend_throw_exception(
         spl_ce_RuntimeException,
         "frankenphp_handle_task() called while not in worker mode", 0);
@@ -861,6 +867,12 @@ static void frankenphp_register_variables(zval *track_vars_array) {
   /* In CGI mode, we consider the environment to be a part of the server
    * variables.
    */
+
+  /* task workers may have argv and argc configured via config */
+  if(is_task_worker_thread) {
+    go_register_args(thread_index, &SG(request_info));
+    php_build_argv(NULL, track_vars_array);
+  }
 
   /* in non-worker mode we import the os environment regularly */
   if (!is_worker_thread) {

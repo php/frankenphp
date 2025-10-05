@@ -1,6 +1,7 @@
 package frankenphp
 
 // #include "frankenphp.h"
+// #include <php_variables.h>
 import "C"
 import (
 	"errors"
@@ -8,6 +9,7 @@ import (
 	"path/filepath"
 	"sync"
 	"sync/atomic"
+	"unsafe"
 )
 
 type taskWorker struct {
@@ -19,6 +21,8 @@ type taskWorker struct {
 	num         int
 	env         PreparedEnv
 	queueLen    atomic.Int32
+	argv        **C.char
+	argc        C.int
 }
 
 // representation of a thread that handles tasks directly assigned by go
@@ -85,6 +89,9 @@ func initTaskWorkers(opts []workerOpt) error {
 			return err
 		}
 
+		fullArgs := append([]string{filename}, opt.args...)
+		argc, argv := convertArgs(fullArgs)
+
 		tw := &taskWorker{
 			threads:  make([]*phpThread, 0, opt.num),
 			filename: filename,
@@ -92,6 +99,8 @@ func initTaskWorkers(opts []workerOpt) error {
 			name:     opt.name,
 			num:      opt.num,
 			env:      opt.env,
+			argv:     (**C.char)(unsafe.Pointer(&argv[0])),
+			argc:     argc,
 		}
 		taskWorkers = append(taskWorkers, tw)
 
@@ -146,6 +155,7 @@ func (handler *taskWorkerThread) beforeScriptExecution() string {
 		tw.threads = append(tw.threads, thread)
 		tw.threadMutex.Unlock()
 		thread.state.set(stateReady)
+		thread.updateContext(false, true)
 
 		return handler.setupWorkerScript()
 	case stateReady:
@@ -296,10 +306,15 @@ func go_frankenphp_worker_dispatch_task(taskChar *C.char, taskLen C.size_t, name
 	return C.bool(true)
 }
 
-//export go_is_task_worker_thread
-func go_is_task_worker_thread(threadIndex C.uintptr_t) C.bool {
+//export go_register_args
+func go_register_args(threadIndex C.uintptr_t, info *C.sapi_request_info) {
 	thread := phpThreads[threadIndex]
-	_, ok := thread.handler.(*taskWorkerThread)
+	handler, ok := thread.handler.(*taskWorkerThread)
 
-	return C.bool(ok)
+	if !ok {
+		panic("thread is not a task thread")
+	}
+
+	info.argc = handler.taskWorker.argc
+	info.argv = handler.taskWorker.argv
 }

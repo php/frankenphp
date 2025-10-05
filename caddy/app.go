@@ -134,6 +134,7 @@ func (f *FrankenPHPApp) Start() error {
 			frankenphp.WithWorkerEnv(tw.Env),
 			frankenphp.WithWorkerWatchMode(tw.Watch),
 			frankenphp.AsTaskWorker(true),
+			frankenphp.WithWorkerArgs(tw.Args),
 		}
 
 		opts = append(opts, frankenphp.WithWorkers(tw.Name, repl.ReplaceKnown(tw.FileName, ""), tw.Num, workerOpts...))
