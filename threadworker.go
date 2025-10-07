@@ -20,12 +20,12 @@ type workerThread struct {
 	dummyContext    *frankenPHPContext
 	workerContext   *frankenPHPContext
 	backoff         *exponentialBackoff
-	externalWorker  WorkerExtension
+	externalWorker  Worker
 	isBootingScript bool // true if the worker has not reached frankenphp_handle_request yet
 }
 
 func convertToWorkerThread(thread *phpThread, worker *worker) {
-	externalWorker := externalWorkers[worker.name]
+	externalWorker := extensionWorkers[worker.name]
 
 	thread.setHandler(&workerThread{
 		state:  thread.state,

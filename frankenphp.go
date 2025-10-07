@@ -215,7 +215,7 @@ func Init(options ...Option) error {
 	registerExtensions()
 
 	// add registered external workers
-	for _, ew := range externalWorkers {
+	for _, ew := range extensionWorkers {
 		options = append(options, WithWorkers(ew.Name(), ew.FileName(), ew.GetMinThreads(), WithWorkerEnv(ew.Env())))
 	}
 
