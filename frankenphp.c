@@ -523,9 +523,11 @@ PHP_FUNCTION(frankenphp_handle_task) {
   fci.size = sizeof fci;
   fci.retval = &retval;
 
-  /* ZVAL_STRINGL_FAST will consume the malloced char without copying it */
+  /* copy the string to thread-local memory */
   zval taskzv;
   ZVAL_STRINGL_FAST(&taskzv, task.data, task.len);
+  pefree(task.data, 1);
+
   fci.params = &taskzv;
   fci.param_count = 1;
   if (zend_call_function(&fci, &fcc) == SUCCESS) {
@@ -547,8 +549,6 @@ PHP_FUNCTION(frankenphp_handle_task) {
 
   go_frankenphp_finish_task(thread_index);
 
-  /* free the task zval (right now always a string) */
-  free(task.data);
   zval_ptr_dtor(&taskzv);
 
   RETURN_TRUE;
@@ -566,15 +566,14 @@ PHP_FUNCTION(frankenphp_dispatch_task) {
   Z_PARAM_STRING(worker_name, worker_name_len);
   ZEND_PARSE_PARAMETERS_END();
 
-  /* copy the zval to be used in the other thread safely, right now only strings
-   * are supported */
-  char *task_copy = malloc(task_len);
-  memcpy(task_copy, task_string, task_len);
+  /* copy the zval to be used in the other thread safely */
+  char *task_str = pemalloc(task_len, 1);
+  memcpy(task_str, task_string, task_len);
 
   bool success = go_frankenphp_worker_dispatch_task(
-      task_copy, task_len, worker_name, worker_name_len);
+      task_str, task_len, worker_name, worker_name_len);
   if (!success) {
-    free(task_copy);
+    pefree(task_str, 1);
     zend_throw_exception(spl_ce_RuntimeException,
                          "No worker found to handle the task", 0);
     RETURN_THROWS();
@@ -869,8 +868,8 @@ static void frankenphp_register_variables(zval *track_vars_array) {
    */
 
   /* task workers may have argv and argc configured via config */
-  if(is_task_worker_thread) {
-    go_register_args(thread_index, &SG(request_info));
+  if (is_task_worker_thread) {
+    go_register_task_worker_args(thread_index, &SG(request_info));
     php_build_argv(NULL, track_vars_array);
   }
 

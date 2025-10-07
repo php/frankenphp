@@ -266,7 +266,7 @@ func go_frankenphp_finish_task(threadIndex C.uintptr_t) {
 }
 
 //export go_frankenphp_worker_dispatch_task
-func go_frankenphp_worker_dispatch_task(taskChar *C.char, taskLen C.size_t, name *C.char, nameLen C.size_t) C.bool {
+func go_frankenphp_worker_dispatch_task(taskStr *C.char, taskLen C.size_t, name *C.char, nameLen C.size_t) C.bool {
 	var worker *taskWorker
 	if name != nil && nameLen != 0 {
 		worker = getTaskWorkerByName(C.GoStringN(name, C.int(nameLen)))
@@ -280,7 +280,7 @@ func go_frankenphp_worker_dispatch_task(taskChar *C.char, taskLen C.size_t, name
 	}
 
 	// create a new task and lock it until the task is done
-	task := &PendingTask{str: taskChar, len: taskLen}
+	task := &PendingTask{str: taskStr, len: taskLen}
 	task.done.Lock()
 
 	// dispatch immediately if available (best performance)
@@ -306,8 +306,8 @@ func go_frankenphp_worker_dispatch_task(taskChar *C.char, taskLen C.size_t, name
 	return C.bool(true)
 }
 
-//export go_register_args
-func go_register_args(threadIndex C.uintptr_t, info *C.sapi_request_info) {
+//export go_register_task_worker_args
+func go_register_task_worker_args(threadIndex C.uintptr_t, info *C.sapi_request_info) {
 	thread := phpThreads[threadIndex]
 	handler, ok := thread.handler.(*taskWorkerThread)
 
