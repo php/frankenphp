@@ -21,7 +21,7 @@ type taskWorker struct {
 	num         int
 	env         PreparedEnv
 	queueLen    atomic.Int32
-	argv        **C.char
+	argv        []*C.char
 	argc        C.int
 }
 
@@ -100,7 +100,7 @@ func initTaskWorkers(opts []workerOpt) error {
 			name:     opt.name,
 			num:      opt.num,
 			env:      opt.env,
-			argv:     (**C.char)(unsafe.Pointer(&argv[0])),
+			argv:     argv,
 			argc:     argc,
 		}
 		taskWorkers = append(taskWorkers, tw)
@@ -317,5 +317,5 @@ func go_register_task_worker_args(threadIndex C.uintptr_t, info *C.sapi_request_
 	}
 
 	info.argc = handler.taskWorker.argc
-	info.argv = handler.taskWorker.argv
+	info.argv = (**C.char)(unsafe.Pointer(&handler.taskWorker.argv[0]))
 }
