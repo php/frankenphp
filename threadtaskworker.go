@@ -316,6 +316,8 @@ func go_register_task_worker_args(threadIndex C.uintptr_t, info *C.sapi_request_
 		panic("thread is not a task thread")
 	}
 
+	ptr := unsafe.Pointer(&handler.taskWorker.argv[0])
+	thread.Pin(ptr)
+	info.argv = (**C.char)(ptr)
 	info.argc = handler.taskWorker.argc
-	info.argv = (**C.char)(unsafe.Pointer(&handler.taskWorker.argv[0]))
 }
