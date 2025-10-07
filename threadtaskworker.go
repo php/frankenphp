@@ -15,7 +15,7 @@ import (
 type taskWorker struct {
 	threads     []*phpThread
 	threadMutex sync.RWMutex
-	filename    string
+	fileName    string
 	taskChan    chan *PendingTask
 	name        string
 	num         int
@@ -84,17 +84,17 @@ func initTaskWorkers(opts []workerOpt) error {
 	taskWorkers = make([]*taskWorker, 0, len(opts))
 	ready := sync.WaitGroup{}
 	for _, opt := range opts {
-		filename, err := fastabs.FastAbs(opt.fileName)
+		fileName, err := fastabs.FastAbs(opt.fileName)
 		if err != nil {
 			return err
 		}
 
-		fullArgs := append([]string{filename}, opt.args...)
+		fullArgs := append([]string{fileName}, opt.args...)
 		argc, argv := convertArgs(fullArgs)
 
 		tw := &taskWorker{
 			threads:  make([]*phpThread, 0, opt.num),
-			filename: filename,
+			fileName: fileName,
 			taskChan: make(chan *PendingTask),
 			name:     opt.name,
 			num:      opt.num,
@@ -176,7 +176,7 @@ func (handler *taskWorkerThread) beforeScriptExecution() string {
 
 func (handler *taskWorkerThread) setupWorkerScript() string {
 	fc, err := newDummyContext(
-		filepath.Base(handler.taskWorker.filename),
+		filepath.Base(handler.taskWorker.fileName),
 		WithRequestPreparedEnv(handler.taskWorker.env),
 	)
 
@@ -187,7 +187,7 @@ func (handler *taskWorkerThread) setupWorkerScript() string {
 	handler.dummyContext = fc
 	clearSandboxedEnv(handler.thread)
 
-	return handler.taskWorker.filename
+	return handler.taskWorker.fileName
 }
 
 func (handler *taskWorkerThread) afterScriptExecution(int) {
@@ -199,7 +199,7 @@ func (handler *taskWorkerThread) getRequestContext() *frankenPHPContext {
 }
 
 func (handler *taskWorkerThread) name() string {
-	return "Task Worker PHP Thread"
+	return "Task Worker PHP Thread - " + handler.taskWorker.fileName
 }
 
 func (tw *taskWorker) detach(thread *phpThread) {

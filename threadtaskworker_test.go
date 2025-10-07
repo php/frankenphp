@@ -87,7 +87,7 @@ func TestDispatchToMultipleWorkers(t *testing.T) {
 
 	assert.NoError(t, Init(
 		WithWorkers("worker1", "./testdata/tasks/task-worker.php", 1, AsTaskWorker(true)),
-		WithWorkers("worker2", "./testdata/tasks/task-worker.php", 1, AsTaskWorker(true)),
+		WithWorkers("worker2", "./testdata/tasks/task-worker2.php", 1, AsTaskWorker(true)),
 		WithNumThreads(4),
 		WithLogger(logger),
 	))
