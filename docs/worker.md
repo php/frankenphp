@@ -179,3 +179,49 @@ $handler = static function () use ($workerServer) {
 
 // ...
 ```
+
+## Task workers
+
+`workers` are used to handle HTTP requests, but FrankenPHP also supports `task workers` that can handle
+asynchronous tasks in the background. Task workers can also be used to just execute a script in a loop.
+
+```caddyfile
+frankenphp {
+    task_worker {
+        name my-task-worker # name of the task worker
+        file /path/to/task-worker.php # path to the script to run
+        num 4 # number of task workers to start
+        args arg1 arg2 # args to pass to the script (to simulate $argv in cli mode)
+    }
+}
+```
+
+Tasks workers may call `frankenphp_handle_task()` to wait for a task to be assigned to them. Tasks
+may be dispatched from anywhere in the process using `frankenphp_dispatch_task()`.
+
+```php
+<?php
+// task-worker.php
+
+// setup code here, run once at worker startup
+
+$handleTask = function (string $task) {
+    // do something with the task
+};
+
+$maxTasksBeforeRestarting = 1000;
+$currentTask = 0;
+while(frankenphp_handle_task($handleTask) && $currentTask++ < $maxTasksBeforeRestarting) {
+    // Keep handling tasks until there are no more tasks or the max limit is reached
+}
+```
+
+```php
+<?php
+// some-script.php
+$task = 'do something';
+$workerName = 'my-task-worker'; // name of the task worker to dispatch the task to (first worker if left empty)
+frankenphp_dispatch_task($task, $workerName);
+```
+
+`frankenphp_dispatch_task` is non-blocking and returns immediately.

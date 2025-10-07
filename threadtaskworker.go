@@ -25,7 +25,8 @@ type taskWorker struct {
 	argc        C.int
 }
 
-// representation of a thread that handles tasks directly assigned by go
+// representation of a thread that handles tasks directly assigned by go or via frankenphp_dispatch_task()
+// can also just execute a script in a loop
 // implements the threadHandler interface
 type taskWorkerThread struct {
 	thread       *phpThread
