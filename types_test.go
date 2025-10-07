@@ -21,7 +21,7 @@ func testOnDummyPHPThread(t *testing.T, cb func()) {
 	))
 	defer Shutdown()
 
-	task, err := ExecuteTask(cb, "tw")
+	task, err := ExecuteCallbackOnTaskWorker(cb, "tw")
 	assert.NoError(t, err)
 
 	task.WaitForCompletion()

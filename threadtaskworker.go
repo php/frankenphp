@@ -50,10 +50,10 @@ func (t *PendingTask) WaitForCompletion() {
 }
 
 // EXPERIMENTAL: DispatchTask dispatches a task to a named task worker
-func DispatchTask(task string, workerName string) (*PendingTask, error) {
-	tw := getTaskWorkerByName(workerName)
+func DispatchTask(task string, taskWorkerName string) (*PendingTask, error) {
+	tw := getTaskWorkerByName(taskWorkerName)
 	if tw == nil {
-		return nil, errors.New("no task worker found with name " + workerName)
+		return nil, errors.New("no task worker found with name " + taskWorkerName)
 	}
 
 	pt := &PendingTask{str: C.CString(task), len: C.size_t(len(task))}
@@ -64,12 +64,12 @@ func DispatchTask(task string, workerName string) (*PendingTask, error) {
 	return pt, nil
 }
 
-// EXPERIMENTAL: ExecuteTask executes the callback func() directly on a task worker thread
+// EXPERIMENTAL: ExecuteCallbackOnTaskWorker executes the callback func() directly on a task worker thread
 // this gives the callback access to PHP's memory management
-func ExecuteTask(callback func(), workerName string) (*PendingTask, error) {
-	tw := getTaskWorkerByName(workerName)
+func ExecuteCallbackOnTaskWorker(callback func(), taskWorkerName string) (*PendingTask, error) {
+	tw := getTaskWorkerByName(taskWorkerName)
 	if tw == nil {
-		return nil, errors.New("no task worker found with name " + workerName)
+		return nil, errors.New("no task worker found with name " + taskWorkerName)
 	}
 
 	pt := &PendingTask{callback: callback}
@@ -283,20 +283,20 @@ func go_frankenphp_worker_dispatch_task(taskStr *C.char, taskLen C.size_t, name 
 	task := &PendingTask{str: taskStr, len: taskLen}
 	task.done.Lock()
 
-	// dispatch immediately if available (best performance)
+	// dispatch task immediately if a thread available (best performance)
 	select {
 	case worker.taskChan <- task:
 		return C.bool(true)
 	default:
 	}
 
+	// otherwise queue up in a non-blocking way
 	// make sure the queue is not too full
 	if worker.queueLen.Load() >= maxQueueLen {
 		logger.Error("task worker queue is full, dropping task", "name", worker.name)
 		return C.bool(false)
 	}
 
-	// otherwise queue up in a non-blocking way
 	go func() {
 		worker.queueLen.Add(1)
 		worker.taskChan <- task
