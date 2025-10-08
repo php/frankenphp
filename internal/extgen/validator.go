@@ -10,26 +10,17 @@ import (
 	"strings"
 )
 
-func scalarTypes() []phpType {
-	return []phpType{phpString, phpInt, phpFloat, phpBool, phpArray}
-}
+var (
+	paramTypes     = []phpType{phpString, phpInt, phpFloat, phpBool, phpArray, phpObject, phpMixed}
+	returnTypes    = []phpType{phpVoid, phpString, phpInt, phpFloat, phpBool, phpArray, phpObject, phpMixed, phpNull, phpTrue, phpFalse}
+	propTypes      = []phpType{phpString, phpInt, phpFloat, phpBool, phpArray, phpObject, phpMixed}
+	supportedTypes = []phpType{phpString, phpInt, phpFloat, phpBool, phpArray, phpMixed}
 
-func paramTypes() []phpType {
-	return []phpType{phpString, phpInt, phpFloat, phpBool, phpArray, phpObject, phpMixed}
-}
-
-func returnTypes() []phpType {
-	return []phpType{phpVoid, phpString, phpInt, phpFloat, phpBool, phpArray, phpObject, phpMixed, phpNull, phpTrue, phpFalse}
-}
-
-func propTypes() []phpType {
-	return []phpType{phpString, phpInt, phpFloat, phpBool, phpArray, phpObject, phpMixed}
-}
-
-var functionNameRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
-var parameterNameRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
-var classNameRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
-var propNameRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+	functionNameRegex  = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+	parameterNameRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+	classNameRegex     = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+	propNameRegex      = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+)
 
 type Validator struct{}
 
@@ -64,8 +55,7 @@ func (v *Validator) validateParameter(param phpParameter) error {
 		return fmt.Errorf("invalid parameter name: %s", param.Name)
 	}
 
-	validTypes := paramTypes()
-	if !v.isValidPHPType(param.PhpType, validTypes) {
+	if !slices.Contains(paramTypes, param.PhpType) {
 		return fmt.Errorf("invalid parameter type: %s", param.PhpType)
 	}
 
@@ -73,8 +63,7 @@ func (v *Validator) validateParameter(param phpParameter) error {
 }
 
 func (v *Validator) validateReturnType(returnType phpType) error {
-	validReturnTypes := returnTypes()
-	if !v.isValidPHPType(returnType, validReturnTypes) {
+	if !slices.Contains(returnTypes, returnType) {
 		return fmt.Errorf("invalid return type: %s", returnType)
 	}
 	return nil
@@ -107,43 +96,32 @@ func (v *Validator) validateClassProperty(prop phpClassProperty) error {
 		return fmt.Errorf("invalid property name: %s", prop.Name)
 	}
 
-	validTypes := propTypes()
-	if !v.isValidPHPType(prop.PhpType, validTypes) {
+	if !slices.Contains(propTypes, prop.PhpType) {
 		return fmt.Errorf("invalid property type: %s", prop.PhpType)
 	}
 
 	return nil
 }
 
-func (v *Validator) isValidPHPType(phpType phpType, validTypes []phpType) bool {
-	return slices.Contains(validTypes, phpType)
-}
-
-// validateScalarTypes checks if PHP signature contains only supported scalar types
-func (v *Validator) validateScalarTypes(fn phpFunction) error {
-	supportedTypes := scalarTypes()
-
+// validateTypes checks if PHP signature contains only supported types
+func (v *Validator) validateTypes(fn phpFunction) error {
 	for i, param := range fn.Params {
-		if !v.isScalarPHPType(param.PhpType, supportedTypes) {
-			return fmt.Errorf("parameter %d (%s) has unsupported type '%s'. Only scalar types (string, int, float, bool, array) and their nullable variants are supported", i+1, param.Name, param.PhpType)
+		if !slices.Contains(supportedTypes, param.PhpType) {
+			return fmt.Errorf("parameter %d %q has unsupported type %q, supported typed: string, int, float, bool, array and mixed, can be nullable", i+1, param.Name, param.PhpType)
 		}
 	}
 
-	if fn.ReturnType != phpVoid && !v.isScalarPHPType(fn.ReturnType, supportedTypes) {
-		return fmt.Errorf("return type '%s' is not supported. Only scalar types (string, int, float, bool, array), void, and their nullable variants are supported", fn.ReturnType)
+	if fn.ReturnType != phpVoid && !slices.Contains(supportedTypes, fn.ReturnType) {
+		return fmt.Errorf("return type %q is not supported, supported typed: string, int, float, bool, array and mixed, can be nullable", fn.ReturnType)
 	}
 
 	return nil
 }
 
-func (v *Validator) isScalarPHPType(phpType phpType, supportedTypes []phpType) bool {
-	return slices.Contains(supportedTypes, phpType)
-}
-
 // validateGoFunctionSignatureWithOptions validates with option for method vs function
 func (v *Validator) validateGoFunctionSignatureWithOptions(phpFunc phpFunction, isMethod bool) error {
 	if phpFunc.GoFunction == "" {
-		return fmt.Errorf("no Go function found for PHP function '%s'", phpFunc.Name)
+		return fmt.Errorf("no Go function found for PHP function %q", phpFunc.Name)
 	}
 
 	fset := token.NewFileSet()
@@ -199,7 +177,7 @@ func (v *Validator) validateGoFunctionSignatureWithOptions(phpFunc phpFunction, 
 			actualGoType := v.goTypeToString(goParam.Type)
 
 			if !v.isCompatibleGoType(expectedGoType, actualGoType) {
-				return fmt.Errorf("parameter %d type mismatch: PHP '%s' requires Go type '%s' but found '%s'", i+1, phpParam.PhpType, expectedGoType, actualGoType)
+				return fmt.Errorf("parameter %d type mismatch: PHP %q requires Go type %q but found %q", i+1, phpParam.PhpType, expectedGoType, actualGoType)
 			}
 		}
 	}
@@ -208,7 +186,7 @@ func (v *Validator) validateGoFunctionSignatureWithOptions(phpFunc phpFunction, 
 	actualGoReturnType := v.goReturnTypeToString(goFunc.Type.Results)
 
 	if !v.isCompatibleGoType(expectedGoReturnType, actualGoReturnType) {
-		return fmt.Errorf("return type mismatch: PHP '%s' requires Go return type '%s' but found '%s'", phpFunc.ReturnType, expectedGoReturnType, actualGoReturnType)
+		return fmt.Errorf("return type mismatch: PHP %q requires Go return type %q but found %q", phpFunc.ReturnType, expectedGoReturnType, actualGoReturnType)
 	}
 
 	return nil
@@ -225,10 +203,10 @@ func (v *Validator) phpTypeToGoType(t phpType, isNullable bool) string {
 		baseType = "float64"
 	case phpBool:
 		baseType = "bool"
-	case phpArray:
+	case phpArray, phpMixed:
 		baseType = "*C.zval"
 	default:
-		baseType = "interface{}"
+		baseType = "any"
 	}
 
 	if isNullable && t != phpString && t != phpArray {
@@ -271,7 +249,7 @@ func (v *Validator) phpReturnTypeToGoType(phpReturnType phpType) string {
 	case phpArray:
 		return "unsafe.Pointer"
 	default:
-		return "interface{}"
+		return "any"
 	}
 }
 

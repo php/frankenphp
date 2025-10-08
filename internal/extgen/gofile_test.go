@@ -340,7 +340,7 @@ import (
 func processData(input *go_string, options *go_nullable) *go_value {
 	data := CStringToGoString(input)
 	processed := internalProcess(data)
-	return types.Array([]interface{}{processed})
+	return types.Array([]any{processed})
 }
 
 //export_php: validateInput(data string): bool
@@ -358,7 +358,7 @@ func validateFormat(input string) bool {
 	return !strings.Contains(input, "invalid")
 }
 
-func jsonHelper(data interface{}) ([]byte, error) {
+func jsonHelper(data any) ([]byte, error) {
 	return json.Marshal(data)
 }
 
@@ -375,7 +375,7 @@ func debugPrint(msg string) {
 			GoFunction: `func processData(input *go_string, options *go_nullable) *go_value {
 	data := CStringToGoString(input)
 	processed := internalProcess(data)
-	return Array([]interface{}{processed})
+	return Array([]any{processed})
 }`,
 		},
 		{
@@ -403,7 +403,7 @@ func debugPrint(msg string) {
 	internalFuncs := []string{
 		"func internalProcess(data string) string",
 		"func validateFormat(input string) bool",
-		"func jsonHelper(data interface{}) ([]byte, error)",
+		"func jsonHelper(data any) ([]byte, error)",
 		"func debugPrint(msg string)",
 	}
 
@@ -510,7 +510,7 @@ import "fmt"
 
 //export_php:class ArrayClass
 type ArrayStruct struct {
-	data []interface{}
+	data []any
 }
 
 //export_php:method ArrayClass::processArray(array $items): array

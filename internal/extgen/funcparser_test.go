@@ -306,7 +306,7 @@ func TestFunctionParserUnsupportedTypes(t *testing.T) {
 			input: `package main
 
 //export_php:function arrayFunc(array $data): string
-func arrayFunc(data interface{}) unsafe.Pointer {
+func arrayFunc(data any) unsafe.Pointer {
 	return String("processed")
 }`,
 			expected:   0,
@@ -317,7 +317,7 @@ func arrayFunc(data interface{}) unsafe.Pointer {
 			input: `package main
 
 //export_php:function objectFunc(object $obj): string
-func objectFunc(obj interface{}) unsafe.Pointer {
+func objectFunc(obj any) unsafe.Pointer {
 	return String("processed")
 }`,
 			expected:   0,
@@ -328,7 +328,7 @@ func objectFunc(obj interface{}) unsafe.Pointer {
 			input: `package main
 
 //export_php:function mixedFunc(mixed $value): string
-func mixedFunc(value interface{}) unsafe.Pointer {
+func mixedFunc(value any) unsafe.Pointer {
 	return String("processed")
 }`,
 			expected:   0,
@@ -339,7 +339,7 @@ func mixedFunc(value interface{}) unsafe.Pointer {
 			input: `package main
 
 //export_php:function arrayReturnFunc(string $name): array
-func arrayReturnFunc(name *C.zend_string) interface{} {
+func arrayReturnFunc(name *C.zend_string) any {
 	return []string{"result"}
 }`,
 			expected:   0,
@@ -350,8 +350,8 @@ func arrayReturnFunc(name *C.zend_string) interface{} {
 			input: `package main
 
 //export_php:function objectReturnFunc(string $name): object
-func objectReturnFunc(name *C.zend_string) interface{} {
-	return map[string]interface{}{"key": "value"}
+func objectReturnFunc(name *C.zend_string) any {
+	return map[string]any{"key": "value"}
 }`,
 			expected:   0,
 			hasWarning: true,

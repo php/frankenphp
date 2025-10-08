@@ -417,7 +417,7 @@ func TestValidateClass(t *testing.T) {
 	}
 }
 
-func TestValidateScalarTypes(t *testing.T) {
+func TestValidateTypes(t *testing.T) {
 	tests := []struct {
 		name        string
 		function    phpFunction
@@ -494,19 +494,7 @@ func TestValidateScalarTypes(t *testing.T) {
 				},
 			},
 			expectError: true,
-			errorMsg:    "parameter 1 (objectParam) has unsupported type 'object'",
-		},
-		{
-			name: "invalid mixed parameter",
-			function: phpFunction{
-				Name:       "mixedFunction",
-				ReturnType: phpString,
-				Params: []phpParameter{
-					{Name: "mixedParam", PhpType: phpMixed},
-				},
-			},
-			expectError: true,
-			errorMsg:    "parameter 1 (mixedParam) has unsupported type 'mixed'",
+			errorMsg:    `parameter 1 "objectParam" has unsupported type "object"`,
 		},
 		{
 			name: "invalid object return type",
@@ -518,7 +506,7 @@ func TestValidateScalarTypes(t *testing.T) {
 				},
 			},
 			expectError: true,
-			errorMsg:    "return type 'object' is not supported",
+			errorMsg:    `return type "object" is not supported`,
 		},
 		{
 			name: "mixed scalar and invalid parameters",
@@ -532,20 +520,20 @@ func TestValidateScalarTypes(t *testing.T) {
 				},
 			},
 			expectError: true,
-			errorMsg:    "parameter 2 (invalidParam) has unsupported type 'object'",
+			errorMsg:    `parameter 2 "invalidParam" has unsupported type "object"`,
 		},
 	}
 
 	validator := Validator{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validator.validateScalarTypes(tt.function)
+			err := validator.validateTypes(tt.function)
 
 			if tt.expectError {
-				assert.Error(t, err, "validateScalarTypes() should return an error for function %s", tt.function.Name)
+				assert.Error(t, err, "validateTypes() should return an error for function %s", tt.function.Name)
 				assert.Contains(t, err.Error(), tt.errorMsg, "Error message should contain expected text")
 			} else {
-				assert.NoError(t, err, "validateScalarTypes() should not return an error for function %s", tt.function.Name)
+				assert.NoError(t, err, "validateTypes() should not return an error for function %s", tt.function.Name)
 			}
 		})
 	}
@@ -628,7 +616,7 @@ func TestValidateGoFunctionSignature(t *testing.T) {
 }`,
 			},
 			expectError: true,
-			errorMsg:    "parameter 2 type mismatch: PHP 'int' requires Go type 'int64' but found 'string'",
+			errorMsg:    `parameter 2 type mismatch: PHP "int" requires Go type "int64" but found "string"`,
 		},
 		{
 			name: "return type mismatch",
@@ -643,7 +631,7 @@ func TestValidateGoFunctionSignature(t *testing.T) {
 }`,
 			},
 			expectError: true,
-			errorMsg:    "return type mismatch: PHP 'int' requires Go return type 'int64' but found 'string'",
+			errorMsg:    `return type mismatch: PHP "int" requires Go return type "int64" but found "string"`,
 		},
 		{
 			name: "valid bool parameter and return",
@@ -751,7 +739,7 @@ func TestPhpTypeToGoType(t *testing.T) {
 		{"bool", true, "*bool"},
 		{"array", false, "*C.zval"},
 		{"array", true, "*C.zval"},
-		{"unknown", false, "interface{}"},
+		{"unknown", false, "any"},
 	}
 
 	validator := Validator{}
@@ -780,7 +768,7 @@ func TestPhpReturnTypeToGoType(t *testing.T) {
 		{"bool", "bool"},
 		{"array", "unsafe.Pointer"},
 		{"array", "unsafe.Pointer"},
-		{"unknown", "interface{}"},
+		{"unknown", "any"},
 	}
 
 	validator := Validator{}

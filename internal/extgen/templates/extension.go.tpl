@@ -40,13 +40,13 @@ type {{.GoStruct}} struct {
 {{- if .Classes}}
 
 //export registerGoObject
-func registerGoObject(obj interface{}) C.uintptr_t {
+func registerGoObject(obj any) C.uintptr_t {
 	handle := cgo.NewHandle(obj)
 	return C.uintptr_t(handle)
 }
 
 //export getGoObject
-func getGoObject(handle C.uintptr_t) interface{} {
+func getGoObject(handle C.uintptr_t) any {
 	h := cgo.Handle(handle)
 	return h.Value()
 }
