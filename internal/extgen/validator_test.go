@@ -555,7 +555,7 @@ func TestValidateGoFunctionSignature(t *testing.T) {
 					{Name: "name", PhpType: phpString},
 					{Name: "count", PhpType: phpInt},
 				},
-				GoFunction: `func testFunc(name *C.zend_string, count int64) unsafe.Pointer {
+				GoFunction: `func testFunc(name unsafe.Pointer, count int64) unsafe.Pointer {
 	return nil
 }`,
 			},
@@ -569,7 +569,7 @@ func TestValidateGoFunctionSignature(t *testing.T) {
 				Params: []phpParameter{
 					{Name: "message", PhpType: phpString},
 				},
-				GoFunction: `func voidFunc(message *C.zend_string) {
+				GoFunction: `func voidFunc(message unsafe.Pointer) {
 	// Do something
 }`,
 			},
@@ -595,7 +595,7 @@ func TestValidateGoFunctionSignature(t *testing.T) {
 					{Name: "param1", PhpType: phpString},
 					{Name: "param2", PhpType: phpInt},
 				},
-				GoFunction: `func countMismatch(param1 *C.zend_string) unsafe.Pointer {
+				GoFunction: `func countMismatch(param1 unsafe.Pointer) unsafe.Pointer {
 	return nil
 }`,
 			},
@@ -611,7 +611,7 @@ func TestValidateGoFunctionSignature(t *testing.T) {
 					{Name: "name", PhpType: phpString},
 					{Name: "count", PhpType: phpInt},
 				},
-				GoFunction: `func typeMismatch(name *C.zend_string, count string) unsafe.Pointer {
+				GoFunction: `func typeMismatch(name unsafe.Pointer, count string) unsafe.Pointer {
 	return nil
 }`,
 			},
@@ -626,7 +626,7 @@ func TestValidateGoFunctionSignature(t *testing.T) {
 				Params: []phpParameter{
 					{Name: "value", PhpType: phpString},
 				},
-				GoFunction: `func returnMismatch(value *C.zend_string) string {
+				GoFunction: `func returnMismatch(value unsafe.Pointer) string {
 	return ""
 }`,
 			},
@@ -669,7 +669,7 @@ func TestValidateGoFunctionSignature(t *testing.T) {
 				Params: []phpParameter{
 					{Name: "items", PhpType: phpArray},
 				},
-				GoFunction: `func arrayFunc(items *C.zval) unsafe.Pointer {
+				GoFunction: `func arrayFunc(items unsafe.Pointer) unsafe.Pointer {
 	return nil
 }`,
 			},
@@ -684,7 +684,7 @@ func TestValidateGoFunctionSignature(t *testing.T) {
 					{Name: "items", PhpType: phpArray, IsNullable: true},
 					{Name: "name", PhpType: phpString},
 				},
-				GoFunction: `func nullableArrayFunc(items *C.zval, name *C.zend_string) unsafe.Pointer {
+				GoFunction: `func nullableArrayFunc(items unsafe.Pointer, name unsafe.Pointer) unsafe.Pointer {
 	return nil
 }`,
 			},
@@ -700,7 +700,7 @@ func TestValidateGoFunctionSignature(t *testing.T) {
 					{Name: "filter", PhpType: phpString},
 					{Name: "limit", PhpType: phpInt},
 				},
-				GoFunction: `func mixedFunc(data *C.zval, filter *C.zend_string, limit int64) unsafe.Pointer {
+				GoFunction: `func mixedFunc(data unsafe.Pointer, filter unsafe.Pointer, limit int64) unsafe.Pointer {
 	return nil
 }`,
 			},
@@ -729,16 +729,16 @@ func TestPhpTypeToGoType(t *testing.T) {
 		isNullable bool
 		expected   string
 	}{
-		{"string", false, "*C.zend_string"},
-		{"string", true, "*C.zend_string"},
+		{"string", false, "unsafe.Pointer"},
+		{"string", true, "unsafe.Pointer"},
 		{"int", false, "int64"},
 		{"int", true, "*int64"},
 		{"float", false, "float64"},
 		{"float", true, "*float64"},
 		{"bool", false, "bool"},
 		{"bool", true, "*bool"},
-		{"array", false, "*C.zval"},
-		{"array", true, "*C.zval"},
+		{"array", false, "unsafe.Pointer"},
+		{"array", true, "unsafe.Pointer"},
 		{"unknown", false, "any"},
 	}
 
