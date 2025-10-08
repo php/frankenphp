@@ -65,39 +65,44 @@ func RegisterWorker(worker Worker) {
 }
 
 // startWorker creates a pipe from a worker to the main worker.
-func startWorker(w *worker, externalWorker Worker, thread *phpThread) {
+func startWorker(w *worker, extensionWorker Worker, thread *phpThread) {
 	for {
-		rq := externalWorker.ProvideRequest()
+		rq := extensionWorker.ProvideRequest()
 
-		if rq == nil || rq.Request == nil {
-			logger.LogAttrs(context.Background(), slog.LevelWarn, "external worker provided nil request", slog.String("worker", w.name), slog.Int("thread", thread.threadIndex))
-			continue
-		}
-
-		r := rq.Request
-		fr, err := NewRequestWithContext(r, WithOriginalRequest(r), WithWorkerName(w.name))
-		if err != nil {
-			logger.LogAttrs(context.Background(), slog.LevelError, "error creating request for external worker", slog.String("worker", w.name), slog.Int("thread", thread.threadIndex), slog.Any("error", err))
-			continue
-		}
-
-		if fc, ok := fromContext(fr.Context()); ok {
-			fc.responseWriter = rq.Response
-			fc.handlerParameters = rq.CallbackParameters
-
-			// Queue the request and wait for completion if Done channel was provided
-			logger.LogAttrs(context.Background(), slog.LevelInfo, "queue the external worker request", slog.String("worker", w.name), slog.Int("thread", thread.threadIndex))
-
-			w.requestChan <- fc
-			if rq.AfterFunc != nil {
-				go func() {
-					<-fc.done
-
-					if rq.AfterFunc != nil {
-						rq.AfterFunc(fc.handlerReturn)
-					}
-				}()
+		var fc *frankenPHPContext
+		if rq.Request == nil {
+			fc = newFrankenPHPContext()
+			fc.logger = logger
+		} else {
+			fr, err := NewRequestWithContext(rq.Request, WithOriginalRequest(rq.Request))
+			if err != nil {
+				logger.LogAttrs(context.Background(), slog.LevelError, "error creating request for external worker", slog.String("worker", w.name), slog.Int("thread", thread.threadIndex), slog.Any("error", err))
+				continue
 			}
+
+			var ok bool
+			if fc, ok = fromContext(fr.Context()); !ok {
+				continue
+			}
+		}
+
+		fc.worker = w
+
+		fc.responseWriter = rq.Response
+		fc.handlerParameters = rq.CallbackParameters
+
+		// Queue the request and wait for completion if Done channel was provided
+		logger.LogAttrs(context.Background(), slog.LevelInfo, "queue the external worker request", slog.String("worker", w.name), slog.Int("thread", thread.threadIndex))
+
+		w.requestChan <- fc
+		if rq.AfterFunc != nil {
+			go func() {
+				<-fc.done
+
+				if rq.AfterFunc != nil {
+					rq.AfterFunc(fc.handlerReturn)
+				}
+			}()
 		}
 	}
 }

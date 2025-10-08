@@ -527,8 +527,12 @@ func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (r
 
 //export go_read_cookies
 func go_read_cookies(threadIndex C.uintptr_t) *C.char {
-	cookies := phpThreads[threadIndex].getRequestContext().request.Header.Values("Cookie")
-	cookie := strings.Join(cookies, "; ")
+	request := phpThreads[threadIndex].getRequestContext().request
+	if request == nil {
+		return nil
+	}
+
+	cookie := strings.Join(request.Header.Values("Cookie"), "; ")
 	if cookie == "" {
 		return nil
 	}
