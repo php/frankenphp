@@ -79,6 +79,16 @@ func (thread *phpThread) shutdown() {
 	}
 }
 
+// restart the underlying PHP thread
+func (thread *phpThread) restart() {
+	if !thread.state.requestSafeStateChange(stateRestarting) {
+		return
+	}
+	close(thread.drainChan)
+	thread.state.waitFor(stateYielding)
+	thread.drainChan = make(chan struct{})
+}
+
 // change the thread handler safely
 // must be called from outside the PHP thread
 func (thread *phpThread) setHandler(handler threadHandler) {
