@@ -6,7 +6,6 @@ package frankenphp
 import "C"
 import (
 	"fmt"
-	"reflect"
 	"strconv"
 	"unsafe"
 )
@@ -286,7 +285,7 @@ func phpValue(value any) *C.zval {
 	case []any:
 		return (*C.zval)(PHPPackedArray(v))
 	default:
-		panic(fmt.Sprintf("unsupported Go type %q", reflect.TypeOf(value)))
+		panic(fmt.Sprintf("unsupported Go type %T", v))
 	}
 
 	return &zval
