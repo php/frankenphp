@@ -1,13 +1,16 @@
 package {{.PackageName}}
 
-/*
-#include <stdlib.h>
-#include "{{.BaseName}}.h"
-*/
+// #include <stdlib.h>
+// #include "{{.BaseName}}.h"
 import "C"
+import (
+	"unsafe"
+
+	"github.com/dunglas/frankenphp"
 {{- range .Imports}}
-import {{.}}
+	import {{.}}
 {{- end}}
+)
 
 func init() {
 	frankenphp.RegisterExtension(unsafe.Pointer(&C.{{.BaseName}}_module_entry))

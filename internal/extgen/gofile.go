@@ -47,7 +47,7 @@ func (gg *GoFileGenerator) buildContent() (string, error) {
 
 	filteredImports := make([]string, 0, len(imports))
 	for _, imp := range imports {
-		if imp != `"C"` {
+		if imp != `"C"` && imp != `"unsafe"` && imp != `"github.com/dunglas/frankenphp"` {
 			filteredImports = append(filteredImports, imp)
 		}
 	}
