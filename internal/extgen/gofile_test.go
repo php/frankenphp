@@ -109,7 +109,7 @@ func test() {
 			contains: []string{
 				"package simple",
 				`#include "simple.h"`,
-				"import \"C\"",
+				`import "C"`,
 				"func init()",
 				"frankenphp.RegisterExtension(",
 				"//export test",
@@ -143,11 +143,11 @@ func process(data *go_string) *go_value {
 			},
 			contains: []string{
 				"package complex",
-				`import "fmt"`,
-				`import "strings"`,
-				`import "encoding/json"`,
+				`"fmt"`,
+				`"strings"`,
+				`"encoding/json"`,
 				"//export process",
-				`import "C"`,
+				`"C"`,
 			},
 		},
 		{
@@ -193,7 +193,7 @@ func internalFunc2(data string) {
 			require.NoError(t, err)
 
 			for _, expected := range tt.contains {
-				assert.Contains(t, content, expected, "Generated Go content should contain '%s'", expected)
+				assert.Contains(t, content, expected, "Generated Go content should contain %q", expected)
 			}
 		})
 	}
@@ -305,9 +305,9 @@ func test() {}`
 	require.NoError(t, err)
 
 	expectedImports := []string{
-		`import "fmt"`,
-		`import "strings"`,
-		`import "github.com/other/package"`,
+		`"fmt"`,
+		`"strings"`,
+		`"github.com/other/package"`,
 	}
 
 	for _, imp := range expectedImports {
@@ -315,10 +315,10 @@ func test() {}`
 	}
 
 	forbiddenImports := []string{
-		`import "C"`,
+		`"C"`,
 	}
 
-	cImportCount := strings.Count(content, `import "C"`)
+	cImportCount := strings.Count(content, `"C"`)
 	assert.Equal(t, 1, cImportCount, "Expected exactly 1 occurrence of 'import \"C\"'")
 
 	for _, imp := range forbiddenImports[1:] {
@@ -675,10 +675,8 @@ func createTempSourceFile(t *testing.T, content string) string {
 func testGoFileBasicStructure(t *testing.T, content, baseName string) {
 	requiredElements := []string{
 		"package " + SanitizePackageName(baseName),
-		"/*",
-		"#include <stdlib.h>",
-		`#include "` + baseName + `.h"`,
-		"*/",
+		"// #include <stdlib.h>",
+		`// #include "` + baseName + `.h"`,
 		`import "C"`,
 		"func init() {",
 		"frankenphp.RegisterExtension(",
@@ -691,7 +689,7 @@ func testGoFileBasicStructure(t *testing.T, content, baseName string) {
 }
 
 func testGoFileImports(t *testing.T, content string) {
-	cImportCount := strings.Count(content, `import "C"`)
+	cImportCount := strings.Count(content, `"C"`)
 	assert.Equal(t, 1, cImportCount, "Expected exactly 1 C import")
 }
 

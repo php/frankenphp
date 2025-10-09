@@ -5,8 +5,6 @@ import (
 	"os"
 )
 
-const BuildDir = "."
-
 type Generator struct {
 	BaseName   string
 	SourceFile string

@@ -28,21 +28,15 @@ Initializes a PHP extension from a Go file. This command generates the necessary
 	})
 }
 
-func cmdInitExtension(fs caddycmd.Flags) (int, error) {
+func cmdInitExtension(_ caddycmd.Flags) (int, error) {
 	if len(os.Args) < 3 {
 		return 1, errors.New("the path to the Go source is required")
 	}
 
 	sourceFile := os.Args[2]
+	baseName := extgen.SanitizePackageName(strings.TrimSuffix(filepath.Base(sourceFile), ".go"))
 
-	baseName := strings.TrimSuffix(filepath.Base(sourceFile), ".go")
-
-	baseName = extgen.SanitizePackageName(baseName)
-
-	sourceDir := filepath.Dir(sourceFile)
-	buildDir := filepath.Join(sourceDir, "build")
-
-	generator := extgen.Generator{BaseName: baseName, SourceFile: sourceFile, BuildDir: buildDir}
+	generator := extgen.Generator{BaseName: baseName, SourceFile: sourceFile, BuildDir: filepath.Dir(sourceFile)}
 
 	if err := generator.Generate(); err != nil {
 		return 1, err
