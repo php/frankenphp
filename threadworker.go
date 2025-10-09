@@ -3,7 +3,6 @@ package frankenphp
 // #include "frankenphp.h"
 import "C"
 import (
-	"log"
 	"context"
 	"log/slog"
 	"path/filepath"
@@ -222,21 +221,18 @@ func go_frankenphp_worker_handle_request_start(threadIndex C.uintptr_t) (C.bool,
 	hasRequest, parameters := handler.waitForWorkerRequest()
 
 	if parameters != nil {
-		var p unsafe.Pointer
+		var ptr unsafe.Pointer
 
-		log.Printf("here")
-
-		switch parameters.(type) {
+		switch p := parameters.(type) {
 		case unsafe.Pointer:
-			p = parameters.(unsafe.Pointer)
-			log.Printf("here 2")
+			ptr = p
 
 		default:
-			p = PHPValue(parameters)
+			ptr = PHPValue(ptr)
 		}
-		handler.thread.Pin(p)
+		handler.thread.Pin(ptr)
 
-		return C.bool(hasRequest), p
+		return C.bool(hasRequest), ptr
 	}
 
 	return C.bool(hasRequest), nil
