@@ -1,12 +1,12 @@
 package extgen
 
 import (
-	"github.com/stretchr/testify/require"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCFileGenerator_Generate(t *testing.T) {
