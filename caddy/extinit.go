@@ -2,11 +2,12 @@ package caddy
 
 import (
 	"errors"
-	"github.com/dunglas/frankenphp/internal/extgen"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/dunglas/frankenphp/internal/extgen"
 
 	caddycmd "github.com/caddyserver/caddy/v2/cmd"
 	"github.com/spf13/cobra"
@@ -47,7 +48,7 @@ func cmdInitExtension(fs caddycmd.Flags) (int, error) {
 		return 1, err
 	}
 
-	log.Printf("PHP extension %q initialized successfully in %q", baseName, generator.BuildDir)
+	log.Printf("PHP extension %q initialized successfully in directory %q", baseName, generator.BuildDir)
 
 	return 0, nil
 }
