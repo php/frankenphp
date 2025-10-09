@@ -62,19 +62,6 @@ RUN if [ "$(uname -m)" = "aarch64" ]; then \
 	echo "source scl_source enable devtoolset-10" >> /etc/bashrc && \
 	source /etc/bashrc
 
-# install newer cmake to build some newer libs
-RUN curl -o cmake.tar.gz -fsSL https://github.com/Kitware/CMake/releases/download/v3.31.4/cmake-3.31.4-linux-$(uname -m).tar.gz && \
-	mkdir /cmake && \
-	tar -xzf cmake.tar.gz -C /cmake --strip-components 1 && \
-	rm cmake.tar.gz
-
-# install patchelf
-RUN curl -fsSL -o patchelf.tar.gz https://github.com/NixOS/patchelf/releases/download/0.18.0/patchelf-0.18.0-$(uname -m).tar.gz && \
-    mkdir -p /patchelf && \
-    tar -xzf patchelf.tar.gz -C /patchelf --strip-components=1 && \
-    cp /patchelf/bin/patchelf /usr/bin/ && \
-	rm patchelf.tar.gz
-
 # install build essentials
 RUN yum install -y \
 		perl \
@@ -102,6 +89,15 @@ RUN yum install -y \
 	ln -sf /usr/local/bin/make /usr/bin/make && \
 	cd .. && \
 	rm -Rf make* && \
+	curl -o cmake.tar.gz -fsSL https://github.com/Kitware/CMake/releases/download/v4.1.2/cmake-4.1.2-linux-$(uname -m).tar.gz && \
+	mkdir /cmake && \
+	tar -xzf cmake.tar.gz -C /cmake --strip-components 1 && \
+	rm cmake.tar.gz && \
+	curl -fsSL -o patchelf.tar.gz https://github.com/NixOS/patchelf/releases/download/0.18.0/patchelf-0.18.0-$(uname -m).tar.gz && \
+	mkdir -p /patchelf && \
+	tar -xzf patchelf.tar.gz -C /patchelf --strip-components=1 && \
+	cp /patchelf/bin/patchelf /usr/bin/ && \
+	rm patchelf.tar.gz && \
 	if [ "$(uname -m)" = "aarch64" ]; then \
 		GO_ARCH="arm64" ; \
 	else \
