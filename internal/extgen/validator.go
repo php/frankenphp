@@ -195,14 +195,16 @@ func (v *Validator) validateGoFunctionSignatureWithOptions(phpFunc phpFunction, 
 func (v *Validator) phpTypeToGoType(t phpType, isNullable bool) string {
 	var baseType string
 	switch t {
+	case phpString:
+		baseType = "*C.zend_string"
 	case phpInt:
 		baseType = "int64"
 	case phpFloat:
 		baseType = "float64"
 	case phpBool:
 		baseType = "bool"
-	case phpString, phpArray, phpMixed:
-		baseType = "unsafe.Pointer"
+	case phpArray, phpMixed:
+		baseType = "*C.zval"
 	default:
 		baseType = "any"
 	}
@@ -236,13 +238,15 @@ func (v *Validator) phpReturnTypeToGoType(phpReturnType phpType) string {
 	switch phpReturnType {
 	case phpVoid:
 		return ""
+	case phpString:
+		return "unsafe.Pointer"
 	case phpInt:
 		return "int64"
 	case phpFloat:
 		return "float64"
 	case phpBool:
 		return "bool"
-	case phpString, phpArray:
+	case phpArray:
 		return "unsafe.Pointer"
 	default:
 		return "any"

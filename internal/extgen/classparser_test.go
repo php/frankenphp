@@ -1,12 +1,12 @@
 package extgen
 
 import (
+	"github.com/stretchr/testify/require"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestClassParser(t *testing.T) {
@@ -138,7 +138,7 @@ func SetUserAge(u *UserStruct, age int64) {
 }
 
 //export_php:method User::getInfo(string $prefix = "User"): string
-func GetUserInfo(u UserStruct, prefix unsafe.Pointer) unsafe.Pointer {
+func GetUserInfo(u UserStruct, prefix *C.zend_string) unsafe.Pointer {
 	return nil
 }`)
 
@@ -432,7 +432,7 @@ type TestClass struct {
 }
 
 //export_php:method TestClass::arrayReturn(string $name): array
-func (tc *TestClass) arrayReturn(name unsafe.Pointer) any {
+func (tc *TestClass) arrayReturn(name *C.zend_string) any {
 	return []string{"result"}
 }`,
 			expectedClasses: 1,
@@ -449,7 +449,7 @@ type TestClass struct {
 }
 
 //export_php:method TestClass::objectReturn(string $name): object
-func (tc *TestClass) objectReturn(name unsafe.Pointer) any {
+func (tc *TestClass) objectReturn(name *C.zend_string) any {
 	return map[string]any{"key": "value"}
 }`,
 			expectedClasses: 1,
@@ -466,7 +466,7 @@ type TestClass struct {
 }
 
 //export_php:method TestClass::validMethod(string $name, int $count, float $rate, bool $active): string
-func validMethod(tc *TestClass, name unsafe.Pointer, count int64, rate float64, active bool) unsafe.Pointer {
+func validMethod(tc *TestClass, name *C.zend_string, count int64, rate float64, active bool) unsafe.Pointer {
 	return nil
 }`,
 			expectedClasses: 1,
@@ -483,7 +483,7 @@ type TestClass struct {
 }
 
 //export_php:method TestClass::voidMethod(string $message): void
-func voidMethod(tc *TestClass, message unsafe.Pointer) {
+func voidMethod(tc *TestClass, message *C.zend_string) {
 	// Do something
 }`,
 			expectedClasses: 1,
@@ -528,7 +528,7 @@ type TestClass struct {
 }
 
 //export_php:method TestClass::countMismatch(string $name, int $count): string
-func (tc *TestClass) countMismatch(name unsafe.Pointer) unsafe.Pointer {
+func (tc *TestClass) countMismatch(name *C.zend_string) unsafe.Pointer {
 	return nil
 }`,
 			expectedClasses: 1,
@@ -545,7 +545,7 @@ type TestClass struct {
 }
 
 //export_php:method TestClass::typeMismatch(string $name, int $count): string
-func (tc *TestClass) typeMismatch(name unsafe.Pointer, count string) unsafe.Pointer {
+func (tc *TestClass) typeMismatch(name *C.zend_string, count string) unsafe.Pointer {
 	return nil
 }`,
 			expectedClasses: 1,
@@ -562,7 +562,7 @@ type TestClass struct {
 }
 
 //export_php:method TestClass::returnMismatch(string $name): int
-func (tc *TestClass) returnMismatch(name unsafe.Pointer) string {
+func (tc *TestClass) returnMismatch(name *C.zend_string) string {
 	return ""
 }`,
 			expectedClasses: 1,
@@ -579,7 +579,7 @@ type TestClass struct {
 }
 
 //export_php:method TestClass::validMatch(string $name, int $count): string
-func validMatch(tc *TestClass, name unsafe.Pointer, count int64) unsafe.Pointer {
+func validMatch(tc *TestClass, name *C.zend_string, count int64) unsafe.Pointer {
 	return nil
 }`,
 			expectedClasses: 1,

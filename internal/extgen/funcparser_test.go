@@ -1,12 +1,12 @@
 package extgen
 
 import (
+	"github.com/stretchr/testify/require"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestFunctionParser(t *testing.T) {
@@ -20,7 +20,7 @@ func TestFunctionParser(t *testing.T) {
 			input: `package main
 
 //export_php:function testFunc(string $name): string
-func testFunc(name unsafe.Pointer) unsafe.Pointer {
+func testFunc(name *C.zend_string) unsafe.Pointer {
 	return String("Hello " + CStringToGoString(name))
 }`,
 			expected: 1,
@@ -35,7 +35,7 @@ func func1(a int64) int64 {
 }
 
 //export_php:function func2(string $b): string  
-func func2(b unsafe.Pointer) unsafe.Pointer {
+func func2(b *C.zend_string) unsafe.Pointer {
 	return String("processed: " + CStringToGoString(b))
 }`,
 			expected: 2,
@@ -54,7 +54,7 @@ func regularFunc() {
 			input: `package main
 
 //export_php:function phpFunc(string $data): string
-func phpFunc(data unsafe.Pointer) unsafe.Pointer {
+func phpFunc(data *C.zend_string) unsafe.Pointer {
 	return String("PHP: " + CStringToGoString(data))
 }
 
@@ -73,7 +73,7 @@ func anotherPhpFunc(num int64) int64 {
 			input: `package main
 
 //export_php function phpFunc(data string): string
-func phpFunc(data unsafe.Pointer) unsafe.Pointer {
+func phpFunc(data *C.zend_string) unsafe.Pointer {
 	return String("PHP: " + CStringToGoString(data))
 }`,
 			expected: 0,
@@ -83,7 +83,7 @@ func phpFunc(data unsafe.Pointer) unsafe.Pointer {
 			input: `package main
 
 //export_php:function my_php_function(string $name): string
-func myGoFunction(name unsafe.Pointer) unsafe.Pointer {
+func myGoFunction(name *C.zend_string) unsafe.Pointer {
 	return String("Hello " + CStringToGoString(name))
 }
 
@@ -339,7 +339,7 @@ func mixedFunc(value any) unsafe.Pointer {
 			input: `package main
 
 //export_php:function arrayReturnFunc(string $name): array
-func arrayReturnFunc(name unsafe.Pointer) any {
+func arrayReturnFunc(name *C.zend_string) any {
 	return []string{"result"}
 }`,
 			expected:   0,
@@ -350,7 +350,7 @@ func arrayReturnFunc(name unsafe.Pointer) any {
 			input: `package main
 
 //export_php:function objectReturnFunc(string $name): object
-func objectReturnFunc(name unsafe.Pointer) any {
+func objectReturnFunc(name *C.zend_string) any {
 	return map[string]any{"key": "value"}
 }`,
 			expected:   0,
@@ -361,7 +361,7 @@ func objectReturnFunc(name unsafe.Pointer) any {
 			input: `package main
 
 //export_php:function validFunc(string $name, int $count, float $rate, bool $active): string
-func validFunc(name unsafe.Pointer, count int64, rate float64, active bool) unsafe.Pointer {
+func validFunc(name *C.zend_string, count int64, rate float64, active bool) unsafe.Pointer {
 	return nil
 }`,
 			expected:   1,
@@ -372,7 +372,7 @@ func validFunc(name unsafe.Pointer, count int64, rate float64, active bool) unsa
 			input: `package main
 
 //export_php:function voidFunc(string $message): void
-func voidFunc(message unsafe.Pointer) {
+func voidFunc(message *C.zend_string) {
 	// Do something
 }`,
 			expected:   1,
@@ -407,7 +407,7 @@ func TestFunctionParserGoTypeMismatch(t *testing.T) {
 			input: `package main
 
 //export_php:function countMismatch(string $name, int $count): string
-func countMismatch(name unsafe.Pointer) unsafe.Pointer {
+func countMismatch(name *C.zend_string) unsafe.Pointer {
 	return nil
 }`,
 			expected:   0,
@@ -418,7 +418,7 @@ func countMismatch(name unsafe.Pointer) unsafe.Pointer {
 			input: `package main
 
 //export_php:function typeMismatch(string $name, int $count): string
-func typeMismatch(name unsafe.Pointer, count string) unsafe.Pointer {
+func typeMismatch(name *C.zend_string, count string) unsafe.Pointer {
 	return nil
 }`,
 			expected:   0,
@@ -429,7 +429,7 @@ func typeMismatch(name unsafe.Pointer, count string) unsafe.Pointer {
 			input: `package main
 
 //export_php:function returnMismatch(string $name): int
-func returnMismatch(name unsafe.Pointer) string {
+func returnMismatch(name *C.zend_string) string {
 	return ""
 }`,
 			expected:   0,
@@ -440,7 +440,7 @@ func returnMismatch(name unsafe.Pointer) string {
 			input: `package main
 
 //export_php:function validMatch(string $name, int $count): string
-func validMatch(name unsafe.Pointer, count int64) unsafe.Pointer {
+func validMatch(name *C.zend_string, count int64) unsafe.Pointer {
 	return nil
 }`,
 			expected:   1,
