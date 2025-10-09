@@ -1,6 +1,20 @@
 package frankenphp
 
 /*
+#cgo nocallback __zend_new_array__
+#cgo nocallback __zval_null__
+#cgo nocallback __zval_bool__
+#cgo nocallback __zval_long__
+#cgo nocallback __zval_double__
+#cgo nocallback __zval_string__
+#cgo nocallback __zval_arr__
+#cgo noescape __zend_new_array__
+#cgo noescape __zval_null__
+#cgo noescape __zval_bool__
+#cgo noescape __zval_long__
+#cgo noescape __zval_double__
+#cgo noescape __zval_string__
+#cgo noescape __zval_arr__
 #include "types.h"
 */
 import "C"
@@ -44,13 +58,13 @@ type AssociativeArray struct {
 	Order []string
 }
 
-// EXPERIMENTAL: GoAssociativeArray converts a zend_array to a Go AssociativeArray
+// EXPERIMENTAL: GoAssociativeArray converts a PHP HashTable to a Go AssociativeArray
 func GoAssociativeArray(arr unsafe.Pointer) AssociativeArray {
 	entries, order := goArray(arr, true)
 	return AssociativeArray{entries, order}
 }
 
-// EXPERIMENTAL: GoMap converts a zval having a zend_array value to an unordered Go map
+// EXPERIMENTAL: GoMap converts a PHP HashTable to an unordered Go map
 func GoMap(arr unsafe.Pointer) map[string]any {
 	entries, _ := goArray(arr, false)
 	return entries
@@ -61,11 +75,10 @@ func goArray(arr unsafe.Pointer, ordered bool) (map[string]any, []string) {
 		panic("received a nil pointer on array conversion")
 	}
 
-	zval := (*C.zval)(arr)
-	hashTable := (*C.HashTable)(extractZvalValue(zval, C.IS_ARRAY))
+	hashTable := (*C.HashTable)(arr)
 
 	if hashTable == nil {
-		panic("received a *zval that wasn't a HashTable on array conversion")
+		panic("received a pointer that wasn't a HashTable on array conversion")
 	}
 
 	nNumUsed := hashTable.nNumUsed
@@ -122,17 +135,16 @@ func goArray(arr unsafe.Pointer, ordered bool) (map[string]any, []string) {
 	return entries, order
 }
 
-// EXPERIMENTAL: GoPackedArray converts a zval with a zend_array value to a Go slice
+// EXPERIMENTAL: GoPackedArray converts a PHP HashTable to a Go slice
 func GoPackedArray(arr unsafe.Pointer) []any {
 	if arr == nil {
 		panic("GoPackedArray received a nil pointer")
 	}
 
-	zval := (*C.zval)(arr)
-	hashTable := (*C.HashTable)(extractZvalValue(zval, C.IS_ARRAY))
+	hashTable := (*C.HashTable)(arr)
 
 	if hashTable == nil {
-		panic("GoPackedArray received *zval that wasn't a HashTable")
+		panic("GoPackedArray received a pointer that wasn't a HashTable")
 	}
 
 	nNumUsed := hashTable.nNumUsed
@@ -165,7 +177,7 @@ func PHPMap(arr map[string]any) unsafe.Pointer {
 	return phpArray(arr, nil)
 }
 
-// EXPERIMENTAL: PHPAssociativeArray converts a Go AssociativeArray to a PHP zval with a zend_array value
+// EXPERIMENTAL: PHPAssociativeArray converts a Go AssociativeArray to a PHP zend_array
 func PHPAssociativeArray(arr AssociativeArray) unsafe.Pointer {
 	return phpArray(arr.Map, arr.Order)
 }
@@ -188,13 +200,10 @@ func phpArray(entries map[string]any, order []string) unsafe.Pointer {
 		}
 	}
 
-	var zval C.zval
-	C.__zval_arr__(&zval, zendArray)
-
-	return unsafe.Pointer(&zval)
+	return unsafe.Pointer(zendArray)
 }
 
-// EXPERIMENTAL: PHPPackedArray converts a Go slice to a PHP zval with a zend_array value.
+// EXPERIMENTAL: PHPPackedArray converts a Go slice to a PHP zend_array.
 func PHPPackedArray(slice []any) unsafe.Pointer {
 	zendArray := createNewArray((uint32)(len(slice)))
 	for _, val := range slice {
@@ -202,10 +211,7 @@ func PHPPackedArray(slice []any) unsafe.Pointer {
 		C.zend_hash_next_index_insert(zendArray, zval)
 	}
 
-	var zval C.zval
-	C.__zval_arr__(&zval, zendArray)
-
-	return unsafe.Pointer(&zval)
+	return unsafe.Pointer(zendArray)
 }
 
 // EXPERIMENTAL: GoValue converts a PHP zval to a Go value
@@ -247,10 +253,10 @@ func goValue(zval *C.zval) any {
 	case C.IS_ARRAY:
 		hashTable := (*C.HashTable)(extractZvalValue(zval, C.IS_ARRAY))
 		if hashTable != nil && htIsPacked(hashTable) {
-			return GoPackedArray(unsafe.Pointer(zval))
+			return GoPackedArray(unsafe.Pointer(hashTable))
 		}
 
-		return GoAssociativeArray(unsafe.Pointer(zval))
+		return GoAssociativeArray(unsafe.Pointer(hashTable))
 	default:
 		return nil
 	}
@@ -279,11 +285,11 @@ func phpValue(value any) *C.zval {
 		str := (*C.zend_string)(PHPString(v, false))
 		C.__zval_string__(&zval, str)
 	case AssociativeArray:
-		return (*C.zval)(PHPAssociativeArray(v))
+		C.__zval_arr__(&zval, (*C.HashTable)(PHPAssociativeArray(v)))
 	case map[string]any:
-		return (*C.zval)(PHPAssociativeArray(AssociativeArray{Map: v}))
+		C.__zval_arr__(&zval, (*C.HashTable)(PHPMap(v)))
 	case []any:
-		return (*C.zval)(PHPPackedArray(v))
+		C.__zval_arr__(&zval, (*C.HashTable)(PHPPackedArray(v)))
 	default:
 		panic(fmt.Sprintf("unsupported Go type %T", v))
 	}
@@ -324,4 +330,14 @@ func extractZvalValue(zval *C.zval, expectedType C.uint8_t) unsafe.Pointer {
 	default:
 		return nil
 	}
+}
+
+func zendStringRelease(p unsafe.Pointer) {
+	zs := (*C.zend_string)(p)
+	C.zend_string_release(zs)
+}
+
+func zendHashDestroy(p unsafe.Pointer) {
+	ht := (*C.HashTable)(p)
+	C.zend_hash_destroy(ht)
 }
