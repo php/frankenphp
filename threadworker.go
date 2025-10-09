@@ -228,7 +228,7 @@ func go_frankenphp_worker_handle_request_start(threadIndex C.uintptr_t) (C.bool,
 			ptr = p
 
 		default:
-			ptr = PHPValue(ptr)
+			ptr = PHPValue(p)
 		}
 		handler.thread.Pin(ptr)
 
@@ -252,9 +252,9 @@ func go_frankenphp_finish_worker_request(threadIndex C.uintptr_t, retval *C.zval
 	thread.handler.(*workerThread).workerContext = nil
 
 	if fc.request == nil {
-		fc.logger.LogAttrs(context.Background(), slog.LevelDebug, "request handling finished", slog.String("worker", fc.scriptFilename), slog.Int("thread", thread.threadIndex))
+		fc.logger.LogAttrs(context.Background(), slog.LevelDebug, "request handling finished", slog.String("worker", fc.worker.name), slog.Int("thread", thread.threadIndex))
 	} else {
-		fc.logger.LogAttrs(context.Background(), slog.LevelDebug, "request handling finished", slog.String("worker", fc.scriptFilename), slog.Int("thread", thread.threadIndex), slog.String("url", fc.request.RequestURI))
+		fc.logger.LogAttrs(context.Background(), slog.LevelDebug, "request handling finished", slog.String("worker", fc.worker.name), slog.Int("thread", thread.threadIndex), slog.String("url", fc.request.RequestURI))
 	}
 }
 
