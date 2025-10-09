@@ -86,4 +86,6 @@ void frankenphp_register_bulk(
 
 void register_extensions(zend_module_entry *m, int len);
 
+void frankenphp_update_thread_context(bool is_worker, bool is_task_worker);
+
 #endif

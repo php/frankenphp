@@ -73,6 +73,7 @@ frankenphp_config frankenphp_get_config() {
 bool should_filter_var = 0;
 __thread uintptr_t thread_index;
 __thread bool is_worker_thread = false;
+__thread bool is_task_worker_thread = false;
 __thread zval *os_environment = NULL;
 
 static void frankenphp_update_request_context() {
@@ -82,7 +83,12 @@ static void frankenphp_update_request_context() {
   /* status It is not reset by zend engine, set it to 200. */
   SG(sapi_headers).http_response_code = 200;
 
-  is_worker_thread = go_update_request_info(thread_index, &SG(request_info));
+  go_update_request_info(thread_index, &SG(request_info));
+}
+
+void frankenphp_update_thread_context(bool is_worker, bool is_task_worker) {
+  is_worker_thread = is_worker;
+  is_task_worker_thread = is_task_worker;
 }
 
 static void frankenphp_free_request_context() {
@@ -484,6 +490,96 @@ PHP_FUNCTION(frankenphp_handle_request) {
   RETURN_TRUE;
 }
 
+PHP_FUNCTION(frankenphp_handle_task) {
+  zend_fcall_info fci;
+  zend_fcall_info_cache fcc;
+
+  ZEND_PARSE_PARAMETERS_START(1, 1)
+  Z_PARAM_FUNC(fci, fcc)
+  ZEND_PARSE_PARAMETERS_END();
+
+  if (!is_task_worker_thread) {
+    zend_throw_exception(
+        spl_ce_RuntimeException,
+        "frankenphp_handle_task() called while not in worker mode", 0);
+    RETURN_THROWS();
+  }
+
+#ifdef ZEND_MAX_EXECUTION_TIMERS
+  /*
+   * Disable timeouts while waiting for a task to handle
+   * TODO: should running forever be the default?
+   */
+  zend_unset_timeout();
+#endif
+
+  go_string task = go_frankenphp_worker_handle_task(thread_index);
+  if (task.data == NULL) {
+    RETURN_FALSE;
+  }
+
+  /* Call the PHP func passed to frankenphp_handle_task() */
+  zval retval = {0};
+  fci.size = sizeof fci;
+  fci.retval = &retval;
+
+  /* copy the string to thread-local memory */
+  zval taskzv;
+  ZVAL_STRINGL_FAST(&taskzv, task.data, task.len);
+  pefree(task.data, 1);
+
+  fci.params = &taskzv;
+  fci.param_count = 1;
+  if (zend_call_function(&fci, &fcc) == SUCCESS) {
+    zval_ptr_dtor(&retval);
+  }
+
+  /*
+   * If an exception occurred, print the message to the client before
+   * exiting
+   */
+  if (EG(exception) && !zend_is_unwind_exit(EG(exception)) &&
+      !zend_is_graceful_exit(EG(exception))) {
+    zend_exception_error(EG(exception), E_ERROR);
+    zend_bailout();
+  }
+
+  zend_try { php_output_end_all(); }
+  zend_end_try();
+
+  go_frankenphp_finish_task(thread_index);
+
+  zval_ptr_dtor(&taskzv);
+
+  RETURN_TRUE;
+}
+
+PHP_FUNCTION(frankenphp_dispatch_task) {
+  char *task_string;
+  size_t task_len;
+  char *worker_name = NULL;
+  size_t worker_name_len = 0;
+
+  ZEND_PARSE_PARAMETERS_START(1, 2);
+  Z_PARAM_STRING(task_string, task_len);
+  Z_PARAM_OPTIONAL
+  Z_PARAM_STRING(worker_name, worker_name_len);
+  ZEND_PARSE_PARAMETERS_END();
+
+  /* copy the zval to be used in the other thread safely */
+  char *task_str = pemalloc(task_len, 1);
+  memcpy(task_str, task_string, task_len);
+
+  bool success = go_frankenphp_worker_dispatch_task(
+      task_str, task_len, worker_name, worker_name_len);
+  if (!success) {
+    pefree(task_str, 1);
+    zend_throw_exception(spl_ce_RuntimeException,
+                         "No worker found to handle the task", 0);
+    RETURN_THROWS();
+  }
+}
+
 PHP_FUNCTION(headers_send) {
   zend_long response_code = 200;
 
@@ -770,6 +866,12 @@ static void frankenphp_register_variables(zval *track_vars_array) {
   /* In CGI mode, we consider the environment to be a part of the server
    * variables.
    */
+
+  /* task workers may have argv and argc configured via config */
+  if (is_task_worker_thread) {
+    go_register_task_worker_args(thread_index, &SG(request_info));
+    php_build_argv(NULL, track_vars_array);
+  }
 
   /* in non-worker mode we import the os environment regularly */
   if (!is_worker_thread) {
