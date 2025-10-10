@@ -107,6 +107,7 @@ func startWorker(w *worker, extensionWorker Worker, thread *phpThread) {
 	}
 }
 
+// EXPERIMENTAL: NewWorker creates a new Worker instance.
 func NewWorker(name, fileName string, minThreads int, env PreparedEnv) Worker {
 	return &defaultWorker{
 		name:           name,
