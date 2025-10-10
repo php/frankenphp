@@ -99,7 +99,7 @@ func (cp *ConstantParser) parse(filename string) (constants []phpConstant, err e
 func determineConstantType(value string) phpType {
 	value = strings.TrimSpace(value)
 
-	if (strings.HasPrefix(value, "\"") && strings.HasSuffix(value, "\"")) ||
+	if (strings.HasPrefix(value, `"`) && strings.HasSuffix(value, `"`)) ||
 		(strings.HasPrefix(value, "`") && strings.HasSuffix(value, "`")) {
 		return phpString
 	}
