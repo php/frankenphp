@@ -42,13 +42,18 @@ func fromContext(ctx context.Context) (fctx *frankenPHPContext, ok bool) {
 	return
 }
 
-// NewRequestWithContext creates a new FrankenPHP request context.
-func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Request, error) {
-	fc := &frankenPHPContext{
+func newFrankenPHPContext() *frankenPHPContext {
+	return &frankenPHPContext{
 		done:      make(chan any),
 		startedAt: time.Now(),
-		request:   r,
 	}
+}
+
+// NewRequestWithContext creates a new FrankenPHP request context.
+func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Request, error) {
+	fc := newFrankenPHPContext()
+	fc.request = r
+
 	for _, o := range opts {
 		if err := o(fc); err != nil {
 			return nil, err
@@ -132,6 +137,10 @@ func (fc *frankenPHPContext) validate() bool {
 }
 
 func (fc *frankenPHPContext) clientHasClosed() bool {
+	if fc.request == nil {
+		return false
+	}
+
 	select {
 	case <-fc.request.Context().Done():
 		return true

@@ -177,22 +177,23 @@ func (cp *classParser) typeToString(expr ast.Expr) string {
 	case *ast.MapType:
 		return "map[" + cp.typeToString(t.Key) + "]" + cp.typeToString(t.Value)
 	default:
-		return "interface{}"
+		return "any"
 	}
+}
+
+var goToPhpTypeMap = map[string]phpType{
+	"string": phpString,
+	"int":    phpInt, "int64": phpInt, "int32": phpInt, "int16": phpInt, "int8": phpInt,
+	"uint": phpInt, "uint64": phpInt, "uint32": phpInt, "uint16": phpInt, "uint8": phpInt,
+	"float64": phpFloat, "float32": phpFloat,
+	"bool": phpBool,
+	"any":  phpMixed,
 }
 
 func (cp *classParser) goTypeToPHPType(goType string) phpType {
 	goType = strings.TrimPrefix(goType, "*")
 
-	typeMap := map[string]phpType{
-		"string": phpString,
-		"int":    phpInt, "int64": phpInt, "int32": phpInt, "int16": phpInt, "int8": phpInt,
-		"uint": phpInt, "uint64": phpInt, "uint32": phpInt, "uint16": phpInt, "uint8": phpInt,
-		"float64": phpFloat, "float32": phpFloat,
-		"bool": phpBool,
-	}
-
-	if phpType, exists := typeMap[goType]; exists {
+	if phpType, exists := goToPhpTypeMap[goType]; exists {
 		return phpType
 	}
 
@@ -244,7 +245,7 @@ func (cp *classParser) parseMethods(filename string) (methods []phpClassMethod, 
 				IsReturnNullable: method.isReturnNullable,
 			}
 
-			if err := validator.validateScalarTypes(phpFunc); err != nil {
+			if err := validator.validateTypes(phpFunc); err != nil {
 				fmt.Printf("Warning: Method \"%s::%s\" uses unsupported types: %v\n", className, method.Name, err)
 
 				continue

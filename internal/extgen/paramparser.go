@@ -68,7 +68,7 @@ func (pp *ParameterParser) generateSingleParamDeclaration(param phpParameter) []
 		if param.IsNullable {
 			decls = append(decls, fmt.Sprintf("zend_bool %s_is_null = 0;", param.Name))
 		}
-	case phpArray:
+	case phpArray, phpMixed:
 		decls = append(decls, fmt.Sprintf("zval *%s = NULL;", param.Name))
 	}
 
@@ -119,6 +119,8 @@ func (pp *ParameterParser) generateParamParsingMacro(param phpParameter) string 
 			return fmt.Sprintf("\n        Z_PARAM_BOOL_OR_NULL(%s, %s_is_null)", param.Name, param.Name)
 		case phpArray:
 			return fmt.Sprintf("\n        Z_PARAM_ARRAY_OR_NULL(%s)", param.Name)
+		case phpMixed:
+			return fmt.Sprintf("\n        Z_PARAM_ZVAL_OR_NULL(%s)", param.Name)
 		default:
 			return ""
 		}
@@ -134,6 +136,8 @@ func (pp *ParameterParser) generateParamParsingMacro(param phpParameter) string 
 			return fmt.Sprintf("\n        Z_PARAM_BOOL(%s)", param.Name)
 		case phpArray:
 			return fmt.Sprintf("\n        Z_PARAM_ARRAY(%s)", param.Name)
+		case phpMixed:
+			return fmt.Sprintf("\n        Z_PARAM_ZVAL(%s)", param.Name)
 		default:
 			return ""
 		}
@@ -164,25 +168,19 @@ func (pp *ParameterParser) generateSingleGoCallParam(param phpParameter) string 
 			return fmt.Sprintf("%s_is_null ? NULL : &%s", param.Name, param.Name)
 		case phpBool:
 			return fmt.Sprintf("%s_is_null ? NULL : &%s", param.Name, param.Name)
-		case phpArray:
-			return param.Name
 		default:
 			return param.Name
 		}
-	} else {
-		switch param.PhpType {
-		case phpString:
-			return param.Name
-		case phpInt:
-			return fmt.Sprintf("(long) %s", param.Name)
-		case phpFloat:
-			return fmt.Sprintf("(double) %s", param.Name)
-		case phpBool:
-			return fmt.Sprintf("(int) %s", param.Name)
-		case phpArray:
-			return param.Name
-		default:
-			return param.Name
-		}
+	}
+
+	switch param.PhpType {
+	case phpInt:
+		return fmt.Sprintf("(long) %s", param.Name)
+	case phpFloat:
+		return fmt.Sprintf("(double) %s", param.Name)
+	case phpBool:
+		return fmt.Sprintf("(int) %s", param.Name)
+	default:
+		return param.Name
 	}
 }

@@ -163,6 +163,20 @@ func TestParameterParser_GenerateParamDeclarations(t *testing.T) {
 			},
 			expected: "    zend_string *name = NULL;\n    zval *items = NULL;\n    zend_long count = 5;",
 		},
+		{
+			name: "mixed parameter",
+			params: []phpParameter{
+				{Name: "m", PhpType: phpMixed, HasDefault: false},
+			},
+			expected: "    zval *m = NULL;",
+		},
+		{
+			name: "nullable mixed parameter",
+			params: []phpParameter{
+				{Name: "m", PhpType: phpMixed, HasDefault: false, IsNullable: true},
+			},
+			expected: "    zval *m = NULL;",
+		},
 	}
 
 	for _, tt := range tests {
@@ -345,6 +359,16 @@ func TestParameterParser_GenerateParamParsingMacro(t *testing.T) {
 			name:     "nullable array parameter",
 			param:    phpParameter{Name: "items", PhpType: phpArray, IsNullable: true},
 			expected: "\n        Z_PARAM_ARRAY_OR_NULL(items)",
+		},
+		{
+			name:     "mixed parameter",
+			param:    phpParameter{Name: "m", PhpType: phpMixed},
+			expected: "\n        Z_PARAM_ZVAL(m)",
+		},
+		{
+			name:     "nullable mixed parameter",
+			param:    phpParameter{Name: "m", PhpType: phpMixed, IsNullable: true},
+			expected: "\n        Z_PARAM_ZVAL_OR_NULL(m)",
 		},
 		{
 			name:     "unknown type",

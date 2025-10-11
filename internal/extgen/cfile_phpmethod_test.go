@@ -1,8 +1,9 @@
 package extgen
 
 import (
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestCFile_NamespacedPHPMethods(t *testing.T) {

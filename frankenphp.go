@@ -222,7 +222,7 @@ func Init(options ...Option) error {
 	registerExtensions()
 
 	// add registered external workers
-	for _, ew := range externalWorkers {
+	for _, ew := range extensionWorkers {
 		options = append(options, WithWorkers(ew.Name(), ew.FileName(), ew.GetMinThreads(), WithWorkerEnv(ew.Env())))
 	}
 
@@ -405,7 +405,7 @@ func go_apache_request_headers(threadIndex C.uintptr_t) (*C.go_string, C.size_t)
 	if fc.responseWriter == nil {
 		// worker mode, not handling a request
 
-		logger.LogAttrs(context.Background(), slog.LevelDebug, "apache_request_headers() called in non-HTTP context", slog.String("worker", fc.scriptFilename))
+		logger.LogAttrs(context.Background(), slog.LevelDebug, "apache_request_headers() called in non-HTTP context", slog.String("worker", fc.worker.name))
 
 		return nil, 0
 	}
@@ -550,8 +550,12 @@ func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (r
 
 //export go_read_cookies
 func go_read_cookies(threadIndex C.uintptr_t) *C.char {
-	cookies := phpThreads[threadIndex].getRequestContext().request.Header.Values("Cookie")
-	cookie := strings.Join(cookies, "; ")
+	request := phpThreads[threadIndex].getRequestContext().request
+	if request == nil {
+		return nil
+	}
+
+	cookie := strings.Join(request.Header.Values("Cookie"), "; ")
 	if cookie == "" {
 		return nil
 	}

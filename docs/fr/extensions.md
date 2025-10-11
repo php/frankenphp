@@ -146,11 +146,11 @@ func process_data(arr *C.zval) unsafe.Pointer {
 
 **Méthodes disponibles :**
 
-- `SetInt(key int64, value interface{})` - Définir une valeur avec une clé entière
-- `SetString(key string, value interface{})` - Définir une valeur avec une clé chaîne
-- `Append(value interface{})` - Ajouter une valeur avec la prochaine clé entière disponible
+- `SetInt(key int64, value any)` - Définir une valeur avec une clé entière
+- `SetString(key string, value any)` - Définir une valeur avec une clé chaîne
+- `Append(value any)` - Ajouter une valeur avec la prochaine clé entière disponible
 - `Len() uint32` - Obtenir le nombre d'éléments
-- `At(index uint32) (PHPKey, interface{})` - Obtenir la paire clé-valeur à l'index
+- `At(index uint32) (PHPKey, any)` - Obtenir la paire clé-valeur à l'index
 - `frankenphp.PHPArray(arr *frankenphp.Array) unsafe.Pointer` - Convertir vers un tableau PHP
 
 ### Déclarer une Classe PHP Native

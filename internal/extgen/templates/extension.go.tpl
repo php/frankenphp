@@ -1,52 +1,55 @@
 package {{.PackageName}}
 
-/*
-#include <stdlib.h>
-#include "{{.BaseName}}.h"
-*/
+// #include <stdlib.h>
+// #include "{{.BaseName}}.h"
 import "C"
+import (
+	"unsafe"
+
+	"github.com/dunglas/frankenphp"
 {{- range .Imports}}
-import {{.}}
+	{{.}}
 {{- end}}
+)
 
 func init() {
 	frankenphp.RegisterExtension(unsafe.Pointer(&C.{{.BaseName}}_module_entry))
 }
-{{- range .Constants}}
+
+{{ range .Constants}}
 const {{.Name}} = {{.Value}}
-{{- end}}
 
-{{ range .Variables}}
+{{- end}}
+{{- range .Variables}}
+
 {{.}}
 {{- end}}
-
-{{range .InternalFunctions}}
+{{- range .InternalFunctions}}
 {{.}}
-{{- end}}
 
+{{- end}}
 {{- range .Functions}}
 //export {{.Name}}
 {{.GoFunction}}
-{{- end}}
 
+{{- end}}
 {{- range .Classes}}
 type {{.GoStruct}} struct {
 {{- range .Properties}}
 	{{.Name}} {{.GoType}}
 {{- end}}
 }
+
 {{- end}}
-
 {{- if .Classes}}
-
 //export registerGoObject
-func registerGoObject(obj interface{}) C.uintptr_t {
+func registerGoObject(obj any) C.uintptr_t {
 	handle := cgo.NewHandle(obj)
 	return C.uintptr_t(handle)
 }
 
 //export getGoObject
-func getGoObject(handle C.uintptr_t) interface{} {
+func getGoObject(handle C.uintptr_t) any {
 	h := cgo.Handle(handle)
 	return h.Value()
 }
@@ -58,7 +61,6 @@ func removeGoObject(handle C.uintptr_t) {
 }
 
 {{- end}}
-
 {{- range $class := .Classes}}
 //export create_{{.GoStruct}}_object
 func create_{{.GoStruct}}_object() C.uintptr_t {
@@ -70,8 +72,8 @@ func create_{{.GoStruct}}_object() C.uintptr_t {
 {{- if .GoFunction}}
 {{.GoFunction}}
 {{- end}}
-{{- end}}
 
+{{- end}}
 {{- range .Methods}}
 //export {{.Name}}_wrapper
 func {{.Name}}_wrapper(handle C.uintptr_t{{range .Params}}{{if eq .PhpType "string"}}, {{.Name}} *C.zend_string{{else if eq .PhpType "array"}}, {{.Name}} *C.zval{{else}}, {{.Name}} {{if .IsNullable}}*{{end}}{{phpTypeToGoType .PhpType}}{{end}}{{end}}){{if not (isVoid .ReturnType)}}{{if isStringOrArray .ReturnType}} unsafe.Pointer{{else}} {{phpTypeToGoType .ReturnType}}{{end}}{{end}} {

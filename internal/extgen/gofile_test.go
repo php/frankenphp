@@ -1,13 +1,13 @@
 package extgen
 
 import (
-	"github.com/stretchr/testify/require"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGoFileGenerator_Generate(t *testing.T) {
@@ -109,7 +109,7 @@ func test() {
 			contains: []string{
 				"package simple",
 				`#include "simple.h"`,
-				"import \"C\"",
+				`import "C"`,
 				"func init()",
 				"frankenphp.RegisterExtension(",
 				"//export test",
@@ -143,11 +143,11 @@ func process(data *go_string) *go_value {
 			},
 			contains: []string{
 				"package complex",
-				`import "fmt"`,
-				`import "strings"`,
-				`import "encoding/json"`,
+				`"fmt"`,
+				`"strings"`,
+				`"encoding/json"`,
 				"//export process",
-				`import "C"`,
+				`"C"`,
 			},
 		},
 		{
@@ -193,7 +193,7 @@ func internalFunc2(data string) {
 			require.NoError(t, err)
 
 			for _, expected := range tt.contains {
-				assert.Contains(t, content, expected, "Generated Go content should contain '%s'", expected)
+				assert.Contains(t, content, expected, "Generated Go content should contain %q", expected)
 			}
 		})
 	}
@@ -305,9 +305,9 @@ func test() {}`
 	require.NoError(t, err)
 
 	expectedImports := []string{
-		`import "fmt"`,
-		`import "strings"`,
-		`import "github.com/other/package"`,
+		`"fmt"`,
+		`"strings"`,
+		`"github.com/other/package"`,
 	}
 
 	for _, imp := range expectedImports {
@@ -315,10 +315,10 @@ func test() {}`
 	}
 
 	forbiddenImports := []string{
-		`import "C"`,
+		`"C"`,
 	}
 
-	cImportCount := strings.Count(content, `import "C"`)
+	cImportCount := strings.Count(content, `"C"`)
 	assert.Equal(t, 1, cImportCount, "Expected exactly 1 occurrence of 'import \"C\"'")
 
 	for _, imp := range forbiddenImports[1:] {
@@ -340,7 +340,7 @@ import (
 func processData(input *go_string, options *go_nullable) *go_value {
 	data := CStringToGoString(input)
 	processed := internalProcess(data)
-	return types.Array([]interface{}{processed})
+	return types.Array([]any{processed})
 }
 
 //export_php: validateInput(data string): bool
@@ -358,7 +358,7 @@ func validateFormat(input string) bool {
 	return !strings.Contains(input, "invalid")
 }
 
-func jsonHelper(data interface{}) ([]byte, error) {
+func jsonHelper(data any) ([]byte, error) {
 	return json.Marshal(data)
 }
 
@@ -375,7 +375,7 @@ func debugPrint(msg string) {
 			GoFunction: `func processData(input *go_string, options *go_nullable) *go_value {
 	data := CStringToGoString(input)
 	processed := internalProcess(data)
-	return Array([]interface{}{processed})
+	return Array([]any{processed})
 }`,
 		},
 		{
@@ -403,7 +403,7 @@ func debugPrint(msg string) {
 	internalFuncs := []string{
 		"func internalProcess(data string) string",
 		"func validateFormat(input string) bool",
-		"func jsonHelper(data interface{}) ([]byte, error)",
+		"func jsonHelper(data any) ([]byte, error)",
 		"func debugPrint(msg string)",
 	}
 
@@ -510,7 +510,7 @@ import "fmt"
 
 //export_php:class ArrayClass
 type ArrayStruct struct {
-	data []interface{}
+	data []any
 }
 
 //export_php:method ArrayClass::processArray(array $items): array
@@ -675,10 +675,8 @@ func createTempSourceFile(t *testing.T, content string) string {
 func testGoFileBasicStructure(t *testing.T, content, baseName string) {
 	requiredElements := []string{
 		"package " + SanitizePackageName(baseName),
-		"/*",
-		"#include <stdlib.h>",
-		`#include "` + baseName + `.h"`,
-		"*/",
+		"// #include <stdlib.h>",
+		`// #include "` + baseName + `.h"`,
 		`import "C"`,
 		"func init() {",
 		"frankenphp.RegisterExtension(",
@@ -691,7 +689,7 @@ func testGoFileBasicStructure(t *testing.T, content, baseName string) {
 }
 
 func testGoFileImports(t *testing.T, content string) {
-	cImportCount := strings.Count(content, `import "C"`)
+	cImportCount := strings.Count(content, `"C"`)
 	assert.Equal(t, 1, cImportCount, "Expected exactly 1 C import")
 }
 

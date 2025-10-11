@@ -1131,8 +1131,7 @@ static char **cli_argv;
  * <johannes@php.net> Parts based on CGI SAPI Module by Rasmus Lerdorf, Stig
  * Bakken and Zeev Suraski
  */
-static void cli_register_file_handles(bool no_close) /* {{{ */
-{
+static void cli_register_file_handles(void) {
   php_stream *s_in, *s_out, *s_err;
   php_stream_context *sc_in = NULL, *sc_out = NULL, *sc_err = NULL;
   zend_constant ic, oc, ec;
@@ -1140,6 +1139,17 @@ static void cli_register_file_handles(bool no_close) /* {{{ */
   s_in = php_stream_open_wrapper_ex("php://stdin", "rb", 0, NULL, sc_in);
   s_out = php_stream_open_wrapper_ex("php://stdout", "wb", 0, NULL, sc_out);
   s_err = php_stream_open_wrapper_ex("php://stderr", "wb", 0, NULL, sc_err);
+
+  /* Release stream resources, but don't free the underlying handles. Othewrise,
+   * extensions which write to stderr or company during mshutdown/gshutdown
+   * won't have the expected functionality.
+   */
+  if (s_in)
+    s_in->flags |= PHP_STREAM_FLAG_NO_RSCR_DTOR_CLOSE;
+  if (s_out)
+    s_out->flags |= PHP_STREAM_FLAG_NO_RSCR_DTOR_CLOSE;
+  if (s_err)
+    s_err->flags |= PHP_STREAM_FLAG_NO_RSCR_DTOR_CLOSE;
 
   if (s_in == NULL || s_out == NULL || s_err == NULL) {
     if (s_in)
@@ -1149,12 +1159,6 @@ static void cli_register_file_handles(bool no_close) /* {{{ */
     if (s_err)
       php_stream_close(s_err);
     return;
-  }
-
-  if (no_close) {
-    s_in->flags |= PHP_STREAM_FLAG_NO_CLOSE;
-    s_out->flags |= PHP_STREAM_FLAG_NO_CLOSE;
-    s_err->flags |= PHP_STREAM_FLAG_NO_CLOSE;
   }
 
   /*s_in_process = s_in;*/
@@ -1175,7 +1179,6 @@ static void cli_register_file_handles(bool no_close) /* {{{ */
   ec.name = zend_string_init_interned("STDERR", sizeof("STDERR") - 1, 0);
   zend_register_constant(&ec);
 }
-/* }}} */
 
 static void sapi_cli_register_variables(zval *track_vars_array) /* {{{ */
 {
@@ -1220,7 +1223,7 @@ static void *execute_script_cli(void *arg) {
 
   php_embed_init(cli_argc, cli_argv);
 
-  cli_register_file_handles(false);
+  cli_register_file_handles();
   zend_first_try {
     if (eval) {
       /* evaluate the cli_script as literal PHP code (php-cli -r "...") */

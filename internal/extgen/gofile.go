@@ -47,7 +47,7 @@ func (gg *GoFileGenerator) buildContent() (string, error) {
 
 	filteredImports := make([]string, 0, len(imports))
 	for _, imp := range imports {
-		if imp != `"C"` {
+		if imp != `"C"` && imp != `"unsafe"` && imp != `"github.com/dunglas/frankenphp"` {
 			filteredImports = append(filteredImports, imp)
 		}
 	}
@@ -104,20 +104,20 @@ type GoParameter struct {
 	Type string
 }
 
-func (gg *GoFileGenerator) phpTypeToGoType(phpT phpType) string {
-	typeMap := map[phpType]string{
-		phpString: "string",
-		phpInt:    "int64",
-		phpFloat:  "float64",
-		phpBool:   "bool",
-		phpArray:  "*frankenphp.Array",
-		phpMixed:  "interface{}",
-		phpVoid:   "",
-	}
+var phpToGoTypeMap = map[phpType]string{
+	phpString: "string",
+	phpInt:    "int64",
+	phpFloat:  "float64",
+	phpBool:   "bool",
+	phpArray:  "*frankenphp.Array",
+	phpMixed:  "any",
+	phpVoid:   "",
+}
 
-	if goType, exists := typeMap[phpT]; exists {
+func (gg *GoFileGenerator) phpTypeToGoType(phpT phpType) string {
+	if goType, exists := phpToGoTypeMap[phpT]; exists {
 		return goType
 	}
 
-	return "interface{}"
+	return "any"
 }

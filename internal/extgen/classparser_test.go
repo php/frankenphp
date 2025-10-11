@@ -1,12 +1,12 @@
 package extgen
 
 import (
-	"github.com/stretchr/testify/require"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestClassParser(t *testing.T) {
@@ -282,7 +282,7 @@ func TestGoTypeToPHPType(t *testing.T) {
 		{"[]string", phpArray},
 		{"map[string]int", phpArray},
 		{"*[]int", phpArray},
-		{"interface{}", phpMixed},
+		{"any", phpMixed},
 		{"CustomType", phpMixed},
 	}
 
@@ -335,7 +335,7 @@ type NullableStruct struct {
 type CollectionStruct struct {
 	StringSlice []string
 	IntMap      map[string]int
-	MixedSlice  []interface{}
+	MixedSlice  []any
 }`,
 			expected: []phpType{phpArray, phpArray, phpArray},
 		},
@@ -381,7 +381,7 @@ type TestClass struct {
 }
 
 //export_php:method TestClass::arrayMethod(array $data): string
-func (tc *TestClass) arrayMethod(data interface{}) unsafe.Pointer {
+func (tc *TestClass) arrayMethod(data any) unsafe.Pointer {
 	return nil
 }`,
 			expectedClasses: 1,
@@ -398,7 +398,7 @@ type TestClass struct {
 }
 
 //export_php:method TestClass::objectMethod(object $obj): string
-func (tc *TestClass) objectMethod(obj interface{}) unsafe.Pointer {
+func (tc *TestClass) objectMethod(obj any) unsafe.Pointer {
 	return nil
 }`,
 			expectedClasses: 1,
@@ -415,7 +415,7 @@ type TestClass struct {
 }
 
 //export_php:method TestClass::mixedMethod(mixed $value): string
-func (tc *TestClass) mixedMethod(value interface{}) unsafe.Pointer {
+func (tc *TestClass) mixedMethod(value any) unsafe.Pointer {
 	return nil
 }`,
 			expectedClasses: 1,
@@ -432,7 +432,7 @@ type TestClass struct {
 }
 
 //export_php:method TestClass::arrayReturn(string $name): array
-func (tc *TestClass) arrayReturn(name *C.zend_string) interface{} {
+func (tc *TestClass) arrayReturn(name *C.zend_string) any {
 	return []string{"result"}
 }`,
 			expectedClasses: 1,
@@ -449,8 +449,8 @@ type TestClass struct {
 }
 
 //export_php:method TestClass::objectReturn(string $name): object
-func (tc *TestClass) objectReturn(name *C.zend_string) interface{} {
-	return map[string]interface{}{"key": "value"}
+func (tc *TestClass) objectReturn(name *C.zend_string) any {
+	return map[string]any{"key": "value"}
 }`,
 			expectedClasses: 1,
 			expectedMethods: 0,
