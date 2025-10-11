@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -66,7 +65,6 @@ func TestDispatchToTaskWorkerFromWorker(t *testing.T) {
 	assertGetRequest(t, "http://example.com/testdata/tasks/task-dispatcher-string.php?count=4", "dispatched 4 tasks")
 
 	// wait and shutdown to ensure all logs are flushed
-	time.Sleep(10 * time.Millisecond)
 	Shutdown()
 
 	// task output appears in logs at info level
@@ -92,7 +90,6 @@ func TestDispatchArrayToTaskWorker(t *testing.T) {
 	assertGetRequest(t, "http://example.com/testdata/tasks/task-dispatcher-array.php?count=1", "dispatched 1 tasks")
 
 	// wait and shutdown to ensure all logs are flushed
-	time.Sleep(10 * time.Millisecond)
 	Shutdown()
 
 	// task output appears in logs at info level
@@ -107,7 +104,7 @@ func TestDispatchToMultipleWorkers(t *testing.T) {
 
 	assert.NoError(t, Init(
 		WithWorkers("worker1", "./testdata/tasks/task-worker.php", 1, AsTaskWorker(true, 0)),
-		WithWorkers("worker2", "./testdata/tasks/task-worker2.php", 1, AsTaskWorker(true, 0)),
+		WithWorkers("worker2", "./testdata/tasks/task-worker.php", 1, AsTaskWorker(true, 0)),
 		WithNumThreads(4),
 		WithLogger(logger),
 	))

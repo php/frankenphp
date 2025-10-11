@@ -1,6 +1,7 @@
 package frankenphp
 
 import (
+	"errors"
 	"log/slog"
 	"testing"
 
@@ -21,10 +22,24 @@ func testOnDummyPHPThread(t *testing.T, cb func()) {
 	))
 	defer Shutdown()
 
-	task, err := ExecuteCallbackOnTaskWorker(cb, "tw")
+	task, err := executeOnPHPThread(cb, "tw")
 	assert.NoError(t, err)
 
 	task.WaitForCompletion()
+}
+
+// executeOnPHPThread executes the callback func() directly on a task worker thread
+// Currently only used in tests
+func executeOnPHPThread(callback func(), taskWorkerName string) (*PendingTask, error) {
+	tw := getTaskWorkerByName(taskWorkerName)
+	if tw == nil {
+		return nil, errors.New("no task worker found with name " + taskWorkerName)
+	}
+
+	pt := &PendingTask{callback: callback}
+	err := pt.dispatch(tw)
+
+	return pt, err
 }
 
 func TestGoString(t *testing.T) {

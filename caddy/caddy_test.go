@@ -1428,7 +1428,7 @@ func TestServerWithTaskWorker(t *testing.T) {
 	tester := caddytest.NewTester(t)
 	taskWorker1, err := fastabs.FastAbs("../testdata/tasks/task-worker.php")
 	require.NoError(t, err)
-	taskWorker2, err := fastabs.FastAbs("../testdata/tasks/task-worker2.php")
+	taskWorker2, err := fastabs.FastAbs("../testdata/tasks/task-worker.php")
 	require.NoError(t, err)
 	tester.InitServer(`
 		{
