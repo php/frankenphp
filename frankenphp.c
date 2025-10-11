@@ -513,8 +513,8 @@ PHP_FUNCTION(frankenphp_handle_task) {
   zend_unset_timeout();
 #endif
 
-  go_string task = go_frankenphp_worker_handle_task(thread_index);
-  if (task.data == NULL) {
+  zval *arg = go_frankenphp_worker_handle_task(thread_index);
+  if (arg == NULL) {
     RETURN_FALSE;
   }
 
@@ -524,14 +524,16 @@ PHP_FUNCTION(frankenphp_handle_task) {
   fci.retval = &retval;
 
   /* copy the string to thread-local memory */
-  zval taskzv;
-  ZVAL_STRINGL_FAST(&taskzv, task.data, task.len);
-  pefree(task.data, 1);
 
-  fci.params = &taskzv;
+  fci.params = arg;
   fci.param_count = 1;
-  if (zend_call_function(&fci, &fcc) == SUCCESS) {
-    zval_ptr_dtor(&retval);
+  zend_bool status = zend_call_function(&fci, &fcc) == SUCCESS;
+
+  if (status == SUCCESS) {
+    go_frankenphp_finish_task(thread_index, &retval);
+  	zval_ptr_dtor(&retval);
+  } else {
+    go_frankenphp_finish_task(thread_index, NULL);
   }
 
   /*
@@ -547,33 +549,25 @@ PHP_FUNCTION(frankenphp_handle_task) {
   zend_try { php_output_end_all(); }
   zend_end_try();
 
-  go_frankenphp_finish_task(thread_index);
-
-  zval_ptr_dtor(&taskzv);
+  zval_ptr_dtor(arg);
 
   RETURN_TRUE;
 }
 
 PHP_FUNCTION(frankenphp_dispatch_task) {
-  char *task_string;
-  size_t task_len;
+  go_log("frankenphp_dispatch_task called", 1);
+  zval *zv;
   char *worker_name = NULL;
   size_t worker_name_len = 0;
 
   ZEND_PARSE_PARAMETERS_START(1, 2);
-  Z_PARAM_STRING(task_string, task_len);
+  Z_PARAM_ZVAL(zv);
   Z_PARAM_OPTIONAL
   Z_PARAM_STRING(worker_name, worker_name_len);
   ZEND_PARSE_PARAMETERS_END();
 
-  /* copy the zval to be used in the other thread safely */
-  char *task_str = pemalloc(task_len, 1);
-  memcpy(task_str, task_string, task_len);
-
-  bool success = go_frankenphp_worker_dispatch_task(
-      task_str, task_len, worker_name, worker_name_len);
+  bool success = go_frankenphp_dispatch_task(zv, worker_name, worker_name_len);
   if (!success) {
-    pefree(task_str, 1);
     zend_throw_exception(spl_ce_RuntimeException,
                          "No worker found to handle the task", 0);
     RETURN_THROWS();

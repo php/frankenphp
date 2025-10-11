@@ -8,7 +8,7 @@ import (
 	"github.com/dunglas/frankenphp/internal/fastabs"
 	"path/filepath"
 	"sync"
-	"sync/atomic"
+	"unsafe"
 )
 
 type taskWorker struct {
@@ -36,10 +36,10 @@ var taskWorkers []*taskWorker
 
 // EXPERIMENTAL: a task dispatched to a task worker
 type PendingTask struct {
-	str      *C.char
-	len      C.size_t
+	arg      any
 	done     sync.RWMutex
 	callback func()
+	Result   any
 }
 
 func (t *PendingTask) WaitForCompletion() {
@@ -47,13 +47,13 @@ func (t *PendingTask) WaitForCompletion() {
 }
 
 // EXPERIMENTAL: DispatchTask dispatches a task to a named task worker
-func DispatchTask(task string, taskWorkerName string) (*PendingTask, error) {
+func DispatchTask(arg any, taskWorkerName string) (*PendingTask, error) {
 	tw := getTaskWorkerByName(taskWorkerName)
 	if tw == nil {
 		return nil, errors.New("no task worker found with name " + taskWorkerName)
 	}
 
-	pt := &PendingTask{str: C.CString(task), len: C.size_t(len(task))}
+	pt := &PendingTask{arg: arg}
 	pt.done.Lock()
 
 	tw.taskChan <- pt
@@ -216,7 +216,7 @@ func getTaskWorkerByName(name string) *taskWorker {
 }
 
 //export go_frankenphp_worker_handle_task
-func go_frankenphp_worker_handle_task(threadIndex C.uintptr_t) C.go_string {
+func go_frankenphp_worker_handle_task(threadIndex C.uintptr_t) *C.zval {
 	thread := phpThreads[threadIndex]
 	handler, _ := thread.handler.(*taskWorkerThread)
 	thread.Unpin()
@@ -231,34 +231,45 @@ func go_frankenphp_worker_handle_task(threadIndex C.uintptr_t) C.go_string {
 		// callbacks may call into C (C -> GO -> C)
 		if task.callback != nil {
 			task.callback()
-			go_frankenphp_finish_task(threadIndex)
+			go_frankenphp_finish_task(threadIndex, nil)
 
 			return go_frankenphp_worker_handle_task(threadIndex)
 		}
 
 		// if the task has no callback, forward it to PHP
-		return C.go_string{len: task.len, data: task.str}
+		zval := phpValue(task.arg)
+		thread.Pin(unsafe.Pointer(zval))
+
+		return zval
 	case <-handler.thread.drainChan:
 		thread.state.markAsWaiting(false)
 		// send an empty task to drain the thread
-		return C.go_string{len: 0, data: nil}
+		return nil
 	}
 }
 
 //export go_frankenphp_finish_task
-func go_frankenphp_finish_task(threadIndex C.uintptr_t) {
+func go_frankenphp_finish_task(threadIndex C.uintptr_t, zv *C.zval) {
 	thread := phpThreads[threadIndex]
 	handler, ok := thread.handler.(*taskWorkerThread)
 	if !ok {
 		panic("thread is not a task thread")
 	}
 
+	if zv != nil {
+		handler.currentTask.Result = goValue(zv)
+	}
 	handler.currentTask.done.Unlock()
 	handler.currentTask = nil
 }
 
-//export go_frankenphp_worker_dispatch_task
-func go_frankenphp_worker_dispatch_task(taskStr *C.char, taskLen C.size_t, name *C.char, nameLen C.size_t) C.bool {
+//export go_frankenphp_dispatch_task
+func go_frankenphp_dispatch_task(zv *C.zval, name *C.char, nameLen C.size_t) C.bool {
+	if zv == nil {
+        logger.Error("no task argument provided")
+        return C.bool(false)
+    }
+
 	var worker *taskWorker
 	if name != nil && nameLen != 0 {
 		worker = getTaskWorkerByName(C.GoStringN(name, C.int(nameLen)))
@@ -272,7 +283,7 @@ func go_frankenphp_worker_dispatch_task(taskStr *C.char, taskLen C.size_t, name 
 	}
 
 	// create a new task and lock it until the task is done
-	task := &PendingTask{str: taskStr, len: taskLen}
+	task := &PendingTask{arg: goValue(zv)}
 	task.done.Lock()
 
 	// dispatch task immediately if a thread available (best performance)

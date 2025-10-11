@@ -13,7 +13,7 @@ ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_dispatch_task, 0, 1,
                                         IS_VOID, 0)
-ZEND_ARG_TYPE_INFO(0, task, IS_STRING, 0)
+ZEND_ARG_TYPE_INFO(0, task, IS_MIXED, 0)
 ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, worker_name, IS_STRING, 0, "\"\"")
 ZEND_END_ARG_INFO()
 

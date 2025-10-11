@@ -1,9 +1,8 @@
 <?php
 
-$handleFunc = function (string $task) {
-    echo "$task";
+$handleFunc = function ($task) {
+    var_dump($task);
     echo $_SERVER['CUSTOM_VAR'] ?? 'no custom var';
-    echo join(' ', $_SERVER['argv']);
 };
 
 $maxTasksBeforeRestarting = 1000;
