@@ -867,12 +867,6 @@ static void frankenphp_register_variables(zval *track_vars_array) {
    * variables.
    */
 
-  /* task workers may have argv and argc configured via config */
-  if (is_task_worker_thread) {
-    go_register_task_worker_args(thread_index, &SG(request_info));
-    php_build_argv(NULL, track_vars_array);
-  }
-
   /* in non-worker mode we import the os environment regularly */
   if (!is_worker_thread) {
     get_full_env(track_vars_array);

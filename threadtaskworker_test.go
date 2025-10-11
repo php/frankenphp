@@ -32,7 +32,6 @@ func TestDispatchToTaskWorker(t *testing.T) {
 			1,
 			AsTaskWorker(true),
 			WithWorkerEnv(PreparedEnv{"CUSTOM_VAR": "custom var"}),
-			WithWorkerArgs([]string{"arg1", "arg2"}),
 		),
 		WithNumThreads(3),
 		WithLogger(logger),
@@ -50,8 +49,6 @@ func TestDispatchToTaskWorker(t *testing.T) {
 	logOutput := buf.String()
 	assert.Contains(t, logOutput, "go task", "should see the dispatched task in the logs")
 	assert.Contains(t, logOutput, "custom var", "should see the prepared env of the task worker")
-	assert.Contains(t, logOutput, "arg1", "should see args passed to the task worker")
-	assert.Contains(t, logOutput, "arg2", "should see args passed to the task worker")
 }
 
 func TestDispatchToTaskWorkerFromWorker(t *testing.T) {

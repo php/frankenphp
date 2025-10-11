@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"sync"
 	"sync/atomic"
-	"unsafe"
 )
 
 type taskWorker struct {
@@ -20,9 +19,6 @@ type taskWorker struct {
 	name        string
 	num         int
 	env         PreparedEnv
-	queueLen    atomic.Int32
-	argv        []*C.char
-	argc        C.int
 }
 
 // representation of a thread that handles tasks directly assigned by go or via frankenphp_dispatch_task()
@@ -35,7 +31,7 @@ type taskWorkerThread struct {
 	currentTask  *PendingTask
 }
 
-const maxQueueLen = 1500 // TODO: configurable or via memory limit or doesn't matter?
+const maxQueueLen = 1500 // TODO: make configurable somehow
 var taskWorkers []*taskWorker
 
 // EXPERIMENTAL: a task dispatched to a task worker
@@ -90,18 +86,13 @@ func initTaskWorkers(opts []workerOpt) error {
 			return err
 		}
 
-		fullArgs := append([]string{fileName}, opt.args...)
-		argc, argv := convertArgs(fullArgs)
-
 		tw := &taskWorker{
 			threads:  make([]*phpThread, 0, opt.num),
 			fileName: fileName,
-			taskChan: make(chan *PendingTask),
+			taskChan: make(chan *PendingTask, maxQueueLen),
 			name:     opt.name,
 			num:      opt.num,
 			env:      opt.env,
-			argv:     argv,
-			argc:     argc,
 		}
 		taskWorkers = append(taskWorkers, tw)
 
@@ -291,33 +282,9 @@ func go_frankenphp_worker_dispatch_task(taskStr *C.char, taskLen C.size_t, name 
 	default:
 	}
 
-	// otherwise queue up in a non-blocking way
-	// make sure the queue is not too full
-	if worker.queueLen.Load() >= maxQueueLen {
-		logger.Error("task worker queue is full, dropping task", "name", worker.name)
-		return C.bool(false)
-	}
-
 	go func() {
-		worker.queueLen.Add(1)
 		worker.taskChan <- task
-		worker.queueLen.Add(-1)
 	}()
 
 	return C.bool(true)
-}
-
-//export go_register_task_worker_args
-func go_register_task_worker_args(threadIndex C.uintptr_t, info *C.sapi_request_info) {
-	thread := phpThreads[threadIndex]
-	handler, ok := thread.handler.(*taskWorkerThread)
-
-	if !ok {
-		panic("thread is not a task thread")
-	}
-
-	ptr := unsafe.Pointer(&handler.taskWorker.argv[0])
-	thread.Pin(ptr)
-	info.argv = (**C.char)(ptr)
-	info.argc = handler.taskWorker.argc
 }
