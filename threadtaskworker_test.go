@@ -43,7 +43,7 @@ func TestDispatchToTaskWorker(t *testing.T) {
 	pendingTask.WaitForCompletion()
 
 	Shutdown()
-    assert.Len(t, taskWorkers[0].threads, 0, "no task-worker threads should remain after shutdown")
+	assert.Len(t, taskWorkers[0].threads, 0, "no task-worker threads should remain after shutdown")
 
 	logOutput := buf.String()
 	assert.Contains(t, logOutput, "go task", "should see the dispatched task in the logs")
