@@ -267,10 +267,9 @@ func go_frankenphp_finish_task(threadIndex C.uintptr_t, zv *C.zval) {
 }
 
 //export go_frankenphp_dispatch_task
-func go_frankenphp_dispatch_task(zv *C.zval, name *C.char, nameLen C.size_t) C.bool {
+func go_frankenphp_dispatch_task(threadIndex C.uintptr_t, zv *C.zval, name *C.char, nameLen C.size_t) *C.char {
 	if zv == nil {
-		logger.Error("no task argument provided")
-		return C.bool(false)
+		return phpThreads[threadIndex].pinCString("Task argument cannot be null")
 	}
 
 	var worker *taskWorker
@@ -281,8 +280,7 @@ func go_frankenphp_dispatch_task(zv *C.zval, name *C.char, nameLen C.size_t) C.b
 	}
 
 	if worker == nil {
-		logger.Error("no task worker found to handle this task", "name", C.GoStringN(name, C.int(nameLen)))
-		return C.bool(false)
+		return phpThreads[threadIndex].pinCString("No worker found to handle this task: " + C.GoStringN(name, C.int(nameLen)))
 	}
 
 	// create a new task and lock it until the task is done
@@ -293,15 +291,8 @@ func go_frankenphp_dispatch_task(zv *C.zval, name *C.char, nameLen C.size_t) C.b
 	// dispatch to the queue
 	select {
 	case worker.taskChan <- task:
-		return C.bool(true)
+		return nil
 	default:
-		logger.Error("task worker queue is full, cannot dispatch task", "name", worker.name, "arg", goArg)
-		return C.bool(false)
+		return phpThreads[threadIndex].pinCString("Task worker queue is full, cannot dispatch task to worker: " + worker.name)
 	}
-
-	go func() {
-		worker.taskChan <- task
-	}()
-
-	return C.bool(true)
 }

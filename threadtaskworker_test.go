@@ -116,5 +116,5 @@ func TestDispatchToMultipleWorkers(t *testing.T) {
 	script := "http://example.com/testdata/tasks/task-dispatcher-string.php"
 	assertGetRequest(t, script+"?count=1&worker=worker1", "dispatched 1 tasks")
 	assertGetRequest(t, script+"?count=1&worker=worker2", "dispatched 1 tasks")
-	assertGetRequest(t, script+"?count=1&worker=worker3", "No worker found to handle the task") // fail
+	assertGetRequest(t, script+"?count=1&worker=worker3", "No worker found to handle this task") // fail
 }
