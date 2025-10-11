@@ -283,7 +283,7 @@ func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) 
 	request := fc.request
 
 	if request == nil {
-		return C.bool(fc.worker != nil)
+		return
 	}
 
 	authUser, authPassword, ok := request.BasicAuth()
