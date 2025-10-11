@@ -15,7 +15,7 @@ func testOnDummyPHPThread(t *testing.T, cb func()) {
 	t.Helper()
 	logger = slog.New(zapslog.NewHandler(zaptest.NewLogger(t).Core()))
 	assert.NoError(t, Init(
-		WithWorkers("tw", "./testdata/tasks/task-worker.php", 1, AsTaskWorker(true)),
+		WithWorkers("tw", "./testdata/tasks/task-worker.php", 1, AsTaskWorker(true, 0)),
 		WithNumThreads(2),
 		WithLogger(logger),
 	))

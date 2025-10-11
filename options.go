@@ -37,6 +37,7 @@ type workerOpt struct {
 	watch                  []string
 	maxConsecutiveFailures int
 	isTaskWorker           bool
+	maxQueueLen            int
 }
 
 // WithNumThreads configures the number of PHP threads to start.
@@ -149,9 +150,10 @@ func WithMaxWaitTime(maxWaitTime time.Duration) Option {
 }
 
 // EXPERIMENTAL: AsTaskWorker configures the worker as a task worker instead.
-func AsTaskWorker(isTaskWorker bool) WorkerOption {
+func AsTaskWorker(isTaskWorker bool, maxQueueLen int) WorkerOption {
 	return func(w *workerOpt) error {
 		w.isTaskWorker = isTaskWorker
+		w.maxQueueLen = maxQueueLen
 		return nil
 	}
 }

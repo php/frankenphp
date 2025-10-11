@@ -30,7 +30,7 @@ func TestDispatchToTaskWorker(t *testing.T) {
 			"worker",
 			"./testdata/tasks/task-worker.php",
 			1,
-			AsTaskWorker(true),
+			AsTaskWorker(true, 0),
 			WithWorkerEnv(PreparedEnv{"CUSTOM_VAR": "custom var"}),
 		),
 		WithNumThreads(3),
@@ -57,7 +57,7 @@ func TestDispatchToTaskWorkerFromWorker(t *testing.T) {
 	logger := slog.New(handler)
 
 	assert.NoError(t, Init(
-		WithWorkers("taskworker", "./testdata/tasks/task-worker.php", 1, AsTaskWorker(true)),
+		WithWorkers("taskworker", "./testdata/tasks/task-worker.php", 1, AsTaskWorker(true, 0)),
 		WithWorkers("worker1", "./testdata/tasks/task-dispatcher-string.php", 1),
 		WithNumThreads(3), // regular thread, task worker thread, dispatcher threads
 		WithLogger(logger),
@@ -83,7 +83,7 @@ func TestDispatchArrayToTaskWorker(t *testing.T) {
 	logger := slog.New(handler)
 
 	assert.NoError(t, Init(
-		WithWorkers("taskworker", "./testdata/tasks/task-worker.php", 1, AsTaskWorker(true)),
+		WithWorkers("taskworker", "./testdata/tasks/task-worker.php", 1, AsTaskWorker(true, 0)),
 		WithWorkers("worker2", "./testdata/tasks/task-dispatcher-array.php", 1),
 		WithNumThreads(3), // regular thread, task worker thread, dispatcher thread
 		WithLogger(logger),
@@ -106,8 +106,8 @@ func TestDispatchToMultipleWorkers(t *testing.T) {
 	logger := slog.New(handler)
 
 	assert.NoError(t, Init(
-		WithWorkers("worker1", "./testdata/tasks/task-worker.php", 1, AsTaskWorker(true)),
-		WithWorkers("worker2", "./testdata/tasks/task-worker2.php", 1, AsTaskWorker(true)),
+		WithWorkers("worker1", "./testdata/tasks/task-worker.php", 1, AsTaskWorker(true, 0)),
+		WithWorkers("worker2", "./testdata/tasks/task-worker2.php", 1, AsTaskWorker(true, 0)),
 		WithNumThreads(4),
 		WithLogger(logger),
 	))

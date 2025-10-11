@@ -133,7 +133,7 @@ func (f *FrankenPHPApp) Start() error {
 		workerOpts := []frankenphp.WorkerOption{
 			frankenphp.WithWorkerEnv(tw.Env),
 			frankenphp.WithWorkerWatchMode(tw.Watch),
-			frankenphp.AsTaskWorker(true),
+			frankenphp.AsTaskWorker(true, 0), // TODO: maxQueueLen configurable here?
 		}
 
 		opts = append(opts, frankenphp.WithWorkers(tw.Name, repl.ReplaceKnown(tw.FileName, ""), tw.Num, workerOpts...))

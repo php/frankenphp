@@ -274,7 +274,7 @@ func phpValue(value any) *C.zval {
 	case float64:
 		C.__zval_double__(&zval, C.double(v))
 	case string:
-        if (v == "") {
+		if v == "" {
 			C.__zval_empty_string__(&zval)
 			break
 		}

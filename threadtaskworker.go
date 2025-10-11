@@ -31,7 +31,6 @@ type taskWorkerThread struct {
 	currentTask  *PendingTask
 }
 
-const maxQueueLen = 1500 // TODO: make configurable somehow
 var taskWorkers []*taskWorker
 
 // EXPERIMENTAL: a task dispatched to a task worker
@@ -86,10 +85,14 @@ func initTaskWorkers(opts []workerOpt) error {
 			return err
 		}
 
+		if opt.maxQueueLen <= 0 {
+			opt.maxQueueLen = 10000 // default queue len, TODO: unlimited?
+		}
+
 		tw := &taskWorker{
 			threads:  make([]*phpThread, 0, opt.num),
 			fileName: fileName,
-			taskChan: make(chan *PendingTask, maxQueueLen),
+			taskChan: make(chan *PendingTask, opt.maxQueueLen),
 			name:     opt.name,
 			num:      opt.num,
 			env:      opt.env,
@@ -266,9 +269,9 @@ func go_frankenphp_finish_task(threadIndex C.uintptr_t, zv *C.zval) {
 //export go_frankenphp_dispatch_task
 func go_frankenphp_dispatch_task(zv *C.zval, name *C.char, nameLen C.size_t) C.bool {
 	if zv == nil {
-        logger.Error("no task argument provided")
-        return C.bool(false)
-    }
+		logger.Error("no task argument provided")
+		return C.bool(false)
+	}
 
 	var worker *taskWorker
 	if name != nil && nameLen != 0 {
@@ -283,14 +286,17 @@ func go_frankenphp_dispatch_task(zv *C.zval, name *C.char, nameLen C.size_t) C.b
 	}
 
 	// create a new task and lock it until the task is done
-	task := &PendingTask{arg: goValue(zv)}
+	goArg := goValue(zv)
+	task := &PendingTask{arg: goArg}
 	task.done.Lock()
 
-	// dispatch task immediately if a thread available (best performance)
+	// dispatch to the queue
 	select {
 	case worker.taskChan <- task:
 		return C.bool(true)
 	default:
+		logger.Error("task worker queue is full, cannot dispatch task", "name", worker.name, "arg", goArg)
+		return C.bool(false)
 	}
 
 	go func() {
