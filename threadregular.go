@@ -35,6 +35,7 @@ func (handler *regularThread) beforeScriptExecution() string {
 		return handler.thread.transitionToNewHandler()
 	case stateTransitionComplete:
 		handler.state.set(stateReady)
+		handler.thread.updateContext(false, false)
 		return handler.waitForRequest()
 	case stateReady:
 		return handler.waitForRequest()

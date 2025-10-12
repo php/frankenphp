@@ -1,27 +1,45 @@
 package frankenphp
 
 import (
-	"io"
+	"errors"
 	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap/exp/zapslog"
+	"go.uber.org/zap/zaptest"
 )
 
 // execute the function on a PHP thread directly
 // this is necessary if tests make use of PHP's internal allocation
-func testOnDummyPHPThread(t *testing.T, test func()) {
+func testOnDummyPHPThread(t *testing.T, cb func()) {
 	t.Helper()
-	logger = slog.New(slog.NewTextHandler(io.Discard, nil))
-	_, err := initPHPThreads(1, 1, nil) // boot 1 thread
+	logger = slog.New(zapslog.NewHandler(zaptest.NewLogger(t).Core()))
+	assert.NoError(t, Init(
+		WithWorkers("tw", "./testdata/tasks/task-worker.php", 1, AsTaskWorker(true, 0)),
+		WithNumThreads(2),
+		WithLogger(logger),
+	))
+	defer Shutdown()
+
+	task, err := executeOnPHPThread(cb, "tw")
 	assert.NoError(t, err)
-	handler := convertToTaskThread(phpThreads[0])
 
-	task := newTask(test)
-	handler.execute(task)
-	task.waitForCompletion()
+	task.WaitForCompletion()
+}
 
-	drainPHPThreads()
+// executeOnPHPThread executes the callback func() directly on a task worker thread
+// Currently only used in tests
+func executeOnPHPThread(callback func(), taskWorkerName string) (*PendingTask, error) {
+	tw := getTaskWorkerByName(taskWorkerName)
+	if tw == nil {
+		return nil, errors.New("no task worker found with name " + taskWorkerName)
+	}
+
+	pt := &PendingTask{callback: callback}
+	err := pt.dispatch(tw)
+
+	return pt, err
 }
 
 func TestGoString(t *testing.T) {

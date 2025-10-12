@@ -37,6 +37,8 @@ import (
 	"unsafe"
 	// debug on Linux
 	//_ "github.com/ianlancetaylor/cgosymbolizer"
+
+	"github.com/dunglas/frankenphp/internal/watcher"
 )
 
 type contextKeyStruct struct{}
@@ -52,7 +54,8 @@ var (
 	ErrScriptExecution        = errors.New("error during PHP script execution")
 	ErrNotRunning             = errors.New("FrankenPHP is not running. For proper configuration visit: https://frankenphp.dev/docs/config/#caddyfile-config")
 
-	isRunning bool
+	isRunning        bool
+	watcherIsEnabled bool
 
 	loggerMu sync.RWMutex
 	logger   *slog.Logger
@@ -149,6 +152,10 @@ func calculateMaxThreads(opt *opt) (int, int, int, error) {
 		metrics.TotalWorkers(w.name, w.num)
 
 		numWorkers += opt.workers[i].num
+	}
+
+	for _, tw := range opt.taskWorkers {
+		numWorkers += tw.num
 	}
 
 	numThreadsIsSet := opt.numThreads > 0
@@ -279,8 +286,21 @@ func Init(options ...Option) error {
 		convertToRegularThread(getInactivePHPThread())
 	}
 
+	directoriesToWatch := getDirectoriesToWatch(append(opt.workers, opt.taskWorkers...))
+	watcherIsEnabled = len(directoriesToWatch) > 0 // watcherIsEnabled is important for initWorkers()
+
 	if err := initWorkers(opt.workers); err != nil {
 		return err
+	}
+
+	if err := initTaskWorkers(opt.taskWorkers); err != nil {
+		return err
+	}
+
+	if watcherIsEnabled {
+		if err := watcher.InitWatcher(directoriesToWatch, RestartWorkers, logger); err != nil {
+			return err
+		}
 	}
 
 	initAutoScaling(mainThread)
@@ -300,8 +320,11 @@ func Shutdown() {
 		return
 	}
 
-	drainWatcher()
+	if watcherIsEnabled {
+		watcher.DrainWatcher()
+	}
 	drainAutoScaling()
+	drainTaskWorkers()
 	drainPHPThreads()
 
 	metrics.Shutdown()
@@ -619,4 +642,12 @@ func timeoutChan(timeout time.Duration) <-chan time.Time {
 	}
 
 	return time.After(timeout)
+}
+
+func getDirectoriesToWatch(workerOpts []workerOpt) []string {
+	directoriesToWatch := []string{}
+	for _, w := range workerOpts {
+		directoriesToWatch = append(directoriesToWatch, w.watch...)
+	}
+	return directoriesToWatch
 }

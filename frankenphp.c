@@ -73,6 +73,7 @@ frankenphp_config frankenphp_get_config() {
 bool should_filter_var = 0;
 __thread uintptr_t thread_index;
 __thread bool is_worker_thread = false;
+__thread bool is_task_worker_thread = false;
 __thread zval *os_environment = NULL;
 
 static void frankenphp_update_request_context() {
@@ -82,7 +83,12 @@ static void frankenphp_update_request_context() {
   /* status It is not reset by zend engine, set it to 200. */
   SG(sapi_headers).http_response_code = 200;
 
-  is_worker_thread = go_update_request_info(thread_index, &SG(request_info));
+  go_update_request_info(thread_index, &SG(request_info));
+}
+
+void frankenphp_update_thread_context(bool is_worker, bool is_task_worker) {
+  is_worker_thread = is_worker;
+  is_task_worker_thread = is_task_worker;
 }
 
 static void frankenphp_free_request_context() {
@@ -482,6 +488,89 @@ PHP_FUNCTION(frankenphp_handle_request) {
   }
 
   RETURN_TRUE;
+}
+
+PHP_FUNCTION(frankenphp_handle_task) {
+  zend_fcall_info fci;
+  zend_fcall_info_cache fcc;
+
+  ZEND_PARSE_PARAMETERS_START(1, 1)
+  Z_PARAM_FUNC(fci, fcc)
+  ZEND_PARSE_PARAMETERS_END();
+
+  if (!is_task_worker_thread) {
+    zend_throw_exception(
+        spl_ce_RuntimeException,
+        "frankenphp_handle_task() called while not in worker mode", 0);
+    RETURN_THROWS();
+  }
+
+#ifdef ZEND_MAX_EXECUTION_TIMERS
+  /*
+   * Disable timeouts while waiting for a task to handle
+   * TODO: should running forever be the default?
+   */
+  zend_unset_timeout();
+#endif
+
+  zval *arg = go_frankenphp_worker_handle_task(thread_index);
+  if (arg == NULL) {
+    RETURN_FALSE;
+  }
+
+  /* Call the PHP func passed to frankenphp_handle_task() */
+  zval retval = {0};
+  fci.size = sizeof fci;
+  fci.retval = &retval;
+
+  /* copy the string to thread-local memory */
+
+  fci.params = arg;
+  fci.param_count = 1;
+  zend_bool status = zend_call_function(&fci, &fcc) == SUCCESS;
+
+  if (status == SUCCESS) {
+    go_frankenphp_finish_task(thread_index, &retval);
+    zval_ptr_dtor(&retval);
+  } else {
+    go_frankenphp_finish_task(thread_index, NULL);
+  }
+
+  /*
+   * If an exception occurred, print the message to the client before
+   * exiting
+   */
+  if (EG(exception) && !zend_is_unwind_exit(EG(exception)) &&
+      !zend_is_graceful_exit(EG(exception))) {
+    zend_exception_error(EG(exception), E_ERROR);
+    zend_bailout();
+  }
+
+  zend_try { php_output_end_all(); }
+  zend_end_try();
+
+  zval_ptr_dtor(arg);
+
+  RETURN_TRUE;
+}
+
+PHP_FUNCTION(frankenphp_dispatch_task) {
+  zval *zv;
+  char *worker_name = NULL;
+  size_t worker_name_len = 0;
+
+  ZEND_PARSE_PARAMETERS_START(1, 2);
+  Z_PARAM_ZVAL(zv);
+  Z_PARAM_OPTIONAL
+  Z_PARAM_STRING(worker_name, worker_name_len);
+  ZEND_PARSE_PARAMETERS_END();
+
+  char *error = go_frankenphp_dispatch_task(thread_index, zv, worker_name,
+                                            worker_name_len);
+  if (error) {
+    zend_throw_exception(spl_ce_RuntimeException, error, 0);
+    RETURN_THROWS();
+  }
 }
 
 PHP_FUNCTION(headers_send) {

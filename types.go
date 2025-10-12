@@ -445,6 +445,11 @@ case C.IS_OBJECT:
 	}
 }
 
+func zvalPtrDtor(p unsafe.Pointer) {
+	zv := (*C.zval)(p)
+	C.zval_ptr_dtor(zv)
+}
+
 func zendStringRelease(p unsafe.Pointer) {
 	zs := (*C.zend_string)(p)
 	C.zend_string_release(zs)
