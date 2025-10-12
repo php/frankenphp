@@ -44,6 +44,11 @@ type AssociativeArray struct {
 	Order []string
 }
 
+type PHPObject struct {
+	ClassName string
+	Props     map[string]any
+}
+
 // EXPERIMENTAL: GoAssociativeArray converts a zend_array to a Go AssociativeArray
 func GoAssociativeArray(arr unsafe.Pointer) AssociativeArray {
 	entries, order := goArray(arr, true)
@@ -214,7 +219,7 @@ func GoValue(zval unsafe.Pointer) any {
 }
 
 func goValue(zval *C.zval) any {
-	t := C.zval_get_type(zval)
+	t := C.zval_get_type(zval) // TODO: zval->u1.v.type
 
 	switch t {
 	case C.IS_NULL:
@@ -223,6 +228,13 @@ func goValue(zval *C.zval) any {
 		return false
 	case C.IS_TRUE:
 		return true
+	case C.IS_OBJECT:
+		obj := (*C.zend_object)(extractZvalValue(zval, C.IS_OBJECT))
+		if obj != nil {
+			return goObject(obj)
+		}
+
+		return nil
 	case C.IS_LONG:
 		longPtr := (*C.zend_long)(extractZvalValue(zval, C.IS_LONG))
 		if longPtr != nil {
@@ -291,6 +303,47 @@ func phpValue(value any) *C.zval {
 	return &zval
 }
 
+func goObject(obj *C.zend_object) PHPObject {
+	if obj == nil {
+		panic("received a nil pointer on object conversion")
+	}
+	classEntry := obj.ce
+	className := GoString(unsafe.Pointer(classEntry.name))
+
+	props := make(map[string]any)
+
+	// iterate over the properties
+	prop := obj.properties
+	if prop != nil {
+		hashTable := (*C.HashTable)(unsafe.Pointer(prop))
+		nNumUsed := hashTable.nNumUsed
+
+		for i := C.uint32_t(0); i < nNumUsed; i++ {
+			bucket := C.get_ht_bucket_data(hashTable, i)
+			if bucket == nil || C.zval_get_type(&bucket.val) == C.IS_UNDEF {
+				continue
+			}
+
+			v := goValue(&bucket.val)
+
+			if bucket.key != nil {
+				keyStr := GoString(unsafe.Pointer(bucket.key))
+				props[keyStr] = v
+				continue
+			}
+
+			// as fallback convert the bucket index to a string key
+			strIndex := strconv.Itoa(int(bucket.h))
+			props[strIndex] = v
+		}
+	}
+
+	return PHPObject{
+		ClassName: className,
+		Props:     props,
+	}
+}
+
 // createNewArray creates a new zend_array with the specified size.
 func createNewArray(size uint32) *C.HashTable {
 	arr := C.__zend_new_array__(C.uint32_t(size))
@@ -315,8 +368,8 @@ func extractZvalValue(zval *C.zval, expectedType C.uint8_t) unsafe.Pointer {
 	switch expectedType {
 	case C.IS_LONG:
 		return v
-	case C.IS_DOUBLE:
-		return v
+	case C.IS_OBJECT:
+		return unsafe.Pointer(*(**C.zend_object)(v))
 	case C.IS_STRING:
 		return unsafe.Pointer(*(**C.zend_string)(v))
 	case C.IS_ARRAY:
