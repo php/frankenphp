@@ -128,16 +128,16 @@ func TestNestedMixedArray(t *testing.T) {
 
 func TestPHPObject(t *testing.T) {
 	testOnDummyPHPThread(t, func() {
-		originalObject := PHPObject{
-			ClassName: "DateTime",
-			Properties: map[string]any{
+		originalObject := Object{
+			ClassName: "stdClass",
+			Props: map[string]any{
 				"prop1": "value1",
 				"prop2": 42,
 			},
 		}
 
-		convertedArray := GoMap(PHPMap(originalArray))
+		convertedObject := GoObject(PHPObject(originalObject))
 
-		assert.Equal(t, originalArray, convertedArray, "nested mixed array should be equal after conversion")
+		assert.Equal(t, originalObject, convertedObject, "nested mixed array should be equal after conversion")
 	})
 }

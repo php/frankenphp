@@ -25,17 +25,19 @@ func GoString(s unsafe.Pointer) string {
 // non-persistent (automatically freed after the request by the ZMM) or persistent. If you choose
 // the second mode, it is your repsonsability to free the allocated memory.
 func PHPString(s string, persistent bool) unsafe.Pointer {
+	return unsafe.Pointer(phpString(s, persistent))
+}
+
+func phpString(s string, persistent bool) *C.zend_string {
 	if s == "" {
-		return nil
+		return C.zend_empty_string
 	}
 
-	zendStr := C.zend_string_init(
+	return C.zend_string_init(
 		(*C.char)(unsafe.Pointer(unsafe.StringData(s))),
 		C.size_t(len(s)),
 		C._Bool(persistent),
 	)
-
-	return unsafe.Pointer(zendStr)
 }
 
 // AssociativeArray represents a PHP array with ordered key-value pairs
@@ -44,9 +46,10 @@ type AssociativeArray struct {
 	Order []string
 }
 
-type PHPObject struct {
+type Object struct {
 	ClassName string
 	Props     map[string]any
+	ce        *C.zend_class_entry
 }
 
 // EXPERIMENTAL: GoAssociativeArray converts a zend_array to a Go AssociativeArray
@@ -296,6 +299,8 @@ func phpValue(value any) *C.zval {
 		return (*C.zval)(PHPAssociativeArray(AssociativeArray{Map: v}))
 	case []any:
 		return (*C.zval)(PHPPackedArray(v))
+	case Object:
+		phpObject(&zval, v)
 	default:
 		panic(fmt.Sprintf("unsupported Go type %T", v))
 	}
@@ -303,7 +308,11 @@ func phpValue(value any) *C.zval {
 	return &zval
 }
 
-func goObject(obj *C.zend_object) PHPObject {
+func GoObject(obj unsafe.Pointer) Object {
+	return goObject((*C.zend_object)(obj))
+}
+
+func goObject(obj *C.zend_object) Object {
 	if obj == nil {
 		panic("received a nil pointer on object conversion")
 	}
@@ -338,10 +347,57 @@ func goObject(obj *C.zend_object) PHPObject {
 		}
 	}
 
-	return PHPObject{
+	return Object{
 		ClassName: className,
 		Props:     props,
+		ce:        classEntry,
 	}
+}
+
+func PHPObject(obj Object) unsafe.Pointer {
+    fmt.Print("\n\ncreating obj\n\n")
+	zval := (*C.zval)(C.malloc(C.size_t(unsafe.Sizeof(C.zval{}))))
+	phpObject(zval, obj)
+	zendObj := (*C.zend_object)(extractZvalValue(zval, C.IS_OBJECT))
+
+	return unsafe.Pointer(&zendObj)
+}
+
+func phpObject(zv *C.zval, obj Object) {
+	className := obj.ClassName
+	if className == "" {
+		panic("PHPObject must have a class name")
+	}
+
+	fmt.Printf("\n\ncreating obj of class %s\n\n", className)
+
+	classEntry := obj.ce
+	if classEntry == nil {
+		classNameZs := phpString(className, false)
+		classEntry = C.zend_lookup_class(classNameZs)
+		zendStringRelease(unsafe.Pointer(classNameZs))
+		fmt.Printf("\n\nclass search %s\n\n", className)
+		if classEntry == nil {
+			panic("class not found: " + className)
+		}
+	}
+
+    fmt.Printf("\n\nclass found %s\n\n", className)
+	C.object_init_ex(zv, classEntry)
+	fmt.Printf("\n\nobj inited %s\n\n", className)
+
+	var zendObj *C.zend_object
+	zendObj = (*C.zend_object)(extractZvalValue(zv, C.IS_OBJECT))
+
+	// set the properties
+	for key, val := range obj.Props {
+	    fmt.Printf("\n\nsetting prop %s\n\n", key)
+		zval := phpValue(val) // TODO: put on stack
+		C.zend_update_property(classEntry, zendObj, toUnsafeChar(key), C.size_t(len(key)), zval)
+		C.zval_ptr_dtor(zval)
+	}
+
+	// TODO: wakeup?
 }
 
 // createNewArray creates a new zend_array with the specified size.
@@ -368,7 +424,9 @@ func extractZvalValue(zval *C.zval, expectedType C.uint8_t) unsafe.Pointer {
 	switch expectedType {
 	case C.IS_LONG:
 		return v
-	case C.IS_OBJECT:
+	case C.IS_DOUBLE:
+		return v
+case C.IS_OBJECT:
 		return unsafe.Pointer(*(**C.zend_object)(v))
 	case C.IS_STRING:
 		return unsafe.Pointer(*(**C.zend_string)(v))
