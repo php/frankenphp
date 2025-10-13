@@ -17,7 +17,7 @@ func init() {
 	caddycmd.RegisterCommand(caddycmd.Command{
 		Name:  "extension-init",
 		Usage: "go_extension.go [--verbose]",
-		Short: "(Experimental) Initializes a PHP extension from a Go file",
+		Short: "Initializes a PHP extension from a Go file (EXPERIMENTAL)",
 		Long: `
 Initializes a PHP extension from a Go file. This command generates the necessary C files for the extension, including the header and source files, as well as the arginfo file.`,
 		CobraFunc: func(cmd *cobra.Command) {

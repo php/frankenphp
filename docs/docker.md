@@ -1,6 +1,8 @@
 # Building Custom Docker Image
 
-[FrankenPHP Docker images](https://hub.docker.com/r/dunglas/frankenphp) are based on [official PHP images](https://hub.docker.com/_/php/). Debian and Alpine Linux variants are provided for popular architectures. Debian variants are recommended.
+[FrankenPHP Docker images](https://hub.docker.com/r/dunglas/frankenphp) are based on [official PHP images](https://hub.docker.com/_/php/).
+Debian and Alpine Linux variants are provided for popular architectures.
+Debian variants are recommended.
 
 Variants for PHP 8.2, 8.3 and 8.4 are provided.
 
@@ -27,6 +29,11 @@ Then, run these commands to build and run the Docker image:
 docker build -t my-php-app .
 docker run -it --rm --name my-running-app my-php-app
 ```
+
+## How to Tweak the Configuration
+
+For convenience, [a default `Caddyfile`](https://github.com/php/frankenphp/blob/main/caddy/frankenphp/Caddyfile) containing
+useful environment variables is provided in the image.
 
 ## How to Install More PHP Extensions
 
