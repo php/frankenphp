@@ -157,12 +157,15 @@ func TestPHPObject(t *testing.T) {
 			ClassName: "stdClass",
 			Props: map[string]any{
 				"prop1": "value1",
-				"prop2": 42,
+				"prop2": int64(42),
 			},
 		}
 
-		convertedObject := GoObject(PHPObject(originalObject))
+		phpObject := PHPObject(originalObject)
+		defer zvalPtrDtor(phpObject)
+		convertedObject := GoObject(phpObject)
 
-		assert.Equal(t, originalObject, convertedObject, "nested mixed array should be equal after conversion")
+		assert.Equal(t, originalObject.ClassName, convertedObject.ClassName, "nested mixed array should be equal after conversion")
+		assert.Equal(t, originalObject.Props, convertedObject.Props, "nested mixed array should be equal after conversion")
 	})
 }
