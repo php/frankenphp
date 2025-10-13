@@ -475,9 +475,18 @@ func go_write_headers(threadIndex C.uintptr_t, status C.int, headers *C.zend_lli
 		current = current.next
 	}
 
-	fc.responseWriter.WriteHeader(int(status))
+	goStatus := int(status)
 
-	if status >= 100 && status < 200 {
+	// go panics on invalid status code
+	// https://github.com/golang/go/blob/9b8742f2e79438b9442afa4c0a0139d3937ea33f/src/net/http/server.go#L1162
+	if goStatus < 100 || goStatus > 999 {
+		logger.Error(fmt.Sprintf("Invalid response status code %v", goStatus))
+		goStatus = 500
+	}
+
+	fc.responseWriter.WriteHeader(goStatus)
+
+	if goStatus >= 100 && goStatus < 200 {
 		// Clear headers, it's not automatically done by ResponseWriter.WriteHeader() for 1xx responses
 		h := fc.responseWriter.Header()
 		for k := range h {
