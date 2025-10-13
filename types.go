@@ -57,13 +57,13 @@ type AssociativeArray struct {
 	Order []string
 }
 
-// EXPERIMENTAL: GoAssociativeArray converts a PHP zend_array to a Go AssociativeArray
+// EXPERIMENTAL: GoAssociativeArray converts a zend_array to a Go AssociativeArray
 func GoAssociativeArray(arr unsafe.Pointer) AssociativeArray {
 	entries, order := goArray(arr, true)
 	return AssociativeArray{entries, order}
 }
 
-// EXPERIMENTAL: GoMap converts a PHP zend_array to an unordered Go map
+// EXPERIMENTAL: GoMap converts a zend_array to an unordered Go map
 func GoMap(arr unsafe.Pointer) map[string]any {
 	entries, _ := goArray(arr, false)
 	return entries
@@ -134,7 +134,7 @@ func goArray(arr unsafe.Pointer, ordered bool) (map[string]any, []string) {
 	return entries, order
 }
 
-// EXPERIMENTAL: GoPackedArray converts a PHP zend_array to a Go slice
+// EXPERIMENTAL: GoPackedArray converts a zend_array to a Go slice
 func GoPackedArray(arr unsafe.Pointer) []any {
 	if arr == nil {
 		panic("GoPackedArray received a nil pointer")
@@ -143,7 +143,7 @@ func GoPackedArray(arr unsafe.Pointer) []any {
 	array := (*C.zend_array)(arr)
 
 	if array == nil {
-		panic("GoPackedArray received a pointer that wasn't a zrnd_array")
+		panic("GoPackedArray received a pointer that wasn't a zend_array")
 	}
 
 	nNumUsed := array.nNumUsed
@@ -171,12 +171,12 @@ func GoPackedArray(arr unsafe.Pointer) []any {
 	return result
 }
 
-// EXPERIMENTAL: PHPMap converts an unordered Go map to a PHP zend_array
+// EXPERIMENTAL: PHPMap converts an unordered Go map to a zend_array
 func PHPMap(arr map[string]any) unsafe.Pointer {
 	return phpArray(arr, nil)
 }
 
-// EXPERIMENTAL: PHPAssociativeArray converts a Go AssociativeArray to a PHP zend_array
+// EXPERIMENTAL: PHPAssociativeArray converts a Go AssociativeArray to a zend_array
 func PHPAssociativeArray(arr AssociativeArray) unsafe.Pointer {
 	return phpArray(arr.Map, arr.Order)
 }
@@ -202,7 +202,7 @@ func phpArray(entries map[string]any, order []string) unsafe.Pointer {
 	return unsafe.Pointer(zendArray)
 }
 
-// EXPERIMENTAL: PHPPackedArray converts a Go slice to a PHP zend_array.
+// EXPERIMENTAL: PHPPackedArray converts a Go slice to a zend_array.
 func PHPPackedArray(slice []any) unsafe.Pointer {
 	zendArray := createNewArray((uint32)(len(slice)))
 	for _, val := range slice {
