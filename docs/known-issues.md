@@ -13,9 +13,9 @@ The following extensions are known not to be compatible with FrankenPHP:
 
 The following extensions have known bugs and unexpected behaviors when used with FrankenPHP:
 
-| Name                                                          | Problem                                                                                                                                                                                                                                                                                         |
-| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [ext-openssl](https://www.php.net/manual/en/book.openssl.php) | When using a static build of FrankenPHP (built with the musl libc), the OpenSSL extension may crash under heavy loads. A workaround is to use a dynamically linked build (like the one used in Docker images). This bug is [being tracked by PHP](https://github.com/php/php-src/issues/13648). |
+| Name                                                          | Problem                                                                                                                                                                                                                   |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [ext-openssl](https://www.php.net/manual/en/book.openssl.php) | When using musl libc, the OpenSSL extension may crash under heavy loads. The problem doesn't occur when using the more popular GNU libc. This bug is [being tracked by PHP](https://github.com/php/php-src/issues/13648). |
 
 ## get_browser
 
@@ -23,7 +23,11 @@ The [get_browser()](https://www.php.net/manual/en/function.get-browser.php) func
 
 ## Standalone Binary and Alpine-based Docker Images
 
-The standalone binary and Alpine-based Docker images (`dunglas/frankenphp:*-alpine`) use [musl libc](https://musl.libc.org/) instead of [glibc and friends](https://www.etalabs.net/compare_libcs.html), to keep a smaller binary size. This may lead to some compatibility issues. In particular, the glob flag `GLOB_BRACE` is [not available](https://www.php.net/manual/en/function.glob.php)
+The fully binary and Alpine-based Docker images (`dunglas/frankenphp:*-alpine`) use [musl libc](https://musl.libc.org/) instead of [glibc and friends](https://www.etalabs.net/compare_libcs.html), to keep a smaller binary size.
+This may lead to some compatibility issues.
+In particular, the glob flag `GLOB_BRACE` is [not available](https://www.php.net/manual/en/function.glob.php)
+
+Prefer using the GNU variant of the static binary and Debian-based Docker images if you encounter issues.
 
 ## Using `https://127.0.0.1` with Docker
 

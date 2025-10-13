@@ -33,7 +33,7 @@ As covered in the manual implementation section below as well, you need to [get 
 The first step to writing a PHP extension in Go is to create a new Go module. You can use the following command for this:
 
 ```console
-go mod init example.com/example 
+go mod init example.com/example
 ```
 
 The second step is to [get the PHP sources](https://www.php.net/downloads.php) for the next steps. Once you have them, decompress them into the directory of your choice, not inside your Go module:
@@ -49,7 +49,7 @@ Everything is now setup to write your native function in Go. Create a new file n
 ```go
 package example
 
-// #include <Zend/zend_types.h> 
+// #include <Zend/zend_types.h>
 import "C"
 import (
     "strings"
@@ -126,7 +126,7 @@ package example
 import "C"
 import (
     "unsafe"
-    
+
     "github.com/dunglas/frankenphp"
 )
 
@@ -790,7 +790,7 @@ import "C"
 import (
     "unsafe"
     "strings"
-    
+
     "github.com/dunglas/frankenphp"
 )
 
