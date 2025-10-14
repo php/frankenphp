@@ -7,9 +7,7 @@ import (
 	"fmt"
 
 	"github.com/caddyserver/caddy/v2"
-	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
-	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 )
 
 const (
@@ -35,12 +33,3 @@ func init() {
 func wrongSubDirectiveError(module string, allowedDriectives string, wrongValue string) error {
 	return fmt.Errorf("unknown '%s' subdirective: '%s' (allowed directives are: %s)", module, wrongValue, allowedDriectives)
 }
-
-// Interface guards
-var (
-	_ caddy.App                   = (*FrankenPHPApp)(nil)
-	_ caddy.Provisioner           = (*FrankenPHPApp)(nil)
-	_ caddy.Provisioner           = (*FrankenPHPModule)(nil)
-	_ caddyhttp.MiddlewareHandler = (*FrankenPHPModule)(nil)
-	_ caddyfile.Unmarshaler       = (*FrankenPHPModule)(nil)
-)
