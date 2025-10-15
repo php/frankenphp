@@ -71,12 +71,12 @@ func TestWorkerExtensionSendMessage(t *testing.T) {
 	defer Shutdown()
 
 	result, err := externalWorker.SendMessage("Hello Worker", nil)
-	assert.NoError(t, err, "Sending request should not produce an error")
+	assert.NoError(t, err, "Sending message should not produce an error")
 
 	switch v := result.(type) {
 	case string:
 		assert.Equal(t, "received message: Hello Worker", v)
 	default:
-		t.Fatalf("Expected result to be string or []byte, got %T", v)
+		t.Fatalf("Expected result to be string, got %T", v)
 	}
 }
