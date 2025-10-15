@@ -112,6 +112,11 @@ You can also explicitly configure FrankenPHP using the [global option](https://c
 # ...
 ```
 
+If the worker mode is enabled, an additional thread is required to handle the incoming requests,
+so the default `num_threads` value is `1 + 2x(number of available CPUs)`.
+
+Thus, in that mode if `num_threads` and `num` are explicitly set, `num_threads` must be strictly greater then `num`.
+
 Alternatively, you may use the one-line short form of the `worker` option:
 
 ```caddyfile
