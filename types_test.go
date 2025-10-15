@@ -163,9 +163,9 @@ func TestPHPObject(t *testing.T) {
 
 		phpObject := PHPObject(originalObject)
 		defer zvalPtrDtor(phpObject)
-		convertedObject := GoObject(phpObject)
 
-		assert.Equal(t, originalObject.ClassName, convertedObject.ClassName, "nested mixed array should be equal after conversion")
-		assert.Equal(t, originalObject.Props, convertedObject.Props, "nested mixed array should be equal after conversion")
+		convertedObject := GoObject(phpObject)
+		assert.Equal(t, originalObject.ClassName, convertedObject.ClassName, "object class should be equal after conversion")
+		assert.Equal(t, originalObject.Props, convertedObject.Props, "object props should be equal after conversion")
 	})
 }

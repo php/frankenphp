@@ -198,14 +198,16 @@ func phpArray(entries map[string]any, order []string) unsafe.Pointer {
 		zendArray = createNewArray((uint32)(len(order)))
 		for _, key := range order {
 			val := entries[key]
-			zval := phpValue(val)
-			C.zend_hash_str_update(zendArray, toUnsafeChar(key), C.size_t(len(key)), zval)
+			var zval C.zval
+			phpValue(&zval, val)
+			C.zend_hash_str_update(zendArray, toUnsafeChar(key), C.size_t(len(key)), &zval)
 		}
 	} else {
 		zendArray = createNewArray((uint32)(len(entries)))
 		for key, val := range entries {
-			zval := phpValue(val)
-			C.zend_hash_str_update(zendArray, toUnsafeChar(key), C.size_t(len(key)), zval)
+			var zval C.zval
+			phpValue(&zval, val)
+			C.zend_hash_str_update(zendArray, toUnsafeChar(key), C.size_t(len(key)), &zval)
 		}
 	}
 
@@ -216,8 +218,9 @@ func phpArray(entries map[string]any, order []string) unsafe.Pointer {
 func PHPPackedArray(slice []any) unsafe.Pointer {
 	zendArray := createNewArray((uint32)(len(slice)))
 	for _, val := range slice {
-		zval := phpValue(val)
-		C.zend_hash_next_index_insert(zendArray, zval)
+		var zval C.zval
+		phpValue(&zval, val)
+		C.zend_hash_next_index_insert(zendArray, &zval)
 	}
 
 	return unsafe.Pointer(zendArray)
@@ -280,43 +283,41 @@ func goValue(zval *C.zval) any {
 
 // EXPERIMENTAL: PHPValue converts a Go any to a PHP zval
 func PHPValue(value any) unsafe.Pointer {
-	return unsafe.Pointer(phpValue(value))
+	var zval C.zval // TODO: emalloc?
+	phpValue(&zval, value)
+	return unsafe.Pointer(&zval)
 }
 
-func phpValue(value any) *C.zval {
-	var zval C.zval
-
+func phpValue(zval *C.zval, value any) {
 	switch v := value.(type) {
 	case nil:
-		C.__zval_null__(&zval)
+		C.__zval_null__(zval)
 	case bool:
-		C.__zval_bool__(&zval, C._Bool(v))
+		C.__zval_bool__(zval, C._Bool(v))
 	case int:
-		C.__zval_long__(&zval, C.zend_long(v))
+		C.__zval_long__(zval, C.zend_long(v))
 	case int64:
-		C.__zval_long__(&zval, C.zend_long(v))
+		C.__zval_long__(zval, C.zend_long(v))
 	case float64:
-		C.__zval_double__(&zval, C.double(v))
+		C.__zval_double__(zval, C.double(v))
 	case string:
 		if v == "" {
-			C.__zval_empty_string__(&zval)
+			C.__zval_empty_string__(zval)
 			break
 		}
 		str := (*C.zend_string)(PHPString(v, false))
-		C.__zval_string__(&zval, str)
+		C.__zval_string__(zval, str)
 	case AssociativeArray:
-		C.__zval_arr__(&zval, (*C.zend_array)(PHPAssociativeArray(v)))
+		C.__zval_arr__(zval, (*C.zend_array)(PHPAssociativeArray(v)))
 	case map[string]any:
-		C.__zval_arr__(&zval, (*C.zend_array)(PHPMap(v)))
+		C.__zval_arr__(zval, (*C.zend_array)(PHPMap(v)))
 	case []any:
-		return (*C.zval)(PHPPackedArray(v))
+		C.__zval_arr__(zval, (*C.zend_array)(PHPPackedArray(v)))
 	case Object:
-		phpObject(&zval, v)
+		phpObject(zval, v)
 	default:
 		panic(fmt.Sprintf("unsupported Go type %T", v))
 	}
-
-	return &zval
 }
 
 func GoObject(obj unsafe.Pointer) Object {
@@ -334,13 +335,13 @@ func goObject(obj *C.zend_object) Object {
 	className := GoString(unsafe.Pointer(classEntry.name))
 
 	//C.instanceof_function(obj.ce, dateTimeCe)
-    if C.is_internal_class(classEntry){
-        return Object{
+	if C.is_internal_class(classEntry) {
+		return Object{
 			ClassName:  className,
 			serialized: C.__zval_serialize__(obj),
-			ce:        classEntry,
+			ce:         classEntry,
 		}
-    }
+	}
 
 	props := make(map[string]any)
 
@@ -410,13 +411,14 @@ func phpObject(zv *C.zval, obj Object) {
 	C.object_init_ex(zv, classEntry)
 
 	var zendObj *C.zend_object
-	zendObj = (*C.zend_object)(extractZvalValue(zv, C.IS_OBJECT))
+	zendObj = *(**C.zend_object)(unsafe.Pointer(&zv.value[0]))
 
 	// set the properties
 	for key, val := range obj.Props {
-		zval := phpValue(val) // TODO: put on stack
-		C.zend_update_property(classEntry, zendObj, toUnsafeChar(key), C.size_t(len(key)), zval)
-		C.zval_ptr_dtor(zval)
+		var zval C.zval
+		phpValue(&zval, val)
+		C.zend_update_property(classEntry, zendObj, toUnsafeChar(key), C.size_t(len(key)), &zval)
+		C.zval_ptr_dtor(&zval)
 	}
 
 	// TODO: wakeup?
@@ -471,5 +473,5 @@ func zendStringRelease(p unsafe.Pointer) {
 
 func zendHashDestroy(p unsafe.Pointer) {
 	ht := (*C.zend_array)(p)
-	C.zend_hash_destroy(ht)
+	C.zend_array_destroy(ht)
 }

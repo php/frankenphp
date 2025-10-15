@@ -78,3 +78,8 @@ void __zval_unserialize__(zval *retval, zend_string *str) {
   zval_ptr_dtor(&func);
   zend_string_release(str);
 }
+
+zval *__init_zval__() {
+  zval *zv = (zval *)emalloc(sizeof(zval));
+  return zv;
+}

@@ -241,10 +241,11 @@ func go_frankenphp_worker_handle_task(threadIndex C.uintptr_t) *C.zval {
 		}
 
 		// if the task has no callback, forward it to PHP
-		zval := phpValue(task.arg)
-		thread.Pin(unsafe.Pointer(zval))
+		var zval C.zval
+		phpValue(&zval, task.arg)
+		thread.Pin(unsafe.Pointer(&zval))
 
-		return zval
+		return &zval
 	case <-handler.thread.drainChan:
 		thread.state.markAsWaiting(false)
 		// send an empty task to drain the thread

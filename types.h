@@ -26,5 +26,6 @@ zend_array *__zend_new_array__(uint32_t size);
 bool is_internal_class(zend_class_entry *entry);
 zend_string *__zval_serialize__(zend_object *obj);
 void __zval_unserialize__(zval *retval, zend_string *str);
+zval *__init_zval__();
 
 #endif

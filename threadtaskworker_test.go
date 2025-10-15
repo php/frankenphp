@@ -117,3 +117,26 @@ func TestDispatchToMultipleWorkers(t *testing.T) {
 	assertGetRequest(t, script+"?count=1&worker=worker2", "dispatched 1 tasks")
 	assertGetRequest(t, script+"?count=1&worker=worker3", "No worker found to handle this task") // fail
 }
+
+func TestDispatchInternalDateObject(t *testing.T) {
+	var buf bytes.Buffer
+	handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	logger := slog.New(handler)
+
+	assert.NoError(t, Init(
+		WithWorkers("worker1", "./testdata/tasks/task-worker.php", 1, AsTaskWorker(true, 0)),
+		WithNumThreads(2),
+		WithLogger(logger),
+	))
+
+	assertGetRequest(t, "http://example.com/testdata/tasks/task-dispatcher-date.php", "dispatched task")
+
+	time.Sleep(10 * time.Millisecond)
+	Shutdown()
+
+	// task output appears in logs at info level
+	logOutput := buf.String()
+	assert.Contains(t, logOutput, "object(DateTime)")
+	assert.Contains(t, logOutput, "2024")
+	assert.Contains(t, logOutput, "Europe/Vienna")
+}
