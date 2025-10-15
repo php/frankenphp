@@ -23,6 +23,9 @@ type worker struct {
 	threadMutex            sync.RWMutex
 	allowPathMatching      bool
 	maxConsecutiveFailures int
+	onReady                func(int)
+	onShutdown             func(int)
+	onServerShutdown       func(int)
 }
 
 var (
@@ -51,12 +54,6 @@ func initWorkers(opt []workerOpt) error {
 			convertToWorkerThread(thread, w)
 			go func() {
 				thread.state.waitFor(stateReady)
-
-				// create a pipe from the external worker to the main worker
-				// note: this is locked to the initial thread size the external worker requested
-				if workerThread, ok := thread.handler.(*workerThread); ok && workerThread.externalWorker != nil {
-					go startWorker(w, workerThread.externalWorker, thread)
-				}
 				workersReady.Done()
 			}()
 		}
@@ -131,6 +128,9 @@ func newWorker(o workerOpt) (*worker, error) {
 		threads:                make([]*phpThread, 0, o.num),
 		allowPathMatching:      allowPathMatching,
 		maxConsecutiveFailures: o.maxConsecutiveFailures,
+		onReady:                o.onReady,
+		onShutdown:             o.onShutdown,
+		onServerShutdown:       o.onServerShutdown,
 	}
 
 	return w, nil

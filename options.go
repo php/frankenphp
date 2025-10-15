@@ -35,6 +35,9 @@ type workerOpt struct {
 	env                    PreparedEnv
 	watch                  []string
 	maxConsecutiveFailures int
+	onReady                func(int)
+	onShutdown             func(int)
+	onServerShutdown       func(int)
 }
 
 // WithNumThreads configures the number of PHP threads to start.
@@ -111,6 +114,30 @@ func WithWorkerMaxFailures(maxFailures int) WorkerOption {
 			return fmt.Errorf("max consecutive failures must be >= -1, got %d", maxFailures)
 		}
 		w.maxConsecutiveFailures = maxFailures
+
+		return nil
+	}
+}
+
+func WithWorkerOnReady(f func(int)) WorkerOption {
+	return func(w *workerOpt) error {
+		w.onReady = f
+
+		return nil
+	}
+}
+
+func WithWorkerOnShutdown(f func(int)) WorkerOption {
+	return func(w *workerOpt) error {
+		w.onShutdown = f
+
+		return nil
+	}
+}
+
+func WithWorkerOnServerShutdown(f func(int)) WorkerOption {
+	return func(w *workerOpt) error {
+		w.onServerShutdown = f
 
 		return nil
 	}
