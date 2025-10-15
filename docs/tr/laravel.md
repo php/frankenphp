@@ -90,7 +90,7 @@ Linux için Laravel uygulamanızı bağımsız bir çalıştırılabilir olarak 
    ```dockerfile
    FROM --platform=linux/amd64 dunglas/frankenphp:static-builder-gnu
    # İkiliyi musl-libc sistemlerinde çalıştırmayı düşünüyorsanız, bunun yerine static-builder-musl kullanın
-   
+
    # Uygulamanızı kopyalayın
    WORKDIR /go/src/app/dist/app
    COPY . .
