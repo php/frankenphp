@@ -163,6 +163,13 @@ frankenphp {
 }
 ```
 
+### Number of threads
+
+When the worker mode is enabled, an additional thread is required to handle the incoming requests,
+so the default `num_threads` value is `1 + 2x(number of available CPUs)`.
+
+Thus, in that mode if `num_threads` and `num` are explicitly set, `num_threads` must be strictly greater then `num`.
+
 ## Superglobals Behavior
 
 [PHP superglobals](https://www.php.net/manual/en/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...)
