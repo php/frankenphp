@@ -64,7 +64,7 @@ type Object struct {
 	ClassName  string
 	Props      map[string]any
 	ce         *C.zend_class_entry
-	serialized string
+	serialized *C.zend_string
 }
 
 // EXPERIMENTAL: GoAssociativeArray converts a zend_array to a Go AssociativeArray
@@ -335,12 +335,9 @@ func goObject(obj *C.zend_object) Object {
 
 	//C.instanceof_function(obj.ce, dateTimeCe)
     if C.is_internal_class(classEntry){
-        str := C.__zval_serialize__(obj)
-        goStr := C.GoString(str)
-
         return Object{
 			ClassName:  className,
-			serialized: goStr,
+			serialized: C.__zval_serialize__(obj),
 			ce:        classEntry,
 		}
     }
@@ -389,10 +386,9 @@ func PHPObject(obj Object) unsafe.Pointer {
 
 func phpObject(zv *C.zval, obj Object) {
 
-	if obj.serialized != "" {
-		str := C.CString(obj.serialized)
-		C.__zval_unserialize__(zv, str)
-		C.free(unsafe.Pointer(str))
+	if obj.serialized != nil {
+		C.__zval_unserialize__(zv, obj.serialized)
+
 		return
 	}
 

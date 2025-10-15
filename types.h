@@ -24,7 +24,7 @@ void __zval_arr__(zval *zv, zend_array *arr);
 zend_array *__zend_new_array__(uint32_t size);
 
 bool is_internal_class(zend_class_entry *entry);
-char *__zval_serialize__(zend_object *obj);
-zval *__zval_unserialize__(zval *retval, const char *buf, size_t buf_len);
+zend_string *__zval_serialize__(zend_object *obj);
+void __zval_unserialize__(zval *retval, zend_string *str);
 
 #endif
