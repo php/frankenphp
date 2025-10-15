@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/dunglas/mercure"
 )
 
 // frankenPHPContext provides contextual information about the Request to handle.
@@ -34,6 +36,8 @@ type frankenPHPContext struct {
 
 	done      chan any
 	startedAt time.Time
+
+	mercureHub *mercure.Hub
 }
 
 // fromContext extracts the frankenPHPContext from a context.
