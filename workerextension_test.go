@@ -70,7 +70,7 @@ func TestWorkerExtensionSendMessage(t *testing.T) {
 	require.NoError(t, err)
 	defer Shutdown()
 
-	result, err := externalWorker.SendMessage("Hello Worker")
+	result, err := externalWorker.SendMessage("Hello Worker", nil)
 	assert.NoError(t, err, "Sending request should not produce an error")
 
 	switch v := result.(type) {

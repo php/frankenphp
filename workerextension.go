@@ -66,7 +66,7 @@ func (w Worker) SendRequest(rw http.ResponseWriter, r *http.Request) error {
 }
 
 // EXPERIMENTAL: SendMessage sends a message to the worker and waits for a response.
-func (w Worker) SendMessage(message any) (any, error) {
+func (w Worker) SendMessage(message any, rw http.ResponseWriter) (any, error) {
 	internalWorker := getWorkerByName(w.Name)
 
 	if internalWorker == nil {
@@ -76,6 +76,7 @@ func (w Worker) SendMessage(message any) (any, error) {
 	fc := newFrankenPHPContext()
 	fc.logger = logger
 	fc.worker = internalWorker
+	fc.responseWriter = rw
 	fc.handlerParameters = message
 
 	internalWorker.handleRequest(fc)
