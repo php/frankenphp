@@ -32,3 +32,18 @@ function frankenphp_response_headers(): array|bool {}
  */
 function apache_response_headers(): array|bool {}
 
+/**
+ * @return array{
+ *     "frankenphp_version": string,
+ *     "current_thread_index": int,
+ *     "is_worker_thread": bool,
+ *     "threads": array {
+ *         "index": int,
+ *         "name": string,
+ *         "state": string,
+ *         "is_waiting": bool,
+ *         "waiting_since_milliseconds": int,
+ *     },
+ * }
+ */
+function frankenphp_info(): array {}
