@@ -31,6 +31,8 @@ void __zval_double__(zval *zv, double val) { ZVAL_DOUBLE(zv, val); }
 
 void __zval_string__(zval *zv, zend_string *str) { ZVAL_STR(zv, str); }
 
+void __zval_empty_string__(zval *zv) { ZVAL_EMPTY_STRING(zv); }
+
 void __zval_arr__(zval *zv, zend_array *arr) { ZVAL_ARR(zv, arr); }
 
 zend_array *__zend_new_array__(uint32_t size) { return zend_new_array(size); }
