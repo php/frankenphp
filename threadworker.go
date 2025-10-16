@@ -46,26 +46,26 @@ func (handler *workerThread) beforeScriptExecution() string {
 	switch handler.state.get() {
 	case stateTransitionRequested:
 		if handler.externalWorker != nil {
-			handler.externalWorker.ThreadDeactivatedNotification(handler.thread.threadIndex)
+			handler.externalWorker.OnServerShutdown(handler.thread.threadIndex)
 		}
 		handler.worker.detachThread(handler.thread)
 		return handler.thread.transitionToNewHandler()
 	case stateRestarting:
 		if handler.externalWorker != nil {
-			handler.externalWorker.ThreadDrainNotification(handler.thread.threadIndex)
+			handler.externalWorker.OnShutdown(handler.thread.threadIndex)
 		}
 		handler.state.set(stateYielding)
 		handler.state.waitFor(stateReady, stateShuttingDown)
 		return handler.beforeScriptExecution()
 	case stateReady, stateTransitionComplete:
 		if handler.externalWorker != nil {
-			handler.externalWorker.ThreadActivatedNotification(handler.thread.threadIndex)
+			handler.externalWorker.OnReady(handler.thread.threadIndex)
 		}
 		setupWorkerScript(handler, handler.worker)
 		return handler.worker.fileName
 	case stateShuttingDown:
 		if handler.externalWorker != nil {
-			handler.externalWorker.ThreadDeactivatedNotification(handler.thread.threadIndex)
+			handler.externalWorker.OnServerShutdown(handler.thread.threadIndex)
 		}
 		handler.worker.detachThread(handler.thread)
 		// signal to stop
