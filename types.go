@@ -244,6 +244,7 @@ func goValue(zval *C.zval) any {
 
 		return int64(0)
 	case C.IS_DOUBLE:
+
 		doublePtr := (*C.double)(extractZvalValue(zval, C.IS_DOUBLE))
 		if doublePtr != nil {
 			return float64(*doublePtr)
@@ -307,7 +308,8 @@ func phpValue(zval *C.zval, value any) {
 		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_ARRAY_EX
 		*(**C.zend_array)(unsafe.Pointer(&zval.value)) = (*C.zend_array)(phpArray(v.Map, v.Order))
 	case map[string]any:
-		C.__zval_arr__(zval, (*C.zend_array)(PHPMap(v)))
+		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_ARRAY_EX
+        *(**C.zend_array)(unsafe.Pointer(&zval.value)) = (*C.zend_array)(PHPMap(v))
 	case []any:
 		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_ARRAY_EX
 		*(**C.zend_array)(unsafe.Pointer(&zval.value)) = (*C.zend_array)(PHPPackedArray(v))
