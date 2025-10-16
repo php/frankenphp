@@ -2,19 +2,7 @@ package frankenphp
 
 /*
 #cgo nocallback __zend_new_array__
-#cgo nocallback __zval_null__
-#cgo nocallback __zval_bool__
-#cgo nocallback __zval_long__
-#cgo nocallback __zval_double__
-#cgo nocallback __zval_string__
-#cgo nocallback __zval_arr__
 #cgo noescape __zend_new_array__
-#cgo noescape __zval_null__
-#cgo noescape __zval_bool__
-#cgo noescape __zval_long__
-#cgo noescape __zval_double__
-#cgo noescape __zval_string__
-#cgo noescape __zval_arr__
 #include "types.h"
 */
 import "C"
@@ -50,7 +38,7 @@ func phpString(s string, persistent bool) *C.zend_string {
 	return C.zend_string_init(
 		(*C.char)(unsafe.Pointer(unsafe.StringData(s))),
 		C.size_t(len(s)),
-		C._Bool(persistent),
+		C.bool(persistent),
 	)
 }
 
@@ -103,7 +91,7 @@ func goArray(arr unsafe.Pointer, ordered bool) (map[string]any, []string) {
 		// still, we'll (inefficiently) convert to an associative array
 		for i := C.uint32_t(0); i < nNumUsed; i++ {
 			v := C.get_ht_packed_data(array, i)
-			if v != nil && C.zval_get_type(v) != C.IS_UNDEF {
+			if v != nil && zvalGetType(v) != C.IS_UNDEF {
 				strIndex := strconv.Itoa(int(i))
 				entries[strIndex] = goValue(v)
 				if ordered {
@@ -117,7 +105,7 @@ func goArray(arr unsafe.Pointer, ordered bool) (map[string]any, []string) {
 
 	for i := C.uint32_t(0); i < nNumUsed; i++ {
 		bucket := C.get_ht_bucket_data(array, i)
-		if bucket == nil || C.zval_get_type(&bucket.val) == C.IS_UNDEF {
+		if bucket == nil || zvalGetType(&bucket.val) == C.IS_UNDEF {
 			continue
 		}
 
@@ -162,7 +150,7 @@ func GoPackedArray(arr unsafe.Pointer) []any {
 	if htIsPacked(array) {
 		for i := C.uint32_t(0); i < nNumUsed; i++ {
 			v := C.get_ht_packed_data(array, i)
-			if v != nil && C.zval_get_type(v) != C.IS_UNDEF {
+			if v != nil && zvalGetType(v) != C.IS_UNDEF {
 				result = append(result, goValue(v))
 			}
 		}
@@ -173,7 +161,7 @@ func GoPackedArray(arr unsafe.Pointer) []any {
 	// fallback if ht isn't packed - equivalent to array_values()
 	for i := C.uint32_t(0); i < nNumUsed; i++ {
 		bucket := C.get_ht_bucket_data(array, i)
-		if bucket != nil && C.zval_get_type(&bucket.val) != C.IS_UNDEF {
+		if bucket != nil && zvalGetType(&bucket.val) != C.IS_UNDEF {
 			result = append(result, goValue(&bucket.val))
 		}
 	}
@@ -232,7 +220,7 @@ func GoValue(zval unsafe.Pointer) any {
 }
 
 func goValue(zval *C.zval) any {
-	t := C.zval_get_type(zval) // TODO: zval->u1.v.type
+	t := zvalGetType(zval) // TODO: zval->u1.v.type
 
 	switch t {
 	case C.IS_NULL:
@@ -291,28 +279,38 @@ func PHPValue(value any) unsafe.Pointer {
 func phpValue(zval *C.zval, value any) {
 	switch v := value.(type) {
 	case nil:
-		C.__zval_null__(zval)
+		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_NULL
 	case bool:
-		C.__zval_bool__(zval, C._Bool(v))
+		if v {
+			*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_TRUE
+		} else {
+			*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_FALSE
+		}
 	case int:
-		C.__zval_long__(zval, C.zend_long(v))
+		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_LONG
+		*(*C.zend_long)(unsafe.Pointer(&zval.value)) = C.zend_long(v)
 	case int64:
-		C.__zval_long__(zval, C.zend_long(v))
+		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_LONG
+		*(*C.zend_long)(unsafe.Pointer(&zval.value)) = C.zend_long(v)
 	case float64:
-		C.__zval_double__(zval, C.double(v))
+		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_DOUBLE
+		*(*C.double)(unsafe.Pointer(&zval.value)) = C.double(v)
 	case string:
 		if v == "" {
-			C.__zval_empty_string__(zval)
+			*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_INTERNED_STRING_EX
+			*(**C.zend_string)(unsafe.Pointer(&zval.value)) = C.zend_empty_string
 			break
 		}
-		str := (*C.zend_string)(PHPString(v, false))
-		C.__zval_string__(zval, str)
+		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_STRING_EX
+		*(**C.zend_string)(unsafe.Pointer(&zval.value)) = phpString(v, false)
 	case AssociativeArray:
-		C.__zval_arr__(zval, (*C.zend_array)(PHPAssociativeArray(v)))
+		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_ARRAY_EX
+		*(**C.zend_array)(unsafe.Pointer(&zval.value)) = (*C.zend_array)(phpArray(v.Map, v.Order))
 	case map[string]any:
 		C.__zval_arr__(zval, (*C.zend_array)(PHPMap(v)))
 	case []any:
-		C.__zval_arr__(zval, (*C.zend_array)(PHPPackedArray(v)))
+		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_ARRAY_EX
+		*(**C.zend_array)(unsafe.Pointer(&zval.value)) = (*C.zend_array)(PHPPackedArray(v))
 	case Object:
 		phpObject(zval, v)
 	default:
@@ -353,7 +351,7 @@ func goObject(obj *C.zend_object) Object {
 
 		for i := C.uint32_t(0); i < nNumUsed; i++ {
 			bucket := C.get_ht_bucket_data(hashTable, i)
-			if bucket == nil || C.zval_get_type(&bucket.val) == C.IS_UNDEF {
+			if bucket == nil || zvalGetType(&bucket.val) == C.IS_UNDEF {
 				continue
 			}
 
@@ -439,7 +437,7 @@ func htIsPacked(ht *C.zend_array) bool {
 
 // extractZvalValue returns a pointer to the zval value cast to the expected type
 func extractZvalValue(zval *C.zval, expectedType C.uint8_t) unsafe.Pointer {
-	if zval == nil || C.zval_get_type(zval) != expectedType {
+	if zval == nil || zvalGetType(zval) != expectedType {
 		return nil
 	}
 
@@ -474,4 +472,11 @@ func zendStringRelease(p unsafe.Pointer) {
 func zendHashDestroy(p unsafe.Pointer) {
 	ht := (*C.zend_array)(p)
 	C.zend_array_destroy(ht)
+}
+
+func zvalGetType(z *C.zval) C.uint8_t {
+	// interpret z->u1 as a 32-bit integer, then take lowest byte
+	ptr := (*uint32)(unsafe.Pointer(&z.u1))
+	typeInfo := *ptr
+	return C.uint8_t(typeInfo & 0xFF)
 }

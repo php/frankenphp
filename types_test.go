@@ -186,13 +186,27 @@ func benchOnPHPThread(b *testing.B, count int, cb func()) {
 		}
 	}, "tw")
 	assert.NoError(b, err)
-    task.WaitForCompletion()
+	task.WaitForCompletion()
 }
 
 func BenchmarkBool(b *testing.B) {
 	benchOnPHPThread(b, b.N, func() {
 		phpBool := PHPValue(true)
 		_ = GoValue(phpBool)
+	})
+}
+
+func BenchmarkInt(b *testing.B) {
+	benchOnPHPThread(b, b.N, func() {
+		phpInt := PHPValue(int64(42))
+		_ = GoValue(phpInt)
+	})
+}
+
+func BenchmarkFloat(b *testing.B) {
+	benchOnPHPThread(b, b.N, func() {
+		phpFloat := PHPValue(3.14)
+		_ = GoValue(phpFloat)
 	})
 }
 
