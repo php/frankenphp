@@ -28,7 +28,7 @@ func TestWorkerExtension(t *testing.T) {
 
 	// Clean up external workers after test to avoid interfering with other tests
 	defer func() {
-		delete(extensionWorkers, externalWorker.Name)
+		delete(extensionWorkers, externalWorker.name)
 	}()
 
 	err := Init()
@@ -63,7 +63,7 @@ func TestWorkerExtensionSendMessage(t *testing.T) {
 
 	// Clean up external workers after test to avoid interfering with other tests
 	defer func() {
-		delete(extensionWorkers, externalWorker.Name)
+		delete(extensionWorkers, externalWorker.name)
 	}()
 
 	err := Init()

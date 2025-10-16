@@ -25,9 +25,9 @@ import (
 // allocated, then FrankenPHP will panic and provide this information to the user (who will need to allocate more
 // total threads). Don't be greedy.
 type Worker struct {
-	Name     string
-	FileName string
-	Num      int
+	name     string
+	fileName string
+	num      int
 	options  []WorkerOption
 }
 
@@ -35,21 +35,21 @@ var extensionWorkers = make(map[string]Worker)
 
 // EXPERIMENTAL: RegisterWorker registers a custom worker script.
 func RegisterWorker(worker Worker) {
-	extensionWorkers[worker.Name] = worker
+	extensionWorkers[worker.name] = worker
 }
 
 // EXPERIMENTAL: SendRequest sends an HTTP request to the worker and writes the response to the provided ResponseWriter.
 func (w Worker) SendRequest(rw http.ResponseWriter, r *http.Request) error {
-	worker := getWorkerByName(w.Name)
+	worker := getWorkerByName(w.name)
 
 	if worker == nil {
-		return errors.New("worker not found: " + w.Name)
+		return errors.New("worker not found: " + w.name)
 	}
 
 	fr, err := NewRequestWithContext(
 		r,
 		WithOriginalRequest(r),
-		WithWorkerName(w.Name),
+		WithWorkerName(w.name),
 	)
 
 	if err != nil {
@@ -67,10 +67,10 @@ func (w Worker) SendRequest(rw http.ResponseWriter, r *http.Request) error {
 
 // EXPERIMENTAL: SendMessage sends a message to the worker and waits for a response.
 func (w Worker) SendMessage(message any, rw http.ResponseWriter) (any, error) {
-	internalWorker := getWorkerByName(w.Name)
+	internalWorker := getWorkerByName(w.name)
 
 	if internalWorker == nil {
-		return nil, errors.New("worker not found: " + w.Name)
+		return nil, errors.New("worker not found: " + w.name)
 	}
 
 	fc := newFrankenPHPContext()
@@ -88,9 +88,9 @@ func (w Worker) SendMessage(message any, rw http.ResponseWriter) (any, error) {
 // The returned instance may be sufficient on its own for simple use cases.
 func NewWorker(name string, fileName string, num int, options ...WorkerOption) Worker {
 	return Worker{
-		Name:     name,
-		FileName: fileName,
-		Num:      num,
+		name:     name,
+		fileName: fileName,
+		num:      num,
 		options:  options,
 	}
 }
