@@ -46,6 +46,8 @@ jobs:
       php_version: ${{ steps.check.outputs.php_version }}
       php82_version: ${{ steps.check.outputs.php82_version }}
       php83_version: ${{ steps.check.outputs.php83_version }}
+      php84_version: ${{ steps.check.outputs.php84_version }}
+      php85_version: ${{ steps.check.outputs.php85_version }}
       skip: ${{ steps.check.outputs.skip }}
       ref: ${{ steps.check.outputs.ref || (github.event_name == 'workflow_dispatch' && inputs.version) || '' }}
     steps:
@@ -57,11 +59,13 @@ jobs:
           PHP_82_LATEST=$(skopeo inspect docker://docker.io/library/php:8.2 --override-os linux --override-arch amd64 | jq -r '.Env[] | select(test("^PHP_VERSION=")) | sub("^PHP_VERSION="; "")')
           PHP_83_LATEST=$(skopeo inspect docker://docker.io/library/php:8.3 --override-os linux --override-arch amd64 | jq -r '.Env[] | select(test("^PHP_VERSION=")) | sub("^PHP_VERSION="; "")')
           PHP_84_LATEST=$(skopeo inspect docker://docker.io/library/php:8.4 --override-os linux --override-arch amd64 | jq -r '.Env[] | select(test("^PHP_VERSION=")) | sub("^PHP_VERSION="; "")')
+          PHP_85_LATEST=$(skopeo inspect docker://docker.io/library/php:8.5-rc --override-os linux --override-arch amd64 | jq -r '.Env[] | select(test("^PHP_VERSION=")) | sub("^PHP_VERSION="; "")')
           {
-            echo php_version="${PHP_82_LATEST},${PHP_83_LATEST},${PHP_84_LATEST}"
+            echo php_version="${PHP_82_LATEST},${PHP_83_LATEST},${PHP_84_LATEST},${PHP_85_LATEST}"
             echo php82_version="${PHP_82_LATEST//./-}"
             echo php83_version="${PHP_83_LATEST//./-}"
             echo php84_version="${PHP_84_LATEST//./-}"
+            echo php85_version="${PHP_85_LATEST//./-}"
           } >> "${GITHUB_OUTPUT}"
 
           # Check if the Docker images must be rebuilt
@@ -75,8 +79,9 @@ jobs:
           FRANKENPHP_82_LATEST=$(skopeo inspect docker://docker.io/dunglas/frankenphp:"${FRANKENPHP_LATEST_TAG_NO_PREFIX}"-php8.2 --override-os linux --override-arch amd64 | jq -r '.Env[] | select(test("^PHP_VERSION=")) | sub("^PHP_VERSION="; "")')
           FRANKENPHP_83_LATEST=$(skopeo inspect docker://docker.io/dunglas/frankenphp:"${FRANKENPHP_LATEST_TAG_NO_PREFIX}"-php8.3 --override-os linux --override-arch amd64 | jq -r '.Env[] | select(test("^PHP_VERSION=")) | sub("^PHP_VERSION="; "")')
           FRANKENPHP_84_LATEST=$(skopeo inspect docker://docker.io/dunglas/frankenphp:"${FRANKENPHP_LATEST_TAG_NO_PREFIX}"-php8.4 --override-os linux --override-arch amd64 | jq -r '.Env[] | select(test("^PHP_VERSION=")) | sub("^PHP_VERSION="; "")')
+          FRANKENPHP_85_LATEST=$(skopeo inspect docker://docker.io/dunglas/frankenphp:"${FRANKENPHP_LATEST_TAG_NO_PREFIX}"-php8.5 --override-os linux --override-arch amd64 | jq -r '.Env[] | select(test("^PHP_VERSION=")) | sub("^PHP_VERSION="; "")')
 
-          if [[ "${FRANKENPHP_82_LATEST}" == "${PHP_82_LATEST}" ]] && [[ "${FRANKENPHP_83_LATEST}" == "${PHP_83_LATEST}" ]] && [[ "${FRANKENPHP_84_LATEST}" == "${PHP_84_LATEST}" ]]; then
+          if [[ "${FRANKENPHP_82_LATEST}" == "${PHP_82_LATEST}" ]] && [[ "${FRANKENPHP_83_LATEST}" == "${PHP_83_LATEST}" ]] && [[ "${FRANKENPHP_84_LATEST}" == "${PHP_84_LATEST}" ]] && [[ "${FRANKENPHP_85_LATEST}" == "${PHP_85_LATEST}" ]]; then
               echo skip=true >> "${GITHUB_OUTPUT}"
               exit 0
           fi
@@ -129,9 +134,17 @@ jobs:
             platform: linux/arm/v6
           - variant: php-${{ needs.prepare.outputs.php83_version }}-trixie
             platform: linux/arm/v6
+          - variant: php-${{ needs.prepare.outputs.php84_version }}-trixie
+            platform: linux/arm/v6
+          - variant: php-${{ needs.prepare.outputs.php85_version }}-trixie
+            platform: linux/arm/v6
           - variant: php-${{ needs.prepare.outputs.php82_version }}-bookworm
             platform: linux/arm/v6
           - variant: php-${{ needs.prepare.outputs.php83_version }}-bookworm
+            platform: linux/arm/v6
+          - variant: php-${{ needs.prepare.outputs.php84_version }}-bookworm
+            platform: linux/arm/v6
+          - variant: php-${{ needs.prepare.outputs.php85_version }}-bookworm
             platform: linux/arm/v6
     steps:
       - name: Prepare
