@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 
 	"github.com/dunglas/frankenphp/internal/fastabs"
+	"github.com/dunglas/mercure"
 )
 
 // RequestOption instances allow to configure a FrankenPHP Request.
@@ -130,6 +131,15 @@ func WithWorkerName(name string) RequestOption {
 		if name != "" {
 			o.worker = getWorkerByName(name)
 		}
+
+		return nil
+	}
+}
+
+// WithMercureHub sets the mercure.Hub to use to publish updates
+func WithMercureHub(hub *mercure.Hub) RequestOption {
+	return func(o *frankenPHPContext) error {
+		o.mercureHub = hub
 
 		return nil
 	}

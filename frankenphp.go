@@ -37,6 +37,9 @@ import (
 	"unsafe"
 	// debug on Linux
 	//_ "github.com/ianlancetaylor/cgosymbolizer"
+
+	"github.com/dunglas/mercure"
+	"go.uber.org/zap"
 )
 
 type contextKeyStruct struct{}
@@ -581,6 +584,46 @@ func go_log(message *C.char, level C.int) {
 //export go_is_context_done
 func go_is_context_done(threadIndex C.uintptr_t) C.bool {
 	return C.bool(phpThreads[threadIndex].getRequestContext().isDone)
+}
+
+//export go_mercure_publish
+func go_mercure_publish(threadIndex C.uintptr_t, topics unsafe.Pointer, data unsafe.Pointer, private bool, id, typ unsafe.Pointer, retry uint64) (generatedID *C.zend_string, error C.short) {
+	fc := phpThreads[threadIndex].getRequestContext()
+
+	if fc.mercureHub == nil {
+		logger.Error("No Mercure hub configured")
+
+		return nil, 1
+	}
+
+	u := &mercure.Update{
+		Event: mercure.Event{
+			Data:  GoString(data),
+			ID:    GoString(id),
+			Retry: retry,
+			Type:  GoString(typ),
+		},
+		Private: private,
+	}
+
+	ts := GoValue[string](topics)
+	switch t := ts.(type) {
+	case string:
+		u.Topics = []string{t}
+	case []string:
+		u.Topics = t
+	default:
+		// Never happens as the function is called from C with proper types
+		panic(fmt.Sprintf("invalid topics type %#v", t))
+	}
+
+	if err := fc.mercureHub.Publish(u); err != nil {
+		logger.Error("Unable to publish Mercure update", zap.Error(err))
+
+		return nil, 2
+	}
+
+	return (*C.zend_string)(PHPString(u.ID, false)), 0
 }
 
 // ExecuteScriptCLI executes the PHP script passed as parameter.
