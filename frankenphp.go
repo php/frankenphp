@@ -582,7 +582,7 @@ func go_mercure_publish(threadIndex C.uintptr_t, topics unsafe.Pointer, data uns
 	fc := phpThreads[threadIndex].getRequestContext()
 
 	if fc.mercureHub == nil {
-		logger.Error("No Mercure configured hub")
+		logger.Error("No Mercure hub configured")
 
 		return nil, 1
 	}
