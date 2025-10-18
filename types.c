@@ -3,14 +3,14 @@
 
 zval *get_ht_packed_data(HashTable *ht, uint32_t index) {
   if (ht->u.flags & HASH_FLAG_PACKED) {
-    return &ht->arPacked[index];
+    return ht->arPacked;
   }
   return NULL;
 }
 
-Bucket *get_ht_bucket_data(HashTable *ht, uint32_t index) {
+Bucket *get_ht_bucket(HashTable *ht) {
   if (!(ht->u.flags & HASH_FLAG_PACKED)) {
-    return &ht->arData[index];
+    return ht->arData;
   }
   return NULL;
 }
@@ -82,4 +82,23 @@ void __zval_unserialize__(zval *retval, zend_string *str) {
 zval *__init_zval__() {
   zval *zv = (zval *)emalloc(sizeof(zval));
   return zv;
+}
+
+zend_object *__php_object_init__(
+    zval *zv,
+    const char *class_name,
+    size_t class_name_len,
+    zend_class_entry *ce // optional: pass NULL to look up by name
+) {
+    if (!ce) {
+        zend_string *name = zend_string_init_interned(class_name, class_name_len, 1);
+        ce = zend_lookup_class(name);
+        if (!ce) {
+            return NULL;
+        }
+    }
+
+    object_init_ex(zv, ce);
+
+    return Z_OBJ_P(zv);
 }

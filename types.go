@@ -18,8 +18,10 @@ func GoString(s unsafe.Pointer) string {
 		return ""
 	}
 
-	zendStr := (*C.zend_string)(s)
+	return goString((*C.zend_string)(s))
+}
 
+func goString(zendStr *C.zend_string) string {
 	return C.GoStringN((*C.char)(unsafe.Pointer(&zendStr.val)), C.int(zendStr.len))
 }
 
@@ -36,7 +38,7 @@ func phpString(s string, persistent bool) *C.zend_string {
 	}
 
 	return C.zend_string_init(
-		(*C.char)(unsafe.Pointer(unsafe.StringData(s))),
+		toUnsafeChar(s),
 		C.size_t(len(s)),
 		C.bool(persistent),
 	)
@@ -89,8 +91,9 @@ func goArray(arr unsafe.Pointer, ordered bool) (map[string]any, []string) {
 		// if the array is packed, convert all integer keys to strings
 		// this is probably a bug by the dev using this function
 		// still, we'll (inefficiently) convert to an associative array
+		zvals := unsafe.Slice(C.get_ht_packed_data(array, 0), nNumUsed)
 		for i := C.uint32_t(0); i < nNumUsed; i++ {
-			v := C.get_ht_packed_data(array, i)
+			v := &zvals[i]
 			if v != nil && zvalGetType(v) != C.IS_UNDEF {
 				strIndex := strconv.Itoa(int(i))
 				entries[strIndex] = goValue(v)
@@ -103,8 +106,9 @@ func goArray(arr unsafe.Pointer, ordered bool) (map[string]any, []string) {
 		return entries, order
 	}
 
+	buckets := unsafe.Slice(C.get_ht_bucket(array), nNumUsed)
 	for i := C.uint32_t(0); i < nNumUsed; i++ {
-		bucket := C.get_ht_bucket_data(array, i)
+		bucket := &buckets[i]
 		if bucket == nil || zvalGetType(&bucket.val) == C.IS_UNDEF {
 			continue
 		}
@@ -112,7 +116,7 @@ func goArray(arr unsafe.Pointer, ordered bool) (map[string]any, []string) {
 		v := goValue(&bucket.val)
 
 		if bucket.key != nil {
-			keyStr := GoString(unsafe.Pointer(bucket.key))
+			keyStr := goString(bucket.key)
 			entries[keyStr] = v
 			if ordered {
 				order = append(order, keyStr)
@@ -148,8 +152,9 @@ func GoPackedArray(arr unsafe.Pointer) []any {
 	result := make([]any, 0, nNumUsed)
 
 	if htIsPacked(array) {
+		zvals := unsafe.Slice(C.get_ht_packed_data(array, 0), nNumUsed)
 		for i := C.uint32_t(0); i < nNumUsed; i++ {
-			v := C.get_ht_packed_data(array, i)
+			v := &zvals[i]
 			if v != nil && zvalGetType(v) != C.IS_UNDEF {
 				result = append(result, goValue(v))
 			}
@@ -159,8 +164,9 @@ func GoPackedArray(arr unsafe.Pointer) []any {
 	}
 
 	// fallback if ht isn't packed - equivalent to array_values()
+	buckets := unsafe.Slice(C.get_ht_bucket(array), nNumUsed)
 	for i := C.uint32_t(0); i < nNumUsed; i++ {
-		bucket := C.get_ht_bucket_data(array, i)
+		bucket := &buckets[i]
 		if bucket != nil && zvalGetType(&bucket.val) != C.IS_UNDEF {
 			result = append(result, goValue(&bucket.val))
 		}
@@ -257,7 +263,7 @@ func goValue(zval *C.zval) any {
 			return ""
 		}
 
-		return GoString(unsafe.Pointer(str))
+		return goString(str)
 	case C.IS_ARRAY:
 		array := (*C.zend_array)(extractZvalValue(zval, C.IS_ARRAY))
 		if array != nil && htIsPacked(array) {
@@ -309,7 +315,7 @@ func phpValue(zval *C.zval, value any) {
 		*(**C.zend_array)(unsafe.Pointer(&zval.value)) = (*C.zend_array)(phpArray(v.Map, v.Order))
 	case map[string]any:
 		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_ARRAY_EX
-        *(**C.zend_array)(unsafe.Pointer(&zval.value)) = (*C.zend_array)(PHPMap(v))
+		*(**C.zend_array)(unsafe.Pointer(&zval.value)) = (*C.zend_array)(PHPMap(v))
 	case []any:
 		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_ARRAY_EX
 		*(**C.zend_array)(unsafe.Pointer(&zval.value)) = (*C.zend_array)(PHPPackedArray(v))
@@ -332,9 +338,8 @@ func goObject(obj *C.zend_object) Object {
 		panic("received a nil pointer on object conversion")
 	}
 	classEntry := obj.ce
-	className := GoString(unsafe.Pointer(classEntry.name))
+	className := goString(classEntry.name)
 
-	//C.instanceof_function(obj.ce, dateTimeCe)
 	if C.is_internal_class(classEntry) {
 		return Object{
 			ClassName:  className,
@@ -343,32 +348,11 @@ func goObject(obj *C.zend_object) Object {
 		}
 	}
 
-	props := make(map[string]any)
-
+	var props map[string]any
 	// iterate over the properties
-	prop := obj.properties
-	if prop != nil {
-		hashTable := (*C.HashTable)(unsafe.Pointer(prop))
-		nNumUsed := hashTable.nNumUsed
-
-		for i := C.uint32_t(0); i < nNumUsed; i++ {
-			bucket := C.get_ht_bucket_data(hashTable, i)
-			if bucket == nil || zvalGetType(&bucket.val) == C.IS_UNDEF {
-				continue
-			}
-
-			v := goValue(&bucket.val)
-
-			if bucket.key != nil {
-				keyStr := GoString(unsafe.Pointer(bucket.key))
-				props[keyStr] = v
-				continue
-			}
-
-			// as fallback convert the bucket index to a string key
-			strIndex := strconv.Itoa(int(bucket.h))
-			props[strIndex] = v
-		}
+	if obj.properties != nil {
+		hashTable := (*C.HashTable)(unsafe.Pointer(obj.properties))
+		props, _ = goArray(unsafe.Pointer(hashTable), false)
 	}
 
 	return Object{
@@ -385,39 +369,22 @@ func PHPObject(obj Object) unsafe.Pointer {
 	return unsafe.Pointer(&zval)
 }
 
-func phpObject(zv *C.zval, obj Object) {
-
+func phpObject(zval *C.zval, obj Object) {
 	if obj.serialized != nil {
-		C.__zval_unserialize__(zv, obj.serialized)
-
+		C.__zval_unserialize__(zval, obj.serialized)
 		return
 	}
 
-	className := obj.ClassName
-	if className == "" {
-		panic("PHPObject must have a class name")
+	zendObj := C.__php_object_init__(zval, toUnsafeChar(obj.ClassName), C.size_t(len(obj.ClassName)), obj.ce)
+	if zendObj == nil {
+		panic("class not found: " + obj.ClassName)
 	}
-
-	classEntry := obj.ce
-	if classEntry == nil {
-		classNameZs := phpString(className, false)
-		classEntry = C.zend_lookup_class(classNameZs)
-		zendStringRelease(unsafe.Pointer(classNameZs))
-		if classEntry == nil {
-			panic("class not found: " + className)
-		}
-	}
-
-	C.object_init_ex(zv, classEntry)
-
-	var zendObj *C.zend_object
-	zendObj = *(**C.zend_object)(unsafe.Pointer(&zv.value[0]))
 
 	// set the properties
 	for key, val := range obj.Props {
 		var zval C.zval
 		phpValue(&zval, val)
-		C.zend_update_property(classEntry, zendObj, toUnsafeChar(key), C.size_t(len(key)), &zval)
+		C.zend_update_property(zendObj.ce, zendObj, toUnsafeChar(key), C.size_t(len(key)), &zval)
 		C.zval_ptr_dtor(&zval)
 	}
 
@@ -426,8 +393,7 @@ func phpObject(zv *C.zval, obj Object) {
 
 // createNewArray creates a new zend_array with the specified size.
 func createNewArray(size uint32) *C.zend_array {
-	arr := C.__zend_new_array__(C.uint32_t(size))
-	return (*C.zend_array)(unsafe.Pointer(arr))
+	return C.__zend_new_array__(C.uint32_t(size))
 }
 
 // htIsPacked checks if a zend_array is a list (packed) or hashmap (not packed).

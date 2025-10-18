@@ -282,3 +282,16 @@ func BenchmarkObject(b *testing.B) {
 		zvalPtrDtor(phpObject)
 	})
 }
+
+func BenchmarkEmptyObject(b *testing.B) {
+	benchOnPHPThread(b, b.N, func() {
+		originalObject := Object{
+			ClassName: "stdClass",
+			Props:     map[string]any{},
+		}
+
+		phpObject := PHPObject(originalObject)
+		_ = GoObject(phpObject)
+		zvalPtrDtor(phpObject)
+	})
+}
