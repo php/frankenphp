@@ -3,6 +3,10 @@ package frankenphp
 /*
 #cgo nocallback __zend_new_array__
 #cgo noescape __zend_new_array__
+#cgo nocallback zend_hash_str_update
+#cgo noescape zend_hash_str_update
+#cgo nocallback zend_hash_next_index_insert
+#cgo noescape zend_hash_next_index_insert
 #include "types.h"
 */
 import "C"
