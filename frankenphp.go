@@ -634,14 +634,11 @@ func go_is_context_done(threadIndex C.uintptr_t) C.bool {
 
 // ExecuteScriptCLI executes the PHP script passed as parameter.
 // It returns the exit status code of the script.
-func ExecuteScriptCLI(script string, args []string) int {
-	cScript := C.CString(script)
-	defer C.free(unsafe.Pointer(cScript))
-
+func ExecuteScriptCLI(args []string) int {
 	argc, argv := convertArgs(args)
 	defer freeArgs(argv)
 
-	return int(C.frankenphp_execute_script_cli(cScript, argc, (**C.char)(unsafe.Pointer(&argv[0])), false))
+	return int(C.frankenphp_execute_script_cli(nil, argc, (**C.char)(unsafe.Pointer(&argv[0])), false))
 }
 
 func ExecutePHPCode(phpCode string) int {

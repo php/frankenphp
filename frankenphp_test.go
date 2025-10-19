@@ -834,7 +834,7 @@ func ExampleExecuteScriptCLI() {
 		os.Exit(1)
 	}
 
-	os.Exit(frankenphp.ExecuteScriptCLI(os.Args[1], os.Args))
+	os.Exit(frankenphp.ExecuteScriptCLI(os.Args))
 }
 
 func BenchmarkHelloWorld(b *testing.B) {

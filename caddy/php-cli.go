@@ -1,9 +1,9 @@
 package caddy
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 
 	caddycmd "github.com/caddyserver/caddy/v2/cmd"
 	"github.com/dunglas/frankenphp"
@@ -26,23 +26,16 @@ Executes a PHP script similarly to the CLI SAPI.`,
 }
 
 func cmdPHPCLI(fs caddycmd.Flags) (int, error) {
-	args := os.Args[2:]
-	if len(args) < 1 {
-		return 1, errors.New("the path to the PHP script is required")
-	}
+	// php's cli sapi expects the 0th arg to be the program itself, only filter out 'php-cli' arg
+	args := append([]string{os.Args[0]}, os.Args[2:]...)
 
-	if frankenphp.EmbeddedAppPath != "" {
-		if _, err := os.Stat(args[0]); err != nil {
-			args[0] = filepath.Join(frankenphp.EmbeddedAppPath, args[0])
+	if frankenphp.EmbeddedAppPath != "" && len(args) > 1 && !strings.HasPrefix(args[1], "-") && strings.HasSuffix(args[1], ".php") {
+		if _, err := os.Stat(args[1]); err != nil {
+			args[1] = filepath.Join(frankenphp.EmbeddedAppPath, args[1])
 		}
 	}
 
-	var status int
-	if len(args) >= 2 && args[0] == "-r" {
-		status = frankenphp.ExecutePHPCode(args[1])
-	} else {
-		status = frankenphp.ExecuteScriptCLI(args[0], args)
-	}
+	status := frankenphp.ExecuteScriptCLI(args)
 
 	os.Exit(status)
 
