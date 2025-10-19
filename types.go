@@ -274,37 +274,47 @@ func PHPValue(value any) unsafe.Pointer {
 func phpValue(zval *C.zval, value any) {
 	switch v := value.(type) {
 	case nil:
+		// equvalent of: ZVAL_NULL
 		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_NULL
 	case bool:
+		// equvalent of: ZVAL_BOOL
 		if v {
 			*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_TRUE
 		} else {
 			*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_FALSE
 		}
 	case int:
+		// equvalent of: ZVAL_LONG
 		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_LONG
 		*(*C.zend_long)(unsafe.Pointer(&zval.value)) = C.zend_long(v)
 	case int64:
+		// equvalent of: ZVAL_LONG
 		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_LONG
 		*(*C.zend_long)(unsafe.Pointer(&zval.value)) = C.zend_long(v)
 	case float64:
+		// equvalent of: ZVAL_DOUBLE
 		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_DOUBLE
 		*(*C.double)(unsafe.Pointer(&zval.value)) = C.double(v)
 	case string:
 		if v == "" {
+			// equivalent: ZVAL_EMPTY_STRING
 			*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_INTERNED_STRING_EX
 			*(**C.zend_string)(unsafe.Pointer(&zval.value)) = C.zend_empty_string
 			break
 		}
+		// equvalent of: ZVAL_STRING
 		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_STRING_EX
 		*(**C.zend_string)(unsafe.Pointer(&zval.value)) = phpString(v, false)
 	case AssociativeArray:
+		// equvalent of: ZVAL_ARR
 		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_ARRAY_EX
 		*(**C.zend_array)(unsafe.Pointer(&zval.value)) = phpArray(v.Map, v.Order)
 	case map[string]any:
+		// equvalent of: ZVAL_ARR
 		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_ARRAY_EX
 		*(**C.zend_array)(unsafe.Pointer(&zval.value)) = phpArray(v, nil)
 	case []any:
+		// equvalent of: ZVAL_ARR
 		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_ARRAY_EX
 		*(**C.zend_array)(unsafe.Pointer(&zval.value)) = (*C.zend_array)(PHPPackedArray(v))
 	case Object:

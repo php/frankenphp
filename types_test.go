@@ -2,6 +2,7 @@ package frankenphp
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"testing"
@@ -211,8 +212,8 @@ func BenchmarkFloat(b *testing.B) {
 }
 
 func BenchmarkString(b *testing.B) {
+	message := "Hello, World!"
 	benchOnPHPThread(b, b.N, func() {
-		message := "Hello, World!"
 		phpString := PHPString(message, false)
 		_ = GoString(phpString)
 		zendStringRelease(phpString)
@@ -220,15 +221,26 @@ func BenchmarkString(b *testing.B) {
 }
 
 func BenchmarkMap(b *testing.B) {
+	originalMap := map[string]any{
+		"foo1": "bar1",
+		"foo2": int64(2),
+		"foo3": true,
+		"foo4": 3.14,
+		"foo5": nil,
+	}
 	benchOnPHPThread(b, b.N, func() {
-		originalMap := map[string]any{
-			"foo1": "bar1",
-			"foo2": int64(2),
-			"foo3": true,
-			"foo4": 3.14,
-			"foo5": nil,
-		}
+		phpArray := PHPMap(originalMap)
+		_ = GoMap(phpArray)
+		zendHashDestroy(phpArray)
+	})
+}
 
+func BenchmarkMap50Entries(b *testing.B) {
+	originalMap := map[string]any{}
+	for i := 0; i < 50; i++ {
+		originalMap[fmt.Sprintf("key%d", i)] = fmt.Sprintf("value%d", i)
+	}
+	benchOnPHPThread(b, b.N, func() {
 		phpArray := PHPMap(originalMap)
 		_ = GoMap(phpArray)
 		zendHashDestroy(phpArray)
@@ -236,18 +248,17 @@ func BenchmarkMap(b *testing.B) {
 }
 
 func BenchmarkOrderedAssociativeArray(b *testing.B) {
+	originalArray := AssociativeArray{
+		Map: map[string]any{
+			"foo1": "bar1",
+			"foo2": int64(2),
+			"foo3": true,
+			"foo4": 3.14,
+			"foo5": nil,
+		},
+		Order: []string{"foo3", "foo1", "foo4", "foo2", "foo5"},
+	}
 	benchOnPHPThread(b, b.N, func() {
-		originalArray := AssociativeArray{
-			Map: map[string]any{
-				"foo1": "bar1",
-				"foo2": int64(2),
-				"foo3": true,
-				"foo4": 3.14,
-				"foo5": nil,
-			},
-			Order: []string{"foo3", "foo1", "foo4", "foo2", "foo5"},
-		}
-
 		phpArray := PHPAssociativeArray(originalArray)
 		_ = GoAssociativeArray(phpArray)
 		zendHashDestroy(phpArray)
@@ -255,9 +266,8 @@ func BenchmarkOrderedAssociativeArray(b *testing.B) {
 }
 
 func BenchmarkSlice(b *testing.B) {
+	originalSlice := []any{"bar1", "bar2", "bar3", "bar4", "bar5"}
 	benchOnPHPThread(b, b.N, func() {
-		originalSlice := []any{"bar1", "bar2", "bar3", "bar4", "bar5"}
-
 		phpArray := PHPPackedArray(originalSlice)
 		_ = GoPackedArray(phpArray)
 		zendHashDestroy(phpArray)
@@ -265,18 +275,17 @@ func BenchmarkSlice(b *testing.B) {
 }
 
 func BenchmarkObject(b *testing.B) {
+	originalObject := Object{
+		ClassName: "stdClass",
+		Props: map[string]any{
+			"prop1": "value1",
+			"prop2": int64(42),
+			"prop3": true,
+			"prop4": 3.14,
+			"prop5": nil,
+		},
+	}
 	benchOnPHPThread(b, b.N, func() {
-		originalObject := Object{
-			ClassName: "stdClass",
-			Props: map[string]any{
-				"prop1": "value1",
-				"prop2": int64(42),
-				"prop3": true,
-				"prop4": 3.14,
-				"prop5": nil,
-			},
-		}
-
 		phpObject := PHPObject(originalObject)
 		_ = GoObject(phpObject)
 		zvalPtrDtor(phpObject)
@@ -284,12 +293,11 @@ func BenchmarkObject(b *testing.B) {
 }
 
 func BenchmarkEmptyObject(b *testing.B) {
+	originalObject := Object{
+		ClassName: "stdClass",
+		Props:     map[string]any{},
+	}
 	benchOnPHPThread(b, b.N, func() {
-		originalObject := Object{
-			ClassName: "stdClass",
-			Props:     map[string]any{},
-		}
-
 		phpObject := PHPObject(originalObject)
 		_ = GoObject(phpObject)
 		zvalPtrDtor(phpObject)

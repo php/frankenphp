@@ -23,10 +23,10 @@ void __zend_hash_init__(HashTable *ht, uint32_t nSize, dtor_func_t pDestructor,
 zend_array *__zend_new_array__(uint32_t size) { return zend_new_array(size); }
 
 bool is_internal_class(zend_class_entry *entry) {
-	return entry->create_object != NULL;
+  return entry->create_object != NULL;
 }
 
-//serialize
+// serialize
 zend_string *__zval_serialize__(zend_object *obj) {
   // find serialize in global function table and call it
   zval zv;
@@ -36,9 +36,10 @@ zend_string *__zval_serialize__(zend_object *obj) {
   zval retval;
   zval params[1];
   params[0] = zv;
-  if (call_user_function(EG(function_table), NULL, &func, &retval, 1, params) != SUCCESS) {
-	zval_ptr_dtor(&func);
-	return NULL;
+  if (call_user_function(EG(function_table), NULL, &func, &retval, 1, params) !=
+      SUCCESS) {
+    zval_ptr_dtor(&func);
+    return NULL;
   }
   zval_ptr_dtor(&func);
 
@@ -56,28 +57,28 @@ void __zval_unserialize__(zval *retval, zend_string *str) {
   zval params[1];
 
   ZVAL_STR(&params[0], str);
-  if (call_user_function(EG(function_table), NULL, &func, retval, 1, params) != SUCCESS) {
-	ZVAL_NULL(retval);
+  if (call_user_function(EG(function_table), NULL, &func, retval, 1, params) !=
+      SUCCESS) {
+    ZVAL_NULL(retval);
   }
   zval_ptr_dtor(&func);
   zend_string_release(str);
 }
 
 zend_object *__php_object_init__(
-    zval *zv,
-    const char *class_name,
-    size_t class_name_len,
+    zval *zv, const char *class_name, size_t class_name_len,
     zend_class_entry *ce // optional: pass NULL to look up by name
 ) {
+  if (!ce) {
+    zend_string *name =
+        zend_string_init_interned(class_name, class_name_len, 1);
+    ce = zend_lookup_class(name);
     if (!ce) {
-        zend_string *name = zend_string_init_interned(class_name, class_name_len, 1);
-        ce = zend_lookup_class(name);
-        if (!ce) {
-            return NULL;
-        }
+      return NULL;
     }
+  }
 
-    object_init_ex(zv, ce);
+  object_init_ex(zv, ce);
 
-    return Z_OBJ_P(zv);
+  return Z_OBJ_P(zv);
 }
