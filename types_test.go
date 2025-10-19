@@ -220,7 +220,16 @@ func BenchmarkString(b *testing.B) {
 	})
 }
 
-func BenchmarkMap(b *testing.B) {
+func BenchmarkEmptyMap(b *testing.B) {
+	originalMap := map[string]any{}
+	benchOnPHPThread(b, b.N, func() {
+		phpArray := PHPMap(originalMap)
+		_ = GoMap(phpArray)
+		zendHashDestroy(phpArray)
+	})
+}
+
+func BenchmarkMap5Entries(b *testing.B) {
 	originalMap := map[string]any{
 		"foo1": "bar1",
 		"foo2": int64(2),
@@ -247,7 +256,7 @@ func BenchmarkMap50Entries(b *testing.B) {
 	})
 }
 
-func BenchmarkOrderedAssociativeArray(b *testing.B) {
+func BenchmarkAssociativeArray5Entries(b *testing.B) {
 	originalArray := AssociativeArray{
 		Map: map[string]any{
 			"foo1": "bar1",
@@ -265,12 +274,24 @@ func BenchmarkOrderedAssociativeArray(b *testing.B) {
 	})
 }
 
-func BenchmarkSlice(b *testing.B) {
+func BenchmarkSlice5Entries(b *testing.B) {
 	originalSlice := []any{"bar1", "bar2", "bar3", "bar4", "bar5"}
 	benchOnPHPThread(b, b.N, func() {
 		phpArray := PHPPackedArray(originalSlice)
 		_ = GoPackedArray(phpArray)
 		zendHashDestroy(phpArray)
+	})
+}
+
+func BenchmarkEmptyObject(b *testing.B) {
+	originalObject := Object{
+		ClassName: "stdClass",
+		Props:     map[string]any{},
+	}
+	benchOnPHPThread(b, b.N, func() {
+		phpObject := PHPObject(originalObject)
+		_ = GoObject(phpObject)
+		zendObjectRelease(phpObject)
 	})
 }
 
@@ -284,18 +305,6 @@ func BenchmarkObject(b *testing.B) {
 			"prop4": 3.14,
 			"prop5": nil,
 		},
-	}
-	benchOnPHPThread(b, b.N, func() {
-		phpObject := PHPObject(originalObject)
-		_ = GoObject(phpObject)
-		zendObjectRelease(phpObject)
-	})
-}
-
-func BenchmarkEmptyObject(b *testing.B) {
-	originalObject := Object{
-		ClassName: "stdClass",
-		Props:     map[string]any{},
 	}
 	benchOnPHPThread(b, b.N, func() {
 		phpObject := PHPObject(originalObject)

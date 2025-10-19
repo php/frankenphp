@@ -13,8 +13,11 @@ import "C"
 import (
 	"fmt"
 	"strconv"
+	"sync"
 	"unsafe"
 )
+
+var internedStrings = sync.Map{}
 
 // EXPERIMENTAL: GoString copies a zend_string to a Go string.
 func GoString(s unsafe.Pointer) string {
@@ -26,6 +29,18 @@ func GoString(s unsafe.Pointer) string {
 }
 
 func goString(zendStr *C.zend_string) string {
+
+	// interned strings may be cached on the go side for faster conversion
+	// interned stings may be global or thread-local, but their number is limited
+	if isInternedString(zendStr) {
+		if v, ok := internedStrings.Load(zendStr); ok {
+			return v.(string)
+		}
+		str := C.GoStringN((*C.char)(unsafe.Pointer(&zendStr.val)), C.int(zendStr.len))
+		internedStrings.Store(zendStr, str)
+		return str
+	}
+
 	return C.GoStringN((*C.char)(unsafe.Pointer(&zendStr.val)), C.int(zendStr.len))
 }
 
@@ -79,6 +94,10 @@ func goArray(array *C.zend_array, ordered bool) (map[string]any, []string) {
 	}
 
 	nNumUsed := array.nNumUsed
+	if nNumUsed == 0 {
+		return make(map[string]any), nil
+	}
+
 	entries := make(map[string]any, nNumUsed)
 	var order []string
 	if ordered {
@@ -198,6 +217,10 @@ func phpArray(entries map[string]any, order []string) *C.zend_array {
 
 // EXPERIMENTAL: PHPPackedArray converts a Go slice to a PHP zend_array.
 func PHPPackedArray(slice []any) unsafe.Pointer {
+	return unsafe.Pointer(phpPackedArray(slice))
+}
+
+func phpPackedArray(slice []any) *C.zend_array {
 	zendArray := createNewArray((uint32)(len(slice)))
 	for _, val := range slice {
 		var zval C.zval
@@ -205,7 +228,7 @@ func PHPPackedArray(slice []any) unsafe.Pointer {
 		C.zend_hash_next_index_insert(zendArray, &zval)
 	}
 
-	return unsafe.Pointer(zendArray)
+	return zendArray
 }
 
 // EXPERIMENTAL: GoValue converts a PHP zval to a Go value
@@ -316,7 +339,7 @@ func phpValue(zval *C.zval, value any) {
 	case []any:
 		// equvalent of: ZVAL_ARR
 		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_ARRAY_EX
-		*(**C.zend_array)(unsafe.Pointer(&zval.value)) = (*C.zend_array)(PHPPackedArray(v))
+		*(**C.zend_array)(unsafe.Pointer(&zval.value)) = phpPackedArray(v)
 	case Object:
 		phpObject(zval, v)
 	default:
@@ -342,11 +365,10 @@ func goObject(obj *C.zend_object) Object {
 		}
 	}
 
+	// object properties are stored in a zend_array
 	var props map[string]any
-	// iterate over the properties
 	if obj.properties != nil {
-		hashTable := (*C.HashTable)(unsafe.Pointer(obj.properties))
-		props, _ = goArray(hashTable, false)
+		props, _ = goArray(obj.properties, false)
 	}
 
 	return Object{
@@ -440,4 +462,16 @@ func zvalGetType(z *C.zval) C.uint8_t {
 	ptr := (*uint32)(unsafe.Pointer(&z.u1))
 	typeInfo := *ptr
 	return C.uint8_t(typeInfo & 0xFF)
+}
+
+// interned strings are global strings used by the zend_engine
+func isInternedString(zs *C.zend_string) bool {
+	// gc.u.type_info is at offset 4 from start of zend_refcounted_h
+	type zendRefcountedH struct {
+		refcount uint32
+		typeInfo uint32
+	}
+
+	gc := (*zendRefcountedH)(unsafe.Pointer(zs))
+	return (gc.typeInfo & C.IS_STR_INTERNED) != 0
 }
