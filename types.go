@@ -382,6 +382,8 @@ func phpValue(zval *C.zval, value any, ctx *copyContext) {
 		*(**C.zend_array)(unsafe.Pointer(&zval.value)) = phpPackedArray(v, ctx)
 	case *Object:
 		phpObject(zval, v, ctx)
+	case Object:
+		phpObject(zval, &v, ctx)
 	default:
 		panic(fmt.Sprintf("unsupported Go type %T", v))
 	}
