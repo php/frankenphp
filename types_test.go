@@ -288,7 +288,7 @@ func BenchmarkObject(b *testing.B) {
 	benchOnPHPThread(b, b.N, func() {
 		phpObject := PHPObject(originalObject)
 		_ = GoObject(phpObject)
-		zvalPtrDtor(phpObject)
+		zendObjectRelease(phpObject)
 	})
 }
 
@@ -300,6 +300,6 @@ func BenchmarkEmptyObject(b *testing.B) {
 	benchOnPHPThread(b, b.N, func() {
 		phpObject := PHPObject(originalObject)
 		_ = GoObject(phpObject)
-		zvalPtrDtor(phpObject)
+		zendObjectRelease(phpObject)
 	})
 }

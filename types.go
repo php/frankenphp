@@ -325,10 +325,7 @@ func phpValue(zval *C.zval, value any) {
 }
 
 func GoObject(obj unsafe.Pointer) Object {
-	zval := (*C.zval)(obj)
-	zObj := (*C.zend_object)(extractZvalValue(zval, C.IS_OBJECT))
-
-	return goObject(zObj)
+	return goObject((*C.zend_object)(obj))
 }
 
 func goObject(obj *C.zend_object) Object {
@@ -362,8 +359,9 @@ func goObject(obj *C.zend_object) Object {
 func PHPObject(obj Object) unsafe.Pointer {
 	var zval C.zval
 	phpObject(&zval, obj)
+	zObj := (*C.zend_object)(extractZvalValue(&zval, C.IS_OBJECT))
 
-	return unsafe.Pointer(&zval)
+	return unsafe.Pointer(zObj)
 }
 
 func phpObject(zval *C.zval, obj Object) {
@@ -430,6 +428,11 @@ func zendStringRelease(p unsafe.Pointer) {
 func zendHashDestroy(p unsafe.Pointer) {
 	ht := (*C.zend_array)(p)
 	C.zend_array_destroy(ht)
+}
+
+func zendObjectRelease(p unsafe.Pointer) {
+	obj := (*C.zend_object)(p)
+	C.zend_object_release(obj)
 }
 
 func zvalGetType(z *C.zval) C.uint8_t {
