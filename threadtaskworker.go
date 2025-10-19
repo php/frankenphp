@@ -242,7 +242,7 @@ func go_frankenphp_worker_handle_task(threadIndex C.uintptr_t) *C.zval {
 
 		// if the task has no callback, forward it to PHP
 		var zval C.zval
-		phpValue(&zval, task.arg)
+		phpValue(&zval, task.arg, make(copyContext))
 		thread.Pin(unsafe.Pointer(&zval))
 
 		return &zval
@@ -262,7 +262,7 @@ func go_frankenphp_finish_task(threadIndex C.uintptr_t, zv *C.zval) {
 	}
 
 	if zv != nil {
-		handler.currentTask.Result = goValue(zv)
+		handler.currentTask.Result = goValue(zv, make(copyContext))
 	}
 	handler.currentTask.done.Unlock()
 	handler.currentTask = nil
@@ -286,7 +286,7 @@ func go_frankenphp_dispatch_task(threadIndex C.uintptr_t, zv *C.zval, name *C.ch
 	}
 
 	// create a new task and lock it until the task is done
-	goArg := goValue(zv)
+	goArg := goValue(zv, make(copyContext))
 	task := &PendingTask{arg: goArg}
 	err := task.dispatch(worker)
 
