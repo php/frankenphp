@@ -239,7 +239,7 @@ func GoValue(zval unsafe.Pointer) any {
 func goValue(zval *C.zval) any {
 	t := zvalGetType(zval)
 
-	// TODO: references and self-referencing structures
+	// TODO: handle nested references correctly
 
 	switch t {
 	case C.IS_NULL:
