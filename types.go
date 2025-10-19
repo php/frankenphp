@@ -284,6 +284,12 @@ func goValue(zval *C.zval) any {
 		}
 
 		return GoAssociativeArray(unsafe.Pointer(array))
+	case C.IS_REFERENCE:
+		ref := (*C.zend_reference)(extractZvalValue(zval, C.IS_REFERENCE))
+		if ref != nil {
+			return goValue(&ref.val)
+		}
+		return nil
 	default:
 		return nil
 	}
@@ -434,6 +440,8 @@ func extractZvalValue(zval *C.zval, expectedType C.uint8_t) unsafe.Pointer {
 		return unsafe.Pointer(*(**C.zend_string)(v))
 	case C.IS_ARRAY:
 		return unsafe.Pointer(*(**C.zend_array)(v))
+	case C.IS_REFERENCE:
+		return unsafe.Pointer(*(**C.zend_reference)(v))
 	default:
 		return nil
 	}
