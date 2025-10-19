@@ -155,7 +155,7 @@ func TestNestedMixedArray(t *testing.T) {
 
 func TestPHPObject(t *testing.T) {
 	testOnDummyPHPThread(t, func() {
-		originalObject := Object{
+		originalObject := &Object{
 			ClassName: "stdClass",
 			Props: map[string]any{
 				"prop1": "value1",
@@ -284,7 +284,7 @@ func BenchmarkSlice5Entries(b *testing.B) {
 }
 
 func BenchmarkEmptyObject(b *testing.B) {
-	originalObject := Object{
+	originalObject := &Object{
 		ClassName: "stdClass",
 		Props:     map[string]any{},
 	}
@@ -296,7 +296,7 @@ func BenchmarkEmptyObject(b *testing.B) {
 }
 
 func BenchmarkObject(b *testing.B) {
-	originalObject := Object{
+	originalObject := &Object{
 		ClassName: "stdClass",
 		Props: map[string]any{
 			"prop1": "value1",
