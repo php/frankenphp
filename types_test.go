@@ -164,7 +164,7 @@ func TestPHPObject(t *testing.T) {
 		}
 
 		phpObject := PHPObject(originalObject)
-		defer zvalPtrDtor(phpObject)
+		defer zendObjectRelease(phpObject)
 
 		convertedObject := GoObject(phpObject)
 		assert.Equal(t, originalObject.ClassName, convertedObject.ClassName, "object class should be equal after conversion")
