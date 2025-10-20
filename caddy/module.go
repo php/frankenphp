@@ -19,6 +19,8 @@ import (
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp/rewrite"
 	"github.com/dunglas/frankenphp"
 	"github.com/dunglas/frankenphp/internal/fastabs"
+	"github.com/dunglas/mercure"
+	mercureCaddy "github.com/dunglas/mercure/caddy"
 )
 
 // FrankenPHPModule represents the "php_server" and "php" directives in the Caddyfile
@@ -45,6 +47,7 @@ type FrankenPHPModule struct {
 	preparedEnv                 frankenphp.PreparedEnv
 	preparedEnvNeedsReplacement bool
 	logger                      *slog.Logger
+	mercureHubRequestOption     *frankenphp.RequestOption
 }
 
 // CaddyModule returns the Caddy module information.
@@ -142,6 +145,8 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		}
 	}
 
+	f.assignMercureHubRequestOption(ctx)
+
 	return nil
 }
 
@@ -184,14 +189,34 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 		}
 	}
 
-	fr, err := frankenphp.NewRequestWithContext(
-		r,
-		documentRootOption,
-		frankenphp.WithRequestSplitPath(f.SplitPath),
-		frankenphp.WithRequestPreparedEnv(env),
-		frankenphp.WithOriginalRequest(&origReq),
-		frankenphp.WithWorkerName(workerName),
+	var (
+		err error
+		fr  *http.Request
 	)
+	if f.mercureHubRequestOption == nil {
+		fr, err = frankenphp.NewRequestWithContext(
+			r,
+			documentRootOption,
+			frankenphp.WithRequestSplitPath(f.SplitPath),
+			frankenphp.WithRequestPreparedEnv(env),
+			frankenphp.WithOriginalRequest(&origReq),
+			frankenphp.WithWorkerName(workerName),
+		)
+	} else {
+		fr, err = frankenphp.NewRequestWithContext(
+			r,
+			documentRootOption,
+			frankenphp.WithRequestSplitPath(f.SplitPath),
+			frankenphp.WithRequestPreparedEnv(env),
+			frankenphp.WithOriginalRequest(&origReq),
+			frankenphp.WithWorkerName(workerName),
+			*f.mercureHubRequestOption,
+		)
+	}
+
+	if err != nil {
+		return caddyhttp.Error(http.StatusInternalServerError, err)
+	}
 
 	if err = frankenphp.ServeHTTP(w, fr); err != nil {
 		return caddyhttp.Error(http.StatusInternalServerError, err)
@@ -270,6 +295,28 @@ func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	}
 
 	return nil
+}
+
+func (f *FrankenPHPModule) assignMercureHubRequestOption(ctx caddy.Context) {
+	var hub *mercure.Hub
+	for _, m := range ctx.Modules() {
+		if h, ok := mercureCaddy.Hubs[m]; ok {
+			hub = h
+
+			break
+		}
+	}
+
+	if h, ok := mercureCaddy.Hubs[nil]; ok {
+		hub = h
+	}
+
+	if hub == nil {
+		return
+	}
+
+	opt := frankenphp.WithMercureHub(hub)
+	f.mercureHubRequestOption = &opt
 }
 
 // parseCaddyfile unmarshals tokens from h into a new Middleware.
