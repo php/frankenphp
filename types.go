@@ -337,47 +337,47 @@ func phpValue(zval *C.zval, value any, ctx *copyContext) {
 	}
 	switch v := value.(type) {
 	case nil:
-		// equvalent of: ZVAL_NULL
+		// equvalent of ZVAL_NULL macro
 		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_NULL
 	case bool:
-		// equvalent of: ZVAL_BOOL
+		// equvalent of ZVAL_BOOL macro
 		if v {
 			*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_TRUE
 		} else {
 			*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_FALSE
 		}
 	case int:
-		// equvalent of: ZVAL_LONG
+		// equvalent of ZVAL_LONG macro
 		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_LONG
 		*(*C.zend_long)(unsafe.Pointer(&zval.value)) = C.zend_long(v)
 	case int64:
-		// equvalent of: ZVAL_LONG
+		// equvalent of ZVAL_LONG macro
 		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_LONG
 		*(*C.zend_long)(unsafe.Pointer(&zval.value)) = C.zend_long(v)
 	case float64:
-		// equvalent of: ZVAL_DOUBLE
+		// equvalent of ZVAL_DOUBLE macro
 		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_DOUBLE
 		*(*C.double)(unsafe.Pointer(&zval.value)) = C.double(v)
 	case string:
 		if v == "" {
-			// equivalent: ZVAL_EMPTY_STRING
+			// equivalent ZVAL_EMPTY_STRING macro
 			*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_INTERNED_STRING_EX
 			*(**C.zend_string)(unsafe.Pointer(&zval.value)) = C.zend_empty_string
 			break
 		}
-		// equvalent of: ZVAL_STRING
+		// equvalent of ZVAL_STRING macro
 		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_STRING_EX
 		*(**C.zend_string)(unsafe.Pointer(&zval.value)) = phpString(v, false)
 	case AssociativeArray:
-		// equvalent of: ZVAL_ARR
+		// equvalent of ZVAL_ARR macro
 		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_ARRAY_EX
 		*(**C.zend_array)(unsafe.Pointer(&zval.value)) = phpArray(v.Map, v.Order, ctx)
 	case map[string]any:
-		// equvalent of: ZVAL_ARR
+		// equvalent of ZVAL_ARR macro
 		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_ARRAY_EX
 		*(**C.zend_array)(unsafe.Pointer(&zval.value)) = phpArray(v, nil, ctx)
 	case []any:
-		// equvalent of: ZVAL_ARR
+		// equvalent of ZVAL_ARR macro
 		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_ARRAY_EX
 		*(**C.zend_array)(unsafe.Pointer(&zval.value)) = phpPackedArray(v, ctx)
 	case *Object:
@@ -422,8 +422,10 @@ func goObject(obj *C.zend_object, ctx *copyContext) *Object {
 
 	ctx.add(unsafe.Pointer(obj), goObj)
 
-	props, _ := goArray(obj.properties, false, ctx)
-	goObj.Props = props
+	if obj.properties != nil {
+		props, _ := goArray(obj.properties, false, ctx)
+		goObj.Props = props
+	}
 
 	return goObj
 }
@@ -447,6 +449,7 @@ func phpObject(zval *C.zval, obj *Object, ctx *copyContext) {
 		return
 	}
 
+	// object is an internal class with serialized data, unserialize it directly
 	if obj.serialized != nil {
 		C.__zval_unserialize__(zval, obj.serialized)
 		return
