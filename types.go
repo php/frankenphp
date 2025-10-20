@@ -153,7 +153,7 @@ func goArray[T any](arr unsafe.Pointer, ordered bool) (map[string]T, []string, e
 // EXPERIMENTAL: GoPackedArray converts a zval with a zend_array value to a Go slice
 func GoPackedArray[T any](arr unsafe.Pointer) ([]T, error) {
 	if arr == nil {
-		panic("GoPackedArray received a nil pointer")
+		return nil, errors.New("GoPackedArray received a nil value")
 	}
 
 	zval := (*C.zval)(arr)
@@ -248,6 +248,11 @@ func PHPPackedArray[T any](slice []T) unsafe.Pointer {
 }
 
 // EXPERIMENTAL: GoValue converts a PHP zval to a Go value
+//
+// Zval having the null, bool, long, double, string and array types are currently supported.
+// Arrays can curently only be converted to any[] and AssociativeArray[any].
+// Any other type will cause an error.
+// More types may be supported in the future.
 func GoValue[T any](zval unsafe.Pointer) (T, error) {
 	return goValue[T]((*C.zval)(zval))
 }
@@ -350,6 +355,10 @@ func goValue[T any](zval *C.zval) (res T, err error) {
 }
 
 // EXPERIMENTAL: PHPValue converts a Go any to a PHP zval
+//
+// nil, bool, int, int64, float64, string, []any, and map[string]any are currently supported.
+// Any other type will cause a panic.
+// More types may be supported in the future.
 func PHPValue(value any) unsafe.Pointer {
 	return unsafe.Pointer(phpValue(value))
 }
