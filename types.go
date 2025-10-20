@@ -55,10 +55,10 @@ func (a AssociativeArray[T]) toZval() *C.zval {
 }
 
 // EXPERIMENTAL: GoAssociativeArray converts a zend_array to a Go AssociativeArray
-func GoAssociativeArray[T any](arr unsafe.Pointer) AssociativeArray[T] {
-	entries, order, _ := goArray[T](arr, true)
+func GoAssociativeArray[T any](arr unsafe.Pointer) (AssociativeArray[T], error) {
+	entries, order, err := goArray[T](arr, true)
 
-	return AssociativeArray[T]{entries, order}
+	return AssociativeArray[T]{entries, order}, err
 }
 
 // EXPERIMENTAL: GoMap converts a zval having a zend_array value to an unordered Go map
@@ -75,7 +75,7 @@ func goArray[T any](arr unsafe.Pointer, ordered bool) (map[string]T, []string, e
 
 	zval := (*C.zval)(arr)
 	v, err := extractZvalValue(zval, C.IS_ARRAY)
-	if v == nil || err != nil {
+	if err != nil {
 		return nil, nil, fmt.Errorf("received a *zval that wasn't a HashTable on array conversion: %w", err)
 	}
 
@@ -158,7 +158,7 @@ func GoPackedArray[T any](arr unsafe.Pointer) ([]T, error) {
 
 	zval := (*C.zval)(arr)
 	v, err := extractZvalValue(zval, C.IS_ARRAY)
-	if v == nil || err != nil {
+	if err != nil {
 		return nil, fmt.Errorf("GoPackedArray received *zval that wasn't a HashTable: %w", err)
 	}
 
@@ -328,7 +328,12 @@ func goValue[T any](zval *C.zval) (res T, err error) {
 			return resZero, fmt.Errorf("cannot convert packed array to non-any Go type %s", typ.String())
 		}
 
-		resAny = any(GoAssociativeArray[T](unsafe.Pointer(zval)))
+		a, err := GoAssociativeArray[T](unsafe.Pointer(zval))
+		if err != nil {
+			return resZero, err
+		}
+
+		resAny = any(a)
 	default:
 		return resZero, fmt.Errorf("unsupported zval type %d", t)
 	}
@@ -397,7 +402,11 @@ func htIsPacked(ht *C.HashTable) bool {
 // extractZvalValue returns a pointer to the zval value cast to the expected type
 func extractZvalValue(zval *C.zval, expectedType C.uint8_t) (unsafe.Pointer, error) {
 	if zval == nil {
-		return nil, nil
+		if expectedType == C.IS_NULL {
+			return nil, nil
+		}
+
+		return nil, fmt.Errorf("zval type mismatch: expected %d, got nil", expectedType)
 	}
 
 	if zType := C.zval_get_type(zval); zType != expectedType {
@@ -407,9 +416,7 @@ func extractZvalValue(zval *C.zval, expectedType C.uint8_t) (unsafe.Pointer, err
 	v := unsafe.Pointer(&zval.value[0])
 
 	switch expectedType {
-	case C.IS_LONG:
-		return v, nil
-	case C.IS_DOUBLE:
+	case C.IS_LONG, C.IS_DOUBLE:
 		return v, nil
 	case C.IS_STRING:
 		return unsafe.Pointer(*(**C.zend_string)(v)), nil

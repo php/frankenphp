@@ -59,7 +59,8 @@ func TestOrderedPHPAssociativeArray(t *testing.T) {
 			Order: []string{"foo2", "foo1"},
 		}
 
-		convertedArray := GoAssociativeArray[string](PHPAssociativeArray(originalArray))
+		convertedArray, err := GoAssociativeArray[string](PHPAssociativeArray(originalArray))
+		require.NoError(t, err)
 
 		assert.Equal(t, originalArray, convertedArray, "associative array should be equal after conversion")
 	})
