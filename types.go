@@ -215,7 +215,6 @@ func GoValue(zval unsafe.Pointer) any {
 
 func goValue(zval *C.zval) any {
 	t := C.zval_get_type(zval)
-
 	switch t {
 	case C.IS_NULL:
 		return nil
@@ -276,6 +275,10 @@ func phpValue(value any) *C.zval {
 	case float64:
 		C.__zval_double__(&zval, C.double(v))
 	case string:
+		if v == "" {
+			C.__zval_empty_string__(&zval)
+			break
+		}
 		str := (*C.zend_string)(PHPString(v, false))
 		C.__zval_string__(&zval, str)
 	case AssociativeArray:
@@ -324,4 +327,14 @@ func extractZvalValue(zval *C.zval, expectedType C.uint8_t) unsafe.Pointer {
 	default:
 		return nil
 	}
+}
+
+func zvalPtrDtor(p unsafe.Pointer) {
+	zv := (*C.zval)(p)
+	C.zval_ptr_dtor(zv)
+}
+
+func zendStringRelease(p unsafe.Pointer) {
+	zs := (*C.zend_string)(p)
+	C.zend_string_release(zs)
 }
