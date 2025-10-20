@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: cd534a8394f535a600bf45a333955d23b5154756 */
+ * Stub hash: fcc86e17663887b089b79144e10ab3ca50ce3faa */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_handle_request, 0, 1, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, callback, IS_CALLABLE, 0)
@@ -27,7 +27,7 @@ ZEND_END_ARG_INFO()
 #define arginfo_apache_response_headers arginfo_frankenphp_response_headers
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_mercure_publish, 0, 1, IS_STRING, 0)
-	ZEND_ARG_TYPE_MASK(0, topics, MAY_BE_STRING|MAY_BE_ARRAY, NULL)
+	ZEND_ARG_INFO(0, topics)
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, data, IS_STRING, 0, "\'\'")
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, private, _IS_BOOL, 0, "false")
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, id, IS_STRING, 1, "null")

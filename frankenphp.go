@@ -39,7 +39,6 @@ import (
 	//_ "github.com/ianlancetaylor/cgosymbolizer"
 
 	"github.com/dunglas/mercure"
-	"go.uber.org/zap"
 )
 
 type contextKeyStruct struct{}
@@ -578,7 +577,7 @@ func go_is_context_done(threadIndex C.uintptr_t) C.bool {
 }
 
 //export go_mercure_publish
-func go_mercure_publish(threadIndex C.uintptr_t, topics unsafe.Pointer, data unsafe.Pointer, private bool, id, typ unsafe.Pointer, retry uint64) (generatedID *C.zend_string, error C.short) {
+func go_mercure_publish(threadIndex C.uintptr_t, topics *C.struct__zval_struct, data unsafe.Pointer, private bool, id, typ unsafe.Pointer, retry uint64) (generatedID *C.zend_string, error C.short) {
 	fc := phpThreads[threadIndex].getRequestContext()
 
 	if fc.mercureHub == nil {
@@ -597,19 +596,26 @@ func go_mercure_publish(threadIndex C.uintptr_t, topics unsafe.Pointer, data uns
 		Private: private,
 	}
 
-	ts := GoValue[string](topics)
-	switch t := ts.(type) {
-	case string:
-		u.Topics = []string{t}
-	case []string:
-		u.Topics = t
+	zvalType := C.zval_get_type(topics)
+	switch zvalType {
+	case C.IS_STRING:
+		u.Topics = []string{GoString(unsafe.Pointer(topics))}
+	case C.IS_ARRAY:
+		ts, err := GoPackedArray[string](unsafe.Pointer(topics))
+		if err != nil {
+			logger.Error("invalid topics type", slog.String("error", err.Error()))
+
+			return nil, 1
+		}
+
+		u.Topics = ts
 	default:
 		// Never happens as the function is called from C with proper types
-		panic(fmt.Sprintf("invalid topics type %#v", t))
+		panic("invalid topics type")
 	}
 
 	if err := fc.mercureHub.Publish(u); err != nil {
-		logger.Error("Unable to publish Mercure update", zap.Error(err))
+		logger.Error("Unable to publish Mercure update", slog.String("error", err.Error()))
 
 		return nil, 2
 	}

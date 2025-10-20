@@ -5,10 +5,16 @@ package frankenphp
 */
 import "C"
 import (
+	"errors"
 	"fmt"
+	"reflect"
 	"strconv"
 	"unsafe"
 )
+
+type toZval interface {
+	toZval() *C.zval
+}
 
 // EXPERIMENTAL: GoString copies a zend_string to a Go string.
 func GoString(s unsafe.Pointer) string {
@@ -44,29 +50,36 @@ type AssociativeArray[T any] struct {
 	Order []string
 }
 
+func (a AssociativeArray[T]) toZval() *C.zval {
+	return (*C.zval)(PHPAssociativeArray[T](a))
+}
+
 // EXPERIMENTAL: GoAssociativeArray converts a zend_array to a Go AssociativeArray
 func GoAssociativeArray[T any](arr unsafe.Pointer) AssociativeArray[T] {
-	entries, order := goArray[T](arr, true)
+	entries, order, _ := goArray[T](arr, true)
+
 	return AssociativeArray[T]{entries, order}
 }
 
 // EXPERIMENTAL: GoMap converts a zval having a zend_array value to an unordered Go map
-func GoMap[T any](arr unsafe.Pointer) map[string]T {
-	entries, _ := goArray[T](arr, false)
-	return entries
+func GoMap[T any](arr unsafe.Pointer) (map[string]T, error) {
+	entries, _, err := goArray[T](arr, false)
+
+	return entries, err
 }
 
-func goArray[T any](arr unsafe.Pointer, ordered bool) (map[string]T, []string) {
+func goArray[T any](arr unsafe.Pointer, ordered bool) (map[string]T, []string, error) {
 	if arr == nil {
-		panic("received a nil pointer on array conversion")
+		return nil, nil, errors.New("received a nil pointer on array conversion")
 	}
 
 	zval := (*C.zval)(arr)
-	hashTable := (*C.HashTable)(extractZvalValue(zval, C.IS_ARRAY))
-
-	if hashTable == nil {
-		panic("received a *zval that wasn't a HashTable on array conversion")
+	v, err := extractZvalValue(zval, C.IS_ARRAY)
+	if v == nil || err != nil {
+		return nil, nil, fmt.Errorf("received a *zval that wasn't a HashTable on array conversion: %w", err)
 	}
+
+	hashTable := (*C.HashTable)(v)
 
 	nNumUsed := hashTable.nNumUsed
 	entries := make(map[string]T, nNumUsed)
@@ -83,15 +96,22 @@ func goArray[T any](arr unsafe.Pointer, ordered bool) (map[string]T, []string) {
 			v := C.get_ht_packed_data(hashTable, i)
 			if v != nil && C.zval_get_type(v) != C.IS_UNDEF {
 				strIndex := strconv.Itoa(int(i))
-				entries[strIndex] = goValue[T](v).(T)
+				e, err := goValue[T](v)
+				if err != nil {
+					return nil, nil, err
+				}
+
+				entries[strIndex] = e
 				if ordered {
 					order = append(order, strIndex)
 				}
 			}
 		}
 
-		return entries, order
+		return entries, order, nil
 	}
+
+	var zeroVal T
 
 	for i := C.uint32_t(0); i < nNumUsed; i++ {
 		bucket := C.get_ht_bucket_data(hashTable, i)
@@ -99,11 +119,19 @@ func goArray[T any](arr unsafe.Pointer, ordered bool) (map[string]T, []string) {
 			continue
 		}
 
-		v := goValue[T](&bucket.val)
+		v, err := goValue[any](&bucket.val)
+		if err != nil {
+			return nil, nil, err
+		}
 
 		if bucket.key != nil {
 			keyStr := GoString(unsafe.Pointer(bucket.key))
-			entries[keyStr] = v.(T)
+			if v == nil {
+				entries[keyStr] = zeroVal
+			} else {
+				entries[keyStr] = v.(T)
+			}
+
 			if ordered {
 				order = append(order, keyStr)
 			}
@@ -119,21 +147,22 @@ func goArray[T any](arr unsafe.Pointer, ordered bool) (map[string]T, []string) {
 		}
 	}
 
-	return entries, order
+	return entries, order, nil
 }
 
 // EXPERIMENTAL: GoPackedArray converts a zval with a zend_array value to a Go slice
-func GoPackedArray[T any](arr unsafe.Pointer) []T {
+func GoPackedArray[T any](arr unsafe.Pointer) ([]T, error) {
 	if arr == nil {
 		panic("GoPackedArray received a nil pointer")
 	}
 
 	zval := (*C.zval)(arr)
-	hashTable := (*C.HashTable)(extractZvalValue(zval, C.IS_ARRAY))
-
-	if hashTable == nil {
-		panic("GoPackedArray received *zval that wasn't a HashTable")
+	v, err := extractZvalValue(zval, C.IS_ARRAY)
+	if v == nil || err != nil {
+		return nil, fmt.Errorf("GoPackedArray received *zval that wasn't a HashTable: %w", err)
 	}
+
+	hashTable := (*C.HashTable)(v)
 
 	nNumUsed := hashTable.nNumUsed
 	result := make([]T, 0, nNumUsed)
@@ -142,32 +171,42 @@ func GoPackedArray[T any](arr unsafe.Pointer) []T {
 		for i := C.uint32_t(0); i < nNumUsed; i++ {
 			v := C.get_ht_packed_data(hashTable, i)
 			if v != nil && C.zval_get_type(v) != C.IS_UNDEF {
-				result = append(result, goValue[T](v).(T))
+				v, err := goValue[T](v)
+				if err != nil {
+					return nil, err
+				}
+
+				result = append(result, v)
 			}
 		}
 
-		return result
+		return result, nil
 	}
 
 	// fallback if ht isn't packed - equivalent to array_values()
 	for i := C.uint32_t(0); i < nNumUsed; i++ {
 		bucket := C.get_ht_bucket_data(hashTable, i)
 		if bucket != nil && C.zval_get_type(&bucket.val) != C.IS_UNDEF {
-			result = append(result, goValue[T](&bucket.val).(T))
+			v, err := goValue[T](&bucket.val)
+			if err != nil {
+				return nil, err
+			}
+
+			result = append(result, v)
 		}
 	}
 
-	return result
+	return result, nil
 }
 
 // EXPERIMENTAL: PHPMap converts an unordered Go map to a PHP zend_array
-func PHPMap(arr map[string]any) unsafe.Pointer {
-	return phpArray(arr, nil)
+func PHPMap[T any](arr map[string]T) unsafe.Pointer {
+	return phpArray[T](arr, nil)
 }
 
 // EXPERIMENTAL: PHPAssociativeArray converts a Go AssociativeArray to a PHP zval with a zend_array value
 func PHPAssociativeArray[T any](arr AssociativeArray[T]) unsafe.Pointer {
-	return phpArray(arr.Map, arr.Order)
+	return phpArray[T](arr.Map, arr.Order)
 }
 
 func phpArray[T any](entries map[string]T, order []string) unsafe.Pointer {
@@ -195,7 +234,7 @@ func phpArray[T any](entries map[string]T, order []string) unsafe.Pointer {
 }
 
 // EXPERIMENTAL: PHPPackedArray converts a Go slice to a PHP zval with a zend_array value.
-func PHPPackedArray(slice []any) unsafe.Pointer {
+func PHPPackedArray[T any](slice []T) unsafe.Pointer {
 	zendArray := createNewArray((uint32)(len(slice)))
 	for _, val := range slice {
 		zval := phpValue(val)
@@ -209,51 +248,100 @@ func PHPPackedArray(slice []any) unsafe.Pointer {
 }
 
 // EXPERIMENTAL: GoValue converts a PHP zval to a Go value
-func GoValue[T any](zval unsafe.Pointer) any {
+func GoValue[T any](zval unsafe.Pointer) (T, error) {
 	return goValue[T]((*C.zval)(zval))
 }
 
-func goValue[T any](zval *C.zval) any {
+func goValue[T any](zval *C.zval) (res T, err error) {
+	var (
+		resAny  any
+		resZero T
+	)
 	t := C.zval_get_type(zval)
 
 	switch t {
 	case C.IS_NULL:
-		return nil
+		resAny = any(nil)
 	case C.IS_FALSE:
-		return false
+		resAny = any(false)
 	case C.IS_TRUE:
-		return true
+		resAny = any(true)
 	case C.IS_LONG:
-		longPtr := (*C.zend_long)(extractZvalValue(zval, C.IS_LONG))
-		if longPtr != nil {
-			return int64(*longPtr)
+		v, err := extractZvalValue(zval, C.IS_LONG)
+		if err != nil {
+			return resZero, err
 		}
 
-		return int64(0)
+		if v != nil {
+			resAny = any(int64(*(*C.zend_long)(v)))
+
+			break
+		}
+
+		resAny = any(int64(0))
 	case C.IS_DOUBLE:
-		doublePtr := (*C.double)(extractZvalValue(zval, C.IS_DOUBLE))
-		if doublePtr != nil {
-			return float64(*doublePtr)
+		v, err := extractZvalValue(zval, C.IS_DOUBLE)
+		if err != nil {
+			return resZero, err
 		}
 
-		return float64(0)
+		if v != nil {
+			resAny = any(float64(*(*C.double)(v)))
+
+			break
+		}
+
+		resAny = any(float64(0))
 	case C.IS_STRING:
-		str := (*C.zend_string)(extractZvalValue(zval, C.IS_STRING))
-		if str == nil {
-			return ""
+		v, err := extractZvalValue(zval, C.IS_STRING)
+		if err != nil {
+			return resZero, err
 		}
 
-		return GoString(unsafe.Pointer(str))
+		if v == nil {
+			resAny = any("")
+
+			break
+		}
+
+		resAny = any(GoString(v))
 	case C.IS_ARRAY:
-		hashTable := (*C.HashTable)(extractZvalValue(zval, C.IS_ARRAY))
-		if hashTable != nil && htIsPacked(hashTable) {
-			return GoPackedArray[T](unsafe.Pointer(zval))
+		v, err := extractZvalValue(zval, C.IS_ARRAY)
+		if err != nil {
+			return resZero, err
 		}
 
-		return GoAssociativeArray[T](unsafe.Pointer(zval))
+		hashTable := (*C.HashTable)(v)
+		if hashTable != nil && htIsPacked(hashTable) {
+			typ := reflect.TypeOf(res)
+			if typ == nil || typ.Kind() == reflect.Interface && typ.NumMethod() == 0 {
+				r, e := GoPackedArray[any](unsafe.Pointer(zval))
+				if e != nil {
+					return resZero, e
+				}
+
+				resAny = any(r)
+
+				break
+			}
+
+			return resZero, fmt.Errorf("cannot convert packed array to non-any Go type %s", typ.String())
+		}
+
+		resAny = any(GoAssociativeArray[T](unsafe.Pointer(zval)))
 	default:
-		return nil
+		return resZero, fmt.Errorf("unsupported zval type %d", t)
 	}
+
+	if resAny == nil {
+		return resZero, nil
+	}
+
+	if castRes, ok := resAny.(T); ok {
+		return castRes, nil
+	}
+
+	return resZero, fmt.Errorf("cannot cast value of type %T to type %T", resAny, res)
 }
 
 // EXPERIMENTAL: PHPValue converts a Go any to a PHP zval
@@ -263,6 +351,10 @@ func PHPValue(value any) unsafe.Pointer {
 
 func phpValue(value any) *C.zval {
 	var zval C.zval
+
+	if toZvalObj, ok := value.(toZval); ok {
+		return toZvalObj.toZval()
+	}
 
 	switch v := value.(type) {
 	case nil:
@@ -278,8 +370,6 @@ func phpValue(value any) *C.zval {
 	case string:
 		str := (*C.zend_string)(PHPString(v, false))
 		C.__zval_string__(&zval, str)
-	case AssociativeArray[any]:
-		return (*C.zval)(PHPAssociativeArray(v))
 	case map[string]any:
 		return (*C.zval)(PHPAssociativeArray[any](AssociativeArray[any]{Map: v}))
 	case []any:
@@ -305,23 +395,27 @@ func htIsPacked(ht *C.HashTable) bool {
 }
 
 // extractZvalValue returns a pointer to the zval value cast to the expected type
-func extractZvalValue(zval *C.zval, expectedType C.uint8_t) unsafe.Pointer {
-	if zval == nil || C.zval_get_type(zval) != expectedType {
-		return nil
+func extractZvalValue(zval *C.zval, expectedType C.uint8_t) (unsafe.Pointer, error) {
+	if zval == nil {
+		return nil, nil
+	}
+
+	if zType := C.zval_get_type(zval); zType != expectedType {
+		return nil, fmt.Errorf("zval type mismatch: expected %d, got %d", expectedType, zType)
 	}
 
 	v := unsafe.Pointer(&zval.value[0])
 
 	switch expectedType {
 	case C.IS_LONG:
-		return v
+		return v, nil
 	case C.IS_DOUBLE:
-		return v
+		return v, nil
 	case C.IS_STRING:
-		return unsafe.Pointer(*(**C.zend_string)(v))
+		return unsafe.Pointer(*(**C.zend_string)(v)), nil
 	case C.IS_ARRAY:
-		return unsafe.Pointer(*(**C.zend_array)(v))
-	default:
-		return nil
+		return unsafe.Pointer(*(**C.zend_array)(v)), nil
 	}
+
+	return nil, fmt.Errorf("unsupported zval type %d", expectedType)
 }
