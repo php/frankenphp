@@ -17,8 +17,6 @@ import (
 	"unsafe"
 )
 
-var internedStrings = sync.Map{}
-
 type copyContext struct {
 	pointers map[unsafe.Pointer]any
 }
@@ -48,10 +46,11 @@ func GoString(s unsafe.Pointer) string {
 	return goString((*C.zend_string)(s))
 }
 
+var internedStrings = sync.Map{}
+
 func goString(zendStr *C.zend_string) string {
 
-	// interned strings may be cached on the go side for faster conversion
-	// interned stings may be global or thread-local, but their number is limited
+	// interned strings can be global or thread-local, but their number is limited
 	if isInternedString(zendStr) {
 		if v, ok := internedStrings.Load(zendStr); ok {
 			return v.(string)
@@ -89,6 +88,7 @@ type AssociativeArray struct {
 	Order []string
 }
 
+// Object represents a PHP object
 type Object struct {
 	ClassName  string
 	Props      map[string]any
@@ -389,6 +389,7 @@ func phpValue(zval *C.zval, value any, ctx *copyContext) {
 	}
 }
 
+// EXPERIMENTAL: GoObject converts a PHP zend_object to a Go Object
 func GoObject(obj unsafe.Pointer) *Object {
 	return goObject((*C.zend_object)(obj), newCopyContext())
 }
@@ -427,6 +428,7 @@ func goObject(obj *C.zend_object, ctx *copyContext) *Object {
 	return goObj
 }
 
+// EXPERIMENTAL: PHPObject converts a Go Object to a PHP zend_object
 func PHPObject(obj *Object) unsafe.Pointer {
 	var zval C.zval
 	phpObject(&zval, obj, newCopyContext())
@@ -498,33 +500,15 @@ func extractZvalValue(zval *C.zval, expectedType C.uint8_t) unsafe.Pointer {
 	}
 }
 
-func zvalPtrDtor(p unsafe.Pointer) {
-	zv := (*C.zval)(p)
-	C.zval_ptr_dtor(zv)
-}
-
-func zendStringRelease(p unsafe.Pointer) {
-	zs := (*C.zend_string)(p)
-	C.zend_string_release(zs)
-}
-
-func zendHashDestroy(p unsafe.Pointer) {
-	ht := (*C.zend_array)(p)
-	C.zend_array_destroy(ht)
-}
-
-func zendObjectRelease(p unsafe.Pointer) {
-	obj := (*C.zend_object)(p)
-	C.zend_object_release(obj)
-}
-
+// equivalent of Z_TYPE_P macro
+// interpret z->u1 as a 32-bit integer, then take lowest byte
 func zvalGetType(z *C.zval) C.uint8_t {
-	// interpret z->u1 as a 32-bit integer, then take lowest byte
 	ptr := (*uint32)(unsafe.Pointer(&z.u1))
 	typeInfo := *ptr
 	return C.uint8_t(typeInfo & 0xFF)
 }
 
+// equivalent of ZSTR_IS_INTERNED macro
 // interned strings are global strings used by the zend_engine
 func isInternedString(zs *C.zend_string) bool {
 	// gc.u.type_info is at offset 4 from start of zend_refcounted_h
@@ -535,4 +519,19 @@ func isInternedString(zs *C.zend_string) bool {
 
 	gc := (*zendRefcountedH)(unsafe.Pointer(zs))
 	return (gc.typeInfo & C.IS_STR_INTERNED) != 0
+}
+
+// used in tests for cleanup
+func zendStringRelease(p unsafe.Pointer) {
+	C.zend_string_release((*C.zend_string)(p))
+}
+
+// used in tests for cleanup
+func zendHashDestroy(p unsafe.Pointer) {
+	C.zend_array_destroy((*C.zend_array)(p))
+}
+
+// used in tests for cleanup
+func zendObjectRelease(p unsafe.Pointer) {
+	C.zend_object_release((*C.zend_object)(p))
 }
