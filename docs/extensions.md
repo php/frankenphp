@@ -53,6 +53,7 @@ package example
 import "C"
 import (
     "strings"
+	"unsafe"
 
 	"github.com/dunglas/frankenphp"
 )
@@ -133,7 +134,10 @@ import (
 // export_php:function process_data_ordered(array $input): array
 func process_data_ordered_map(arr *C.zval) unsafe.Pointer {
 	// Convert PHP associative array to Go while keeping the order
-	associativeArray := frankenphp.GoAssociativeArray(unsafe.Pointer(arr))
+	associativeArray, err := frankenphp.GoAssociativeArray[any](unsafe.Pointer(arr))
+    if err != nil {
+        // handle error
+    }
 
 	// loop over the entries in order
 	for _, key := range associativeArray.Order {
@@ -143,8 +147,8 @@ func process_data_ordered_map(arr *C.zval) unsafe.Pointer {
 
 	// return an ordered array
 	// if 'Order' is not empty, only the key-value pairs in 'Order' will be respected
-	return frankenphp.PHPAssociativeArray(frankenphp.AssociativeArray{
-		Map: map[string]any{
+	return frankenphp.PHPAssociativeArray[string](frankenphp.AssociativeArray[string]{
+		Map: map[string]string{
 			"key1": "value1",
 			"key2": "value2",
 		},
@@ -156,7 +160,10 @@ func process_data_ordered_map(arr *C.zval) unsafe.Pointer {
 func process_data_unordered_map(arr *C.zval) unsafe.Pointer {
 	// Convert PHP associative array to a Go map without keeping the order
 	// ignoring the order will be more performant
-	goMap := frankenphp.GoMap(unsafe.Pointer(arr))
+	goMap, err := frankenphp.GoMap[any](unsafe.Pointer(arr))
+    if err != nil {
+        // handle error
+    }
 
 	// loop over the entries in no specific order
 	for key, value := range goMap {
@@ -164,7 +171,7 @@ func process_data_unordered_map(arr *C.zval) unsafe.Pointer {
 	}
 
 	// return an unordered array
-	return frankenphp.PHPMap(map[string]any{
+	return frankenphp.PHPMap(map[string]string {
 		"key1": "value1",
 		"key2": "value2",
 	})
@@ -173,7 +180,10 @@ func process_data_unordered_map(arr *C.zval) unsafe.Pointer {
 // export_php:function process_data_packed(array $input): array
 func process_data_packed(arr *C.zval) unsafe.Pointer {
 	// Convert PHP packed array to Go
-	goSlice := frankenphp.GoPackedArray(unsafe.Pointer(arr), false)
+	goSlice, err := frankenphp.GoPackedArray(unsafe.Pointer(arr), false)
+    if err != nil {
+        // handle error
+    }
 
 	// loop over the slice in order
 	for index, value := range goSlice {
@@ -181,7 +191,7 @@ func process_data_packed(arr *C.zval) unsafe.Pointer {
 	}
 
 	// return a packed array
-	return frankenphp.PHPackedArray([]any{"value1", "value2", "value3"})
+	return frankenphp.PHPPackedArray([]string{"value1", "value2", "value3"})
 }
 ```
 

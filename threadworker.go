@@ -4,6 +4,7 @@ package frankenphp
 import "C"
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"path/filepath"
 	"time"
@@ -245,7 +246,12 @@ func go_frankenphp_finish_worker_request(threadIndex C.uintptr_t, retval *C.zval
 	thread := phpThreads[threadIndex]
 	fc := thread.getRequestContext()
 	if retval != nil {
-		fc.handlerReturn = GoValue(unsafe.Pointer(retval))
+		r, err := GoValue[any](unsafe.Pointer(retval))
+		if err != nil {
+			logger.Error(fmt.Sprintf("cannot convert return value: %s", err))
+		}
+
+		fc.handlerReturn = r
 	}
 
 	fc.closeContext()
