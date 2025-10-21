@@ -262,37 +262,37 @@ func goValue(zval *C.zval, ctx *copyContext) any {
 		return false
 	case C.IS_TRUE:
 		return true
-	case C.IS_OBJECT:
-		obj := (*C.zend_object)(extractZvalValue(zval, C.IS_OBJECT))
-		if obj == nil {
-			return nil
-		}
-		goObj := goObject(obj, ctx)
-
-		return goObj
 	case C.IS_LONG:
-		longPtr := (*C.zend_long)(extractZvalValue(zval, C.IS_LONG))
+		longPtr := (*C.zend_long)(unsafe.Pointer(&zval.value[0]))
 		if longPtr != nil {
 			return int64(*longPtr)
 		}
 
 		return int64(0)
 	case C.IS_DOUBLE:
-		doublePtr := (*C.double)(extractZvalValue(zval, C.IS_DOUBLE))
+		doublePtr := (*C.double)(unsafe.Pointer(&zval.value[0]))
 		if doublePtr != nil {
 			return float64(*doublePtr)
 		}
 
 		return float64(0)
 	case C.IS_STRING:
-		str := (*C.zend_string)(extractZvalValue(zval, C.IS_STRING))
+		str := *(**C.zend_string)(unsafe.Pointer(&zval.value[0]))
 		if str == nil {
 			return ""
 		}
 
 		return goString(str)
+	case C.IS_OBJECT:
+		obj := *(**C.zend_object)(unsafe.Pointer(&zval.value[0]))
+		if obj == nil {
+			return nil
+		}
+		goObj := goObject(obj, ctx)
+
+		return goObj
 	case C.IS_ARRAY:
-		array := (*C.zend_array)(extractZvalValue(zval, C.IS_ARRAY))
+		array := *(**C.zend_array)(unsafe.Pointer(&zval.value[0]))
 		if array == nil {
 			return nil
 		}
@@ -309,7 +309,7 @@ func goValue(zval *C.zval, ctx *copyContext) any {
 		logger.Debug("copying references is currently not supported")
 
 		return nil
-		//ref := (*C.zend_reference)(extractZvalValue(zval, C.IS_REFERENCE))
+		//ref := *(**C.zend_reference)(unsafe.Pointer(&zval.value[0]))
 		//if ref == nil {
 		//	return nil
 		//}
@@ -432,9 +432,12 @@ func goObject(obj *C.zend_object, ctx *copyContext) *Object {
 
 // EXPERIMENTAL: PHPObject converts a Go Object to a PHP zend_object
 func PHPObject(obj *Object) unsafe.Pointer {
+	if obj == nil {
+		panic("PHPObject received a nil Object pointer")
+	}
 	var zval C.zval
 	phpObject(&zval, obj, newCopyContext())
-	zObj := (*C.zend_object)(extractZvalValue(&zval, C.IS_OBJECT))
+	zObj := *(**C.zend_object)(unsafe.Pointer(&zval.value[0]))
 
 	return unsafe.Pointer(zObj)
 }
@@ -456,12 +459,14 @@ func phpObject(zval *C.zval, obj *Object, ctx *copyContext) {
 	}
 
 	zendObj := C.__php_object_init__(zval, toUnsafeChar(obj.ClassName), C.size_t(len(obj.ClassName)), obj.ce)
-	ctx.add(unsafe.Pointer(obj), zendObj)
 	if zendObj == nil {
 		panic("class not found: " + obj.ClassName)
 	}
 
+	// add the object to the context before setting properties to handle recursive references
+	ctx.add(unsafe.Pointer(obj), zendObj)
 	zendObj.properties = phpArray(obj.Props, nil, ctx)
+
 	// TODO: wakeup?
 }
 
@@ -475,32 +480,6 @@ func htIsPacked(ht *C.zend_array) bool {
 	flags := *(*C.uint32_t)(unsafe.Pointer(&ht.u[0]))
 
 	return (flags & C.HASH_FLAG_PACKED) != 0
-}
-
-// extractZvalValue returns a pointer to the zval value cast to the expected type
-func extractZvalValue(zval *C.zval, expectedType C.uint8_t) unsafe.Pointer {
-	if zval == nil || zvalGetType(zval) != expectedType {
-		return nil
-	}
-
-	v := unsafe.Pointer(&zval.value[0])
-
-	switch expectedType {
-	case C.IS_LONG:
-		return v
-	case C.IS_DOUBLE:
-		return v
-	case C.IS_OBJECT:
-		return unsafe.Pointer(*(**C.zend_object)(v))
-	case C.IS_STRING:
-		return unsafe.Pointer(*(**C.zend_string)(v))
-	case C.IS_ARRAY:
-		return unsafe.Pointer(*(**C.zend_array)(v))
-	case C.IS_REFERENCE:
-		return unsafe.Pointer(*(**C.zend_reference)(v))
-	default:
-		return nil
-	}
 }
 
 // equivalent of Z_TYPE_P macro
