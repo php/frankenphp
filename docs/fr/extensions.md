@@ -75,7 +75,7 @@ Il y a deux choses importantes à noter ici :
 - Une directive `//export_php:function` définit la signature de la fonction en PHP. C'est ainsi que le générateur sait comment générer la fonction PHP avec les bons paramètres et le bon type de retour ;
 - La fonction doit retourner un `unsafe.Pointer`. FrankenPHP fournit une API pour vous aider avec le jonglage de types entre C et Go.
 
-Alors que le premier point parle de lui-même, le second peut être plus difficile à appréhender. Plongeons plus profondément dans la jonglage de types dans la section suivante.
+Alors que le premier point parle de lui-même, le second peut être plus difficile à appréhender. Plongeons plus profondément dans le jonglage de types dans la section suivante.
 
 ### Jonglage de Types
 
