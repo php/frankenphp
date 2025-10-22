@@ -15,6 +15,11 @@ type mockWorker struct {
 	Worker
 }
 
+func (*mockWorker) OnShutdown(threadId int) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func TestWorkerExtension(t *testing.T) {
 	// Create a mock worker extension
 	mockExt := &mockWorker{
@@ -50,7 +55,7 @@ func TestWorkerExtension(t *testing.T) {
 	done := make(chan struct{})
 
 	// Inject the request into the worker through the extension
-	mockExt.InjectRequest(&WorkerRequest{
+	mockExt.SendRequest(&WorkerRequest{
 		Request:  req,
 		Response: w,
 		AfterFunc: func(callbackReturn any) {
