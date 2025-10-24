@@ -58,7 +58,8 @@ Windows | MINGW64_NT*)
 esac
 
 if [ -z "${THE_ARCH_BIN}" ]; then
-	echo "❗ FrankenPHP is not supported on ${OS} and ${ARCH}"
+	echo "❗ Precompiled binaries are not available for ${ARCH}-${OS}"
+	echo "❗ You can compile from sources by following the documentation at: https://frankenphp.dev/docs/compile/"
 	exit 1
 fi
 
