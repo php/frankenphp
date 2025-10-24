@@ -214,8 +214,10 @@ func go_register_variables(threadIndex C.uintptr_t, trackVarsArray *C.zval) {
 	thread := phpThreads[threadIndex]
 	fc := thread.getRequestContext()
 
-	addKnownVariablesToServer(thread, fc, trackVarsArray)
-	addHeadersToServer(fc, trackVarsArray)
+	if fc.request != nil {
+		addKnownVariablesToServer(thread, fc, trackVarsArray)
+		addHeadersToServer(fc, trackVarsArray)
+	}
 
 	// The Prepared Environment is registered last and can overwrite any previous values
 	addPreparedEnvToServer(fc, trackVarsArray)
@@ -279,6 +281,10 @@ func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) 
 	thread := phpThreads[threadIndex]
 	fc := thread.getRequestContext()
 	request := fc.request
+
+	if request == nil {
+		return C.bool(fc.worker != nil)
+	}
 
 	authUser, authPassword, ok := request.BasicAuth()
 	if ok {

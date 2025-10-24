@@ -156,7 +156,7 @@ void register_all_classes() {
 
 PHP_MINIT_FUNCTION({{.BaseName}}) {
     {{ if .Classes}}register_all_classes();{{end}}
-    
+
     {{- range .Constants}}
     {{- if eq .ClassName ""}}
     {{if .IsIota}}REGISTER_LONG_CONSTANT("{{.Name}}", {{.Name}}, CONST_CS | CONST_PERSISTENT);
@@ -180,4 +180,3 @@ zend_module_entry {{.BaseName}}_module_entry = {STANDARD_MODULE_HEADER,
                                          NULL,                      /* MINFO */
                                          "1.0.0",                   /* Version */
                                          STANDARD_MODULE_PROPERTIES};
-

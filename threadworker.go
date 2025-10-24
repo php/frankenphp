@@ -4,6 +4,7 @@ package frankenphp
 import "C"
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"path/filepath"
 	"time"
@@ -20,12 +21,12 @@ type workerThread struct {
 	dummyContext    *frankenPHPContext
 	workerContext   *frankenPHPContext
 	backoff         *exponentialBackoff
-	externalWorker  WorkerExtension
+	externalWorker  Worker
 	isBootingScript bool // true if the worker has not reached frankenphp_handle_request yet
 }
 
 func convertToWorkerThread(thread *phpThread, worker *worker) {
-	externalWorker := externalWorkers[worker.name]
+	externalWorker := extensionWorkers[worker.name]
 
 	thread.setHandler(&workerThread{
 		state:  thread.state,
@@ -204,7 +205,11 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 	handler.workerContext = fc
 	handler.state.markAsWaiting(false)
 
-	logger.LogAttrs(ctx, slog.LevelDebug, "request handling started", slog.String("worker", handler.worker.name), slog.Int("thread", handler.thread.threadIndex), slog.String("url", fc.request.RequestURI))
+	if fc.request == nil {
+		logger.LogAttrs(ctx, slog.LevelDebug, "request handling started", slog.String("worker", handler.worker.name), slog.Int("thread", handler.thread.threadIndex))
+	} else {
+		logger.LogAttrs(ctx, slog.LevelDebug, "request handling started", slog.String("worker", handler.worker.name), slog.Int("thread", handler.thread.threadIndex), slog.String("url", fc.request.RequestURI))
+	}
 
 	return true, fc.handlerParameters
 }
@@ -217,10 +222,18 @@ func go_frankenphp_worker_handle_request_start(threadIndex C.uintptr_t) (C.bool,
 	hasRequest, parameters := handler.waitForWorkerRequest()
 
 	if parameters != nil {
-		p := PHPValue(parameters)
-		handler.thread.Pin(p)
+		var ptr unsafe.Pointer
 
-		return C.bool(hasRequest), p
+		switch p := parameters.(type) {
+		case unsafe.Pointer:
+			ptr = p
+
+		default:
+			ptr = PHPValue(p)
+		}
+		handler.thread.Pin(ptr)
+
+		return C.bool(hasRequest), ptr
 	}
 
 	return C.bool(hasRequest), nil
@@ -233,13 +246,22 @@ func go_frankenphp_finish_worker_request(threadIndex C.uintptr_t, retval *C.zval
 	thread := phpThreads[threadIndex]
 	fc := thread.getRequestContext()
 	if retval != nil {
-		fc.handlerReturn = GoValue(unsafe.Pointer(retval))
+		r, err := GoValue[any](unsafe.Pointer(retval))
+		if err != nil {
+			logger.Error(fmt.Sprintf("cannot convert return value: %s", err))
+		}
+
+		fc.handlerReturn = r
 	}
 
 	fc.closeContext()
 	thread.handler.(*workerThread).workerContext = nil
 
-	fc.logger.LogAttrs(context.Background(), slog.LevelDebug, "request handling finished", slog.String("worker", fc.scriptFilename), slog.Int("thread", thread.threadIndex), slog.String("url", fc.request.RequestURI))
+	if fc.request == nil {
+		fc.logger.LogAttrs(context.Background(), slog.LevelDebug, "request handling finished", slog.String("worker", fc.worker.name), slog.Int("thread", thread.threadIndex))
+	} else {
+		fc.logger.LogAttrs(context.Background(), slog.LevelDebug, "request handling finished", slog.String("worker", fc.worker.name), slog.Int("thread", thread.threadIndex), slog.String("url", fc.request.RequestURI))
+	}
 }
 
 // when frankenphp_finish_request() is directly called from PHP

@@ -50,7 +50,7 @@ func (fp *FuncParser) parse(filename string) (functions []phpFunction, err error
 				continue
 			}
 
-			if err := validator.validateScalarTypes(*phpFunc); err != nil {
+			if err := validator.validateTypes(*phpFunc); err != nil {
 				fmt.Printf("Warning: Function '%s' uses unsupported types: %v\n", phpFunc.Name, err)
 
 				continue

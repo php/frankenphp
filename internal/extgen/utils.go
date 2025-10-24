@@ -26,7 +26,7 @@ func NamespacedName(namespace, name string) string {
 	if namespace == "" {
 		return name
 	}
-	namespacePart := strings.ReplaceAll(namespace, "\\", "_")
+	namespacePart := strings.ReplaceAll(namespace, `\`, "_")
 	return namespacePart + "_" + name
 }
 

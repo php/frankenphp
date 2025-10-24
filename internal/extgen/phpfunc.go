@@ -50,21 +50,21 @@ func (pfg *PHPFuncGenerator) generateGoCall(fn phpFunction) string {
 		return fmt.Sprintf("    zend_array *result = %s(%s);", fn.Name, callParams)
 	}
 
+	if fn.ReturnType == phpMixed {
+		return fmt.Sprintf("    zval *result = %s(%s);", fn.Name, callParams)
+	}
+
 	return fmt.Sprintf("    %s result = %s(%s);", pfg.getCReturnType(fn.ReturnType), fn.Name, callParams)
 }
 
 func (pfg *PHPFuncGenerator) getCReturnType(returnType phpType) string {
 	switch returnType {
-	case phpString:
-		return "zend_string*"
 	case phpInt:
 		return "long"
 	case phpFloat:
 		return "double"
 	case phpBool:
 		return "int"
-	case phpArray:
-		return "zend_array*"
 	default:
 		return "void"
 	}

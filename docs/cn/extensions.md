@@ -146,11 +146,11 @@ func process_data(arr *C.zval) unsafe.Pointer {
 
 **可用方法：**
 
-- `SetInt(key int64, value interface{})` - 使用整数键设置值
-- `SetString(key string, value interface{})` - 使用字符串键设置值
-- `Append(value interface{})` - 使用下一个可用整数键添加值
+- `SetInt(key int64, value any)` - 使用整数键设置值
+- `SetString(key string, value any)` - 使用字符串键设置值
+- `Append(value any)` - 使用下一个可用整数键添加值
 - `Len() uint32` - 获取元素数量
-- `At(index uint32) (PHPKey, interface{})` - 获取索引处的键值对
+- `At(index uint32) (PHPKey, any)` - 获取索引处的键值对
 - `frankenphp.PHPArray(arr *frankenphp.Array) unsafe.Pointer` - 转换为 PHP 数组
 
 ### 声明原生 PHP 类

@@ -55,7 +55,7 @@ func initWorkers(opt []workerOpt) error {
 				// create a pipe from the external worker to the main worker
 				// note: this is locked to the initial thread size the external worker requested
 				if workerThread, ok := thread.handler.(*workerThread); ok && workerThread.externalWorker != nil {
-					go startExternalWorkerPipe(w, workerThread.externalWorker, thread)
+					go startWorker(w, workerThread.externalWorker, thread)
 				}
 				workersReady.Done()
 			}()

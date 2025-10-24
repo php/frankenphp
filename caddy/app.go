@@ -42,7 +42,7 @@ type FrankenPHPApp struct {
 	logger  *slog.Logger
 }
 
-var iniError = errors.New("'php_ini' must be in the format: php_ini \"<key>\" \"<value>\"")
+var iniError = errors.New(`"php_ini" must be in the format: php_ini "<key>" "<value>"`)
 
 // CaddyModule returns the Caddy module information.
 func (f FrankenPHPApp) CaddyModule() caddy.ModuleInfo {
@@ -194,7 +194,7 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 
 				v, err := time.ParseDuration(d.Val())
 				if err != nil {
-					return errors.New("max_wait_time must be a valid duration (example: 10s)")
+					return d.Err("max_wait_time must be a valid duration (example: 10s)")
 				}
 
 				f.MaxWaitTime = v
@@ -202,14 +202,14 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				parseIniLine := func(d *caddyfile.Dispenser) error {
 					key := d.Val()
 					if !d.NextArg() {
-						return iniError
+						return d.WrapErr(iniError)
 					}
 					if f.PhpIni == nil {
 						f.PhpIni = make(map[string]string)
 					}
 					f.PhpIni[key] = d.Val()
 					if d.NextArg() {
-						return iniError
+						return d.WrapErr(iniError)
 					}
 
 					return nil
@@ -226,7 +226,7 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 
 				if !isBlock {
 					if !d.NextArg() {
-						return iniError
+						return d.WrapErr(iniError)
 					}
 					err := parseIniLine(d)
 					if err != nil {
@@ -243,12 +243,12 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					wc.FileName = filepath.Join(frankenphp.EmbeddedAppPath, wc.FileName)
 				}
 				if strings.HasPrefix(wc.Name, "m#") {
-					return fmt.Errorf(`global worker names must not start with "m#": %q`, wc.Name)
+					return d.Errf(`global worker names must not start with "m#": %q`, wc.Name)
 				}
 				// check for duplicate workers
 				for _, existingWorker := range f.Workers {
 					if existingWorker.FileName == wc.FileName {
-						return fmt.Errorf("global workers must not have duplicate filenames: %q", wc.FileName)
+						return d.Errf("global workers must not have duplicate filenames: %q", wc.FileName)
 					}
 				}
 
@@ -261,7 +261,7 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	}
 
 	if f.MaxThreads > 0 && f.NumThreads > 0 && f.MaxThreads < f.NumThreads {
-		return errors.New(`"max_threads"" must be greater than or equal to "num_threads"`)
+		return d.Err(`"max_threads"" must be greater than or equal to "num_threads"`)
 	}
 
 	return nil
@@ -279,3 +279,8 @@ func parseGlobalOption(d *caddyfile.Dispenser, _ any) (any, error) {
 		Value: caddyconfig.JSON(app, nil),
 	}, nil
 }
+
+var (
+	_ caddy.App         = (*FrankenPHPApp)(nil)
+	_ caddy.Provisioner = (*FrankenPHPApp)(nil)
+)

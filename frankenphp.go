@@ -215,7 +215,7 @@ func Init(options ...Option) error {
 	registerExtensions()
 
 	// add registered external workers
-	for _, ew := range externalWorkers {
+	for _, ew := range extensionWorkers {
 		options = append(options, WithWorkers(ew.Name(), ew.FileName(), ew.GetMinThreads(), WithWorkerEnv(ew.Env())))
 	}
 
@@ -382,7 +382,7 @@ func go_apache_request_headers(threadIndex C.uintptr_t) (*C.go_string, C.size_t)
 	if fc.responseWriter == nil {
 		// worker mode, not handling a request
 
-		logger.LogAttrs(context.Background(), slog.LevelDebug, "apache_request_headers() called in non-HTTP context", slog.String("worker", fc.scriptFilename))
+		logger.LogAttrs(context.Background(), slog.LevelDebug, "apache_request_headers() called in non-HTTP context", slog.String("worker", fc.worker.name))
 
 		return nil, 0
 	}
@@ -475,9 +475,18 @@ func go_write_headers(threadIndex C.uintptr_t, status C.int, headers *C.zend_lli
 		current = current.next
 	}
 
-	fc.responseWriter.WriteHeader(int(status))
+	goStatus := int(status)
 
-	if status >= 100 && status < 200 {
+	// go panics on invalid status code
+	// https://github.com/golang/go/blob/9b8742f2e79438b9442afa4c0a0139d3937ea33f/src/net/http/server.go#L1162
+	if goStatus < 100 || goStatus > 999 {
+		logger.Warn(fmt.Sprintf("Invalid response status code %v", goStatus))
+		goStatus = 500
+	}
+
+	fc.responseWriter.WriteHeader(goStatus)
+
+	if goStatus >= 100 && goStatus < 200 {
 		// Clear headers, it's not automatically done by ResponseWriter.WriteHeader() for 1xx responses
 		h := fc.responseWriter.Header()
 		for k := range h {
@@ -527,8 +536,12 @@ func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (r
 
 //export go_read_cookies
 func go_read_cookies(threadIndex C.uintptr_t) *C.char {
-	cookies := phpThreads[threadIndex].getRequestContext().request.Header.Values("Cookie")
-	cookie := strings.Join(cookies, "; ")
+	request := phpThreads[threadIndex].getRequestContext().request
+	if request == nil {
+		return nil
+	}
+
+	cookie := strings.Join(request.Header.Values("Cookie"), "; ")
 	if cookie == "" {
 		return nil
 	}

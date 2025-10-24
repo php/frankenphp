@@ -75,7 +75,7 @@ Il y a deux choses importantes à noter ici :
 - Une directive `//export_php:function` définit la signature de la fonction en PHP. C'est ainsi que le générateur sait comment générer la fonction PHP avec les bons paramètres et le bon type de retour ;
 - La fonction doit retourner un `unsafe.Pointer`. FrankenPHP fournit une API pour vous aider avec le jonglage de types entre C et Go.
 
-Alors que le premier point parle de lui-même, le second peut être plus difficile à appréhender. Plongeons plus profondément dans la jonglage de types dans la section suivante.
+Alors que le premier point parle de lui-même, le second peut être plus difficile à appréhender. Plongeons plus profondément dans le jonglage de types dans la section suivante.
 
 ### Jonglage de Types
 
@@ -146,11 +146,11 @@ func process_data(arr *C.zval) unsafe.Pointer {
 
 **Méthodes disponibles :**
 
-- `SetInt(key int64, value interface{})` - Définir une valeur avec une clé entière
-- `SetString(key string, value interface{})` - Définir une valeur avec une clé chaîne
-- `Append(value interface{})` - Ajouter une valeur avec la prochaine clé entière disponible
+- `SetInt(key int64, value any)` - Définir une valeur avec une clé entière
+- `SetString(key string, value any)` - Définir une valeur avec une clé chaîne
+- `Append(value any)` - Ajouter une valeur avec la prochaine clé entière disponible
 - `Len() uint32` - Obtenir le nombre d'éléments
-- `At(index uint32) (PHPKey, interface{})` - Obtenir la paire clé-valeur à l'index
+- `At(index uint32) (PHPKey, any)` - Obtenir la paire clé-valeur à l'index
 - `frankenphp.PHPArray(arr *frankenphp.Array) unsafe.Pointer` - Convertir vers un tableau PHP
 
 ### Déclarer une Classe PHP Native
