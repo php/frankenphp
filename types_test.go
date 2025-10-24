@@ -76,7 +76,7 @@ func TestPHPPackedArray(t *testing.T) {
 		originalSlice := []string{"bar1", "bar2"}
 
 		phpArray := PHPPackedArray(originalSlice)
-        defer zendHashDestroy(phpArray)
+		defer zendHashDestroy(phpArray)
 		convertedSlice, err := GoPackedArray[string](phpArray)
 		require.NoError(t, err)
 
@@ -93,7 +93,7 @@ func TestPHPPackedArrayToGoMap(t *testing.T) {
 		}
 
 		phpArray := PHPPackedArray(originalSlice)
-    	defer zendHashDestroy(phpArray)
+		defer zendHashDestroy(phpArray)
 		convertedMap, err := GoMap[string](phpArray)
 		require.NoError(t, err)
 
@@ -115,7 +115,7 @@ func TestPHPAssociativeArrayToPacked(t *testing.T) {
 		phpArray := PHPAssociativeArray(originalArray)
 		defer zendHashDestroy(phpArray)
 		convertedSlice, err := GoPackedArray[string](phpArray)
-        require.NoError(t, err)
+		require.NoError(t, err)
 
 		assert.Equal(t, expectedSlice, convertedSlice, "convert an associative array to a slice")
 	})
@@ -138,7 +138,7 @@ func TestNestedMixedArray(t *testing.T) {
 		}
 
 		phpArray := PHPMap(originalArray)
-        defer zendHashDestroy(phpArray)
+		defer zendHashDestroy(phpArray)
 		convertedArray, err := GoMap[any](phpArray)
 		require.NoError(t, err)
 

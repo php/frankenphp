@@ -27,7 +27,7 @@ import (
 )
 
 type toZval interface {
-	toZval() *C.zval
+	toZval(*C.zval)
 }
 
 // EXPERIMENTAL: GoString copies a zend_string to a Go string.
@@ -64,8 +64,8 @@ type AssociativeArray[T any] struct {
 	Order []string
 }
 
-func (a AssociativeArray[T]) toZval() *C.zval {
-	return (*C.zval)(PHPAssociativeArray[T](a))
+func (a AssociativeArray[T]) toZval(zval *C.zval) {
+	C.__zval_arr__(zval, (*C.zend_array)(PHPAssociativeArray[T](a)))
 }
 
 // EXPERIMENTAL: GoAssociativeArray converts a zend_array to a Go AssociativeArray
@@ -232,7 +232,6 @@ func phpArray[T any](entries map[string]T, order []string) unsafe.Pointer {
 	} else {
 		zendArray = createNewArray((uint32)(len(entries)))
 		for key, val := range entries {
-			fmt.Println("adding key", key, "val", val)
 			zval := phpValue(val)
 			C.zend_hash_str_update(zendArray, toUnsafeChar(key), C.size_t(len(key)), zval)
 		}
@@ -372,11 +371,9 @@ func phpValue(value any) *C.zval {
 	var zval C.zval
 
 	if toZvalObj, ok := value.(toZval); ok {
-		fmt.Println("wtf")
-		return toZvalObj.toZval()
+		toZvalObj.toZval(&zval)
+		return &zval
 	}
-
-	fmt.Println("type", reflect.TypeOf(value))
 
 	switch v := value.(type) {
 	case nil:
@@ -397,10 +394,8 @@ func phpValue(value any) *C.zval {
 		str := (*C.zend_string)(PHPString(v, false))
 		C.__zval_string__(&zval, str)
 	case AssociativeArray[any]:
-		fmt.Println("associative arr")
 		C.__zval_arr__(&zval, (*C.zend_array)(PHPAssociativeArray[any](v)))
 	case map[string]any:
-		fmt.Println("map arr")
 		C.__zval_arr__(&zval, (*C.zend_array)(PHPMap[any](v)))
 	case []any:
 		C.__zval_arr__(&zval, (*C.zend_array)(PHPPackedArray[any](v)))
