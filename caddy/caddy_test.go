@@ -1426,9 +1426,7 @@ func TestWorkerMatchDirectiveWithoutFileServer(t *testing.T) {
 
 func TestServerWithTaskWorker(t *testing.T) {
 	tester := caddytest.NewTester(t)
-	taskWorker1, err := fastabs.FastAbs("../testdata/tasks/task-worker.php")
-	require.NoError(t, err)
-	taskWorker2, err := fastabs.FastAbs("../testdata/tasks/task-worker.php")
+	taskWorker, err := fastabs.FastAbs("../testdata/tasks/task-worker.php")
 	require.NoError(t, err)
 	tester.InitServer(`
 		{
@@ -1436,32 +1434,20 @@ func TestServerWithTaskWorker(t *testing.T) {
 			admin localhost:2999
 
 			frankenphp {
-				num_threads 3
-				task_worker `+taskWorker1+` {
-					args foo bar
+				num_threads 2
+				task_worker `+taskWorker+` {
 					num 1
 				}
-				task_worker `+taskWorker2+` {
-                    args foo bar
-                    num 1
-                }
 			}
 		}
 		`, "caddyfile")
 
 	debugState := getDebugState(t, tester)
-	require.Len(t, debugState.ThreadDebugStates, 3, "there should be 3 threads")
+	require.Len(t, debugState.ThreadDebugStates, 2, "there should be 3 threads")
 	require.Equal(
 		t,
 		debugState.ThreadDebugStates[1].Name,
-		"Task Worker PHP Thread - "+taskWorker1,
+		"Task Worker PHP Thread - "+taskWorker,
 		"the second spawned thread should be the task worker",
-	)
-
-	require.Equal(
-		t,
-		debugState.ThreadDebugStates[2].Name,
-		"Task Worker PHP Thread - "+taskWorker2,
-		"the third spawned thread should belong to the second task worker",
 	)
 }

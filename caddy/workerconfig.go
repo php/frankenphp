@@ -122,8 +122,6 @@ func parseWorkerConfig(d *caddyfile.Dispenser) (workerConfig, error) {
 			}
 
 			wc.MaxConsecutiveFailures = int(v)
-		case "args":
-			wc.Args = d.RemainingArgs()
 		default:
 			allowedDirectives := "name, file, num, env, watch, match, max_consecutive_failures"
 			return wc, wrongSubDirectiveError("worker", allowedDirectives, v)
