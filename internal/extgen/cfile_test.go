@@ -313,7 +313,7 @@ func TestCFileSpecialCharacters(t *testing.T) {
 			content, err := cGen.buildContent()
 			require.NoError(t, err)
 
-			expectedInclude := "#include \"" + tt.expected + ".h\""
+			expectedInclude := `#include "` + tt.expected + `.h"`
 			assert.Contains(t, content, expectedInclude, "Content should contain include: %s", expectedInclude)
 		})
 	}
@@ -424,8 +424,8 @@ func TestCFileConstants(t *testing.T) {
 				},
 			},
 			contains: []string{
-				"REGISTER_LONG_CONSTANT(\"GLOBAL_INT\", 42, CONST_CS | CONST_PERSISTENT);",
-				"REGISTER_STRING_CONSTANT(\"GLOBAL_STRING\", \"test\", CONST_CS | CONST_PERSISTENT);",
+				`REGISTER_LONG_CONSTANT("GLOBAL_INT", 42, CONST_CS | CONST_PERSISTENT);`,
+				`REGISTER_STRING_CONSTANT("GLOBAL_STRING", "test", CONST_CS | CONST_PERSISTENT);`,
 			},
 		},
 	}

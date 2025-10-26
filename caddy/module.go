@@ -71,9 +71,8 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 	}
 
 	for i, wc := range f.Workers {
-
 		// make the file path absolute from the public directory
-		// this can only be done if the root is definied inside php_server
+		// this can only be done if the root is defined inside php_server
 		if !filepath.IsAbs(wc.FileName) && f.Root != "" {
 			wc.FileName = filepath.Join(f.Root, wc.FileName)
 		}
@@ -602,7 +601,7 @@ func prependWorkerRoutes(routes caddyhttp.RouteList, h httpcaddyfile.Helper, f F
 	// forward matching routes to the PHP handler
 	routes = append(routes, caddyhttp.Route{
 		MatcherSetsRaw: []caddy.ModuleMap{
-			caddy.ModuleMap{"path": h.JSON(allWorkerMatches)},
+			{"path": h.JSON(allWorkerMatches)},
 		},
 		HandlersRaw: []json.RawMessage{
 			caddyconfig.JSONModuleObject(f, "handler", "php", nil),
@@ -611,3 +610,10 @@ func prependWorkerRoutes(routes caddyhttp.RouteList, h httpcaddyfile.Helper, f F
 
 	return routes
 }
+
+// Interface guards
+var (
+	_ caddy.Provisioner           = (*FrankenPHPModule)(nil)
+	_ caddyhttp.MiddlewareHandler = (*FrankenPHPModule)(nil)
+	_ caddyfile.Unmarshaler       = (*FrankenPHPModule)(nil)
+)

@@ -1,16 +1,37 @@
 # Configuration
 
-FrankenPHP, Caddy as well as the Mercure and Vulcain modules can be configured using [the formats supported by Caddy](https://caddyserver.com/docs/getting-started#your-first-config).
+FrankenPHP, Caddy as well as the [Mercure](mercure.md) and [Vulcain](https://vulcain.rocks) modules can be configured using [the formats supported by Caddy](https://caddyserver.com/docs/getting-started#your-first-config).
 
-In [the Docker images](docker.md), the `Caddyfile` is located at `/etc/frankenphp/Caddyfile`.
-The static binary will also look for the `Caddyfile` in the directory where the `frankenphp run` command is executed.
+The most common format is the `Caddyfile`, which is a simple, human-readable text format.
+By default, FrankenPHP will look for a `Caddyfile` in the current directory.
 You can specify a custom path with the `-c` or `--config` option.
+
+A minimal `Caddyfile` to serve a PHP application is shown below:
+
+```caddyfile
+# The hostname to respond to
+localhost
+
+# Optionaly, the directory to serve files from, otherwise defaults to the current directory
+#root public/
+php_server
+```
+
+A more advanced `Caddyfile` enabling more features and providing convenient environment variables is provided [in the FrankenPHP repository](https://github.com/php/frankenphp/blob/main/caddy/frankenphp/Caddyfile),
+and with Docker images.
 
 PHP itself can be configured [using a `php.ini` file](https://www.php.net/manual/en/configuration.file.php).
 
-Depending on your installation method, the PHP interpreter will look for configuration files in locations described below.
+Depending on your installation method, FrankenPHP and the PHP interpreter will look for configuration files in locations described below.
 
 ## Docker
+
+FrankenPHP:
+
+- `/etc/frankenphp/Caddyfile`: the main configuration file
+- `/etc/frankenphp/caddy.d/*.caddy`: additional configuration files that are loaded automatically
+
+PHP:
 
 - `php.ini`: `/usr/local/etc/php/php.ini` (no `php.ini` is provided by default)
 - additional configuration files: `/usr/local/etc/php/conf.d/*.ini`
@@ -29,11 +50,24 @@ RUN cp $PHP_INI_DIR/php.ini-development $PHP_INI_DIR/php.ini
 
 ## RPM and Debian packages
 
+FrankenPHP:
+
+- `/etc/frankenphp/Caddyfile`: the main configuration file
+- `/etc/frankenphp/caddy.d/*.caddy`: additional configuration files that are loaded automatically
+
+PHP:
+
 - `php.ini`: `/etc/frankenphp/php.ini` (a `php.ini` file with production presets is provided by default)
 - additional configuration files: `/etc/frankenphp/php.d/*.ini`
 - PHP extensions: `/usr/lib/frankenphp/modules/`
 
 ## Static binary
+
+FrankenPHP:
+
+- In the current working directory: `Caddyfile`
+
+PHP:
 
 - `php.ini`: The directory in which `frankenphp run` or `frankenphp php-server` is executed, then `/etc/frankenphp/php.ini`
 - additional configuration files: `/etc/frankenphp/php.d/*.ini`
@@ -229,34 +263,6 @@ and otherwise forward the request to the worker matching the path pattern.
 }
 ```
 
-### Full Duplex (HTTP/1)
-
-When using HTTP/1.x, it may be desirable to enable full-duplex mode to allow writing a response before the entire body
-has been read. (for example: WebSocket, Server-Sent Events, etc.)
-
-This is an opt-in configuration that needs to be added to the global options in the `Caddyfile`:
-
-```caddyfile
-{
-  servers {
-    enable_full_duplex
-  }
-}
-```
-
-> [!CAUTION]
->
-> Enabling this option may cause old HTTP/1.x clients that don't support full-duplex to deadlock.
-> This can also be configured using the `CADDY_GLOBAL_OPTIONS` environment config:
-
-```sh
-CADDY_GLOBAL_OPTIONS="servers {
-  enable_full_duplex
-}"
-```
-
-You can find more information about this setting in the [Caddy documentation](https://caddyserver.com/docs/caddyfile/options#enable-full-duplex).
-
 ## Environment Variables
 
 The following environment variables can be used to inject Caddy directives in the `Caddyfile` without modifying it:
@@ -292,6 +298,43 @@ You can also change the PHP configuration using the `php_ini` directive in the `
     }
 }
 ```
+
+### Disabling HTTPS
+
+By default, FrankenPHP will automatically enable HTTPS using for all the hostnames, including `localhost`.
+If you want to disable HTTPS (for example in a development environment), you can set the `SERVER_NAME` environment variable to `http://` or `:80`:
+
+Alternatively, you can use all other methods described in the [Caddy documentation](https://caddyserver.com/docs/automatic-https#activation).
+
+If you want to use HTTPS with the `127.0.0.1` IP address instead of the `localhost` hostname, please read the [known issues](known-issues.md#using-https127001-with-docker) section.
+
+### Full Duplex (HTTP/1)
+
+When using HTTP/1.x, it may be desirable to enable full-duplex mode to allow writing a response before the entire body
+has been read. (for example: [Mercure](mercure.md), WebSocket, Server-Sent Events, etc.)
+
+This is an opt-in configuration that needs to be added to the global options in the `Caddyfile`:
+
+```caddyfile
+{
+  servers {
+    enable_full_duplex
+  }
+}
+```
+
+> [!CAUTION]
+>
+> Enabling this option may cause old HTTP/1.x clients that don't support full-duplex to deadlock.
+> This can also be configured using the `CADDY_GLOBAL_OPTIONS` environment config:
+
+```sh
+CADDY_GLOBAL_OPTIONS="servers {
+  enable_full_duplex
+}"
+```
+
+You can find more information about this setting in the [Caddy documentation](https://caddyserver.com/docs/caddyfile/options#enable-full-duplex).
 
 ## Enable the Debug Mode
 

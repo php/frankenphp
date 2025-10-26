@@ -59,7 +59,7 @@ func parseWorkerConfig(d *caddyfile.Dispenser) (workerConfig, error) {
 	}
 
 	if d.NextArg() {
-		return wc, errors.New(`FrankenPHP: too many "worker" arguments: ` + d.Val())
+		return wc, d.Errf(`FrankenPHP: too many "worker" arguments: %s`, d.Val())
 	}
 
 	for d.NextBlock(1) {

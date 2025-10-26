@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/exp/zapslog"
 	"go.uber.org/zap/zaptest"
 )
@@ -53,13 +54,15 @@ func TestGoString(t *testing.T) {
 
 func TestPHPMap(t *testing.T) {
 	testOnDummyPHPThread(t, func() {
-		originalMap := map[string]any{
+		originalMap := map[string]string{
 			"foo1": "bar1",
 			"foo2": "bar2",
 		}
 
 		phpArray := PHPMap(originalMap)
-		defer zvalPtrDtor(phpArray)
+        defer zvalPtrDtor(phpArray)
+		convertedMap, err := GoMap[string](phpArray)
+		require.NoError(t, err)
 
 		assert.Equal(t, originalMap, GoMap(phpArray), "associative array should be equal after conversion")
 	})
@@ -67,8 +70,8 @@ func TestPHPMap(t *testing.T) {
 
 func TestOrderedPHPAssociativeArray(t *testing.T) {
 	testOnDummyPHPThread(t, func() {
-		originalArray := AssociativeArray{
-			Map: map[string]any{
+		originalArray := AssociativeArray[string]{
+			Map: map[string]string{
 				"foo1": "bar1",
 				"foo2": "bar2",
 			},
@@ -76,7 +79,9 @@ func TestOrderedPHPAssociativeArray(t *testing.T) {
 		}
 
 		phpArray := PHPAssociativeArray(originalArray)
-		defer zvalPtrDtor(phpArray)
+        		defer zvalPtrDtor(phpArray)
+		convertedArray, err := GoAssociativeArray[string](phpArray)
+		require.NoError(t, err)
 
 		assert.Equal(t, originalArray, GoAssociativeArray(phpArray), "associative array should be equal after conversion")
 	})
@@ -84,10 +89,12 @@ func TestOrderedPHPAssociativeArray(t *testing.T) {
 
 func TestPHPPackedArray(t *testing.T) {
 	testOnDummyPHPThread(t, func() {
-		originalSlice := []any{"bar1", "bar2"}
+		originalSlice := []string{"bar1", "bar2"}
 
-		phpArray := PHPPackedArray(originalSlice)
+phpArray := PHPPackedArray(originalSlice)
 		defer zvalPtrDtor(phpArray)
+		convertedSlice, err := GoPackedArray[string](phpArray)
+		require.NoError(t, err)
 
 		assert.Equal(t, originalSlice, GoPackedArray(phpArray), "slice should be equal after conversion")
 	})
@@ -95,14 +102,16 @@ func TestPHPPackedArray(t *testing.T) {
 
 func TestPHPPackedArrayToGoMap(t *testing.T) {
 	testOnDummyPHPThread(t, func() {
-		originalSlice := []any{"bar1", "bar2"}
-		expectedMap := map[string]any{
+		originalSlice := []string{"bar1", "bar2"}
+		expectedMap := map[string]string{
 			"0": "bar1",
 			"1": "bar2",
 		}
 
-		phpArray := PHPPackedArray(originalSlice)
+phpArray := PHPPackedArray(originalSlice)
 		defer zvalPtrDtor(phpArray)
+		convertedMap, err := GoMap[string](phpArray)
+		require.NoError(t, err)
 
 		assert.Equal(t, expectedMap, GoMap(phpArray), "convert a packed to an associative array")
 	})
@@ -110,17 +119,19 @@ func TestPHPPackedArrayToGoMap(t *testing.T) {
 
 func TestPHPAssociativeArrayToPacked(t *testing.T) {
 	testOnDummyPHPThread(t, func() {
-		originalArray := AssociativeArray{
-			Map: map[string]any{
+		originalArray := AssociativeArray[string]{
+			Map: map[string]string{
 				"foo1": "bar1",
 				"foo2": "bar2",
 			},
 			Order: []string{"foo1", "foo2"},
 		}
-		expectedSlice := []any{"bar1", "bar2"}
+		expectedSlice := []string{"bar1", "bar2"}
 
 		phpArray := PHPAssociativeArray(originalArray)
 		defer zvalPtrDtor(phpArray)
+		convertedSlice, err := GoPackedArray[string](phpArray)
+		require.NoError(t, err)
 
 		assert.Equal(t, expectedSlice, GoPackedArray(phpArray), "convert an associative array to a slice")
 	})
@@ -131,12 +142,12 @@ func TestNestedMixedArray(t *testing.T) {
 		originalArray := map[string]any{
 			"string":      "value",
 			"int":         int64(123),
-			"float":       float64(1.2),
+			"float":       1.2,
 			"true":        true,
 			"false":       false,
 			"nil":         nil,
 			"packedArray": []any{"bar1", "bar2"},
-			"associativeArray": AssociativeArray{
+			"associativeArray": AssociativeArray[any]{
 				Map:   map[string]any{"foo1": "bar1", "foo2": "bar2"},
 				Order: []string{"foo2", "foo1"},
 			},
@@ -144,6 +155,8 @@ func TestNestedMixedArray(t *testing.T) {
 
 		phpArray := PHPMap(originalArray)
 		defer zvalPtrDtor(phpArray)
+		convertedArray, err := GoMap[any](phpArray)
+		require.NoError(t, err)
 
 		assert.Equal(t, originalArray, GoMap(phpArray), "nested mixed array should be equal after conversion")
 	})

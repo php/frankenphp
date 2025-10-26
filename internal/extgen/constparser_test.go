@@ -250,7 +250,7 @@ func TestConstantParserTypeDetection(t *testing.T) {
 		value        string
 		expectedType phpType
 	}{
-		{"string with double quotes", "\"hello world\"", phpString},
+		{"string with double quotes", `"hello world"`, phpString},
 		{"string with backticks", "`hello world`", phpString},
 		{"boolean true", "true", phpBool},
 		{"boolean false", "false", phpBool},
@@ -443,13 +443,13 @@ func TestConstantParserDeclRegex(t *testing.T) {
 		name        string
 		value       string
 	}{
-		{"const MyConst = \"value\"", true, "MyConst", "\"value\""},
+		{`const MyConst = "value"`, true, "MyConst", `"value"`},
 		{"const IntConst = 42", true, "IntConst", "42"},
 		{"const BoolConst = true", true, "BoolConst", "true"},
 		{"const IotaConst = iota", true, "IotaConst", "iota"},
 		{"const ComplexValue = someFunction()", true, "ComplexValue", "someFunction()"},
-		{"const SpacedName = \"with spaces\"", true, "SpacedName", "\"with spaces\""},
-		{"var notAConst = \"value\"", false, "", ""},
+		{`const SpacedName = "with spaces"`, true, "SpacedName", `"with spaces"`},
+		{`var notAConst = "value"`, false, "", ""},
 		{"const", false, "", ""},
 		{"const =", false, "", ""},
 	}
@@ -518,10 +518,10 @@ func TestPHPConstantCValue(t *testing.T) {
 			name: "string constant",
 			constant: phpConstant{
 				Name:    "StringConst",
-				Value:   "\"hello\"",
+				Value:   `"hello"`,
 				PhpType: phpString,
 			},
-			expected: "\"hello\"", // strings should remain unchanged
+			expected: `"hello"`, // strings should remain unchanged
 		},
 		{
 			name: "boolean constant",
