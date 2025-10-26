@@ -1,37 +1,50 @@
 package frankenphp
 
 import (
-	"io"
+	"errors"
 	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/exp/zapslog"
+	"go.uber.org/zap/zaptest"
 )
 
 // execute the function on a PHP thread directly
 // this is necessary if tests make use of PHP's internal allocation
-func testOnDummyPHPThread(t *testing.T, test func()) {
+func testOnDummyPHPThread(t *testing.T, cb func()) {
 	t.Helper()
-	logger = slog.New(slog.NewTextHandler(io.Discard, nil))
-	_, err := initPHPThreads(1, 1, nil) // boot 1 thread
-	assert.NoError(t, err)
-	handler := convertToTaskThread(phpThreads[0])
+	logger = slog.New(zapslog.NewHandler(zaptest.NewLogger(t).Core()))
+	assert.NoError(t, Init(
+		WithWorkers("tw", "./testdata/tasks/task-worker.php", 1, AsTaskWorker(true, 0)),
+		WithNumThreads(2),
+		WithLogger(logger),
+	))
+	defer Shutdown()
 
-	task := newTask(test)
-	handler.execute(task)
-	task.waitForCompletion()
+	assert.NoError(t, executeOnPHPThread(cb, "tw"))
+}
 
-	drainPHPThreads()
+// executeOnPHPThread executes the callback func() directly on a task worker thread
+// useful for testing purposes when dealing with PHP allocations
+func executeOnPHPThread(callback func(), taskWorkerName string) error {
+	tw := getTaskWorkerByName(taskWorkerName)
+	if tw == nil {
+		return errors.New("no task worker found with name " + taskWorkerName)
+	}
+
+	return tw.dispatch(&pendingTask{callback: callback})
 }
 
 func TestGoString(t *testing.T) {
 	testOnDummyPHPThread(t, func() {
 		originalString := "Hello, World!"
 
-		convertedString := GoString(PHPString(originalString, false))
+		phpString := PHPString(originalString, false)
+		defer zendStringRelease(phpString)
 
-		assert.Equal(t, originalString, convertedString, "string -> zend_string -> string should yield an equal string")
+		assert.Equal(t, originalString, GoString(phpString), "string -> zend_string -> string should yield an equal string")
 	})
 }
 
@@ -42,7 +55,9 @@ func TestPHPMap(t *testing.T) {
 			"foo2": "bar2",
 		}
 
-		convertedMap, err := GoMap[string](PHPMap(originalMap))
+		phpArray := PHPMap(originalMap)
+		defer zvalPtrDtor(phpArray)
+		convertedMap, err := GoMap[string](phpArray)
 		require.NoError(t, err)
 
 		assert.Equal(t, originalMap, convertedMap, "associative array should be equal after conversion")
@@ -59,7 +74,9 @@ func TestOrderedPHPAssociativeArray(t *testing.T) {
 			Order: []string{"foo2", "foo1"},
 		}
 
-		convertedArray, err := GoAssociativeArray[string](PHPAssociativeArray(originalArray))
+		phpArray := PHPAssociativeArray(originalArray)
+		defer zvalPtrDtor(phpArray)
+		convertedArray, err := GoAssociativeArray[string](phpArray)
 		require.NoError(t, err)
 
 		assert.Equal(t, originalArray, convertedArray, "associative array should be equal after conversion")
@@ -70,7 +87,9 @@ func TestPHPPackedArray(t *testing.T) {
 	testOnDummyPHPThread(t, func() {
 		originalSlice := []string{"bar1", "bar2"}
 
-		convertedSlice, err := GoPackedArray[string](PHPPackedArray(originalSlice))
+		phpArray := PHPPackedArray(originalSlice)
+		defer zvalPtrDtor(phpArray)
+		convertedSlice, err := GoPackedArray[string](phpArray)
 		require.NoError(t, err)
 
 		assert.Equal(t, originalSlice, convertedSlice, "slice should be equal after conversion")
@@ -85,7 +104,9 @@ func TestPHPPackedArrayToGoMap(t *testing.T) {
 			"1": "bar2",
 		}
 
-		convertedMap, err := GoMap[string](PHPPackedArray(originalSlice))
+		phpArray := PHPPackedArray(originalSlice)
+		defer zvalPtrDtor(phpArray)
+		convertedMap, err := GoMap[string](phpArray)
 		require.NoError(t, err)
 
 		assert.Equal(t, expectedMap, convertedMap, "convert a packed to an associative array")
@@ -103,7 +124,9 @@ func TestPHPAssociativeArrayToPacked(t *testing.T) {
 		}
 		expectedSlice := []string{"bar1", "bar2"}
 
-		convertedSlice, err := GoPackedArray[string](PHPAssociativeArray(originalArray))
+		phpArray := PHPAssociativeArray(originalArray)
+		defer zvalPtrDtor(phpArray)
+		convertedSlice, err := GoPackedArray[string](phpArray)
 		require.NoError(t, err)
 
 		assert.Equal(t, expectedSlice, convertedSlice, "convert an associative array to a slice")
@@ -126,7 +149,9 @@ func TestNestedMixedArray(t *testing.T) {
 			},
 		}
 
-		convertedArray, err := GoMap[any](PHPMap(originalArray))
+		phpArray := PHPMap(originalArray)
+		defer zvalPtrDtor(phpArray)
+		convertedArray, err := GoMap[any](phpArray)
 		require.NoError(t, err)
 
 		assert.Equal(t, originalArray, convertedArray, "nested mixed array should be equal after conversion")

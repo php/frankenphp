@@ -263,7 +263,6 @@ func goValue[T any](zval *C.zval) (res T, err error) {
 		resZero T
 	)
 	t := C.zval_get_type(zval)
-
 	switch t {
 	case C.IS_NULL:
 		resAny = any(nil)
@@ -382,6 +381,10 @@ func phpValue(value any) *C.zval {
 	case float64:
 		C.__zval_double__(&zval, C.double(v))
 	case string:
+		if v == "" {
+			C.__zval_empty_string__(&zval)
+			break
+		}
 		str := (*C.zend_string)(PHPString(v, false))
 		C.__zval_string__(&zval, str)
 	case map[string]any:
@@ -434,4 +437,14 @@ func extractZvalValue(zval *C.zval, expectedType C.uint8_t) (unsafe.Pointer, err
 	}
 
 	return nil, fmt.Errorf("unsupported zval type %d", expectedType)
+}
+
+// used for cleanup in tests
+func zvalPtrDtor(p unsafe.Pointer) {
+	C.zval_ptr_dtor((*C.zval)(p))
+}
+
+// used for cleanup in tests
+func zendStringRelease(p unsafe.Pointer) {
+	C.zend_string_release((*C.zend_string)(p))
 }

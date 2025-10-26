@@ -62,6 +62,7 @@ func (handler *workerThread) beforeScriptExecution() string {
 		if handler.externalWorker != nil {
 			handler.externalWorker.ThreadActivatedNotification(handler.thread.threadIndex)
 		}
+		handler.thread.updateContext(true, false)
 		setupWorkerScript(handler, handler.worker)
 		return handler.worker.fileName
 	case stateShuttingDown:

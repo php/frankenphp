@@ -1423,3 +1423,31 @@ func TestWorkerMatchDirectiveWithoutFileServer(t *testing.T) {
 	// the request should completely fall through the php_server module
 	tester.AssertGetResponse("http://localhost:"+testPort+"/static.txt", http.StatusNotFound, "Request falls through")
 }
+
+func TestServerWithTaskWorker(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	taskWorker, err := fastabs.FastAbs("../testdata/tasks/task-worker.php")
+	require.NoError(t, err)
+	tester.InitServer(`
+		{
+			skip_install_trust
+			admin localhost:2999
+
+			frankenphp {
+				num_threads 2
+				task_worker `+taskWorker+` {
+					num 1
+				}
+			}
+		}
+		`, "caddyfile")
+
+	debugState := getDebugState(t, tester)
+	require.Len(t, debugState.ThreadDebugStates, 2, "there should be 3 threads")
+	require.Equal(
+		t,
+		debugState.ThreadDebugStates[1].Name,
+		"Task Worker PHP Thread - "+taskWorker,
+		"the second spawned thread should be the task worker",
+	)
+}

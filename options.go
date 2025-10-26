@@ -22,6 +22,7 @@ type opt struct {
 	numThreads  int
 	maxThreads  int
 	workers     []workerOpt
+	taskWorkers []workerOpt
 	logger      *slog.Logger
 	metrics     Metrics
 	phpIni      map[string]string
@@ -35,6 +36,8 @@ type workerOpt struct {
 	env                    PreparedEnv
 	watch                  []string
 	maxConsecutiveFailures int
+	isTaskWorker           bool
+	maxQueueLen            int
 }
 
 // WithNumThreads configures the number of PHP threads to start.
@@ -80,7 +83,11 @@ func WithWorkers(name string, fileName string, num int, options ...WorkerOption)
 			}
 		}
 
-		o.workers = append(o.workers, worker)
+		if worker.isTaskWorker {
+			o.taskWorkers = append(o.taskWorkers, worker)
+		} else {
+			o.workers = append(o.workers, worker)
+		}
 
 		return nil
 	}
@@ -138,6 +145,17 @@ func WithMaxWaitTime(maxWaitTime time.Duration) Option {
 	return func(o *opt) error {
 		o.maxWaitTime = maxWaitTime
 
+		return nil
+	}
+}
+
+// EXPERIMENTAL: AsTaskWorker configures the worker as a task worker.
+// no http requests will be handled.
+// no globals resetting will be performed between tasks.
+func AsTaskWorker(isTaskWorker bool, maxQueueLen int) WorkerOption {
+	return func(w *workerOpt) error {
+		w.isTaskWorker = isTaskWorker
+		w.maxQueueLen = maxQueueLen
 		return nil
 	}
 }
