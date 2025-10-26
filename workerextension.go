@@ -17,8 +17,6 @@ import (
 // A worker script with the provided name, fileName and thread count will be registered, along with additional
 // configuration through WorkerOptions.
 //
-// Name() and FileName() are only called once at startup, so register them in an init() function.
-//
 // Workers are designed to run indefinitely and will be gracefully shut down when FrankenPHP shuts down.
 //
 // Extension workers receive the lowest priority when determining thread allocations. If MinThreads cannot be
