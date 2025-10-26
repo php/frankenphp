@@ -20,36 +20,6 @@ func assertGetRequest(t *testing.T, url string, expectedBodyContains string, opt
 	assert.Contains(t, w.Body.String(), expectedBodyContains)
 }
 
-func TestDispatchToTaskWorker(t *testing.T) {
-	var buf bytes.Buffer
-	handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
-	logger := slog.New(handler)
-
-	assert.NoError(t, Init(
-		WithWorkers(
-			"worker",
-			"./testdata/tasks/task-worker.php",
-			1,
-			AsTaskWorker(true, 0),
-			WithWorkerEnv(PreparedEnv{"CUSTOM_VAR": "custom var"}),
-		),
-		WithNumThreads(3),
-		WithLogger(logger),
-	))
-	assert.Len(t, taskWorkers, 1)
-
-	result, err := DispatchTask("go task", "worker")
-	assert.NoError(t, err)
-
-	Shutdown()
-	assert.Len(t, taskWorkers[0].threads, 0, "no task-worker threads should remain after shutdown")
-
-	logOutput := buf.String()
-	assert.Contains(t, logOutput, "go task", "should see the dispatched task in the logs")
-	assert.Contains(t, logOutput, "custom var", "should see the prepared env of the task worker")
-	assert.Equal(t, "task completed: go task", result)
-}
-
 func TestDispatchToTaskWorkerFromWorker(t *testing.T) {
 	var buf bytes.Buffer
 	handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})

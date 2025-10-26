@@ -60,11 +60,11 @@ func TestPHPMap(t *testing.T) {
 		}
 
 		phpArray := PHPMap(originalMap)
-        defer zvalPtrDtor(phpArray)
+		defer zvalPtrDtor(phpArray)
 		convertedMap, err := GoMap[string](phpArray)
 		require.NoError(t, err)
 
-		assert.Equal(t, originalMap, GoMap(phpArray), "associative array should be equal after conversion")
+		assert.Equal(t, originalMap, convertedMap, "associative array should be equal after conversion")
 	})
 }
 
@@ -79,11 +79,11 @@ func TestOrderedPHPAssociativeArray(t *testing.T) {
 		}
 
 		phpArray := PHPAssociativeArray(originalArray)
-        		defer zvalPtrDtor(phpArray)
+		defer zvalPtrDtor(phpArray)
 		convertedArray, err := GoAssociativeArray[string](phpArray)
 		require.NoError(t, err)
 
-		assert.Equal(t, originalArray, GoAssociativeArray(phpArray), "associative array should be equal after conversion")
+		assert.Equal(t, originalArray, convertedArray, "associative array should be equal after conversion")
 	})
 }
 
@@ -91,12 +91,12 @@ func TestPHPPackedArray(t *testing.T) {
 	testOnDummyPHPThread(t, func() {
 		originalSlice := []string{"bar1", "bar2"}
 
-phpArray := PHPPackedArray(originalSlice)
+		phpArray := PHPPackedArray(originalSlice)
 		defer zvalPtrDtor(phpArray)
 		convertedSlice, err := GoPackedArray[string](phpArray)
 		require.NoError(t, err)
 
-		assert.Equal(t, originalSlice, GoPackedArray(phpArray), "slice should be equal after conversion")
+		assert.Equal(t, originalSlice, convertedSlice, "slice should be equal after conversion")
 	})
 }
 
@@ -108,12 +108,12 @@ func TestPHPPackedArrayToGoMap(t *testing.T) {
 			"1": "bar2",
 		}
 
-phpArray := PHPPackedArray(originalSlice)
+		phpArray := PHPPackedArray(originalSlice)
 		defer zvalPtrDtor(phpArray)
 		convertedMap, err := GoMap[string](phpArray)
 		require.NoError(t, err)
 
-		assert.Equal(t, expectedMap, GoMap(phpArray), "convert a packed to an associative array")
+		assert.Equal(t, expectedMap, convertedMap, "convert a packed to an associative array")
 	})
 }
 
@@ -133,7 +133,7 @@ func TestPHPAssociativeArrayToPacked(t *testing.T) {
 		convertedSlice, err := GoPackedArray[string](phpArray)
 		require.NoError(t, err)
 
-		assert.Equal(t, expectedSlice, GoPackedArray(phpArray), "convert an associative array to a slice")
+		assert.Equal(t, expectedSlice, convertedSlice, "convert an associative array to a slice")
 	})
 }
 
@@ -158,6 +158,6 @@ func TestNestedMixedArray(t *testing.T) {
 		convertedArray, err := GoMap[any](phpArray)
 		require.NoError(t, err)
 
-		assert.Equal(t, originalArray, GoMap(phpArray), "nested mixed array should be equal after conversion")
+		assert.Equal(t, originalArray, convertedArray, "nested mixed array should be equal after conversion")
 	})
 }

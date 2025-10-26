@@ -35,36 +35,20 @@ var taskWorkers []*taskWorker
 
 // EXPERIMENTAL: a task dispatched to a task worker
 type pendingTask struct {
-	arg      any
+	arg      any // the argument passed to frankenphp_send_request()
+	result   any // the return value of frankenphp_handle_request()
 	done     sync.RWMutex
-	callback func()
-	result   any
+	callback func() // optional callback for direct execution (tests)
 }
 
 func (t *pendingTask) dispatch(tw *taskWorker) error {
 	t.done.Lock()
-
 	select {
 	case tw.taskChan <- t:
 		return nil
 	default:
 		return errors.New("Task worker queue is full, cannot dispatch task: " + tw.name)
 	}
-}
-
-// EXPERIMENTAL: DispatchTask dispatches a task to a named task worker
-// will block until completion and return the result or an error
-func DispatchTask(arg any, workerName string) (any, error) {
-	tw := getTaskWorkerByName(workerName)
-	if tw == nil {
-		return nil, errors.New("no task worker found with name " + workerName)
-	}
-
-	pt := &pendingTask{arg: arg}
-	err := pt.dispatch(tw)
-	pt.done.RLock() // wait for completion
-
-	return pt.result, err
 }
 
 func initTaskWorkers(opts []workerOpt) error {
@@ -257,7 +241,11 @@ func go_frankenphp_finish_task(threadIndex C.uintptr_t, zv *C.zval) {
 	}
 
 	if zv != nil {
-		handler.currentTask.result = goValue(zv)
+		result, err := goValue[any](zv)
+		if err != nil {
+			panic("failed to convert go_frankenphp_finish_task() return value: " + err.Error())
+		}
+		handler.currentTask.result = result
 	}
 	handler.currentTask.done.Unlock()
 	handler.currentTask = nil
@@ -281,9 +269,13 @@ func go_frankenphp_dispatch_request(threadIndex C.uintptr_t, zv *C.zval, name *C
 	}
 
 	// create a new task and lock it until the task is done
-	goArg := goValue(zv)
+	goArg, err := goValue[any](zv)
+	if err != nil {
+		return phpThreads[threadIndex].pinCString("Failed to convert go_frankenphp_dispatch_request() argument: " + err.Error())
+	}
+
 	task := &pendingTask{arg: goArg}
-	err := task.dispatch(tw)
+	err = task.dispatch(tw)
 
 	if err != nil {
 		return phpThreads[threadIndex].pinCString(err.Error())

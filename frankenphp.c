@@ -417,8 +417,7 @@ PHP_FUNCTION(frankenphp_response_headers) /* {{{ */
 }
 /* }}} */
 
-bool frankenphp_handle_message(zend_fcall_info fci,
-                                            zend_fcall_info_cache fcc) {
+bool frankenphp_handle_message(zend_fcall_info fci, zend_fcall_info_cache fcc) {
   zval *arg = go_frankenphp_worker_handle_task(thread_index);
   if (arg == NULL) {
     return false;
@@ -433,8 +432,8 @@ bool frankenphp_handle_message(zend_fcall_info fci,
   zend_bool status = zend_call_function(&fci, &fcc) == SUCCESS;
 
   if (!status || Z_TYPE(retval) == IS_UNDEF) {
-	go_frankenphp_finish_task(thread_index, NULL);
-	zval_ptr_dtor(arg);
+    go_frankenphp_finish_task(thread_index, NULL);
+    zval_ptr_dtor(arg);
   } else {
     go_frankenphp_finish_task(thread_index, &retval);
   }
@@ -551,7 +550,7 @@ PHP_FUNCTION(frankenphp_dispatch_request) {
   ZEND_PARSE_PARAMETERS_END();
 
   char *error = go_frankenphp_dispatch_request(thread_index, zv, worker_name,
-                                            worker_name_len);
+                                               worker_name_len);
   if (error) {
     zend_throw_exception(spl_ce_RuntimeException, error, 0);
     RETURN_THROWS();
