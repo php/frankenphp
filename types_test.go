@@ -23,22 +23,18 @@ func testOnDummyPHPThread(t *testing.T, cb func()) {
 	))
 	defer Shutdown()
 
-	_, err := executeOnPHPThread(cb, "tw")
-	assert.NoError(t, err)
+	assert.NoError(t, executeOnPHPThread(cb, "tw"))
 }
 
 // executeOnPHPThread executes the callback func() directly on a task worker thread
 // useful for testing purposes when dealing with PHP allocations
-func executeOnPHPThread(callback func(), taskWorkerName string) (*pendingTask, error) {
+func executeOnPHPThread(callback func(), taskWorkerName string) error {
 	tw := getTaskWorkerByName(taskWorkerName)
 	if tw == nil {
-		return nil, errors.New("no task worker found with name " + taskWorkerName)
+		return errors.New("no task worker found with name " + taskWorkerName)
 	}
 
-	pt := &pendingTask{callback: callback}
-	err := pt.dispatch(tw)
-
-	return pt, err
+	return tw.dispatch(&pendingTask{callback: callback})
 }
 
 func TestGoString(t *testing.T) {

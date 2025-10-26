@@ -6,7 +6,6 @@ import "C"
 import (
 	"errors"
 	"github.com/dunglas/frankenphp/internal/fastabs"
-	"path/filepath"
 	"sync"
 	"unsafe"
 )
@@ -21,7 +20,7 @@ type taskWorker struct {
 	env         PreparedEnv
 }
 
-// representation of a thread that handles tasks directly assigned by go or via frankenphp_dispatch_request()
+// representation of a thread that handles tasks directly assigned by go or via frankenphp_send_request()
 // can also just execute a script in a loop
 // implements the threadHandler interface
 type taskWorkerThread struct {
@@ -39,16 +38,6 @@ type pendingTask struct {
 	result   any // the return value of frankenphp_handle_request()
 	done     sync.RWMutex
 	callback func() // optional callback for direct execution (tests)
-}
-
-func (t *pendingTask) dispatch(tw *taskWorker) error {
-	t.done.Lock()
-	select {
-	case tw.taskChan <- t:
-		return nil
-	default:
-		return errors.New("Task worker queue is full, cannot dispatch task: " + tw.name)
-	}
 }
 
 func initTaskWorkers(opts []workerOpt) error {
@@ -140,10 +129,7 @@ func (handler *taskWorkerThread) beforeScriptExecution() string {
 }
 
 func (handler *taskWorkerThread) setupWorkerScript() string {
-	fc, err := newDummyContext(
-		filepath.Base(handler.taskWorker.fileName),
-		WithRequestPreparedEnv(handler.taskWorker.env),
-	)
+	fc, err := newDummyContext(handler.taskWorker.fileName, WithRequestPreparedEnv(handler.taskWorker.env))
 
 	if err != nil {
 		panic(err)
@@ -188,6 +174,16 @@ func (tw *taskWorker) drainQueue() {
 		default:
 			return
 		}
+	}
+}
+
+func (tw *taskWorker) dispatch(t *pendingTask) error {
+	t.done.Lock()
+	select {
+	case tw.taskChan <- t:
+		return nil
+	default:
+		return errors.New("Task worker queue is full, cannot dispatch task: " + tw.name)
 	}
 }
 
@@ -237,7 +233,7 @@ func go_frankenphp_finish_task(threadIndex C.uintptr_t, zv *C.zval) {
 	thread := phpThreads[threadIndex]
 	handler, ok := thread.handler.(*taskWorkerThread)
 	if !ok {
-		panic("thread is not a task thread")
+		panic("thread is not a task thread: " + thread.handler.name())
 	}
 
 	if zv != nil {
@@ -251,8 +247,8 @@ func go_frankenphp_finish_task(threadIndex C.uintptr_t, zv *C.zval) {
 	handler.currentTask = nil
 }
 
-//export go_frankenphp_dispatch_request
-func go_frankenphp_dispatch_request(threadIndex C.uintptr_t, zv *C.zval, name *C.char, nameLen C.size_t) *C.char {
+//export go_frankenphp_send_request
+func go_frankenphp_send_request(threadIndex C.uintptr_t, zv *C.zval, name *C.char, nameLen C.size_t) *C.char {
 	if zv == nil {
 		return phpThreads[threadIndex].pinCString("Task argument cannot be null")
 	}
@@ -268,14 +264,13 @@ func go_frankenphp_dispatch_request(threadIndex C.uintptr_t, zv *C.zval, name *C
 		return phpThreads[threadIndex].pinCString("No worker found to handle this task: " + C.GoStringN(name, C.int(nameLen)))
 	}
 
-	// create a new task and lock it until the task is done
+	// convert the argument of frankenphp_send_request() to a Go value
 	goArg, err := goValue[any](zv)
 	if err != nil {
-		return phpThreads[threadIndex].pinCString("Failed to convert go_frankenphp_dispatch_request() argument: " + err.Error())
+		return phpThreads[threadIndex].pinCString("Failed to convert frankenphp_send_request() argument: " + err.Error())
 	}
 
-	task := &pendingTask{arg: goArg}
-	err = task.dispatch(tw)
+	err = tw.dispatch(&pendingTask{arg: goArg})
 
 	if err != nil {
 		return phpThreads[threadIndex].pinCString(err.Error())

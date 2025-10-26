@@ -4,7 +4,7 @@
 
 function frankenphp_handle_request(callable $callback): bool {}
 
-function frankenphp_dispatch_request(mixed $task, string $workerName = ''): void {}
+function frankenphp_send_request(mixed $task, string $workerName = ''): void {}
 
 function headers_send(int $status = 200): int {}
 

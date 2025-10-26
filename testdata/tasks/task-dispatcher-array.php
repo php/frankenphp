@@ -6,7 +6,7 @@ return function () {
     $taskCount = $_GET['count'] ?? 0;
     $workerName = $_GET['worker'] ?? '';
     for ($i = 0; $i < $taskCount; $i++) {
-        frankenphp_dispatch_request([
+        frankenphp_send_request([
             'task' => "array task$i",
             'worker' => $workerName,
             'index' => $i,
