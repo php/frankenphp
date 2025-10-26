@@ -35,9 +35,10 @@ type workerOpt struct {
 	env                    PreparedEnv
 	watch                  []string
 	maxConsecutiveFailures int
-	onReady                func(int)
-	onShutdown             func(int)
-	onServerShutdown       func(int)
+	onThreadReady          func(int)
+	onThreadShutdown       func(int)
+	onServerStartup        func()
+	onServerShutdown       func()
 }
 
 // WithNumThreads configures the number of PHP threads to start.
@@ -121,7 +122,7 @@ func WithWorkerMaxFailures(maxFailures int) WorkerOption {
 
 func WithWorkerOnReady(f func(int)) WorkerOption {
 	return func(w *workerOpt) error {
-		w.onReady = f
+		w.onThreadReady = f
 
 		return nil
 	}
@@ -129,13 +130,23 @@ func WithWorkerOnReady(f func(int)) WorkerOption {
 
 func WithWorkerOnShutdown(f func(int)) WorkerOption {
 	return func(w *workerOpt) error {
-		w.onShutdown = f
+		w.onThreadShutdown = f
 
 		return nil
 	}
 }
 
-func WithWorkerOnServerShutdown(f func(int)) WorkerOption {
+// WithOnServerStartup adds a function to be called right after server startup. Useful for extensions.
+func WithOnServerStartup(f func()) WorkerOption {
+	return func(w *workerOpt) error {
+		w.onServerStartup = f
+
+		return nil
+	}
+}
+
+// WithOnServerShutdown adds a function to be called right before server shutdown. Useful for extensions.
+func WithOnServerShutdown(f func()) WorkerOption {
 	return func(w *workerOpt) error {
 		w.onServerShutdown = f
 

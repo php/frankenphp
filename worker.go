@@ -23,9 +23,8 @@ type worker struct {
 	threadMutex            sync.RWMutex
 	allowPathMatching      bool
 	maxConsecutiveFailures int
-	onReady                func(int)
-	onShutdown             func(int)
-	onServerShutdown       func(int)
+	onThreadReady          func(int)
+	onThreadShutdown       func(int)
 }
 
 var (
@@ -128,9 +127,8 @@ func newWorker(o workerOpt) (*worker, error) {
 		threads:                make([]*phpThread, 0, o.num),
 		allowPathMatching:      allowPathMatching,
 		maxConsecutiveFailures: o.maxConsecutiveFailures,
-		onReady:                o.onReady,
-		onShutdown:             o.onShutdown,
-		onServerShutdown:       o.onServerShutdown,
+		onThreadReady:          o.onThreadReady,
+		onThreadShutdown:       o.onThreadShutdown,
 	}
 
 	return w, nil

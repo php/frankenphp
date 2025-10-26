@@ -41,27 +41,27 @@ func convertToWorkerThread(thread *phpThread, worker *worker) {
 func (handler *workerThread) beforeScriptExecution() string {
 	switch handler.state.get() {
 	case stateTransitionRequested:
-		if handler.worker.onShutdown != nil {
-			handler.worker.onShutdown(handler.thread.threadIndex)
+		if handler.worker.onThreadShutdown != nil {
+			handler.worker.onThreadShutdown(handler.thread.threadIndex)
 		}
 		handler.worker.detachThread(handler.thread)
 		return handler.thread.transitionToNewHandler()
 	case stateRestarting:
-		if handler.worker.onShutdown != nil {
-			handler.worker.onShutdown(handler.thread.threadIndex)
+		if handler.worker.onThreadShutdown != nil {
+			handler.worker.onThreadShutdown(handler.thread.threadIndex)
 		}
 		handler.state.set(stateYielding)
 		handler.state.waitFor(stateReady, stateShuttingDown)
 		return handler.beforeScriptExecution()
 	case stateReady, stateTransitionComplete:
-		if handler.worker.onReady != nil {
-			handler.worker.onReady(handler.thread.threadIndex)
+		if handler.worker.onThreadReady != nil {
+			handler.worker.onThreadReady(handler.thread.threadIndex)
 		}
 		setupWorkerScript(handler, handler.worker)
 		return handler.worker.fileName
 	case stateShuttingDown:
-		if handler.worker.onServerShutdown != nil {
-			handler.worker.onServerShutdown(handler.thread.threadIndex)
+		if handler.worker.onThreadShutdown != nil {
+			handler.worker.onThreadShutdown(handler.thread.threadIndex)
 		}
 		handler.worker.detachThread(handler.thread)
 		// signal to stop

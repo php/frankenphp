@@ -11,6 +11,8 @@ import (
 
 func TestWorkerExtension(t *testing.T) {
 	readyWorkers := 0
+	shutdownWorkers := 0
+	serverStarts := 0
 	serverShutDowns := 0
 
 	externalWorker := NewWorker(
@@ -20,25 +22,30 @@ func TestWorkerExtension(t *testing.T) {
 		WithWorkerOnReady(func(id int) {
 			readyWorkers++
 		}),
-		WithWorkerOnServerShutdown(func(id int) {
+		WithWorkerOnShutdown(func(id int) {
 			serverShutDowns++
+		}),
+		WithOnServerStartup(func() {
+			serverStarts++
+		}),
+		WithOnServerShutdown(func() {
+			shutdownWorkers++
 		}),
 	)
 	RegisterWorker(externalWorker)
 
-	// Clean up external workers after test to avoid interfering with other tests
+	require.NoError(t, Init())
 	defer func() {
+		// Clean up external workers after test to avoid interfering with other tests
 		delete(extensionWorkers, externalWorker.name)
-	}()
-
-	err := Init()
-	require.NoError(t, err)
-	defer func() {
 		Shutdown()
+		assert.Equal(t, 1, shutdownWorkers, "Worker shutdown hook should have been called")
 		assert.Equal(t, 1, serverShutDowns, "Server shutdown hook should have been called")
 	}()
 
 	assert.Equal(t, readyWorkers, 1, "Worker thread should have called onReady()")
+	assert.Equal(t, serverStarts, 1, "Server start hook should have been called")
+	assert.Equal(t, externalWorker.NumThreads(), 1, "NumThreads() should report 1 thread")
 
 	// Create a test request
 	req := httptest.NewRequest("GET", "https://example.com/test/?foo=bar", nil)
@@ -46,7 +53,7 @@ func TestWorkerExtension(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	// Inject the request into the worker through the extension
-	err = externalWorker.SendRequest(w, req)
+	err := externalWorker.SendRequest(w, req)
 	assert.NoError(t, err, "Sending request should not produce an error")
 
 	resp := w.Result()
