@@ -34,8 +34,7 @@ var taskWorkers []*taskWorker
 
 // EXPERIMENTAL: a task dispatched to a task worker
 type pendingTask struct {
-	arg      any // the argument passed to frankenphp_send_request()
-	result   any // the return value of frankenphp_handle_request()
+	message  any // the argument passed to frankenphp_send_request() or the return value of frankenphp_handle_request()
 	done     sync.RWMutex
 	callback func() // optional callback for direct execution (tests)
 }
@@ -155,13 +154,13 @@ func (handler *taskWorkerThread) name() string {
 
 func (tw *taskWorker) detach(thread *phpThread) {
 	tw.threadMutex.Lock()
+	defer tw.threadMutex.Unlock()
 	for i, t := range tw.threads {
 		if t == thread {
 			tw.threads = append(tw.threads[:i], tw.threads[i+1:]...)
 			return
 		}
 	}
-	tw.threadMutex.Unlock()
 }
 
 // make sure all tasks are done by re-queuing them until the channel is empty
@@ -217,7 +216,8 @@ func go_frankenphp_worker_handle_task(threadIndex C.uintptr_t) *C.zval {
 			return go_frankenphp_worker_handle_task(threadIndex)
 		}
 
-		zval := phpValue(task.arg)
+		zval := phpValue(task.message)
+		task.message = nil               // free memory
 		thread.Pin(unsafe.Pointer(zval)) // TODO: refactor types.go so no pinning is required
 
 		return zval
@@ -241,7 +241,7 @@ func go_frankenphp_finish_task(threadIndex C.uintptr_t, zv *C.zval) {
 		if err != nil {
 			panic("failed to convert go_frankenphp_finish_task() return value: " + err.Error())
 		}
-		handler.currentTask.result = result
+		handler.currentTask.message = result
 	}
 	handler.currentTask.done.Unlock()
 	handler.currentTask = nil
@@ -270,7 +270,7 @@ func go_frankenphp_send_request(threadIndex C.uintptr_t, zv *C.zval, name *C.cha
 		return phpThreads[threadIndex].pinCString("Failed to convert frankenphp_send_request() argument: " + err.Error())
 	}
 
-	err = tw.dispatch(&pendingTask{arg: goArg})
+	err = tw.dispatch(&pendingTask{message: goArg})
 
 	if err != nil {
 		return phpThreads[threadIndex].pinCString(err.Error())

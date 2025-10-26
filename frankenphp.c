@@ -418,7 +418,8 @@ PHP_FUNCTION(frankenphp_response_headers) /* {{{ */
 /* }}} */
 
 /* Handle a message in task worker mode */
-bool frankenphp_handle_message(zend_fcall_info fci, zend_fcall_info_cache fcc) {
+static bool frankenphp_handle_message(zend_fcall_info fci,
+                                      zend_fcall_info_cache fcc) {
   zval *arg = go_frankenphp_worker_handle_task(thread_index);
   if (arg == NULL) {
     return false;
@@ -551,7 +552,7 @@ PHP_FUNCTION(frankenphp_send_request) {
   ZEND_PARSE_PARAMETERS_END();
 
   char *error = go_frankenphp_send_request(thread_index, zv, worker_name,
-                                               worker_name_len);
+                                           worker_name_len);
   if (error) {
     zend_throw_exception(spl_ce_RuntimeException, error, 0);
     RETURN_THROWS();

@@ -149,7 +149,9 @@ func WithMaxWaitTime(maxWaitTime time.Duration) Option {
 	}
 }
 
-// EXPERIMENTAL: AsTaskWorker configures the worker as a task worker instead.
+// EXPERIMENTAL: AsTaskWorker configures the worker as a task worker.
+// no http requests will be handled.
+// no globals resetting will be performed between tasks.
 func AsTaskWorker(isTaskWorker bool, maxQueueLen int) WorkerOption {
 	return func(w *workerOpt) error {
 		w.isTaskWorker = isTaskWorker
