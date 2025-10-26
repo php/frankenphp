@@ -32,7 +32,8 @@ func TestWorkerExtension(t *testing.T) {
 			shutdownWorkers++
 		}),
 	)
-	RegisterWorker(externalWorker)
+
+	assert.NoError(t, RegisterWorker(externalWorker))
 
 	require.NoError(t, Init())
 	defer func() {
@@ -66,7 +67,7 @@ func TestWorkerExtension(t *testing.T) {
 
 func TestWorkerExtensionSendMessage(t *testing.T) {
 	externalWorker := NewWorker("externalWorker", "testdata/message-worker.php", 1)
-	RegisterWorker(externalWorker)
+	assert.NoError(t, RegisterWorker(externalWorker))
 
 	// Clean up external workers after test to avoid interfering with other tests
 	defer func() {
@@ -86,4 +87,17 @@ func TestWorkerExtensionSendMessage(t *testing.T) {
 	default:
 		t.Fatalf("Expected result to be string, got %T", v)
 	}
+}
+
+func TestErrorIf2WorkersHaveSameName(t *testing.T) {
+	w := NewWorker("duplicateWorker", "testdata/worker.php", 1)
+	w2 := NewWorker("duplicateWorker", "testdata/worker2.php", 1)
+
+	err := RegisterWorker(w)
+	require.NoError(t, err, "First registration should succeed")
+
+	err = RegisterWorker(w2)
+	require.Error(t, err, "Second registration with duplicate name should fail")
+	// Clean up external workers after test to avoid interfering with other tests
+	extensionWorkers = make(map[string]Worker)
 }
