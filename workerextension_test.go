@@ -25,10 +25,10 @@ func TestWorkerExtension(t *testing.T) {
 		WithWorkerOnShutdown(func(id int) {
 			serverShutDowns++
 		}),
-		WithOnServerStartup(func() {
+		WithWorkerOnServerStartup(func() {
 			serverStarts++
 		}),
-		WithOnServerShutdown(func() {
+		WithWorkerOnServerShutdown(func() {
 			shutdownWorkers++
 		}),
 	)
@@ -63,6 +63,7 @@ func TestWorkerExtension(t *testing.T) {
 	// The worker.php script should output information about the request
 	// We're just checking that we got a response, not the specific content
 	assert.NotEmpty(t, body, "Response body should not be empty")
+	assert.Contains(t, string(body), "Requests handled: 0", "Response body should contain request information")
 }
 
 func TestWorkerExtensionSendMessage(t *testing.T) {

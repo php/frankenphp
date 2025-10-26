@@ -136,8 +136,8 @@ func WithWorkerOnShutdown(f func(int)) WorkerOption {
 	}
 }
 
-// WithOnServerStartup adds a function to be called right after server startup. Useful for extensions.
-func WithOnServerStartup(f func()) WorkerOption {
+// WithWorkerOnServerStartup adds a function to be called right after server startup. Useful for extensions.
+func WithWorkerOnServerStartup(f func()) WorkerOption {
 	return func(w *workerOpt) error {
 		w.onServerStartup = f
 
@@ -145,8 +145,8 @@ func WithOnServerStartup(f func()) WorkerOption {
 	}
 }
 
-// WithOnServerShutdown adds a function to be called right before server shutdown. Useful for extensions.
-func WithOnServerShutdown(f func()) WorkerOption {
+// WithWorkerOnServerShutdown adds a function to be called right before server shutdown. Useful for extensions.
+func WithWorkerOnServerShutdown(f func()) WorkerOption {
 	return func(w *workerOpt) error {
 		w.onServerShutdown = f
 
