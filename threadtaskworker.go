@@ -15,37 +15,33 @@ type taskWorker struct {
 	threads     []*phpThread
 	threadMutex sync.RWMutex
 	fileName    string
-	taskChan    chan *PendingTask
+	taskChan    chan *pendingTask
 	name        string
 	num         int
 	env         PreparedEnv
 }
 
-// representation of a thread that handles tasks directly assigned by go or via frankenphp_dispatch_task()
+// representation of a thread that handles tasks directly assigned by go or via frankenphp_dispatch_request()
 // can also just execute a script in a loop
 // implements the threadHandler interface
 type taskWorkerThread struct {
 	thread       *phpThread
 	taskWorker   *taskWorker
 	dummyContext *frankenPHPContext
-	currentTask  *PendingTask
+	currentTask  *pendingTask
 }
 
 var taskWorkers []*taskWorker
 
 // EXPERIMENTAL: a task dispatched to a task worker
-type PendingTask struct {
+type pendingTask struct {
 	arg      any
 	done     sync.RWMutex
 	callback func()
-	Result   any
+	result   any
 }
 
-func (t *PendingTask) WaitForCompletion() {
-	t.done.RLock()
-}
-
-func (t *PendingTask) dispatch(tw *taskWorker) error {
+func (t *pendingTask) dispatch(tw *taskWorker) error {
 	t.done.Lock()
 
 	select {
@@ -57,16 +53,18 @@ func (t *PendingTask) dispatch(tw *taskWorker) error {
 }
 
 // EXPERIMENTAL: DispatchTask dispatches a task to a named task worker
-func DispatchTask(arg any, taskWorkerName string) (*PendingTask, error) {
-	tw := getTaskWorkerByName(taskWorkerName)
+// will block until completion and return the result or an error
+func DispatchTask(arg any, workerName string) (any, error) {
+	tw := getTaskWorkerByName(workerName)
 	if tw == nil {
-		return nil, errors.New("no task worker found with name " + taskWorkerName)
+		return nil, errors.New("no task worker found with name " + workerName)
 	}
 
-	pt := &PendingTask{arg: arg}
+	pt := &pendingTask{arg: arg}
 	err := pt.dispatch(tw)
+	pt.done.RLock() // wait for completion
 
-	return pt, err
+	return pt.result, err
 }
 
 func initTaskWorkers(opts []workerOpt) error {
@@ -85,7 +83,7 @@ func initTaskWorkers(opts []workerOpt) error {
 		tw := &taskWorker{
 			threads:  make([]*phpThread, 0, opt.num),
 			fileName: fileName,
-			taskChan: make(chan *PendingTask, opt.maxQueueLen),
+			taskChan: make(chan *pendingTask, opt.maxQueueLen),
 			name:     opt.name,
 			num:      opt.num,
 			env:      opt.env,
@@ -202,7 +200,7 @@ func (tw *taskWorker) drainQueue() {
 		select {
 		case pt := <-tw.taskChan:
 			tw.taskChan <- pt
-			pt.WaitForCompletion()
+			pt.done.RLock() // wait for completion
 		default:
 			return
 		}
@@ -231,8 +229,7 @@ func go_frankenphp_worker_handle_task(threadIndex C.uintptr_t) *C.zval {
 		handler.currentTask = task
 		thread.state.markAsWaiting(false)
 
-		// if the task has a callback, handle it directly
-		// currently only here for tests, TODO: is this useful for extensions?
+		// if the task has a callback, execute it (see types_test.go)
 		if task.callback != nil {
 			task.callback()
 			go_frankenphp_finish_task(threadIndex, nil)
@@ -240,9 +237,8 @@ func go_frankenphp_worker_handle_task(threadIndex C.uintptr_t) *C.zval {
 			return go_frankenphp_worker_handle_task(threadIndex)
 		}
 
-		// if the task has no callback, forward it to PHP
 		zval := phpValue(task.arg)
-		thread.Pin(unsafe.Pointer(zval))
+		thread.Pin(unsafe.Pointer(zval)) // TODO: refactor types.go so no pinning is required
 
 		return zval
 	case <-handler.thread.drainChan:
@@ -261,33 +257,33 @@ func go_frankenphp_finish_task(threadIndex C.uintptr_t, zv *C.zval) {
 	}
 
 	if zv != nil {
-		handler.currentTask.Result = goValue(zv)
+		handler.currentTask.result = goValue(zv)
 	}
 	handler.currentTask.done.Unlock()
 	handler.currentTask = nil
 }
 
-//export go_frankenphp_dispatch_task
-func go_frankenphp_dispatch_task(threadIndex C.uintptr_t, zv *C.zval, name *C.char, nameLen C.size_t) *C.char {
+//export go_frankenphp_dispatch_request
+func go_frankenphp_dispatch_request(threadIndex C.uintptr_t, zv *C.zval, name *C.char, nameLen C.size_t) *C.char {
 	if zv == nil {
 		return phpThreads[threadIndex].pinCString("Task argument cannot be null")
 	}
 
-	var worker *taskWorker
+	var tw *taskWorker
 	if nameLen != 0 {
-		worker = getTaskWorkerByName(C.GoStringN(name, C.int(nameLen)))
+		tw = getTaskWorkerByName(C.GoStringN(name, C.int(nameLen)))
 	} else if len(taskWorkers) != 0 {
-		worker = taskWorkers[0]
+		tw = taskWorkers[0]
 	}
 
-	if worker == nil {
+	if tw == nil {
 		return phpThreads[threadIndex].pinCString("No worker found to handle this task: " + C.GoStringN(name, C.int(nameLen)))
 	}
 
 	// create a new task and lock it until the task is done
 	goArg := goValue(zv)
-	task := &PendingTask{arg: goArg}
-	err := task.dispatch(worker)
+	task := &pendingTask{arg: goArg}
+	err := task.dispatch(tw)
 
 	if err != nil {
 		return phpThreads[threadIndex].pinCString(err.Error())

@@ -287,7 +287,7 @@ func Init(options ...Option) error {
 	}
 
 	directoriesToWatch := getDirectoriesToWatch(append(opt.workers, opt.taskWorkers...))
-	watcherIsEnabled = len(directoriesToWatch) > 0 // watcherIsEnabled is important for initWorkers()
+	watcherIsEnabled = len(directoriesToWatch) > 0 // watcherIsEnabled needs to be set before initWorkers()
 
 	if err := initWorkers(opt.workers); err != nil {
 		return err
@@ -649,5 +649,6 @@ func getDirectoriesToWatch(workerOpts []workerOpt) []string {
 	for _, w := range workerOpts {
 		directoriesToWatch = append(directoriesToWatch, w.watch...)
 	}
+
 	return directoriesToWatch
 }

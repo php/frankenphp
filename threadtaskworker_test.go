@@ -38,9 +38,8 @@ func TestDispatchToTaskWorker(t *testing.T) {
 	))
 	assert.Len(t, taskWorkers, 1)
 
-	pendingTask, err := DispatchTask("go task", "worker")
+	result, err := DispatchTask("go task", "worker")
 	assert.NoError(t, err)
-	pendingTask.WaitForCompletion()
 
 	Shutdown()
 	assert.Len(t, taskWorkers[0].threads, 0, "no task-worker threads should remain after shutdown")
@@ -48,6 +47,7 @@ func TestDispatchToTaskWorker(t *testing.T) {
 	logOutput := buf.String()
 	assert.Contains(t, logOutput, "go task", "should see the dispatched task in the logs")
 	assert.Contains(t, logOutput, "custom var", "should see the prepared env of the task worker")
+	assert.Equal(t, "task completed: go task", result)
 }
 
 func TestDispatchToTaskWorkerFromWorker(t *testing.T) {
