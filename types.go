@@ -439,12 +439,12 @@ func extractZvalValue(zval *C.zval, expectedType C.uint8_t) (unsafe.Pointer, err
 	return nil, fmt.Errorf("unsupported zval type %d", expectedType)
 }
 
+// used for cleanup in tests
 func zvalPtrDtor(p unsafe.Pointer) {
-	zv := (*C.zval)(p)
-	C.zval_ptr_dtor(zv)
+	C.zval_ptr_dtor((*C.zval)(p))
 }
 
+// used for cleanup in tests
 func zendStringRelease(p unsafe.Pointer) {
-	zs := (*C.zend_string)(p)
-	C.zend_string_release(zs)
+	C.zend_string_release((*C.zend_string)(p))
 }
