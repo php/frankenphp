@@ -1444,6 +1444,6 @@ func TestDd(t *testing.T) {
 	tester.AssertGetResponse(
 		"http://localhost:"+testPort+"/some-path?output=",
 		http.StatusServerError,
-		"dd output"
+		"dd output",
 	)
 }
