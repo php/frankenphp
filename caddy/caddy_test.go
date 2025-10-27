@@ -1442,8 +1442,8 @@ func TestDd(t *testing.T) {
 
 	// simulate Symfony's dd()
 	tester.AssertGetResponse(
-		"http://localhost:"+testPort+"/some-path?output=",
-		http.StatusServerError,
-		"dd output",
+		"http://localhost:"+testPort+"/some-path?output=dump123",
+		http.StatusInternalServerError,
+		"dump123",
 	)
 }
