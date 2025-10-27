@@ -1423,3 +1423,27 @@ func TestWorkerMatchDirectiveWithoutFileServer(t *testing.T) {
 	// the request should completely fall through the php_server module
 	tester.AssertGetResponse("http://localhost:"+testPort+"/static.txt", http.StatusNotFound, "Request falls through")
 }
+
+func TestDd(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	tester.InitServer(`
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		http://localhost:`+testPort+` {
+			php {
+				worker ../testdata/dd.php 1 {
+					match *
+				}
+			}
+		`, "caddyfile")
+
+	// simulate Symfony's dd()
+	tester.AssertGetResponse(
+		"http://localhost:"+testPort+"/some-path?output=",
+		http.StatusServerError,
+		"dd output"
+	)
+}
