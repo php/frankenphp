@@ -54,7 +54,7 @@ To subscribe to updates, use the native [`EventSource`](https://developer.mozill
 
 ## Publishing Updates
 
-### Using `file_put_contents()`
+### Using `file_get_contents()`
 
 To dispatch an update to connected subscribers, send an authenticated POST request to the Mercure hub with the `topic` and `data` parameters:
 
@@ -64,7 +64,7 @@ To dispatch an update to connected subscribers, send an authenticated POST reque
 
 const JWT = 'eyJhbGciOiJIUzI1NiJ9.eyJtZXJjdXJlIjp7InB1Ymxpc2giOlsiKiJdfX0.PXwpfIGng6KObfZlcOXvcnWCJOWTFLtswGI5DZuWSK4';
 
-$updateID = file_put_contents('https://localhost/.well-known/mercure', context: stream_context_create(['http' => [
+$updateID = file_get_contents('https://localhost/.well-known/mercure', context: stream_context_create(['http' => [
     'method'  => 'POST',
     'header'  => "Content-type: application/x-www-form-urlencoded\r\nAuthorization: Bearer " . JWT,
     'content' => http_build_query([
