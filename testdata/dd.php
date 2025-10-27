@@ -23,8 +23,10 @@ class Dumper
 $dumper = new Dumper();
 
 while (frankenphp_handle_request(function () use ($dumper) {
-    $dumper->dump($_GET['output']);
+    $dumper->dump($_GET['output'] ?? '');
     exit(1);
 })) {
     // keep handling requests
 }
+
+echo "we should never reach here\n";
