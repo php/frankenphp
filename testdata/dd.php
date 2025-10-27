@@ -1,6 +1,7 @@
 <?php
 
 // simulate Symfony's dd() behavior
+// see https://github.com/symfony/http-kernel/blob/7.3/DataCollector/DumpDataCollector.php#L216
 class Dumper
 {
     private string $message;
@@ -25,5 +26,5 @@ while (frankenphp_handle_request(function () use ($dumper) {
     $dumper->dump($_GET['output']);
     exit(1);
 })) {
-    // noop
+    // keep handling requests
 }

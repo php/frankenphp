@@ -467,7 +467,8 @@ PHP_FUNCTION(frankenphp_handle_request) {
    * closing the connection.
    */
   if (EG(exception)) {
-    if(!zend_is_unwind_exit(EG(exception)) && !zend_is_graceful_exit(EG(exception))){
+    if (!zend_is_unwind_exit(EG(exception)) &&
+        !zend_is_graceful_exit(EG(exception))) {
       zend_exception_error(EG(exception), E_ERROR);
     } else {
       /* exit() will jump directly to after php_execute_script */
