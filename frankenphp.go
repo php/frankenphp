@@ -52,7 +52,8 @@ var (
 	ErrScriptExecution        = errors.New("error during PHP script execution")
 	ErrNotRunning             = errors.New("FrankenPHP is not running. For proper configuration visit: https://frankenphp.dev/docs/config/#caddyfile-config")
 
-	isRunning bool
+	isRunning        bool
+	onServerShutdown []func()
 
 	loggerMu sync.RWMutex
 	logger   *slog.Logger
@@ -216,7 +217,7 @@ func Init(options ...Option) error {
 
 	// add registered external workers
 	for _, ew := range extensionWorkers {
-		options = append(options, WithWorkers(ew.Name(), ew.FileName(), ew.MinThreads(), WithWorkerEnv(ew.Env())))
+		options = append(options, WithWorkers(ew.name, ew.fileName, ew.num, ew.options...))
 	}
 
 	opt := &opt{}
@@ -291,6 +292,17 @@ func Init(options ...Option) error {
 		logger.LogAttrs(ctx, slog.LevelInfo, "embedded PHP app 📦", slog.String("path", EmbeddedAppPath))
 	}
 
+	// register the startup/shutdown hooks (mainly useful for extensions)
+	onServerShutdown = nil
+	for _, w := range opt.workers {
+		if w.onServerStartup != nil {
+			w.onServerStartup()
+		}
+		if w.onServerShutdown != nil {
+			onServerShutdown = append(onServerShutdown, w.onServerShutdown)
+		}
+	}
+
 	return nil
 }
 
@@ -298,6 +310,11 @@ func Init(options ...Option) error {
 func Shutdown() {
 	if !isRunning {
 		return
+	}
+
+	// call the shutdown hooks (mainly useful for extensions)
+	for _, fn := range onServerShutdown {
+		fn()
 	}
 
 	drainWatcher()
