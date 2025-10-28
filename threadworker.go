@@ -20,13 +20,10 @@ type workerThread struct {
 	dummyContext    *frankenPHPContext
 	workerContext   *frankenPHPContext
 	backoff         *exponentialBackoff
-	externalWorker  Worker
 	isBootingScript bool // true if the worker has not reached frankenphp_handle_request yet
 }
 
 func convertToWorkerThread(thread *phpThread, worker *worker) {
-	externalWorker := extensionWorkers[worker.name]
-
 	thread.setHandler(&workerThread{
 		state:  thread.state,
 		thread: thread,
@@ -36,7 +33,6 @@ func convertToWorkerThread(thread *phpThread, worker *worker) {
 			minBackoff:             100 * time.Millisecond,
 			maxConsecutiveFailures: worker.maxConsecutiveFailures,
 		},
-		externalWorker: externalWorker,
 	})
 	worker.attachThread(thread)
 }
@@ -45,27 +41,27 @@ func convertToWorkerThread(thread *phpThread, worker *worker) {
 func (handler *workerThread) beforeScriptExecution() string {
 	switch handler.state.get() {
 	case stateTransitionRequested:
-		if handler.externalWorker != nil {
-			handler.externalWorker.OnServerShutdown(handler.thread.threadIndex)
+		if handler.worker.onThreadShutdown != nil {
+			handler.worker.onThreadShutdown(handler.thread.threadIndex)
 		}
 		handler.worker.detachThread(handler.thread)
 		return handler.thread.transitionToNewHandler()
 	case stateRestarting:
-		if handler.externalWorker != nil {
-			handler.externalWorker.OnShutdown(handler.thread.threadIndex)
+		if handler.worker.onThreadShutdown != nil {
+			handler.worker.onThreadShutdown(handler.thread.threadIndex)
 		}
 		handler.state.set(stateYielding)
 		handler.state.waitFor(stateReady, stateShuttingDown)
 		return handler.beforeScriptExecution()
 	case stateReady, stateTransitionComplete:
-		if handler.externalWorker != nil {
-			handler.externalWorker.OnReady(handler.thread.threadIndex)
+		if handler.worker.onThreadReady != nil {
+			handler.worker.onThreadReady(handler.thread.threadIndex)
 		}
 		setupWorkerScript(handler, handler.worker)
 		return handler.worker.fileName
 	case stateShuttingDown:
-		if handler.externalWorker != nil {
-			handler.externalWorker.OnServerShutdown(handler.thread.threadIndex)
+		if handler.worker.onThreadShutdown != nil {
+			handler.worker.onThreadShutdown(handler.thread.threadIndex)
 		}
 		handler.worker.detachThread(handler.thread)
 		// signal to stop
