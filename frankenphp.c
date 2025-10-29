@@ -163,7 +163,12 @@ static void frankenphp_release_temporary_streams() {
   ZEND_HASH_FOREACH_END();
 }
 
-/* Adapted from php_request_shutdown */
+/* Adapted from php_request_shutdown
+ * This mimics the RSHUTDOWN phase from PHP for the worker mode. In case you
+ * need to observe the end of a request being handled, you can hook into the
+ * `sapi_module.deactivate` function pointer which gets called from
+ * `sapi_deactivate()`.
+ * */
 static void frankenphp_worker_request_shutdown() {
   /* Flush all output buffers */
   zend_try { php_output_end_all(); }
@@ -211,7 +216,12 @@ void frankenphp_add_assoc_str_ex(zval *track_vars_array, char *key,
   add_assoc_str_ex(track_vars_array, key, keylen, val);
 }
 
-/* Adapted from php_request_startup() */
+/* Adapted from php_request_startup()
+ * This mimics the RINIT phase from PHP for the worker mode. In case you need to
+ * observe a new request being handled, you can hook into the
+ * `sapi_module.activate` function pointer which gets called from
+ * `sapi_activate()`.
+ * */
 static int frankenphp_worker_request_startup() {
   int retval = SUCCESS;
 
