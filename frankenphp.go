@@ -138,10 +138,9 @@ func Config() PHPConfig {
 	}
 }
 
-func calculateMaxThreads(opt *opt) (int, int, int, error) {
+func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 	maxProcs := runtime.GOMAXPROCS(0) * 2
 
-	var numWorkers int
 	for i, w := range opt.workers {
 		if w.num <= 0 {
 			// https://github.com/php/frankenphp/issues/126
@@ -159,21 +158,19 @@ func calculateMaxThreads(opt *opt) (int, int, int, error) {
 	if numThreadsIsSet && !maxThreadsIsSet {
 		opt.maxThreads = opt.numThreads
 		if opt.numThreads <= numWorkers {
-			err := fmt.Errorf("num_threads (%d) must be greater than the number of worker threads (%d)", opt.numThreads, numWorkers)
-			return 0, 0, 0, err
+			return 0, fmt.Errorf("num_threads (%d) must be greater than the number of worker threads (%d)", opt.numThreads, numWorkers)
 		}
 
-		return opt.numThreads, numWorkers, opt.maxThreads, nil
+		return numWorkers, nil
 	}
 
 	if maxThreadsIsSet && !numThreadsIsSet {
 		opt.numThreads = numWorkers + 1
 		if !maxThreadsIsAuto && opt.numThreads > opt.maxThreads {
-			err := fmt.Errorf("max_threads (%d) must be greater than the number of worker threads (%d)", opt.maxThreads, numWorkers)
-			return 0, 0, 0, err
+			return 0, fmt.Errorf("max_threads (%d) must be greater than the number of worker threads (%d)", opt.maxThreads, numWorkers)
 		}
 
-		return opt.numThreads, numWorkers, opt.maxThreads, nil
+		return numWorkers, nil
 	}
 
 	if !numThreadsIsSet {
@@ -185,21 +182,19 @@ func calculateMaxThreads(opt *opt) (int, int, int, error) {
 		}
 		opt.maxThreads = opt.numThreads
 
-		return opt.numThreads, numWorkers, opt.maxThreads, nil
+		return numWorkers, nil
 	}
 
 	// both num_threads and max_threads are set
 	if opt.numThreads <= numWorkers {
-		err := fmt.Errorf("num_threads (%d) must be greater than the number of worker threads (%d)", opt.numThreads, numWorkers)
-		return 0, 0, 0, err
+		return 0, fmt.Errorf("num_threads (%d) must be greater than the number of worker threads (%d)", opt.numThreads, numWorkers)
 	}
 
 	if !maxThreadsIsAuto && opt.maxThreads < opt.numThreads {
-		err := fmt.Errorf("max_threads (%d) must be greater than or equal to num_threads (%d)", opt.maxThreads, opt.numThreads)
-		return 0, 0, 0, err
+		return 0, fmt.Errorf("max_threads (%d) must be greater than or equal to num_threads (%d)", opt.maxThreads, opt.numThreads)
 	}
 
-	return opt.numThreads, numWorkers, opt.maxThreads, nil
+	return numWorkers, nil
 }
 
 // Init starts the PHP runtime and the configured workers.
@@ -230,16 +225,12 @@ func Init(options ...Option) error {
 	if opt.logger == nil {
 		// set a default logger
 		// to disable logging, set the logger to slog.New(slog.NewTextHandler(io.Discard, nil))
-		l := slog.New(slog.NewTextHandler(os.Stdout, nil))
-
-		loggerMu.Lock()
-		logger = l
-		loggerMu.Unlock()
-	} else {
-		loggerMu.Lock()
-		logger = opt.logger
-		loggerMu.Unlock()
+		opt.logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
 	}
+
+	loggerMu.Lock()
+	logger = opt.logger
+	loggerMu.Unlock()
 
 	if opt.metrics != nil {
 		metrics = opt.metrics
@@ -247,12 +238,12 @@ func Init(options ...Option) error {
 
 	maxWaitTime = opt.maxWaitTime
 
-	totalThreadCount, workerThreadCount, maxThreadCount, err := calculateMaxThreads(opt)
+	workerThreadCount, err := calculateMaxThreads(opt)
 	if err != nil {
 		return err
 	}
 
-	metrics.TotalThreads(totalThreadCount)
+	metrics.TotalThreads(opt.numThreads)
 
 	config := Config()
 
@@ -265,18 +256,18 @@ func Init(options ...Option) error {
 			logger.Warn(`Zend Max Execution Timers are not enabled, timeouts (e.g. "max_execution_time") are disabled, recompile PHP with the "--enable-zend-max-execution-timers" configuration option to fix this issue`)
 		}
 	} else {
-		totalThreadCount = 1
+		opt.numThreads = 1
 		logger.Warn(`ZTS is not enabled, only 1 thread will be available, recompile PHP using the "--enable-zts" configuration option or performance will be degraded`)
 	}
 
-	mainThread, err := initPHPThreads(totalThreadCount, maxThreadCount, opt.phpIni)
+	mainThread, err := initPHPThreads(opt.numThreads, opt.maxThreads, opt.phpIni)
 	if err != nil {
 		return err
 	}
 
-	regularRequestChan = make(chan *frankenPHPContext, totalThreadCount-workerThreadCount)
-	regularThreads = make([]*phpThread, 0, totalThreadCount-workerThreadCount)
-	for i := 0; i < totalThreadCount-workerThreadCount; i++ {
+	regularRequestChan = make(chan *frankenPHPContext, opt.numThreads-workerThreadCount)
+	regularThreads = make([]*phpThread, 0, opt.numThreads-workerThreadCount)
+	for i := 0; i < opt.numThreads-workerThreadCount; i++ {
 		convertToRegularThread(getInactivePHPThread())
 	}
 
