@@ -54,7 +54,8 @@ composer dump-env prod
 1. 在准备好的应用的存储库中创建一个名为 `static-build.Dockerfile` 的文件。
 
    ```dockerfile
-   FROM --platform=linux/amd64 dunglas/frankenphp:static-builder
+   FROM --platform=linux/amd64 dunglas/frankenphp:static-builder-musl
+   # 如果你打算在 glibc 系统上运行该二进制文件，请使用 static-builder-gnu
 
    # 复制应用代码
    WORKDIR /go/src/app/dist/app

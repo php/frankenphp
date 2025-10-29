@@ -46,7 +46,8 @@ Bir Linux binary çıktısı almanın en kolay yolu, sağladığımız Docker ta
 1. Hazırladığınız uygulamanın deposunda `static-build.Dockerfile` adlı bir dosya oluşturun:
 
    ```dockerfile
-   FROM --platform=linux/amd64 dunglas/frankenphp:static-builder
+   FROM --platform=linux/amd64 dunglas/frankenphp:static-builder-musl
+   # İkili dosyayı glibc sistemlerinde çalıştırmayı düşünüyorsanız static-builder-gnu kullanın
 
    # Uygulamanızı kopyalayın
    WORKDIR /go/src/app/dist/app

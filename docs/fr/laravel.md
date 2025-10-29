@@ -88,7 +88,8 @@ Suivez ces étapes pour empaqueter votre application Laravel en tant que binaire
 1. Créez un fichier nommé `static-build.Dockerfile` dans le dépôt de votre application :
 
    ```dockerfile
-   FROM --platform=linux/amd64 dunglas/frankenphp:static-builder
+   FROM --platform=linux/amd64 dunglas/frankenphp:static-builder-musl
+   # Si vous avez l'intention d'exécuter le binaire sur des systèmes glibc, utilisez plutôt static-builder-gnu
 
    # Copiez votre application
    WORKDIR /go/src/app/dist/app
