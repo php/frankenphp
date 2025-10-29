@@ -30,11 +30,16 @@ ZEND_END_ARG_INFO()
 
 #define arginfo_apache_response_headers arginfo_frankenphp_response_headers
 
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_info, 0, 0, IS_ARRAY,
+                                        0)
+ZEND_END_ARG_INFO()
+
 ZEND_FUNCTION(frankenphp_handle_request);
 ZEND_FUNCTION(headers_send);
 ZEND_FUNCTION(frankenphp_finish_request);
 ZEND_FUNCTION(frankenphp_request_headers);
 ZEND_FUNCTION(frankenphp_response_headers);
+ZEND_FUNCTION(frankenphp_info);
 
 // clang-format off
 static const zend_function_entry ext_functions[] = {
@@ -47,6 +52,7 @@ static const zend_function_entry ext_functions[] = {
   ZEND_FALIAS(getallheaders, frankenphp_request_headers, arginfo_getallheaders)
   ZEND_FE(frankenphp_response_headers, arginfo_frankenphp_response_headers)
   ZEND_FALIAS(apache_response_headers, frankenphp_response_headers, arginfo_apache_response_headers)
+  ZEND_FE(frankenphp_info, arginfo_frankenphp_info)
   ZEND_FE_END
 };
 // clang-format on
