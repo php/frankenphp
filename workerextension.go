@@ -9,7 +9,7 @@ type Workers interface {
 	// SendRequest calls the closure passed to frankenphp_handle_request() and updates the context.
 	// The generated HTTP response will be written through the provided writer
 	SendRequest(rw http.ResponseWriter, r *http.Request) error
-	// SendMessage calls the closure passed to frankenphp_handle_request() and pass message as parameter, if the value returned by the closure is returned by the function.
+	// SendMessage calls the closure passed to frankenphp_handle_request(), passes message as a parameter, and returns the value produced by the closure.
 	SendMessage(message any, rw http.ResponseWriter) any
 	// NumThreads returns the number of available threads
 	NumThreads() int
