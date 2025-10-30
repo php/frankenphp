@@ -6,7 +6,7 @@ import (
 
 // EXPERIMENTAL: Workers allows you to register a worker.
 type Workers interface {
-	// SendRequest calls the closure passed to frankenphp_handle_request() and update the context.
+	// SendRequest calls the closure passed to frankenphp_handle_request() and updates the context.
 	// The generated HTTP response will be written through the provided writer
 	SendRequest(rw http.ResponseWriter, r *http.Request) error
 	// SendMessage calls the closure passed to frankenphp_handle_request() and pass message as parameter, if the value returned by the closure is returned by the function.
