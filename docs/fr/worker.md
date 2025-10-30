@@ -15,9 +15,9 @@ L'article suivant résume très bien ce problème et explique comment y remédie
 
 **Ressources supplémentaires :**
 
-* **Article (EN)** : [Getting your Symfony app ready for Swoole, RoadRunner, and FrankenPHP](https://dev.to/sergiid/getting-symfony-app-ready-for-swoole-roadrunner-and-frankenphp-no-ai-involved-2d0g) - Explique le problème en détail et présente des solutions.
-* **Symfony** : La [documentation de Messenger](https://symfony.com/doc/current/messenger.html#stateless-worker) aborde également ce concept de "stateless worker".
-* **Outil** : [phanalist](https://github.com/denzyldick/phanalist) est un analyseur statique (mentionné dans l'article) qui peut vous aider à détecter les services "stateful" dans votre code.
+- Article (EN) : [Getting your Symfony app ready for Swoole, RoadRunner, and FrankenPHP](https://dev.to/sergiid/getting-symfony-app-ready-for-swoole-roadrunner-and-frankenphp-no-ai-involved-2d0g) - Explique le problème en détail et présente des solutions.
+- Symfony : La [documentation de Messenger](https://symfony.com/doc/current/messenger.html#stateless-worker) aborde également ce concept de "stateless worker".
+- Outil : [phanalist](https://github.com/denzyldick/phanalist) est un analyseur statique (mentionné dans l'article) qui peut vous aider à détecter les services "stateful" dans votre code.
 
 ## Démarrage des scripts workers
 
