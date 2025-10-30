@@ -210,11 +210,6 @@ func Init(options ...Option) error {
 
 	registerExtensions()
 
-	// add registered external workers
-	for _, ew := range extensionWorkers {
-		options = append(options, WithWorkers(ew.name, ew.fileName, ew.num, ew.options...))
-	}
-
 	opt := &opt{}
 	for _, o := range options {
 		if err := o(opt); err != nil {
