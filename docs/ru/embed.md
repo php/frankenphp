@@ -52,8 +52,8 @@ composer dump-env prod
 1. Создайте файл `static-build.Dockerfile` в репозитории вашего приложения:
 
    ```dockerfile
-   FROM --platform=linux/amd64 dunglas/frankenphp:static-builder-musl
-   # Если вы планируете запускать бинарный файл на системах с glibc, используйте static-builder-gnu
+   FROM dunglas/frankenphp:static-builder-gnu
+   # Если вы планируете запускать бинарный файл на системах с musl-libc, используйте static-builder-musl
 
    # Скопировать приложение
    WORKDIR /go/src/app/dist/app

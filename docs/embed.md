@@ -54,8 +54,8 @@ The easiest way to create a Linux binary is to use the Docker-based builder we p
 1. Create a file named `static-build.Dockerfile` in the repository of your app:
 
    ```dockerfile
-   FROM --platform=linux/amd64 dunglas/frankenphp:static-builder-musl
-   # If you intend to run the binary on glibc systems, use static-builder-gnu instead
+   FROM dunglas/frankenphp:static-builder-gnu
+   # If you intend to run the binary on musl-libc systems, use static-builder-musl instead
 
    # Copy your app
    WORKDIR /go/src/app/dist/app
