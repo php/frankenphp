@@ -3,18 +3,16 @@
 Boot your application once and keep it in memory.
 FrankenPHP will handle incoming requests in a few milliseconds.
 
-## A Paradigm Shift
-
-Warning: This mode introduces a new development paradigm. If your code is not stateless, enabling worker mode risks introducing unexpected behavior.
+## Warning about stateful design
 
 Unlike with the traditional PHP-FPM model, the application remains loaded in memory between requests. Consequently, any state stored in your services (object properties, singletons, etc.) will be preserved and shared across successive requests handled by the same worker. This can lead to data leaks or inconsistent states if your application is not designed for it.
 The following article summarizes this issue very well and explains how to fix it, notably for Symfony applications using ResetInterface to ensure your services are "clean" for every new request.
 
 **Additional Resources:**
 
-- Article: [Getting your Symfony app ready for Swoole, RoadRunner, and FrankenPHP](https://dev.to/sergiid/getting-symfony-app-ready-for-swoole-roadrunner-and-frankenphp-no-ai-involved-2d0g) - Explains the problem in detail and presents solutions.
+- Article: [Getting your Symfony app ready for Swoole, RoadRunner, and FrankenPHP](https://dev.to/sergiid/getting-symfony-app-ready-for-swoole-roadrunner-and-frankenphp-no-ai-involved-2d0g)
 - Symfony: [The Messenger](https://symfony.com/doc/current/messenger.html#stateless-worker) documentation also discusses this "stateless worker" concept.
-- Tool: [phanalist](https://github.com/denzyldick/phanalist) is a static analyzer (mentioned in the article) that can help you detect "stateful" services in your code.
+- Tool: [phanalist](https://github.com/denzyldick/phanalist) is a static analyzer that can help you detect "stateful" services in your code.
 
 ## Starting Worker Scripts
 
