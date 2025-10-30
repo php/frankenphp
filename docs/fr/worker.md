@@ -3,11 +3,11 @@
 Démarrez votre application une fois et gardez-la en mémoire.
 FrankenPHP traitera les requêtes entrantes en quelques millisecondes.
 
-## Un changement de paradigme : Le modèle "Shared Memory"
+## Un changement de paradigme
 
 Attention, ce mode ajoute un nouveau paradigme de développement. Si votre code n'est pas stateless (sans état), l'activation du mode worker risque d'introduire des comportements inattendus.
 
-Contrairement au modèle PHP-FPM traditionnel ("Shared Nothing"), où la mémoire est effacée après chaque requête, le mode worker de FrankenPHP utilise un modèle de mémoire partagée ("Shared Memory Model").
+Contrairement au modèle PHP-FPM traditionnel ("Shared Nothing"), où la mémoire est effacée après chaque requête.
 
 L'application reste chargée en mémoire entre les requêtes. Par conséquent, tout état stocké dans vos services (propriétés d'objet, singletons, etc.) sera conservé et partagé entre les requêtes successives traitées par le même worker. Cela peut entraîner des fuites de données ou des états incohérents si votre application n'est pas conçue pour cela.
 

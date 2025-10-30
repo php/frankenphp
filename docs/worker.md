@@ -3,11 +3,11 @@
 Boot your application once and keep it in memory.
 FrankenPHP will handle incoming requests in a few milliseconds.
 
-## A Paradigm Shift: The "Shared Memory" Model
+## A Paradigm Shift
 
 Warning: This mode introduces a new development paradigm. If your code is not stateless, enabling worker mode risks introducing unexpected behavior.
 
-Unlike the traditional PHP-FPM model ("Shared Nothing"), where memory is cleared after every request, FrankenPHP's worker mode uses a "Shared Memory Model".
+Unlike the traditional PHP-FPM model ("Shared Nothing"), where memory is cleared after every request.
 
 The application remains loaded in memory between requests. Consequently, any state stored in your services (object properties, singletons, etc.) will be preserved and shared across successive requests handled by the same worker. This can lead to data leaks or inconsistent states if your application is not designed for it.
 
