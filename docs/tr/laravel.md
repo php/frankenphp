@@ -88,7 +88,7 @@ Linux için Laravel uygulamanızı bağımsız bir çalıştırılabilir olarak 
 1. Uygulamanızın deposunda `static-build.Dockerfile` adında bir dosya oluşturun:
 
    ```dockerfile
-   FROM dunglas/frankenphp:static-builder-gnu
+   FROM --platform=linux/amd64 dunglas/frankenphp:static-builder-gnu
    # İkiliyi glibc sistemlerinde çalıştırmayı düşünüyorsanız, bunun yerine static-builder-gnu kullanın
    
    # Uygulamanızı kopyalayın

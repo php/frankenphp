@@ -88,7 +88,7 @@ LaravelアプリをLinux用のスタンドアロンバイナリとしてパッ�
 1. アプリのリポジトリに`static-build.Dockerfile`という名前のファイルを作成します：
 
    ```dockerfile
-   FROM dunglas/frankenphp:static-builder-gnu
+   FROM --platform=linux/amd64 dunglas/frankenphp:static-builder-gnu
    # バイナリをmusl-libcシステムで実行する場合は、static-builder-musl を使用してください
 
    # アプリをコピー

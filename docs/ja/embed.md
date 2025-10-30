@@ -54,7 +54,7 @@ Linux用バイナリを作成する最も簡単な方法は、提供されてい
 1. アプリのリポジトリに`static-build.Dockerfile`というファイルを作成します：
 
    ```dockerfile
-   FROM dunglas/frankenphp:static-builder-gnu
+   FROM --platform=linux/amd64 dunglas/frankenphp:static-builder-gnu
    # バイナリをmusl-libcシステムで実行する場合は、static-builder-musl を使用してください
 
    # アプリをコピー

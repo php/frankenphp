@@ -88,7 +88,7 @@ php artisan octane:frankenphp
 1. 在您的应用程序的存储库中创建一个名为 `static-build.Dockerfile` 的文件:
 
    ```dockerfile
-   FROM dunglas/frankenphp:static-builder-gnu
+   FROM --platform=linux/amd64 dunglas/frankenphp:static-builder-gnu
    # 如果你打算在 glibc 系统上运行该二进制文件，请使用 static-builder-gnu
 
    # 复制你的应用

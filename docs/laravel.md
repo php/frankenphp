@@ -90,7 +90,7 @@ Follow these steps to package your Laravel app as a standalone binary for Linux:
 1. Create a file named `static-build.Dockerfile` in the repository of your app:
 
    ```dockerfile
-   FROM dunglas/frankenphp:static-builder-gnu
+   FROM --platform=linux/amd64 dunglas/frankenphp:static-builder-gnu
    # If you intend to run the binary on musl-libc systems, use static-builder-musl instead
    
    # Copy your app

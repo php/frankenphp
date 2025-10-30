@@ -56,7 +56,7 @@ La manière la plus simple de créer un binaire Linux est d'utiliser le builder 
 1. Créez un fichier nommé `static-build.Dockerfile` dans le répertoire de votre application préparée :
 
    ```dockerfile
-   FROM dunglas/frankenphp:static-builder-gnu
+   FROM --platform=linux/amd64 dunglas/frankenphp:static-builder-gnu
    # Si vous envisagez d'exécuter le binaire sur des systèmes musl-libc, utilisez plutôt static-builder-musl
 
    # Copy your app
