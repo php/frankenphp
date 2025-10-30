@@ -36,7 +36,6 @@ func (w *extensionWorkers) SendRequest(rw http.ResponseWriter, r *http.Request) 
 	}
 
 	return ServeHTTP(rw, fr)
-
 }
 
 func (w *extensionWorkers) NumThreads() int {
