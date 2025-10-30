@@ -9,14 +9,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestWorkerExtension(t *testing.T) {
+func TestWorkersExtension(t *testing.T) {
 	readyWorkers := 0
 	shutdownWorkers := 0
 	serverStarts := 0
 	serverShutDowns := 0
 
-	externalWorker := NewWorker(
-		"externalWorker",
+	externalWorkers, o := WithExtensionWorkers(
+		"extensionWorkers",
 		"testdata/worker.php",
 		1,
 		WithWorkerOnReady(func(id int) {
@@ -33,20 +33,16 @@ func TestWorkerExtension(t *testing.T) {
 		}),
 	)
 
-	assert.NoError(t, RegisterWorker(externalWorker))
-
-	require.NoError(t, Init())
-	defer func() {
-		// Clean up external workers after test to avoid interfering with other tests
-		delete(extensionWorkers, externalWorker.name)
+	require.NoError(t, Init(o))
+	t.Cleanup(func() {
 		Shutdown()
 		assert.Equal(t, 1, shutdownWorkers, "Worker shutdown hook should have been called")
 		assert.Equal(t, 1, serverShutDowns, "Server shutdown hook should have been called")
-	}()
+	})
 
 	assert.Equal(t, readyWorkers, 1, "Worker thread should have called onReady()")
 	assert.Equal(t, serverStarts, 1, "Server start hook should have been called")
-	assert.Equal(t, externalWorker.NumThreads(), 1, "NumThreads() should report 1 thread")
+	assert.Equal(t, externalWorkers.NumThreads(), 1, "NumThreads() should report 1 thread")
 
 	// Create a test request
 	req := httptest.NewRequest("GET", "https://example.com/test/?foo=bar", nil)
@@ -54,7 +50,7 @@ func TestWorkerExtension(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	// Inject the request into the worker through the extension
-	err := externalWorker.SendRequest(w, req)
+	err := externalWorkers.SendRequest(w, req)
 	assert.NoError(t, err, "Sending request should not produce an error")
 
 	resp := w.Result()
@@ -67,38 +63,19 @@ func TestWorkerExtension(t *testing.T) {
 }
 
 func TestWorkerExtensionSendMessage(t *testing.T) {
-	externalWorker := NewWorker("externalWorker", "testdata/message-worker.php", 1)
-	assert.NoError(t, RegisterWorker(externalWorker))
+	externalWorker, o := WithExtensionWorkers("extensionWorkers", "testdata/message-worker.php", 1)
 
-	// Clean up external workers after test to avoid interfering with other tests
-	defer func() {
-		delete(extensionWorkers, externalWorker.name)
-	}()
-
-	err := Init()
+	err := Init(o)
 	require.NoError(t, err)
-	defer Shutdown()
+	t.Cleanup(Shutdown)
 
-	result, err := externalWorker.SendMessage("Hello Worker", nil)
-	assert.NoError(t, err, "Sending message should not produce an error")
-
-	switch v := result.(type) {
-	case string:
-		assert.Equal(t, "received message: Hello Worker", v)
-	default:
-		t.Fatalf("Expected result to be string, got %T", v)
-	}
+	assert.Equal(t, "received message: Hello Workers", externalWorker.SendMessage("Hello Workers", nil))
 }
 
 func TestErrorIf2WorkersHaveSameName(t *testing.T) {
-	w := NewWorker("duplicateWorker", "testdata/worker.php", 1)
-	w2 := NewWorker("duplicateWorker", "testdata/worker2.php", 1)
+	_, o1 := WithExtensionWorkers("duplicateWorker", "testdata/worker.php", 1)
+	_, o2 := WithExtensionWorkers("duplicateWorker", "testdata/worker2.php", 1)
 
-	err := RegisterWorker(w)
-	require.NoError(t, err, "First registration should succeed")
-
-	err = RegisterWorker(w2)
-	require.Error(t, err, "Second registration with duplicate name should fail")
-	// Clean up external workers after test to avoid interfering with other tests
-	extensionWorkers = make(map[string]Worker)
+	t.Cleanup(Shutdown)
+	require.Error(t, Init(o1, o2))
 }

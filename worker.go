@@ -131,6 +131,10 @@ func newWorker(o workerOpt) (*worker, error) {
 		onThreadShutdown:       o.onThreadShutdown,
 	}
 
+	if o.extensionWorkers != nil {
+		o.extensionWorkers.internalWorker = w
+	}
+
 	return w, nil
 }
 
