@@ -24,7 +24,7 @@ var (
 	optionsMU sync.Mutex
 )
 
-// EXPERIMENTAL: RegisterWorkers provides a way for extension to register frankenphp.Workers
+// EXPERIMENTAL: RegisterWorkers provides a way for extensions to register frankenphp.Workers
 func RegisterWorkers(name, fileName string, num int, wo ...frankenphp.WorkerOption) frankenphp.Workers {
 	w, opt := frankenphp.WithExtensionWorkers(name, fileName, num, wo...)
 
