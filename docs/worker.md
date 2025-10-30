@@ -3,6 +3,21 @@
 Boot your application once and keep it in memory.
 FrankenPHP will handle incoming requests in a few milliseconds.
 
+## A Paradigm Shift: The "Shared Memory" Model
+
+Warning: This mode introduces a new development paradigm. If your code is not stateless, enabling worker mode risks introducing unexpected behavior.
+
+Unlike the traditional PHP-FPM model ("Shared Nothing"), where memory is cleared after every request, FrankenPHP's worker mode uses a "Shared Memory Model".
+
+The application remains loaded in memory between requests. Consequently, any state stored in your services (object properties, singletons, etc.) will be preserved and shared across successive requests handled by the same worker. This can lead to data leaks or inconsistent states if your application is not designed for it.
+
+The following article summarizes this issue very well and explains how to fix it, notably for Symfony applications using ResetInterface to ensure your services are "clean" for every new request.
+
+**Additional Resources:**
+
+* **Article**: [Getting your Symfony app ready for Swoole, RoadRunner, and FrankenPHP](https://dev.to/sergiid/getting-symfony-app-ready-for-swoole-roadrunner-and-frankenphp-no-ai-involved-2d0g) - Explains the problem in detail and presents solutions.
+* **Symfony**: [The Messenger](https://symfony.com/doc/current/messenger.html#stateless-worker) documentation also discusses this "stateless worker" concept.
+* **Tool**: [phanalist](https://github.com/denzyldick/phanalist) is a static analyzer (mentioned in the article) that can help you detect "stateful" services in your code.
 ## Starting Worker Scripts
 
 ### Docker
