@@ -2,14 +2,14 @@
 
 zval *get_ht_packed_data(HashTable *ht, uint32_t index) {
   if (ht->u.flags & HASH_FLAG_PACKED) {
-    return &ht->arPacked[index];
+    return ht->arPacked;
   }
   return NULL;
 }
 
-Bucket *get_ht_bucket_data(HashTable *ht, uint32_t index) {
+Bucket *get_ht_bucket(HashTable *ht) {
   if (!(ht->u.flags & HASH_FLAG_PACKED)) {
-    return &ht->arData[index];
+    return ht->arData;
   }
   return NULL;
 }
