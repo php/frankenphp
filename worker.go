@@ -223,7 +223,7 @@ func (worker *worker) countThreads() int {
 	return l
 }
 
-func (worker *worker) handleRequest(fc *frankenPHPContext) {
+func (worker *worker) handleRequest(fc *frankenPHPContext) error {
 	metrics.StartWorkerRequest(worker.name)
 
 	// dispatch requests to all worker threads in order
@@ -234,7 +234,8 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) {
 			worker.threadMutex.RUnlock()
 			<-fc.done
 			metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
-			return
+
+			return nil
 		default:
 			// thread is busy, continue
 		}
@@ -249,14 +250,15 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) {
 			metrics.DequeuedWorkerRequest(worker.name)
 			<-fc.done
 			metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
-			return
+
+			return nil
 		case scaleChan <- fc:
 			// the request has triggered scaling, continue to wait for a thread
 		case <-timeoutChan(maxWaitTime):
-			metrics.DequeuedWorkerRequest(worker.name)
 			// the request has timed out stalling
-			fc.reject(504, "Gateway Timeout")
-			return
+			metrics.DequeuedWorkerRequest(worker.name)
+
+			return fc.reject(504, "Gateway Timeout")
 		}
 	}
 }

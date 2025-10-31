@@ -50,7 +50,7 @@ func (w *extensionWorkers) SendMessage(message any, rw http.ResponseWriter) (any
 	fc.responseWriter = rw
 	fc.handlerParameters = message
 
-	w.internalWorker.handleRequest(fc)
+	err := w.internalWorker.handleRequest(fc)
 
-	return fc.handlerReturn, nil
+	return fc.handlerReturn, err
 }
