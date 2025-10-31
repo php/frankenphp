@@ -113,7 +113,9 @@ func handleRequestWithRegularPHPThreads(fc *frankenPHPContext) error {
 			// the request has timed out stalling
 			metrics.DequeuedRequest()
 
-			return fc.reject(504, "Gateway Timeout")
+			fc.reject(ErrMaxWaitTimeExceeded)
+
+			return ErrMaxWaitTimeExceeded
 		}
 	}
 }

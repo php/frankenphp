@@ -2,6 +2,8 @@ package frankenphp
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -117,23 +119,23 @@ func (fc *frankenPHPContext) closeContext() {
 }
 
 // validate checks if the request should be outright rejected
-func (fc *frankenPHPContext) validate() bool {
+func (fc *frankenPHPContext) validate() error {
 	if strings.Contains(fc.request.URL.Path, "\x00") {
-		fc.rejectBadRequest("Invalid request path")
+		fc.reject(ErrInvalidRequestPath)
 
-		return false
+		return ErrInvalidRequestPath
 	}
 
 	contentLengthStr := fc.request.Header.Get("Content-Length")
 	if contentLengthStr != "" {
 		if contentLength, err := strconv.Atoi(contentLengthStr); err != nil || contentLength < 0 {
-			fc.rejectBadRequest("invalid Content-Length header: " + contentLengthStr)
+			e := fmt.Errorf("%w: %s", ErrInvalidContentLengthHeader, contentLengthStr)
 
-			return false
+			fc.reject(e)
 		}
 	}
 
-	return true
+	return nil
 }
 
 func (fc *frankenPHPContext) clientHasClosed() bool {
@@ -149,16 +151,22 @@ func (fc *frankenPHPContext) clientHasClosed() bool {
 	}
 }
 
-// reject sends a response with the given status code and message
-func (fc *frankenPHPContext) reject(statusCode int, message string) error {
+// reject sends a response with the given status code and error
+func (fc *frankenPHPContext) reject(err error) {
 	if fc.isDone {
-		return nil
+		return
+	}
+
+	re := &ErrRejected{}
+	if !errors.As(err, re) {
+		// Should never happen
+		panic("only instance of ErrRejected can be passed to reject")
 	}
 
 	rw := fc.responseWriter
 	if rw != nil {
-		rw.WriteHeader(statusCode)
-		_, _ = rw.Write([]byte(message))
+		rw.WriteHeader(re.status)
+		_, _ = rw.Write([]byte(err.Error()))
 
 		if f, ok := rw.(http.Flusher); ok {
 			f.Flush()
@@ -166,10 +174,4 @@ func (fc *frankenPHPContext) reject(statusCode int, message string) error {
 	}
 
 	fc.closeContext()
-
-	return ErrMaxTimeExceeded
-}
-
-func (fc *frankenPHPContext) rejectBadRequest(message string) {
-	fc.reject(http.StatusBadRequest, message)
 }
