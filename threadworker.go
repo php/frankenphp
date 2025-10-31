@@ -213,23 +213,21 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 // go_frankenphp_worker_handle_request_start is called at the start of every php request served.
 //
 //export go_frankenphp_worker_handle_request_start
-func go_frankenphp_worker_handle_request_start(threadIndex C.uintptr_t) (C.bool, unsafe.Pointer) {
+func go_frankenphp_worker_handle_request_start(threadIndex C.uintptr_t) (C.bool, *C.zval) {
 	handler := phpThreads[threadIndex].handler.(*workerThread)
 	hasRequest, parameters := handler.waitForWorkerRequest()
 
 	if parameters != nil {
-		var ptr unsafe.Pointer
-
 		switch p := parameters.(type) {
 		case unsafe.Pointer:
-			ptr = p
+			return C.bool(hasRequest), (*C.zval)(p)
 
 		default:
-			ptr = PHPValue(p)
+			var zval C.zval
+			phpValue(&zval, p)
+			handler.thread.Pin(unsafe.Pointer(&zval))
+			return C.bool(hasRequest), &zval
 		}
-		handler.thread.Pin(ptr)
-
-		return C.bool(hasRequest), ptr
 	}
 
 	return C.bool(hasRequest), nil

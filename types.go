@@ -140,7 +140,6 @@ func goArray[T any](array *C.zend_array, ordered bool) (map[string]T, []string, 
 		return entries, order, nil
 	}
 
-	var zeroVal T
 	buckets := unsafe.Slice(C.get_ht_bucket(array), nNumUsed)
 	for i := C.uint32_t(0); i < nNumUsed; i++ {
 		bucket := &buckets[i]
@@ -151,11 +150,7 @@ func goArray[T any](array *C.zend_array, ordered bool) (map[string]T, []string, 
 
 		if bucket.key != nil {
 			keyStr := goString(bucket.key)
-			if v == nil {
-				entries[keyStr] = zeroVal
-			} else {
-				entries[keyStr] = v
-			}
+			entries[keyStr] = v
 
 			if ordered {
 				order = append(order, keyStr)
@@ -282,9 +277,8 @@ func goValue[T any](zval *C.zval) (res T, err error) {
 		resAny  any
 		resZero T
 	)
-	t := zvalGetType(zval)
 
-	switch t {
+	switch zvalGetType(zval) {
 	case C.IS_NULL:
 		resAny = any(nil)
 	case C.IS_FALSE:
@@ -369,7 +363,7 @@ func goValue[T any](zval *C.zval) (res T, err error) {
 // Any other type will cause a panic.
 // More types may be supported in the future.
 func PHPValue(value any) unsafe.Pointer {
-	var zval C.zval // TODO: emalloc?
+	var zval C.zval // TODO: should this be allocated on heap?
 	phpValue(&zval, value)
 	return unsafe.Pointer(&zval)
 }
