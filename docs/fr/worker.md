@@ -6,7 +6,7 @@ FrankenPHP traitera les requêtes entrantes en quelques millisecondes.
 ## Avertissement sur la conception Stateful
 
 Contrairement au modèle PHP-FPM traditionnel, l'application reste chargée en mémoire entre les requêtes. Par conséquent, tout état stocké dans vos services (propriétés d'objet, singletons, etc.) sera conservé et partagé entre les requêtes successives traitées par le même worker. Cela peut entraîner des fuites de données ou des états incohérents si votre application n'est pas conçue pour cela.
-L'article suivant résume très bien ce problème et explique comment y remédier, notamment pour les applications Symfony en utilisant ResetInterface pour garantir que vos services sont "propres" à chaque nouvelle requête.
+L'article suivant résume ce problème et explique comment y remédier, notamment pour les applications Symfony en utilisant ResetInterface pour garantir que vos services sont "propres" à chaque nouvelle requête.
 
 **Ressources supplémentaires :**
 
