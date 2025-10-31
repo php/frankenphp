@@ -258,7 +258,9 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) error {
 			// the request has timed out stalling
 			metrics.DequeuedWorkerRequest(worker.name)
 
-			return fc.reject(504, "Gateway Timeout")
+			fc.reject(ErrMaxWaitTimeExceeded)
+
+			return ErrMaxWaitTimeExceeded
 		}
 	}
 }

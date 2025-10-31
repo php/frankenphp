@@ -51,7 +51,10 @@ var (
 	ErrRequestContextCreation = errors.New("error during request context creation")
 	ErrScriptExecution        = errors.New("error during PHP script execution")
 	ErrNotRunning             = errors.New("FrankenPHP is not running. For proper configuration visit: https://frankenphp.dev/docs/config/#caddyfile-config")
-	ErrMaxTimeExceeded        = errors.New("max request handling time exceeded")
+
+	ErrInvalidRequestPath         = ErrRejected{"invalid request path", http.StatusBadRequest}
+	ErrInvalidContentLengthHeader = ErrRejected{"invalid Content-Length header", http.StatusBadRequest}
+	ErrMaxWaitTimeExceeded        = ErrRejected{"maximum request handling time exceeded", http.StatusServiceUnavailable}
 
 	isRunning        bool
 	onServerShutdown []func()
@@ -63,6 +66,15 @@ var (
 
 	maxWaitTime time.Duration
 )
+
+type ErrRejected struct {
+	message string
+	status  int
+}
+
+func (e ErrRejected) Error() string {
+	return e.message
+}
 
 type syslogLevel int
 
@@ -332,8 +344,8 @@ func ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) error 
 
 	fc.responseWriter = responseWriter
 
-	if !fc.validate() {
-		return nil
+	if err := fc.validate(); err != nil {
+		return err
 	}
 
 	// Detect if a worker is available to handle this request
