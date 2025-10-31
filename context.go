@@ -150,9 +150,9 @@ func (fc *frankenPHPContext) clientHasClosed() bool {
 }
 
 // reject sends a response with the given status code and message
-func (fc *frankenPHPContext) reject(statusCode int, message string) {
+func (fc *frankenPHPContext) reject(statusCode int, message string) error {
 	if fc.isDone {
-		return
+		return nil
 	}
 
 	rw := fc.responseWriter
@@ -166,6 +166,8 @@ func (fc *frankenPHPContext) reject(statusCode int, message string) {
 	}
 
 	fc.closeContext()
+
+	return ErrMaxTimeExceeded
 }
 
 func (fc *frankenPHPContext) rejectBadRequest(message string) {

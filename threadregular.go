@@ -84,14 +84,15 @@ func (handler *regularThread) afterRequest() {
 	handler.requestContext = nil
 }
 
-func handleRequestWithRegularPHPThreads(fc *frankenPHPContext) {
+func handleRequestWithRegularPHPThreads(fc *frankenPHPContext) error {
 	metrics.StartRequest()
 	select {
 	case regularRequestChan <- fc:
 		// a thread was available to handle the request immediately
 		<-fc.done
 		metrics.StopRequest()
-		return
+
+		return nil
 	default:
 		// no thread was available
 	}
@@ -104,14 +105,15 @@ func handleRequestWithRegularPHPThreads(fc *frankenPHPContext) {
 			metrics.DequeuedRequest()
 			<-fc.done
 			metrics.StopRequest()
-			return
+
+			return nil
 		case scaleChan <- fc:
 			// the request has triggered scaling, continue to wait for a thread
 		case <-timeoutChan(maxWaitTime):
 			// the request has timed out stalling
 			metrics.DequeuedRequest()
-			fc.reject(504, "Gateway Timeout")
-			return
+
+			return fc.reject(504, "Gateway Timeout")
 		}
 	}
 }
