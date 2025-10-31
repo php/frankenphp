@@ -132,7 +132,7 @@ import (
 )
 
 // export_php:function process_data_ordered(array $input): array
-func process_data_ordered_map(arr *C.zval) unsafe.Pointer {
+func process_data_ordered_map(arr *C.zend_array) unsafe.Pointer {
 	// Convert PHP associative array to Go while keeping the order
 	associativeArray, err := frankenphp.GoAssociativeArray[any](unsafe.Pointer(arr))
     if err != nil {
@@ -157,7 +157,7 @@ func process_data_ordered_map(arr *C.zval) unsafe.Pointer {
 }
 
 // export_php:function process_data_unordered(array $input): array
-func process_data_unordered_map(arr *C.zval) unsafe.Pointer {
+func process_data_unordered_map(arr *C.zend_array) unsafe.Pointer {
 	// Convert PHP associative array to a Go map without keeping the order
 	// ignoring the order will be more performant
 	goMap, err := frankenphp.GoMap[any](unsafe.Pointer(arr))
@@ -178,7 +178,7 @@ func process_data_unordered_map(arr *C.zval) unsafe.Pointer {
 }
 
 // export_php:function process_data_packed(array $input): array
-func process_data_packed(arr *C.zval) unsafe.Pointer {
+func process_data_packed(arr *C.zend_array) unsafe.Pointer {
 	// Convert PHP packed array to Go
 	goSlice, err := frankenphp.GoPackedArray(unsafe.Pointer(arr), false)
     if err != nil {
