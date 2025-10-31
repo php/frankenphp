@@ -10,7 +10,7 @@ type Workers interface {
 	// The generated HTTP response will be written through the provided writer
 	SendRequest(rw http.ResponseWriter, r *http.Request) error
 	// SendMessage calls the closure passed to frankenphp_handle_request(), passes message as a parameter, and returns the value produced by the closure.
-	SendMessage(message any, rw http.ResponseWriter) any
+	SendMessage(message any, rw http.ResponseWriter) (any, error)
 	// NumThreads returns the number of available threads
 	NumThreads() int
 }
@@ -43,7 +43,7 @@ func (w *extensionWorkers) NumThreads() int {
 }
 
 // EXPERIMENTAL: SendMessage sends a message to the worker and waits for a response.
-func (w *extensionWorkers) SendMessage(message any, rw http.ResponseWriter) any {
+func (w *extensionWorkers) SendMessage(message any, rw http.ResponseWriter) (any, error) {
 	fc := newFrankenPHPContext()
 	fc.logger = logger
 	fc.worker = w.internalWorker
@@ -52,5 +52,5 @@ func (w *extensionWorkers) SendMessage(message any, rw http.ResponseWriter) any 
 
 	w.internalWorker.handleRequest(fc)
 
-	return fc.handlerReturn
+	return fc.handlerReturn, nil
 }

@@ -21,7 +21,7 @@ import (
 
 var (
 	options   []frankenphp.Option
-	optionsMU sync.Mutex
+	optionsMU sync.RWMutex
 )
 
 // EXPERIMENTAL: RegisterWorkers provides a way for extensions to register frankenphp.Workers
@@ -135,7 +135,10 @@ func (f *FrankenPHPApp) Start() error {
 		frankenphp.WithPhpIni(f.PhpIni),
 		frankenphp.WithMaxWaitTime(f.MaxWaitTime),
 	}
+
+	optionsMU.RLock()
 	opts = append(opts, options...)
+	optionsMU.RUnlock()
 
 	for _, w := range append(f.Workers) {
 		workerOpts := []frankenphp.WorkerOption{
