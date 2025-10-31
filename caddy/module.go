@@ -151,8 +151,6 @@ func needReplacement(s string) bool {
 	return strings.ContainsAny(s, "{}")
 }
 
-var errRejected = &frankenphp.ErrRejected{}
-
 // ServeHTTP implements caddyhttp.MiddlewareHandler.
 func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ caddyhttp.Handler) error {
 	origReq := r.Context().Value(caddyhttp.OriginalRequestCtxKey).(http.Request)
@@ -199,7 +197,7 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 		return caddyhttp.Error(http.StatusInternalServerError, err)
 	}
 
-	if err = frankenphp.ServeHTTP(w, fr); err != nil && !errors.As(err, errRejected) {
+	if err = frankenphp.ServeHTTP(w, fr); err != nil && !errors.As(err, &frankenphp.ErrRejected{}) {
 		return caddyhttp.Error(http.StatusInternalServerError, err)
 	}
 
