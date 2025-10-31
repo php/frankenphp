@@ -3,6 +3,17 @@
 Démarrez votre application une fois et gardez-la en mémoire.
 FrankenPHP traitera les requêtes entrantes en quelques millisecondes.
 
+## Avertissement sur la conception Stateful
+
+Contrairement au modèle PHP-FPM traditionnel, l'application reste chargée en mémoire entre les requêtes. Par conséquent, tout état stocké dans vos services (propriétés d'objet, singletons, etc.) sera conservé et partagé entre les requêtes successives traitées par le même worker. Cela peut entraîner des fuites de données ou des états incohérents si votre application n'est pas conçue pour cela.
+L'article suivant résume ce problème et explique comment y remédier, notamment pour les applications Symfony en utilisant ResetInterface pour garantir que vos services sont "propres" à chaque nouvelle requête.
+
+**Ressources supplémentaires :**
+
+- Article (EN) : [Getting your Symfony app ready for Swoole, RoadRunner, and FrankenPHP](https://dev.to/sergiid/getting-symfony-app-ready-for-swoole-roadrunner-and-frankenphp-no-ai-involved-2d0g)
+- Symfony : La [documentation de Messenger](https://symfony.com/doc/current/messenger.html#stateless-worker) aborde également ce concept de "stateless worker".
+- Outil : [phanalist](https://github.com/denzyldick/phanalist) est un analyseur statique qui peut vous aider à détecter les services "stateful" dans votre code.
+
 ## Démarrage des scripts workers
 
 ### Docker
