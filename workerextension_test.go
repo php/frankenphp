@@ -69,7 +69,10 @@ func TestWorkerExtensionSendMessage(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(Shutdown)
 
-	assert.Equal(t, "received message: Hello Workers", externalWorker.SendMessage("Hello Workers", nil))
+	ret, err := externalWorker.SendMessage("Hello Workers", nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, "received message: Hello Workers", ret)
 }
 
 func TestErrorIf2WorkersHaveSameName(t *testing.T) {
