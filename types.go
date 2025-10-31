@@ -343,7 +343,7 @@ func goValue[T any](zval *C.zval) (res T, err error) {
 
 		resAny = any(AssociativeArray[T]{Map: goMap, Order: order})
 	default:
-		return resZero, fmt.Errorf("unsupported zval type %d", t)
+		return resZero, fmt.Errorf("unsupported zval type %d", zvalGetType(zval))
 	}
 
 	if resAny == nil {
