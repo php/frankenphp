@@ -1,7 +1,6 @@
 package caddy
 
 import (
-	"errors"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -82,7 +81,7 @@ func parseWorkerConfig(d *caddyfile.Dispenser) (workerConfig, error) {
 
 			v, err := strconv.ParseUint(d.Val(), 10, 32)
 			if err != nil {
-				return wc, err
+				return wc, d.WrapErr(err)
 			}
 
 			wc.Num = int(v)
@@ -106,8 +105,11 @@ func parseWorkerConfig(d *caddyfile.Dispenser) (workerConfig, error) {
 			// provision the path so it's identical to Caddy match rules
 			// see: https://github.com/caddyserver/caddy/blob/master/modules/caddyhttp/matchers.go
 			caddyMatchPath := (caddyhttp.MatchPath)(d.RemainingArgs())
-			caddyMatchPath.Provision(caddy.Context{})
-			wc.MatchPath = ([]string)(caddyMatchPath)
+			if err := caddyMatchPath.Provision(caddy.Context{}); err != nil {
+				return wc, d.WrapErr(err)
+			}
+
+			wc.MatchPath = caddyMatchPath
 		case "max_consecutive_failures":
 			if !d.NextArg() {
 				return wc, d.ArgErr()
@@ -115,21 +117,20 @@ func parseWorkerConfig(d *caddyfile.Dispenser) (workerConfig, error) {
 
 			v, err := strconv.Atoi(d.Val())
 			if err != nil {
-				return wc, err
+				return wc, d.WrapErr(err)
 			}
 			if v < -1 {
-				return wc, errors.New("max_consecutive_failures must be >= -1")
+				return wc, d.Errf("max_consecutive_failures must be >= -1")
 			}
 
-			wc.MaxConsecutiveFailures = int(v)
+			wc.MaxConsecutiveFailures = v
 		default:
-			allowedDirectives := "name, file, num, env, watch, match, max_consecutive_failures"
-			return wc, wrongSubDirectiveError("worker", allowedDirectives, v)
+			return wc, wrongSubDirectiveError("worker", "name, file, num, env, watch, match, max_consecutive_failures", v)
 		}
 	}
 
 	if wc.FileName == "" {
-		return wc, errors.New(`the "file" argument must be specified`)
+		return wc, d.Err(`the "file" argument must be specified`)
 	}
 
 	if frankenphp.EmbeddedAppPath != "" && filepath.IsLocal(wc.FileName) {
