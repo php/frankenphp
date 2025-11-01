@@ -44,10 +44,10 @@ func goString(zendStr *C.zend_string) string {
 	return C.GoStringN((*C.char)(unsafe.Pointer(&zendStr.val)), C.int(zendStr.len))
 }
 
-// equivalent of ZSTR_IS_INTERNED macro
+// equivalent of ZSTR_IS_INTERNED
 // interned strings are global strings used by the zend_engine (like classnames, function names, etc)
 func isInternedString(zs *C.zend_string) bool {
-	// mirror of zend_refcounted_h struct definition
+	// mirror of zend_refcounted_h struct
 	type zendRefcountedH struct {
 		refcount uint32
 		typeInfo uint32
@@ -287,23 +287,10 @@ func goValue[T any](zval *C.zval) (res T, err error) {
 		resAny = true
 	case C.IS_LONG:
 		v := (*C.zend_long)(unsafe.Pointer(&zval.value[0]))
-
-		if v != nil {
-			resAny = int64(*v)
-
-			break
-		}
-
-		resAny = int64(0)
+		resAny = int64(*v)
 	case C.IS_DOUBLE:
 		v := (*C.double)(unsafe.Pointer(&zval.value[0]))
-		if v != nil {
-			resAny = float64(*v)
-
-			break
-		}
-
-		resAny = float64(0)
+		resAny = float64(*v)
 	case C.IS_STRING:
 		v := *(**C.zend_string)(unsafe.Pointer(&zval.value[0]))
 		resAny = goString(v)
@@ -365,49 +352,49 @@ func phpValue(zval *C.zval, value any) {
 
 	switch v := value.(type) {
 	case nil:
-		// equvalent of ZVAL_NULL macro
+		// equvalent of ZVAL_NULL
 		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_NULL
 	case bool:
-		// equvalent of ZVAL_BOOL macro
+		// equvalent of ZVAL_BOOL
 		if v {
 			*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_TRUE
 		} else {
 			*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_FALSE
 		}
 	case int:
-		// equvalent of ZVAL_LONG macro
+		// equvalent of ZVAL_LONG
 		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_LONG
 		*(*C.zend_long)(unsafe.Pointer(&zval.value)) = C.zend_long(v)
 	case int64:
-		// equvalent of ZVAL_LONG macro
+		// equvalent of ZVAL_LONG
 		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_LONG
 		*(*C.zend_long)(unsafe.Pointer(&zval.value)) = C.zend_long(v)
 	case float64:
-		// equvalent of ZVAL_DOUBLE macro
+		// equvalent of ZVAL_DOUBLE
 		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_DOUBLE
 		*(*C.double)(unsafe.Pointer(&zval.value)) = C.double(v)
 	case string:
 		if v == "" {
-			// equivalent ZVAL_EMPTY_STRING macro
+			// equivalent ZVAL_EMPTY_STRING
 			*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_INTERNED_STRING_EX
 			*(**C.zend_string)(unsafe.Pointer(&zval.value)) = C.zend_empty_string
 			break
 		}
-		// equvalent of ZVAL_STRING macro
+		// equvalent of ZVAL_STRING
 		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_STRING_EX
 		*(**C.zend_string)(unsafe.Pointer(&zval.value)) = phpString(v, false)
 	case AssociativeArray[any]:
-		// equvalent of ZVAL_ARR macro
+		// equvalent of ZVAL_ARR
 		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_ARRAY_EX
-		*(**C.zend_array)(unsafe.Pointer(&zval.value)) = phpArray(v.Map, v.Order)
+		*(**C.zend_array)(unsafe.Pointer(&zval.value)) = phpArray[any](v.Map, v.Order)
 	case map[string]any:
-		// equvalent of ZVAL_ARR macro
+		// equvalent of ZVAL_ARR
 		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_ARRAY_EX
-		*(**C.zend_array)(unsafe.Pointer(&zval.value)) = phpArray(v, nil)
+		*(**C.zend_array)(unsafe.Pointer(&zval.value)) = phpArray[any](v, nil)
 	case []any:
-		// equvalent of ZVAL_ARR macro
+		// equvalent of ZVAL_ARR
 		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_ARRAY_EX
-		*(**C.zend_array)(unsafe.Pointer(&zval.value)) = phpPackedArray(v)
+		*(**C.zend_array)(unsafe.Pointer(&zval.value)) = phpPackedArray[any](v)
 	default:
 		panic(fmt.Sprintf("unsupported Go type %T", v))
 	}
@@ -425,7 +412,7 @@ func htIsPacked(ht *C.zend_array) bool {
 	return (flags & C.HASH_FLAG_PACKED) != 0
 }
 
-// equivalent of Z_TYPE_P macro
+// equivalent of Z_TYPE_P
 // interpret z->u1 as a 32-bit integer, then take lowest byte
 func zvalGetType(z *C.zval) C.uint8_t {
 	ptr := (*uint32)(unsafe.Pointer(&z.u1))
