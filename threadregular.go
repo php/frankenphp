@@ -2,13 +2,15 @@ package frankenphp
 
 import (
 	"sync"
+
+	state "github.com/dunglas/frankenphp/internal/state"
 )
 
 // representation of a non-worker PHP thread
 // executes PHP scripts in a web context
 // implements the threadHandler interface
 type regularThread struct {
-	state          *threadState
+	state          *state.ThreadState
 	thread         *phpThread
 	requestContext *frankenPHPContext
 }
@@ -29,22 +31,22 @@ func convertToRegularThread(thread *phpThread) {
 
 // beforeScriptExecution returns the name of the script or an empty string on shutdown
 func (handler *regularThread) beforeScriptExecution() string {
-	switch handler.state.get() {
-	case stateTransitionRequested:
+	switch handler.state.Get() {
+	case state.StateTransitionRequested:
 		detachRegularThread(handler.thread)
 		return handler.thread.transitionToNewHandler()
-	case stateTransitionComplete:
+	case state.StateTransitionComplete:
 		handler.thread.updateContext(false)
-		handler.state.set(stateReady)
+		handler.state.Set(state.StateReady)
 		return handler.waitForRequest()
-	case stateReady:
+	case state.StateReady:
 		return handler.waitForRequest()
-	case stateShuttingDown:
+	case state.StateShuttingDown:
 		detachRegularThread(handler.thread)
 		// signal to stop
 		return ""
 	}
-	panic("unexpected state: " + handler.state.name())
+	panic("unexpected state: " + handler.state.Name())
 }
 
 func (handler *regularThread) afterScriptExecution(int) {
@@ -63,7 +65,7 @@ func (handler *regularThread) waitForRequest() string {
 	// clear any previously sandboxed env
 	clearSandboxedEnv(handler.thread)
 
-	handler.state.markAsWaiting(true)
+	handler.state.MarkAsWaiting(true)
 
 	var fc *frankenPHPContext
 	select {
@@ -74,7 +76,7 @@ func (handler *regularThread) waitForRequest() string {
 	}
 
 	handler.requestContext = fc
-	handler.state.markAsWaiting(false)
+	handler.state.MarkAsWaiting(false)
 
 	// set the scriptFilename that should be executed
 	return fc.scriptFilename

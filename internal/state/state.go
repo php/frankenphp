@@ -6,46 +6,46 @@ import (
 	"time"
 )
 
-type stateID uint8
+type StateID uint8
 
 const (
-	// livecycle states of a thread
-	stateReserved stateID = iota
-	stateBooting
-	stateBootRequested
-	stateShuttingDown
-	stateDone
+	// livecycle States of a thread
+	StateReserved StateID = iota
+	StateBooting
+	StateBootRequested
+	StateShuttingDown
+	StateDone
 
-	// these states are 'stable' and safe to transition from at any time
-	stateInactive
-	stateReady
+	// these States are 'stable' and safe to transition from at any time
+	StateInactive
+	StateReady
 
-	// states necessary for restarting workers
-	stateRestarting
-	stateYielding
+	// States necessary for restarting workers
+	StateRestarting
+	StateYielding
 
-	// states necessary for transitioning between different handlers
-	stateTransitionRequested
-	stateTransitionInProgress
-	stateTransitionComplete
+	// States necessary for transitioning between different handlers
+	StateTransitionRequested
+	StateTransitionInProgress
+	StateTransitionComplete
 )
 
-var stateNames = map[stateID]string{
-	stateReserved:             "reserved",
-	stateBooting:              "booting",
-	stateInactive:             "inactive",
-	stateReady:                "ready",
-	stateShuttingDown:         "shutting down",
-	stateDone:                 "done",
-	stateRestarting:           "restarting",
-	stateYielding:             "yielding",
-	stateTransitionRequested:  "transition requested",
-	stateTransitionInProgress: "transition in progress",
-	stateTransitionComplete:   "transition complete",
+var stateNames = map[StateID]string{
+	StateReserved:             "reserved",
+	StateBooting:              "booting",
+	StateInactive:             "inactive",
+	StateReady:                "ready",
+	StateShuttingDown:         "shutting down",
+	StateDone:                 "done",
+	StateRestarting:           "restarting",
+	StateYielding:             "yielding",
+	StateTransitionRequested:  "transition requested",
+	StateTransitionInProgress: "transition in progress",
+	StateTransitionComplete:   "transition complete",
 }
 
-type threadState struct {
-	currentState stateID
+type ThreadState struct {
+	currentState StateID
 	mu           sync.RWMutex
 	subscribers  []stateSubscriber
 	// how long threads have been waiting in stable states
@@ -54,19 +54,19 @@ type threadState struct {
 }
 
 type stateSubscriber struct {
-	states []stateID
+	states []StateID
 	ch     chan struct{}
 }
 
-func newThreadState() *threadState {
-	return &threadState{
-		currentState: stateReserved,
+func NewThreadState() *ThreadState {
+	return &ThreadState{
+		currentState: StateReserved,
 		subscribers:  []stateSubscriber{},
 		mu:           sync.RWMutex{},
 	}
 }
 
-func (ts *threadState) is(state stateID) bool {
+func (ts *ThreadState) Is(state StateID) bool {
 	ts.mu.RLock()
 	ok := ts.currentState == state
 	ts.mu.RUnlock()
@@ -74,7 +74,7 @@ func (ts *threadState) is(state stateID) bool {
 	return ok
 }
 
-func (ts *threadState) compareAndSwap(compareTo stateID, swapTo stateID) bool {
+func (ts *ThreadState) CompareAndSwap(compareTo StateID, swapTo StateID) bool {
 	ts.mu.Lock()
 	ok := ts.currentState == compareTo
 	if ok {
@@ -86,11 +86,11 @@ func (ts *threadState) compareAndSwap(compareTo stateID, swapTo stateID) bool {
 	return ok
 }
 
-func (ts *threadState) name() string {
-	return stateNames[ts.get()]
+func (ts *ThreadState) Name() string {
+	return stateNames[ts.Get()]
 }
 
-func (ts *threadState) get() stateID {
+func (ts *ThreadState) Get() StateID {
 	ts.mu.RLock()
 	id := ts.currentState
 	ts.mu.RUnlock()
@@ -98,14 +98,14 @@ func (ts *threadState) get() stateID {
 	return id
 }
 
-func (ts *threadState) set(nextState stateID) {
+func (ts *ThreadState) Set(nextState StateID) {
 	ts.mu.Lock()
 	ts.currentState = nextState
 	ts.notifySubscribers(nextState)
 	ts.mu.Unlock()
 }
 
-func (ts *threadState) notifySubscribers(nextState stateID) {
+func (ts *ThreadState) notifySubscribers(nextState StateID) {
 	if len(ts.subscribers) == 0 {
 		return
 	}
@@ -122,7 +122,7 @@ func (ts *threadState) notifySubscribers(nextState stateID) {
 }
 
 // block until the thread reaches a certain state
-func (ts *threadState) waitFor(states ...stateID) {
+func (ts *ThreadState) WaitFor(states ...StateID) {
 	ts.mu.Lock()
 	if slices.Contains(states, ts.currentState) {
 		ts.mu.Unlock()
@@ -138,15 +138,15 @@ func (ts *threadState) waitFor(states ...stateID) {
 }
 
 // safely request a state change from a different goroutine
-func (ts *threadState) requestSafeStateChange(nextState stateID) bool {
+func (ts *ThreadState) RequestSafeStateChange(nextState StateID) bool {
 	ts.mu.Lock()
 	switch ts.currentState {
 	// disallow state changes if shutting down or done
-	case stateShuttingDown, stateDone, stateReserved:
+	case StateShuttingDown, StateDone, StateReserved:
 		ts.mu.Unlock()
 		return false
 	// ready and inactive are safe states to transition from
-	case stateReady, stateInactive:
+	case StateReady, StateInactive:
 		ts.currentState = nextState
 		ts.notifySubscribers(nextState)
 		ts.mu.Unlock()
@@ -155,12 +155,12 @@ func (ts *threadState) requestSafeStateChange(nextState stateID) bool {
 	ts.mu.Unlock()
 
 	// wait for the state to change to a safe state
-	ts.waitFor(stateReady, stateInactive, stateShuttingDown)
-	return ts.requestSafeStateChange(nextState)
+	ts.WaitFor(StateReady, StateInactive, StateShuttingDown)
+	return ts.RequestSafeStateChange(nextState)
 }
 
 // markAsWaiting hints that the thread reached a stable state and is waiting for requests or shutdown
-func (ts *threadState) markAsWaiting(isWaiting bool) {
+func (ts *ThreadState) MarkAsWaiting(isWaiting bool) {
 	ts.mu.Lock()
 	if isWaiting {
 		ts.isWaiting = true
@@ -172,7 +172,7 @@ func (ts *threadState) markAsWaiting(isWaiting bool) {
 }
 
 // isWaitingState returns true if a thread is waiting for a request or shutdown
-func (ts *threadState) isInWaitingState() bool {
+func (ts *ThreadState) IsInWaitingState() bool {
 	ts.mu.RLock()
 	isWaiting := ts.isWaiting
 	ts.mu.RUnlock()
@@ -180,7 +180,7 @@ func (ts *threadState) isInWaitingState() bool {
 }
 
 // waitTime returns the time since the thread is waiting in a stable state in ms
-func (ts *threadState) waitTime() int64 {
+func (ts *ThreadState) WaitTime() int64 {
 	ts.mu.RLock()
 	waitTime := int64(0)
 	if ts.isWaiting {
@@ -188,4 +188,10 @@ func (ts *threadState) waitTime() int64 {
 	}
 	ts.mu.RUnlock()
 	return waitTime
+}
+
+func (ts *ThreadState) SetWaitTime(t time.Time) {
+	ts.mu.Lock()
+	ts.waitingSince = t
+	ts.mu.Unlock()
 }

@@ -15,12 +15,13 @@ import (
 
 	"github.com/dunglas/frankenphp/internal/memory"
 	"github.com/dunglas/frankenphp/internal/phpheaders"
+	state "github.com/dunglas/frankenphp/internal/state"
 )
 
 // represents the main PHP thread
 // the thread needs to keep running as long as all other threads are running
 type phpMainThread struct {
-	state           *threadState
+	state           *state.ThreadState
 	done            chan struct{}
 	numThreads      int
 	maxThreads      int
@@ -40,7 +41,7 @@ var (
 // and reserves a fixed number of possible PHP threads
 func initPHPThreads(numThreads int, numMaxThreads int, phpIni map[string]string) (*phpMainThread, error) {
 	mainThread = &phpMainThread{
-		state:        newThreadState(),
+		state:        state.NewThreadState(),
 		done:         make(chan struct{}),
 		numThreads:   numThreads,
 		maxThreads:   numMaxThreads,
@@ -84,11 +85,11 @@ func initPHPThreads(numThreads int, numMaxThreads int, phpIni map[string]string)
 func drainPHPThreads() {
 	doneWG := sync.WaitGroup{}
 	doneWG.Add(len(phpThreads))
-	mainThread.state.set(stateShuttingDown)
+	mainThread.state.Set(state.StateShuttingDown)
 	close(mainThread.done)
 	for _, thread := range phpThreads {
 		// shut down all reserved threads
-		if thread.state.compareAndSwap(stateReserved, stateDone) {
+		if thread.state.CompareAndSwap(state.StateReserved, state.StateDone) {
 			doneWG.Done()
 			continue
 		}
@@ -100,8 +101,8 @@ func drainPHPThreads() {
 	}
 
 	doneWG.Wait()
-	mainThread.state.set(stateDone)
-	mainThread.state.waitFor(stateReserved)
+	mainThread.state.Set(state.StateDone)
+	mainThread.state.WaitFor(state.StateReserved)
 	phpThreads = nil
 }
 
@@ -110,7 +111,7 @@ func (mainThread *phpMainThread) start() error {
 		return ErrMainThreadCreation
 	}
 
-	mainThread.state.waitFor(stateReady)
+	mainThread.state.WaitFor(state.StateReady)
 
 	// cache common request headers as zend_strings (HTTP_ACCEPT, HTTP_USER_AGENT, etc.)
 	mainThread.commonHeaders = make(map[string]*C.zend_string, len(phpheaders.CommonRequestHeaders))
@@ -129,13 +130,13 @@ func (mainThread *phpMainThread) start() error {
 
 func getInactivePHPThread() *phpThread {
 	for _, thread := range phpThreads {
-		if thread.state.is(stateInactive) {
+		if thread.state.Is(state.StateInactive) {
 			return thread
 		}
 	}
 
 	for _, thread := range phpThreads {
-		if thread.state.compareAndSwap(stateReserved, stateBootRequested) {
+		if thread.state.CompareAndSwap(state.StateReserved, state.StateBootRequested) {
 			thread.boot()
 			return thread
 		}
@@ -151,8 +152,8 @@ func go_frankenphp_main_thread_is_ready() {
 		mainThread.maxThreads = mainThread.numThreads
 	}
 
-	mainThread.state.set(stateReady)
-	mainThread.state.waitFor(stateDone)
+	mainThread.state.Set(state.StateReady)
+	mainThread.state.WaitFor(state.StateDone)
 }
 
 // max_threads = auto
@@ -176,7 +177,7 @@ func (mainThread *phpMainThread) setAutomaticMaxThreads() {
 
 //export go_frankenphp_shutdown_main_thread
 func go_frankenphp_shutdown_main_thread() {
-	mainThread.state.set(stateReserved)
+	mainThread.state.Set(state.StateReserved)
 }
 
 //export go_get_custom_php_ini

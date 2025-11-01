@@ -11,13 +11,13 @@ func Test2GoroutinesYieldToEachOtherViaStates(t *testing.T) {
 	threadState := &threadState{currentState: stateBooting}
 
 	go func() {
-		threadState.waitFor(stateInactive)
+		threadState.WaitFor(stateInactive)
 		assert.True(t, threadState.is(stateInactive))
-		threadState.set(stateReady)
+		threadstate.Set(stateReady)
 	}()
 
-	threadState.set(stateInactive)
-	threadState.waitFor(stateReady)
+	threadstate.Set(stateInactive)
+	threadState.WaitFor(stateReady)
 	assert.True(t, threadState.is(stateReady))
 }
 
@@ -25,16 +25,16 @@ func TestStateShouldHaveCorrectAmountOfSubscribers(t *testing.T) {
 	threadState := &threadState{currentState: stateBooting}
 
 	// 3 subscribers waiting for different states
-	go threadState.waitFor(stateInactive)
-	go threadState.waitFor(stateInactive, stateShuttingDown)
-	go threadState.waitFor(stateShuttingDown)
+	go threadState.WaitFor(stateInactive)
+	go threadState.WaitFor(stateInactive, StateShuttingDown)
+	go threadState.WaitFor(StateShuttingDown)
 
 	assertNumberOfSubscribers(t, threadState, 3)
 
-	threadState.set(stateInactive)
+	threadstate.Set(stateInactive)
 	assertNumberOfSubscribers(t, threadState, 1)
 
-	assert.True(t, threadState.compareAndSwap(stateInactive, stateShuttingDown))
+	assert.True(t, threadstate.CompareAndSwap(stateInactive, stateShuttingDown))
 	assertNumberOfSubscribers(t, threadState, 0)
 }
 

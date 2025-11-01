@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/dunglas/frankenphp/internal/cpu"
+	state "github.com/dunglas/frankenphp/internal/state"
 )
 
 const (
@@ -64,7 +65,7 @@ func addRegularThread() (*phpThread, error) {
 		return nil, ErrMaxThreadsReached
 	}
 	convertToRegularThread(thread)
-	thread.state.waitFor(stateReady, stateShuttingDown, stateReserved)
+	thread.state.WaitFor(state.StateReady, state.StateShuttingDown, state.StateReserved)
 	return thread, nil
 }
 
@@ -74,7 +75,7 @@ func addWorkerThread(worker *worker) (*phpThread, error) {
 		return nil, ErrMaxThreadsReached
 	}
 	convertToWorkerThread(thread, worker)
-	thread.state.waitFor(stateReady, stateShuttingDown, stateReserved)
+	thread.state.WaitFor(state.StateReady, state.StateShuttingDown, state.StateReserved)
 	return thread, nil
 }
 
@@ -83,7 +84,7 @@ func scaleWorkerThread(worker *worker) {
 	scalingMu.Lock()
 	defer scalingMu.Unlock()
 
-	if !mainThread.state.is(stateReady) {
+	if !mainThread.state.Is(state.StateReady) {
 		return
 	}
 
@@ -108,7 +109,7 @@ func scaleRegularThread() {
 	scalingMu.Lock()
 	defer scalingMu.Unlock()
 
-	if !mainThread.state.is(stateReady) {
+	if !mainThread.state.Is(state.StateReady) {
 		return
 	}
 
@@ -189,18 +190,18 @@ func deactivateThreads() {
 		thread := autoScaledThreads[i]
 
 		// the thread might have been stopped otherwise, remove it
-		if thread.state.is(stateReserved) {
+		if thread.state.Is(state.StateReserved) {
 			autoScaledThreads = append(autoScaledThreads[:i], autoScaledThreads[i+1:]...)
 			continue
 		}
 
-		waitTime := thread.state.waitTime()
+		waitTime := thread.state.WaitTime()
 		if stoppedThreadCount > maxTerminationCount || waitTime == 0 {
 			continue
 		}
 
 		// convert threads to inactive if they have been idle for too long
-		if thread.state.is(stateReady) && waitTime > maxThreadIdleTime.Milliseconds() {
+		if thread.state.Is(state.StateReady) && waitTime > maxThreadIdleTime.Milliseconds() {
 			convertToInactiveThread(thread)
 			stoppedThreadCount++
 			autoScaledThreads = append(autoScaledThreads[:i], autoScaledThreads[i+1:]...)
@@ -212,7 +213,7 @@ func deactivateThreads() {
 		// TODO: Completely stopping threads is more memory efficient
 		// Some PECL extensions like #1296 will prevent threads from fully stopping (they leak memory)
 		// Reactivate this if there is a better solution or workaround
-		// if thread.state.is(stateInactive) && waitTime > maxThreadIdleTime.Milliseconds() {
+		// if thread.state.Is(state.StateInactive) && waitTime > maxThreadIdleTime.Milliseconds() {
 		// 	logger.LogAttrs(nil, slog.LevelDebug, "auto-stopping thread", slog.Int("thread", thread.threadIndex))
 		// 	thread.shutdown()
 		// 	stoppedThreadCount++

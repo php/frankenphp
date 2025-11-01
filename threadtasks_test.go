@@ -2,6 +2,8 @@ package frankenphp
 
 import (
 	"sync"
+
+	state "github.com/dunglas/frankenphp/internal/state"
 )
 
 // representation of a thread that handles tasks directly assigned by go
@@ -41,23 +43,23 @@ func convertToTaskThread(thread *phpThread) *taskThread {
 func (handler *taskThread) beforeScriptExecution() string {
 	thread := handler.thread
 
-	switch thread.state.get() {
-	case stateTransitionRequested:
+	switch thread.state.Get() {
+	case state.StateTransitionRequested:
 		return thread.transitionToNewHandler()
-	case stateBooting, stateTransitionComplete:
-		thread.state.set(stateReady)
+	case state.StateBooting, state.StateTransitionComplete:
+		thread.state.Set(state.StateReady)
 		handler.waitForTasks()
 
 		return handler.beforeScriptExecution()
-	case stateReady:
+	case state.StateReady:
 		handler.waitForTasks()
 
 		return handler.beforeScriptExecution()
-	case stateShuttingDown:
+	case state.StateShuttingDown:
 		// signal to stop
 		return ""
 	}
-	panic("unexpected state: " + thread.state.name())
+	panic("unexpected state: " + thread.state.Name())
 }
 
 func (handler *taskThread) afterScriptExecution(int) {
