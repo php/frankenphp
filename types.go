@@ -280,46 +280,35 @@ func goValue[T any](zval *C.zval) (res T, err error) {
 
 	switch zvalGetType(zval) {
 	case C.IS_NULL:
-		resAny = any(nil)
+		resAny = nil
 	case C.IS_FALSE:
-		resAny = any(false)
+		resAny = false
 	case C.IS_TRUE:
-		resAny = any(true)
+		resAny = true
 	case C.IS_LONG:
 		v := (*C.zend_long)(unsafe.Pointer(&zval.value[0]))
 
 		if v != nil {
-			resAny = any(int64(*v))
+			resAny = int64(*v)
 
 			break
 		}
 
-		resAny = any(int64(0))
+		resAny = int64(0)
 	case C.IS_DOUBLE:
 		v := (*C.double)(unsafe.Pointer(&zval.value[0]))
 		if v != nil {
-			resAny = any(float64(*v))
+			resAny = float64(*v)
 
 			break
 		}
 
-		resAny = any(float64(0))
+		resAny = float64(0)
 	case C.IS_STRING:
 		v := *(**C.zend_string)(unsafe.Pointer(&zval.value[0]))
-
-		if v == nil {
-			resAny = any("")
-
-			break
-		}
-
-		resAny = any(goString(v))
+		resAny = goString(v)
 	case C.IS_ARRAY:
 		array := *(**C.zend_array)(unsafe.Pointer(&zval.value[0]))
-		if array == nil {
-			return resZero, err
-		}
-
 		if htIsPacked(array) {
 			typ := reflect.TypeOf(res)
 			if typ == nil || typ.Kind() == reflect.Interface && typ.NumMethod() == 0 {
@@ -328,7 +317,7 @@ func goValue[T any](zval *C.zval) (res T, err error) {
 					return resZero, e
 				}
 
-				resAny = any(r)
+				resAny = r
 
 				break
 			}
@@ -341,7 +330,7 @@ func goValue[T any](zval *C.zval) (res T, err error) {
 			return resZero, err
 		}
 
-		resAny = any(AssociativeArray[T]{Map: goMap, Order: order})
+		resAny = AssociativeArray[T]{Map: goMap, Order: order}
 	default:
 		return resZero, fmt.Errorf("unsupported zval type %d", zvalGetType(zval))
 	}
