@@ -2,6 +2,12 @@ package frankenphp
 
 /*
 #cgo noescape __zend_new_array__
+#cgo noescape zend_hash_str_update
+#cgo noescape zend_hash_next_index_insert
+#cgo noescape get_ht_bucket
+#cgo noescape get_ht_packed_data
+#cgo noescape zend_string_init
+#include "zend_API.h"
 #include "types.h"
 */
 import "C"
@@ -59,7 +65,7 @@ func isInternedString(zs *C.zend_string) bool {
 
 // EXPERIMENTAL: PHPString converts a Go string to a zend_string with copy. The string can be
 // non-persistent (automatically freed after the request by the ZMM) or persistent. If you choose
-// the second mode, it is your repsonsability to free the allocated memory.
+// the second mode, it is your repsonsibility to free the allocated memory.
 func PHPString(s string, persistent bool) unsafe.Pointer {
 	return unsafe.Pointer(phpString(s, persistent))
 }
@@ -415,8 +421,7 @@ func htIsPacked(ht *C.zend_array) bool {
 // equivalent of Z_TYPE_P
 // interpret z->u1 as a 32-bit integer, then take lowest byte
 func zvalGetType(z *C.zval) C.uint8_t {
-	ptr := (*uint32)(unsafe.Pointer(&z.u1))
-	typeInfo := *ptr
+	typeInfo := *(*uint32)(unsafe.Pointer(&z.u1))
 	return C.uint8_t(typeInfo & 0xFF)
 }
 
