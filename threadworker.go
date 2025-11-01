@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"time"
 	"unsafe"
+
+	"github.com/dunglas/frankenphp/internal/backoff"
 )
 
 // representation of a thread assigned to a worker script
@@ -20,7 +22,7 @@ type workerThread struct {
 	worker          *worker
 	dummyContext    *frankenPHPContext
 	workerContext   *frankenPHPContext
-	backoff         *exponentialBackoff
+	backoff         *backoff.ExponentialBackoff
 	isBootingScript bool // true if the worker has not reached frankenphp_handle_request yet
 }
 
@@ -29,10 +31,10 @@ func convertToWorkerThread(thread *phpThread, worker *worker) {
 		state:  thread.state,
 		thread: thread,
 		worker: worker,
-		backoff: &exponentialBackoff{
-			maxBackoff:             1 * time.Second,
-			minBackoff:             100 * time.Millisecond,
-			maxConsecutiveFailures: worker.maxConsecutiveFailures,
+		backoff: &backoff.ExponentialBackoff{
+			MaxBackoff:             1 * time.Second,
+			MinBackoff:             100 * time.Millisecond,
+			MaxConsecutiveFailures: worker.maxConsecutiveFailures,
 		},
 	})
 	worker.attachThread(thread)
@@ -55,6 +57,7 @@ func (handler *workerThread) beforeScriptExecution() string {
 		handler.state.waitFor(stateReady, stateShuttingDown)
 		return handler.beforeScriptExecution()
 	case stateReady, stateTransitionComplete:
+		handler.thread.updateContext(true)
 		if handler.worker.onThreadReady != nil {
 			handler.worker.onThreadReady(handler.thread.threadIndex)
 		}
@@ -88,7 +91,7 @@ func (handler *workerThread) name() string {
 }
 
 func setupWorkerScript(handler *workerThread, worker *worker) {
-	handler.backoff.wait()
+	handler.backoff.Wait()
 	metrics.StartWorker(worker.name)
 
 	if handler.state.is(stateReady) {
@@ -128,7 +131,7 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 	// on exit status 0 we just run the worker script again
 	if exitStatus == 0 && !handler.isBootingScript {
 		metrics.StopWorker(worker.name, StopReasonRestart)
-		handler.backoff.recordSuccess()
+		handler.backoff.RecordSuccess()
 		logger.LogAttrs(ctx, slog.LevelDebug, "restarting", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex), slog.Int("exit_status", exitStatus))
 
 		return
@@ -147,12 +150,12 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 	logger.LogAttrs(ctx, slog.LevelError, "worker script has not reached frankenphp_handle_request()", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex))
 
 	// panic after exponential backoff if the worker has never reached frankenphp_handle_request
-	if handler.backoff.recordFailure() {
+	if handler.backoff.RecordFailure() {
 		if !watcherIsEnabled && !handler.state.is(stateReady) {
-			logger.LogAttrs(ctx, slog.LevelError, "too many consecutive worker failures", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex), slog.Int("failures", handler.backoff.failureCount))
+			logger.LogAttrs(ctx, slog.LevelError, "too many consecutive worker failures", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex), slog.Int("failures", handler.backoff.FailureCount()))
 			panic("too many consecutive worker failures")
 		}
-		logger.LogAttrs(ctx, slog.LevelWarn, "many consecutive worker failures", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex), slog.Int("failures", handler.backoff.failureCount))
+		logger.LogAttrs(ctx, slog.LevelWarn, "many consecutive worker failures", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex), slog.Int("failures", handler.backoff.FailureCount()))
 	}
 }
 

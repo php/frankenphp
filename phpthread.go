@@ -132,6 +132,10 @@ func (thread *phpThread) pinCString(s string) *C.char {
 	return thread.pinString(s + "\x00")
 }
 
+func (*phpThread) updateContext(isWorker bool) {
+	C.frankenphp_update_local_thread_context(C.bool(isWorker))
+}
+
 //export go_frankenphp_before_script_execution
 func go_frankenphp_before_script_execution(threadIndex C.uintptr_t) *C.char {
 	thread := phpThreads[threadIndex]
