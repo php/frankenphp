@@ -275,8 +275,7 @@ func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				f.Workers = append(f.Workers, wc)
 
 			default:
-				allowedDirectives := "root, split, env, resolve_root_symlink, worker"
-				return wrongSubDirectiveError("php or php_server", allowedDirectives, d.Val())
+				return wrongSubDirectiveError("php or php_server", "root, split, env, resolve_root_symlink, worker", d.Val())
 			}
 		}
 	}
