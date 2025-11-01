@@ -4,6 +4,7 @@ import (
 	"io"
 	"log/slog"
 	"testing"
+	"fmt"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -143,5 +144,115 @@ func TestNestedMixedArray(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, originalArray, convertedArray, "nested mixed array should be equal after conversion")
+	})
+}
+
+func benchOnPHPThread(b *testing.B, count int, cb func()) {
+    logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+    _, err := initPHPThreads(1, 1, nil) // boot 1 thread
+    assert.NoError(b, err)
+    handler := convertToTaskThread(phpThreads[0])
+
+    task := newTask(func() {
+        for i := 0; i < count; i++ {
+            cb()
+        }
+    })
+    handler.execute(task)
+    task.waitForCompletion()
+
+    drainPHPThreads()
+}
+
+func BenchmarkBool(b *testing.B) {
+	benchOnPHPThread(b, b.N, func() {
+		phpBool := PHPValue(true)
+		_, _ = GoValue[bool](phpBool)
+	})
+}
+
+func BenchmarkInt(b *testing.B) {
+	benchOnPHPThread(b, b.N, func() {
+		phpInt := PHPValue(int64(42))
+		_, _ = GoValue[int64](phpInt)
+	})
+}
+
+func BenchmarkFloat(b *testing.B) {
+	benchOnPHPThread(b, b.N, func() {
+		phpFloat := PHPValue(3.14)
+		_, _ = GoValue[float64](phpFloat)
+	})
+}
+
+func BenchmarkString(b *testing.B) {
+	message := "Hello, World!"
+	benchOnPHPThread(b, b.N, func() {
+		phpString := PHPString(message, false)
+		_ = GoString(phpString)
+		zendStringRelease(phpString)
+	})
+}
+
+func BenchmarkEmptyMap(b *testing.B) {
+	originalMap := map[string]any{}
+	benchOnPHPThread(b, b.N, func() {
+		phpArray := PHPMap(originalMap)
+		_, _ = GoMap[any](phpArray)
+		zendHashDestroy(phpArray)
+	})
+}
+
+func BenchmarkMap5Entries(b *testing.B) {
+	originalMap := map[string]any{
+		"foo1": "bar1",
+		"foo2": int64(2),
+		"foo3": true,
+		"foo4": 3.14,
+		"foo5": nil,
+	}
+	benchOnPHPThread(b, b.N, func() {
+		phpArray := PHPMap(originalMap)
+		_, _ = GoMap[any](phpArray)
+		zendHashDestroy(phpArray)
+	})
+}
+
+func BenchmarkMap50Entries(b *testing.B) {
+	originalMap := map[string]any{}
+	for i := 0; i < 50; i++ {
+		originalMap[fmt.Sprintf("key%d", i)] = fmt.Sprintf("value%d", i)
+	}
+	benchOnPHPThread(b, b.N, func() {
+		phpArray := PHPMap(originalMap)
+		_, _ = GoMap[any](phpArray)
+		zendHashDestroy(phpArray)
+	})
+}
+
+func BenchmarkAssociativeArray5Entries(b *testing.B) {
+	originalArray := AssociativeArray[any]{
+		Map: map[string]any{
+			"foo1": "bar1",
+			"foo2": int64(2),
+			"foo3": true,
+			"foo4": 3.14,
+			"foo5": nil,
+		},
+		Order: []string{"foo3", "foo1", "foo4", "foo2", "foo5"},
+	}
+	benchOnPHPThread(b, b.N, func() {
+		phpArray := PHPAssociativeArray(originalArray)
+		_, _ = GoAssociativeArray[any](phpArray)
+		zendHashDestroy(phpArray)
+	})
+}
+
+func BenchmarkSlice5Entries(b *testing.B) {
+	originalSlice := []any{"bar1", "bar2", "bar3", "bar4", "bar5"}
+	benchOnPHPThread(b, b.N, func() {
+		phpArray := PHPPackedArray(originalSlice)
+		_, _ = GoPackedArray[any](phpArray)
+		zendHashDestroy(phpArray)
 	})
 }
