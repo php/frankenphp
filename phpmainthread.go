@@ -15,7 +15,7 @@ import (
 
 	"github.com/dunglas/frankenphp/internal/memory"
 	"github.com/dunglas/frankenphp/internal/phpheaders"
-	state "github.com/dunglas/frankenphp/internal/state"
+	"github.com/dunglas/frankenphp/internal/state"
 )
 
 // represents the main PHP thread
@@ -85,11 +85,11 @@ func initPHPThreads(numThreads int, numMaxThreads int, phpIni map[string]string)
 func drainPHPThreads() {
 	doneWG := sync.WaitGroup{}
 	doneWG.Add(len(phpThreads))
-	mainThread.state.Set(state.StateShuttingDown)
+	mainThread.state.Set(state.ShuttingDown)
 	close(mainThread.done)
 	for _, thread := range phpThreads {
 		// shut down all reserved threads
-		if thread.state.CompareAndSwap(state.StateReserved, state.StateDone) {
+		if thread.state.CompareAndSwap(state.Reserved, state.Done) {
 			doneWG.Done()
 			continue
 		}
@@ -101,8 +101,8 @@ func drainPHPThreads() {
 	}
 
 	doneWG.Wait()
-	mainThread.state.Set(state.StateDone)
-	mainThread.state.WaitFor(state.StateReserved)
+	mainThread.state.Set(state.Done)
+	mainThread.state.WaitFor(state.Reserved)
 	phpThreads = nil
 }
 
@@ -111,7 +111,7 @@ func (mainThread *phpMainThread) start() error {
 		return ErrMainThreadCreation
 	}
 
-	mainThread.state.WaitFor(state.StateReady)
+	mainThread.state.WaitFor(state.Ready)
 
 	// cache common request headers as zend_strings (HTTP_ACCEPT, HTTP_USER_AGENT, etc.)
 	mainThread.commonHeaders = make(map[string]*C.zend_string, len(phpheaders.CommonRequestHeaders))
@@ -130,13 +130,13 @@ func (mainThread *phpMainThread) start() error {
 
 func getInactivePHPThread() *phpThread {
 	for _, thread := range phpThreads {
-		if thread.state.Is(state.StateInactive) {
+		if thread.state.Is(state.Inactive) {
 			return thread
 		}
 	}
 
 	for _, thread := range phpThreads {
-		if thread.state.CompareAndSwap(state.StateReserved, state.StateBootRequested) {
+		if thread.state.CompareAndSwap(state.Reserved, state.BootRequested) {
 			thread.boot()
 			return thread
 		}
@@ -152,8 +152,8 @@ func go_frankenphp_main_thread_is_ready() {
 		mainThread.maxThreads = mainThread.numThreads
 	}
 
-	mainThread.state.Set(state.StateReady)
-	mainThread.state.WaitFor(state.StateDone)
+	mainThread.state.Set(state.Ready)
+	mainThread.state.WaitFor(state.Done)
 }
 
 // max_threads = auto
@@ -177,7 +177,7 @@ func (mainThread *phpMainThread) setAutomaticMaxThreads() {
 
 //export go_frankenphp_shutdown_main_thread
 func go_frankenphp_shutdown_main_thread() {
-	mainThread.state.Set(state.StateReserved)
+	mainThread.state.Set(state.Reserved)
 }
 
 //export go_get_custom_php_ini

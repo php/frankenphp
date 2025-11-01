@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/dunglas/frankenphp/internal/fastabs"
-	state "github.com/dunglas/frankenphp/internal/state"
+	"github.com/dunglas/frankenphp/internal/state"
 	"github.com/dunglas/frankenphp/internal/watcher"
 )
 
@@ -53,7 +53,7 @@ func initWorkers(opt []workerOpt) error {
 			thread := getInactivePHPThread()
 			convertToWorkerThread(thread, w)
 			go func() {
-				thread.state.WaitFor(state.StateReady)
+				thread.state.WaitFor(state.Ready)
 				workersReady.Done()
 			}()
 		}
@@ -147,7 +147,7 @@ func drainWorkerThreads() []*phpThread {
 		worker.threadMutex.RLock()
 		ready.Add(len(worker.threads))
 		for _, thread := range worker.threads {
-			if !thread.state.RequestSafeStateChange(state.StateRestarting) {
+			if !thread.state.RequestSafeStateChange(state.Restarting) {
 				ready.Done()
 				// no state change allowed == thread is shutting down
 				// we'll proceed to restart all other threads anyways
@@ -156,7 +156,7 @@ func drainWorkerThreads() []*phpThread {
 			close(thread.drainChan)
 			drainedThreads = append(drainedThreads, thread)
 			go func(thread *phpThread) {
-				thread.state.WaitFor(state.StateYielding)
+				thread.state.WaitFor(state.Yielding)
 				ready.Done()
 			}(thread)
 		}
@@ -183,7 +183,7 @@ func RestartWorkers() {
 
 	for _, thread := range threadsToRestart {
 		thread.drainChan = make(chan struct{})
-		thread.state.Set(state.StateReady)
+		thread.state.Set(state.Ready)
 	}
 }
 

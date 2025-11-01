@@ -11,7 +11,7 @@ import (
 	"unsafe"
 
 	"github.com/dunglas/frankenphp/internal/backoff"
-	state "github.com/dunglas/frankenphp/internal/state"
+	"github.com/dunglas/frankenphp/internal/state"
 )
 
 // representation of a thread assigned to a worker script
@@ -44,27 +44,27 @@ func convertToWorkerThread(thread *phpThread, worker *worker) {
 // beforeScriptExecution returns the name of the script or an empty string on shutdown
 func (handler *workerThread) beforeScriptExecution() string {
 	switch handler.state.Get() {
-	case state.StateTransitionRequested:
+	case state.TransitionRequested:
 		if handler.worker.onThreadShutdown != nil {
 			handler.worker.onThreadShutdown(handler.thread.threadIndex)
 		}
 		handler.worker.detachThread(handler.thread)
 		return handler.thread.transitionToNewHandler()
-	case state.StateRestarting:
+	case state.Restarting:
 		if handler.worker.onThreadShutdown != nil {
 			handler.worker.onThreadShutdown(handler.thread.threadIndex)
 		}
-		handler.state.Set(state.StateYielding)
-		handler.state.WaitFor(state.StateReady, state.StateShuttingDown)
+		handler.state.Set(state.Yielding)
+		handler.state.WaitFor(state.Ready, state.ShuttingDown)
 		return handler.beforeScriptExecution()
-	case state.StateReady, state.StateTransitionComplete:
+	case state.Ready, state.TransitionComplete:
 		handler.thread.updateContext(true)
 		if handler.worker.onThreadReady != nil {
 			handler.worker.onThreadReady(handler.thread.threadIndex)
 		}
 		setupWorkerScript(handler, handler.worker)
 		return handler.worker.fileName
-	case state.StateShuttingDown:
+	case state.ShuttingDown:
 		if handler.worker.onThreadShutdown != nil {
 			handler.worker.onThreadShutdown(handler.thread.threadIndex)
 		}
@@ -95,7 +95,7 @@ func setupWorkerScript(handler *workerThread, worker *worker) {
 	handler.backoff.Wait()
 	metrics.StartWorker(worker.name)
 
-	if handler.state.Is(state.StateReady) {
+	if handler.state.Is(state.Ready) {
 		metrics.ReadyWorker(handler.worker.name)
 	}
 
@@ -152,7 +152,7 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 
 	// panic after exponential backoff if the worker has never reached frankenphp_handle_request
 	if handler.backoff.RecordFailure() {
-		if !watcherIsEnabled && !handler.state.Is(state.StateReady) {
+		if !watcherIsEnabled && !handler.state.Is(state.Ready) {
 			logger.LogAttrs(ctx, slog.LevelError, "too many consecutive worker failures", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex), slog.Int("failures", handler.backoff.FailureCount()))
 			panic("too many consecutive worker failures")
 		}
@@ -177,11 +177,11 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 	}
 
 	// worker threads are 'ready' after they first reach frankenphp_handle_request()
-	// 'state.StateTransitionComplete' is only true on the first boot of the worker script,
+	// 'state.TransitionComplete' is only true on the first boot of the worker script,
 	// while 'isBootingScript' is true on every boot of the worker script
-	if handler.state.Is(state.StateTransitionComplete) {
+	if handler.state.Is(state.TransitionComplete) {
 		metrics.ReadyWorker(handler.worker.name)
-		handler.state.Set(state.StateReady)
+		handler.state.Set(state.Ready)
 	}
 
 	handler.state.MarkAsWaiting(true)
@@ -193,7 +193,7 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 
 		// flush the opcache when restarting due to watcher or admin api
 		// note: this is done right before frankenphp_handle_request() returns 'false'
-		if handler.state.Is(state.StateRestarting) {
+		if handler.state.Is(state.Restarting) {
 			C.frankenphp_reset_opcache()
 		}
 

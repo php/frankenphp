@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/dunglas/frankenphp/internal/phpheaders"
-	state "github.com/dunglas/frankenphp/internal/state"
+	"github.com/dunglas/frankenphp/internal/state"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -26,7 +26,7 @@ func TestStartAndStopTheMainThreadWithOneInactiveThread(t *testing.T) {
 
 	assert.Len(t, phpThreads, 1)
 	assert.Equal(t, 0, phpThreads[0].threadIndex)
-	assert.True(t, phpThreads[0].state.Is(state.StateInactive))
+	assert.True(t, phpThreads[0].state.Is(state.Inactive))
 
 	drainPHPThreads()
 	assert.Nil(t, phpThreads)
@@ -160,7 +160,7 @@ func TestFinishBootingAWorkerScript(t *testing.T) {
 	// boot the worker
 	worker := getDummyWorker("transition-worker-1.php")
 	convertToWorkerThread(phpThreads[0], worker)
-	phpThreads[0].state.WaitFor(state.StateReady)
+	phpThreads[0].state.WaitFor(state.Ready)
 
 	assert.NotNil(t, phpThreads[0].handler.(*workerThread).dummyContext)
 	assert.Nil(t, phpThreads[0].handler.(*workerThread).workerContext)
@@ -226,7 +226,7 @@ func allPossibleTransitions(worker1Path string, worker2Path string) []func(*phpT
 		convertToRegularThread,
 		func(thread *phpThread) { thread.shutdown() },
 		func(thread *phpThread) {
-			if thread.state.Is(state.StateReserved) {
+			if thread.state.Is(state.Reserved) {
 				thread.boot()
 			}
 		},

@@ -3,7 +3,7 @@ package frankenphp
 import (
 	"sync"
 
-	state "github.com/dunglas/frankenphp/internal/state"
+	"github.com/dunglas/frankenphp/internal/state"
 )
 
 // representation of a non-worker PHP thread
@@ -32,16 +32,16 @@ func convertToRegularThread(thread *phpThread) {
 // beforeScriptExecution returns the name of the script or an empty string on shutdown
 func (handler *regularThread) beforeScriptExecution() string {
 	switch handler.state.Get() {
-	case state.StateTransitionRequested:
+	case state.TransitionRequested:
 		detachRegularThread(handler.thread)
 		return handler.thread.transitionToNewHandler()
-	case state.StateTransitionComplete:
+	case state.TransitionComplete:
 		handler.thread.updateContext(false)
-		handler.state.Set(state.StateReady)
+		handler.state.Set(state.Ready)
 		return handler.waitForRequest()
-	case state.StateReady:
+	case state.Ready:
 		return handler.waitForRequest()
-	case state.StateShuttingDown:
+	case state.ShuttingDown:
 		detachRegularThread(handler.thread)
 		// signal to stop
 		return ""

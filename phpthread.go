@@ -10,7 +10,7 @@ import (
 	"sync"
 	"unsafe"
 
-	state "github.com/dunglas/frankenphp/internal/state"
+	"github.com/dunglas/frankenphp/internal/state"
 )
 
 // representation of the actual underlying PHP thread
@@ -45,7 +45,7 @@ func newPHPThread(threadIndex int) *phpThread {
 // boot starts the underlying PHP thread
 func (thread *phpThread) boot() {
 	// thread must be in reserved state to boot
-	if !thread.state.CompareAndSwap(state.StateReserved, state.StateBooting) && !thread.state.CompareAndSwap(state.StateBootRequested, state.StateBooting) {
+	if !thread.state.CompareAndSwap(state.Reserved, state.Booting) && !thread.state.CompareAndSwap(state.BootRequested, state.Booting) {
 		logger.Error("thread is not in reserved state: " + thread.state.Name())
 		panic("thread is not in reserved state: " + thread.state.Name())
 	}
@@ -62,22 +62,22 @@ func (thread *phpThread) boot() {
 		panic("unable to create thread")
 	}
 
-	thread.state.WaitFor(state.StateInactive)
+	thread.state.WaitFor(state.Inactive)
 }
 
 // shutdown the underlying PHP thread
 func (thread *phpThread) shutdown() {
-	if !thread.state.RequestSafeStateChange(state.StateShuttingDown) {
+	if !thread.state.RequestSafeStateChange(state.ShuttingDown) {
 		// already shutting down or done
 		return
 	}
 	close(thread.drainChan)
-	thread.state.WaitFor(state.StateDone)
+	thread.state.WaitFor(state.Done)
 	thread.drainChan = make(chan struct{})
 
 	// threads go back to the reserved state from which they can be booted again
-	if mainThread.state.Is(state.StateReady) {
-		thread.state.Set(state.StateReserved)
+	if mainThread.state.Is(state.Ready) {
+		thread.state.Set(state.Reserved)
 	}
 }
 
@@ -86,22 +86,22 @@ func (thread *phpThread) shutdown() {
 func (thread *phpThread) setHandler(handler threadHandler) {
 	thread.handlerMu.Lock()
 	defer thread.handlerMu.Unlock()
-	if !thread.state.RequestSafeStateChange(state.StateTransitionRequested) {
+	if !thread.state.RequestSafeStateChange(state.TransitionRequested) {
 		// no state change allowed == shutdown or done
 		return
 	}
 	close(thread.drainChan)
-	thread.state.WaitFor(state.StateTransitionInProgress)
+	thread.state.WaitFor(state.TransitionInProgress)
 	thread.handler = handler
 	thread.drainChan = make(chan struct{})
-	thread.state.Set(state.StateTransitionComplete)
+	thread.state.Set(state.TransitionComplete)
 }
 
 // transition to a new handler safely
 // is triggered by setHandler and executed on the PHP thread
 func (thread *phpThread) transitionToNewHandler() string {
-	thread.state.Set(state.StateTransitionInProgress)
-	thread.state.WaitFor(state.StateTransitionComplete)
+	thread.state.Set(state.TransitionInProgress)
+	thread.state.WaitFor(state.TransitionComplete)
 	// execute beforeScriptExecution of the new handler
 	return thread.handler.beforeScriptExecution()
 }
@@ -168,5 +168,5 @@ func go_frankenphp_after_script_execution(threadIndex C.uintptr_t, exitStatus C.
 func go_frankenphp_on_thread_shutdown(threadIndex C.uintptr_t) {
 	thread := phpThreads[threadIndex]
 	thread.Unpin()
-	thread.state.Set(state.StateDone)
+	thread.state.Set(state.Done)
 }

@@ -1,7 +1,7 @@
 package frankenphp
 
 import (
-	state "github.com/dunglas/frankenphp/internal/state"
+	"github.com/dunglas/frankenphp/internal/state"
 )
 
 // representation of a thread with no work assigned to it
@@ -20,17 +20,17 @@ func (handler *inactiveThread) beforeScriptExecution() string {
 	thread := handler.thread
 
 	switch thread.state.Get() {
-	case state.StateTransitionRequested:
+	case state.TransitionRequested:
 		return thread.transitionToNewHandler()
-	case state.StateBooting, state.StateTransitionComplete:
-		thread.state.Set(state.StateInactive)
+	case state.Booting, state.TransitionComplete:
+		thread.state.Set(state.Inactive)
 
 		// wait for external signal to start or shut down
 		thread.state.MarkAsWaiting(true)
-		thread.state.WaitFor(state.StateTransitionRequested, state.StateShuttingDown)
+		thread.state.WaitFor(state.TransitionRequested, state.ShuttingDown)
 		thread.state.MarkAsWaiting(false)
 		return handler.beforeScriptExecution()
-	case state.StateShuttingDown:
+	case state.ShuttingDown:
 		// signal to stop
 		return ""
 	}

@@ -1,4 +1,4 @@
-package frankenphp
+package state
 
 import (
 	"slices"
@@ -10,38 +10,38 @@ type StateID uint8
 
 const (
 	// livecycle States of a thread
-	StateReserved StateID = iota
-	StateBooting
-	StateBootRequested
-	StateShuttingDown
-	StateDone
+	Reserved StateID = iota
+	Booting
+	BootRequested
+	ShuttingDown
+	Done
 
 	// these States are 'stable' and safe to transition from at any time
-	StateInactive
-	StateReady
+	Inactive
+	Ready
 
 	// States necessary for restarting workers
-	StateRestarting
-	StateYielding
+	Restarting
+	Yielding
 
 	// States necessary for transitioning between different handlers
-	StateTransitionRequested
-	StateTransitionInProgress
-	StateTransitionComplete
+	TransitionRequested
+	TransitionInProgress
+	TransitionComplete
 )
 
 var stateNames = map[StateID]string{
-	StateReserved:             "reserved",
-	StateBooting:              "booting",
-	StateInactive:             "inactive",
-	StateReady:                "ready",
-	StateShuttingDown:         "shutting down",
-	StateDone:                 "done",
-	StateRestarting:           "restarting",
-	StateYielding:             "yielding",
-	StateTransitionRequested:  "transition requested",
-	StateTransitionInProgress: "transition in progress",
-	StateTransitionComplete:   "transition complete",
+	Reserved:             "reserved",
+	Booting:              "booting",
+	Inactive:             "inactive",
+	Ready:                "ready",
+	ShuttingDown:         "shutting down",
+	Done:                 "done",
+	Restarting:           "restarting",
+	Yielding:             "yielding",
+	TransitionRequested:  "transition requested",
+	TransitionInProgress: "transition in progress",
+	TransitionComplete:   "transition complete",
 }
 
 type ThreadState struct {
@@ -60,7 +60,7 @@ type stateSubscriber struct {
 
 func NewThreadState() *ThreadState {
 	return &ThreadState{
-		currentState: StateReserved,
+		currentState: Reserved,
 		subscribers:  []stateSubscriber{},
 		mu:           sync.RWMutex{},
 	}
@@ -142,11 +142,11 @@ func (ts *ThreadState) RequestSafeStateChange(nextState StateID) bool {
 	ts.mu.Lock()
 	switch ts.currentState {
 	// disallow state changes if shutting down or done
-	case StateShuttingDown, StateDone, StateReserved:
+	case ShuttingDown, Done, Reserved:
 		ts.mu.Unlock()
 		return false
 	// ready and inactive are safe states to transition from
-	case StateReady, StateInactive:
+	case Ready, Inactive:
 		ts.currentState = nextState
 		ts.notifySubscribers(nextState)
 		ts.mu.Unlock()
@@ -155,7 +155,7 @@ func (ts *ThreadState) RequestSafeStateChange(nextState StateID) bool {
 	ts.mu.Unlock()
 
 	// wait for the state to change to a safe state
-	ts.WaitFor(StateReady, StateInactive, StateShuttingDown)
+	ts.WaitFor(Ready, Inactive, ShuttingDown)
 	return ts.RequestSafeStateChange(nextState)
 }
 

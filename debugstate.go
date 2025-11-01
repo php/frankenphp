@@ -1,7 +1,7 @@
 package frankenphp
 
 import (
-	state "github.com/dunglas/frankenphp/internal/state"
+	"github.com/dunglas/frankenphp/internal/state"
 )
 
 // EXPERIMENTAL: ThreadDebugState prints the state of a single PHP thread - debugging purposes only
@@ -27,7 +27,7 @@ func DebugState() FrankenPHPDebugState {
 		ReservedThreadCount: 0,
 	}
 	for _, thread := range phpThreads {
-		if thread.state.Is(state.StateReserved) {
+		if thread.state.Is(state.Reserved) {
 			fullState.ReservedThreadCount++
 			continue
 		}

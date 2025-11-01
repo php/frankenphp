@@ -3,7 +3,7 @@ package frankenphp
 import (
 	"sync"
 
-	state "github.com/dunglas/frankenphp/internal/state"
+	"github.com/dunglas/frankenphp/internal/state"
 )
 
 // representation of a thread that handles tasks directly assigned by go
@@ -44,18 +44,18 @@ func (handler *taskThread) beforeScriptExecution() string {
 	thread := handler.thread
 
 	switch thread.state.Get() {
-	case state.StateTransitionRequested:
+	case state.TransitionRequested:
 		return thread.transitionToNewHandler()
-	case state.StateBooting, state.StateTransitionComplete:
-		thread.state.Set(state.StateReady)
+	case state.Booting, state.TransitionComplete:
+		thread.state.Set(state.Ready)
 		handler.waitForTasks()
 
 		return handler.beforeScriptExecution()
-	case state.StateReady:
+	case state.Ready:
 		handler.waitForTasks()
 
 		return handler.beforeScriptExecution()
-	case state.StateShuttingDown:
+	case state.ShuttingDown:
 		// signal to stop
 		return ""
 	}
