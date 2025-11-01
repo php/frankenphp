@@ -29,7 +29,7 @@ ENV GOTOOLCHAIN=local
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# labels, same as static-builder.Dockerfile
+# labels, same as static-builder-musl.Dockerfile
 LABEL org.opencontainers.image.title=FrankenPHP
 LABEL org.opencontainers.image.description="The modern PHP app server"
 LABEL org.opencontainers.image.url=https://frankenphp.dev

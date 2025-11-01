@@ -56,13 +56,13 @@ La manière la plus simple de créer un binaire Linux est d'utiliser le builder 
 1. Créez un fichier nommé `static-build.Dockerfile` dans le répertoire de votre application préparée :
 
    ```dockerfile
-   FROM --platform=linux/amd64 dunglas/frankenphp:static-builder
+   FROM --platform=linux/amd64 dunglas/frankenphp:static-builder-gnu
+   # Si vous envisagez d'exécuter le binaire sur des systèmes musl-libc, utilisez plutôt static-builder-musl
 
    # Copy your app
    WORKDIR /go/src/app/dist/app
    COPY . .
 
-   # Build the static binary, be sure to select only the PHP extensions you want
    WORKDIR /go/src/app/
    RUN EMBED=dist/app/ ./build-static.sh
    ```

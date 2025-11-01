@@ -108,7 +108,8 @@ independente para Linux:
    aplicação:
 
    ```dockerfile
-   FROM --platform=linux/amd64 dunglas/frankenphp:static-builder
+   FROM --platform=linux/amd64 dunglas/frankenphp:static-builder-gnu
+   # Se você pretende executar o binário em sistemas musl-libc, use o static-builder-musl
 
    # Copia sua aplicação
    WORKDIR /go/src/app/dist/app

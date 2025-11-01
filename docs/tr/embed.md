@@ -46,7 +46,8 @@ Bir Linux binary çıktısı almanın en kolay yolu, sağladığımız Docker ta
 1. Hazırladığınız uygulamanın deposunda `static-build.Dockerfile` adlı bir dosya oluşturun:
 
    ```dockerfile
-   FROM --platform=linux/amd64 dunglas/frankenphp:static-builder
+   FROM --platform=linux/amd64 dunglas/frankenphp:static-builder-gnu
+   # İkili dosyayı musl-libc sistemlerinde çalıştırmayı düşünüyorsanız static-builder-musl kullanın
 
    # Uygulamanızı kopyalayın
    WORKDIR /go/src/app/dist/app
@@ -55,7 +56,6 @@ Bir Linux binary çıktısı almanın en kolay yolu, sağladığımız Docker ta
    # Statik binary dosyasını oluşturun, yalnızca istediğiniz PHP eklentilerini seçtiğinizden emin olun
    WORKDIR /go/src/app/
    RUN EMBED=dist/app/ \
-       PHP_EXTENSIONS=ctype,iconv,pdo_sqlite \
        ./build-static.sh
    ```
 
@@ -86,7 +86,6 @@ Docker kullanmak istemiyorsanız veya bir macOS binary dosyası oluşturmak isti
 git clone https://github.com/php/frankenphp
 cd frankenphp
 EMBED=/path/to/your/app \
-    PHP_EXTENSIONS=ctype,iconv,pdo_sqlite \
     ./build-static.sh
 ```
 
