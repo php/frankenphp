@@ -244,15 +244,41 @@ func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				f.ResolveRootSymlink = &v
 
 			case "worker":
-				wc, err := parseWorkerConfig(d)
-				if err != nil {
-					return err
+				for d.NextBlock(1) {
 				}
-				f.Workers = append(f.Workers, wc)
+				for d.NextArg() {
+				}
+				// Skip "worker" blocks, so we can inherit the environment
+				continue
 
 			default:
 				allowedDirectives := "root, split, env, resolve_root_symlink, worker"
 				return wrongSubDirectiveError("php or php_server", allowedDirectives, d.Val())
+			}
+		}
+	}
+	d.Reset()
+	for d.Next() {
+		for d.NextBlock(0) {
+			if d.Val() == "worker" {
+				wc, err := parseWorkerConfig(d)
+				if err != nil {
+					return err
+				}
+
+				if f.Env != nil {
+					if wc.Env == nil {
+						wc.Env = make(map[string]string)
+					}
+					for k, v := range f.Env {
+						// Only set if not already defined in the worker
+						if _, exists := wc.Env[k]; !exists {
+							wc.Env[k] = v
+						}
+					}
+				}
+
+				f.Workers = append(f.Workers, wc)
 			}
 		}
 	}
@@ -580,7 +606,7 @@ func prependWorkerRoutes(routes caddyhttp.RouteList, h httpcaddyfile.Helper, f F
 	if !disableFsrv {
 		routes = append(routes, caddyhttp.Route{
 			MatcherSetsRaw: []caddy.ModuleMap{
-				caddy.ModuleMap{
+				{
 					"file": h.JSON(fileserver.MatchFile{
 						TryFiles: []string{"{http.request.uri.path}"},
 						Root:     f.Root,
