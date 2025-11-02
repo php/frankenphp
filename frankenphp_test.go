@@ -787,11 +787,11 @@ func BenchmarkHelloWorld(b *testing.B) {
 
 func BenchmarkHelloWorldWorker(b *testing.B) {
 	cwd, _ := os.Getwd()
-    testDataDir := cwd + "/testdata/"
+	testDataDir := cwd + "/testdata/"
 	if err := frankenphp.Init(
-			frankenphp.WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
-			frankenphp.WithWorkers("worker1", testDataDir+"index.php", 1),
-		); err != nil {
+		frankenphp.WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
+		frankenphp.WithWorkers("worker1", testDataDir+"index.php", 1),
+	); err != nil {
 		panic(err)
 	}
 	defer frankenphp.Shutdown()
