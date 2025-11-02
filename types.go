@@ -241,12 +241,55 @@ func phpArray[T any](entries map[string]T, order []string) *C.zend_array {
 			C.zend_hash_str_update(zendArray, toUnsafeChar(key), C.size_t(len(key)), &zval)
 		}
 	} else {
-		zendArray = createNewArray(len(entries))
-		for key, val := range entries {
-			var zval C.zval
-			phpValue(&zval, val)
-			C.zend_hash_str_update(zendArray, toUnsafeChar(key), C.size_t(len(key)), &zval)
+		if len(entries) == 0 {
+			return createNewArray(0)
 		}
+
+		i := 0
+		var key1 *C.char
+		var keyLen1 C.size_t
+		var zval1 C.zval
+		var key2 *C.char
+		var keyLen2 C.size_t
+		var zval2 C.zval
+		var key3 *C.char
+		var keyLen3 C.size_t
+		var zval3 C.zval
+
+		for key, val := range entries {
+			i++
+			switch i % 3 {
+			case 1:
+				key1 = toUnsafeChar(key)
+				keyLen1 = C.size_t(len(key))
+				phpValue(&zval1, val)
+				continue
+			case 2:
+				key2 = toUnsafeChar(key)
+				keyLen2 = C.size_t(len(key))
+				phpValue(&zval2, val)
+				continue
+			case 0:
+				key3 = toUnsafeChar(key)
+				keyLen3 = C.size_t(len(key))
+				phpValue(&zval3, val)
+				zendArray = C.zend_hash_bulk_insert(
+					zendArray, C.size_t(len(entries)),
+					key1, key2, key3,
+					keyLen1, keyLen2, keyLen3,
+					&zval1, &zval2, &zval3,
+				)
+				key1 = nil
+				key2 = nil
+				key3 = nil
+			}
+		}
+		zendArray = C.zend_hash_bulk_insert(
+			zendArray, C.size_t(len(entries)),
+			key1, key2, key3,
+			keyLen1, keyLen2, keyLen3,
+			&zval1, &zval2, &zval3,
+		)
 	}
 
 	return zendArray
@@ -408,6 +451,9 @@ func phpValue(zval *C.zval, value any) {
 
 // createNewArray creates a new zend_array with the specified size.
 func createNewArray(size int) *C.zend_array {
+	if size == 0 {
+		//return (*C.zend_array)(&C.zend_empty_array)
+	}
 	return C.__zend_new_array__(C.uint32_t(size))
 }
 

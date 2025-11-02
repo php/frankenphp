@@ -1,10 +1,10 @@
 package frankenphp
 
 import (
+	"fmt"
 	"io"
 	"log/slog"
 	"testing"
-	"fmt"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -148,20 +148,20 @@ func TestNestedMixedArray(t *testing.T) {
 }
 
 func benchOnPHPThread(b *testing.B, count int, cb func()) {
-    logger = slog.New(slog.NewTextHandler(io.Discard, nil))
-    _, err := initPHPThreads(1, 1, nil) // boot 1 thread
-    assert.NoError(b, err)
-    handler := convertToTaskThread(phpThreads[0])
+	logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	_, err := initPHPThreads(1, 1, nil) // boot 1 thread
+	assert.NoError(b, err)
+	handler := convertToTaskThread(phpThreads[0])
 
-    task := newTask(func() {
-        for i := 0; i < count; i++ {
-            cb()
-        }
-    })
-    handler.execute(task)
-    task.waitForCompletion()
+	task := newTask(func() {
+		for i := 0; i < count; i++ {
+			cb()
+		}
+	})
+	handler.execute(task)
+	task.waitForCompletion()
 
-    drainPHPThreads()
+	drainPHPThreads()
 }
 
 func BenchmarkBool(b *testing.B) {
