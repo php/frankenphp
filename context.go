@@ -132,6 +132,8 @@ func (fc *frankenPHPContext) validate() error {
 			e := fmt.Errorf("%w: %s", ErrInvalidContentLengthHeader, contentLengthStr)
 
 			fc.reject(e)
+
+			return e
 		}
 	}
 
