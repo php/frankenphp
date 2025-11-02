@@ -168,6 +168,28 @@ func TestGlobalAndModuleWorker(t *testing.T) {
 	wg.Wait()
 }
 
+func TestModuleWorkerInheritsEnv(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	tester.InitServer(`
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		http://localhost:`+testPort+` {
+			route {
+				php {
+					root ../testdata
+					env APP_ENV inherit_this
+					worker worker-with-env.php
+				}
+			}
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/worker-with-env.php", http.StatusOK, "Worker has APP_ENV=inherit_this")
+}
+
 func TestNamedModuleWorkers(t *testing.T) {
 	var wg sync.WaitGroup
 	testPortNum, _ := strconv.Atoi(testPort)

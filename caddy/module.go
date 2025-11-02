@@ -202,7 +202,6 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 
 // UnmarshalCaddyfile implements caddyfile.Unmarshaler.
 func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
-	// First pass: Parse all directives except "worker"
 	for d.Next() {
 		for d.NextBlock(0) {
 			switch d.Val() {
