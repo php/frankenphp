@@ -244,9 +244,9 @@ func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				f.ResolveRootSymlink = &v
 
 			case "worker":
-				for d.NextBlock(1) {
-				}
 				for d.NextArg() {
+				}
+				for d.NextBlock(1) {
 				}
 				// Skip "worker" blocks, so we can inherit the environment
 				continue
