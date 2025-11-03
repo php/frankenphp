@@ -129,7 +129,7 @@ func (fc *frankenPHPContext) validate() error {
 	contentLengthStr := fc.request.Header.Get("Content-Length")
 	if contentLengthStr != "" {
 		if contentLength, err := strconv.Atoi(contentLengthStr); err != nil || contentLength < 0 {
-			e := fmt.Errorf("%w: %s", ErrInvalidContentLengthHeader, contentLengthStr)
+			e := fmt.Errorf("%w: %q", ErrInvalidContentLengthHeader, contentLengthStr)
 
 			fc.reject(e)
 
