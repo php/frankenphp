@@ -41,8 +41,6 @@ import (
 
 type contextKeyStruct struct{}
 
-var contextKey = contextKeyStruct{}
-
 var (
 	ErrInvalidRequest         = errors.New("not a FrankenPHP request")
 	ErrAlreadyStarted         = errors.New("FrankenPHP is already started")
@@ -55,6 +53,9 @@ var (
 	ErrInvalidRequestPath         = ErrRejected{"invalid request path", http.StatusBadRequest}
 	ErrInvalidContentLengthHeader = ErrRejected{"invalid Content-Length header", http.StatusBadRequest}
 	ErrMaxWaitTimeExceeded        = ErrRejected{"maximum request handling time exceeded", http.StatusServiceUnavailable}
+
+	contextKey   = contextKeyStruct{}
+	serverHeader = []string{"FrankenPHP"}
 
 	isRunning        bool
 	onServerShutdown []func()
@@ -333,6 +334,11 @@ func Shutdown() {
 
 // ServeHTTP executes a PHP script according to the given context.
 func ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) error {
+	h := responseWriter.Header()
+	if h["Server"] == nil {
+		h["Server"] = serverHeader
+	}
+
 	if !isRunning {
 		return ErrNotRunning
 	}
