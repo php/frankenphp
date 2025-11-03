@@ -66,7 +66,7 @@ zend_array *zend_hash_bulk_next_index_insert(zend_array *arr,
   if (bulk_size < 1) { return arr; }
   zend_hash_next_index_insert(arr, val2);
   if (bulk_size < 2) { return arr; }
-  zend_hash_next_index_insert(arr, val4);
+  zend_hash_next_index_insert(arr, val3);
   if (bulk_size < 3) { return arr; }
   zend_hash_next_index_insert(arr, val4);
 
