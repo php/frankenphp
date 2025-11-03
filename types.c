@@ -23,14 +23,13 @@ void __zend_hash_init__(HashTable *ht, uint32_t nSize, dtor_func_t pDestructor,
 
 zend_array *__zend_new_array__(uint32_t size) { return zend_new_array(size); }
 
-/* Returns existing interned string or creates a new one if it does not exist.
- */
+/* Returns existing interned string or creates a new zend_string. */
 zend_string *__zend_string_init_existing_interned__(const char *str,
                                                     size_t size,
                                                     bool permanent) {
   return zend_string_init(str, size, permanent);
-  // return zend_string_init_existing_interned(str, size, permanent); TODO: use
-  // this once it's possible to test
+  // TODO: use this once it's possible to test the behavior
+  // return zend_string_init_existing_interned(str, size, permanent);
 }
 
 zend_array *zend_hash_bulk_insert(zend_array *arr, size_t num_entries,
@@ -43,18 +42,13 @@ zend_array *zend_hash_bulk_insert(zend_array *arr, size_t num_entries,
     arr = zend_new_array(num_entries);
   }
 
-  if (bulk_size >= 0) {
-    zend_hash_str_update(arr, key1, key_len1, val1);
-  }
-  if (bulk_size >= 1) {
-    zend_hash_str_update(arr, key2, key_len2, val2);
-  }
-  if (bulk_size >= 2) {
-    zend_hash_str_update(arr, key3, key_len3, val3);
-  }
-  if (bulk_size >= 3) {
-    zend_hash_str_update(arr, key4, key_len4, val4);
-  }
+  zend_hash_str_update(arr, key1, key_len1, val1);
+  if (bulk_size < 1) { return arr; }
+  zend_hash_str_update(arr, key2, key_len2, val2);
+  if (bulk_size < 2) { return arr; }
+  zend_hash_str_update(arr, key3, key_len3, val3);
+  if (bulk_size < 3) { return arr; }
+  zend_hash_str_update(arr, key4, key_len4, val4);
 
   return arr;
 }
@@ -68,18 +62,13 @@ zend_array *zend_hash_bulk_next_index_insert(zend_array *arr,
     arr = zend_new_array(num_entries);
   }
 
-  if (bulk_size >= 0) {
-    zend_hash_next_index_insert(arr, val1);
-  }
-  if (bulk_size >= 1) {
-    zend_hash_next_index_insert(arr, val2);
-  }
-  if (bulk_size >= 2) {
-    zend_hash_next_index_insert(arr, val3);
-  }
-  if (bulk_size >= 3) {
-    zend_hash_next_index_insert(arr, val4);
-  }
+  zend_hash_next_index_insert(arr, val1);
+  if (bulk_size < 1) { return arr; }
+  zend_hash_next_index_insert(arr, val2);
+  if (bulk_size < 2) { return arr; }
+  zend_hash_next_index_insert(arr, val4);
+  if (bulk_size < 3) { return arr; }
+  zend_hash_next_index_insert(arr, val4);
 
   return arr;
 }
