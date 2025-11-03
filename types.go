@@ -3,7 +3,6 @@ package frankenphp
 /*
 #cgo noescape __zend_new_array__
 #cgo noescape __zend_string_init_existing_interned__
-#cgo noescape zend_hash_str_update
 #cgo noescape zend_hash_bulk_insert
 #cgo noescape zend_hash_bulk_next_index_insert
 #cgo noescape get_ht_bucket
@@ -231,71 +230,91 @@ func PHPAssociativeArray[T any](arr AssociativeArray[T]) unsafe.Pointer {
 }
 
 func phpArray[T any](entries map[string]T, order []string) *C.zend_array {
-	var zendArray *C.zend_array
+	lenEntries := len(entries)
+	lenOrder := len(order)
+	if lenEntries == 0 && lenOrder == 0 {
+		return createNewArray(0)
+	}
 
-	if len(order) != 0 {
-		zendArray = createNewArray(len(order))
+	// bulk insert zvals 4 by 4
+	// this is currently the most efficient way to avoid cgo overhead
+	var zendArray *C.zend_array
+	var key1 *C.char
+	var keyLen1 C.size_t
+	var zval1 C.zval
+	var key2 *C.char
+	var keyLen2 C.size_t
+	var zval2 C.zval
+	var key3 *C.char
+	var keyLen3 C.size_t
+	var zval3 C.zval
+	var key4 *C.char
+	var keyLen4 C.size_t
+	var zval4 C.zval
+	i := 0
+
+	if lenOrder != 0 {
 		for _, key := range order {
 			val := entries[key]
-			var zval C.zval
-			phpValue(&zval, val)
-			C.zend_hash_str_update(zendArray, toUnsafeChar(key), C.size_t(len(key)), &zval)
-		}
-	} else {
-		arrayLen := len(entries)
-		if arrayLen == 0 {
-			return createNewArray(0)
-		}
-
-		// bulk insert zvals 4 by 4
-		// this is the only way to avoid allocations/pinning/CGO calls
-		var key1 *C.char
-		var keyLen1 C.size_t
-		var zval1 C.zval
-		var key2 *C.char
-		var keyLen2 C.size_t
-		var zval2 C.zval
-		var key3 *C.char
-		var keyLen3 C.size_t
-		var zval3 C.zval
-		var key4 *C.char
-		var keyLen4 C.size_t
-		var zval4 C.zval
-		i := 0
-
-		for key, val := range entries {
-			i++
-			mod := i % 3
+			mod := i % 4
 			switch mod {
-			case 1:
+			case 0:
 				key1 = toUnsafeChar(key)
 				keyLen1 = C.size_t(len(key))
 				phpValue(&zval1, val)
-			case 2:
+			case 1:
 				key2 = toUnsafeChar(key)
 				keyLen2 = C.size_t(len(key))
 				phpValue(&zval2, val)
-			case 3:
+			case 2:
 				key3 = toUnsafeChar(key)
 				keyLen3 = C.size_t(len(key))
 				phpValue(&zval3, val)
-			case 0:
+			case 3:
 				key4 = toUnsafeChar(key)
 				keyLen4 = C.size_t(len(key))
 				phpValue(&zval4, val)
 			}
-			if mod == 0 || i == arrayLen {
+			if mod == 3 || i == lenOrder-1 {
 				zendArray = C.zend_hash_bulk_insert(
-					zendArray, C.size_t(arrayLen),
+					zendArray, C.size_t(lenOrder), C.size_t(mod),
 					key1, key2, key3, key4,
 					keyLen1, keyLen2, keyLen3, keyLen4,
 					&zval1, &zval2, &zval3, &zval4,
 				)
-				key1 = nil
-				key2 = nil
-				key3 = nil
-				key4 = nil
 			}
+			i++
+		}
+	} else {
+		for key, val := range entries {
+			mod := i % 4
+			switch mod {
+			case 0:
+				key1 = toUnsafeChar(key)
+				keyLen1 = C.size_t(len(key))
+				phpValue(&zval1, val)
+			case 1:
+				key2 = toUnsafeChar(key)
+				keyLen2 = C.size_t(len(key))
+				phpValue(&zval2, val)
+			case 2:
+				key3 = toUnsafeChar(key)
+				keyLen3 = C.size_t(len(key))
+				phpValue(&zval3, val)
+			case 3:
+				key4 = toUnsafeChar(key)
+				keyLen4 = C.size_t(len(key))
+				phpValue(&zval4, val)
+			}
+			if mod == 3 || i == lenEntries-1 {
+				zendArray = C.zend_hash_bulk_insert(
+					zendArray, C.size_t(lenEntries), C.size_t(mod),
+					key1, key2, key3, key4,
+					keyLen1, keyLen2, keyLen3, keyLen4,
+					&zval1, &zval2, &zval3, &zval4,
+				)
+			}
+			i++
 		}
 	}
 

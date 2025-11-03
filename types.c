@@ -30,7 +30,7 @@ zend_string *__zend_string_init_existing_interned__(const char *str, size_t size
 }
 
 zend_array *zend_hash_bulk_insert(
-	zend_array *arr, size_t num_entries,
+	zend_array *arr, size_t num_entries, size_t bulk_size,
 	char *key1, char *key2, char *key3, char *key4,
 	size_t key_len1, size_t key_len2, size_t key_len3, size_t key_len4,
 	zval *val1, zval *val2, zval *val3, zval *val4
@@ -39,10 +39,10 @@ zend_array *zend_hash_bulk_insert(
     arr = zend_new_array(num_entries);
   }
 
-  if (key1){ zend_hash_str_update(arr, key1, key_len1, val1); }
-  if (key2){ zend_hash_str_update(arr, key2, key_len2, val2); }
-  if (key3){ zend_hash_str_update(arr, key3, key_len3, val3); }
-  if (key4){ zend_hash_str_update(arr, key4, key_len4, val4); }
+  if (bulk_size >= 0){ zend_hash_str_update(arr, key1, key_len1, val1); }
+  if (bulk_size >= 1){ zend_hash_str_update(arr, key2, key_len2, val2); }
+  if (bulk_size >= 2){ zend_hash_str_update(arr, key3, key_len3, val3); }
+  if (bulk_size >= 3){ zend_hash_str_update(arr, key4, key_len4, val4); }
 
   return arr;
 }
