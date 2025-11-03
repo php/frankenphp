@@ -5,8 +5,8 @@ FrankenPHP will handle incoming requests in a few milliseconds.
 
 ## Warning about stateful design
 
-Unlike with the traditional PHP-FPM model, the application remains loaded in memory between requests. Consequently, any state stored in your services (object properties, singletons, etc.) will be preserved and shared across successive requests handled by the same worker. This can lead to data leaks or inconsistent states if your application is not designed for it.
-The following article summarizes this issue very well and explains how to fix it, notably for Symfony applications using ResetInterface to ensure your services are "clean" for every new request.
+Unlike with the traditional PHP-FPM model, the application remains loaded in memory between requests. Consequently, any state stored in your services (object properties, singletons, etc.) will be preserved and shared across successive requests handled by the same worker. This can lead to data leaks and memory issues, or inconsistent states if your application is not designed for it.
+The following article summarizes this issue and explains how to fix it, notably for Symfony applications using ResetInterface to ensure your services are "reset" for every new request.
 
 **Additional Resources:**
 
