@@ -2,11 +2,12 @@ package frankenphp
 
 /*
 #cgo noescape __zend_new_array__
+#cgo noescape __zend_string_init_existing_interned__
 #cgo noescape zend_hash_str_update
-#cgo noescape zend_hash_next_index_insert
+#cgo noescape zend_hash_bulk_insert
+#cgo noescape zend_hash_bulk_next_index_insert
 #cgo noescape get_ht_bucket
 #cgo noescape get_ht_packed_data
-#cgo noescape zend_string_init
 #include "zend_API.h"
 #include "types.h"
 */
@@ -75,7 +76,7 @@ func phpString(s string, persistent bool) *C.zend_string {
 		return C.zend_empty_string
 	}
 
-	return C.zend_string_init(
+	return C.__zend_string_init_existing_interned__(
 		toUnsafeChar(s),
 		C.size_t(len(s)),
 		C.bool(persistent),
@@ -241,11 +242,13 @@ func phpArray[T any](entries map[string]T, order []string) *C.zend_array {
 			C.zend_hash_str_update(zendArray, toUnsafeChar(key), C.size_t(len(key)), &zval)
 		}
 	} else {
-		if len(entries) == 0 {
+		arrayLen := len(entries)
+		if arrayLen == 0 {
 			return createNewArray(0)
 		}
 
-		i := 0
+		// bulk insert zvals 4 by 4
+		// this is the only way to avoid allocations/pinning/CGO calls
 		var key1 *C.char
 		var keyLen1 C.size_t
 		var zval1 C.zval
@@ -255,41 +258,45 @@ func phpArray[T any](entries map[string]T, order []string) *C.zend_array {
 		var key3 *C.char
 		var keyLen3 C.size_t
 		var zval3 C.zval
+		var key4 *C.char
+		var keyLen4 C.size_t
+		var zval4 C.zval
+		i := 0
 
 		for key, val := range entries {
 			i++
-			switch i % 3 {
+			mod := i % 3
+			switch mod {
 			case 1:
 				key1 = toUnsafeChar(key)
 				keyLen1 = C.size_t(len(key))
 				phpValue(&zval1, val)
-				continue
 			case 2:
 				key2 = toUnsafeChar(key)
 				keyLen2 = C.size_t(len(key))
 				phpValue(&zval2, val)
-				continue
-			case 0:
+			case 3:
 				key3 = toUnsafeChar(key)
 				keyLen3 = C.size_t(len(key))
 				phpValue(&zval3, val)
+			case 0:
+				key4 = toUnsafeChar(key)
+				keyLen4 = C.size_t(len(key))
+				phpValue(&zval4, val)
+			}
+			if mod == 0 || i == arrayLen {
 				zendArray = C.zend_hash_bulk_insert(
-					zendArray, C.size_t(len(entries)),
-					key1, key2, key3,
-					keyLen1, keyLen2, keyLen3,
-					&zval1, &zval2, &zval3,
+					zendArray, C.size_t(arrayLen),
+					key1, key2, key3, key4,
+					keyLen1, keyLen2, keyLen3, keyLen4,
+					&zval1, &zval2, &zval3, &zval4,
 				)
 				key1 = nil
 				key2 = nil
 				key3 = nil
+				key4 = nil
 			}
 		}
-		zendArray = C.zend_hash_bulk_insert(
-			zendArray, C.size_t(len(entries)),
-			key1, key2, key3,
-			keyLen1, keyLen2, keyLen3,
-			&zval1, &zval2, &zval3,
-		)
 	}
 
 	return zendArray
@@ -301,13 +308,35 @@ func PHPPackedArray[T any](slice []T) unsafe.Pointer {
 }
 
 func phpPackedArray[T any](slice []T) *C.zend_array {
-	zendArray := createNewArray(len(slice))
-	for _, val := range slice {
-		var zval C.zval
-		phpValue(&zval, val)
-		C.zend_hash_next_index_insert(zendArray, &zval)
+	sliceLen := len(slice)
+	if sliceLen == 0 {
+		return createNewArray(0)
 	}
+	var zendArray *C.zend_array
+	var zval1 C.zval
+	var zval2 C.zval
+	var zval3 C.zval
+	var zval4 C.zval
+	for i, val := range slice {
 
+		mod := i % 4
+		switch mod {
+		case 0:
+			phpValue(&zval1, val)
+		case 1:
+			phpValue(&zval2, val)
+		case 2:
+			phpValue(&zval3, val)
+		case 3:
+			phpValue(&zval4, val)
+		}
+		if mod == 3 || i == sliceLen-1 {
+			zendArray = C.zend_hash_bulk_next_index_insert(
+				zendArray, C.size_t(sliceLen), C.size_t(mod),
+				&zval1, &zval2, &zval3, &zval4,
+			)
+		}
+	}
 	return zendArray
 }
 
@@ -452,7 +481,8 @@ func phpValue(zval *C.zval, value any) {
 // createNewArray creates a new zend_array with the specified size.
 func createNewArray(size int) *C.zend_array {
 	if size == 0 {
-		//return (*C.zend_array)(&C.zend_empty_array)
+		// use the global empty array instance
+		return (*C.zend_array)(&C.zend_empty_array)
 	}
 	return C.__zend_new_array__(C.uint32_t(size))
 }
@@ -477,6 +507,6 @@ func zendStringRelease(p unsafe.Pointer) {
 }
 
 // used in tests for cleanup
-func zendHashDestroy(p unsafe.Pointer) {
-	C.zend_array_destroy((*C.zend_array)(p))
+func zendArrayRelease(p unsafe.Pointer) {
+	C.zend_array_release((*C.zend_array)(p))
 }
