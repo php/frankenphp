@@ -3,16 +3,36 @@
 Boot your application once and keep it in memory.
 FrankenPHP will handle incoming requests in a few milliseconds.
 
-## Warning about stateful design
+## Designing for Stateful Applications
 
-Unlike with the traditional PHP-FPM model, the application remains loaded in memory between requests. Consequently, any state stored in your services (object properties, singletons, etc.) will be preserved and shared across successive requests handled by the same worker. This can lead to data leaks and memory issues, or inconsistent states if your application is not designed for it.
-The following article summarizes this issue and explains how to fix it, notably for Symfony applications using ResetInterface to ensure your services are "reset" for every new request.
+Unlike the traditional PHP-FPM model, the application remains **loaded in memory** between requests. Consequently, any state stored within your services (object properties, singletons, etc.) will be retained and shared between successive requests handled by the same worker. This can lead to data and memory leaks or inconsistent states if your application is not designed for this.
 
-**Additional Resources:**
+### Designing a Stateless Application
 
-- Article: [Getting your Symfony app ready for Swoole, RoadRunner, and FrankenPHP](https://dev.to/sergiid/getting-symfony-app-ready-for-swoole-roadrunner-and-frankenphp-no-ai-involved-2d0g)
-- Symfony: [The Messenger](https://symfony.com/doc/current/messenger.html#stateless-worker) documentation also discusses this "stateless worker" concept.
-- Tool: [phanalist](https://github.com/denzyldick/phanalist) is a static analyzer that can help you detect "stateful" services in your code.
+The challenge is managing the lifecycle of your objects, especially those that are shared instances by the dependency container.
+
+**Key Principles to Follow:**
+
+- **Avoid Global State:** Global variables and static properties must not be modified.
+- **Caution with Services:** Avoid storing values via setters or modifying public properties of a shared service, as these changes will affect the next request.
+- **Prioritize New Objects:** Anything tied to the request or user parameters must be returned as a new object for each request.
+
+### Issue Detection (Static Analysis)
+
+Static analysis tools can help you identify potentially stateful services. These tools primarily check for:
+
+- The use of mutable public or static properties in shared services.
+- The use of functions like `die()` or `exit()`.
+
+A notable tool is **[denzyldick/phanalist](https://github.com/denzyldick/phanalist)**. After installation, you can run it specifically with rule E0012 (for "Service compatibility with Shared Memory Model") to get a list of problematic areas in your code.
+
+### The Reset Interface (Symfony)
+
+The ideal approach is to design your services to be naturally **`stateless`**.
+
+However, in cases where it is difficult to make a shared service completely stateless (e.g., a service with an internal cache or request-specific configuration), you can use the **`Symfony\Contracts\Service\ResetInterface`**.
+
+When a service implements this interface, its `reset()` method is automatically called by the service container at the end of each request. This allows you to specifically clean up the service's internal state (e.g., emptying an internal cache, resetting properties...).
 
 ## Starting Worker Scripts
 
