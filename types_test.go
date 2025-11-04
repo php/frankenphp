@@ -45,7 +45,7 @@ func TestPHPMap(t *testing.T) {
 		}
 
 		phpArray := PHPMap(originalMap)
-		defer zendHashDestroy(phpArray)
+		defer zendArrayRelease(phpArray)
 		convertedMap, err := GoMap[string](phpArray)
 		require.NoError(t, err)
 
@@ -64,7 +64,7 @@ func TestOrderedPHPAssociativeArray(t *testing.T) {
 		}
 
 		phpArray := PHPAssociativeArray(originalArray)
-		defer zendHashDestroy(phpArray)
+		defer zendArrayRelease(phpArray)
 		convertedArray, err := GoAssociativeArray[string](phpArray)
 		require.NoError(t, err)
 
@@ -77,7 +77,7 @@ func TestPHPPackedArray(t *testing.T) {
 		originalSlice := []string{"bar1", "bar2"}
 
 		phpArray := PHPPackedArray(originalSlice)
-		defer zendHashDestroy(phpArray)
+		defer zendArrayRelease(phpArray)
 		convertedSlice, err := GoPackedArray[string](phpArray)
 		require.NoError(t, err)
 
@@ -94,7 +94,7 @@ func TestPHPPackedArrayToGoMap(t *testing.T) {
 		}
 
 		phpArray := PHPPackedArray(originalSlice)
-		defer zendHashDestroy(phpArray)
+		defer zendArrayRelease(phpArray)
 		convertedMap, err := GoMap[string](phpArray)
 		require.NoError(t, err)
 
@@ -114,7 +114,7 @@ func TestPHPAssociativeArrayToPacked(t *testing.T) {
 		expectedSlice := []string{"bar1", "bar2"}
 
 		phpArray := PHPAssociativeArray(originalArray)
-		defer zendHashDestroy(phpArray)
+		defer zendArrayRelease(phpArray)
 		convertedSlice, err := GoPackedArray[string](phpArray)
 		require.NoError(t, err)
 
@@ -139,7 +139,7 @@ func TestNestedMixedArray(t *testing.T) {
 		}
 
 		phpArray := PHPMap(originalArray)
-		defer zendHashDestroy(phpArray)
+		defer zendArrayRelease(phpArray)
 		convertedArray, err := GoMap[any](phpArray)
 		require.NoError(t, err)
 
@@ -207,7 +207,7 @@ func BenchmarkEmptyMap(b *testing.B) {
 	benchOnPHPThread(b, b.N, func() {
 		phpArray := PHPMap(originalMap)
 		_, _ = GoMap[any](phpArray)
-		zendHashDestroy(phpArray)
+		zendArrayRelease(phpArray)
 	})
 }
 
@@ -222,30 +222,38 @@ func BenchmarkMap5Entries(b *testing.B) {
 	benchOnPHPThread(b, b.N, func() {
 		phpArray := PHPMap(originalMap)
 		_, _ = GoMap[any](phpArray)
-		zendHashDestroy(phpArray)
+		zendArrayRelease(phpArray)
 	})
 }
 
 func BenchmarkMap50EntriesOnlyPHP(b *testing.B) {
 	originalMap := map[string]any{}
-	for i := 0; i < 50; i++ {
-		originalMap[fmt.Sprintf("key%d", i)] = fmt.Sprintf("value%d", i)
+	for i := 0; i < 10; i++ {
+		originalMap[fmt.Sprintf("foo%d", i*5)] = fmt.Sprintf("val%d", i)
+		originalMap[fmt.Sprintf("foo%d", i*5+1)] = "Error" // interned string
+		originalMap[fmt.Sprintf("foo%d", i*5+2)] = true
+		originalMap[fmt.Sprintf("foo%d", i*5+3)] = 3.12
+		originalMap[fmt.Sprintf("foo%d", i*5+4)] = nil
 	}
 	benchOnPHPThread(b, b.N, func() {
 		phpArray := PHPMap(originalMap)
-		zendHashDestroy(phpArray)
+		zendArrayRelease(phpArray)
 	})
 }
 
 func BenchmarkMap50Entries(b *testing.B) {
 	originalMap := map[string]any{}
-	for i := 0; i < 50; i++ {
-		originalMap[fmt.Sprintf("key%d", i)] = fmt.Sprintf("value%d", i)
+	for i := 0; i < 10; i++ {
+		originalMap[fmt.Sprintf("foo%d", i*5)] = fmt.Sprintf("val%d", i)
+		originalMap[fmt.Sprintf("foo%d", i*5+1)] = "Error" // interned string
+		originalMap[fmt.Sprintf("foo%d", i*5+2)] = true
+		originalMap[fmt.Sprintf("foo%d", i*5+3)] = 3.12
+		originalMap[fmt.Sprintf("foo%d", i*5+4)] = nil
 	}
 	benchOnPHPThread(b, b.N, func() {
 		phpArray := PHPMap(originalMap)
 		_, _ = GoMap[any](phpArray)
-		zendHashDestroy(phpArray)
+		zendArrayRelease(phpArray)
 	})
 }
 
@@ -263,7 +271,7 @@ func BenchmarkAssociativeArray5Entries(b *testing.B) {
 	benchOnPHPThread(b, b.N, func() {
 		phpArray := PHPAssociativeArray(originalArray)
 		_, _ = GoAssociativeArray[any](phpArray)
-		zendHashDestroy(phpArray)
+		zendArrayRelease(phpArray)
 	})
 }
 
@@ -272,6 +280,6 @@ func BenchmarkSlice5Entries(b *testing.B) {
 	benchOnPHPThread(b, b.N, func() {
 		phpArray := PHPPackedArray(originalSlice)
 		_, _ = GoPackedArray[any](phpArray)
-		zendHashDestroy(phpArray)
+		zendArrayRelease(phpArray)
 	})
 }
