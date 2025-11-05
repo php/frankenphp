@@ -128,6 +128,7 @@ script to customize the static build:
 - `DEBUG_SYMBOLS`: when set, debug-symbols will not be stripped and will be added to the binary
 - `MIMALLOC`: (experimental, Linux-only) replace musl's mallocng by [mimalloc](https://github.com/microsoft/mimalloc) for improved performance. We only recommend using this for musl targeting builds, for glibc prefer disabling this option and using [`LD_PRELOAD`](https://microsoft.github.io/mimalloc/overrides.html) when you run your binary instead.
 - `RELEASE`: (maintainers only) when set, the resulting binary will be uploaded on GitHub
+- `INCLUDE_CLI`: embeds the PHP CLI in the resulting binary which can be installed with the `install-php` command
 
 ## Extensions
 
