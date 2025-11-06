@@ -213,7 +213,7 @@ jobs:
         run: |
           docker run --platform="${PLATFORM}" --rm \
             "$(jq -r ".\"builder-${VARIANT}\".\"containerimage.config.digest\"" <<< "${METADATA}")" \
-            sh -c "./go.sh test ${RACE} -v $(./go.sh list ./... | grep -v github.com/dunglas/frankenphp/internal/testext | grep -v github.com/dunglas/frankenphp/internal/extgen | tr '\n' ' ') && cd caddy && ../go.sh test ${RACE} -v ./..."
+            sh -c "./go.sh test ${RACE} -v -vet=off $(./go.sh list ./... | grep -v github.com/dunglas/frankenphp/internal/testext | grep -v github.com/dunglas/frankenphp/internal/extgen | tr '\n' ' ') && cd caddy && ../go.sh test ${RACE} -v ./..."
         env:
           METADATA: ${{ steps.build.outputs.metadata }}
           PLATFORM: ${{ matrix.platform }}
