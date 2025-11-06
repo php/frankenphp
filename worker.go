@@ -17,6 +17,7 @@ type worker struct {
 	name                   string
 	fileName               string
 	num                    int
+	maxThreads             int
 	env                    PreparedEnv
 	requestChan            chan *frankenPHPContext
 	threads                []*phpThread
@@ -122,6 +123,7 @@ func newWorker(o workerOpt) (*worker, error) {
 		name:                   o.name,
 		fileName:               absFileName,
 		num:                    o.num,
+		maxThreads:             o.maxThreads,
 		env:                    o.env,
 		requestChan:            make(chan *frankenPHPContext),
 		threads:                make([]*phpThread, 0, o.num),
@@ -240,13 +242,17 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) {
 	// if no thread was available, mark the request as queued and apply the scaling strategy
 	metrics.QueuedWorkerRequest(worker.name)
 	for {
+		workerScaleChan := scaleChan
+		if worker.maxThreads > 0 && worker.countThreads() >= worker.maxThreads {
+			workerScaleChan = nil // max_threads for this worker reached, do not attempt scaling
+		}
 		select {
 		case worker.requestChan <- fc:
 			metrics.DequeuedWorkerRequest(worker.name)
 			<-fc.done
 			metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
 			return
-		case scaleChan <- fc:
+		case workerScaleChan <- fc:
 			// the request has triggered scaling, continue to wait for a thread
 		case <-timeoutChan(maxWaitTime):
 			metrics.DequeuedWorkerRequest(worker.name)

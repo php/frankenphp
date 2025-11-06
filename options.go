@@ -32,6 +32,7 @@ type workerOpt struct {
 	name                   string
 	fileName               string
 	num                    int
+	maxThreads             int
 	env                    PreparedEnv
 	watch                  []string
 	maxConsecutiveFailures int
@@ -94,6 +95,15 @@ func WithWorkers(name string, fileName string, num int, options ...WorkerOption)
 func WithWorkerEnv(env map[string]string) WorkerOption {
 	return func(w *workerOpt) error {
 		w.env = PrepareEnv(env)
+
+		return nil
+	}
+}
+
+// WithWorkerEnv sets environment variables for the worker
+func WithWorkerMaxThreads(num int) WorkerOption {
+	return func(w *workerOpt) error {
+		w.maxThreads = num
 
 		return nil
 	}

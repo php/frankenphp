@@ -140,6 +140,7 @@ func Config() PHPConfig {
 
 func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 	maxProcs := runtime.GOMAXPROCS(0) * 2
+	maxThreadsFromWorkerOpts := 0
 
 	for i, w := range opt.workers {
 		if w.num <= 0 {
@@ -149,6 +150,11 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 		metrics.TotalWorkers(w.name, w.num)
 
 		numWorkers += opt.workers[i].num
+		maxThreadsFromWorkerOpts += w.maxThreads
+	}
+
+	if opt.maxThreads == 0 && maxThreadsFromWorkerOpts > 0 {
+		opt.maxThreads = maxThreadsFromWorkerOpts
 	}
 
 	numThreadsIsSet := opt.numThreads > 0
