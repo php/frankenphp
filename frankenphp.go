@@ -140,7 +140,7 @@ func Config() PHPConfig {
 
 func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 	maxProcs := runtime.GOMAXPROCS(0) * 2
-	maxThreadsFromWorkerOpts := 0
+	maxThreadsFromWorkers := 0
 
 	for i, w := range opt.workers {
 		if w.num <= 0 {
@@ -158,21 +158,26 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 			if w.maxThreads > opt.maxThreads && opt.maxThreads > 0 {
 				return 0, fmt.Errorf("worker max_threads (%d) cannot be greater than total max_threads (%d) (%q)", w.maxThreads, opt.maxThreads, w.fileName)
 			}
-			maxThreadsFromWorkerOpts += w.maxThreads
+			maxThreadsFromWorkers += w.maxThreads - w.num
 		}
-	}
-
-	// if no max_threads is defined, use the sum of worker max_threads
-	if opt.maxThreads == 0 && maxThreadsFromWorkerOpts > 0 {
-		opt.maxThreads = maxThreadsFromWorkerOpts
 	}
 
 	numThreadsIsSet := opt.numThreads > 0
 	maxThreadsIsSet := opt.maxThreads != 0
 	maxThreadsIsAuto := opt.maxThreads < 0 // maxthreads < 0 signifies auto mode (see phpmaintread.go)
 
+	// consider the case where max_threads is only defined in workers
+	if !maxThreadsIsSet && maxThreadsFromWorkers > 0 {
+		maxThreadsIsSet = true
+		if numThreadsIsSet {
+			opt.maxThreads = opt.numThreads + maxThreadsFromWorkers
+		} else {
+			opt.maxThreads = numWorkers + 1 + maxThreadsFromWorkers
+		}
+	}
+
 	if numThreadsIsSet && !maxThreadsIsSet {
-		opt.maxThreads = opt.numThreads
+		opt.maxThreads = opt.numThreads + maxThreadsFromWorkers
 		if opt.numThreads <= numWorkers {
 			return 0, fmt.Errorf("num_threads (%d) must be greater than the number of worker threads (%d)", opt.numThreads, numWorkers)
 		}
@@ -189,7 +194,7 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 		return numWorkers, nil
 	}
 
-	if !numThreadsIsSet {
+	if !maxThreadsIsSet && !numThreadsIsSet {
 		if numWorkers >= maxProcs {
 			// Start at least as many threads as workers, and keep a free thread to handle requests in non-worker mode
 			opt.numThreads = numWorkers + 1

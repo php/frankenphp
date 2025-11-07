@@ -272,9 +272,10 @@ func TestCorrectThreadCalculation(t *testing.T) {
 	testThreadCalculation(t, 2, -1, &opt{maxThreads: -1, workers: oneWorkerThread})
 	testThreadCalculation(t, 2, -1, &opt{numThreads: 2, maxThreads: -1})
 
-	// max_threads should be sum of worker max_threads
-	testThreadCalculation(t, 2, 5, &opt{workers: []workerOpt{{num: 1, maxThreads: 5}}})
-	testThreadCalculation(t, 6, 8, &opt{workers: []workerOpt{{num: 1, maxThreads: 4}, {num: 4, maxThreads: 4}}})
+	// max_threads should be thread minimum + sum of worker max_threads
+	testThreadCalculation(t, 2, 6, &opt{workers: []workerOpt{{num: 1, maxThreads: 5}}})
+	testThreadCalculation(t, 6, 9, &opt{workers: []workerOpt{{num: 1, maxThreads: 4}, {num: 4, maxThreads: 4}}})
+	testThreadCalculation(t, 10, 14, &opt{numThreads: 10, workers: []workerOpt{{num: 1, maxThreads: 4}, {num: 3, maxThreads: 4}}})
 
 	// max_threads should remain equal to overall max_threads
 	testThreadCalculation(t, 2, 5, &opt{maxThreads: 5, workers: []workerOpt{{num: 1, maxThreads: 3}}})
