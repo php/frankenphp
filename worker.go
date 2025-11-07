@@ -4,6 +4,7 @@ package frankenphp
 import "C"
 import (
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -96,6 +97,10 @@ func newWorker(o workerOpt) (*worker, error) {
 	absFileName, err := fastabs.FastAbs(o.fileName)
 	if err != nil {
 		return nil, fmt.Errorf("worker filename is invalid %q: %w", o.fileName, err)
+	}
+
+	if _, err := os.Stat(absFileName); err != nil {
+		return nil, fmt.Errorf("worker file not found %q: %w", absFileName, err)
 	}
 
 	if o.name == "" {
