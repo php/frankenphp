@@ -177,7 +177,7 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 	}
 
 	if numThreadsIsSet && !maxThreadsIsSet {
-		opt.maxThreads = opt.numThreads + maxThreadsFromWorkers
+		opt.maxThreads = opt.numThreads
 		if opt.numThreads <= numWorkers {
 			return 0, fmt.Errorf("num_threads (%d) must be greater than the number of worker threads (%d)", opt.numThreads, numWorkers)
 		}
