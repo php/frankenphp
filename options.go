@@ -100,7 +100,7 @@ func WithWorkerEnv(env map[string]string) WorkerOption {
 	}
 }
 
-// WithWorkerEnv sets environment variables for the worker
+// WithWorkerMaxThreads sets the max number of threads for this specific worker
 func WithWorkerMaxThreads(num int) WorkerOption {
 	return func(w *workerOpt) error {
 		w.maxThreads = num
