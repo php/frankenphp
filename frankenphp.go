@@ -166,7 +166,7 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 	maxThreadsIsSet := opt.maxThreads != 0
 	maxThreadsIsAuto := opt.maxThreads < 0 // maxthreads < 0 signifies auto mode (see phpmaintread.go)
 
-	// consider the case where max_threads is only defined in workers
+	// if max_threads is only defined in workers, scale up to the sum of all worker max_threads
 	if !maxThreadsIsSet && maxThreadsFromWorkers > 0 {
 		maxThreadsIsSet = true
 		if numThreadsIsSet {
