@@ -165,7 +165,6 @@ func startUpscalingThreads(maxScaledThreads int, scale chan *frankenPHPContext, 
 
 			if fc.worker.maxThreads > 0 && fc.worker.countThreads() >= fc.worker.maxThreads {
 				logger.Debug("cannot scale worker thread, max threads reached for worker " + fc.worker.name)
-				logger.Debug("max_threads", fc.worker.maxThreads)
 				continue
 			}
 

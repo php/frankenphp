@@ -272,6 +272,14 @@ func TestCorrectThreadCalculation(t *testing.T) {
 	testThreadCalculation(t, 2, -1, &opt{maxThreads: -1, workers: oneWorkerThread})
 	testThreadCalculation(t, 2, -1, &opt{numThreads: 2, maxThreads: -1})
 
+	// max_threads should be sum of worker max_threads
+	testThreadCalculation(t, 2, 5, &opt{workers: []workerOpt{{num: 1, maxThreads: 5}}})
+	testThreadCalculation(t, 6, 8, &opt{workers: []workerOpt{{num: 1, maxThreads: 4}, {num: 4, maxThreads: 4}}})
+
+	// max_threads should remain equal to overall max_threads
+	testThreadCalculation(t, 2, 5, &opt{maxThreads: 5, workers: []workerOpt{{num: 1, maxThreads: 3}}})
+	testThreadCalculation(t, 3, 5, &opt{maxThreads: 5, workers: []workerOpt{{num: 1, maxThreads: 4}, {num: 1, maxThreads: 4}}})
+
 	// not enough num threads
 	testThreadCalculationError(t, &opt{numThreads: 1, workers: oneWorkerThread})
 	testThreadCalculationError(t, &opt{numThreads: 1, maxThreads: 1, workers: oneWorkerThread})
@@ -279,9 +287,16 @@ func TestCorrectThreadCalculation(t *testing.T) {
 	// not enough max_threads
 	testThreadCalculationError(t, &opt{numThreads: 2, maxThreads: 1})
 	testThreadCalculationError(t, &opt{maxThreads: 1, workers: oneWorkerThread})
+
+	// worker max_threads is bigger than overall max_threads
+	testThreadCalculationError(t, &opt{maxThreads: 5, workers: []workerOpt{{num: 1, maxThreads: 10}}})
+
+	// worker max_threads is smaller than num_threads
+	testThreadCalculationError(t, &opt{workers: []workerOpt{{num: 3, maxThreads: 2}}})
 }
 
 func testThreadCalculation(t *testing.T, expectedNumThreads int, expectedMaxThreads int, o *opt) {
+	t.Helper()
 	_, err := calculateMaxThreads(o)
 	assert.NoError(t, err, "no error should be returned")
 	assert.Equal(t, expectedNumThreads, o.numThreads, "num_threads must be correct")
@@ -289,6 +304,7 @@ func testThreadCalculation(t *testing.T, expectedNumThreads int, expectedMaxThre
 }
 
 func testThreadCalculationError(t *testing.T, o *opt) {
+	t.Helper()
 	_, err := calculateMaxThreads(o)
 	assert.Error(t, err, "configuration must error")
 }

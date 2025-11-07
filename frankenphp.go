@@ -150,9 +150,19 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 		metrics.TotalWorkers(w.name, w.num)
 
 		numWorkers += opt.workers[i].num
-		maxThreadsFromWorkerOpts += w.maxThreads
+
+		if w.maxThreads > 0 {
+			if w.maxThreads < w.num {
+				return 0, fmt.Errorf("worker max_threads (%d) must be greater or equal to worker num (%d) (%q)", w.maxThreads, w.num, w.fileName)
+			}
+			if w.maxThreads > opt.maxThreads && opt.maxThreads > 0 {
+				return 0, fmt.Errorf("worker max_threads (%d) cannot be greater than total max_threads (%d) (%q)", w.maxThreads, opt.maxThreads, w.fileName)
+			}
+			maxThreadsFromWorkerOpts += w.maxThreads
+		}
 	}
 
+	// if no max_threads is defined, use the sum of worker max_threads
 	if opt.maxThreads == 0 && maxThreadsFromWorkerOpts > 0 {
 		opt.maxThreads = maxThreadsFromWorkerOpts
 	}
