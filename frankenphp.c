@@ -71,9 +71,11 @@ frankenphp_config frankenphp_get_config() {
 }
 
 bool should_filter_var = 0;
+HashTable *main_thread_env = NULL;
+
 __thread uintptr_t thread_index;
 __thread bool is_worker_thread = false;
-__thread zval *os_environment = NULL;
+__thread HashTable *sandboxed_env = NULL;
 
 static void frankenphp_update_request_context() {
   /* the server context is stored on the go side, still SG(server_context) needs
@@ -203,12 +205,7 @@ bool frankenphp_shutdown_dummy_request(void) {
 }
 
 PHPAPI void get_full_env(zval *track_vars_array) {
-  go_getfullenv(thread_index, track_vars_array);
-}
-
-void frankenphp_add_assoc_str_ex(zval *track_vars_array, char *key,
-                                 size_t keylen, zend_string *val) {
-  add_assoc_str_ex(track_vars_array, key, keylen, val);
+  zend_hash_copy(Z_ARR_P(track_vars_array), main_thread_env, NULL);
 }
 
 /* Adapted from php_request_startup() */
@@ -305,39 +302,55 @@ PHP_FUNCTION(frankenphp_putenv) {
     RETURN_FALSE;
   }
 
-  if (go_putenv(thread_index, setting, (int)setting_len)) {
-    RETURN_TRUE;
-  } else {
-    RETURN_FALSE;
+  if (sandboxed_env == NULL) {
+    sandboxed_env = zend_array_dup(main_thread_env);
   }
+
+  // cut the string at the first '='
+  char *eq_pos = strchr(setting, '=');
+  bool put_env_success = true;
+  if (eq_pos != NULL) {
+    size_t name_len = eq_pos - setting;
+    size_t value_len =
+        (setting_len > name_len + 1) ? (setting_len - name_len - 1) : 0;
+    put_env_success =
+        go_putenv(setting, (int)name_len, eq_pos + 1, (int)value_len);
+    zval val = {0};
+    ZVAL_STRINGL(&val, eq_pos + 1, value_len);
+    zend_hash_str_update(sandboxed_env, setting, name_len, &val);
+  } else {
+    // no '=' found, delete the variable
+    put_env_success = go_putenv(setting, (int)setting_len, NULL, 0);
+    zend_hash_str_del(sandboxed_env, setting, setting_len);
+  }
+
+  RETURN_BOOL(put_env_success);
 } /* }}} */
 
 /* {{{ Call go's getenv to prevent race conditions */
 PHP_FUNCTION(frankenphp_getenv) {
-  char *name = NULL;
-  size_t name_len = 0;
+  zend_string *name = NULL;
   bool local_only = 0;
 
   ZEND_PARSE_PARAMETERS_START(0, 2)
   Z_PARAM_OPTIONAL
-  Z_PARAM_STRING_OR_NULL(name, name_len)
+  Z_PARAM_STR_OR_NULL(name)
   Z_PARAM_BOOL(local_only)
   ZEND_PARSE_PARAMETERS_END();
 
-  if (!name) {
-    array_init(return_value);
-    get_full_env(return_value);
+  HashTable *ht = sandboxed_env ? sandboxed_env : main_thread_env;
 
+  if (!name) {
+    RETURN_ARR(zend_array_dup(ht));
     return;
   }
 
-  struct go_getenv_return result = go_getenv(thread_index, name);
-
-  if (result.r0) {
-    // Return the single environment variable as a string
-    RETVAL_STR(result.r1);
+  zval *env_val = zend_hash_find(ht, name);
+  if (env_val && Z_TYPE_P(env_val) == IS_STRING) {
+    zend_string *str = Z_STR_P(env_val);
+    zend_string_addref(str);
+    RETVAL_STR(str);
   } else {
-    // Environment variable does not exist
     RETVAL_FALSE;
   }
 } /* }}} */
@@ -546,6 +559,10 @@ static zend_module_entry frankenphp_module = {
     STANDARD_MODULE_PROPERTIES};
 
 static void frankenphp_request_shutdown() {
+  if (sandboxed_env != NULL) {
+    zend_hash_release(sandboxed_env);
+    sandboxed_env = NULL;
+  }
   frankenphp_free_request_context();
   php_request_shutdown((void *)0);
 }
@@ -774,29 +791,7 @@ static void frankenphp_register_variables(zval *track_vars_array) {
   /* In CGI mode, we consider the environment to be a part of the server
    * variables.
    */
-
-  /* in non-worker mode we import the os environment regularly */
-  if (!is_worker_thread) {
-    get_full_env(track_vars_array);
-    // php_import_environment_variables(track_vars_array);
-    go_register_variables(thread_index, track_vars_array);
-    return;
-  }
-
-  /* In worker mode we cache the os environment */
-  if (os_environment == NULL) {
-    os_environment = malloc(sizeof(zval));
-    if (os_environment == NULL) {
-      php_error(E_ERROR, "Failed to allocate memory for os_environment");
-
-      return;
-    }
-    array_init(os_environment);
-    get_full_env(os_environment);
-    // php_import_environment_variables(os_environment);
-  }
-  zend_hash_copy(Z_ARR_P(track_vars_array), Z_ARR_P(os_environment),
-                 (copy_ctor_func_t)zval_add_ref);
+  zend_hash_copy(Z_ARR_P(track_vars_array), main_thread_env, NULL);
 
   go_register_variables(thread_index, track_vars_array);
 }
@@ -806,10 +801,12 @@ static void frankenphp_log_message(const char *message, int syslog_type_int) {
 }
 
 static char *frankenphp_getenv(const char *name, size_t name_len) {
-  struct go_getenv_return result = go_getenv(thread_index, (char *)name);
+  HashTable *ht = sandboxed_env ? sandboxed_env : main_thread_env;
 
-  if (result.r0) {
-    return result.r1->val;
+  zval *env_val = zend_hash_str_find(ht, name, name_len);
+  if (env_val && Z_TYPE_P(env_val) == IS_STRING) {
+    zend_string *str = Z_STR_P(env_val);
+    return ZSTR_VAL(str);
   }
 
   return NULL;
@@ -945,7 +942,17 @@ static void *php_main(void *arg) {
   cfg_get_string("filter.default", &default_filter);
   should_filter_var = default_filter != NULL;
 
+  if (main_thread_env == NULL) {
+    main_thread_env = malloc(sizeof(HashTable));
+    zend_hash_init(main_thread_env, 8, NULL, NULL, 1);
+    go_init_os_env(main_thread_env);
+  }
+
   go_frankenphp_main_thread_is_ready();
+
+  // free env and entries
+  zend_hash_release(main_thread_env);
+  main_thread_env = NULL;
 
   /* channel closed, shutdown gracefully */
   frankenphp_sapi_module.shutdown(&frankenphp_sapi_module);
@@ -1017,13 +1024,6 @@ int frankenphp_execute_script(char *file_name) {
   }
   zend_catch { status = EG(exit_status); }
   zend_end_try();
-
-  // free the cached os environment before shutting down the script
-  if (os_environment != NULL) {
-    zval_ptr_dtor(os_environment);
-    free(os_environment);
-    os_environment = NULL;
-  }
 
   zend_destroy_file_handle(&file_handle);
 

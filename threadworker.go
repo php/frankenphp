@@ -108,7 +108,6 @@ func setupWorkerScript(handler *workerThread, worker *worker) {
 	fc.worker = worker
 	handler.dummyContext = fc
 	handler.isBootingScript = true
-	clearSandboxedEnv(handler.thread)
 	logger.LogAttrs(context.Background(), slog.LevelDebug, "starting", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex))
 }
 

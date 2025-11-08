@@ -59,9 +59,6 @@ func (handler *regularThread) name() string {
 }
 
 func (handler *regularThread) waitForRequest() string {
-	// clear any previously sandboxed env
-	clearSandboxedEnv(handler.thread)
-
 	handler.state.markAsWaiting(true)
 
 	var fc *frankenPHPContext
