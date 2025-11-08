@@ -10,19 +10,6 @@ import (
 	"unsafe"
 )
 
-//export go_putenv
-func go_putenv(name *C.char, nameLen C.int, val *C.char, valLen C.int) C.bool {
-	goName := C.GoStringN(name, nameLen)
-
-	if val == nil {
-		// Unset the environment variable
-		return C.bool(os.Unsetenv(goName) == nil)
-	}
-
-	goVal := C.GoStringN(val, valLen)
-	return C.bool(os.Setenv(goName, goVal) == nil)
-}
-
 //export go_init_os_env
 func go_init_os_env(trackVarsArray *C.HashTable) {
 	env := os.Environ()
@@ -36,4 +23,17 @@ func go_init_os_env(trackVarsArray *C.HashTable) {
 		*(**C.zend_string)(unsafe.Pointer(&zval.value)) = zvalStr
 		C.zend_hash_update(trackVarsArray, zkey, &zval)
 	}
+}
+
+//export go_putenv
+func go_putenv(name *C.char, nameLen C.int, val *C.char, valLen C.int) C.bool {
+	goName := C.GoStringN(name, nameLen)
+
+	if val == nil {
+		// Unset the environment variable
+		return C.bool(os.Unsetenv(goName) == nil)
+	}
+
+	goVal := C.GoStringN(val, valLen)
+	return C.bool(os.Setenv(goName, goVal) == nil)
 }

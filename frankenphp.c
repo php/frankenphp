@@ -327,7 +327,7 @@ PHP_FUNCTION(frankenphp_putenv) {
   RETURN_BOOL(put_env_success);
 } /* }}} */
 
-/* {{{ Call go's getenv to prevent race conditions */
+/* {{{ Get the env from the sandboxed environment */
 PHP_FUNCTION(frankenphp_getenv) {
   zend_string *name = NULL;
   bool local_only = 0;
@@ -942,6 +942,7 @@ static void *php_main(void *arg) {
   cfg_get_string("filter.default", &default_filter);
   should_filter_var = default_filter != NULL;
 
+  /* take a snapshot of the environment for sandboxing */
   if (main_thread_env == NULL) {
     main_thread_env = malloc(sizeof(HashTable));
     zend_hash_init(main_thread_env, 8, NULL, NULL, 1);
@@ -949,10 +950,6 @@ static void *php_main(void *arg) {
   }
 
   go_frankenphp_main_thread_is_ready();
-
-  // free env and entries
-  zend_hash_release(main_thread_env);
-  main_thread_env = NULL;
 
   /* channel closed, shutdown gracefully */
   frankenphp_sapi_module.shutdown(&frankenphp_sapi_module);
@@ -966,6 +963,10 @@ static void *php_main(void *arg) {
     free((char *)frankenphp_sapi_module.ini_entries);
     frankenphp_sapi_module.ini_entries = NULL;
   }
+
+  /* free the main thread environment, necessary for tests */
+  zend_hash_release(main_thread_env);
+  main_thread_env = NULL;
 
   go_frankenphp_shutdown_main_thread();
 
