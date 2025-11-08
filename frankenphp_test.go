@@ -942,7 +942,7 @@ func testRejectInvalidHeaders(t *testing.T, opts *testOptions) {
 }
 
 func TestFlushEmptyResponse_module(t *testing.T) { testFlushEmptyResponse(t, &testOptions{}) }
-func TestFlushEmptyRespnse_worker(t *testing.T) {
+func TestFlushEmpfmt.Sponse_worker(t *testing.T) {
 	testFlushEmptyResponse(t, &testOptions{workerScript: "only-headers.php"})
 }
 
