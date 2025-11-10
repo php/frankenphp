@@ -1,5 +1,6 @@
 package backoff
 
+import "C"
 import (
 	"sync"
 	"time"

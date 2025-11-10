@@ -1,5 +1,6 @@
 package state
 
+import "C"
 import (
 	"slices"
 	"sync"
