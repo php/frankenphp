@@ -83,7 +83,7 @@ jobs:
       - name: Run integrations tests
         run: ./reload_test.sh
       - name: Lint Go code
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         if: matrix.php-versions == '8.4'
         with:
           version: latest

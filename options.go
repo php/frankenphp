@@ -36,6 +36,7 @@ type workerOpt struct {
 	env                    PreparedEnv
 	watch                  []string
 	maxConsecutiveFailures int
+	extensionWorkers       *extensionWorkers
 	onThreadReady          func(int)
 	onThreadShutdown       func(int)
 	onServerStartup        func()
@@ -68,7 +69,7 @@ func WithMetrics(m Metrics) Option {
 }
 
 // WithWorkers configures the PHP workers to start
-func WithWorkers(name string, fileName string, num int, options ...WorkerOption) Option {
+func WithWorkers(name, fileName string, num int, options ...WorkerOption) Option {
 	return func(o *opt) error {
 		worker := workerOpt{
 			name:                   name,
@@ -86,6 +87,54 @@ func WithWorkers(name string, fileName string, num int, options ...WorkerOption)
 		}
 
 		o.workers = append(o.workers, worker)
+
+		return nil
+	}
+}
+
+// EXPERIMENTAL: WithExtensionWorkers allow extensions to create workers.
+//
+// A worker script with the provided name, fileName and thread count will be registered, along with additional
+// configuration through WorkerOptions.
+//
+// Workers are designed to run indefinitely and will be gracefully shut down when FrankenPHP shuts down.
+//
+// Extension workers receive the lowest priority when determining thread allocations. If the requested number of threads
+// cannot be allocated, then FrankenPHP will panic and provide this information to the user (who will need to allocate
+// more total threads). Don't be greedy.
+func WithExtensionWorkers(name, fileName string, numThreads int, options ...WorkerOption) (Workers, Option) {
+	w := &extensionWorkers{
+		name:     name,
+		fileName: fileName,
+		num:      numThreads,
+	}
+
+	w.options = append(options, withExtensionWorkers(w))
+
+	return w, WithWorkers(w.name, w.fileName, w.num, w.options...)
+}
+
+// WithLogger configures the global logger to use.
+func WithLogger(l *slog.Logger) Option {
+	return func(o *opt) error {
+		o.logger = l
+
+		return nil
+	}
+}
+
+// WithPhpIni configures user defined PHP ini settings.
+func WithPhpIni(overrides map[string]string) Option {
+	return func(o *opt) error {
+		o.phpIni = overrides
+		return nil
+	}
+}
+
+// WithMaxWaitTime configures the max time a request may be stalled waiting for a thread.
+func WithMaxWaitTime(maxWaitTime time.Duration) Option {
+	return func(o *opt) error {
+		o.maxWaitTime = maxWaitTime
 
 		return nil
 	}
@@ -164,27 +213,9 @@ func WithWorkerOnServerShutdown(f func()) WorkerOption {
 	}
 }
 
-// WithLogger configures the global logger to use.
-func WithLogger(l *slog.Logger) Option {
-	return func(o *opt) error {
-		o.logger = l
-
-		return nil
-	}
-}
-
-// WithPhpIni configures user defined PHP ini settings.
-func WithPhpIni(overrides map[string]string) Option {
-	return func(o *opt) error {
-		o.phpIni = overrides
-		return nil
-	}
-}
-
-// WithMaxWaitTime configures the max time a request may be stalled waiting for a thread.
-func WithMaxWaitTime(maxWaitTime time.Duration) Option {
-	return func(o *opt) error {
-		o.maxWaitTime = maxWaitTime
+func withExtensionWorkers(w *extensionWorkers) WorkerOption {
+	return func(wo *workerOpt) error {
+		wo.extensionWorkers = w
 
 		return nil
 	}
