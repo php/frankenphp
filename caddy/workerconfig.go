@@ -84,7 +84,7 @@ func parseWorkerConfig(d *caddyfile.Dispenser) (workerConfig, error) {
 
 			v, err := strconv.ParseUint(d.Val(), 10, 32)
 			if err != nil {
-				return wc, err
+				return wc, d.WrapErr(err)
 			}
 
 			wc.Num = int(v)
@@ -95,7 +95,7 @@ func parseWorkerConfig(d *caddyfile.Dispenser) (workerConfig, error) {
 
 			v, err := strconv.ParseUint(d.Val(), 10, 32)
 			if err != nil {
-				return wc, err
+				return wc, d.WrapErr(err)
 			}
 
 			wc.MaxThreads = int(v)
