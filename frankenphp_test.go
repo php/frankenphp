@@ -601,10 +601,12 @@ func testRequestHeaders(t *testing.T, opts *testOptions) {
 }
 
 func TestFailingWorker(t *testing.T) {
-	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
-		body, _ := testGet("http://example.com/failing-worker.php", handler, t)
-		assert.Contains(t, body, "ok")
-	}, &testOptions{workerScript: "failing-worker.php"})
+	err := frankenphp.Init(
+		//frankenphp.WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
+		frankenphp.WithWorkers("failing worker", "testdata/failing-worker.php", 4),
+		frankenphp.WithNumThreads(5),
+	)
+	assert.Error(t, err, "should return an immediate error if workers fail on startup")
 }
 
 func TestEnv(t *testing.T) {
