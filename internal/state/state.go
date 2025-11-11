@@ -7,46 +7,32 @@ import (
 	"time"
 )
 
-type StateID uint8
+type State string
 
 const (
 	// livecycle States of a thread
-	Reserved StateID = iota
-	Booting
-	BootRequested
-	ShuttingDown
-	Done
+	Reserved      State = "reserved"
+	Booting       State = "booting"
+	BootRequested State = "boot requested"
+	ShuttingDown  State = "shutting down"
+	Done          State = "done"
 
 	// these States are 'stable' and safe to transition from at any time
-	Inactive
-	Ready
+	Inactive State = "inactive"
+	Ready    State = "ready"
 
 	// States necessary for restarting workers
-	Restarting
-	Yielding
+	Restarting State = "restarting"
+	Yielding   State = "yielding"
 
 	// States necessary for transitioning between different handlers
-	TransitionRequested
-	TransitionInProgress
-	TransitionComplete
+	TransitionRequested  State = "transition requested"
+	TransitionInProgress State = "transition in progress"
+	TransitionComplete   State = "transition complete"
 )
 
-var stateNames = map[StateID]string{
-	Reserved:             "reserved",
-	Booting:              "booting",
-	Inactive:             "inactive",
-	Ready:                "ready",
-	ShuttingDown:         "shutting down",
-	Done:                 "done",
-	Restarting:           "restarting",
-	Yielding:             "yielding",
-	TransitionRequested:  "transition requested",
-	TransitionInProgress: "transition in progress",
-	TransitionComplete:   "transition complete",
-}
-
 type ThreadState struct {
-	currentState StateID
+	currentState State
 	mu           sync.RWMutex
 	subscribers  []stateSubscriber
 	// how long threads have been waiting in stable states
@@ -55,7 +41,7 @@ type ThreadState struct {
 }
 
 type stateSubscriber struct {
-	states []StateID
+	states []State
 	ch     chan struct{}
 }
 
@@ -67,7 +53,7 @@ func NewThreadState() *ThreadState {
 	}
 }
 
-func (ts *ThreadState) Is(state StateID) bool {
+func (ts *ThreadState) Is(state State) bool {
 	ts.mu.RLock()
 	ok := ts.currentState == state
 	ts.mu.RUnlock()
@@ -75,7 +61,7 @@ func (ts *ThreadState) Is(state StateID) bool {
 	return ok
 }
 
-func (ts *ThreadState) CompareAndSwap(compareTo StateID, swapTo StateID) bool {
+func (ts *ThreadState) CompareAndSwap(compareTo State, swapTo State) bool {
 	ts.mu.Lock()
 	ok := ts.currentState == compareTo
 	if ok {
@@ -88,10 +74,10 @@ func (ts *ThreadState) CompareAndSwap(compareTo StateID, swapTo StateID) bool {
 }
 
 func (ts *ThreadState) Name() string {
-	return stateNames[ts.Get()]
+	return string(ts.Get())
 }
 
-func (ts *ThreadState) Get() StateID {
+func (ts *ThreadState) Get() State {
 	ts.mu.RLock()
 	id := ts.currentState
 	ts.mu.RUnlock()
@@ -99,14 +85,14 @@ func (ts *ThreadState) Get() StateID {
 	return id
 }
 
-func (ts *ThreadState) Set(nextState StateID) {
+func (ts *ThreadState) Set(nextState State) {
 	ts.mu.Lock()
 	ts.currentState = nextState
 	ts.notifySubscribers(nextState)
 	ts.mu.Unlock()
 }
 
-func (ts *ThreadState) notifySubscribers(nextState StateID) {
+func (ts *ThreadState) notifySubscribers(nextState State) {
 	if len(ts.subscribers) == 0 {
 		return
 	}
@@ -123,7 +109,7 @@ func (ts *ThreadState) notifySubscribers(nextState StateID) {
 }
 
 // block until the thread reaches a certain state
-func (ts *ThreadState) WaitFor(states ...StateID) {
+func (ts *ThreadState) WaitFor(states ...State) {
 	ts.mu.Lock()
 	if slices.Contains(states, ts.currentState) {
 		ts.mu.Unlock()
@@ -139,7 +125,7 @@ func (ts *ThreadState) WaitFor(states ...StateID) {
 }
 
 // safely request a state change from a different goroutine
-func (ts *ThreadState) RequestSafeStateChange(nextState StateID) bool {
+func (ts *ThreadState) RequestSafeStateChange(nextState State) bool {
 	ts.mu.Lock()
 	switch ts.currentState {
 	// disallow state changes if shutting down or done
