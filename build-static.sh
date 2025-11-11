@@ -7,10 +7,6 @@ if ! type "git" >/dev/null 2>&1; then
 	echo "The \"git\" command must be installed."
 	exit 1
 fi
-if ! type "go" >/dev/null 2>&1; then
-	echo "The \"go\" command must be installed."
-	exit 1
-fi
 
 CURRENT_DIR=$(pwd)
 
