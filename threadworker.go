@@ -148,7 +148,7 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 	}
 
 	if !watcherIsEnabled {
-		// worker script has failed on a restart during normal operation
+		// rare case where worker script has failed on a restart during normal operation
 		// this can happen if startup success depends on external resources
 		logger.LogAttrs(ctx, slog.LevelError, "worker script has failed on restart", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex))
 	} else {
