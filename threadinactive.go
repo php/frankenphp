@@ -1,5 +1,7 @@
 package frankenphp
 
+import "context"
+
 // representation of a thread with no work assigned to it
 // implements the threadHandler interface
 // each inactive thread weighs around ~350KB
@@ -37,7 +39,7 @@ func (handler *inactiveThread) afterScriptExecution(int) {
 	panic("inactive threads should not execute scripts")
 }
 
-func (handler *inactiveThread) getRequestContext() *frankenPHPContext {
+func (handler *inactiveThread) context() context.Context {
 	return nil
 }
 

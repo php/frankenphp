@@ -3,6 +3,7 @@ package frankenphp
 // #include "frankenphp.h"
 import "C"
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -19,7 +20,7 @@ type worker struct {
 	fileName               string
 	num                    int
 	env                    PreparedEnv
-	requestChan            chan *frankenPHPContext
+	requestChan            chan context.Context
 	threads                []*phpThread
 	threadMutex            sync.RWMutex
 	allowPathMatching      bool
@@ -128,7 +129,7 @@ func newWorker(o workerOpt) (*worker, error) {
 		fileName:               absFileName,
 		num:                    o.num,
 		env:                    o.env,
-		requestChan:            make(chan *frankenPHPContext),
+		requestChan:            make(chan context.Context),
 		threads:                make([]*phpThread, 0, o.num),
 		allowPathMatching:      allowPathMatching,
 		maxConsecutiveFailures: o.maxConsecutiveFailures,
@@ -228,14 +229,16 @@ func (worker *worker) countThreads() int {
 	return l
 }
 
-func (worker *worker) handleRequest(fc *frankenPHPContext) error {
+func (worker *worker) handleRequest(ctx context.Context) error {
 	metrics.StartWorkerRequest(worker.name)
+
+	fc := ctx.Value(contextKey).(*frankenPHPContext)
 
 	// dispatch requests to all worker threads in order
 	worker.threadMutex.RLock()
 	for _, thread := range worker.threads {
 		select {
-		case thread.requestChan <- fc:
+		case thread.requestChan <- ctx:
 			worker.threadMutex.RUnlock()
 			<-fc.done
 			metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
@@ -251,7 +254,7 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) error {
 	metrics.QueuedWorkerRequest(worker.name)
 	for {
 		select {
-		case worker.requestChan <- fc:
+		case worker.requestChan <- ctx:
 			metrics.DequeuedWorkerRequest(worker.name)
 			<-fc.done
 			metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))

@@ -233,8 +233,8 @@ func Init(options ...Option) error {
 
 	if opt.logger == nil {
 		// set a default logger
-		// to disable logging, set the logger to slog.New(slog.NewTextHandler(io.Discard, nil))
-		opt.logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
+		// to disable logging, set the logger to slog.New(slog.DiscardHandler)
+		opt.logger = slog.Default()
 	}
 
 	loggerMu.Lock()
@@ -274,7 +274,7 @@ func Init(options ...Option) error {
 		return err
 	}
 
-	regularRequestChan = make(chan *frankenPHPContext, opt.numThreads-workerThreadCount)
+	regularRequestChan = make(chan context.Context, opt.numThreads-workerThreadCount)
 	regularThreads = make([]*phpThread, 0, opt.numThreads-workerThreadCount)
 	for i := 0; i < opt.numThreads-workerThreadCount; i++ {
 		convertToRegularThread(getInactivePHPThread())
@@ -343,7 +343,9 @@ func ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) error 
 		return ErrNotRunning
 	}
 
-	fc, ok := fromContext(request.Context())
+	ctx := request.Context()
+	fc, ok := fromContext(ctx)
+
 	if !ok {
 		return ErrInvalidRequest
 	}
@@ -356,16 +358,17 @@ func ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) error 
 
 	// Detect if a worker is available to handle this request
 	if fc.worker != nil {
-		return fc.worker.handleRequest(fc)
+		return fc.worker.handleRequest(ctx)
 	}
 
 	// If no worker was available, send the request to non-worker threads
-	return handleRequestWithRegularPHPThreads(fc)
+	return handleRequestWithRegularPHPThreads(ctx)
 }
 
 //export go_ub_write
 func go_ub_write(threadIndex C.uintptr_t, cBuf *C.char, length C.int) (C.size_t, C.bool) {
-	fc := phpThreads[threadIndex].getRequestContext()
+	ctx := phpThreads[threadIndex].context()
+	fc := ctx.Value(contextKey).(*frankenPHPContext)
 
 	if fc.isDone {
 		return 0, C.bool(true)
@@ -381,13 +384,13 @@ func go_ub_write(threadIndex C.uintptr_t, cBuf *C.char, length C.int) (C.size_t,
 	}
 
 	i, e := writer.Write(unsafe.Slice((*byte)(unsafe.Pointer(cBuf)), length))
-	if e != nil {
-		fc.logger.LogAttrs(context.Background(), slog.LevelWarn, "write error", slog.Any("error", e))
+	if e != nil && fc.logger.Enabled(ctx, slog.LevelWarn) {
+		fc.logger.LogAttrs(ctx, slog.LevelWarn, "write error", slog.Any("error", e))
 	}
 
-	if fc.responseWriter == nil {
+	if fc.responseWriter == nil && fc.logger.Enabled(ctx, slog.LevelInfo) {
 		// probably starting a worker script, log the output
-		fc.logger.Info(writer.(*bytes.Buffer).String())
+		fc.logger.LogAttrs(ctx, slog.LevelInfo, writer.(*bytes.Buffer).String())
 	}
 
 	return C.size_t(i), C.bool(fc.clientHasClosed())
@@ -396,12 +399,15 @@ func go_ub_write(threadIndex C.uintptr_t, cBuf *C.char, length C.int) (C.size_t,
 //export go_apache_request_headers
 func go_apache_request_headers(threadIndex C.uintptr_t) (*C.go_string, C.size_t) {
 	thread := phpThreads[threadIndex]
-	fc := thread.getRequestContext()
+	ctx := thread.context()
+	fc := ctx.Value(contextKey).(*frankenPHPContext)
 
 	if fc.responseWriter == nil {
 		// worker mode, not handling a request
 
-		logger.LogAttrs(context.Background(), slog.LevelDebug, "apache_request_headers() called in non-HTTP context", slog.String("worker", fc.worker.name))
+		if logger.Enabled(ctx, slog.LevelDebug) {
+			logger.LogAttrs(ctx, slog.LevelDebug, "apache_request_headers() called in non-HTTP context", slog.String("worker", fc.worker.name))
+		}
 
 		return nil, 0
 	}
@@ -471,11 +477,12 @@ func splitRawHeader(rawHeader *C.char, length int) (string, string) {
 
 //export go_write_headers
 func go_write_headers(threadIndex C.uintptr_t, status C.int, headers *C.zend_llist) C.bool {
-	fc := phpThreads[threadIndex].getRequestContext()
-
-	if fc == nil {
+	ctx := phpThreads[threadIndex].context()
+	if ctx == nil {
 		return C.bool(false)
 	}
+
+	fc := ctx.Value(contextKey).(*frankenPHPContext)
 
 	if fc.isDone {
 		return C.bool(false)
@@ -499,13 +506,16 @@ func go_write_headers(threadIndex C.uintptr_t, status C.int, headers *C.zend_lli
 	// go panics on invalid status code
 	// https://github.com/golang/go/blob/9b8742f2e79438b9442afa4c0a0139d3937ea33f/src/net/http/server.go#L1162
 	if goStatus < 100 || goStatus > 999 {
-		logger.Warn(fmt.Sprintf("Invalid response status code %v", goStatus))
+		if logger.Enabled(ctx, slog.LevelWarn) {
+			logger.LogAttrs(ctx, slog.LevelWarn, "Invalid response status code", slog.Int("status_code", goStatus))
+		}
+
 		goStatus = 500
 	}
 
 	fc.responseWriter.WriteHeader(goStatus)
 
-	if goStatus >= 100 && goStatus < 200 {
+	if goStatus < 200 {
 		// Clear headers, it's not automatically done by ResponseWriter.WriteHeader() for 1xx responses
 		h := fc.responseWriter.Header()
 		for k := range h {
@@ -518,8 +528,14 @@ func go_write_headers(threadIndex C.uintptr_t, status C.int, headers *C.zend_lli
 
 //export go_sapi_flush
 func go_sapi_flush(threadIndex C.uintptr_t) bool {
-	fc := phpThreads[threadIndex].getRequestContext()
-	if fc == nil || fc.responseWriter == nil {
+	ctx := phpThreads[threadIndex].context()
+	if ctx == nil {
+		return false
+	}
+
+	fc := ctx.Value(contextKey).(*frankenPHPContext)
+
+	if fc.responseWriter == nil {
 		return false
 	}
 
@@ -527,8 +543,8 @@ func go_sapi_flush(threadIndex C.uintptr_t) bool {
 		return true
 	}
 
-	if err := http.NewResponseController(fc.responseWriter).Flush(); err != nil {
-		logger.LogAttrs(context.Background(), slog.LevelWarn, "the current responseWriter is not a flusher, if you are not using a custom build, please report this issue", slog.Any("error", err))
+	if err := http.NewResponseController(fc.responseWriter).Flush(); err != nil && logger.Enabled(ctx, slog.LevelWarn) {
+		logger.LogAttrs(ctx, slog.LevelWarn, "the current responseWriter is not a flusher, if you are not using a custom build, please report this issue", slog.Any("error", err))
 	}
 
 	return false
@@ -536,7 +552,7 @@ func go_sapi_flush(threadIndex C.uintptr_t) bool {
 
 //export go_read_post
 func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (readBytes C.size_t) {
-	fc := phpThreads[threadIndex].getRequestContext()
+	fc := phpThreads[threadIndex].context().Value(contextKey).(*frankenPHPContext)
 
 	if fc.responseWriter == nil {
 		return 0
@@ -555,7 +571,7 @@ func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (r
 
 //export go_read_cookies
 func go_read_cookies(threadIndex C.uintptr_t) *C.char {
-	request := phpThreads[threadIndex].getRequestContext().request
+	request := phpThreads[threadIndex].context().Value(contextKey).(*frankenPHPContext).request
 	if request == nil {
 		return nil
 	}
@@ -599,7 +615,7 @@ func go_log(message *C.char, level C.int) {
 
 //export go_is_context_done
 func go_is_context_done(threadIndex C.uintptr_t) C.bool {
-	return C.bool(phpThreads[threadIndex].getRequestContext().isDone)
+	return C.bool(phpThreads[threadIndex].context().Value(contextKey).(*frankenPHPContext).isDone)
 }
 
 // ExecuteScriptCLI executes the PHP script passed as parameter.

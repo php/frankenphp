@@ -19,7 +19,7 @@ import (
 var testDataPath, _ = filepath.Abs("./testdata")
 
 func TestStartAndStopTheMainThreadWithOneInactiveThread(t *testing.T) {
-	logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger = slog.New(slog.DiscardHandler)
 	_, err := initPHPThreads(1, 1, nil) // boot 1 thread
 	assert.NoError(t, err)
 
@@ -28,6 +28,7 @@ func TestStartAndStopTheMainThreadWithOneInactiveThread(t *testing.T) {
 	assert.True(t, phpThreads[0].state.is(stateInactive))
 
 	drainPHPThreads()
+
 	assert.Nil(t, phpThreads)
 }
 
