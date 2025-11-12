@@ -177,7 +177,7 @@ fi
 
 # Embed PHP app, if any
 if [ -n "${EMBED}" ] && [ -d "${EMBED}" ]; then
-  SPC_OPT_BUILD_ARGS="${SPC_OPT_BUILD_ARGS} --with-frankenphp-app=${EMBED}"
+	SPC_OPT_BUILD_ARGS="${SPC_OPT_BUILD_ARGS} --with-frankenphp-app=${EMBED}"
 fi
 
 SPC_OPT_INSTALL_ARGS="go-xcaddy"
@@ -197,7 +197,7 @@ export SPC_CMD_VAR_PHP_MAKE_EXTRA_CFLAGS
 # Build FrankenPHP
 ${spcCommand} doctor --auto-fix
 for pkg in ${SPC_OPT_INSTALL_ARGS}; do
-  ${spcCommand} install-pkg "${pkg}"
+	${spcCommand} install-pkg "${pkg}"
 done
 # shellcheck disable=SC2086
 ${spcCommand} download --with-php="${PHP_VERSION}" --for-extensions="${PHP_EXTENSIONS}" --for-libs="${PHP_EXTENSION_LIBS}" ${SPC_OPT_DOWNLOAD_ARGS}
