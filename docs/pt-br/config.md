@@ -84,7 +84,6 @@ A [opção global](https://caddyserver.com/docs/caddyfile/concepts#global-option
             env <chave> <valor> # Define uma variável de ambiente extra para o valor fornecido. Pode ser especificada mais de uma vez para múltiplas variáveis de ambiente.
             watch <caminho> # Define o caminho para monitorar alterações em arquivos. Pode ser especificada mais de uma vez para múltiplos caminhos.
             name <nome> # Define o nome do worker, usado em logs e métricas. Padrão: caminho absoluto do arquivo do worker.
-            max_consecutive_failures <num> # Define o número máximo de falhas consecutivas antes do worker ser considerado inoperante. -1 significa que o worker sempre reiniciará. Padrão: 6.
         }
     }
 }

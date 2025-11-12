@@ -136,25 +136,6 @@ docker run \
 curl -X POST http://localhost:2019/frankenphp/workers/restart
 ```
 
-### Worker 故障
-
-如果 worker 脚本因非零退出代码而崩溃，FrankenPHP 将使用指数退避策略重启它。
-如果 worker 脚本保持运行的时间超过上次退避 × 2，
-它将不会惩罚 worker 脚本并再次重启它。
-但是，如果 worker 脚本在短时间内继续以非零退出代码失败
-（例如，脚本中有拼写错误），FrankenPHP 将崩溃并出现错误：`too many consecutive failures`。
-
-可以在你的 [Caddyfile](config.md#caddyfile-配置) 中使用 `max_consecutive_failures` 选项配置连续失败的次数：
-
-```caddyfile
-frankenphp {
-    worker {
-        # ...
-        max_consecutive_failures 10
-    }
-}
-```
-
 ## 超全局变量行为
 
 [PHP 超全局变量](https://www.php.net/manual/zh/language.variables.superglobals.php)（`$_SERVER`、`$_ENV`、`$_GET`...）
