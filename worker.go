@@ -15,16 +15,17 @@ import (
 
 // represents a worker script and can have many threads assigned to it
 type worker struct {
-	name              string
-	fileName          string
-	num               int
-	env               PreparedEnv
-	requestChan       chan *frankenPHPContext
-	threads           []*phpThread
-	threadMutex       sync.RWMutex
-	allowPathMatching bool
-	onThreadReady     func(int)
-	onThreadShutdown  func(int)
+	name                   string
+	fileName               string
+	num                    int
+	env                    PreparedEnv
+	requestChan            chan *frankenPHPContext
+	threads                []*phpThread
+	threadMutex            sync.RWMutex
+	allowPathMatching      bool
+	maxConsecutiveFailures int
+	onThreadReady          func(int)
+	onThreadShutdown       func(int)
 }
 
 var (
@@ -130,15 +131,16 @@ func newWorker(o workerOpt) (*worker, error) {
 
 	o.env["FRANKENPHP_WORKER\x00"] = "1"
 	w := &worker{
-		name:              o.name,
-		fileName:          absFileName,
-		num:               o.num,
-		env:               o.env,
-		requestChan:       make(chan *frankenPHPContext),
-		threads:           make([]*phpThread, 0, o.num),
-		allowPathMatching: allowPathMatching,
-		onThreadReady:     o.onThreadReady,
-		onThreadShutdown:  o.onThreadShutdown,
+		name:                   o.name,
+		fileName:               absFileName,
+		num:                    o.num,
+		env:                    o.env,
+		requestChan:            make(chan *frankenPHPContext),
+		threads:                make([]*phpThread, 0, o.num),
+		allowPathMatching:      allowPathMatching,
+		maxConsecutiveFailures: o.maxConsecutiveFailures,
+		onThreadReady:          o.onThreadReady,
+		onThreadShutdown:       o.onThreadShutdown,
 	}
 
 	return w, nil
