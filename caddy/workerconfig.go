@@ -107,7 +107,8 @@ func parseWorkerConfig(d *caddyfile.Dispenser) (workerConfig, error) {
 			caddyMatchPath.Provision(caddy.Context{})
 			wc.MatchPath = ([]string)(caddyMatchPath)
 		case "max_consecutive_failures":
-			caddy.Log().Warn("max_consecutive_failures is deprecated")
+			_ = d.NextArg()
+			caddy.Log().Warn("frankenphp: worker max_consecutive_failures is deprecated")
 		default:
 			allowedDirectives := "name, file, num, env, watch, match"
 			return wc, wrongSubDirectiveError("worker", allowedDirectives, v)
