@@ -140,7 +140,7 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 		return
 	}
 
-	if worker.maxConsecutiveFailures > 0 && startupFailChan != nil && !watcherIsEnabled && handler.failureCount >= worker.maxConsecutiveFailures {
+	if worker.maxConsecutiveFailures >= 0 && startupFailChan != nil && !watcherIsEnabled && handler.failureCount >= worker.maxConsecutiveFailures {
 		select {
 		case startupFailChan <- fmt.Errorf("worker failure: script %s has not reached frankenphp_handle_request()", worker.fileName):
 			handler.thread.state.Set(state.ShuttingDown)
@@ -154,11 +154,11 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 	} else {
 		// rare case where worker script has failed on a restart during normal operation
 		// this can happen if startup success depends on external resources
-		logger.LogAttrs(ctx, slog.LevelError, "worker script has failed on restart", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex))
+		logger.LogAttrs(ctx, slog.LevelWarn, "worker script has failed on restart", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex))
 	}
 
 	// wait a bit and try again (exponential backoff)
-	backoffDuration := time.Duration(handler.failureCount*handler.failureCount*10) * time.Millisecond
+	backoffDuration := time.Duration(handler.failureCount*handler.failureCount*100) * time.Millisecond
 	if backoffDuration > time.Second {
 		backoffDuration = time.Second
 	}
