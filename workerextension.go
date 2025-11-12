@@ -51,7 +51,7 @@ func (w *extensionWorkers) SendMessage(ctx context.Context, message any, rw http
 	fc.responseWriter = rw
 	fc.handlerParameters = message
 
-	err := w.internalWorker.handleRequest(context.WithValue(ctx, contextKey, fc))
+	err := w.internalWorker.handleRequest(contextHolder{context.WithValue(ctx, contextKey, fc), fc})
 
 	return fc.handlerReturn, err
 }

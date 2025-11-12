@@ -39,6 +39,10 @@ func (handler *inactiveThread) afterScriptExecution(int) {
 	panic("inactive threads should not execute scripts")
 }
 
+func (handler *inactiveThread) frankenPHPContext() *frankenPHPContext {
+	return nil
+}
+
 func (handler *inactiveThread) context() context.Context {
 	return nil
 }

@@ -65,6 +65,10 @@ func (handler *taskThread) afterScriptExecution(_ int) {
 	panic("task threads should not execute scripts")
 }
 
+func (handler *taskThread) frankenPHPContext() *frankenPHPContext {
+	return nil
+}
+
 func (handler *taskThread) context() context.Context {
 	return nil
 }

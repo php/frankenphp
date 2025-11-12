@@ -274,7 +274,7 @@ func Init(options ...Option) error {
 		return err
 	}
 
-	regularRequestChan = make(chan context.Context, opt.numThreads-workerThreadCount)
+	regularRequestChan = make(chan contextHolder, opt.numThreads-workerThreadCount)
 	regularThreads = make([]*phpThread, 0, opt.numThreads-workerThreadCount)
 	for i := 0; i < opt.numThreads-workerThreadCount; i++ {
 		convertToRegularThread(getInactivePHPThread())
@@ -346,6 +346,8 @@ func ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) error 
 	ctx := request.Context()
 	fc, ok := fromContext(ctx)
 
+	ch := contextHolder{ctx, fc}
+
 	if !ok {
 		return ErrInvalidRequest
 	}
@@ -358,17 +360,17 @@ func ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) error 
 
 	// Detect if a worker is available to handle this request
 	if fc.worker != nil {
-		return fc.worker.handleRequest(ctx)
+		return fc.worker.handleRequest(ch)
 	}
 
 	// If no worker was available, send the request to non-worker threads
-	return handleRequestWithRegularPHPThreads(ctx)
+	return handleRequestWithRegularPHPThreads(ch)
 }
 
 //export go_ub_write
 func go_ub_write(threadIndex C.uintptr_t, cBuf *C.char, length C.int) (C.size_t, C.bool) {
-	ctx := phpThreads[threadIndex].context()
-	fc := ctx.Value(contextKey).(*frankenPHPContext)
+	thread := phpThreads[threadIndex]
+	fc := thread.frankenPHPContext()
 
 	if fc.isDone {
 		return 0, C.bool(true)
@@ -383,14 +385,27 @@ func go_ub_write(threadIndex C.uintptr_t, cBuf *C.char, length C.int) (C.size_t,
 		writer = fc.responseWriter
 	}
 
+	var ctx context.Context
+
 	i, e := writer.Write(unsafe.Slice((*byte)(unsafe.Pointer(cBuf)), length))
-	if e != nil && fc.logger.Enabled(ctx, slog.LevelWarn) {
-		fc.logger.LogAttrs(ctx, slog.LevelWarn, "write error", slog.Any("error", e))
+	if e != nil {
+		ctx = thread.context()
+
+		if fc.logger.Enabled(ctx, slog.LevelWarn) {
+			fc.logger.LogAttrs(ctx, slog.LevelWarn, "write error", slog.Any("error", e))
+		}
 	}
 
-	if fc.responseWriter == nil && fc.logger.Enabled(ctx, slog.LevelInfo) {
+	if fc.responseWriter == nil {
 		// probably starting a worker script, log the output
-		fc.logger.LogAttrs(ctx, slog.LevelInfo, writer.(*bytes.Buffer).String())
+
+		if ctx == nil {
+			ctx = thread.context()
+		}
+
+		if fc.logger.Enabled(ctx, slog.LevelInfo) {
+			fc.logger.LogAttrs(ctx, slog.LevelInfo, writer.(*bytes.Buffer).String())
+		}
 	}
 
 	return C.size_t(i), C.bool(fc.clientHasClosed())
@@ -400,7 +415,7 @@ func go_ub_write(threadIndex C.uintptr_t, cBuf *C.char, length C.int) (C.size_t,
 func go_apache_request_headers(threadIndex C.uintptr_t) (*C.go_string, C.size_t) {
 	thread := phpThreads[threadIndex]
 	ctx := thread.context()
-	fc := ctx.Value(contextKey).(*frankenPHPContext)
+	fc := thread.frankenPHPContext()
 
 	if fc.responseWriter == nil {
 		// worker mode, not handling a request
@@ -477,12 +492,11 @@ func splitRawHeader(rawHeader *C.char, length int) (string, string) {
 
 //export go_write_headers
 func go_write_headers(threadIndex C.uintptr_t, status C.int, headers *C.zend_llist) C.bool {
-	ctx := phpThreads[threadIndex].context()
-	if ctx == nil {
+	thread := phpThreads[threadIndex]
+	fc := thread.frankenPHPContext()
+	if fc == nil {
 		return C.bool(false)
 	}
-
-	fc := ctx.Value(contextKey).(*frankenPHPContext)
 
 	if fc.isDone {
 		return C.bool(false)
@@ -506,6 +520,8 @@ func go_write_headers(threadIndex C.uintptr_t, status C.int, headers *C.zend_lli
 	// go panics on invalid status code
 	// https://github.com/golang/go/blob/9b8742f2e79438b9442afa4c0a0139d3937ea33f/src/net/http/server.go#L1162
 	if goStatus < 100 || goStatus > 999 {
+		ctx := thread.context()
+
 		if logger.Enabled(ctx, slog.LevelWarn) {
 			logger.LogAttrs(ctx, slog.LevelWarn, "Invalid response status code", slog.Int("status_code", goStatus))
 		}
@@ -528,12 +544,11 @@ func go_write_headers(threadIndex C.uintptr_t, status C.int, headers *C.zend_lli
 
 //export go_sapi_flush
 func go_sapi_flush(threadIndex C.uintptr_t) bool {
-	ctx := phpThreads[threadIndex].context()
-	if ctx == nil {
+	thread := phpThreads[threadIndex]
+	fc := thread.frankenPHPContext()
+	if fc == nil {
 		return false
 	}
-
-	fc := ctx.Value(contextKey).(*frankenPHPContext)
 
 	if fc.responseWriter == nil {
 		return false
@@ -543,8 +558,12 @@ func go_sapi_flush(threadIndex C.uintptr_t) bool {
 		return true
 	}
 
-	if err := http.NewResponseController(fc.responseWriter).Flush(); err != nil && logger.Enabled(ctx, slog.LevelWarn) {
-		logger.LogAttrs(ctx, slog.LevelWarn, "the current responseWriter is not a flusher, if you are not using a custom build, please report this issue", slog.Any("error", err))
+	if err := http.NewResponseController(fc.responseWriter).Flush(); err != nil {
+		ctx := thread.context()
+
+		if logger.Enabled(ctx, slog.LevelWarn) {
+			logger.LogAttrs(ctx, slog.LevelWarn, "the current responseWriter is not a flusher, if you are not using a custom build, please report this issue", slog.Any("error", err))
+		}
 	}
 
 	return false
@@ -552,7 +571,7 @@ func go_sapi_flush(threadIndex C.uintptr_t) bool {
 
 //export go_read_post
 func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (readBytes C.size_t) {
-	fc := phpThreads[threadIndex].context().Value(contextKey).(*frankenPHPContext)
+	fc := phpThreads[threadIndex].frankenPHPContext()
 
 	if fc.responseWriter == nil {
 		return 0
@@ -571,7 +590,7 @@ func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (r
 
 //export go_read_cookies
 func go_read_cookies(threadIndex C.uintptr_t) *C.char {
-	request := phpThreads[threadIndex].context().Value(contextKey).(*frankenPHPContext).request
+	request := phpThreads[threadIndex].frankenPHPContext().request
 	if request == nil {
 		return nil
 	}
@@ -615,7 +634,7 @@ func go_log(message *C.char, level C.int) {
 
 //export go_is_context_done
 func go_is_context_done(threadIndex C.uintptr_t) C.bool {
-	return C.bool(phpThreads[threadIndex].context().Value(contextKey).(*frankenPHPContext).isDone)
+	return C.bool(phpThreads[threadIndex].frankenPHPContext().isDone)
 }
 
 // ExecuteScriptCLI executes the PHP script passed as parameter.
