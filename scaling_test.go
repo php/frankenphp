@@ -41,7 +41,6 @@ func TestScaleAWorkerThreadUpAndDown(t *testing.T) {
 		WithWorkers(workerName, workerPath, 1,
 			WithWorkerEnv(map[string]string{}),
 			WithWorkerWatchMode([]string{}),
-			WithWorkerMaxFailures(0),
 		),
 		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
 	))
