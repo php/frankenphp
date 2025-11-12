@@ -204,11 +204,15 @@ ${spcCommand} download --with-php="${PHP_VERSION}" --for-extensions="${PHP_EXTEN
 # shellcheck disable=SC2086
 FRANKENPHP_SOURCE_DIR=${CURRENT_DIR} ${spcCommand} build --enable-zts --build-embed --build-frankenphp ${SPC_OPT_BUILD_ARGS} "${PHP_EXTENSIONS}" --with-libs="${PHP_EXTENSION_LIBS}"
 
-"dist/static-php-cli/buildroot/bin/frankenphp" version
-"dist/static-php-cli/buildroot/bin/frankenphp" build-info
+cd ../..
+
+bin="dist/frankenphp-${os}-${arch}"
+cp "dist/static-php-cli/buildroot/bin/frankenphp" "${bin}"
+"${bin}" version
+"${bin}" build-info
 
 if [ -n "${RELEASE}" ]; then
-	gh release upload "v${FRANKENPHP_VERSION}" "dist/static-php-cli/buildroot/bin/frankenphp" --repo dunglas/frankenphp --clobber
+	gh release upload "v${FRANKENPHP_VERSION}" "${bin}" --repo dunglas/frankenphp --clobber
 fi
 
 if [ -n "${CURRENT_REF}" ]; then
