@@ -50,16 +50,14 @@ func initWorkers(opt []workerOpt) error {
 	}
 
 	startupFailChan = make(chan error, totalThreadsToStart)
-	workersReady := sync.WaitGroup{}
-	workersReady.Add(totalThreadsToStart)
+	var workersReady sync.WaitGroup
 	for _, w := range workers {
 		for i := 0; i < w.num; i++ {
 			thread := getInactivePHPThread()
 			convertToWorkerThread(thread, w)
-			go func() {
+			workersReady.Go(func() {
 				thread.state.WaitFor(state.Ready, state.ShuttingDown, state.Done)
-				workersReady.Done()
-			}()
+			})
 		}
 	}
 

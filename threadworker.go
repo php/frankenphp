@@ -23,6 +23,7 @@ type workerThread struct {
 	dummyContext    *frankenPHPContext
 	workerContext   *frankenPHPContext
 	isBootingScript bool // true if the worker has not reached frankenphp_handle_request yet
+	failureCount    int  // number of consecutive startup failures
 }
 
 func convertToWorkerThread(thread *phpThread, worker *worker) {
@@ -139,7 +140,7 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 		return
 	}
 
-	if !watcherIsEnabled && !handler.state.Is(state.Ready) {
+	if startupFailChan != nil && !watcherIsEnabled {
 		select {
 		case startupFailChan <- fmt.Errorf("worker failure: script %s has not reached frankenphp_handle_request()", worker.fileName):
 			handler.thread.state.Set(state.ShuttingDown)
@@ -147,17 +148,22 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 		}
 	}
 
-	if !watcherIsEnabled {
+	if watcherIsEnabled {
+		// worker script has probably failed due to script changes while watcher is enabled
+		logger.LogAttrs(ctx, slog.LevelWarn, "(watcher enabled) worker script has not reached frankenphp_handle_request()", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex))
+	} else {
 		// rare case where worker script has failed on a restart during normal operation
 		// this can happen if startup success depends on external resources
 		logger.LogAttrs(ctx, slog.LevelError, "worker script has failed on restart", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex))
-	} else {
-		// worker script has probably failed due to script changes while watcher is enabled
-		logger.LogAttrs(ctx, slog.LevelWarn, "(watcher enabled) worker script has not reached frankenphp_handle_request()", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex))
 	}
 
-	// wait a bit and try again
-	time.Sleep(time.Millisecond * 250)
+	// wait a bit and try again (exponential backoff)
+	handler.failureCount++
+	backoffDuration := time.Duration(handler.failureCount*handler.failureCount*10) * time.Millisecond
+	if backoffDuration > time.Second {
+		backoffDuration = time.Second
+	}
+	time.Sleep(backoffDuration)
 }
 
 // waitForWorkerRequest is called during frankenphp_handle_request in the php worker script.
@@ -171,6 +177,7 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 	// Clear the first dummy request created to initialize the worker
 	if handler.isBootingScript {
 		handler.isBootingScript = false
+		handler.failureCount = 0
 		if !C.frankenphp_shutdown_dummy_request() {
 			panic("Not in CGI context")
 		}
