@@ -230,6 +230,19 @@ func (worker *worker) countThreads() int {
 	return l
 }
 
+// check if max_threads has been reached
+func (worker *worker) isAtThreadLimit() bool {
+	if worker.maxThreads <= 0 {
+		return false
+	}
+
+	worker.threadMutex.RLock()
+	atMaxThreads := len(worker.threads) >= worker.maxThreads
+	worker.threadMutex.RUnlock()
+
+	return atMaxThreads
+}
+
 func (worker *worker) handleRequest(fc *frankenPHPContext) error {
 	metrics.StartWorkerRequest(worker.name)
 
@@ -253,7 +266,7 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) error {
 	metrics.QueuedWorkerRequest(worker.name)
 	for {
 		workerScaleChan := scaleChan
-		if worker.maxThreads > 0 && worker.countThreads() >= worker.maxThreads {
+		if worker.isAtThreadLimit() {
 			workerScaleChan = nil // max_threads for this worker reached, do not attempt scaling
 		}
 		select {

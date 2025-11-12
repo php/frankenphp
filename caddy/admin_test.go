@@ -132,7 +132,7 @@ func TestAutoScaleWorkerThreads(t *testing.T) {
 	}
 
 	assert.NotEqual(t, amountOfThreads, 2, "at least one thread should have been auto-scaled")
-	assert.LessOrEqual(t, amountOfThreads, 4, "not more than 3 max_threads + 1 regular thread should be present")
+	assert.LessOrEqual(t, amountOfThreads, 4, "at most 3 max_threads + 1 regular thread should be present")
 }
 
 // Note this test requires at least 2x40MB available memory for the process
