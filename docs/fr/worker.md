@@ -143,6 +143,24 @@ curl -X POST http://localhost:2019/frankenphp/workers/restart
 >
 > C'est une fonctionnalité expérimentale et peut être modifiée ou supprimée dans le futur.
 
+### Worker Failures
+
+Si un script de worker se plante avec un code de sortie non nul, FrankenPHP le redémarre avec une stratégie de backoff exponentielle.
+Si le script worker reste en place plus longtemps que le dernier backoff \* 2, FrankenPHP ne pénalisera pas le script et le redémarrera à nouveau.
+Toutefois, si le script de worker continue d'échouer avec un code de sortie non nul dans un court laps de temps
+(par exemple, une faute de frappe dans un script), FrankenPHP plantera avec l'erreur : `too many consecutive failures` (trop d'échecs consécutifs).
+
+Le nombre d'échecs consécutifs peut être configuré dans votre [Caddyfile](config.md#configuration-du-caddyfile) avec l'option `max_consecutive_failures` :
+
+```caddyfile
+frankenphp {
+    worker {
+        # ...
+        max_consecutive_failures 10
+    }
+}
+```
+
 ## Comportement des superglobales
 
 [Les superglobales PHP](https://www.php.net/manual/fr/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...)

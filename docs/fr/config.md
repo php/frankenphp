@@ -70,6 +70,7 @@ L'[option globale](https://caddyserver.com/docs/caddyfile/concepts#global-option
             env <key> <value> # Définit une variable d'environnement supplémentaire avec la valeur donnée. Peut être spécifié plusieurs fois pour régler plusieurs variables d'environnement.
             watch <path> # Définit le chemin d'accès à surveiller pour les modifications de fichiers. Peut être spécifié plusieurs fois pour plusieurs chemins.
             name <name> # Définit le nom du worker, utilisé dans les journaux et les métriques. Défaut : chemin absolu du fichier du worker
+            max_consecutive_failures <num> # Définit le nombre maximum d'échecs consécutifs avant que le worker ne soit considéré comme défaillant, -1 signifie que le worker redémarre toujours. Par défaut : 6.
         }
     }
 }

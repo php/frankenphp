@@ -138,6 +138,25 @@ PHPはもともと長時間実行されるプロセス向けに設計されて�
 curl -X POST http://localhost:2019/frankenphp/workers/restart
 ```
 
+### ワーカーの失敗
+
+ワーカースクリプトがゼロ以外の終了コードでクラッシュした場合、FrankenPHP は指数的バックオフ戦略を用いて再起動を行います。
+ワーカースクリプトが最後のバックオフ時間 × 2 より長く稼働し続けた場合、
+それ以降の再起動ではペナルティを科しません。
+しかし、スクリプトにタイプミスがあるなど短時間で何度もゼロ以外の終了コードで失敗し続ける場合、
+FrankenPHP は`too many consecutive failures`というエラーとともにクラッシュします。
+
+連続失敗の回数上限は、[Caddyfile](config.md#caddyfile-config)の`max_consecutive_failures`オプションで設定できます:
+
+```caddyfile
+frankenphp {
+    worker {
+        # ...
+        max_consecutive_failures 10
+    }
+}
+```
+
 ## スーパーグローバルの動作
 
 [PHPのスーパーグローバル](https://www.php.net/manual/en/language.variables.superglobals.php)（`$_SERVER`、`$_ENV`、`$_GET`など）

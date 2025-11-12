@@ -71,6 +71,7 @@ localhost {
 			env <key> <value> # 设置一个额外的环境变量为给定的值。可以多次指定以设置多个环境变量。
 			watch <path> # 设置要监视文件更改的路径。可以为多个路径多次指定。
 			name <name> # 设置worker的名称，用于日志和指标。默认值：worker文件的绝对路径。
+			max_consecutive_failures <num> # 设置在工人被视为不健康之前的最大连续失败次数，-1意味着工人将始终重新启动。默认值：6。
 		}
 	}
 }
