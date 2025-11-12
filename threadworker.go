@@ -140,7 +140,7 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 		return
 	}
 
-	if startupFailChan != nil && !watcherIsEnabled {
+	if worker.maxConsecutiveFailures > 0 && startupFailChan != nil && !watcherIsEnabled && handler.failureCount >= worker.maxConsecutiveFailures {
 		select {
 		case startupFailChan <- fmt.Errorf("worker failure: script %s has not reached frankenphp_handle_request()", worker.fileName):
 			handler.thread.state.Set(state.ShuttingDown)
@@ -158,11 +158,11 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 	}
 
 	// wait a bit and try again (exponential backoff)
-	handler.failureCount++
 	backoffDuration := time.Duration(handler.failureCount*handler.failureCount*10) * time.Millisecond
 	if backoffDuration > time.Second {
 		backoffDuration = time.Second
 	}
+	handler.failureCount++
 	time.Sleep(backoffDuration)
 }
 
