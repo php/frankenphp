@@ -602,7 +602,7 @@ func testRequestHeaders(t *testing.T, opts *testOptions) {
 
 func TestFailingWorker(t *testing.T) {
 	err := frankenphp.Init(
-		//frankenphp.WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
+		frankenphp.WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
 		frankenphp.WithWorkers("failing worker", "testdata/failing-worker.php", 4),
 		frankenphp.WithNumThreads(5),
 	)
