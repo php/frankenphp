@@ -10,7 +10,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/dunglas/frankenphp/internal/backoff"
 	"github.com/dunglas/frankenphp/internal/state"
 )
 
@@ -23,8 +22,8 @@ type workerThread struct {
 	worker          *worker
 	dummyContext    *frankenPHPContext
 	workerContext   *frankenPHPContext
-	backoff         *backoff.ExponentialBackoff
 	isBootingScript bool // true if the worker has not reached frankenphp_handle_request yet
+	failureCount    int  // number of consecutive startup failures
 }
 
 func convertToWorkerThread(thread *phpThread, worker *worker) {
@@ -32,11 +31,6 @@ func convertToWorkerThread(thread *phpThread, worker *worker) {
 		state:  thread.state,
 		thread: thread,
 		worker: worker,
-		backoff: &backoff.ExponentialBackoff{
-			MaxBackoff:             1 * time.Second,
-			MinBackoff:             100 * time.Millisecond,
-			MaxConsecutiveFailures: worker.maxConsecutiveFailures,
-		},
 	})
 	worker.attachThread(thread)
 }
@@ -92,7 +86,6 @@ func (handler *workerThread) name() string {
 }
 
 func setupWorkerScript(handler *workerThread, worker *worker) {
-	handler.backoff.Wait()
 	metrics.StartWorker(worker.name)
 
 	if handler.state.Is(state.Ready) {
@@ -132,7 +125,6 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 	// on exit status 0 we just run the worker script again
 	if exitStatus == 0 && !handler.isBootingScript {
 		metrics.StopWorker(worker.name, StopReasonRestart)
-		handler.backoff.RecordSuccess()
 		logger.LogAttrs(ctx, slog.LevelDebug, "restarting", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex), slog.Int("exit_status", exitStatus))
 
 		return
@@ -148,16 +140,30 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 		return
 	}
 
-	logger.LogAttrs(ctx, slog.LevelError, "worker script has not reached frankenphp_handle_request()", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex))
-
-	// panic after exponential backoff if the worker has never reached frankenphp_handle_request
-	if handler.backoff.RecordFailure() {
-		if !watcherIsEnabled && !handler.state.Is(state.Ready) {
-			logger.LogAttrs(ctx, slog.LevelError, "too many consecutive worker failures", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex), slog.Int("failures", handler.backoff.FailureCount()))
-			panic("too many consecutive worker failures")
+	if worker.maxConsecutiveFailures >= 0 && startupFailChan != nil && !watcherIsEnabled && handler.failureCount >= worker.maxConsecutiveFailures {
+		select {
+		case startupFailChan <- fmt.Errorf("worker failure: script %s has not reached frankenphp_handle_request()", worker.fileName):
+			handler.thread.state.Set(state.ShuttingDown)
+			return
 		}
-		logger.LogAttrs(ctx, slog.LevelWarn, "many consecutive worker failures", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex), slog.Int("failures", handler.backoff.FailureCount()))
 	}
+
+	if watcherIsEnabled {
+		// worker script has probably failed due to script changes while watcher is enabled
+		logger.LogAttrs(ctx, slog.LevelWarn, "(watcher enabled) worker script has not reached frankenphp_handle_request()", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex))
+	} else {
+		// rare case where worker script has failed on a restart during normal operation
+		// this can happen if startup success depends on external resources
+		logger.LogAttrs(ctx, slog.LevelWarn, "worker script has failed on restart", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex))
+	}
+
+	// wait a bit and try again (exponential backoff)
+	backoffDuration := time.Duration(handler.failureCount*handler.failureCount*100) * time.Millisecond
+	if backoffDuration > time.Second {
+		backoffDuration = time.Second
+	}
+	handler.failureCount++
+	time.Sleep(backoffDuration)
 }
 
 // waitForWorkerRequest is called during frankenphp_handle_request in the php worker script.
@@ -171,6 +177,7 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 	// Clear the first dummy request created to initialize the worker
 	if handler.isBootingScript {
 		handler.isBootingScript = false
+		handler.failureCount = 0
 		if !C.frankenphp_shutdown_dummy_request() {
 			panic("Not in CGI context")
 		}

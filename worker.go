@@ -31,41 +31,52 @@ type worker struct {
 var (
 	workers          []*worker
 	watcherIsEnabled bool
+	startupFailChan  chan (error)
 )
 
 func initWorkers(opt []workerOpt) error {
 	workers = make([]*worker, 0, len(opt))
-	workersReady := sync.WaitGroup{}
 	directoriesToWatch := getDirectoriesToWatch(opt)
 	watcherIsEnabled = len(directoriesToWatch) > 0
+	totalThreadsToStart := 0
 
 	for _, o := range opt {
 		w, err := newWorker(o)
 		if err != nil {
 			return err
 		}
+		totalThreadsToStart += w.num
 		workers = append(workers, w)
 	}
 
+	startupFailChan = make(chan error, totalThreadsToStart)
+	var workersReady sync.WaitGroup
 	for _, w := range workers {
-		workersReady.Add(w.num)
 		for i := 0; i < w.num; i++ {
 			thread := getInactivePHPThread()
 			convertToWorkerThread(thread, w)
-			go func() {
-				thread.state.WaitFor(state.Ready)
-				workersReady.Done()
-			}()
+			workersReady.Go(func() {
+				thread.state.WaitFor(state.Ready, state.ShuttingDown, state.Done)
+			})
 		}
 	}
 
 	workersReady.Wait()
 
+	select {
+	case err := <-startupFailChan:
+		// at least 1 worker has failed, shut down and return an error
+		Shutdown()
+		return fmt.Errorf("failed to initialize workers: %w", err)
+	default:
+		// all workers started successfully
+		startupFailChan = nil
+	}
+
 	if !watcherIsEnabled {
 		return nil
 	}
 
-	watcherIsEnabled = true
 	if err := watcher.InitWatcher(directoriesToWatch, RestartWorkers, logger); err != nil {
 		return err
 	}
