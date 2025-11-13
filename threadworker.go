@@ -142,7 +142,7 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 
 	if worker.maxConsecutiveFailures >= 0 && startupFailChan != nil && !watcherIsEnabled && handler.failureCount >= worker.maxConsecutiveFailures {
 		select {
-		case startupFailChan <- fmt.Errorf("worker failure: script %s has not reached frankenphp_handle_request()", worker.fileName):
+		case startupFailChan <- fmt.Errorf("too many consecutive failures: worker %s has not reached frankenphp_handle_request()", worker.fileName):
 			handler.thread.state.Set(state.ShuttingDown)
 			return
 		}
