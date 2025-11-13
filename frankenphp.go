@@ -41,8 +41,6 @@ import (
 
 type contextKeyStruct struct{}
 
-var contextKey = contextKeyStruct{}
-
 var (
 	ErrInvalidRequest         = errors.New("not a FrankenPHP request")
 	ErrAlreadyStarted         = errors.New("FrankenPHP is already started")
@@ -51,6 +49,13 @@ var (
 	ErrRequestContextCreation = errors.New("error during request context creation")
 	ErrScriptExecution        = errors.New("error during PHP script execution")
 	ErrNotRunning             = errors.New("FrankenPHP is not running. For proper configuration visit: https://frankenphp.dev/docs/config/#caddyfile-config")
+
+	ErrInvalidRequestPath         = ErrRejected{"invalid request path", http.StatusBadRequest}
+	ErrInvalidContentLengthHeader = ErrRejected{"invalid Content-Length header", http.StatusBadRequest}
+	ErrMaxWaitTimeExceeded        = ErrRejected{"maximum request handling time exceeded", http.StatusServiceUnavailable}
+
+	contextKey   = contextKeyStruct{}
+	serverHeader = []string{"FrankenPHP"}
 
 	isRunning        bool
 	onServerShutdown []func()
@@ -63,34 +68,43 @@ var (
 	maxWaitTime time.Duration
 )
 
+type ErrRejected struct {
+	message string
+	status  int
+}
+
+func (e ErrRejected) Error() string {
+	return e.message
+}
+
 type syslogLevel int
 
 const (
-	emerg   syslogLevel = iota // system is unusable
-	alert                      // action must be taken immediately
-	crit                       // critical conditions
-	err                        // error conditions
-	warning                    // warning conditions
-	notice                     // normal but significant condition
-	info                       // informational
-	debug                      // debug-level messages
+	syslogLevelEmerg  syslogLevel = iota // system is unusable
+	syslogLevelAlert                     // action must be taken immediately
+	syslogLevelCrit                      // critical conditions
+	syslogLevelErr                       // error conditions
+	syslogLevelWarn                      // warning conditions
+	syslogLevelNotice                    // normal but significant condition
+	syslogLevelInfo                      // informational
+	syslogLevelDebug                     // debug-level messages
 )
 
 func (l syslogLevel) String() string {
 	switch l {
-	case emerg:
+	case syslogLevelEmerg:
 		return "emerg"
-	case alert:
+	case syslogLevelAlert:
 		return "alert"
-	case crit:
+	case syslogLevelCrit:
 		return "crit"
-	case err:
+	case syslogLevelErr:
 		return "err"
-	case warning:
+	case syslogLevelWarn:
 		return "warning"
-	case notice:
+	case syslogLevelNotice:
 		return "notice"
-	case debug:
+	case syslogLevelDebug:
 		return "debug"
 	default:
 		return "info"
@@ -210,11 +224,6 @@ func Init(options ...Option) error {
 
 	registerExtensions()
 
-	// add registered external workers
-	for _, ew := range extensionWorkers {
-		options = append(options, WithWorkers(ew.name, ew.fileName, ew.num, ew.options...))
-	}
-
 	opt := &opt{}
 	for _, o := range options {
 		if err := o(opt); err != nil {
@@ -325,6 +334,11 @@ func Shutdown() {
 
 // ServeHTTP executes a PHP script according to the given context.
 func ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) error {
+	h := responseWriter.Header()
+	if h["Server"] == nil {
+		h["Server"] = serverHeader
+	}
+
 	if !isRunning {
 		return ErrNotRunning
 	}
@@ -336,20 +350,17 @@ func ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) error 
 
 	fc.responseWriter = responseWriter
 
-	if !fc.validate() {
-		return nil
+	if err := fc.validate(); err != nil {
+		return err
 	}
 
 	// Detect if a worker is available to handle this request
 	if fc.worker != nil {
-		fc.worker.handleRequest(fc)
-
-		return nil
+		return fc.worker.handleRequest(fc)
 	}
 
 	// If no worker was available, send the request to non-worker threads
-	handleRequestWithRegularPHPThreads(fc)
-	return nil
+	return handleRequestWithRegularPHPThreads(fc)
 }
 
 //export go_ub_write
@@ -566,19 +577,19 @@ func go_log(message *C.char, level C.int) {
 	m := C.GoString(message)
 
 	var le syslogLevel
-	if level < C.int(emerg) || level > C.int(debug) {
-		le = info
+	if level < C.int(syslogLevelEmerg) || level > C.int(syslogLevelDebug) {
+		le = syslogLevelInfo
 	} else {
 		le = syslogLevel(level)
 	}
 
 	switch le {
-	case emerg, alert, crit, err:
+	case syslogLevelEmerg, syslogLevelAlert, syslogLevelCrit, syslogLevelErr:
 		logger.LogAttrs(context.Background(), slog.LevelError, m, slog.String("syslog_level", syslogLevel(level).String()))
 
-	case warning:
+	case syslogLevelWarn:
 		logger.LogAttrs(context.Background(), slog.LevelWarn, m, slog.String("syslog_level", syslogLevel(level).String()))
-	case debug:
+	case syslogLevelDebug:
 		logger.LogAttrs(context.Background(), slog.LevelDebug, m, slog.String("syslog_level", syslogLevel(level).String()))
 
 	default:
