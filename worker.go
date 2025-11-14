@@ -66,7 +66,7 @@ func initWorkers(opt []workerOpt) error {
 	}
 
 	watcherIsEnabled = true
-	if err := watcher.InitWatcher(directoriesToWatch, RestartWorkers, logger); err != nil {
+	if err := watcher.InitWatcher(globalCtx, directoriesToWatch, RestartWorkers, globalLogger); err != nil {
 		return err
 	}
 

@@ -5,7 +5,6 @@ package frankenphp
 import "C"
 import (
 	"context"
-	"log/slog"
 	"runtime"
 	"sync"
 	"unsafe"
@@ -45,7 +44,6 @@ func newPHPThread(threadIndex int) *phpThread {
 func (thread *phpThread) boot() {
 	// thread must be in reserved state to boot
 	if !thread.state.compareAndSwap(stateReserved, stateBooting) && !thread.state.compareAndSwap(stateBootRequested, stateBooting) {
-		logger.Error("thread is not in reserved state: " + thread.state.name())
 		panic("thread is not in reserved state: " + thread.state.name())
 	}
 
@@ -57,7 +55,6 @@ func (thread *phpThread) boot() {
 
 	// start the actual posix thread - TODO: try this with go threads instead
 	if !C.frankenphp_new_php_thread(C.uintptr_t(thread.threadIndex)) {
-		logger.LogAttrs(context.Background(), slog.LevelError, "unable to create thread", slog.Int("thread", thread.threadIndex))
 		panic("unable to create thread")
 	}
 
@@ -101,6 +98,7 @@ func (thread *phpThread) setHandler(handler threadHandler) {
 func (thread *phpThread) transitionToNewHandler() string {
 	thread.state.set(stateTransitionInProgress)
 	thread.state.waitFor(stateTransitionComplete)
+
 	// execute beforeScriptExecution of the new handler
 	return thread.handler.beforeScriptExecution()
 }

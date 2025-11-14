@@ -20,6 +20,7 @@ func (handler *inactiveThread) beforeScriptExecution() string {
 	switch thread.state.get() {
 	case stateTransitionRequested:
 		return thread.transitionToNewHandler()
+
 	case stateBooting, stateTransitionComplete:
 		thread.state.set(stateInactive)
 
@@ -27,11 +28,14 @@ func (handler *inactiveThread) beforeScriptExecution() string {
 		thread.state.markAsWaiting(true)
 		thread.state.waitFor(stateTransitionRequested, stateShuttingDown)
 		thread.state.markAsWaiting(false)
+
 		return handler.beforeScriptExecution()
+
 	case stateShuttingDown:
 		// signal to stop
 		return ""
 	}
+
 	panic("unexpected state: " + thread.state.name())
 }
 

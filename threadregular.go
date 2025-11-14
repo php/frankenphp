@@ -35,16 +35,20 @@ func (handler *regularThread) beforeScriptExecution() string {
 	case stateTransitionRequested:
 		detachRegularThread(handler.thread)
 		return handler.thread.transitionToNewHandler()
+
 	case stateTransitionComplete:
 		handler.state.set(stateReady)
 		return handler.waitForRequest()
+
 	case stateReady:
 		return handler.waitForRequest()
+
 	case stateShuttingDown:
 		detachRegularThread(handler.thread)
 		// signal to stop
 		return ""
 	}
+
 	panic("unexpected state: " + handler.state.name())
 }
 
@@ -71,6 +75,7 @@ func (handler *regularThread) waitForRequest() string {
 	handler.state.markAsWaiting(true)
 
 	var ch contextHolder
+
 	select {
 	case <-handler.thread.drainChan:
 		// go back to beforeScriptExecution

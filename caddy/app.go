@@ -159,7 +159,11 @@ func (f *FrankenPHPApp) Start() error {
 }
 
 func (f *FrankenPHPApp) Stop() error {
-	f.logger.Info("FrankenPHP stopped 🐘")
+	ctx := caddy.ActiveContext()
+
+	if f.logger.Enabled(caddy.ActiveContext(), slog.LevelInfo) {
+		f.logger.LogAttrs(ctx, slog.LevelInfo, "FrankenPHP stopped 🐘")
+	}
 
 	// attempt a graceful shutdown if caddy is exiting
 	// note: Exiting() is currently marked as 'experimental'

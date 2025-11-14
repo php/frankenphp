@@ -68,7 +68,7 @@ func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Reques
 	}
 
 	if fc.logger == nil {
-		fc.logger = logger
+		fc.logger = globalLogger
 	}
 
 	if fc.documentRoot == "" {

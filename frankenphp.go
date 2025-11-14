@@ -60,8 +60,10 @@ var (
 	isRunning        bool
 	onServerShutdown []func()
 
-	loggerMu sync.RWMutex
-	logger   *slog.Logger
+	globalMu sync.RWMutex
+	// Set default values because to make Shutdown() idempotent
+	globalCtx    = context.TODO()
+	globalLogger = slog.Default()
 
 	metrics Metrics = nullMetrics{}
 
@@ -231,15 +233,25 @@ func Init(options ...Option) error {
 		}
 	}
 
-	if opt.logger == nil {
-		// set a default logger
-		// to disable logging, set the logger to slog.New(slog.DiscardHandler)
-		opt.logger = slog.Default()
+	globalMu.Lock()
+
+	if opt.ctx == nil {
+		globalCtx = context.Background()
+	} else {
+		globalCtx = opt.ctx
+		opt.ctx = nil
 	}
 
-	loggerMu.Lock()
-	logger = opt.logger
-	loggerMu.Unlock()
+	if opt.logger == nil {
+		// set a default globalLogger
+		// to disable logging, set the globalLogger to slog.New(slog.DiscardHandler)
+		opt.logger = slog.Default()
+	} else {
+		globalLogger = opt.logger
+		opt.logger = nil
+	}
+
+	globalMu.Unlock()
 
 	if opt.metrics != nil {
 		metrics = opt.metrics
@@ -262,11 +274,16 @@ func Init(options ...Option) error {
 
 	if config.ZTS {
 		if !config.ZendMaxExecutionTimers && runtime.GOOS == "linux" {
-			logger.Warn(`Zend Max Execution Timers are not enabled, timeouts (e.g. "max_execution_time") are disabled, recompile PHP with the "--enable-zend-max-execution-timers" configuration option to fix this issue`)
+			if globalLogger.Enabled(globalCtx, slog.LevelWarn) {
+				globalLogger.LogAttrs(globalCtx, slog.LevelWarn, `Zend Max Execution Timers are not enabled, timeouts (e.g. "max_execution_time") are disabled, recompile PHP with the "--enable-zend-max-execution-timers" configuration option to fix this issue`)
+			}
 		}
 	} else {
 		opt.numThreads = 1
-		logger.Warn(`ZTS is not enabled, only 1 thread will be available, recompile PHP using the "--enable-zts" configuration option or performance will be degraded`)
+
+		if globalLogger.Enabled(globalCtx, slog.LevelWarn) {
+			globalLogger.LogAttrs(globalCtx, slog.LevelWarn, `ZTS is not enabled, only 1 thread will be available, recompile PHP using the "--enable-zts" configuration option or performance will be degraded`)
+		}
 	}
 
 	mainThread, err := initPHPThreads(opt.numThreads, opt.maxThreads, opt.phpIni)
@@ -286,10 +303,12 @@ func Init(options ...Option) error {
 
 	initAutoScaling(mainThread)
 
-	ctx := context.Background()
-	logger.LogAttrs(ctx, slog.LevelInfo, "FrankenPHP started 🐘", slog.String("php_version", Version().Version), slog.Int("num_threads", mainThread.numThreads), slog.Int("max_threads", mainThread.maxThreads))
-	if EmbeddedAppPath != "" {
-		logger.LogAttrs(ctx, slog.LevelInfo, "embedded PHP app 📦", slog.String("path", EmbeddedAppPath))
+	if globalLogger.Enabled(globalCtx, slog.LevelInfo) {
+		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "FrankenPHP started 🐘", slog.String("php_version", Version().Version), slog.Int("num_threads", mainThread.numThreads), slog.Int("max_threads", mainThread.maxThreads))
+
+		if EmbeddedAppPath != "" {
+			globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "embedded PHP app 📦", slog.String("path", EmbeddedAppPath))
+		}
 	}
 
 	// register the startup/shutdown hooks (mainly useful for extensions)
@@ -329,7 +348,15 @@ func Shutdown() {
 	}
 
 	isRunning = false
-	logger.Debug("FrankenPHP shut down")
+	if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
+		globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "FrankenPHP shut down")
+	}
+
+	globalMu.Lock()
+	globalCtx = context.TODO()
+	globalLogger = slog.Default()
+	workers = nil
+	globalMu.Unlock()
 }
 
 // ServeHTTP executes a PHP script according to the given context.
@@ -420,8 +447,8 @@ func go_apache_request_headers(threadIndex C.uintptr_t) (*C.go_string, C.size_t)
 	if fc.responseWriter == nil {
 		// worker mode, not handling a request
 
-		if logger.Enabled(ctx, slog.LevelDebug) {
-			logger.LogAttrs(ctx, slog.LevelDebug, "apache_request_headers() called in non-HTTP context", slog.String("worker", fc.worker.name))
+		if globalLogger.Enabled(ctx, slog.LevelDebug) {
+			globalLogger.LogAttrs(ctx, slog.LevelDebug, "apache_request_headers() called in non-HTTP context", slog.String("worker", fc.worker.name))
 		}
 
 		return nil, 0
@@ -450,10 +477,13 @@ func go_apache_request_headers(threadIndex C.uintptr_t) (*C.go_string, C.size_t)
 	return sd, C.size_t(len(fc.request.Header))
 }
 
-func addHeader(fc *frankenPHPContext, cString *C.char, length C.int) {
+func addHeader(ctx context.Context, fc *frankenPHPContext, cString *C.char, length C.int) {
 	key, val := splitRawHeader(cString, int(length))
 	if key == "" {
-		fc.logger.LogAttrs(context.Background(), slog.LevelDebug, "invalid header", slog.String("header", C.GoStringN(cString, length)))
+		if fc.logger.Enabled(ctx, slog.LevelDebug) {
+			fc.logger.LogAttrs(ctx, slog.LevelDebug, "invalid header", slog.String("header", C.GoStringN(cString, length)))
+		}
+
 		return
 	}
 	fc.responseWriter.Header().Add(key, val)
@@ -511,7 +541,7 @@ func go_write_headers(threadIndex C.uintptr_t, status C.int, headers *C.zend_lli
 	for current != nil {
 		h := (*C.sapi_header_struct)(unsafe.Pointer(&(current.data)))
 
-		addHeader(fc, h.header, C.int(h.header_len))
+		addHeader(thread.context(), fc, h.header, C.int(h.header_len))
 		current = current.next
 	}
 
@@ -522,8 +552,8 @@ func go_write_headers(threadIndex C.uintptr_t, status C.int, headers *C.zend_lli
 	if goStatus < 100 || goStatus > 999 {
 		ctx := thread.context()
 
-		if logger.Enabled(ctx, slog.LevelWarn) {
-			logger.LogAttrs(ctx, slog.LevelWarn, "Invalid response status code", slog.Int("status_code", goStatus))
+		if globalLogger.Enabled(ctx, slog.LevelWarn) {
+			globalLogger.LogAttrs(ctx, slog.LevelWarn, "Invalid response status code", slog.Int("status_code", goStatus))
 		}
 
 		goStatus = 500
@@ -561,8 +591,8 @@ func go_sapi_flush(threadIndex C.uintptr_t) bool {
 	if err := http.NewResponseController(fc.responseWriter).Flush(); err != nil {
 		ctx := thread.context()
 
-		if logger.Enabled(ctx, slog.LevelWarn) {
-			logger.LogAttrs(ctx, slog.LevelWarn, "the current responseWriter is not a flusher, if you are not using a custom build, please report this issue", slog.Any("error", err))
+		if globalLogger.Enabled(ctx, slog.LevelWarn) {
+			globalLogger.LogAttrs(ctx, slog.LevelWarn, "the current responseWriter is not a flusher, if you are not using a custom build, please report this issue", slog.Any("error", err))
 		}
 	}
 
@@ -608,7 +638,8 @@ func go_read_cookies(threadIndex C.uintptr_t) *C.char {
 }
 
 //export go_log
-func go_log(message *C.char, level C.int) {
+func go_log(threadIndex C.uintptr_t, message *C.char, level C.int) {
+	ctx := phpThreads[threadIndex].context()
 	m := C.GoString(message)
 
 	var le syslogLevel
@@ -620,15 +651,23 @@ func go_log(message *C.char, level C.int) {
 
 	switch le {
 	case syslogLevelEmerg, syslogLevelAlert, syslogLevelCrit, syslogLevelErr:
-		logger.LogAttrs(context.Background(), slog.LevelError, m, slog.String("syslog_level", syslogLevel(level).String()))
+		if globalLogger.Enabled(ctx, slog.LevelError) {
+			globalLogger.LogAttrs(ctx, slog.LevelError, m, slog.String("syslog_level", syslogLevel(level).String()))
+		}
 
 	case syslogLevelWarn:
-		logger.LogAttrs(context.Background(), slog.LevelWarn, m, slog.String("syslog_level", syslogLevel(level).String()))
+		if globalLogger.Enabled(ctx, slog.LevelWarn) {
+			globalLogger.LogAttrs(ctx, slog.LevelWarn, m, slog.String("syslog_level", syslogLevel(level).String()))
+		}
 	case syslogLevelDebug:
-		logger.LogAttrs(context.Background(), slog.LevelDebug, m, slog.String("syslog_level", syslogLevel(level).String()))
+		if globalLogger.Enabled(ctx, slog.LevelDebug) {
+			globalLogger.LogAttrs(ctx, slog.LevelDebug, m, slog.String("syslog_level", syslogLevel(level).String()))
+		}
 
 	default:
-		logger.LogAttrs(context.Background(), slog.LevelInfo, m, slog.String("syslog_level", syslogLevel(level).String()))
+		if globalLogger.Enabled(ctx, slog.LevelInfo) {
+			globalLogger.LogAttrs(ctx, slog.LevelInfo, m, slog.String("syslog_level", syslogLevel(level).String()))
+		}
 	}
 }
 

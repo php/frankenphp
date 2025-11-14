@@ -18,8 +18,24 @@ import (
 
 var testDataPath, _ = filepath.Abs("./testdata")
 
+func setupGlobals(t *testing.T) {
+	t.Helper()
+
+	t.Cleanup(func() {
+		globalMu.Lock()
+		globalCtx = nil
+		globalLogger = nil
+		workers = nil
+		globalMu.Unlock()
+	})
+
+	globalMu.Lock()
+	globalCtx = t.Context()
+	globalLogger = slog.Default()
+	globalMu.Unlock()
+}
+
 func TestStartAndStopTheMainThreadWithOneInactiveThread(t *testing.T) {
-	logger = slog.New(slog.DiscardHandler)
 	_, err := initPHPThreads(1, 1, nil) // boot 1 thread
 	assert.NoError(t, err)
 
@@ -33,8 +49,8 @@ func TestStartAndStopTheMainThreadWithOneInactiveThread(t *testing.T) {
 }
 
 func TestTransitionRegularThreadToWorkerThread(t *testing.T) {
-	workers = nil
-	logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	setupGlobals(t)
+
 	_, err := initPHPThreads(1, 1, nil)
 	assert.NoError(t, err)
 
@@ -43,7 +59,7 @@ func TestTransitionRegularThreadToWorkerThread(t *testing.T) {
 	assert.IsType(t, &regularThread{}, phpThreads[0].handler)
 
 	// transition to worker thread
-	worker := getDummyWorker("transition-worker-1.php")
+	worker := getDummyWorker(t, "transition-worker-1.php")
 	convertToWorkerThread(phpThreads[0], worker)
 	assert.IsType(t, &workerThread{}, phpThreads[0].handler)
 	assert.Len(t, worker.threads, 1)
@@ -58,12 +74,12 @@ func TestTransitionRegularThreadToWorkerThread(t *testing.T) {
 }
 
 func TestTransitionAThreadBetween2DifferentWorkers(t *testing.T) {
-	workers = nil
-	logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	setupGlobals(t)
+
 	_, err := initPHPThreads(1, 1, nil)
 	assert.NoError(t, err)
-	firstWorker := getDummyWorker("transition-worker-1.php")
-	secondWorker := getDummyWorker("transition-worker-2.php")
+	firstWorker := getDummyWorker(t, "transition-worker-1.php")
+	secondWorker := getDummyWorker(t, "transition-worker-2.php")
 
 	// convert to first worker thread
 	convertToWorkerThread(phpThreads[0], firstWorker)
@@ -152,13 +168,13 @@ func TestTransitionThreadsWhileDoingRequests(t *testing.T) {
 }
 
 func TestFinishBootingAWorkerScript(t *testing.T) {
-	workers = nil
-	logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	setupGlobals(t)
+
 	_, err := initPHPThreads(1, 1, nil)
 	assert.NoError(t, err)
 
 	// boot the worker
-	worker := getDummyWorker("transition-worker-1.php")
+	worker := getDummyWorker(t, "transition-worker-1.php")
 	convertToWorkerThread(phpThreads[0], worker)
 	phpThreads[0].state.waitFor(stateReady)
 
@@ -194,16 +210,20 @@ func TestReturnAnErrorIf2ModuleWorkersHaveTheSameName(t *testing.T) {
 	assert.Error(t, err2, "two workers cannot have the same name")
 }
 
-func getDummyWorker(fileName string) *worker {
+func getDummyWorker(t *testing.T, fileName string) *worker {
+	t.Helper()
+
 	if workers == nil {
 		workers = []*worker{}
 	}
+
 	worker, _ := newWorker(workerOpt{
 		fileName:               testDataPath + "/" + fileName,
 		num:                    1,
 		maxConsecutiveFailures: defaultMaxConsecutiveFailures,
 	})
 	workers = append(workers, worker)
+
 	return worker
 }
 
