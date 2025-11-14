@@ -4,6 +4,7 @@ import (
 	"bytes"
 	_ "embed"
 	"fmt"
+	"os"
 	"path/filepath"
 	"text/template"
 
@@ -30,6 +31,16 @@ type goTemplateData struct {
 
 func (gg *GoFileGenerator) generate() error {
 	filename := filepath.Join(gg.generator.BuildDir, gg.generator.BaseName+".go")
+
+	if _, err := os.Stat(filename); err == nil {
+		backupFilename := filename + ".bak"
+		if err := os.Rename(filename, backupFilename); err != nil {
+			return fmt.Errorf("backing up existing Go file: %w", err)
+		}
+
+		gg.generator.SourceFile = backupFilename
+	}
+
 	content, err := gg.buildContent()
 	if err != nil {
 		return fmt.Errorf("building Go file content: %w", err)
