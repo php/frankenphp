@@ -416,6 +416,26 @@ func createNewArray(size uint32) *C.zend_array {
 	return (*C.zend_array)(unsafe.Pointer(arr))
 }
 
+// IsPacked determines if the given zval pointer represents a packed array (list).
+// Returns false if the zval is nil, not an array, or not packed.
+func IsPacked(zval unsafe.Pointer) bool {
+	if zval == nil {
+		return false
+	}
+
+	v, err := extractZvalValue((*C.zval)(zval), C.IS_ARRAY)
+	if err != nil {
+		return false
+	}
+
+	ht := (*C.HashTable)(v)
+	if ht == nil {
+		return false
+	}
+
+	return htIsPacked(ht)
+}
+
 // htIsPacked checks if a zend_array is a list (packed) or hashmap (not packed).
 func htIsPacked(ht *C.zend_array) bool {
 	flags := *(*C.uint32_t)(unsafe.Pointer(&ht.u[0]))
