@@ -228,12 +228,14 @@ func phpArray[T any](entries map[string]T, order []string) unsafe.Pointer {
 			val := entries[key]
 			zval := phpValue(val)
 			C.zend_hash_str_update(zendArray, toUnsafeChar(key), C.size_t(len(key)), zval)
+			C.__efree__(unsafe.Pointer(zval))
 		}
 	} else {
 		zendArray = createNewArray((uint32)(len(entries)))
 		for key, val := range entries {
 			zval := phpValue(val)
 			C.zend_hash_str_update(zendArray, toUnsafeChar(key), C.size_t(len(key)), zval)
+			C.__efree__(unsafe.Pointer(zval))
 		}
 	}
 
@@ -246,6 +248,7 @@ func PHPPackedArray[T any](slice []T) unsafe.Pointer {
 	for _, val := range slice {
 		zval := phpValue(val)
 		C.zend_hash_next_index_insert(zendArray, zval)
+		C.__efree__(unsafe.Pointer(zval))
 	}
 
 	return unsafe.Pointer(zendArray)
@@ -368,42 +371,43 @@ func PHPValue(value any) unsafe.Pointer {
 }
 
 func phpValue(value any) *C.zval {
-	var zval C.zval
+	zval := (*C.zval)(C.__emalloc__(C.size_t(unsafe.Sizeof(C.zval{}))))
 
 	if toZvalObj, ok := value.(toZval); ok {
-		toZvalObj.toZval(&zval)
-		return &zval
+		toZvalObj.toZval(zval)
+		return zval
 	}
 
 	switch v := value.(type) {
 	case nil:
-		C.__zval_null__(&zval)
+		C.__zval_null__(zval)
 	case bool:
-		C.__zval_bool__(&zval, C._Bool(v))
+		C.__zval_bool__(zval, C._Bool(v))
 	case int:
-		C.__zval_long__(&zval, C.zend_long(v))
+		C.__zval_long__(zval, C.zend_long(v))
 	case int64:
-		C.__zval_long__(&zval, C.zend_long(v))
+		C.__zval_long__(zval, C.zend_long(v))
 	case float64:
-		C.__zval_double__(&zval, C.double(v))
+		C.__zval_double__(zval, C.double(v))
 	case string:
 		if v == "" {
-			C.__zval_empty_string__(&zval)
+			C.__zval_empty_string__(zval)
 			break
 		}
 		str := (*C.zend_string)(PHPString(v, false))
-		C.__zval_string__(&zval, str)
+		C.__zval_string__(zval, str)
 	case AssociativeArray[any]:
-		C.__zval_arr__(&zval, (*C.zend_array)(PHPAssociativeArray[any](v)))
+		C.__zval_arr__(zval, (*C.zend_array)(PHPAssociativeArray[any](v)))
 	case map[string]any:
-		C.__zval_arr__(&zval, (*C.zend_array)(PHPMap[any](v)))
+		C.__zval_arr__(zval, (*C.zend_array)(PHPMap[any](v)))
 	case []any:
-		C.__zval_arr__(&zval, (*C.zend_array)(PHPPackedArray[any](v)))
+		C.__zval_arr__(zval, (*C.zend_array)(PHPPackedArray[any](v)))
 	default:
+		C.__efree__(unsafe.Pointer(zval))
 		panic(fmt.Sprintf("unsupported Go type %T", v))
 	}
 
-	return &zval
+	return zval
 }
 
 // createNewArray creates a new zend_array with the specified size.
@@ -477,12 +481,19 @@ func CallPHPCallable(cb unsafe.Pointer, params []interface{}) interface{} {
 	var paramStorage *C.zval
 	if paramCount > 0 {
 		paramStorage = (*C.zval)(C.__emalloc__(C.size_t(paramCount) * C.size_t(unsafe.Sizeof(C.zval{}))))
-		defer C.__efree__(unsafe.Pointer(paramStorage))
+		defer func() {
+			for i := 0; i < paramCount; i++ {
+				targetZval := (*C.zval)(unsafe.Pointer(uintptr(unsafe.Pointer(paramStorage)) + uintptr(i)*unsafe.Sizeof(C.zval{})))
+				C.zval_ptr_dtor(targetZval)
+			}
+			C.__efree__(unsafe.Pointer(paramStorage))
+		}()
 
 		for i, param := range params {
 			targetZval := (*C.zval)(unsafe.Pointer(uintptr(unsafe.Pointer(paramStorage)) + uintptr(i)*unsafe.Sizeof(C.zval{})))
 			sourceZval := phpValue(param)
 			*targetZval = *sourceZval
+			C.__efree__(unsafe.Pointer(sourceZval))
 		}
 	}
 
@@ -494,6 +505,8 @@ func CallPHPCallable(cb unsafe.Pointer, params []interface{}) interface{} {
 	}
 
 	goResult, err := goValue[any](&retval)
+	C.zval_ptr_dtor(&retval)
+
 	if err != nil {
 		return nil
 	}
