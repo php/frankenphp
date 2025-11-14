@@ -39,7 +39,7 @@ type frankenPHPContext struct {
 }
 
 type contextHolder struct {
-	ctx  			  context.Context
+	ctx               context.Context
 	frankenPHPContext *frankenPHPContext
 }
 
