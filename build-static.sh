@@ -193,6 +193,7 @@ else
 	SPC_CMD_VAR_PHP_MAKE_EXTRA_CFLAGS="${SPC_CMD_VAR_PHP_MAKE_EXTRA_CFLAGS} -fPIE -fstack-protector-strong -O2 -w -s"
 fi
 export SPC_CMD_VAR_PHP_MAKE_EXTRA_CFLAGS
+export SPC_CMD_VAR_FRANKENPHP_XCADDY_MODULES="--with github.com/dunglas/mercure/caddy --with github.com/dunglas/vulcain/caddy --with github.com/dunglas/caddy-cbrotli"
 
 # Build FrankenPHP
 ${spcCommand} doctor --auto-fix
