@@ -47,13 +47,26 @@ func (gg *GoFileGenerator) buildContent() (string, error) {
 
 	filteredImports := make([]string, 0, len(imports))
 	for _, imp := range imports {
-		if imp != `"C"` && imp != `"unsafe"` && imp != `"github.com/dunglas/frankenphp"` {
+		if imp != `"C"` && imp != `"unsafe"` && imp != `"github.com/dunglas/frankenphp"` && imp != `"runtime/cgo"` {
 			filteredImports = append(filteredImports, imp)
 		}
 	}
 
 	classes := make([]phpClass, len(gg.generator.Classes))
 	copy(classes, gg.generator.Classes)
+
+	if len(classes) > 0 {
+		hasCgo := false
+		for _, imp := range imports {
+			if imp == `"runtime/cgo"` {
+				hasCgo = true
+				break
+			}
+		}
+		if !hasCgo {
+			filteredImports = append(filteredImports, `"runtime/cgo"`)
+		}
+	}
 
 	templateContent, err := gg.getTemplateContent(goTemplateData{
 		PackageName:       SanitizePackageName(gg.generator.BaseName),
