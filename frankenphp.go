@@ -60,9 +60,9 @@ var (
 	isRunning        bool
 	onServerShutdown []func()
 
-	globalMu sync.RWMutex
-	// Set default values because to make Shutdown() idempotent
-	globalCtx    = context.TODO()
+	// Set default values to make Shutdown() idempotent
+	globalMu     sync.Mutex
+	globalCtx    = context.Background()
 	globalLogger = slog.Default()
 
 	metrics Metrics = nullMetrics{}
@@ -235,18 +235,12 @@ func Init(options ...Option) error {
 
 	globalMu.Lock()
 
-	if opt.ctx == nil {
-		globalCtx = context.Background()
-	} else {
+	if opt.ctx != nil {
 		globalCtx = opt.ctx
 		opt.ctx = nil
 	}
 
-	if opt.logger == nil {
-		// set a default globalLogger
-		// to disable logging, set the globalLogger to slog.New(slog.DiscardHandler)
-		opt.logger = slog.Default()
-	} else {
+	if opt.logger != nil {
 		globalLogger = opt.logger
 		opt.logger = nil
 	}
@@ -352,11 +346,7 @@ func Shutdown() {
 		globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "FrankenPHP shut down")
 	}
 
-	globalMu.Lock()
-	globalCtx = context.TODO()
-	globalLogger = slog.Default()
-	workers = nil
-	globalMu.Unlock()
+	resetGlobals()
 }
 
 // ServeHTTP executes a PHP script according to the given context.
@@ -721,4 +711,12 @@ func timeoutChan(timeout time.Duration) <-chan time.Time {
 	}
 
 	return time.After(timeout)
+}
+
+func resetGlobals() {
+	globalMu.Lock()
+	globalCtx = context.Background()
+	globalLogger = slog.Default()
+	workers = nil
+	globalMu.Unlock()
 }

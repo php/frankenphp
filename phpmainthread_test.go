@@ -21,18 +21,9 @@ var testDataPath, _ = filepath.Abs("./testdata")
 func setupGlobals(t *testing.T) {
 	t.Helper()
 
-	t.Cleanup(func() {
-		globalMu.Lock()
-		globalCtx = nil
-		globalLogger = nil
-		workers = nil
-		globalMu.Unlock()
-	})
+	t.Cleanup(Shutdown)
 
-	globalMu.Lock()
-	globalCtx = t.Context()
-	globalLogger = slog.Default()
-	globalMu.Unlock()
+	resetGlobals()
 }
 
 func TestStartAndStopTheMainThreadWithOneInactiveThread(t *testing.T) {
