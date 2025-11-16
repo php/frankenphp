@@ -693,6 +693,81 @@ func go_log(threadIndex C.uintptr_t, message *C.char, level C.int) {
 	}
 }
 
+// go_log_attrs is a cgo-exported bridge between PHP and the Go slog logger.
+//
+// It is called from C/PHP and must not panic. All errors are reported by
+// returning a C-allocated error string; on success it returns NULL.
+//
+// Parameters:
+//
+// threadIndex:
+//   - Index into the phpThreads table, used to retrieve the Go context for
+//     the current PHP request/thread.
+//
+// message:
+//   - Pointer to a C string containing the log message bytes. The memory
+//     is owned by the caller and must NOT be freed by Go.
+//
+// len:
+//   - Length of the message, in bytes, as seen from C (not including the
+//     terminating NUL). This is passed to C.GoStringN to build the Go string.
+//
+// level:
+//   - Numeric log level compatible with slog.Level values. It is cast to
+//     slog.Level inside this function.
+//
+// cattrs:
+//   - Pointer to a PHP zval representing an associative array of attributes,
+//     or NULL. When non-NULL, it is converted to map[string]any via GoMap[any]
+//     and then mapped to slog.Attr values (using slog.Any under the hood).
+//
+// Return value:
+//
+// On success:
+//   - Returns NULL and the message is logged (if the logger is enabled at
+//     the given level).
+//
+// On error:
+//   - Returns a non-NULL *C.char pointing to a NUL-terminated error message
+//     allocated with C.CString. The caller is responsible for releasing
+//     this memory.
+//
+//export go_log_attrs
+func go_log_attrs(threadIndex C.uintptr_t, message *C.char, len C.int, level C.int, cattrs *C.zval) *C.char {
+	var attrs map[string]any
+
+	if cattrs == nil {
+		attrs = nil
+	} else {
+		var err error
+		if attrs, err = GoMap[any](unsafe.Pointer(cattrs)); err != nil {
+			// NOTE: return value is already formatted for a PHP exception message.
+			return C.CString("Failed to log message: converting attrs: " + err.Error())
+		}
+	}
+
+	m := C.GoStringN(message, len)
+	lvl := slog.Level(level)
+
+	ctx := phpThreads[threadIndex].context()
+
+	if globalLogger.Enabled(ctx, lvl) {
+		globalLogger.LogAttrs(ctx, lvl, m, mapToAttr(attrs)...)
+	}
+
+	return nil
+}
+
+func mapToAttr(input map[string]any) []slog.Attr {
+	out := make([]slog.Attr, 0, len(input))
+
+	for key, val := range input {
+		out = append(out, slog.Any(key, val))
+	}
+
+	return out
+}
+
 //export go_is_context_done
 func go_is_context_done(threadIndex C.uintptr_t) C.bool {
 	return C.bool(phpThreads[threadIndex].frankenPHPContext().isDone)

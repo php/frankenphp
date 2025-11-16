@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: cd534a8394f535a600bf45a333955d23b5154756 */
+ * Stub hash: 28aa97e2c6102b3e51059dbd001ac65679f0bfda */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_handle_request, 0, 1, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, callback, IS_CALLABLE, 0)
@@ -35,6 +35,11 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_mercure_publish, 0, 1, IS_STRING
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, retry, IS_LONG, 1, "null")
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_log, 0, 1, IS_VOID, 0)
+	ZEND_ARG_TYPE_INFO(0, message, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, level, IS_LONG, 0, "0")
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, context, IS_ARRAY, 0, "[]")
+ZEND_END_ARG_INFO()
 
 ZEND_FUNCTION(frankenphp_handle_request);
 ZEND_FUNCTION(headers_send);
@@ -42,18 +47,19 @@ ZEND_FUNCTION(frankenphp_finish_request);
 ZEND_FUNCTION(frankenphp_request_headers);
 ZEND_FUNCTION(frankenphp_response_headers);
 ZEND_FUNCTION(mercure_publish);
-
+ZEND_FUNCTION(frankenphp_log);
 
 static const zend_function_entry ext_functions[] = {
 	ZEND_FE(frankenphp_handle_request, arginfo_frankenphp_handle_request)
 	ZEND_FE(headers_send, arginfo_headers_send)
 	ZEND_FE(frankenphp_finish_request, arginfo_frankenphp_finish_request)
-	ZEND_FALIAS(fastcgi_finish_request, frankenphp_finish_request, arginfo_fastcgi_finish_request)
+	ZEND_RAW_FENTRY("fastcgi_finish_request", zif_frankenphp_finish_request, arginfo_fastcgi_finish_request, 0, NULL, NULL)
 	ZEND_FE(frankenphp_request_headers, arginfo_frankenphp_request_headers)
-	ZEND_FALIAS(apache_request_headers, frankenphp_request_headers, arginfo_apache_request_headers)
-	ZEND_FALIAS(getallheaders, frankenphp_request_headers, arginfo_getallheaders)
+	ZEND_RAW_FENTRY("apache_request_headers", zif_frankenphp_request_headers, arginfo_apache_request_headers, 0, NULL, NULL)
+	ZEND_RAW_FENTRY("getallheaders", zif_frankenphp_request_headers, arginfo_getallheaders, 0, NULL, NULL)
 	ZEND_FE(frankenphp_response_headers, arginfo_frankenphp_response_headers)
-	ZEND_FALIAS(apache_response_headers, frankenphp_response_headers, arginfo_apache_response_headers)
+	ZEND_RAW_FENTRY("apache_response_headers", zif_frankenphp_response_headers, arginfo_apache_response_headers, 0, NULL, NULL)
 	ZEND_FE(mercure_publish, arginfo_mercure_publish)
+	ZEND_FE(frankenphp_log, arginfo_frankenphp_log)
 	ZEND_FE_END
 };
