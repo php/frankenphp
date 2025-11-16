@@ -1058,7 +1058,34 @@ func FuzzRequest(f *testing.F) {
 			// Headers should always be present even if empty
 			assert.Contains(t, body, fmt.Sprintf("[CONTENT_TYPE] => %s", fuzzedString))
 			assert.Contains(t, body, fmt.Sprintf("[HTTP_FUZZED] => %s", fuzzedString))
-
 		}, &testOptions{workerScript: "request-headers.php"})
 	})
+}
+
+func TestFrankenPHPLog(t *testing.T) {
+	var buf bytes.Buffer
+	handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	logger := slog.New(handler)
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/log_to_slog.php", handler, t)
+		assert.Empty(t, body)
+	}, &testOptions{
+		logger:             logger,
+		nbParallelRequests: 1,
+		nbWorkers:          1,
+	})
+
+	logOutput := buf.String()
+
+	t.Logf("captured log output: %s", logOutput)
+
+	for level, needle := range map[string]string{
+		"debug attrs": `level=DEBUG msg="some debug message" "key int"=1`,
+		"info attrs":  `level=INFO msg="some info message" "key string"=string`,
+		"warn attrs":  `level=WARN msg="some warn message"`,
+		"error attrs": `level=ERROR msg="some error message" err="[a v]"`,
+	} {
+		assert.Containsf(t, logOutput, needle, "should contains %q log", level)
+	}
 }
