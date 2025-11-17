@@ -69,7 +69,7 @@ func TestWorkerExtensionSendMessage(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(Shutdown)
 
-	ret, err := externalWorker.SendMessage("Hello Workers", nil)
+	ret, err := externalWorker.SendMessage(t.Context(), "Hello Workers", nil)
 	require.NoError(t, err)
 
 	assert.Equal(t, "received message: Hello Workers", ret)

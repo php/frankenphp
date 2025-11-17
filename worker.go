@@ -19,7 +19,7 @@ type worker struct {
 	fileName               string
 	num                    int
 	env                    PreparedEnv
-	requestChan            chan *frankenPHPContext
+	requestChan            chan contextHolder
 	threads                []*phpThread
 	threadMutex            sync.RWMutex
 	allowPathMatching      bool
@@ -66,7 +66,7 @@ func initWorkers(opt []workerOpt) error {
 	}
 
 	watcherIsEnabled = true
-	if err := watcher.InitWatcher(directoriesToWatch, RestartWorkers, logger); err != nil {
+	if err := watcher.InitWatcher(globalCtx, directoriesToWatch, RestartWorkers, globalLogger); err != nil {
 		return err
 	}
 
@@ -128,7 +128,7 @@ func newWorker(o workerOpt) (*worker, error) {
 		fileName:               absFileName,
 		num:                    o.num,
 		env:                    o.env,
-		requestChan:            make(chan *frankenPHPContext),
+		requestChan:            make(chan contextHolder),
 		threads:                make([]*phpThread, 0, o.num),
 		allowPathMatching:      allowPathMatching,
 		maxConsecutiveFailures: o.maxConsecutiveFailures,
@@ -228,17 +228,17 @@ func (worker *worker) countThreads() int {
 	return l
 }
 
-func (worker *worker) handleRequest(fc *frankenPHPContext) error {
+func (worker *worker) handleRequest(ch contextHolder) error {
 	metrics.StartWorkerRequest(worker.name)
 
 	// dispatch requests to all worker threads in order
 	worker.threadMutex.RLock()
 	for _, thread := range worker.threads {
 		select {
-		case thread.requestChan <- fc:
+		case thread.requestChan <- ch:
 			worker.threadMutex.RUnlock()
-			<-fc.done
-			metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
+			<-ch.frankenPHPContext.done
+			metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
 
 			return nil
 		default:
@@ -251,19 +251,19 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) error {
 	metrics.QueuedWorkerRequest(worker.name)
 	for {
 		select {
-		case worker.requestChan <- fc:
+		case worker.requestChan <- ch:
 			metrics.DequeuedWorkerRequest(worker.name)
-			<-fc.done
-			metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
+			<-ch.frankenPHPContext.done
+			metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
 
 			return nil
-		case scaleChan <- fc:
+		case scaleChan <- ch.frankenPHPContext:
 			// the request has triggered scaling, continue to wait for a thread
 		case <-timeoutChan(maxWaitTime):
 			// the request has timed out stalling
 			metrics.DequeuedWorkerRequest(worker.name)
 
-			fc.reject(ErrMaxWaitTimeExceeded)
+			ch.frankenPHPContext.reject(ErrMaxWaitTimeExceeded)
 
 			return ErrMaxWaitTimeExceeded
 		}

@@ -38,6 +38,11 @@ type frankenPHPContext struct {
 	startedAt time.Time
 }
 
+type contextHolder struct {
+	ctx               context.Context
+	frankenPHPContext *frankenPHPContext
+}
+
 // fromContext extracts the frankenPHPContext from a context.
 func fromContext(ctx context.Context) (fctx *frankenPHPContext, ok bool) {
 	fctx, ok = ctx.Value(contextKey).(*frankenPHPContext)
@@ -63,7 +68,7 @@ func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Reques
 	}
 
 	if fc.logger == nil {
-		fc.logger = logger
+		fc.logger = globalLogger
 	}
 
 	if fc.documentRoot == "" {
