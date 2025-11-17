@@ -18,8 +18,15 @@ import (
 
 var testDataPath, _ = filepath.Abs("./testdata")
 
+func setupGlobals(t *testing.T) {
+	t.Helper()
+
+	t.Cleanup(Shutdown)
+
+	resetGlobals()
+}
+
 func TestStartAndStopTheMainThreadWithOneInactiveThread(t *testing.T) {
-	logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	_, err := initPHPThreads(1, 1, nil) // boot 1 thread
 	assert.NoError(t, err)
 
@@ -28,12 +35,13 @@ func TestStartAndStopTheMainThreadWithOneInactiveThread(t *testing.T) {
 	assert.True(t, phpThreads[0].state.is(stateInactive))
 
 	drainPHPThreads()
+
 	assert.Nil(t, phpThreads)
 }
 
 func TestTransitionRegularThreadToWorkerThread(t *testing.T) {
-	workers = nil
-	logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	setupGlobals(t)
+
 	_, err := initPHPThreads(1, 1, nil)
 	assert.NoError(t, err)
 
@@ -42,7 +50,7 @@ func TestTransitionRegularThreadToWorkerThread(t *testing.T) {
 	assert.IsType(t, &regularThread{}, phpThreads[0].handler)
 
 	// transition to worker thread
-	worker := getDummyWorker("transition-worker-1.php")
+	worker := getDummyWorker(t, "transition-worker-1.php")
 	convertToWorkerThread(phpThreads[0], worker)
 	assert.IsType(t, &workerThread{}, phpThreads[0].handler)
 	assert.Len(t, worker.threads, 1)
@@ -57,12 +65,12 @@ func TestTransitionRegularThreadToWorkerThread(t *testing.T) {
 }
 
 func TestTransitionAThreadBetween2DifferentWorkers(t *testing.T) {
-	workers = nil
-	logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	setupGlobals(t)
+
 	_, err := initPHPThreads(1, 1, nil)
 	assert.NoError(t, err)
-	firstWorker := getDummyWorker("transition-worker-1.php")
-	secondWorker := getDummyWorker("transition-worker-2.php")
+	firstWorker := getDummyWorker(t, "transition-worker-1.php")
+	secondWorker := getDummyWorker(t, "transition-worker-2.php")
 
 	// convert to first worker thread
 	convertToWorkerThread(phpThreads[0], firstWorker)
@@ -151,13 +159,13 @@ func TestTransitionThreadsWhileDoingRequests(t *testing.T) {
 }
 
 func TestFinishBootingAWorkerScript(t *testing.T) {
-	workers = nil
-	logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	setupGlobals(t)
+
 	_, err := initPHPThreads(1, 1, nil)
 	assert.NoError(t, err)
 
 	// boot the worker
-	worker := getDummyWorker("transition-worker-1.php")
+	worker := getDummyWorker(t, "transition-worker-1.php")
 	convertToWorkerThread(phpThreads[0], worker)
 	phpThreads[0].state.waitFor(stateReady)
 
@@ -175,9 +183,9 @@ func TestFinishBootingAWorkerScript(t *testing.T) {
 
 func TestReturnAnErrorIf2WorkersHaveTheSameFileName(t *testing.T) {
 	workers = []*worker{}
-	w, err1 := newWorker(workerOpt{fileName: "filename.php", maxConsecutiveFailures: defaultMaxConsecutiveFailures})
+	w, err1 := newWorker(workerOpt{fileName: testDataPath + "/index.php"})
 	workers = append(workers, w)
-	_, err2 := newWorker(workerOpt{fileName: "filename.php", maxConsecutiveFailures: defaultMaxConsecutiveFailures})
+	_, err2 := newWorker(workerOpt{fileName: testDataPath + "/index.php"})
 
 	assert.NoError(t, err1)
 	assert.Error(t, err2, "two workers cannot have the same filename")
@@ -185,24 +193,28 @@ func TestReturnAnErrorIf2WorkersHaveTheSameFileName(t *testing.T) {
 
 func TestReturnAnErrorIf2ModuleWorkersHaveTheSameName(t *testing.T) {
 	workers = []*worker{}
-	w, err1 := newWorker(workerOpt{fileName: "filename.php", name: "workername", maxConsecutiveFailures: defaultMaxConsecutiveFailures})
+	w, err1 := newWorker(workerOpt{fileName: testDataPath + "/index.php", name: "workername"})
 	workers = append(workers, w)
-	_, err2 := newWorker(workerOpt{fileName: "filename2.php", name: "workername", maxConsecutiveFailures: defaultMaxConsecutiveFailures})
+	_, err2 := newWorker(workerOpt{fileName: testDataPath + "/hello.php", name: "workername"})
 
 	assert.NoError(t, err1)
 	assert.Error(t, err2, "two workers cannot have the same name")
 }
 
-func getDummyWorker(fileName string) *worker {
+func getDummyWorker(t *testing.T, fileName string) *worker {
+	t.Helper()
+
 	if workers == nil {
 		workers = []*worker{}
 	}
+
 	worker, _ := newWorker(workerOpt{
 		fileName:               testDataPath + "/" + fileName,
 		num:                    1,
 		maxConsecutiveFailures: defaultMaxConsecutiveFailures,
 	})
 	workers = append(workers, worker)
+
 	return worker
 }
 
@@ -282,13 +294,13 @@ func TestCorrectThreadCalculation(t *testing.T) {
 }
 
 func testThreadCalculation(t *testing.T, expectedNumThreads int, expectedMaxThreads int, o *opt) {
-	totalThreadCount, _, maxThreadCount, err := calculateMaxThreads(o)
+	_, err := calculateMaxThreads(o)
 	assert.NoError(t, err, "no error should be returned")
-	assert.Equal(t, expectedNumThreads, totalThreadCount, "num_threads must be correct")
-	assert.Equal(t, expectedMaxThreads, maxThreadCount, "max_threads must be correct")
+	assert.Equal(t, expectedNumThreads, o.numThreads, "num_threads must be correct")
+	assert.Equal(t, expectedMaxThreads, o.maxThreads, "max_threads must be correct")
 }
 
 func testThreadCalculationError(t *testing.T, o *opt) {
-	_, _, _, err := calculateMaxThreads(o)
+	_, err := calculateMaxThreads(o)
 	assert.Error(t, err, "configuration must error")
 }

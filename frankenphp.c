@@ -464,12 +464,16 @@ PHP_FUNCTION(frankenphp_handle_request) {
 
   /*
    * If an exception occurred, print the message to the client before
-   * closing the connection and bailout.
+   * closing the connection.
    */
-  if (EG(exception) && !zend_is_unwind_exit(EG(exception)) &&
-      !zend_is_graceful_exit(EG(exception))) {
-    zend_exception_error(EG(exception), E_ERROR);
-    zend_bailout();
+  if (EG(exception)) {
+    if (!zend_is_unwind_exit(EG(exception)) &&
+        !zend_is_graceful_exit(EG(exception))) {
+      zend_exception_error(EG(exception), E_ERROR);
+    } else {
+      /* exit() will jump directly to after php_execute_script */
+      zend_bailout();
+    }
   }
 
   frankenphp_worker_request_shutdown();
@@ -798,7 +802,7 @@ static void frankenphp_register_variables(zval *track_vars_array) {
 }
 
 static void frankenphp_log_message(const char *message, int syslog_type_int) {
-  go_log((char *)message, syslog_type_int);
+  go_log(thread_index, (char *)message, syslog_type_int);
 }
 
 static char *frankenphp_getenv(const char *name, size_t name_len) {

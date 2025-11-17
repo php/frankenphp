@@ -1,12 +1,14 @@
 package caddy
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/caddyserver/caddy/v2"
@@ -17,6 +19,22 @@ import (
 	"github.com/dunglas/frankenphp"
 	"github.com/dunglas/frankenphp/internal/fastabs"
 )
+
+var (
+	options   []frankenphp.Option
+	optionsMU sync.RWMutex
+)
+
+// EXPERIMENTAL: RegisterWorkers provides a way for extensions to register frankenphp.Workers
+func RegisterWorkers(name, fileName string, num int, wo ...frankenphp.WorkerOption) frankenphp.Workers {
+	w, opt := frankenphp.WithExtensionWorkers(name, fileName, num, wo...)
+
+	optionsMU.Lock()
+	options = append(options, opt)
+	optionsMU.Unlock()
+
+	return w
+}
 
 // FrankenPHPApp represents the global "frankenphp" directive in the Caddyfile
 // it's responsible for starting up the global PHP instance and all threads
@@ -39,6 +57,7 @@ type FrankenPHPApp struct {
 	MaxWaitTime time.Duration `json:"max_wait_time,omitempty"`
 
 	metrics frankenphp.Metrics
+	ctx     context.Context
 	logger  *slog.Logger
 }
 
@@ -54,6 +73,7 @@ func (f FrankenPHPApp) CaddyModule() caddy.ModuleInfo {
 
 // Provision sets up the module.
 func (f *FrankenPHPApp) Provision(ctx caddy.Context) error {
+	f.ctx = ctx
 	f.logger = ctx.Slogger()
 
 	if httpApp, err := ctx.AppIfConfigured("http"); err == nil {
@@ -111,13 +131,19 @@ func (f *FrankenPHPApp) Start() error {
 	repl := caddy.NewReplacer()
 
 	opts := []frankenphp.Option{
+		frankenphp.WithContext(f.ctx),
+		frankenphp.WithLogger(f.logger),
 		frankenphp.WithNumThreads(f.NumThreads),
 		frankenphp.WithMaxThreads(f.MaxThreads),
-		frankenphp.WithLogger(f.logger),
 		frankenphp.WithMetrics(f.metrics),
 		frankenphp.WithPhpIni(f.PhpIni),
 		frankenphp.WithMaxWaitTime(f.MaxWaitTime),
 	}
+
+	optionsMU.RLock()
+	opts = append(opts, options...)
+	optionsMU.RUnlock()
+
 	for _, w := range append(f.Workers) {
 		workerOpts := []frankenphp.WorkerOption{
 			frankenphp.WithWorkerEnv(w.Env),
@@ -137,7 +163,11 @@ func (f *FrankenPHPApp) Start() error {
 }
 
 func (f *FrankenPHPApp) Stop() error {
-	f.logger.Info("FrankenPHP stopped 🐘")
+	ctx := caddy.ActiveContext()
+
+	if f.logger.Enabled(caddy.ActiveContext(), slog.LevelInfo) {
+		f.logger.LogAttrs(ctx, slog.LevelInfo, "FrankenPHP stopped 🐘")
+	}
 
 	// attempt a graceful shutdown if caddy is exiting
 	// note: Exiting() is currently marked as 'experimental'
@@ -150,6 +180,10 @@ func (f *FrankenPHPApp) Stop() error {
 	f.Workers = nil
 	f.NumThreads = 0
 	f.MaxWaitTime = 0
+
+	optionsMU.Lock()
+	options = nil
+	optionsMU.Unlock()
 
 	return nil
 }
