@@ -20,6 +20,7 @@ FrankenPHP can also be used as a standalone Go library to embed PHP in any app u
 
 We provide static FrankenPHP binaries for Linux and macOS
 containing [PHP 8.4](https://www.php.net/releases/8.4/en.php) and most popular PHP extensions.
+Only use this option for development as FrankenPHP is compiled for maximum compatibility, rather than performance.
 
 On Windows, use [WSL](https://learn.microsoft.com/windows/wsl/) to run FrankenPHP.
 
@@ -41,6 +42,38 @@ You can also run command-line scripts with:
 
 ```console
 frankenphp php-cli /path/to/your/script.php
+```
+
+### RPM Packages
+
+We offer RPM packages for all systems using `dnf`. To install, run:
+
+```console
+sudo dnf install https://rpm.henderkes.com/static-php-1-0.noarch.rpm
+sudo dnf module enable php-zts:static-8.4 # 8.2-8.5 available
+sudo dnf install frankenphp
+# to install extensions:
+sudo dnf install php-zts-xdebug
+# if an extension is not available by default, install it with pie
+sudo dnf install php-zts-devel
+sudo pie install asgrim/example-pie-extension --with-php-config=php-config-zts
+```
+
+### DEB Packages
+
+We offer DEB packages for all Debian-based systems. To install, run:
+
+```console
+. /etc/os-release && \
+sudo curl -fsSL https://key.henderkes.com/static-php.gpg -o /usr/share/keyrings/static-php.gpg && \
+echo "deb [signed-by=/usr/share/keyrings/static-php.gpg] https://deb.henderkes.com/ $VERSION_CODENAME main" | sudo tee /etc/apt/sources.list.d/static-php.list && \
+sudo apt update
+sudo apt install frankenphp
+# to install extensions:
+sudo apt install php-zts-xdebug
+# if an extension is not available by default, install it with pie
+sudo apt install php-zts-devel
+sudo pie install asgrim/example-pie-extension --with-php-config=php-config-zts
 ```
 
 ### Docker

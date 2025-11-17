@@ -41,9 +41,9 @@ especially when compiled in ZTS mode (thread-safe), which is required for Franke
 
 Also, [some bugs only happen when using musl](https://github.com/php/php-src/issues?q=sort%3Aupdated-desc+is%3Aissue+is%3Aopen+label%3ABug+musl).
 
-In production environments, we recommend using FrankenPHP linked against glibc.
+In production environments, we recommend using FrankenPHP linked against glibc, compiled with an appropriate optimization level.
 
-This can be achieved by using the Debian Docker images (the default), downloading the -gnu suffix binary from our [Releases](https://github.com/php/frankenphp/releases), or by [compiling FrankenPHP from sources](compile.md).
+This can be achieved by using the Debian Docker images (the default), using our [.deb](https://debs.henderkes.com) or [.rpm](https://rpms.henderkes.com) packages, or by [compiling FrankenPHP from sources](compile.md).
 
 Alternatively, we provide static musl binaries compiled with [the mimalloc allocator](https://github.com/microsoft/mimalloc), which alleviates the problems in threaded scenarios.
 
