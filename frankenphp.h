@@ -56,6 +56,9 @@ int frankenphp_execute_script(char *file_name);
 int frankenphp_execute_script_cli(char *script, int argc, char **argv,
                                   bool eval);
 
+void frankenphp_set_caddy_placeholder(uintptr_t thread_index, zend_string *key,
+                                      zend_string *value);
+
 void frankenphp_register_variables_from_request_info(
     zval *track_vars_array, zend_string *content_type,
     zend_string *path_translated, zend_string *query_string,

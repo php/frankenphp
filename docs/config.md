@@ -240,6 +240,28 @@ where the FrankenPHP process was started. You can instead also specify one or mo
 
 The file watcher is based on [e-dant/watcher](https://github.com/e-dant/watcher).
 
+### Placeholders
+
+You can set Caddy placeholders from your PHP code using the `frankenphp_set_caddy_placeholder(string $key, string $value)` function.
+These placeholders can then be used in Caddy directives like `log_append`.
+
+Example usage:
+
+```php
+frankenphp_set_caddy_placeholder('frankenphp.custom_placeholder', 'Look at my placeholder!');
+```
+
+```caddyfile
+http:// {
+	log
+	route {
+		# ...
+
+		log_append my_placeholder {frankenphp.custom_placeholder}
+	}
+}
+```
+
 ## Matching the worker to a path
 
 In traditional PHP applications, scripts are always placed in the public directory.

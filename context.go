@@ -38,6 +38,9 @@ type frankenPHPContext struct {
 	startedAt time.Time
 }
 
+type placeholdersContextKeyStruct struct{}
+var PlaceholdersContextKey = placeholdersContextKeyStruct{}
+
 // fromContext extracts the frankenPHPContext from a context.
 func fromContext(ctx context.Context) (fctx *frankenPHPContext, ok bool) {
 	fctx, ok = ctx.Value(contextKey).(*frankenPHPContext)
@@ -87,8 +90,11 @@ func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Reques
 	}
 
 	c := context.WithValue(r.Context(), contextKey, fc)
+	c = context.WithValue(c, PlaceholdersContextKey, make(map[string]string))
+	r = r.WithContext(c)
+	fc.request = r
 
-	return r.WithContext(c), nil
+	return r, nil
 }
 
 // newDummyContext creates a fake context from a request path
