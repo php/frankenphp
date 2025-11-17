@@ -172,7 +172,7 @@ PHP_MINIT_FUNCTION({{.BaseName}}) {
 
 zend_module_entry {{.BaseName}}_module_entry = {STANDARD_MODULE_HEADER,
                                          "{{.BaseName}}",
-                                         ext_functions,             /* Functions */
+                                         {{if .Functions}}ext_functions{{else}}NULL{{end}},             /* Functions */
                                          PHP_MINIT({{.BaseName}}),  /* MINIT */
                                          NULL,                      /* MSHUTDOWN */
                                          NULL,                      /* RINIT */
