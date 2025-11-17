@@ -6,7 +6,6 @@ package frankenphp
 // #include <php.h>
 import "C"
 import (
-	"context"
 	"log/slog"
 	"unsafe"
 
@@ -61,7 +60,7 @@ func go_mercure_publish(threadIndex C.uintptr_t, topics *C.struct__zval_struct, 
 		panic("invalid topics type")
 	}
 
-	if err := fc.mercureHub.Publish(context.TODO(), u); err != nil {
+	if err := fc.mercureHub.Publish(ctx, u); err != nil {
 		if fc.logger.Enabled(ctx, slog.LevelError) {
 			fc.logger.LogAttrs(ctx, slog.LevelError, "Unable to publish Mercure update", slog.Any("error", err))
 		}

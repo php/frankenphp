@@ -37,19 +37,17 @@ import (
 	"unsafe"
 	// debug on Linux
 	//_ "github.com/ianlancetaylor/cgosymbolizer"
-
 )
 
 type contextKeyStruct struct{}
 
 var (
-	ErrInvalidRequest         = errors.New("not a FrankenPHP request")
-	ErrAlreadyStarted         = errors.New("FrankenPHP is already started")
-	ErrInvalidPHPVersion      = errors.New("FrankenPHP is only compatible with PHP 8.2+")
-	ErrMainThreadCreation     = errors.New("error creating the main thread")
-	ErrRequestContextCreation = errors.New("error during request context creation")
-	ErrScriptExecution        = errors.New("error during PHP script execution")
-	ErrNotRunning             = errors.New("FrankenPHP is not running. For proper configuration visit: https://frankenphp.dev/docs/config/#caddyfile-config")
+	ErrInvalidRequest     = errors.New("not a FrankenPHP request")
+	ErrAlreadyStarted     = errors.New("FrankenPHP is already started")
+	ErrInvalidPHPVersion  = errors.New("FrankenPHP is only compatible with PHP 8.2+")
+	ErrMainThreadCreation = errors.New("error creating the main thread")
+	ErrScriptExecution    = errors.New("error during PHP script execution")
+	ErrNotRunning         = errors.New("FrankenPHP is not running. For proper configuration visit: https://frankenphp.dev/docs/config/#caddyfile-config")
 
 	ErrInvalidRequestPath         = ErrRejected{"invalid request path", http.StatusBadRequest}
 	ErrInvalidContentLengthHeader = ErrRejected{"invalid Content-Length header", http.StatusBadRequest}
