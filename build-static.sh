@@ -206,8 +206,8 @@ else
 	${spcCommand} build --enable-zts --build-embed ${SPC_OPT_BUILD_ARGS} "${PHP_EXTENSIONS}" --with-libs="${PHP_EXTENSION_LIBS}"
 
 	if [ -n "$GITHUB_ACTIONS" ] || [ -n "$CI" ]; then
-      rm -rf ./source
-  fi
+		rm -rf ./source
+	fi
 
 	echo -n "${cache_key}" >../cache_key
 fi
