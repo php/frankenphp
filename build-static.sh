@@ -201,7 +201,7 @@ if [ -f ../cache_key ] && [ "$(cat ../cache_key)" = "${cache_key}" ] && [ -f "bu
 else
 	${spcCommand} doctor --auto-fix
 	# shellcheck disable=SC2086
-	${spcCommand} download --with-php="${PHP_VERSION}" --for-extensions="${PHP_EXTENSIONS}" --for-libs="${PHP_EXTENSION_LIBS}" ${SPC_OPT_DOWNLOAD_ARGS}
+	${spcCommand} download --with-php="${PHP_VERSION}" --shallow-clone --for-extensions="${PHP_EXTENSIONS}" --for-libs="${PHP_EXTENSION_LIBS}" ${SPC_OPT_DOWNLOAD_ARGS}
 	# shellcheck disable=SC2086
 	${spcCommand} build --enable-zts --build-embed ${SPC_OPT_BUILD_ARGS} "${PHP_EXTENSIONS}" --with-libs="${PHP_EXTENSION_LIBS}"
 
