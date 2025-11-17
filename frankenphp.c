@@ -802,7 +802,7 @@ static void frankenphp_register_variables(zval *track_vars_array) {
 }
 
 static void frankenphp_log_message(const char *message, int syslog_type_int) {
-  go_log((char *)message, syslog_type_int);
+  go_log(thread_index, (char *)message, syslog_type_int);
 }
 
 static char *frankenphp_getenv(const char *name, size_t name_len) {

@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -78,7 +79,7 @@ func runTest(t *testing.T, test func(func(http.ResponseWriter, *http.Request), *
 	}
 
 	err := frankenphp.Init(initOpts...)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	defer frankenphp.Shutdown()
 
 	handler := func(w http.ResponseWriter, r *http.Request) {
@@ -86,7 +87,9 @@ func runTest(t *testing.T, test func(func(http.ResponseWriter, *http.Request), *
 		assert.NoError(t, err)
 
 		err = frankenphp.ServeHTTP(w, req)
-		assert.NoError(t, err)
+		if err != nil && !errors.As(err, &frankenphp.ErrRejected{}) {
+			assert.Fail(t, fmt.Sprintf("Received unexpected error:\n%+v", err))
+		}
 	}
 
 	var ts *httptest.Server
@@ -109,6 +112,7 @@ func runTest(t *testing.T, test func(func(http.ResponseWriter, *http.Request), *
 
 func testRequest(req *http.Request, handler func(http.ResponseWriter, *http.Request), t *testing.T) (string, *http.Response) {
 	t.Helper()
+
 	w := httptest.NewRecorder()
 	handler(w, req)
 	resp := w.Result()
@@ -131,6 +135,16 @@ func testPost(url string, body string, handler func(http.ResponseWriter, *http.R
 	req.Body = io.NopCloser(strings.NewReader(body))
 
 	return testRequest(req, handler, t)
+}
+
+func TestMain(m *testing.M) {
+	flag.Parse()
+
+	if !testing.Verbose() {
+		slog.SetDefault(slog.New(slog.DiscardHandler))
+	}
+
+	os.Exit(m.Run())
 }
 
 func TestHelloWorld_module(t *testing.T) { testHelloWorld(t, nil) }
@@ -976,7 +990,7 @@ func testRejectInvalidHeaders(t *testing.T, opts *testOptions) {
 }
 
 func TestFlushEmptyResponse_module(t *testing.T) { testFlushEmptyResponse(t, &testOptions{}) }
-func TestFlushEmptyRespnse_worker(t *testing.T) {
+func TestFlushEmptyResponse_worker(t *testing.T) {
 	testFlushEmptyResponse(t, &testOptions{workerScript: "only-headers.php"})
 }
 
@@ -1022,7 +1036,7 @@ func FuzzRequest(f *testing.F) {
 			// The response status must be 400 if the request path contains null bytes
 			if strings.Contains(req.URL.Path, "\x00") {
 				assert.Equal(t, 400, resp.StatusCode)
-				assert.Contains(t, body, "Invalid request path")
+				assert.Contains(t, body, "invalid request path")
 				return
 			}
 

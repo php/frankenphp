@@ -14,7 +14,7 @@ import (
 // this is necessary if tests make use of PHP's internal allocation
 func testOnDummyPHPThread(t *testing.T, test func()) {
 	t.Helper()
-	logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	globalLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	_, err := initPHPThreads(1, 1, nil) // boot 1 thread
 	assert.NoError(t, err)
 	handler := convertToTaskThread(phpThreads[0])

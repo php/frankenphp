@@ -5,7 +5,6 @@ package frankenphp
 import "C"
 import (
 	"context"
-	"log/slog"
 	"runtime"
 	"sync"
 	"unsafe"
@@ -16,7 +15,7 @@ import (
 type phpThread struct {
 	runtime.Pinner
 	threadIndex  int
-	requestChan  chan *frankenPHPContext
+	requestChan  chan contextHolder
 	drainChan    chan struct{}
 	handlerMu    sync.Mutex
 	handler      threadHandler
@@ -29,13 +28,14 @@ type threadHandler interface {
 	name() string
 	beforeScriptExecution() string
 	afterScriptExecution(exitStatus int)
-	getRequestContext() *frankenPHPContext
+	context() context.Context
+	frankenPHPContext() *frankenPHPContext
 }
 
 func newPHPThread(threadIndex int) *phpThread {
 	return &phpThread{
 		threadIndex: threadIndex,
-		requestChan: make(chan *frankenPHPContext),
+		requestChan: make(chan contextHolder),
 		state:       newThreadState(),
 	}
 }
@@ -44,7 +44,6 @@ func newPHPThread(threadIndex int) *phpThread {
 func (thread *phpThread) boot() {
 	// thread must be in reserved state to boot
 	if !thread.state.compareAndSwap(stateReserved, stateBooting) && !thread.state.compareAndSwap(stateBootRequested, stateBooting) {
-		logger.Error("thread is not in reserved state: " + thread.state.name())
 		panic("thread is not in reserved state: " + thread.state.name())
 	}
 
@@ -56,7 +55,6 @@ func (thread *phpThread) boot() {
 
 	// start the actual posix thread - TODO: try this with go threads instead
 	if !C.frankenphp_new_php_thread(C.uintptr_t(thread.threadIndex)) {
-		logger.LogAttrs(context.Background(), slog.LevelError, "unable to create thread", slog.Int("thread", thread.threadIndex))
 		panic("unable to create thread")
 	}
 
@@ -100,12 +98,17 @@ func (thread *phpThread) setHandler(handler threadHandler) {
 func (thread *phpThread) transitionToNewHandler() string {
 	thread.state.set(stateTransitionInProgress)
 	thread.state.waitFor(stateTransitionComplete)
+
 	// execute beforeScriptExecution of the new handler
 	return thread.handler.beforeScriptExecution()
 }
 
-func (thread *phpThread) getRequestContext() *frankenPHPContext {
-	return thread.handler.getRequestContext()
+func (thread *phpThread) frankenPHPContext() *frankenPHPContext {
+	return thread.handler.frankenPHPContext()
+}
+
+func (thread *phpThread) context() context.Context {
+	return thread.handler.context()
 }
 
 func (thread *phpThread) name() string {
