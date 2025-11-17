@@ -24,6 +24,11 @@ variable "CACHE" {
     default = ""
 }
 
+variable "CI" {
+    # CI flag coming from the environment or --set; empty by default
+    default = ""
+}
+
 variable DEFAULT_PHP_VERSION {
     default = "8.4"
 }
@@ -141,8 +146,7 @@ target "static-builder-musl" {
     }
     args = {
         FRANKENPHP_VERSION = VERSION
-        # pass CI flags from the environment so Dockerfiles can propagate them
-        CI = env("CI")
+        CI = CI
     }
     secret = ["id=github-token,env=GITHUB_TOKEN"]
 }
@@ -167,10 +171,7 @@ target "static-builder-gnu" {
     args = {
         FRANKENPHP_VERSION = VERSION
         GO_VERSION = GO_VERSION
-        # pass CI flags from the environment so Dockerfiles can propagate them
-        # use env() to read from the shell environment running bake
-        CI = env("CI")
-        GITHUB_ACTIONS = env("GITHUB_ACTIONS")
+        CI = CI
     }
     secret = ["id=github-token,env=GITHUB_TOKEN"]
 }
