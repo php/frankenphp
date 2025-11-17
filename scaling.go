@@ -178,7 +178,7 @@ func startUpscalingThreads(maxScaledThreads int, scale chan *frankenPHPContext, 
 
 			// check for max worker threads here again in case requests overflowed while waiting
 			if fc.worker.isAtThreadLimit() {
-				logger.Debug("cannot scale worker thread, max threads reached for worker", slog.String("worker", fc.worker.name))
+				globalLogger.Debug("cannot scale worker thread, max threads reached for worker", slog.String("worker", fc.worker.name))
 				continue
 			}
 
