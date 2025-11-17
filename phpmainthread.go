@@ -8,7 +8,6 @@ package frankenphp
 // #include "frankenphp.h"
 import "C"
 import (
-	"context"
 	"log/slog"
 	"strings"
 	"sync"
@@ -171,7 +170,9 @@ func (mainThread *phpMainThread) setAutomaticMaxThreads() {
 	maxAllowedThreads := totalSysMemory / uint64(perThreadMemoryLimit)
 	mainThread.maxThreads = int(maxAllowedThreads)
 
-	logger.LogAttrs(context.Background(), slog.LevelDebug, "Automatic thread limit", slog.Int("perThreadMemoryLimitMB", int(perThreadMemoryLimit/1024/1024)), slog.Int("maxThreads", mainThread.maxThreads))
+	if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
+		globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "Automatic thread limit", slog.Int("perThreadMemoryLimitMB", int(perThreadMemoryLimit/1024/1024)), slog.Int("maxThreads", mainThread.maxThreads))
+	}
 }
 
 //export go_frankenphp_shutdown_main_thread

@@ -36,6 +36,7 @@ ENV CI=${CI}
 ENV GITHUB_ACTIONS=${GITHUB_ACTIONS}
 
 # labels, same as static-builder.Dockerfile
+
 LABEL org.opencontainers.image.title=FrankenPHP
 LABEL org.opencontainers.image.description="The modern PHP app server"
 LABEL org.opencontainers.image.url=https://frankenphp.dev

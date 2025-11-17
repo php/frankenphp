@@ -1,56 +1,31 @@
 package frankenphp
 
 import (
-	"errors"
+	"context"
 	"net/http"
 )
 
-// EXPERIMENTAL: Worker allows you to register a worker where, instead of calling FrankenPHP handlers on
-// frankenphp_handle_request(), the GetRequest method is called.
-//
-// You may provide an http.Request that will be conferred to the underlying worker script,
-// or custom parameters that will be passed to frankenphp_handle_request().
-//
-// After the execution of frankenphp_handle_request(), the return value WorkerRequest.AfterFunc will be called,
-// with the optional return value of the callback passed as parameter.
-//
-// A worker script with the provided name, fileName and thread count will be registered, along with additional
-// configuration through WorkerOptions.
-//
-// Workers are designed to run indefinitely and will be gracefully shut down when FrankenPHP shuts down.
-//
-// Extension workers receive the lowest priority when determining thread allocations. If MinThreads cannot be
-// allocated, then FrankenPHP will panic and provide this information to the user (who will need to allocate more
-// total threads). Don't be greedy.
-type Worker struct {
-	name     string
-	fileName string
-	num      int
-	options  []WorkerOption
+// EXPERIMENTAL: Workers allows you to register a worker.
+type Workers interface {
+	// SendRequest calls the closure passed to frankenphp_handle_request() and updates the PHP context .
+	// The generated HTTP response will be written through the provided writer.
+	SendRequest(rw http.ResponseWriter, r *http.Request) error
+	// SendMessage calls the closure passed to frankenphp_handle_request(), passes message as a parameter, and returns the value produced by the closure.
+	SendMessage(ctx context.Context, message any, rw http.ResponseWriter) (any, error)
+	// NumThreads returns the number of available threads.
+	NumThreads() int
 }
 
-var extensionWorkers = make(map[string]Worker)
-
-// EXPERIMENTAL: RegisterWorker registers an external worker.
-// external workers are booted together with regular workers on server startup.
-func RegisterWorker(worker Worker) error {
-	if _, exists := extensionWorkers[worker.name]; exists {
-		return errors.New("worker with this name is already registered: " + worker.name)
-	}
-
-	extensionWorkers[worker.name] = worker
-
-	return nil
+type extensionWorkers struct {
+	name           string
+	fileName       string
+	num            int
+	options        []WorkerOption
+	internalWorker *worker
 }
 
 // EXPERIMENTAL: SendRequest sends an HTTP request to the worker and writes the response to the provided ResponseWriter.
-func (w Worker) SendRequest(rw http.ResponseWriter, r *http.Request) error {
-	worker := getWorkerByName(w.name)
-
-	if worker == nil {
-		return errors.New("worker not found: " + w.name)
-	}
-
+func (w *extensionWorkers) SendRequest(rw http.ResponseWriter, r *http.Request) error {
 	fr, err := NewRequestWithContext(
 		r,
 		WithOriginalRequest(r),
@@ -61,50 +36,22 @@ func (w Worker) SendRequest(rw http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	err = ServeHTTP(rw, fr)
-
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return ServeHTTP(rw, fr)
 }
 
-func (w Worker) NumThreads() int {
-	worker := getWorkerByName(w.name)
-
-	if worker == nil {
-		return 0
-	}
-
-	return worker.countThreads()
+func (w *extensionWorkers) NumThreads() int {
+	return w.internalWorker.countThreads()
 }
 
 // EXPERIMENTAL: SendMessage sends a message to the worker and waits for a response.
-func (w Worker) SendMessage(message any, rw http.ResponseWriter) (any, error) {
-	internalWorker := getWorkerByName(w.name)
-
-	if internalWorker == nil {
-		return nil, errors.New("worker not found: " + w.name)
-	}
-
+func (w *extensionWorkers) SendMessage(ctx context.Context, message any, rw http.ResponseWriter) (any, error) {
 	fc := newFrankenPHPContext()
-	fc.logger = logger
-	fc.worker = internalWorker
+	fc.logger = globalLogger
+	fc.worker = w.internalWorker
 	fc.responseWriter = rw
 	fc.handlerParameters = message
 
-	internalWorker.handleRequest(fc)
+	err := w.internalWorker.handleRequest(contextHolder{context.WithValue(ctx, contextKey, fc), fc})
 
-	return fc.handlerReturn, nil
-}
-
-// EXPERIMENTAL: NewWorker registers an external worker with the given options
-func NewWorker(name string, fileName string, num int, options ...WorkerOption) Worker {
-	return Worker{
-		name:     name,
-		fileName: fileName,
-		num:      num,
-		options:  options,
-	}
+	return fc.handlerReturn, err
 }

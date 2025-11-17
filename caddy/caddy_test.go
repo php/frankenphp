@@ -168,6 +168,28 @@ func TestGlobalAndModuleWorker(t *testing.T) {
 	wg.Wait()
 }
 
+func TestModuleWorkerInheritsEnv(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	tester.InitServer(`
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		http://localhost:`+testPort+` {
+			route {
+				php {
+					root ../testdata
+					env APP_ENV inherit_this
+					worker worker-with-env.php
+				}
+			}
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/worker-with-env.php", http.StatusOK, "Worker has APP_ENV=inherit_this")
+}
+
 func TestNamedModuleWorkers(t *testing.T) {
 	var wg sync.WaitGroup
 	testPortNum, _ := strconv.Atoi(testPort)
@@ -943,7 +965,7 @@ func TestMaxWaitTime(t *testing.T) {
 	for range 10 {
 		go func() {
 			statusCode := getStatusCode("http://localhost:"+testPort+"/sleep.php?sleep=10", t)
-			if statusCode == http.StatusGatewayTimeout {
+			if statusCode == http.StatusServiceUnavailable {
 				success.Store(true)
 			}
 			wg.Done()
@@ -951,7 +973,7 @@ func TestMaxWaitTime(t *testing.T) {
 	}
 	wg.Wait()
 
-	require.True(t, success.Load(), "At least one request should have failed with a 504 Gateway Timeout status")
+	require.True(t, success.Load(), "At least one request should have failed with a 503 Service Unavailable status")
 }
 
 func TestMaxWaitTimeWorker(t *testing.T) {
@@ -990,23 +1012,26 @@ func TestMaxWaitTimeWorker(t *testing.T) {
 	for range 10 {
 		go func() {
 			statusCode := getStatusCode("http://localhost:"+testPort+"/sleep.php?sleep=10&iteration=1", t)
-			if statusCode == http.StatusGatewayTimeout {
+			if statusCode == http.StatusServiceUnavailable {
 				success.Store(true)
 			}
 			wg.Done()
 		}()
 	}
 	wg.Wait()
-	require.True(t, success.Load(), "At least one request should have failed with a 504 Gateway Timeout status")
+	require.True(t, success.Load(), "At least one request should have failed with a 503 Service Unavailable status")
 
 	// Fetch metrics
 	resp, err := http.Get("http://localhost:2999/metrics")
 	require.NoError(t, err, "failed to fetch metrics")
-	defer resp.Body.Close()
+	t.Cleanup(func() {
+		require.NoError(t, resp.Body.Close())
+	})
 
 	// Read and parse metrics
 	metrics := new(bytes.Buffer)
 	_, err = metrics.ReadFrom(resp.Body)
+	require.NoError(t, err)
 
 	expectedMetrics := `
 	# TYPE frankenphp_worker_queue_depth gauge
