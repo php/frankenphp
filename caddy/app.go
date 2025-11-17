@@ -1,6 +1,7 @@
 package caddy
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -56,6 +57,7 @@ type FrankenPHPApp struct {
 	MaxWaitTime time.Duration `json:"max_wait_time,omitempty"`
 
 	metrics frankenphp.Metrics
+	ctx     context.Context
 	logger  *slog.Logger
 }
 
@@ -71,6 +73,7 @@ func (f FrankenPHPApp) CaddyModule() caddy.ModuleInfo {
 
 // Provision sets up the module.
 func (f *FrankenPHPApp) Provision(ctx caddy.Context) error {
+	f.ctx = ctx
 	f.logger = ctx.Slogger()
 
 	if httpApp, err := ctx.AppIfConfigured("http"); err == nil {
@@ -128,9 +131,10 @@ func (f *FrankenPHPApp) Start() error {
 	repl := caddy.NewReplacer()
 
 	opts := []frankenphp.Option{
+		frankenphp.WithContext(f.ctx),
+		frankenphp.WithLogger(f.logger),
 		frankenphp.WithNumThreads(f.NumThreads),
 		frankenphp.WithMaxThreads(f.MaxThreads),
-		frankenphp.WithLogger(f.logger),
 		frankenphp.WithMetrics(f.metrics),
 		frankenphp.WithPhpIni(f.PhpIni),
 		frankenphp.WithMaxWaitTime(f.MaxWaitTime),
@@ -160,7 +164,11 @@ func (f *FrankenPHPApp) Start() error {
 }
 
 func (f *FrankenPHPApp) Stop() error {
-	f.logger.Info("FrankenPHP stopped 🐘")
+	ctx := caddy.ActiveContext()
+
+	if f.logger.Enabled(caddy.ActiveContext(), slog.LevelInfo) {
+		f.logger.LogAttrs(ctx, slog.LevelInfo, "FrankenPHP stopped 🐘")
+	}
 
 	// attempt a graceful shutdown if caddy is exiting
 	// note: Exiting() is currently marked as 'experimental'

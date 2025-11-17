@@ -1,5 +1,7 @@
 package frankenphp
 
+import "context"
+
 // representation of a thread with no work assigned to it
 // implements the threadHandler interface
 // each inactive thread weighs around ~350KB
@@ -18,6 +20,7 @@ func (handler *inactiveThread) beforeScriptExecution() string {
 	switch thread.state.get() {
 	case stateTransitionRequested:
 		return thread.transitionToNewHandler()
+
 	case stateBooting, stateTransitionComplete:
 		thread.state.set(stateInactive)
 
@@ -25,11 +28,14 @@ func (handler *inactiveThread) beforeScriptExecution() string {
 		thread.state.markAsWaiting(true)
 		thread.state.waitFor(stateTransitionRequested, stateShuttingDown)
 		thread.state.markAsWaiting(false)
+
 		return handler.beforeScriptExecution()
+
 	case stateShuttingDown:
 		// signal to stop
 		return ""
 	}
+
 	panic("unexpected state: " + thread.state.name())
 }
 
@@ -37,7 +43,11 @@ func (handler *inactiveThread) afterScriptExecution(int) {
 	panic("inactive threads should not execute scripts")
 }
 
-func (handler *inactiveThread) getRequestContext() *frankenPHPContext {
+func (handler *inactiveThread) frankenPHPContext() *frankenPHPContext {
+	return nil
+}
+
+func (handler *inactiveThread) context() context.Context {
 	return nil
 }
 

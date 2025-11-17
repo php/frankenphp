@@ -1,6 +1,7 @@
 package frankenphp
 
 import (
+	"context"
 	"sync"
 )
 
@@ -60,11 +61,15 @@ func (handler *taskThread) beforeScriptExecution() string {
 	panic("unexpected state: " + thread.state.name())
 }
 
-func (handler *taskThread) afterScriptExecution(int) {
+func (handler *taskThread) afterScriptExecution(_ int) {
 	panic("task threads should not execute scripts")
 }
 
-func (handler *taskThread) getRequestContext() *frankenPHPContext {
+func (handler *taskThread) frankenPHPContext() *frankenPHPContext {
+	return nil
+}
+
+func (handler *taskThread) context() context.Context {
 	return nil
 }
 

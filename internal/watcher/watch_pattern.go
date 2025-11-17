@@ -3,7 +3,6 @@
 package watcher
 
 import (
-	"context"
 	"log/slog"
 	"path/filepath"
 	"strings"
@@ -81,9 +80,10 @@ func isValidEventType(eventType int) bool {
 
 // 0:dir,1:file,2:hard_link,3:sym_link,4:watcher,5:other,
 func isValidPathType(pathType int, fileName string) bool {
-	if pathType == 4 {
-		logger.LogAttrs(context.Background(), slog.LevelDebug, "special edant/watcher event", slog.String("fileName", fileName))
+	if pathType == 4 && logger.Enabled(ctx, slog.LevelDebug) {
+		logger.LogAttrs(ctx, slog.LevelDebug, "special edant/watcher event", slog.String("fileName", fileName))
 	}
+
 	return pathType <= 2
 }
 
@@ -163,9 +163,14 @@ func matchPattern(pattern string, fileName string) bool {
 	if pattern == "" {
 		return true
 	}
+
 	patternMatches, err := filepath.Match(pattern, fileName)
+
 	if err != nil {
-		logger.LogAttrs(context.Background(), slog.LevelError, "failed to match filename", slog.String("file", fileName), slog.Any("error", err))
+		if logger.Enabled(ctx, slog.LevelError) {
+			logger.LogAttrs(ctx, slog.LevelError, "failed to match filename", slog.String("file", fileName), slog.Any("error", err))
+		}
+
 		return false
 	}
 

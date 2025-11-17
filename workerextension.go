@@ -1,6 +1,7 @@
 package frankenphp
 
 import (
+	"context"
 	"net/http"
 )
 
@@ -10,7 +11,7 @@ type Workers interface {
 	// The generated HTTP response will be written through the provided writer.
 	SendRequest(rw http.ResponseWriter, r *http.Request) error
 	// SendMessage calls the closure passed to frankenphp_handle_request(), passes message as a parameter, and returns the value produced by the closure.
-	SendMessage(message any, rw http.ResponseWriter) (any, error)
+	SendMessage(ctx context.Context, message any, rw http.ResponseWriter) (any, error)
 	// NumThreads returns the number of available threads.
 	NumThreads() int
 }
@@ -43,14 +44,14 @@ func (w *extensionWorkers) NumThreads() int {
 }
 
 // EXPERIMENTAL: SendMessage sends a message to the worker and waits for a response.
-func (w *extensionWorkers) SendMessage(message any, rw http.ResponseWriter) (any, error) {
+func (w *extensionWorkers) SendMessage(ctx context.Context, message any, rw http.ResponseWriter) (any, error) {
 	fc := newFrankenPHPContext()
-	fc.logger = logger
+	fc.logger = globalLogger
 	fc.worker = w.internalWorker
 	fc.responseWriter = rw
 	fc.handlerParameters = message
 
-	err := w.internalWorker.handleRequest(fc)
+	err := w.internalWorker.handleRequest(contextHolder{context.WithValue(ctx, contextKey, fc), fc})
 
 	return fc.handlerReturn, err
 }
