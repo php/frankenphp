@@ -8,7 +8,6 @@ import (
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
-	caddyMercure "github.com/dunglas/mercure/caddy"
 )
 
 const (
@@ -17,8 +16,6 @@ const (
 )
 
 func init() {
-	caddyMercure.AllowNoPublish = true
-
 	caddy.RegisterModule(FrankenPHPApp{})
 	caddy.RegisterModule(FrankenPHPModule{})
 	caddy.RegisterModule(FrankenPHPAdmin{})
@@ -32,7 +29,7 @@ func init() {
 	httpcaddyfile.RegisterDirectiveOrder("php_server", "before", "file_server")
 }
 
-// wrongSubDirectiveError returns a nice error message.s
+// wrongSubDirectiveError returns a nice error message.
 func wrongSubDirectiveError(module string, allowedDirectives string, wrongValue string) error {
 	return fmt.Errorf("unknown %q subdirective: %s (allowed directives are: %s)", module, wrongValue, allowedDirectives)
 }

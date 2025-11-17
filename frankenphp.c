@@ -541,12 +541,12 @@ PHP_FUNCTION(mercure_publish) {
                          0);
     RETURN_THROWS();
   case 2:
-    zend_throw_exception(spl_ce_RuntimeException, "Publish failed", 1);
+    zend_throw_exception(spl_ce_RuntimeException, "Publish failed", 0);
     RETURN_THROWS();
   }
 
   zend_throw_exception(spl_ce_RuntimeException,
-                       "FrankenPHP not built with Mercure support", 1);
+                       "FrankenPHP not built with Mercure support", 0);
   RETURN_THROWS();
 }
 
