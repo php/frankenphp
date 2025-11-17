@@ -205,7 +205,8 @@ else
 	# shellcheck disable=SC2086
 	${spcCommand} build --enable-zts --build-embed ${SPC_OPT_BUILD_ARGS} "${PHP_EXTENSIONS}" --with-libs="${PHP_EXTENSION_LIBS}"
 
-	if [ -n "$GITHUB_ACTIONS" ] || [ -n "$CI" ]; then
+	if [ -n "$CI" ]; then
+		rm -rf ./downloads
 		rm -rf ./source
 	fi
 

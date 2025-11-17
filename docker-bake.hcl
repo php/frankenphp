@@ -142,8 +142,7 @@ target "static-builder-musl" {
     args = {
         FRANKENPHP_VERSION = VERSION
         # pass CI flags from the environment so Dockerfiles can propagate them
-        CI = CI
-        GITHUB_ACTIONS = GITHUB_ACTIONS
+        CI = env("CI")
     }
     secret = ["id=github-token,env=GITHUB_TOKEN"]
 }
@@ -169,8 +168,9 @@ target "static-builder-gnu" {
         FRANKENPHP_VERSION = VERSION
         GO_VERSION = GO_VERSION
         # pass CI flags from the environment so Dockerfiles can propagate them
-        CI = CI
-        GITHUB_ACTIONS = GITHUB_ACTIONS
+        # use env() to read from the shell environment running bake
+        CI = env("CI")
+        GITHUB_ACTIONS = env("GITHUB_ACTIONS")
     }
     secret = ["id=github-token,env=GITHUB_TOKEN"]
 }
