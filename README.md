@@ -109,6 +109,8 @@ To serve the content of the current directory, run:
 frankenphp php-server
 ```
 
+If you need extensions, you will have to install them with [pie](https://github.com/php/pie).
+
 ## Docs
 
 - [Classic mode](https://frankenphp.dev/docs/classic/)
