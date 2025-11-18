@@ -269,6 +269,7 @@ func (worker *worker) handleRequest(ch contextHolder) error {
 		if worker.isAtThreadLimit() {
 			workerScaleChan = nil // max_threads for this worker reached, do not attempt scaling
 		}
+
 		select {
 		case worker.requestChan <- ch:
 			metrics.DequeuedWorkerRequest(worker.name)

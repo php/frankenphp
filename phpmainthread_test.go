@@ -310,6 +310,7 @@ func TestCorrectThreadCalculation(t *testing.T) {
 
 func testThreadCalculation(t *testing.T, expectedNumThreads int, expectedMaxThreads int, o *opt) {
 	t.Helper()
+
 	_, err := calculateMaxThreads(o)
 	assert.NoError(t, err, "no error should be returned")
 	assert.Equal(t, expectedNumThreads, o.numThreads, "num_threads must be correct")
@@ -318,6 +319,7 @@ func testThreadCalculation(t *testing.T, expectedNumThreads int, expectedMaxThre
 
 func testThreadCalculationError(t *testing.T, o *opt) {
 	t.Helper()
+
 	_, err := calculateMaxThreads(o)
 	assert.Error(t, err, "configuration must error")
 }

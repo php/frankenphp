@@ -170,9 +170,11 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 			if w.maxThreads < w.num {
 				return 0, fmt.Errorf("worker max_threads (%d) must be greater or equal to worker num (%d) (%q)", w.maxThreads, w.num, w.fileName)
 			}
+
 			if w.maxThreads > opt.maxThreads && opt.maxThreads > 0 {
 				return 0, fmt.Errorf("worker max_threads (%d) cannot be greater than total max_threads (%d) (%q)", w.maxThreads, opt.maxThreads, w.fileName)
 			}
+
 			maxThreadsFromWorkers += w.maxThreads - w.num
 		}
 	}
