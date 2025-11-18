@@ -218,7 +218,7 @@ $user->updateInfo(null, 25, null);          // Nameとactiveがnull
 
 ### 定数の宣言
 
-ジェネレーターは、2つのディレクティブを使用してGo定数をPHPにエクスポートすることをサポートしています：グローバル定数用の`//export_php:const`とクラス定数用の`//export_php:classconstant`です。これにより、GoとPHPコード間で設定値、ステータスコード、その他の定数を共有できます。
+ジェネレーターは、2つのディレクティブを使用してGo定数をPHPにエクスポートすることをサポートしています：グローバル定数用の`//export_php:const`とクラス定数用の`//export_php:classconst`です。これにより、GoとPHPコード間で設定値、ステータスコード、その他の定数を共有できます。
 
 #### グローバル定数
 
@@ -240,25 +240,25 @@ const STATUS_ERROR = iota
 
 #### クラス定数
 
-`//export_php:classconstant ClassName`ディレクティブを使用して、特定のPHPクラスに属する定数を作成できます：
+`//export_php:classconst ClassName`ディレクティブを使用して、特定のPHPクラスに属する定数を作成できます：
 
 ```go
-//export_php:classconstant User
+//export_php:classconst User
 const STATUS_ACTIVE = 1
 
-//export_php:classconstant User
+//export_php:classconst User
 const STATUS_INACTIVE = 0
 
-//export_php:classconstant User
+//export_php:classconst User
 const ROLE_ADMIN = "admin"
 
-//export_php:classconstant Order
+//export_php:classconst Order
 const STATE_PENDING = iota
 
-//export_php:classconstant Order
+//export_php:classconst Order
 const STATE_PROCESSING = iota
 
-//export_php:classconstant Order
+//export_php:classconst Order
 const STATE_COMPLETED = iota
 ```
 
@@ -294,10 +294,10 @@ const STR_REVERSE = iota
 //export_php:const
 const STR_NORMAL = iota
 
-//export_php:classconstant StringProcessor
+//export_php:classconst StringProcessor
 const MODE_LOWERCASE = 1
 
-//export_php:classconstant StringProcessor
+//export_php:classconst StringProcessor
 const MODE_UPPERCASE = 2
 
 //export_php:function repeat_this(string $str, int $count, int $mode): string
