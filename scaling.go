@@ -171,11 +171,21 @@ func startUpscalingThreads(maxScaledThreads int, scale chan *frankenPHPContext, 
 			}
 
 			// if the request has been stalled long enough, scale
-			if fc.worker != nil {
-				scaleWorkerThread(fc.worker)
-			} else {
+			if fc.worker == nil {
 				scaleRegularThread()
+				continue
 			}
+
+			// check for max worker threads here again in case requests overflowed while waiting
+			if fc.worker.isAtThreadLimit() {
+				if globalLogger.Enabled(globalCtx, slog.LevelInfo) {
+					globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "cannot scale worker thread, max threads reached for worker", slog.String("worker", fc.worker.name))
+				}
+
+				continue
+			}
+
+			scaleWorkerThread(fc.worker)
 		case <-done:
 			return
 		}
