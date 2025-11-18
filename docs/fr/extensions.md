@@ -349,7 +349,7 @@ Cette conception garantit que votre code Go a un contrôle complet sur la façon
 
 ### Déclarer des Constantes
 
-Le générateur prend en charge l'exportation de constantes Go vers PHP en utilisant deux directives : `//export_php:const` pour les constantes globales et `//export_php:classconstant` pour les constantes de classe. Cela vous permet de partager des valeurs de configuration, des codes de statut et d'autres constantes entre le code Go et PHP.
+Le générateur prend en charge l'exportation de constantes Go vers PHP en utilisant deux directives : `//export_php:const` pour les constantes globales et `//export_php:classconst` pour les constantes de classe. Cela vous permet de partager des valeurs de configuration, des codes de statut et d'autres constantes entre le code Go et PHP.
 
 #### Constantes Globales
 
@@ -373,27 +373,27 @@ const STATUS_ERROR = iota
 
 #### Constantes de Classe
 
-Utilisez la directive `//export_php:classconstant ClassName` pour créer des constantes qui appartiennent à une classe PHP spécifique :
+Utilisez la directive `//export_php:classconst ClassName` pour créer des constantes qui appartiennent à une classe PHP spécifique :
 
 ```go
 package example
 
-//export_php:classconstant User
+//export_php:classconst User
 const STATUS_ACTIVE = 1
 
-//export_php:classconstant User
+//export_php:classconst User
 const STATUS_INACTIVE = 0
 
-//export_php:classconstant User
+//export_php:classconst User
 const ROLE_ADMIN = "admin"
 
-//export_php:classconstant Order
+//export_php:classconst Order
 const STATE_PENDING = iota
 
-//export_php:classconstant Order
+//export_php:classconst Order
 const STATE_PROCESSING = iota
 
-//export_php:classconstant Order
+//export_php:classconst Order
 const STATE_COMPLETED = iota
 ```
 
@@ -434,10 +434,10 @@ const STR_REVERSE = iota
 //export_php:const
 const STR_NORMAL = iota
 
-//export_php:classconstant StringProcessor
+//export_php:classconst StringProcessor
 const MODE_LOWERCASE = 1
 
-//export_php:classconstant StringProcessor
+//export_php:classconst StringProcessor
 const MODE_UPPERCASE = 2
 
 //export_php:function repeat_this(string $str, int $count, int $mode): string
