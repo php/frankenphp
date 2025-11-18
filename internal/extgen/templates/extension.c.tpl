@@ -159,11 +159,20 @@ PHP_MINIT_FUNCTION({{.BaseName}}) {
 
     {{- range .Constants}}
     {{- if eq .ClassName ""}}
+    {{- if $.Namespace}}
+        {{if .IsIota}}REGISTER_NS_LONG_CONSTANT("{{cString $.Namespace}}", "{{.Name}}", {{.Name}}, CONST_CS | CONST_PERSISTENT);
+        {{else if eq .PhpType "string"}}REGISTER_NS_STRING_CONSTANT("{{cString $.Namespace}}", "{{.Name}}", {{.CValue}}, CONST_CS | CONST_PERSISTENT);
+        {{else if eq .PhpType "bool"}}REGISTER_NS_LONG_CONSTANT("{{cString $.Namespace}}", "{{.Name}}", {{if eq .Value "true"}}1{{else}}0{{end}}, CONST_CS | CONST_PERSISTENT);
+        {{else if eq .PhpType "float"}}REGISTER_NS_DOUBLE_CONSTANT("{{cString $.Namespace}}", "{{.Name}}", {{.CValue}}, CONST_CS | CONST_PERSISTENT);
+        {{else}}REGISTER_NS_LONG_CONSTANT("{{cString $.Namespace}}", "{{.Name}}", {{.CValue}}, CONST_CS | CONST_PERSISTENT);
+        {{- end}}
+    {{- else}}
     {{if .IsIota}}REGISTER_LONG_CONSTANT("{{.Name}}", {{.Name}}, CONST_CS | CONST_PERSISTENT);
     {{else if eq .PhpType "string"}}REGISTER_STRING_CONSTANT("{{.Name}}", {{.CValue}}, CONST_CS | CONST_PERSISTENT);
     {{else if eq .PhpType "bool"}}REGISTER_LONG_CONSTANT("{{.Name}}", {{if eq .Value "true"}}1{{else}}0{{end}}, CONST_CS | CONST_PERSISTENT);
     {{else if eq .PhpType "float"}}REGISTER_DOUBLE_CONSTANT("{{.Name}}", {{.CValue}}, CONST_CS | CONST_PERSISTENT);
     {{else}}REGISTER_LONG_CONSTANT("{{.Name}}", {{.CValue}}, CONST_CS | CONST_PERSISTENT);
+    {{- end}}
     {{- end}}
     {{- end}}
     {{- end}}
