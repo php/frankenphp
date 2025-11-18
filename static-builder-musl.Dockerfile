@@ -25,6 +25,9 @@ ENV GOTOOLCHAIN=local
 
 SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
 
+ARG CI
+ENV CI=${CI}
+
 LABEL org.opencontainers.image.title=FrankenPHP
 LABEL org.opencontainers.image.description="The modern PHP app server"
 LABEL org.opencontainers.image.url=https://frankenphp.dev

@@ -29,7 +29,12 @@ ENV GOTOOLCHAIN=local
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# labels, same as static-builder-musl.Dockerfile
+# Pass through CI environment flag so build-static.sh can detect CI context
+ARG CI
+ENV CI=${CI}
+
+# labels, same as static-builder.Dockerfile
+
 LABEL org.opencontainers.image.title=FrankenPHP
 LABEL org.opencontainers.image.description="The modern PHP app server"
 LABEL org.opencontainers.image.url=https://frankenphp.dev
