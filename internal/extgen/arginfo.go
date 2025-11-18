@@ -2,6 +2,7 @@ package extgen
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,7 +26,9 @@ func (ag *arginfoGenerator) generate() error {
 	stubFile := ag.generator.BaseName + ".stub.php"
 	cmd := exec.Command("php", genStubPath, filepath.Join(ag.generator.BuildDir, stubFile))
 
-	if err := cmd.Run(); err != nil {
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Print("gen_stub.php output:\n", string(output))
 		return fmt.Errorf("running gen_stub script: %w", err)
 	}
 

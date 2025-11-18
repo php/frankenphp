@@ -24,6 +24,11 @@ variable "CACHE" {
     default = ""
 }
 
+variable "CI" {
+    # CI flag coming from the environment or --set; empty by default
+    default = ""
+}
+
 variable DEFAULT_PHP_VERSION {
     default = "8.4"
 }
@@ -141,6 +146,7 @@ target "static-builder-musl" {
     }
     args = {
         FRANKENPHP_VERSION = VERSION
+        CI = CI
     }
     secret = ["id=github-token,env=GITHUB_TOKEN"]
 }
@@ -165,6 +171,7 @@ target "static-builder-gnu" {
     args = {
         FRANKENPHP_VERSION = VERSION
         GO_VERSION = GO_VERSION
+        CI = CI
     }
     secret = ["id=github-token,env=GITHUB_TOKEN"]
 }
