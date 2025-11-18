@@ -48,6 +48,7 @@ type FrankenPHPModule struct {
 	preparedEnv                 frankenphp.PreparedEnv
 	preparedEnvNeedsReplacement bool
 	logger                      *slog.Logger
+	mercureHubRequestOption     *frankenphp.RequestOption
 }
 
 // CaddyModule returns the Caddy module information.
@@ -145,6 +146,8 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		}
 	}
 
+	f.assignMercureHubRequestOption(ctx)
+
 	return nil
 }
 
@@ -187,14 +190,32 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 		}
 	}
 
-	fr, err := frankenphp.NewRequestWithContext(
-		r,
-		documentRootOption,
-		frankenphp.WithRequestSplitPath(f.SplitPath),
-		frankenphp.WithRequestPreparedEnv(env),
-		frankenphp.WithOriginalRequest(&origReq),
-		frankenphp.WithWorkerName(workerName),
+	var (
+		err error
+		fr  *http.Request
 	)
+
+	if f.mercureHubRequestOption == nil {
+		fr, err = frankenphp.NewRequestWithContext(
+			r,
+			documentRootOption,
+			frankenphp.WithRequestSplitPath(f.SplitPath),
+			frankenphp.WithRequestPreparedEnv(env),
+			frankenphp.WithOriginalRequest(&origReq),
+			frankenphp.WithWorkerName(workerName),
+		)
+	} else {
+		fr, err = frankenphp.NewRequestWithContext(
+			r,
+			documentRootOption,
+			frankenphp.WithRequestSplitPath(f.SplitPath),
+			frankenphp.WithRequestPreparedEnv(env),
+			frankenphp.WithOriginalRequest(&origReq),
+			frankenphp.WithWorkerName(workerName),
+			*f.mercureHubRequestOption,
+		)
+	}
+
 	if err != nil {
 		return caddyhttp.Error(http.StatusInternalServerError, err)
 	}
@@ -258,8 +279,7 @@ func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				f.Workers = append(f.Workers, wc)
 
 			default:
-				allowedDirectives := "root, split, env, resolve_root_symlink, worker"
-				return wrongSubDirectiveError("php or php_server", allowedDirectives, d.Val())
+				return wrongSubDirectiveError("php or php_server", "root, split, env, resolve_root_symlink, worker", d.Val())
 			}
 		}
 	}
