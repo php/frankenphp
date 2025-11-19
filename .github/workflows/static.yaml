@@ -224,17 +224,17 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.ref }}
           persist-credentials: false
-      - name: Set FRANKENPHP_VERSION
+      - name: Set VERSION
         run: |
           if [ "${GITHUB_REF_TYPE}" == "tag" ]; then
-            export FRANKENPHP_VERSION=${GITHUB_REF_NAME:1}
+            export VERSION=${GITHUB_REF_NAME:1}
           elif [ "${GITHUB_EVENT_NAME}" == "schedule" ]; then
-            export FRANKENPHP_VERSION="${REF}"
+            export VERSION="${REF}"
           else
-            export FRANKENPHP_VERSION=${GITHUB_SHA}
+            export VERSION=${GITHUB_SHA}
           fi
 
-          echo "FRANKENPHP_VERSION=${FRANKENPHP_VERSION}" >> "${GITHUB_ENV}"
+          echo "VERSION=${VERSION}" >> "${GITHUB_ENV}"
         env:
           REF: ${{ needs.prepare.outputs.ref }}
       - name: Set up Docker Buildx
@@ -266,7 +266,6 @@ jobs:
             ${{ fromJson(needs.prepare.outputs.push) && format('*.output=type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME) || '' }}
         env:
           SHA: ${{ github.sha }}
-          VERSION: ${{ (github.ref_type == 'tag' && github.ref_name) || needs.prepare.outputs.ref || 'dev' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - # Workaround for https://github.com/actions/runner/pull/2477#issuecomment-1501003600
         name: Export metadata
