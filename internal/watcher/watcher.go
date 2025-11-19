@@ -53,18 +53,19 @@ func InitWatcher(ct context.Context, filePatterns []string, callback func(), slo
 	if len(filePatterns) == 0 {
 		return nil
 	}
+
 	if watcherIsActive.Load() {
 		return ErrAlreadyStarted
 	}
+
 	watcherIsActive.Store(true)
 	ctx = ct
 	logger = slogger
 	activeWatcher = &watcher{callback: callback}
-	err := activeWatcher.startWatching(ctx, filePatterns)
-	if err != nil {
+
+	if 	err := activeWatcher.startWatching(ctx, filePatterns); err != nil {
 		return err
 	}
-	reloadWaitGroup = sync.WaitGroup{}
 
 	return nil
 }
@@ -73,6 +74,7 @@ func DrainWatcher() {
 	if !watcherIsActive.Load() {
 		return
 	}
+
 	watcherIsActive.Store(false)
 
 	if logger.Enabled(ctx, slog.LevelDebug) {

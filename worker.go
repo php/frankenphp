@@ -36,7 +36,6 @@ var (
 
 func initWorkers(opt []workerOpt) error {
 	workers = make([]*worker, 0, len(opt))
-	workersReady := sync.WaitGroup{}
 	directoriesToWatch := getDirectoriesToWatch(opt)
 	watcherIsEnabled = len(directoriesToWatch) > 0
 
@@ -48,15 +47,16 @@ func initWorkers(opt []workerOpt) error {
 		workers = append(workers, w)
 	}
 
+	var workersReady sync.WaitGroup
+
 	for _, w := range workers {
-		workersReady.Add(w.num)
 		for i := 0; i < w.num; i++ {
 			thread := getInactivePHPThread()
 			convertToWorkerThread(thread, w)
-			go func() {
+
+			workersReady.Go(func() {
 				thread.state.waitFor(stateReady)
-				workersReady.Done()
-			}()
+			})
 		}
 	}
 
