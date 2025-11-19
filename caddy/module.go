@@ -2,6 +2,7 @@ package caddy
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -20,6 +21,8 @@ import (
 	"github.com/dunglas/frankenphp"
 	"github.com/dunglas/frankenphp/internal/fastabs"
 )
+
+var serverHeader = []string{"FrankenPHP Caddy"}
 
 // FrankenPHPModule represents the "php_server" and "php" directives in the Caddyfile
 // they are responsible for forwarding requests to FrankenPHP via "ServeHTTP"
@@ -45,6 +48,7 @@ type FrankenPHPModule struct {
 	preparedEnv                 frankenphp.PreparedEnv
 	preparedEnvNeedsReplacement bool
 	logger                      *slog.Logger
+	mercureHubRequestOption     *frankenphp.RequestOption
 }
 
 // CaddyModule returns the Caddy module information.
@@ -142,6 +146,8 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		}
 	}
 
+	f.assignMercureHubRequestOption(ctx)
+
 	return nil
 }
 
@@ -184,16 +190,39 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 		}
 	}
 
-	fr, err := frankenphp.NewRequestWithContext(
-		r,
-		documentRootOption,
-		frankenphp.WithRequestSplitPath(f.SplitPath),
-		frankenphp.WithRequestPreparedEnv(env),
-		frankenphp.WithOriginalRequest(&origReq),
-		frankenphp.WithWorkerName(workerName),
+	var (
+		err error
+		fr  *http.Request
 	)
 
-	if err = frankenphp.ServeHTTP(w, fr); err != nil {
+	if f.mercureHubRequestOption == nil {
+		fr, err = frankenphp.NewRequestWithContext(
+			r,
+			documentRootOption,
+			frankenphp.WithRequestSplitPath(f.SplitPath),
+			frankenphp.WithRequestPreparedEnv(env),
+			frankenphp.WithOriginalRequest(&origReq),
+			frankenphp.WithWorkerName(workerName),
+		)
+	} else {
+		fr, err = frankenphp.NewRequestWithContext(
+			r,
+			documentRootOption,
+			frankenphp.WithRequestSplitPath(f.SplitPath),
+			frankenphp.WithRequestPreparedEnv(env),
+			frankenphp.WithOriginalRequest(&origReq),
+			frankenphp.WithWorkerName(workerName),
+			*f.mercureHubRequestOption,
+		)
+	}
+
+	if err != nil {
+		return caddyhttp.Error(http.StatusInternalServerError, err)
+	}
+
+	// TODO: set caddyhttp.ServerHeader when https://github.com/caddyserver/caddy/pull/7338 will be released
+	w.Header()["Server"] = serverHeader
+	if err = frankenphp.ServeHTTP(w, fr); err != nil && !errors.As(err, &frankenphp.ErrRejected{}) {
 		return caddyhttp.Error(http.StatusInternalServerError, err)
 	}
 
@@ -202,7 +231,6 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 
 // UnmarshalCaddyfile implements caddyfile.Unmarshaler.
 func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
-	// First pass: Parse all directives except "worker"
 	for d.Next() {
 		for d.NextBlock(0) {
 			switch d.Val() {
@@ -251,8 +279,7 @@ func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				f.Workers = append(f.Workers, wc)
 
 			default:
-				allowedDirectives := "root, split, env, resolve_root_symlink, worker"
-				return wrongSubDirectiveError("php or php_server", allowedDirectives, d.Val())
+				return wrongSubDirectiveError("php or php_server", "root, split, env, resolve_root_symlink, worker", d.Val())
 			}
 		}
 	}

@@ -1,6 +1,7 @@
 package frankenphp
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"time"
@@ -19,6 +20,7 @@ type WorkerOption func(*workerOpt) error
 //
 // If you change this, also update the Caddy module and the documentation.
 type opt struct {
+	ctx         context.Context
 	numThreads  int
 	maxThreads  int
 	workers     []workerOpt
@@ -32,13 +34,24 @@ type workerOpt struct {
 	name                   string
 	fileName               string
 	num                    int
+	maxThreads             int
 	env                    PreparedEnv
 	watch                  []string
 	maxConsecutiveFailures int
+	extensionWorkers       *extensionWorkers
 	onThreadReady          func(int)
 	onThreadShutdown       func(int)
 	onServerStartup        func()
 	onServerShutdown       func()
+}
+
+// WithContext sets the main context to use.
+func WithContext(ctx context.Context) Option {
+	return func(h *opt) error {
+		h.ctx = ctx
+
+		return nil
+	}
 }
 
 // WithNumThreads configures the number of PHP threads to start.
@@ -67,7 +80,7 @@ func WithMetrics(m Metrics) Option {
 }
 
 // WithWorkers configures the PHP workers to start
-func WithWorkers(name string, fileName string, num int, options ...WorkerOption) Option {
+func WithWorkers(name, fileName string, num int, options ...WorkerOption) Option {
 	return func(o *opt) error {
 		worker := workerOpt{
 			name:                   name,
@@ -90,10 +103,67 @@ func WithWorkers(name string, fileName string, num int, options ...WorkerOption)
 	}
 }
 
+// EXPERIMENTAL: WithExtensionWorkers allow extensions to create workers.
+//
+// A worker script with the provided name, fileName and thread count will be registered, along with additional
+// configuration through WorkerOptions.
+//
+// Workers are designed to run indefinitely and will be gracefully shut down when FrankenPHP shuts down.
+//
+// Extension workers receive the lowest priority when determining thread allocations. If the requested number of threads
+// cannot be allocated, then FrankenPHP will panic and provide this information to the user (who will need to allocate
+// more total threads). Don't be greedy.
+func WithExtensionWorkers(name, fileName string, numThreads int, options ...WorkerOption) (Workers, Option) {
+	w := &extensionWorkers{
+		name:     name,
+		fileName: fileName,
+		num:      numThreads,
+	}
+
+	w.options = append(options, withExtensionWorkers(w))
+
+	return w, WithWorkers(w.name, w.fileName, w.num, w.options...)
+}
+
+// WithLogger configures the global logger to use.
+func WithLogger(l *slog.Logger) Option {
+	return func(o *opt) error {
+		o.logger = l
+
+		return nil
+	}
+}
+
+// WithPhpIni configures user defined PHP ini settings.
+func WithPhpIni(overrides map[string]string) Option {
+	return func(o *opt) error {
+		o.phpIni = overrides
+		return nil
+	}
+}
+
+// WithMaxWaitTime configures the max time a request may be stalled waiting for a thread.
+func WithMaxWaitTime(maxWaitTime time.Duration) Option {
+	return func(o *opt) error {
+		o.maxWaitTime = maxWaitTime
+
+		return nil
+	}
+}
+
 // WithWorkerEnv sets environment variables for the worker
 func WithWorkerEnv(env map[string]string) WorkerOption {
 	return func(w *workerOpt) error {
 		w.env = PrepareEnv(env)
+
+		return nil
+	}
+}
+
+// WithWorkerMaxThreads sets the max number of threads for this specific worker
+func WithWorkerMaxThreads(num int) WorkerOption {
+	return func(w *workerOpt) error {
+		w.maxThreads = num
 
 		return nil
 	}
@@ -154,27 +224,9 @@ func WithWorkerOnServerShutdown(f func()) WorkerOption {
 	}
 }
 
-// WithLogger configures the global logger to use.
-func WithLogger(l *slog.Logger) Option {
-	return func(o *opt) error {
-		o.logger = l
-
-		return nil
-	}
-}
-
-// WithPhpIni configures user defined PHP ini settings.
-func WithPhpIni(overrides map[string]string) Option {
-	return func(o *opt) error {
-		o.phpIni = overrides
-		return nil
-	}
-}
-
-// WithMaxWaitTime configures the max time a request may be stalled waiting for a thread.
-func WithMaxWaitTime(maxWaitTime time.Duration) Option {
-	return func(o *opt) error {
-		o.maxWaitTime = maxWaitTime
+func withExtensionWorkers(w *extensionWorkers) WorkerOption {
+	return func(wo *workerOpt) error {
+		wo.extensionWorkers = w
 
 		return nil
 	}

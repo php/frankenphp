@@ -156,7 +156,7 @@ jobs:
           METADATA: ${{ steps.build.outputs.metadata }}
       - name: Upload metadata
         if: fromJson(needs.prepare.outputs.push) && !matrix.debug && !matrix.mimalloc
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: metadata-static-builder-musl-${{ steps.prepare.outputs.sanitized_platform }}
           path: /tmp/metadata/*
@@ -174,7 +174,7 @@ jobs:
           PLATFORM: ${{ matrix.platform }}
       - name: Upload artifact
         if: ${{ !fromJson(needs.prepare.outputs.push) }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }}
           path: frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }}
@@ -266,7 +266,7 @@ jobs:
           METADATA: ${{ steps.build.outputs.metadata }}
       - name: Upload metadata
         if: fromJson(needs.prepare.outputs.push)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: metadata-static-builder-gnu-${{ steps.prepare.outputs.sanitized_platform }}
           path: /tmp/metadata-gnu/*
@@ -290,7 +290,7 @@ jobs:
           PLATFORM: ${{ matrix.platform }}
       - name: Upload artifact
         if: ${{ !fromJson(needs.prepare.outputs.push) }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}-gnu-files
           path: gh-output/*
@@ -326,13 +326,13 @@ jobs:
     if: fromJson(needs.prepare.outputs.push)
     steps:
       - name: Download metadata
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           pattern: metadata-static-builder-musl-*
           path: /tmp/metadata
           merge-multiple: true
       - name: Download GNU metadata
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           pattern: metadata-static-builder-gnu-*
           path: /tmp/metadata-gnu
@@ -419,13 +419,19 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE: ${{ (needs.prepare.outputs.ref || github.ref_type == 'tag') && '1' || '' }}
           NO_COMPRESS: ${{ github.event_name == 'pull_request' && '1' || '' }}
+      - name: Upload logs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v5
+        with:
+          path: dist/static-php-cli/log
+          name: static-php-cli-log-${{ matrix.platform }}-${{ github.sha }}
       - if: needs.prepare.outputs.ref || github.ref_type == 'tag'
         uses: actions/attest-build-provenance@v3
         with:
           subject-path: ${{ github.workspace }}/dist/frankenphp-mac-*
       - name: Upload artifact
         if: github.ref_type == 'branch'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: frankenphp-mac-${{ matrix.platform }}
           path: dist/frankenphp-mac-${{ matrix.platform }}

@@ -43,11 +43,13 @@ var (
 	activeWatcher *watcher
 	// after stopping the watcher we will wait for eventual reloads to finish
 	reloadWaitGroup sync.WaitGroup
+	// we are passing the context from the main package to the watcher
+	ctx context.Context
 	// we are passing the logger from the main package to the watcher
 	logger *slog.Logger
 )
 
-func InitWatcher(filePatterns []string, callback func(), slogger *slog.Logger) error {
+func InitWatcher(ct context.Context, filePatterns []string, callback func(), slogger *slog.Logger) error {
 	if len(filePatterns) == 0 {
 		return nil
 	}
@@ -55,9 +57,10 @@ func InitWatcher(filePatterns []string, callback func(), slogger *slog.Logger) e
 		return ErrAlreadyStarted
 	}
 	watcherIsActive.Store(true)
+	ctx = ct
 	logger = slogger
 	activeWatcher = &watcher{callback: callback}
-	err := activeWatcher.startWatching(filePatterns)
+	err := activeWatcher.startWatching(ctx, filePatterns)
 	if err != nil {
 		return err
 	}
@@ -71,7 +74,11 @@ func DrainWatcher() {
 		return
 	}
 	watcherIsActive.Store(false)
-	logger.Debug("stopping watcher")
+
+	if logger.Enabled(ctx, slog.LevelDebug) {
+		logger.LogAttrs(ctx, slog.LevelDebug, "stopping watcher")
+	}
+
 	activeWatcher.stopWatching()
 	reloadWaitGroup.Wait()
 	activeWatcher = nil
@@ -79,15 +86,19 @@ func DrainWatcher() {
 
 // TODO: how to test this?
 func retryWatching(watchPattern *watchPattern) {
-	ctx := context.Background()
-
 	failureMu.Lock()
 	defer failureMu.Unlock()
 	if watchPattern.failureCount >= maxFailureCount {
-		logger.LogAttrs(ctx, slog.LevelWarn, "giving up watching", slog.String("dir", watchPattern.dir))
+		if logger.Enabled(ctx, slog.LevelWarn) {
+			logger.LogAttrs(ctx, slog.LevelWarn, "giving up watching", slog.String("dir", watchPattern.dir))
+		}
+
 		return
 	}
-	logger.LogAttrs(ctx, slog.LevelInfo, "watcher was closed prematurely, retrying...", slog.String("dir", watchPattern.dir))
+
+	if logger.Enabled(ctx, slog.LevelInfo) {
+		logger.LogAttrs(ctx, slog.LevelInfo, "watcher was closed prematurely, retrying...", slog.String("dir", watchPattern.dir))
+	}
 
 	watchPattern.failureCount++
 	session, err := startSession(watchPattern)
@@ -106,7 +117,7 @@ func retryWatching(watchPattern *watchPattern) {
 	}()
 }
 
-func (w *watcher) startWatching(filePatterns []string) error {
+func (w *watcher) startWatching(ctx context.Context, filePatterns []string) error {
 	w.trigger = make(chan string)
 	w.stop = make(chan struct{})
 	w.sessions = make([]C.uintptr_t, len(filePatterns))
@@ -134,26 +145,29 @@ func (w *watcher) stopWatching() {
 }
 
 func startSession(w *watchPattern) (C.uintptr_t, error) {
-	ctx := context.Background()
-
 	handle := cgo.NewHandle(w)
 	cDir := C.CString(w.dir)
 	defer C.free(unsafe.Pointer(cDir))
 	watchSession := C.start_new_watcher(cDir, C.uintptr_t(handle))
 	if watchSession != 0 {
-		logger.LogAttrs(ctx, slog.LevelDebug, "watching", slog.String("dir", w.dir), slog.Any("patterns", w.patterns))
+		if logger.Enabled(ctx, slog.LevelDebug) {
+			logger.LogAttrs(ctx, slog.LevelDebug, "watching", slog.String("dir", w.dir), slog.Any("patterns", w.patterns))
+		}
 
 		return watchSession, nil
 	}
-	logger.LogAttrs(ctx, slog.LevelError, "couldn't start watching", slog.String("dir", w.dir))
+
+	if logger.Enabled(ctx, slog.LevelError) {
+		logger.LogAttrs(ctx, slog.LevelError, "couldn't start watching", slog.String("dir", w.dir))
+	}
 
 	return watchSession, ErrUnableToStartWatching
 }
 
 func stopSession(session C.uintptr_t) {
 	success := C.stop_watcher(session)
-	if success == 0 {
-		logger.Warn("couldn't close the watcher")
+	if success == 0 && logger.Enabled(ctx, slog.LevelWarn) {
+		logger.LogAttrs(ctx, slog.LevelWarn, "couldn't close the watcher")
 	}
 }
 
@@ -195,7 +209,11 @@ func listenForFileEvents(triggerWatcher chan string, stopWatcher chan struct{}) 
 			timer.Reset(debounceDuration)
 		case <-timer.C:
 			timer.Stop()
-			logger.LogAttrs(context.Background(), slog.LevelInfo, "filesystem change detected", slog.String("file", lastChangedFile))
+
+			if logger.Enabled(ctx, slog.LevelInfo) {
+				logger.LogAttrs(ctx, slog.LevelInfo, "filesystem change detected", slog.String("file", lastChangedFile))
+			}
+
 			scheduleReload()
 		}
 	}
