@@ -63,7 +63,7 @@ func InitWatcher(ct context.Context, filePatterns []string, callback func(), slo
 	logger = slogger
 	activeWatcher = &watcher{callback: callback}
 
-	if 	err := activeWatcher.startWatching(ctx, filePatterns); err != nil {
+	if err := activeWatcher.startWatching(ctx, filePatterns); err != nil {
 		return err
 	}
 
