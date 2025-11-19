@@ -2,6 +2,11 @@
 
 set -e
 
+SUDO=""
+if [ "$(id -u)" -ne 0 ]; then
+	SUDO="sudo"
+fi
+
 if [ -z "${BIN_DIR}" ]; then
 	BIN_DIR=$(pwd)
 fi
@@ -21,6 +26,46 @@ fi
 
 case ${OS} in
 Linux*)
+	if [ "${ARCH}" = "aarch64" ] || [ "${ARCH}" = "x86_64" ]; then
+		if command -v dnf >/dev/null 2>&1; then
+			echo "📦 Detected dnf. Installing FrankenPHP from RPM repository..."
+			if [ -n "${SUDO}" ]; then
+				echo "❗ Enter your password to grant sudo powers for package installation"
+				${SUDO} -v || true
+			fi
+			${SUDO} dnf -y install https://rpm.henderkes.com/static-php-1-0.noarch.rpm
+			${SUDO} dnf -y module enable php-zts:static-8.4 || true
+			${SUDO} dnf -y install frankenphp
+			echo
+			echo "🥳 FrankenPHP installed successfully"
+			echo
+			echo "⭐ If you like FrankenPHP, please give it a star on GitHub: ${italic}https://github.com/php/frankenphp${normal}"
+			exit 0
+		fi
+
+		if command -v apt >/dev/null 2>&1 || command -v apt-get >/dev/null 2>&1; then
+			echo "📦 Detected apt. Installing FrankenPHP from DEB repository..."
+			if [ -n "${SUDO}" ]; then
+				echo "❗ Enter your password to grant sudo powers for package installation"
+				${SUDO} -v || true
+			fi
+			${SUDO} sh -c 'curl -fsSL https://key.henderkes.com/static-php.gpg -o /usr/share/keyrings/static-php.gpg'
+			${SUDO} sh -c 'echo "deb [signed-by=/usr/share/keyrings/static-php.gpg] https://deb.henderkes.com/ stable main" > /etc/apt/sources.list.d/static-php.list'
+			if command -v apt >/dev/null 2>&1; then
+				${SUDO} apt update
+				${SUDO} apt -y install frankenphp
+			else
+				${SUDO} apt-get update
+				${SUDO} apt-get -y install frankenphp
+			fi
+			echo
+			echo "🥳 FrankenPHP installed successfully."
+			echo
+			echo "⭐ If you like FrankenPHP, please give it a star on GitHub: ${italic}https://github.com/php/frankenphp${normal}"
+			exit 0
+		fi
+	fi
+
 	case ${ARCH} in
 	aarch64)
 		THE_ARCH_BIN="frankenphp-linux-aarch64"
@@ -63,33 +108,22 @@ if [ -z "${THE_ARCH_BIN}" ]; then
 	exit 1
 fi
 
-SUDO=""
-
 echo "📦 Downloading ${bold}FrankenPHP${normal} for ${OS}${GNU} (${ARCH}):"
 
-# check if $DEST is writable and suppress an error message
 touch "${DEST}" 2>/dev/null
 
-# we need sudo powers to write to DEST
 if [ $? -eq 1 ]; then
 	echo "❗ You do not have permission to write to ${italic}${DEST}${normal}, enter your password to grant sudo powers"
 	SUDO="sudo"
 fi
 
-if type "curl" >/dev/null 2>&1; then
-	curl -L --progress-bar "https://github.com/php/frankenphp/releases/latest/download/${THE_ARCH_BIN}" -o "${DEST}"
-elif type "wget" >/dev/null 2>&1; then
-	${SUDO} wget "https://github.com/php/frankenphp/releases/latest/download/${THE_ARCH_BIN}" -O "${DEST}"
-else
-	echo "❗ Please install ${italic}curl${normal} or ${italic}wget${normal} to download FrankenPHP"
-	exit 1
-fi
+curl -L --progress-bar "https://github.com/php/frankenphp/releases/latest/download/${THE_ARCH_BIN}" -o "${DEST}"
 
 ${SUDO} chmod +x "${DEST}"
 
 echo
 echo "🥳 FrankenPHP downloaded successfully to ${italic}${DEST}${normal}"
 echo "🔧 Move the binary to ${italic}/usr/local/bin/${normal} or another directory in your ${italic}PATH${normal} to use it globally:"
-echo "   ${bold}sudo mv ${DEST} /usr/local/bin/${normal}"
+echo "	 ${bold}sudo mv ${DEST} /usr/local/bin/${normal}"
 echo
 echo "⭐ If you like FrankenPHP, please give it a star on GitHub: ${italic}https://github.com/php/frankenphp${normal}"
