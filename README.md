@@ -16,33 +16,24 @@ FrankenPHP can also be used as a standalone Go library to embed PHP in any app u
 
 ## Getting Started
 
-### Standalone Binary
-
-We provide static FrankenPHP binaries for Linux and macOS
-containing [PHP 8.4](https://www.php.net/releases/8.4/en.php) and most popular PHP extensions.
-Only use this option for development as FrankenPHP is compiled for maximum compatibility, rather than performance.
-
 On Windows, use [WSL](https://learn.microsoft.com/windows/wsl/) to run FrankenPHP.
 
-[Download FrankenPHP](https://github.com/php/frankenphp/releases) or copy this line into your
-terminal to automatically install the version appropriate for your platform:
+### Install Script
+
+You can copy this line into your terminal to automatically
+install an appropriate version for your platform:
 
 ```console
 curl https://frankenphp.dev/install.sh | sh
 mv frankenphp /usr/local/bin/
 ```
 
-To serve the content of the current directory, run:
+### Standalone Binary
 
-```console
-frankenphp php-server
-```
+We provide static FrankenPHP binaries for development purposes on Linux and macOS
+containing [PHP 8.4](https://www.php.net/releases/8.4/en.php) and most popular PHP extensions.
 
-You can also run command-line scripts with:
-
-```console
-frankenphp php-cli /path/to/your/script.php
-```
+[Download FrankenPHP](https://github.com/php/frankenphp/releases)
 
 ### RPM Packages
 
@@ -61,12 +52,11 @@ sudo pie install asgrim/example-pie-extension --with-php-config=php-config-zts
 
 ### DEB Packages
 
-We offer DEB packages for all Debian-based systems. To install, run:
+We offer DEB packages for all systems using `apt`. To install, run:
 
 ```console
-. /etc/os-release && \
 sudo curl -fsSL https://key.henderkes.com/static-php.gpg -o /usr/share/keyrings/static-php.gpg && \
-echo "deb [signed-by=/usr/share/keyrings/static-php.gpg] https://deb.henderkes.com/ $VERSION_CODENAME main" | sudo tee /etc/apt/sources.list.d/static-php.list && \
+echo "deb [signed-by=/usr/share/keyrings/static-php.gpg] https://deb.henderkes.com/ stable main" | sudo tee /etc/apt/sources.list.d/static-php.list && \
 sudo apt update
 sudo apt install frankenphp
 # to install extensions:
@@ -76,22 +66,19 @@ sudo apt install php-zts-devel
 sudo pie install asgrim/example-pie-extension --with-php-config=php-config-zts
 ```
 
-### Docker
+### Usage
 
-Alternatively, [Docker images](https://frankenphp.dev/docs/docker/) are available:
+To serve the content of the current directory, run:
 
 ```console
-docker run -v .:/app/public \
-    -p 80:80 -p 443:443 -p 443:443/udp \
-    dunglas/frankenphp
+frankenphp php-server
 ```
 
-Go to `https://localhost`, and enjoy!
+You can also run command-line scripts with:
 
-> [!TIP]
->
-> Do not attempt to use `https://127.0.0.1`. Use `https://localhost` and accept the self-signed certificate.
-> Use the [`SERVER_NAME` environment variable](docs/config.md#environment-variables) to change the domain to use.
+```console
+frankenphp php-cli /path/to/your/script.php
+```
 
 ### Homebrew
 
@@ -110,6 +97,23 @@ frankenphp php-server
 ```
 
 If you need extensions, you will have to install them with [pie](https://github.com/php/pie).
+
+### Docker
+
+Alternatively, [Docker images](https://frankenphp.dev/docs/docker/) are available:
+
+```console
+docker run -v .:/app/public \
+    -p 80:80 -p 443:443 -p 443:443/udp \
+    dunglas/frankenphp
+```
+
+Go to `https://localhost`, and enjoy!
+
+> [!TIP]
+>
+> Do not attempt to use `https://127.0.0.1`. Use `https://localhost` and accept the self-signed certificate.
+> Use the [`SERVER_NAME` environment variable](docs/config.md#environment-variables) to change the domain to use.
 
 ## Docs
 

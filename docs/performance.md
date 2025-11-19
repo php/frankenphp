@@ -43,9 +43,7 @@ Also, [some bugs only happen when using musl](https://github.com/php/php-src/iss
 
 In production environments, we recommend using FrankenPHP linked against glibc, compiled with an appropriate optimization level.
 
-This can be achieved by using the Debian Docker images (the default), using our [.deb](https://debs.henderkes.com) or [.rpm](https://rpms.henderkes.com) packages, or by [compiling FrankenPHP from sources](compile.md).
-
-Alternatively, we provide static musl binaries compiled with [the mimalloc allocator](https://github.com/microsoft/mimalloc), which alleviates the problems in threaded scenarios.
+This can be achieved by using the Debian Docker images, using our maintainers [.deb](https://debs.henderkes.com) or [.rpm](https://rpms.henderkes.com) packages, or by [compiling FrankenPHP from sources](compile.md).
 
 ## Go Runtime Configuration
 

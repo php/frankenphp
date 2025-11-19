@@ -242,7 +242,6 @@ jobs:
           targets: static-builder-gnu
           set: |
             ${{ (github.event_name == 'pull_request' || matrix.platform == 'linux/arm64') && 'static-builder-gnu.args.NO_COMPRESS=1' || '' }}
-            static-builder-gnu.args.BUILD_PACKAGES=1
             *.tags=
             *.platform=${{ matrix.platform }}
             *.cache-from=type=gha,scope=${{ needs.prepare.outputs.ref || github.ref }}-static-builder-gnu
