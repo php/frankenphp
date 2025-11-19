@@ -94,7 +94,10 @@ func TestAutoScaleWorkerThreads(t *testing.T) {
 			frankenphp {
 				max_threads 10
 				num_threads 2
-				worker ../testdata/sleep.php 1
+				worker ../testdata/sleep.php {
+					num 1
+					max_threads 3
+				}
 			}
 		}
 
@@ -128,8 +131,8 @@ func TestAutoScaleWorkerThreads(t *testing.T) {
 		}
 	}
 
-	// assert that there are now more threads than before
-	assert.NotEqual(t, amountOfThreads, 2)
+	assert.NotEqual(t, amountOfThreads, 2, "at least one thread should have been auto-scaled")
+	assert.LessOrEqual(t, amountOfThreads, 4, "at most 3 max_threads + 1 regular thread should be present")
 }
 
 // Note this test requires at least 2x40MB available memory for the process

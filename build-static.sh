@@ -8,6 +8,8 @@ if ! type "git" >/dev/null 2>&1; then
 	exit 1
 fi
 
+CURRENT_DIR=$(pwd)
+
 arch="$(uname -m)"
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 
@@ -73,27 +75,8 @@ if [ -z "${PHP_VERSION}" ]; then
 	export PHP_VERSION
 fi
 # default extension set
-defaultExtensions="amqp,apcu,ast,bcmath,brotli,bz2,calendar,ctype,curl,dba,dom,exif,fileinfo,filter,ftp,gd,gmp,gettext,iconv,igbinary,imagick,intl,ldap,lz4,mbregex,mbstring,memcache,memcached,mysqli,mysqlnd,opcache,openssl,password-argon2,parallel,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pdo_sqlsrv,pgsql,phar,posix,protobuf,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,ssh2,sysvmsg,sysvsem,sysvshm,tidy,tokenizer,xlswriter,xml,xmlreader,xmlwriter,xz,zip,zlib,yaml,zstd"
+defaultExtensions="amqp,apcu,ast,bcmath,brotli,bz2,calendar,ctype,curl,dba,dom,exif,fileinfo,filter,ftp,gd,gmp,gettext,iconv,igbinary,imagick,intl,ldap,lz4,mbregex,mbstring,memcache,memcached,mysqli,mysqlnd,opcache,openssl,password-argon2,parallel,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pdo_sqlsrv,pgsql,phar,posix,protobuf,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,ssh2,sysvmsg,sysvsem,sysvshm,tidy,tokenizer,xlswriter,xml,xmlreader,xmlwriter,xsl,xz,zip,zlib,yaml,zstd"
 defaultExtensionLibs="libavif,nghttp2,nghttp3,ngtcp2"
-
-md5binary="md5sum"
-if [ "${os}" = "darwin" ]; then
-	os="mac"
-	md5binary="md5 -q"
-fi
-
-if [ "${os}" = "linux" ] && ! type "cmake" >/dev/null 2>&1; then
-	echo "The \"cmake\" command must be installed."
-	exit 1
-fi
-
-if [ "${os}" = "linux" ] && { [[ "${arch}" =~ "aarch" ]] || [[ "${arch}" =~ "arm" ]]; }; then
-	fpic="-fPIC"
-	fpie="-fPIE"
-else
-	fpic="-fpic"
-	fpie="-fpie"
-fi
 
 if [ -z "${FRANKENPHP_VERSION}" ]; then
 	FRANKENPHP_VERSION="$(git rev-parse --verify HEAD)"
@@ -114,8 +97,6 @@ elif [ -d ".git/" ]; then
 		git checkout "${FRANKENPHP_VERSION}"
 	fi
 fi
-
-bin="frankenphp-${os}-${arch}"
 
 if [ -n "${CLEAN}" ]; then
 	rm -Rf dist/
@@ -194,153 +175,45 @@ if [ -n "${MIMALLOC}" ]; then
 	fi
 fi
 
-# Build libphp if necessary
-cache_key="${PHP_VERSION}-${PHP_EXTENSIONS}-${PHP_EXTENSION_LIBS}"
-if [ -f ../cache_key ] && [ "$(cat ../cache_key)" = "${cache_key}" ] && [ -f "buildroot/lib/libphp.a" ]; then
-	echo "Hit cache, skipping libphp build."
-else
-	${spcCommand} doctor --auto-fix
-	# shellcheck disable=SC2086
-	${spcCommand} download --with-php="${PHP_VERSION}" --for-extensions="${PHP_EXTENSIONS}" --for-libs="${PHP_EXTENSION_LIBS}" ${SPC_OPT_DOWNLOAD_ARGS}
-	# shellcheck disable=SC2086
-	${spcCommand} build --enable-zts --build-embed ${SPC_OPT_BUILD_ARGS} "${PHP_EXTENSIONS}" --with-libs="${PHP_EXTENSION_LIBS}"
-
-	echo -n "${cache_key}" >../cache_key
-fi
-
-if ! type "go" >/dev/null 2>&1; then
-	echo "The \"go\" command must be installed."
-	exit 1
-fi
-
-XCADDY_COMMAND="xcaddy"
-if ! type "$XCADDY_COMMAND" >/dev/null 2>&1; then
-	go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
-	XCADDY_COMMAND="$(go env GOPATH)/bin/xcaddy"
-fi
-
-curlGitHubHeaders=(--header "X-GitHub-Api-Version: 2022-11-28")
-if [ "${GITHUB_TOKEN}" ]; then
-	curlGitHubHeaders+=(--header "Authorization: Bearer ${GITHUB_TOKEN}")
-fi
-
-# Compile e-dant/watcher as a static library
-mkdir -p watcher
-cd watcher
-curl -f --retry 5 "${curlGitHubHeaders[@]}" https://api.github.com/repos/e-dant/watcher/releases/latest |
-	grep tarball_url |
-	awk '{ print $2 }' |
-	sed 's/,$//' |
-	sed 's/"//g' |
-	xargs curl -fL --retry 5 "${curlGitHubHeaders[@]}" |
-	tar xz --strip-components 1
-cd watcher-c
-if [ -z "${CC}" ]; then
-	watcherCC=cc
-else
-	watcherCC="${CC}"
-fi
-${watcherCC} -c -o libwatcher-c.o ./src/watcher-c.cpp -I ./include -I ../include -std=c++17 -Wall -Wextra "${fpic}"
-ar rcs libwatcher-c.a libwatcher-c.o
-cp libwatcher-c.a ../../buildroot/lib/libwatcher-c.a
-mkdir -p ../../buildroot/include/wtr
-cp -R include/wtr/watcher-c.h ../../buildroot/include/wtr/watcher-c.h
-cd ../../
-
-# See https://github.com/docker-library/php/blob/master/8.3/alpine3.20/zts/Dockerfile#L53-L55
-CGO_CFLAGS="-DFRANKENPHP_VERSION=${FRANKENPHP_VERSION} -I${PWD}/buildroot/include/ $(${spcCommand} spc-config "${PHP_EXTENSIONS}" --with-libs="${PHP_EXTENSION_LIBS}" --includes)"
-if [ -n "${DEBUG_SYMBOLS}" ]; then
-	CGO_CFLAGS="-g ${CGO_CFLAGS}"
-else
-	CGO_CFLAGS="-fstack-protector-strong ${fpic} ${fpie} -O2 -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64 ${CGO_CFLAGS}"
-fi
-export CGO_CFLAGS
-export CGO_CPPFLAGS="${CGO_CFLAGS}"
-
-if [ "${os}" = "mac" ]; then
-	export CGO_LDFLAGS="-framework CoreFoundation -framework SystemConfiguration"
-elif [ "${os}" = "linux" ] && [ -z "${DEBUG_SYMBOLS}" ]; then
-	CGO_LDFLAGS="-Wl,-O1 -pie"
-fi
-if [ "${os}" = "linux" ] && [ "${SPC_LIBC}" = "glibc" ]; then
-	CGO_LDFLAGS="${CGO_LDFLAGS} -Wl,--allow-multiple-definition -Wl,--export-dynamic"
-fi
-
-CGO_LDFLAGS="${CGO_LDFLAGS} ${PWD}/buildroot/lib/libbrotlicommon.a ${PWD}/buildroot/lib/libbrotlienc.a ${PWD}/buildroot/lib/libbrotlidec.a ${PWD}/buildroot/lib/libwatcher-c.a $(${spcCommand} spc-config "${PHP_EXTENSIONS}" --with-libs="${PHP_EXTENSION_LIBS}" --libs)"
-if [[ "$CGO_LDFLAGS" == *"${PWD}/buildroot/lib/mimalloc.o"* ]]; then
-	CGO_LDFLAGS=${CGO_LDFLAGS//${PWD}\/buildroot\/lib\/mimalloc.o/}
-	CGO_LDFLAGS="${PWD}/buildroot/lib/libmimalloc.a $CGO_LDFLAGS"
-fi
-if [ "${os}" = "linux" ] && [ "${SPC_LIBC}" = "glibc" ]; then
-	CGO_LDFLAGS="${CGO_LDFLAGS//-lphp/-Wl,--whole-archive -lphp -Wl,--no-whole-archive}"
-	# shellcheck disable=SC2046
-	ar d "${PWD}/buildroot/lib/libphp.a" $(ar t "${PWD}/buildroot/lib/libphp.a" | grep '\.a$')
-fi
-
-export CGO_LDFLAGS
-
-LIBPHP_VERSION="$(./buildroot/bin/php-config --version)"
-
-cd ../
-
-if [ -z "${DEBUG_SYMBOLS}" ]; then
-	extraLdflags="-w -s"
-fi
-
-cd ../
-
 # Embed PHP app, if any
 if [ -n "${EMBED}" ] && [ -d "${EMBED}" ]; then
-	tar -cf app.tar -C "${EMBED}" .
-	${md5binary} app.tar | awk '{printf $1}' >app_checksum.txt
+	SPC_OPT_BUILD_ARGS="${SPC_OPT_BUILD_ARGS} --with-frankenphp-app=${EMBED}"
 fi
 
-if [ -z "${XCADDY_ARGS}" ]; then
-	XCADDY_ARGS="--with github.com/dunglas/caddy-cbrotli --with github.com/dunglas/mercure/caddy --with github.com/dunglas/vulcain/caddy"
+SPC_OPT_INSTALL_ARGS="go-xcaddy"
+if [ -z "${DEBUG_SYMBOLS}" ] && [ -z "${NO_COMPRESS}" ]; then
+	SPC_OPT_BUILD_ARGS="${SPC_OPT_BUILD_ARGS} --with-upx-pack"
+	SPC_OPT_INSTALL_ARGS="${SPC_OPT_INSTALL_ARGS} upx"
 fi
 
-XCADDY_DEBUG=0
+export SPC_DEFAULT_C_FLAGS="-fPIC -O2"
 if [ -n "${DEBUG_SYMBOLS}" ]; then
-	XCADDY_DEBUG=1
+	SPC_CMD_VAR_PHP_MAKE_EXTRA_CFLAGS="${SPC_CMD_VAR_PHP_MAKE_EXTRA_CFLAGS} -fPIE -g"
+else
+	SPC_CMD_VAR_PHP_MAKE_EXTRA_CFLAGS="${SPC_CMD_VAR_PHP_MAKE_EXTRA_CFLAGS} -fPIE -fstack-protector-strong -O2 -w -s"
 fi
+export SPC_CMD_VAR_PHP_MAKE_EXTRA_CFLAGS
+export SPC_CMD_VAR_FRANKENPHP_XCADDY_MODULES="--with github.com/dunglas/mercure/caddy --with github.com/dunglas/vulcain/caddy --with github.com/dunglas/caddy-cbrotli"
 
-if [ "${SPC_LIBC}" = "musl" ]; then
-	muslStackSizeFix="-Wl,-z,stack-size=0x80000"
-fi
-
-go env
-cd caddy/
-if [ -z "${SPC_LIBC}" ] || [ "${SPC_LIBC}" = "musl" ]; then
-	xcaddyGoBuildFlags="-buildmode=pie -tags cgo,netgo,osusergo,static_build,nobadger,nomysql,nopgx -ldflags \"-linkmode=external -extldflags '-static-pie ${muslStackSizeFix}' ${extraLdflags} -X 'github.com/caddyserver/caddy/v2.CustomVersion=FrankenPHP ${FRANKENPHP_VERSION} PHP ${LIBPHP_VERSION} Caddy'\""
-elif [ "${SPC_LIBC}" = "glibc" ]; then
-	xcaddyGoBuildFlags="-buildmode=pie -tags cgo,netgo,osusergo,nobadger,nomysql,nopgx -ldflags \"-linkmode=external -extldflags '-pie' ${extraLdflags} -X 'github.com/caddyserver/caddy/v2.CustomVersion=FrankenPHP ${FRANKENPHP_VERSION} PHP ${LIBPHP_VERSION} Caddy'\""
-fi
-
+# Build FrankenPHP
+${spcCommand} doctor --auto-fix
+for pkg in ${SPC_OPT_INSTALL_ARGS}; do
+	${spcCommand} install-pkg "${pkg}"
+done
 # shellcheck disable=SC2086
-CGO_ENABLED=1 \
-	XCADDY_GO_BUILD_FLAGS=${xcaddyGoBuildFlags} \
-	XCADDY_DEBUG="${XCADDY_DEBUG}" \
-	${XCADDY_COMMAND} build \
-	--output "../dist/${bin}" \
-	${XCADDY_ARGS} \
-	--with github.com/dunglas/frankenphp=.. \
-	--with github.com/dunglas/frankenphp/caddy=.
-cd ..
+${spcCommand} download --with-php="${PHP_VERSION}" --for-extensions="${PHP_EXTENSIONS}" --for-libs="${PHP_EXTENSION_LIBS}" ${SPC_OPT_DOWNLOAD_ARGS}
+# shellcheck disable=SC2086
+FRANKENPHP_SOURCE_DIR=${CURRENT_DIR} ${spcCommand} build --enable-zts --build-embed --build-frankenphp ${SPC_OPT_BUILD_ARGS} "${PHP_EXTENSIONS}" --with-libs="${PHP_EXTENSION_LIBS}"
 
-if [ -d "${EMBED}" ]; then
-	truncate -s 0 app.tar
-	truncate -s 0 app_checksum.txt
-fi
+cd ../..
 
-if type "upx" >/dev/null 2>&1 && [ -z "${DEBUG_SYMBOLS}" ] && [ -z "${NO_COMPRESS}" ]; then
-	upx --best "dist/${bin}"
-fi
-
-"dist/${bin}" version
-"dist/${bin}" build-info
+bin="dist/frankenphp-${os}-${arch}"
+cp "dist/static-php-cli/buildroot/bin/frankenphp" "${bin}"
+"${bin}" version
+"${bin}" build-info
 
 if [ -n "${RELEASE}" ]; then
-	gh release upload "v${FRANKENPHP_VERSION}" "dist/${bin}" --repo dunglas/frankenphp --clobber
+	gh release upload "v${FRANKENPHP_VERSION}" "${bin}" --repo dunglas/frankenphp --clobber
 fi
 
 if [ -n "${CURRENT_REF}" ]; then

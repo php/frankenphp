@@ -149,6 +149,7 @@ func (f *FrankenPHPApp) Start() error {
 			frankenphp.WithWorkerEnv(w.Env),
 			frankenphp.WithWorkerWatchMode(w.Watch),
 			frankenphp.WithWorkerMaxFailures(w.MaxConsecutiveFailures),
+			frankenphp.WithWorkerMaxThreads(w.MaxThreads),
 		}
 
 		opts = append(opts, frankenphp.WithWorkers(w.Name, repl.ReplaceKnown(w.FileName, ""), w.Num, workerOpts...))
@@ -288,8 +289,7 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 
 				f.Workers = append(f.Workers, wc)
 			default:
-				allowedDirectives := "num_threads, max_threads, php_ini, worker, max_wait_time"
-				return wrongSubDirectiveError("frankenphp", allowedDirectives, d.Val())
+				return wrongSubDirectiveError("frankenphp", "num_threads, max_threads, php_ini, worker, max_wait_time", d.Val())
 			}
 		}
 	}

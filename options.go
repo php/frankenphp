@@ -34,6 +34,7 @@ type workerOpt struct {
 	name                   string
 	fileName               string
 	num                    int
+	maxThreads             int
 	env                    PreparedEnv
 	watch                  []string
 	maxConsecutiveFailures int
@@ -154,6 +155,15 @@ func WithMaxWaitTime(maxWaitTime time.Duration) Option {
 func WithWorkerEnv(env map[string]string) WorkerOption {
 	return func(w *workerOpt) error {
 		w.env = PrepareEnv(env)
+
+		return nil
+	}
+}
+
+// WithWorkerMaxThreads sets the max number of threads for this specific worker
+func WithWorkerMaxThreads(num int) WorkerOption {
+	return func(w *workerOpt) error {
+		w.maxThreads = num
 
 		return nil
 	}

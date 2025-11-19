@@ -88,19 +88,19 @@ While some variable types have the same memory representation between C/PHP and 
 This table summarizes what you need to know:
 
 | PHP type           | Go type                       | Direct conversion | C to Go helper                    | Go to C helper                     | Class Methods Support |
-|--------------------|-------------------------------|-------------------|-----------------------------------|------------------------------------|-----------------------|
-| `int`              | `int64`                       | ✅                 | -                                 | -                                  | ✅                     |
-| `?int`             | `*int64`                      | ✅                 | -                                 | -                                  | ✅                     |
-| `float`            | `float64`                     | ✅                 | -                                 | -                                  | ✅                     |
-| `?float`           | `*float64`                    | ✅                 | -                                 | -                                  | ✅                     |
-| `bool`             | `bool`                        | ✅                 | -                                 | -                                  | ✅                     |
-| `?bool`            | `*bool`                       | ✅                 | -                                 | -                                  | ✅                     |
-| `string`/`?string` | `*C.zend_string`              | ❌                 | `frankenphp.GoString()`           | `frankenphp.PHPString()`           | ✅                     |
-| `array`            | `frankenphp.AssociativeArray` | ❌                 | `frankenphp.GoAssociativeArray()` | `frankenphp.PHPAssociativeArray()` | ✅                     |
-| `array`            | `map[string]any`              | ❌                 | `frankenphp.GoMap()`              | `frankenphp.PHPMap()`              | ✅                     |
-| `array`            | `[]any`                       | ❌                 | `frankenphp.GoPackedArray()`      | `frankenphp.PHPPackedArray()`      | ✅                     |
-| `mixed`            | `any`                         | ❌                 | `GoValue()`                       | `PHPValue()`                       | ❌                     |
-| `object`           | `struct`                      | ❌                 | _Not yet implemented_             | _Not yet implemented_              | ❌                     |
+| ------------------ | ----------------------------- | ----------------- | --------------------------------- | ---------------------------------- | --------------------- |
+| `int`              | `int64`                       | ✅                | -                                 | -                                  | ✅                    |
+| `?int`             | `*int64`                      | ✅                | -                                 | -                                  | ✅                    |
+| `float`            | `float64`                     | ✅                | -                                 | -                                  | ✅                    |
+| `?float`           | `*float64`                    | ✅                | -                                 | -                                  | ✅                    |
+| `bool`             | `bool`                        | ✅                | -                                 | -                                  | ✅                    |
+| `?bool`            | `*bool`                       | ✅                | -                                 | -                                  | ✅                    |
+| `string`/`?string` | `*C.zend_string`              | ❌                | `frankenphp.GoString()`           | `frankenphp.PHPString()`           | ✅                    |
+| `array`            | `frankenphp.AssociativeArray` | ❌                | `frankenphp.GoAssociativeArray()` | `frankenphp.PHPAssociativeArray()` | ✅                    |
+| `array`            | `map[string]any`              | ❌                | `frankenphp.GoMap()`              | `frankenphp.PHPMap()`              | ✅                    |
+| `array`            | `[]any`                       | ❌                | `frankenphp.GoPackedArray()`      | `frankenphp.PHPPackedArray()`      | ✅                    |
+| `mixed`            | `any`                         | ❌                | `GoValue()`                       | `PHPValue()`                       | ❌                    |
+| `object`           | `struct`                      | ❌                | _Not yet implemented_             | _Not yet implemented_              | ❌                    |
 
 > [!NOTE]
 >
@@ -352,7 +352,7 @@ This design ensures that your Go code has complete control over how the object's
 
 ### Declaring Constants
 
-The generator supports exporting Go constants to PHP using two directives: `//export_php:const` for global constants and `//export_php:classconstant` for class constants. This allows you to share configuration values, status codes, and other constants between Go and PHP code.
+The generator supports exporting Go constants to PHP using two directives: `//export_php:const` for global constants and `//export_php:classconst` for class constants. This allows you to share configuration values, status codes, and other constants between Go and PHP code.
 
 #### Global Constants
 
@@ -376,27 +376,27 @@ const STATUS_ERROR = iota
 
 #### Class Constants
 
-Use the `//export_php:classconstant ClassName` directive to create constants that belong to a specific PHP class:
+Use the `//export_php:classconst ClassName` directive to create constants that belong to a specific PHP class:
 
 ```go
 package example
 
-//export_php:classconstant User
+//export_php:classconst User
 const STATUS_ACTIVE = 1
 
-//export_php:classconstant User
+//export_php:classconst User
 const STATUS_INACTIVE = 0
 
-//export_php:classconstant User
+//export_php:classconst User
 const ROLE_ADMIN = "admin"
 
-//export_php:classconstant Order
+//export_php:classconst Order
 const STATE_PENDING = iota
 
-//export_php:classconstant Order
+//export_php:classconst Order
 const STATE_PROCESSING = iota
 
-//export_php:classconstant Order
+//export_php:classconst Order
 const STATE_COMPLETED = iota
 ```
 
@@ -437,10 +437,10 @@ const STR_REVERSE = iota
 //export_php:const
 const STR_NORMAL = iota
 
-//export_php:classconstant StringProcessor
+//export_php:classconst StringProcessor
 const MODE_LOWERCASE = 1
 
-//export_php:classconstant StringProcessor
+//export_php:classconst StringProcessor
 const MODE_UPPERCASE = 2
 
 //export_php:function repeat_this(string $str, int $count, int $mode): string

@@ -14,6 +14,8 @@ import (
 
 // frankenPHPContext provides contextual information about the Request to handle.
 type frankenPHPContext struct {
+	mercureContext
+
 	documentRoot    string
 	splitPath       []string
 	env             PreparedEnv
