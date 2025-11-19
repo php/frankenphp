@@ -128,6 +128,7 @@ jobs:
         with:
           pull: true
           load: ${{ !fromJson(needs.prepare.outputs.push) || matrix.debug || matrix.mimalloc }}
+          source: .
           targets: static-builder-musl
           set: |
             ${{ matrix.debug && 'static-builder-musl.args.DEBUG_SYMBOLS=1' || '' }}
@@ -239,6 +240,7 @@ jobs:
         with:
           pull: true
           load: ${{ !fromJson(needs.prepare.outputs.push) }}
+          source: .
           targets: static-builder-gnu
           set: |
             ${{ (github.event_name == 'pull_request' || matrix.platform == 'linux/arm64') && 'static-builder-gnu.args.NO_COMPRESS=1' || '' }}
