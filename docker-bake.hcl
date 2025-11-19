@@ -96,8 +96,7 @@ target "default" {
     platforms = os == "alpine" ? [
         "linux/amd64",
         "linux/386",
-        # FIXME: armv6 doesn't build in GitHub actions because we use a custom Go build
-        #"linux/arm/v6",
+        "linux/arm/v6",
         "linux/arm/v7",
         "linux/arm64",
     ] : [
