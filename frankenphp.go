@@ -651,13 +651,7 @@ func go_read_cookies(threadIndex C.uintptr_t) *C.char {
 
 //export go_log
 func go_log(threadIndex C.uintptr_t, message *C.char, level C.int) {
-	thread := phpThreads[threadIndex]
-
-	// thread can be nil when using opcache.preload
-	ctx := globalCtx
-	if thread != nil {
-		ctx = phpThreads[threadIndex].context()
-	}
+	ctx := phpThreads[threadIndex].context()
 
 	m := C.GoString(message)
 	le := syslogLevelInfo
