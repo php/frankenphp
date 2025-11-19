@@ -656,7 +656,7 @@ func go_log(threadIndex C.uintptr_t, message *C.char, level C.int) {
 	m := C.GoString(message)
 	le := syslogLevelInfo
 
-	if level >= C.int(syslogLevelEmerg) || level <= C.int(syslogLevelDebug) {
+	if level >= C.int(syslogLevelEmerg) && level <= C.int(syslogLevelDebug) {
 		le = syslogLevel(level)
 	}
 
