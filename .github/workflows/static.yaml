@@ -224,6 +224,19 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.ref }}
           persist-credentials: false
+      - name: Set FRANKENPHP_VERSION
+        run: |
+          if [ "${GITHUB_REF_TYPE}" == "tag" ]; then
+            export FRANKENPHP_VERSION=${GITHUB_REF_NAME:1}
+          elif [ "${GITHUB_EVENT_NAME}" == "schedule" ]; then
+            export FRANKENPHP_VERSION="${REF}"
+          else
+            export FRANKENPHP_VERSION=${GITHUB_SHA}
+          fi
+
+          echo "FRANKENPHP_VERSION=${FRANKENPHP_VERSION}" >> "${GITHUB_ENV}"
+        env:
+          REF: ${{ needs.prepare.outputs.ref }}
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
