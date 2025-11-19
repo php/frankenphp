@@ -142,15 +142,15 @@ RUN if [ -n "${BUILD_PACKAGES}" ]; then \
 		rpm-build \
 		sudo \
 		zlib-devel && \
-	  curl -o ruby.tar.gz -fsSL https://cache.ruby-lang.org/pub/ruby/3.4/ruby-3.4.4.tar.gz && \
-	  tar -xzf ruby.tar.gz && \
-	  cd ruby-* && \
-	  ./configure --without-baseruby && \
-	  make && \
-	  make install && \
-	  cd .. && \
-	  rm -rf ruby* && \
-	  gem install fpm; \
+		curl -o ruby.tar.gz -fsSL https://cache.ruby-lang.org/pub/ruby/3.4/ruby-3.4.4.tar.gz && \
+		tar -xzf ruby.tar.gz && \
+		cd ruby-* && \
+		./configure --without-baseruby && \
+		make && \
+		make install && \
+		cd .. && \
+		rm -rf ruby* && \
+		gem install fpm; \
 fi
 
 WORKDIR /go/src/app
