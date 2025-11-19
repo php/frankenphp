@@ -205,6 +205,11 @@ ${spcCommand} download --with-php="${PHP_VERSION}" --for-extensions="${PHP_EXTEN
 # shellcheck disable=SC2086
 FRANKENPHP_SOURCE_DIR=${CURRENT_DIR} ${spcCommand} build --enable-zts --build-embed --build-frankenphp ${SPC_OPT_BUILD_ARGS} "${PHP_EXTENSIONS}" --with-libs="${PHP_EXTENSION_LIBS}"
 
+if [ -n "$CI" ]; then
+	rm -rf ./downloads
+	rm -rf ./source
+fi
+
 cd ../..
 
 bin="dist/frankenphp-${os}-${arch}"
