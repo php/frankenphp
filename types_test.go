@@ -148,7 +148,7 @@ func TestNestedMixedArray(t *testing.T) {
 }
 
 func benchOnPHPThread(b *testing.B, count int, cb func()) {
-	logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	globalLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	_, err := initPHPThreads(1, 1, nil) // boot 1 thread
 	assert.NoError(b, err)
 	handler := convertToTaskThread(phpThreads[0])
