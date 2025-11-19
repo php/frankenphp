@@ -122,6 +122,19 @@ jobs:
         with:
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_PASSWORD }}
+      - name: Set VERSION
+        run: |
+          if [ "${GITHUB_REF_TYPE}" == "tag" ]; then
+            export VERSION=${GITHUB_REF_NAME:1}
+          elif [ "${GITHUB_EVENT_NAME}" == "schedule" ]; then
+            export VERSION="${REF}"
+          else
+            export VERSION=${GITHUB_SHA}
+          fi
+
+          echo "VERSION=${VERSION}" >> "${GITHUB_ENV}"
+        env:
+          REF: ${{ needs.prepare.outputs.ref }}
       - name: Build
         id: build
         uses: docker/bake-action@v6
@@ -142,7 +155,6 @@ jobs:
             ${{ (fromJson(needs.prepare.outputs.push) && !matrix.debug && !matrix.mimalloc) && format('*.output=type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME) || '' }}
         env:
           SHA: ${{ github.sha }}
-          VERSION: ${{ (github.ref_type == 'tag' && github.ref_name) || needs.prepare.outputs.ref || 'dev' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - # Workaround for https://github.com/actions/runner/pull/2477#issuecomment-1501003600
         name: Export metadata
