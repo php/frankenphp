@@ -48,7 +48,7 @@ func (handler *inactiveThread) frankenPHPContext() *frankenPHPContext {
 }
 
 func (handler *inactiveThread) context() context.Context {
-	return nil
+	return globalCtx
 }
 
 func (handler *inactiveThread) name() string {

@@ -82,10 +82,12 @@ func (thread *phpThread) shutdown() {
 func (thread *phpThread) setHandler(handler threadHandler) {
 	thread.handlerMu.Lock()
 	defer thread.handlerMu.Unlock()
+
 	if !thread.state.requestSafeStateChange(stateTransitionRequested) {
 		// no state change allowed == shutdown or done
 		return
 	}
+
 	close(thread.drainChan)
 	thread.state.waitFor(stateTransitionInProgress)
 	thread.handler = handler
@@ -108,6 +110,11 @@ func (thread *phpThread) frankenPHPContext() *frankenPHPContext {
 }
 
 func (thread *phpThread) context() context.Context {
+	if thread.handler == nil {
+		// handler can be nil when using opcache.preload
+		return globalCtx
+	}
+
 	return thread.handler.context()
 }
 
