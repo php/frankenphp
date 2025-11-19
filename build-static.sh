@@ -12,6 +12,7 @@ CURRENT_DIR=$(pwd)
 
 arch="$(uname -m)"
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+[ "$os" = "darwin" ] && os="mac"
 
 # Supported variables:
 # - PHP_VERSION: PHP version to build (default: "8.4")
