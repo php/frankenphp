@@ -181,7 +181,7 @@ if [ -n "${EMBED}" ] && [ -d "${EMBED}" ]; then
 fi
 
 SPC_OPT_INSTALL_ARGS="go-xcaddy"
-if [ -z "${DEBUG_SYMBOLS}" ] && [ -z "${NO_COMPRESS}" ]; then
+if [ -z "${DEBUG_SYMBOLS}" ] && [ -z "${NO_COMPRESS}" ] && [ "${os}" = "linux" ]; then
 	SPC_OPT_BUILD_ARGS="${SPC_OPT_BUILD_ARGS} --with-upx-pack"
 	SPC_OPT_INSTALL_ARGS="${SPC_OPT_INSTALL_ARGS} upx"
 fi
