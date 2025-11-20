@@ -52,7 +52,7 @@ sudo pie install asgrim/example-pie-extension --with-php-config=php-config-zts
 
 ### deb Packages
 
-We offer DEB packages for all systems using `apt`. To install, run:
+Our maintainers offer deb packages for all systems using `apt`. To install, run:
 
 ```console
 sudo curl -fsSL https://key.henderkes.com/static-php.gpg -o /usr/share/keyrings/static-php.gpg && \
