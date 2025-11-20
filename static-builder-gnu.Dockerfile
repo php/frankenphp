@@ -142,6 +142,4 @@ COPY --link caddy caddy
 COPY --link internal internal
 COPY --link package package
 
-RUN --mount=type=secret,id=github-token \
-	GITHUB_TOKEN=$(cat /run/secrets/github-token) ./build-static.sh && \
-	rm -rf dist/static-php-cli/source dist/static-php-cli/downloads
+RUN --mount=type=secret,id=github-token GITHUB_TOKEN=$(cat /run/secrets/github-token) ./build-static.sh

@@ -122,12 +122,26 @@ jobs:
         with:
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_PASSWORD }}
+      - name: Set VERSION
+        run: |
+          if [ "${GITHUB_REF_TYPE}" == "tag" ]; then
+            export VERSION=${GITHUB_REF_NAME:1}
+          elif [ "${GITHUB_EVENT_NAME}" == "schedule" ]; then
+            export VERSION="${REF}"
+          else
+            export VERSION=${GITHUB_SHA}
+          fi
+
+          echo "VERSION=${VERSION}" >> "${GITHUB_ENV}"
+        env:
+          REF: ${{ needs.prepare.outputs.ref }}
       - name: Build
         id: build
         uses: docker/bake-action@v6
         with:
           pull: true
           load: ${{ !fromJson(needs.prepare.outputs.push) || matrix.debug || matrix.mimalloc }}
+          source: .
           targets: static-builder-musl
           set: |
             ${{ matrix.debug && 'static-builder-musl.args.DEBUG_SYMBOLS=1' || '' }}
@@ -141,7 +155,6 @@ jobs:
             ${{ (fromJson(needs.prepare.outputs.push) && !matrix.debug && !matrix.mimalloc) && format('*.output=type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME) || '' }}
         env:
           SHA: ${{ github.sha }}
-          VERSION: ${{ (github.ref_type == 'tag' && github.ref_name) || needs.prepare.outputs.ref || 'dev' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - # Workaround for https://github.com/actions/runner/pull/2477#issuecomment-1501003600
         name: Export metadata
@@ -214,6 +227,34 @@ jobs:
     runs-on: ${{ startsWith(matrix.platform, 'linux/arm') && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     needs: [prepare]
     steps:
+      # Inspired by https://gist.github.com/antiphishfish/1e3fbc3f64ef6f1ab2f47457d2da5d9d and https://github.com/apache/flink/blob/master/tools/azure-pipelines/free_disk_space.sh
+      - name: Free disk space
+        run: |
+          set -xe
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/share/swift
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/.ghcup
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo rm -rf /opt/hostedtoolcache/
+          sudo rm -rf /usr/local/graalvm/
+          sudo rm -rf /usr/local/share/powershell
+          sudo rm -rf /usr/local/share/chromium
+          sudo rm -rf /usr/local/lib/node_modules
+          sudo docker image prune --all --force
+
+          APT_PARAMS='sudo apt -y -qq -o=Dpkg::Use-Pty=0'
+          $APT_PARAMS remove -y '^dotnet-.*'
+          $APT_PARAMS remove -y '^llvm-.*'
+          $APT_PARAMS remove -y '^php.*'
+          $APT_PARAMS remove -y '^mongodb-.*'
+          $APT_PARAMS remove -y '^mysql-.*'
+          $APT_PARAMS remove -y azure-cli firefox powershell mono-devel libgl1-mesa-dri
+          $APT_PARAMS autoremove --purge -y
+          $APT_PARAMS autoclean
+          $APT_PARAMS clean
       - name: Prepare
         id: prepare
         run: echo "sanitized_platform=${PLATFORM//\//-}" >> "${GITHUB_OUTPUT}"
@@ -223,6 +264,19 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.ref }}
           persist-credentials: false
+      - name: Set VERSION
+        run: |
+          if [ "${GITHUB_REF_TYPE}" == "tag" ]; then
+            export VERSION=${GITHUB_REF_NAME:1}
+          elif [ "${GITHUB_EVENT_NAME}" == "schedule" ]; then
+            export VERSION="${REF}"
+          else
+            export VERSION=${GITHUB_SHA}
+          fi
+
+          echo "VERSION=${VERSION}" >> "${GITHUB_ENV}"
+        env:
+          REF: ${{ needs.prepare.outputs.ref }}
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
@@ -239,6 +293,7 @@ jobs:
         with:
           pull: true
           load: ${{ !fromJson(needs.prepare.outputs.push) }}
+          source: .
           targets: static-builder-gnu
           set: |
             ${{ (github.event_name == 'pull_request' || matrix.platform == 'linux/arm64') && 'static-builder-gnu.args.NO_COMPRESS=1' || '' }}
@@ -250,7 +305,6 @@ jobs:
             ${{ fromJson(needs.prepare.outputs.push) && format('*.output=type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME) || '' }}
         env:
           SHA: ${{ github.sha }}
-          VERSION: ${{ (github.ref_type == 'tag' && github.ref_name) || needs.prepare.outputs.ref || 'dev' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - # Workaround for https://github.com/actions/runner/pull/2477#issuecomment-1501003600
         name: Export metadata

@@ -172,6 +172,7 @@ jobs:
         with:
           pull: true
           load: ${{ !fromJson(needs.prepare.outputs.push) }}
+          source: .
           targets: |
             builder-${{ matrix.variant }}
             runner-${{ matrix.variant }}
