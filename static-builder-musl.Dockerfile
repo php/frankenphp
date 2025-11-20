@@ -103,6 +103,4 @@ ENV SPC_OPT_BUILD_ARGS='--with-config-file-path=/etc/frankenphp --with-config-fi
 ENV SPC_REL_TYPE='binary'
 ENV EXTENSION_DIR='/usr/lib/frankenphp/modules'
 
-RUN --mount=type=secret,id=github-token \
-	GITHUB_TOKEN=$(cat /run/secrets/github-token) ./build-static.sh && \
-	rm -Rf dist/static-php-cli/source/*
+RUN --mount=type=secret,id=github-token GITHUB_TOKEN=$(cat /run/secrets/github-token) ./build-static.sh
