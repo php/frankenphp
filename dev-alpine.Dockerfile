@@ -49,6 +49,7 @@ RUN apk add --no-cache \
 
 WORKDIR /usr/local/src/php
 RUN git clone --branch=PHP-8.4 https://github.com/php/php-src.git . && \
+	# --enable-embed is necessary to generate libphp.so, but we don't use this SAPI directly
 	./buildconf --force && \
 	EXTENSION_DIR=/usr/lib/frankenphp/modules ./configure \
 		--enable-embed \
