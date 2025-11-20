@@ -127,6 +127,13 @@ fi
 curl -L --progress-bar "https://github.com/php/frankenphp/releases/latest/download/${THE_ARCH_BIN}" -o "${DEST}"
 
 ${SUDO} chmod +x "${DEST}"
+# Allow binding to ports 80/443 without running as root (if setcap is available)
+if command -v setcap >/dev/null 2>&1; then
+	${SUDO} setcap 'cap_net_bind_service=+ep' "${DEST}" || true
+else
+	echo "❗ install setcap (e.g. libcap2-bin) to allow FrankenPHP to bind to ports 80/443 without root:"
+	echo "  sudo setcap 'cap_net_bind_service=+ep' \"${DEST}\""
+fi
 
 echo
 echo "🥳 FrankenPHP downloaded successfully to ${italic}${DEST}${normal}"
