@@ -18,6 +18,11 @@ OS=$(uname -s)
 ARCH=$(uname -m)
 GNU=""
 
+if ! command -v curl >/dev/null 2>&1; then
+    echo "Please install curl to download FrankenPHP"
+    exit 1
+fi
+
 if type "tput" >/dev/null 2>&1; then
 	bold=$(tput bold || true)
 	italic=$(tput sitm || true)
@@ -110,8 +115,10 @@ fi
 
 echo "📦 Downloading ${bold}FrankenPHP${normal} for ${OS}${GNU} (${ARCH}):"
 
+# check if $DEST is writable and suppress an error message
 touch "${DEST}" 2>/dev/null
 
+# we need sudo powers to write to DEST
 if [ $? -eq 1 ]; then
 	echo "❗ You do not have permission to write to ${italic}${DEST}${normal}, enter your password to grant sudo powers"
 	SUDO="sudo"
