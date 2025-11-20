@@ -6,7 +6,7 @@ insert_final_newline = true
 
 [*.sh]
 indent_style = tab
-tab_width = 2
+tab_width = 4
 
 [*.Dockerfile]
 indent_style = tab
