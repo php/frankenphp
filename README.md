@@ -35,9 +35,9 @@ containing [PHP 8.4](https://www.php.net/releases/8.4/en.php) and most popular P
 
 [Download FrankenPHP](https://github.com/php/frankenphp/releases)
 
-### RPM Packages
+### rpm Packages
 
-We offer RPM packages for all systems using `dnf`. To install, run:
+Our maintainers offer rpm packages for all systems using `dnf`. To install, run:
 
 ```console
 sudo dnf install https://rpm.henderkes.com/static-php-1-0.noarch.rpm
@@ -50,7 +50,7 @@ sudo dnf install php-zts-devel
 sudo pie install asgrim/example-pie-extension --with-php-config=php-config-zts
 ```
 
-### DEB Packages
+### deb Packages
 
 We offer DEB packages for all systems using `apt`. To install, run:
 
