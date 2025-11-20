@@ -19,8 +19,8 @@ ARCH=$(uname -m)
 GNU=""
 
 if ! command -v curl >/dev/null 2>&1; then
-    echo "Please install curl to download FrankenPHP"
-    exit 1
+	echo "Please install curl to download FrankenPHP"
+	exit 1
 fi
 
 if type "tput" >/dev/null 2>&1; then
@@ -131,8 +131,8 @@ ${SUDO} chmod +x "${DEST}"
 if command -v setcap >/dev/null 2>&1; then
 	${SUDO} setcap 'cap_net_bind_service=+ep' "${DEST}" || true
 else
-	echo "❗ install setcap (e.g. libcap2-bin) to allow FrankenPHP to bind to ports 80/443 without root:"
-	echo "  sudo setcap 'cap_net_bind_service=+ep' \"${DEST}\""
+	echo "❗	install setcap (e.g. libcap2-bin) to allow FrankenPHP to bind to ports 80/443 without root:"
+	echo "	sudo setcap 'cap_net_bind_service=+ep' \"${DEST}\""
 fi
 
 echo
