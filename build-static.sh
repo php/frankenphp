@@ -203,8 +203,9 @@ for pkg in ${SPC_OPT_INSTALL_ARGS}; do
 done
 # shellcheck disable=SC2086
 ${spcCommand} download --with-php="${PHP_VERSION}" --for-extensions="${PHP_EXTENSIONS}" --for-libs="${PHP_EXTENSION_LIBS}" ${SPC_OPT_DOWNLOAD_ARGS}
+export FRANKENPHP_SOURCE_PATH="${CURRENT_DIR}"
 # shellcheck disable=SC2086
-FRANKENPHP_SOURCE_DIR=${CURRENT_DIR} ${spcCommand} build --enable-zts --build-embed --build-frankenphp ${SPC_OPT_BUILD_ARGS} "${PHP_EXTENSIONS}" --with-libs="${PHP_EXTENSION_LIBS}"
+${spcCommand} build --enable-zts --build-embed --build-frankenphp ${SPC_OPT_BUILD_ARGS} "${PHP_EXTENSIONS}" --with-libs="${PHP_EXTENSION_LIBS}"
 
 if [ -n "$CI" ]; then
 	rm -rf ./downloads
