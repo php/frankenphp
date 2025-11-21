@@ -16,6 +16,8 @@ const (
 )
 
 func init() {
+	caddy.CustomBinaryName = "frankenphp"
+
 	caddy.RegisterModule(FrankenPHPApp{})
 	caddy.RegisterModule(FrankenPHPModule{})
 	caddy.RegisterModule(FrankenPHPAdmin{})
