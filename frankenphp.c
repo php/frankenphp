@@ -514,6 +514,7 @@ PHP_FUNCTION(mercure_publish) {
   zend_string *data = NULL, *id = NULL, *type = NULL;
   zend_bool private = 0;
   zend_long retry = 0;
+  bool retry_is_null = 1;
 
   ZEND_PARSE_PARAMETERS_START(1, 6)
   Z_PARAM_ZVAL(topics)
@@ -522,7 +523,7 @@ PHP_FUNCTION(mercure_publish) {
   Z_PARAM_BOOL(private)
   Z_PARAM_STR_OR_NULL(id)
   Z_PARAM_STR_OR_NULL(type)
-  Z_PARAM_LONG(retry)
+  Z_PARAM_LONG_OR_NULL(retry, retry_is_null)
   ZEND_PARSE_PARAMETERS_END();
 
   if (Z_TYPE_P(topics) != IS_ARRAY && Z_TYPE_P(topics) != IS_STRING) {

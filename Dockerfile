@@ -110,7 +110,7 @@ RUN go mod download
 WORKDIR /go/src/app
 COPY --link . ./
 
-# See https://github.com/docker-library/php/blob/master/8.4/trixie/zts/Dockerfile#L57-L59 for PHP values
+# See https://github.com/docker-library/php/blob/master/8.5/trixie/zts/Dockerfile#L57-L59 for PHP values
 ENV CGO_CFLAGS="-DFRANKENPHP_VERSION=$FRANKENPHP_VERSION $PHP_CFLAGS"
 ENV CGO_CPPFLAGS=$PHP_CPPFLAGS
 ENV CGO_LDFLAGS="-L/usr/local/lib -lssl -lcrypto -lreadline -largon2 -lcurl -lonig -lz $PHP_LDFLAGS"

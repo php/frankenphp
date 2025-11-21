@@ -2,7 +2,7 @@
 
 [FrankenPHPのDockerイメージ](https://hub.docker.com/r/dunglas/frankenphp)は、[公式PHPイメージ](https://hub.docker.com/_/php/)をベースにしています。主要なアーキテクチャに対してDebianとAlpine Linuxのバリアントを提供しており、Debianバリアントの使用を推奨しています。
 
-PHP 8.2、8.3、8.4向けのバリアントが提供されています。
+PHP 8.2、8.3、8.4、8.5向けのバリアントが提供されています。
 
 タグは次のパターンに従います：`dunglas/frankenphp:<frankenphp-version>-php<php-version>-<os>`
 

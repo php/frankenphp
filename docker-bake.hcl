@@ -7,7 +7,7 @@ variable "VERSION" {
 }
 
 variable "PHP_VERSION" {
-    default = "8.2,8.3,8.4"
+    default = "8.2,8.3,8.4,8.5"
 }
 
 variable "GO_VERSION" {
@@ -30,7 +30,7 @@ variable "CI" {
 }
 
 variable DEFAULT_PHP_VERSION {
-    default = "8.4"
+    default = "8.5"
 }
 
 function "tag" {
@@ -96,8 +96,7 @@ target "default" {
     platforms = os == "alpine" ? [
         "linux/amd64",
         "linux/386",
-        # FIXME: armv6 doesn't build in GitHub actions because we use a custom Go build
-        #"linux/arm/v6",
+        "linux/arm/v6",
         "linux/arm/v7",
         "linux/arm64",
     ] : [
