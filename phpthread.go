@@ -46,7 +46,7 @@ func newPHPThread(threadIndex int) *phpThread {
 func (thread *phpThread) boot() {
 	// thread must be in reserved state to boot
 	if !thread.state.CompareAndSwap(state.Reserved, state.Booting) && !thread.state.CompareAndSwap(state.BootRequested, state.Booting) {
-		panic("thread is not in reserved state: " + thread.state.name())
+		panic("thread is not in reserved state: " + thread.state.Name())
 	}
 
 	// boot threads as inactive
@@ -84,7 +84,7 @@ func (thread *phpThread) shutdown() {
 func (thread *phpThread) setHandler(handler threadHandler) {
 	thread.handlerMu.Lock()
 	defer thread.handlerMu.Unlock()
-	if !thread.state.requestSafeStateChange(stateTransitionRequested) {
+	if !thread.state.RequestSafeStateChange(state.TransitionRequested) {
 		// no state change allowed == shutdown or done
 		return
 	}

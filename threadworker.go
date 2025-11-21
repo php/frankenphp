@@ -4,6 +4,7 @@ package frankenphp
 import "C"
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"path/filepath"
 	"time"
@@ -16,7 +17,7 @@ import (
 // executes the PHP worker script in a loop
 // implements the threadHandler interface
 type workerThread struct {
-	state           *state.ThreadState
+	state                   *state.ThreadState
 	thread                  *phpThread
 	worker                  *worker
 	dummyFrankenPHPContext  *frankenPHPContext
@@ -24,7 +25,7 @@ type workerThread struct {
 	workerFrankenPHPContext *frankenPHPContext
 	workerContext           context.Context
 	isBootingScript         bool // true if the worker has not reached frankenphp_handle_request yet
-	failureCount    int  // number of consecutive startup failures
+	failureCount            int  // number of consecutive startup failures
 }
 
 func convertToWorkerThread(thread *phpThread, worker *worker) {
@@ -178,7 +179,7 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 		// rare case where worker script has failed on a restart during normal operation
 		// this can happen if startup success depends on external resources
 		if globalLogger.Enabled(globalCtx, slog.LevelWarn) {
-		globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "worker script has failed on restart", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex), slog.Int("failures", handler.failureCount))
+			globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "worker script has failed on restart", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex), slog.Int("failures", handler.failureCount))
 		}
 	}
 

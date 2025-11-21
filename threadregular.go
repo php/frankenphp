@@ -13,7 +13,7 @@ import (
 type regularThread struct {
 	contextHolder
 
-	state          *state.ThreadState
+	state  *state.ThreadState
 	thread *phpThread
 }
 
@@ -53,7 +53,7 @@ func (handler *regularThread) beforeScriptExecution() string {
 		return ""
 	}
 
-	panic("unexpected state: " + handler.state.name())
+	panic("unexpected state: " + handler.state.Name())
 }
 
 func (handler *regularThread) afterScriptExecution(_ int) {
