@@ -210,6 +210,54 @@ func process_data_packed(arr *C.zval) unsafe.Pointer {
 - `frankenphp.GoMap(arr unsafe.Pointer) map[string]any` - Convertir un tableau PHP vers une map Go non ordonnée
 - `frankenphp.GoPackedArray(arr unsafe.Pointer) []any` - Convertir un tableau PHP vers un slice Go
 
+### Travailler avec des Callables
+
+FrankenPHP propose un moyen de travailler avec les _callables_ PHP grâce au helper `frankenphp.CallPHPCallable()`. Cela permet d’appeler des fonctions ou des méthodes PHP depuis du code Go.
+
+Pour illustrer cela, créons notre propre fonction `array_map()` qui prend un _callable_ et un tableau, applique le _callable_ à chaque élément du tableau, et retourne un nouveau tableau avec les résultats :
+
+```go
+// export_php:function my_array_map(array $data, callable $callback): array
+func my_array_map(arr *C.zval, callback *C.zval) unsafe.Pointer {
+	goArr := frankenphp.GoArray(unsafe.Pointer(arr))
+	result := &frankenphp.Array{}
+
+	for i := uint32(0); i < goArr.Len(); i++ {
+		key, value := goArr.At(i)
+
+		callbackResult := frankenphp.CallPHPCallable(unsafe.Pointer(callback), []interface{}{value})
+
+		if key.Type == frankenphp.PHPIntKey {
+			result.SetInt(key.Int, callbackResult)
+		} else {
+			result.SetString(key.Str, callbackResult)
+		}
+	}
+
+	return frankenphp.PHPArray(result)
+}
+```
+
+Remarquez comment nous utilisons `frankenphp.CallPHPCallable()` pour appeler le _callable_ PHP passé en paramètre. Cette fonction prend un pointeur vers le _callable_ et un tableau d’arguments, et elle retourne le résultat de l’exécution du _callable_. Vous pouvez utiliser la syntaxe habituelle des _callables_ :
+
+```php
+<?php
+
+$strArray = ['a' => 'hello', 'b' => 'world', 'c' => 'php'];
+$result = my_array_map($strArray, 'strtoupper'); // $result vaudra ['a' => 'HELLO', 'b' => 'WORLD', 'c' => 'PHP']
+
+$arr = [1, 2, 3, 4, [5, 6]];
+$result = my_array_map($arr, function($item) {
+    if (\is_array($item)) {
+        return my_array_map($item, function($subItem) {
+            return $subItem * 2;
+        });
+    }
+
+    return $item * 3;
+}); // $result vaudra [3, 6, 9, 12, [10, 12]]
+```
+
 ### Déclarer une Classe PHP Native
 
 Le générateur prend en charge la déclaration de **classes opaques** comme structures Go, qui peuvent être utilisées pour créer des objets PHP. Vous pouvez utiliser la directive `//export_php:class` pour définir une classe PHP. Par exemple :

@@ -218,19 +218,18 @@ func phpArray[T any](entries map[string]T, order []string) unsafe.Pointer {
 			val := entries[key]
 			zval := phpValue(val)
 			C.zend_hash_str_update(zendArray, toUnsafeChar(key), C.size_t(len(key)), zval)
+			C.__efree__(unsafe.Pointer(zval))
 		}
 	} else {
 		zendArray = createNewArray((uint32)(len(entries)))
 		for key, val := range entries {
 			zval := phpValue(val)
 			C.zend_hash_str_update(zendArray, toUnsafeChar(key), C.size_t(len(key)), zval)
+			C.__efree__(unsafe.Pointer(zval))
 		}
 	}
 
-	var zval C.zval
-	C.__zval_arr__(&zval, zendArray)
-
-	return unsafe.Pointer(&zval)
+	return unsafe.Pointer(zendArray)
 }
 
 // EXPERIMENTAL: PHPPackedArray converts a Go slice to a PHP zval with a zend_array value.
@@ -239,12 +238,10 @@ func PHPPackedArray[T any](slice []T) unsafe.Pointer {
 	for _, val := range slice {
 		zval := phpValue(val)
 		C.zend_hash_next_index_insert(zendArray, zval)
+		C.__efree__(unsafe.Pointer(zval))
 	}
 
-	var zval C.zval
-	C.__zval_arr__(&zval, zendArray)
-
-	return unsafe.Pointer(&zval)
+	return unsafe.Pointer(zendArray)
 }
 
 // EXPERIMENTAL: GoValue converts a PHP zval to a Go value
@@ -364,35 +361,39 @@ func PHPValue(value any) unsafe.Pointer {
 }
 
 func phpValue(value any) *C.zval {
-	var zval C.zval
+	zval := (*C.zval)(C.__emalloc__(C.size_t(unsafe.Sizeof(C.zval{}))))
 
 	if toZvalObj, ok := value.(toZval); ok {
+		C.__efree__(unsafe.Pointer(zval))
 		return toZvalObj.toZval()
 	}
 
 	switch v := value.(type) {
 	case nil:
-		C.__zval_null__(&zval)
+		C.__zval_null__(zval)
 	case bool:
-		C.__zval_bool__(&zval, C._Bool(v))
+		C.__zval_bool__(zval, C._Bool(v))
 	case int:
-		C.__zval_long__(&zval, C.zend_long(v))
+		C.__zval_long__(zval, C.zend_long(v))
 	case int64:
-		C.__zval_long__(&zval, C.zend_long(v))
+		C.__zval_long__(zval, C.zend_long(v))
 	case float64:
-		C.__zval_double__(&zval, C.double(v))
+		C.__zval_double__(zval, C.double(v))
 	case string:
 		str := (*C.zend_string)(PHPString(v, false))
-		C.__zval_string__(&zval, str)
+		C.__zval_string__(zval, str)
 	case map[string]any:
-		return (*C.zval)(PHPAssociativeArray[any](AssociativeArray[any]{Map: v}))
+		zendArray := (*C.HashTable)(PHPAssociativeArray[any](AssociativeArray[any]{Map: v}))
+		C.__zval_arr__(zval, zendArray)
 	case []any:
-		return (*C.zval)(PHPPackedArray(v))
+		zendArray := (*C.HashTable)(PHPPackedArray(v))
+		C.__zval_arr__(zval, zendArray)
 	default:
+		C.__efree__(unsafe.Pointer(zval))
 		panic(fmt.Sprintf("unsupported Go type %T", v))
 	}
 
-	return &zval
+	return zval
 }
 
 // createNewArray creates a new zend_array with the specified size.
@@ -434,4 +435,57 @@ func extractZvalValue(zval *C.zval, expectedType C.uint8_t) (unsafe.Pointer, err
 	}
 
 	return nil, fmt.Errorf("unsupported zval type %d", expectedType)
+}
+
+// EXPERIMENTAL: CallPHPCallable executes a PHP callable with the given parameters.
+// Returns the result of the callable as a Go interface{}, or nil if the call failed.
+func CallPHPCallable(cb unsafe.Pointer, params []interface{}) interface{} {
+	if cb == nil {
+		return nil
+	}
+
+	callback := (*C.zval)(cb)
+	if callback == nil {
+		return nil
+	}
+
+	if C.__zend_is_callable__(callback) == 0 {
+		return nil
+	}
+
+	paramCount := len(params)
+	var paramStorage *C.zval
+	if paramCount > 0 {
+		paramStorage = (*C.zval)(C.__emalloc__(C.size_t(paramCount) * C.size_t(unsafe.Sizeof(C.zval{}))))
+		defer func() {
+			for i := 0; i < paramCount; i++ {
+				targetZval := (*C.zval)(unsafe.Pointer(uintptr(unsafe.Pointer(paramStorage)) + uintptr(i)*unsafe.Sizeof(C.zval{})))
+				C.zval_ptr_dtor(targetZval)
+			}
+			C.__efree__(unsafe.Pointer(paramStorage))
+		}()
+
+		for i, param := range params {
+			targetZval := (*C.zval)(unsafe.Pointer(uintptr(unsafe.Pointer(paramStorage)) + uintptr(i)*unsafe.Sizeof(C.zval{})))
+			sourceZval := phpValue(param)
+			*targetZval = *sourceZval
+			C.__efree__(unsafe.Pointer(sourceZval))
+		}
+	}
+
+	var retval C.zval
+
+	result := C.__call_user_function__(callback, &retval, C.uint32_t(paramCount), paramStorage)
+	if result != C.SUCCESS {
+		return nil
+	}
+
+	goResult, err := goValue[any](&retval)
+	C.zval_ptr_dtor(&retval)
+
+	if err != nil {
+		return nil
+	}
+
+	return goResult
 }
