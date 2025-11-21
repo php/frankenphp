@@ -438,7 +438,7 @@ jobs:
       matrix:
         platform: ["arm64", "x86_64"]
     name: Build macOS ${{ matrix.platform }} binaries
-    runs-on: ${{ matrix.platform == 'arm64' && 'macos-14' || 'macos-13' }}
+    runs-on: ${{ matrix.platform == 'arm64' && 'macos-15' || 'macos-15-intel' }}
     needs: [prepare]
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
