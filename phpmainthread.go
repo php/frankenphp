@@ -8,7 +8,6 @@ package frankenphp
 // #include "frankenphp.h"
 import "C"
 import (
-	"context"
 	"log/slog"
 	"strings"
 	"sync"
@@ -65,15 +64,12 @@ func initPHPThreads(numThreads int, numMaxThreads int, phpIni map[string]string)
 	}
 
 	// start the underlying C threads
-	ready := sync.WaitGroup{}
-	ready.Add(numThreads)
+	var ready sync.WaitGroup
+
 	for i := 0; i < numThreads; i++ {
-		thread := phpThreads[i]
-		go func() {
-			thread.boot()
-			ready.Done()
-		}()
+		ready.Go(phpThreads[i].boot)
 	}
+
 	ready.Wait()
 
 	return mainThread, nil
@@ -169,7 +165,9 @@ func (mainThread *phpMainThread) setAutomaticMaxThreads() {
 	maxAllowedThreads := totalSysMemory / uint64(perThreadMemoryLimit)
 	mainThread.maxThreads = int(maxAllowedThreads)
 
-	logger.LogAttrs(context.Background(), slog.LevelDebug, "Automatic thread limit", slog.Int("perThreadMemoryLimitMB", int(perThreadMemoryLimit/1024/1024)), slog.Int("maxThreads", mainThread.maxThreads))
+	if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
+		globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "Automatic thread limit", slog.Int("perThreadMemoryLimitMB", int(perThreadMemoryLimit/1024/1024)), slog.Int("maxThreads", mainThread.maxThreads))
+	}
 }
 
 //export go_frankenphp_shutdown_main_thread

@@ -407,7 +407,7 @@ func TestPHPServerDirective(t *testing.T) {
 		`, "caddyfile")
 
 	tester.AssertGetResponse("http://localhost:"+testPort, http.StatusOK, "I am by birth a Genevese (i not set)")
-	tester.AssertGetResponse("http://localhost:"+testPort+"/hello.txt", http.StatusOK, "Hello")
+	tester.AssertGetResponse("http://localhost:"+testPort+"/hello.txt", http.StatusOK, "Hello\n")
 	tester.AssertGetResponse("http://localhost:"+testPort+"/not-found.txt", http.StatusOK, "I am by birth a Genevese (i not set)")
 }
 
@@ -965,7 +965,7 @@ func TestMaxWaitTime(t *testing.T) {
 	for range 10 {
 		go func() {
 			statusCode := getStatusCode("http://localhost:"+testPort+"/sleep.php?sleep=10", t)
-			if statusCode == http.StatusGatewayTimeout {
+			if statusCode == http.StatusServiceUnavailable {
 				success.Store(true)
 			}
 			wg.Done()
@@ -973,7 +973,7 @@ func TestMaxWaitTime(t *testing.T) {
 	}
 	wg.Wait()
 
-	require.True(t, success.Load(), "At least one request should have failed with a 504 Gateway Timeout status")
+	require.True(t, success.Load(), "At least one request should have failed with a 503 Service Unavailable status")
 }
 
 func TestMaxWaitTimeWorker(t *testing.T) {
@@ -1012,23 +1012,26 @@ func TestMaxWaitTimeWorker(t *testing.T) {
 	for range 10 {
 		go func() {
 			statusCode := getStatusCode("http://localhost:"+testPort+"/sleep.php?sleep=10&iteration=1", t)
-			if statusCode == http.StatusGatewayTimeout {
+			if statusCode == http.StatusServiceUnavailable {
 				success.Store(true)
 			}
 			wg.Done()
 		}()
 	}
 	wg.Wait()
-	require.True(t, success.Load(), "At least one request should have failed with a 504 Gateway Timeout status")
+	require.True(t, success.Load(), "At least one request should have failed with a 503 Service Unavailable status")
 
 	// Fetch metrics
 	resp, err := http.Get("http://localhost:2999/metrics")
 	require.NoError(t, err, "failed to fetch metrics")
-	defer resp.Body.Close()
+	t.Cleanup(func() {
+		require.NoError(t, resp.Body.Close())
+	})
 
 	// Read and parse metrics
 	metrics := new(bytes.Buffer)
 	_, err = metrics.ReadFrom(resp.Body)
+	require.NoError(t, err)
 
 	expectedMetrics := `
 	# TYPE frankenphp_worker_queue_depth gauge

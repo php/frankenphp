@@ -6,8 +6,6 @@ FROM centos:7
 ARG FRANKENPHP_VERSION=''
 ENV FRANKENPHP_VERSION=${FRANKENPHP_VERSION}
 
-ARG BUILD_PACKAGES=''
-
 ARG PHP_VERSION=''
 ENV PHP_VERSION=${PHP_VERSION}
 
@@ -29,7 +27,12 @@ ENV GOTOOLCHAIN=local
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# labels, same as static-builder-musl.Dockerfile
+# Pass through CI environment flag so build-static.sh can detect CI context
+ARG CI
+ENV CI=${CI}
+
+# labels, same as static-builder.Dockerfile
+
 LABEL org.opencontainers.image.title=FrankenPHP
 LABEL org.opencontainers.image.description="The modern PHP app server"
 LABEL org.opencontainers.image.url=https://frankenphp.dev
@@ -125,29 +128,6 @@ ENV EXTENSION_DIR='/usr/lib/frankenphp/modules'
 # not sure if this is needed
 ENV COMPOSER_ALLOW_SUPERUSER=1
 
-# install tools to build packages, if requested - needs gcc 10
-RUN if [ -n "${BUILD_PACKAGES}" ]; then \
-	yum install -y \
-		bzip2 \
-		libffi-devel \
-		libyaml \
-		libyaml-devel \
-		make \
-		openssl-devel \
-		rpm-build \
-		sudo \
-		zlib-devel && \
-	  curl -o ruby.tar.gz -fsSL https://cache.ruby-lang.org/pub/ruby/3.4/ruby-3.4.4.tar.gz && \
-	  tar -xzf ruby.tar.gz && \
-	  cd ruby-* && \
-	  ./configure --without-baseruby && \
-	  make && \
-	  make install && \
-	  cd .. && \
-	  rm -rf ruby* && \
-	  gem install fpm; \
-fi
-
 WORKDIR /go/src/app
 COPY go.mod go.sum ./
 RUN go mod download
@@ -162,9 +142,4 @@ COPY --link caddy caddy
 COPY --link internal internal
 COPY --link package package
 
-RUN --mount=type=secret,id=github-token \
-	GITHUB_TOKEN=$(cat /run/secrets/github-token) ./build-static.sh && \
-	if [ -n "${BUILD_PACKAGES}" ]; then \
-		./build-packages.sh; \
-	fi; \
-	rm -Rf dist/static-php-cli/source/*
+RUN --mount=type=secret,id=github-token GITHUB_TOKEN=$(cat /run/secrets/github-token) ./build-static.sh

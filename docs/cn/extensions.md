@@ -270,7 +270,7 @@ $user->updateInfo(null, 25, null);          // Name 和 active 为 null
 
 ### 声明常量
 
-生成器支持使用两个指令将 Go 常量导出到 PHP：`//export_php:const` 用于全局常量，`//export_php:classconstant` 用于类常量。这允许你在 Go 和 PHP 代码之间共享配置值、状态代码和其他常量。
+生成器支持使用两个指令将 Go 常量导出到 PHP：`//export_php:const` 用于全局常量，`//export_php:classconst` 用于类常量。这允许你在 Go 和 PHP 代码之间共享配置值、状态代码和其他常量。
 
 #### 全局常量
 
@@ -292,25 +292,25 @@ const STATUS_ERROR = iota
 
 #### 类常量
 
-使用 `//export_php:classconstant ClassName` 指令创建属于特定 PHP 类的常量：
+使用 `//export_php:classconst ClassName` 指令创建属于特定 PHP 类的常量：
 
 ```go
-//export_php:classconstant User
+//export_php:classconst User
 const STATUS_ACTIVE = 1
 
-//export_php:classconstant User
+//export_php:classconst User
 const STATUS_INACTIVE = 0
 
-//export_php:classconstant User
+//export_php:classconst User
 const ROLE_ADMIN = "admin"
 
-//export_php:classconstant Order
+//export_php:classconst Order
 const STATE_PENDING = iota
 
-//export_php:classconstant Order
+//export_php:classconst Order
 const STATE_PROCESSING = iota
 
-//export_php:classconstant Order
+//export_php:classconst Order
 const STATE_COMPLETED = iota
 ```
 
@@ -346,10 +346,10 @@ const STR_REVERSE = iota
 //export_php:const
 const STR_NORMAL = iota
 
-//export_php:classconstant StringProcessor
+//export_php:classconst StringProcessor
 const MODE_LOWERCASE = 1
 
-//export_php:classconstant StringProcessor
+//export_php:classconst StringProcessor
 const MODE_UPPERCASE = 2
 
 //export_php:function repeat_this(string $str, int $count, int $mode): string

@@ -1,6 +1,7 @@
 package frankenphp
 
 import (
+	"context"
 	"sync"
 )
 
@@ -8,15 +9,16 @@ import (
 // executes PHP scripts in a web context
 // implements the threadHandler interface
 type regularThread struct {
-	state          *threadState
-	thread         *phpThread
-	requestContext *frankenPHPContext
+	contextHolder
+
+	state  *threadState
+	thread *phpThread
 }
 
 var (
 	regularThreads     []*phpThread
 	regularThreadMu    = &sync.RWMutex{}
-	regularRequestChan chan *frankenPHPContext
+	regularRequestChan chan contextHolder
 )
 
 func convertToRegularThread(thread *phpThread) {
@@ -33,25 +35,33 @@ func (handler *regularThread) beforeScriptExecution() string {
 	case stateTransitionRequested:
 		detachRegularThread(handler.thread)
 		return handler.thread.transitionToNewHandler()
+
 	case stateTransitionComplete:
 		handler.state.set(stateReady)
 		return handler.waitForRequest()
+
 	case stateReady:
 		return handler.waitForRequest()
+
 	case stateShuttingDown:
 		detachRegularThread(handler.thread)
 		// signal to stop
 		return ""
 	}
+
 	panic("unexpected state: " + handler.state.name())
 }
 
-func (handler *regularThread) afterScriptExecution(int) {
+func (handler *regularThread) afterScriptExecution(_ int) {
 	handler.afterRequest()
 }
 
-func (handler *regularThread) getRequestContext() *frankenPHPContext {
-	return handler.requestContext
+func (handler *regularThread) frankenPHPContext() *frankenPHPContext {
+	return handler.contextHolder.frankenPHPContext
+}
+
+func (handler *regularThread) context() context.Context {
+	return handler.ctx
 }
 
 func (handler *regularThread) name() string {
@@ -61,34 +71,39 @@ func (handler *regularThread) name() string {
 func (handler *regularThread) waitForRequest() string {
 	handler.state.markAsWaiting(true)
 
-	var fc *frankenPHPContext
+	var ch contextHolder
+
 	select {
 	case <-handler.thread.drainChan:
 		// go back to beforeScriptExecution
 		return handler.beforeScriptExecution()
-	case fc = <-regularRequestChan:
+	case ch = <-regularRequestChan:
 	}
 
-	handler.requestContext = fc
+	handler.ctx = ch.ctx
+	handler.contextHolder.frankenPHPContext = ch.frankenPHPContext
 	handler.state.markAsWaiting(false)
 
 	// set the scriptFilename that should be executed
-	return fc.scriptFilename
+	return handler.contextHolder.frankenPHPContext.scriptFilename
 }
 
 func (handler *regularThread) afterRequest() {
-	handler.requestContext.closeContext()
-	handler.requestContext = nil
+	handler.contextHolder.frankenPHPContext.closeContext()
+	handler.contextHolder.frankenPHPContext = nil
+	handler.ctx = nil
 }
 
-func handleRequestWithRegularPHPThreads(fc *frankenPHPContext) {
+func handleRequestWithRegularPHPThreads(ch contextHolder) error {
 	metrics.StartRequest()
+
 	select {
-	case regularRequestChan <- fc:
+	case regularRequestChan <- ch:
 		// a thread was available to handle the request immediately
-		<-fc.done
+		<-ch.frankenPHPContext.done
 		metrics.StopRequest()
-		return
+
+		return nil
 	default:
 		// no thread was available
 	}
@@ -97,18 +112,21 @@ func handleRequestWithRegularPHPThreads(fc *frankenPHPContext) {
 	metrics.QueuedRequest()
 	for {
 		select {
-		case regularRequestChan <- fc:
+		case regularRequestChan <- ch:
 			metrics.DequeuedRequest()
-			<-fc.done
+			<-ch.frankenPHPContext.done
 			metrics.StopRequest()
-			return
-		case scaleChan <- fc:
+
+			return nil
+		case scaleChan <- ch.frankenPHPContext:
 			// the request has triggered scaling, continue to wait for a thread
 		case <-timeoutChan(maxWaitTime):
 			// the request has timed out stalling
 			metrics.DequeuedRequest()
-			fc.reject(504, "Gateway Timeout")
-			return
+
+			ch.frankenPHPContext.reject(ErrMaxWaitTimeExceeded)
+
+			return ErrMaxWaitTimeExceeded
 		}
 	}
 }

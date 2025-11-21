@@ -7,7 +7,7 @@ variable "VERSION" {
 }
 
 variable "PHP_VERSION" {
-    default = "8.2,8.3,8.4"
+    default = "8.2,8.3,8.4,8.5"
 }
 
 variable "GO_VERSION" {
@@ -24,8 +24,13 @@ variable "CACHE" {
     default = ""
 }
 
+variable "CI" {
+    # CI flag coming from the environment or --set; empty by default
+    default = ""
+}
+
 variable DEFAULT_PHP_VERSION {
-    default = "8.4"
+    default = "8.5"
 }
 
 function "tag" {
@@ -91,8 +96,7 @@ target "default" {
     platforms = os == "alpine" ? [
         "linux/amd64",
         "linux/386",
-        # FIXME: armv6 doesn't build in GitHub actions because we use a custom Go build
-        #"linux/arm/v6",
+        "linux/arm/v6",
         "linux/arm/v7",
         "linux/arm64",
     ] : [
@@ -141,6 +145,7 @@ target "static-builder-musl" {
     }
     args = {
         FRANKENPHP_VERSION = VERSION
+        CI = CI
     }
     secret = ["id=github-token,env=GITHUB_TOKEN"]
 }
@@ -165,6 +170,7 @@ target "static-builder-gnu" {
     args = {
         FRANKENPHP_VERSION = VERSION
         GO_VERSION = GO_VERSION
+        CI = CI
     }
     secret = ["id=github-token,env=GITHUB_TOKEN"]
 }
