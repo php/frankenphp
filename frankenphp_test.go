@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -134,6 +135,16 @@ func testPost(url string, body string, handler func(http.ResponseWriter, *http.R
 	req.Body = io.NopCloser(strings.NewReader(body))
 
 	return testRequest(req, handler, t)
+}
+
+func TestMain(m *testing.M) {
+	flag.Parse()
+
+	if !testing.Verbose() {
+		slog.SetDefault(slog.New(slog.DiscardHandler))
+	}
+
+	os.Exit(m.Run())
 }
 
 func TestHelloWorld_module(t *testing.T) { testHelloWorld(t, nil) }

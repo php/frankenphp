@@ -14,6 +14,8 @@ import (
 
 // frankenPHPContext provides contextual information about the Request to handle.
 type frankenPHPContext struct {
+	mercureContext
+
 	documentRoot    string
 	splitPath       []string
 	env             PreparedEnv
@@ -36,6 +38,11 @@ type frankenPHPContext struct {
 
 	done      chan any
 	startedAt time.Time
+}
+
+type contextHolder struct {
+	ctx               context.Context
+	frankenPHPContext *frankenPHPContext
 }
 
 // fromContext extracts the frankenPHPContext from a context.
@@ -63,7 +70,7 @@ func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Reques
 	}
 
 	if fc.logger == nil {
-		fc.logger = logger
+		fc.logger = globalLogger
 	}
 
 	if fc.documentRoot == "" {

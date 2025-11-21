@@ -4,7 +4,7 @@
 Debian and Alpine Linux variants are provided for popular architectures.
 Debian variants are recommended.
 
-Variants for PHP 8.2, 8.3 and 8.4 are provided.
+Variants for PHP 8.2, 8.3, 8.4 and 8.5 are provided.
 
 The tags follow this pattern: `dunglas/frankenphp:<frankenphp-version>-php<php-version>-<os>`
 

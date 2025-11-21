@@ -212,7 +212,7 @@ func addPreparedEnvToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 //export go_register_variables
 func go_register_variables(threadIndex C.uintptr_t, trackVarsArray *C.zval) {
 	thread := phpThreads[threadIndex]
-	fc := thread.getRequestContext()
+	fc := thread.frankenPHPContext()
 
 	if fc.request != nil {
 		addKnownVariablesToServer(thread, fc, trackVarsArray)
@@ -279,7 +279,7 @@ func splitPos(path string, splitPath []string) int {
 //export go_update_request_info
 func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) {
 	thread := phpThreads[threadIndex]
-	fc := thread.getRequestContext()
+	fc := thread.frankenPHPContext()
 	request := fc.request
 
 	if request == nil {

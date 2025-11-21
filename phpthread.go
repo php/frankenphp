@@ -5,7 +5,6 @@ package frankenphp
 import "C"
 import (
 	"context"
-	"log/slog"
 	"runtime"
 	"sync"
 	"unsafe"
@@ -18,7 +17,7 @@ import (
 type phpThread struct {
 	runtime.Pinner
 	threadIndex  int
-	requestChan  chan *frankenPHPContext
+	requestChan  chan contextHolder
 	drainChan    chan struct{}
 	handlerMu    sync.Mutex
 	handler      threadHandler
@@ -31,13 +30,14 @@ type threadHandler interface {
 	name() string
 	beforeScriptExecution() string
 	afterScriptExecution(exitStatus int)
-	getRequestContext() *frankenPHPContext
+	context() context.Context
+	frankenPHPContext() *frankenPHPContext
 }
 
 func newPHPThread(threadIndex int) *phpThread {
 	return &phpThread{
 		threadIndex: threadIndex,
-		requestChan: make(chan *frankenPHPContext),
+		requestChan: make(chan contextHolder),
 		state:       state.NewThreadState(),
 	}
 }
@@ -46,8 +46,7 @@ func newPHPThread(threadIndex int) *phpThread {
 func (thread *phpThread) boot() {
 	// thread must be in reserved state to boot
 	if !thread.state.CompareAndSwap(state.Reserved, state.Booting) && !thread.state.CompareAndSwap(state.BootRequested, state.Booting) {
-		logger.Error("thread is not in reserved state: " + thread.state.Name())
-		panic("thread is not in reserved state: " + thread.state.Name())
+		panic("thread is not in reserved state: " + thread.state.name())
 	}
 
 	// boot threads as inactive
@@ -58,7 +57,6 @@ func (thread *phpThread) boot() {
 
 	// start the actual posix thread - TODO: try this with go threads instead
 	if !C.frankenphp_new_php_thread(C.uintptr_t(thread.threadIndex)) {
-		logger.LogAttrs(context.Background(), slog.LevelError, "unable to create thread", slog.Int("thread", thread.threadIndex))
 		panic("unable to create thread")
 	}
 
@@ -86,10 +84,11 @@ func (thread *phpThread) shutdown() {
 func (thread *phpThread) setHandler(handler threadHandler) {
 	thread.handlerMu.Lock()
 	defer thread.handlerMu.Unlock()
-	if !thread.state.RequestSafeStateChange(state.TransitionRequested) {
+	if !thread.state.requestSafeStateChange(stateTransitionRequested) {
 		// no state change allowed == shutdown or done
 		return
 	}
+
 	close(thread.drainChan)
 	thread.state.WaitFor(state.TransitionInProgress)
 	thread.handler = handler
@@ -102,12 +101,22 @@ func (thread *phpThread) setHandler(handler threadHandler) {
 func (thread *phpThread) transitionToNewHandler() string {
 	thread.state.Set(state.TransitionInProgress)
 	thread.state.WaitFor(state.TransitionComplete)
+
 	// execute beforeScriptExecution of the new handler
 	return thread.handler.beforeScriptExecution()
 }
 
-func (thread *phpThread) getRequestContext() *frankenPHPContext {
-	return thread.handler.getRequestContext()
+func (thread *phpThread) frankenPHPContext() *frankenPHPContext {
+	return thread.handler.frankenPHPContext()
+}
+
+func (thread *phpThread) context() context.Context {
+	if thread.handler == nil {
+		// handler can be nil when using opcache.preload
+		return globalCtx
+	}
+
+	return thread.handler.context()
 }
 
 func (thread *phpThread) name() string {

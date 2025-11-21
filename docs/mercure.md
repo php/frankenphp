@@ -54,6 +54,29 @@ To subscribe to updates, use the native [`EventSource`](https://developer.mozill
 
 ## Publishing Updates
 
+### Using `mercure_publish()`
+
+FrankenPHP provides a convenient `mercure_publish()` function to publish updates to the built-in Mercure hub:
+
+```php
+<?php
+// public/publish.php
+
+$updateID = mercure_publish('my-topic',  json_encode(['key' => 'value']));
+
+// Write to FrankenPHP's logs
+error_log("update $updateID published", 4);
+```
+
+The full function signature is:
+
+```php
+/**
+ * @param string|string[] $topics
+ */
+function mercure_publish(string|array $topics, string $data = '', bool $private = false, ?string $id = null, ?string $type = null, ?int $retry = null): string {}
+```
+
 ### Using `file_get_contents()`
 
 To dispatch an update to connected subscribers, send an authenticated POST request to the Mercure hub with the `topic` and `data` parameters:

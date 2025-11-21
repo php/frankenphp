@@ -4,6 +4,7 @@ import (
 	"bytes"
 	_ "embed"
 	"fmt"
+	"os"
 	"path/filepath"
 	"text/template"
 
@@ -30,6 +31,16 @@ type goTemplateData struct {
 
 func (gg *GoFileGenerator) generate() error {
 	filename := filepath.Join(gg.generator.BuildDir, gg.generator.BaseName+".go")
+
+	if _, err := os.Stat(filename); err == nil {
+		backupFilename := filename + ".bak"
+		if err := os.Rename(filename, backupFilename); err != nil {
+			return fmt.Errorf("backing up existing Go file: %w", err)
+		}
+
+		gg.generator.SourceFile = backupFilename
+	}
+
 	content, err := gg.buildContent()
 	if err != nil {
 		return fmt.Errorf("building Go file content: %w", err)
@@ -47,13 +58,26 @@ func (gg *GoFileGenerator) buildContent() (string, error) {
 
 	filteredImports := make([]string, 0, len(imports))
 	for _, imp := range imports {
-		if imp != `"C"` && imp != `"unsafe"` && imp != `"github.com/dunglas/frankenphp"` {
+		if imp != `"C"` && imp != `"unsafe"` && imp != `"github.com/dunglas/frankenphp"` && imp != `"runtime/cgo"` {
 			filteredImports = append(filteredImports, imp)
 		}
 	}
 
 	classes := make([]phpClass, len(gg.generator.Classes))
 	copy(classes, gg.generator.Classes)
+
+	if len(classes) > 0 {
+		hasCgo := false
+		for _, imp := range imports {
+			if imp == `"runtime/cgo"` {
+				hasCgo = true
+				break
+			}
+		}
+		if !hasCgo {
+			filteredImports = append(filteredImports, `"runtime/cgo"`)
+		}
+	}
 
 	templateContent, err := gg.getTemplateContent(goTemplateData{
 		PackageName:       SanitizePackageName(gg.generator.BaseName),

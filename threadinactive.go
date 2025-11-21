@@ -1,6 +1,8 @@
 package frankenphp
 
 import (
+	"context"
+
 	"github.com/dunglas/frankenphp/internal/state"
 )
 
@@ -22,6 +24,7 @@ func (handler *inactiveThread) beforeScriptExecution() string {
 	switch thread.state.Get() {
 	case state.TransitionRequested:
 		return thread.transitionToNewHandler()
+
 	case state.Booting, state.TransitionComplete:
 		thread.state.Set(state.Inactive)
 
@@ -29,11 +32,14 @@ func (handler *inactiveThread) beforeScriptExecution() string {
 		thread.state.MarkAsWaiting(true)
 		thread.state.WaitFor(state.TransitionRequested, state.ShuttingDown)
 		thread.state.MarkAsWaiting(false)
+
 		return handler.beforeScriptExecution()
+
 	case state.ShuttingDown:
 		// signal to stop
 		return ""
 	}
+
 	panic("unexpected state: " + thread.state.Name())
 }
 
@@ -41,8 +47,12 @@ func (handler *inactiveThread) afterScriptExecution(int) {
 	panic("inactive threads should not execute scripts")
 }
 
-func (handler *inactiveThread) getRequestContext() *frankenPHPContext {
+func (handler *inactiveThread) frankenPHPContext() *frankenPHPContext {
 	return nil
+}
+
+func (handler *inactiveThread) context() context.Context {
+	return globalCtx
 }
 
 func (handler *inactiveThread) name() string {

@@ -159,6 +159,14 @@ PHP_MINIT_FUNCTION({{.BaseName}}) {
 
     {{- range .Constants}}
     {{- if eq .ClassName ""}}
+    {{- if $.Namespace}}
+        {{if .IsIota}}REGISTER_NS_LONG_CONSTANT("{{cString $.Namespace}}", "{{.Name}}", {{.Name}}, CONST_CS | CONST_PERSISTENT);
+        {{else if eq .PhpType "string"}}REGISTER_NS_STRING_CONSTANT("{{cString $.Namespace}}", "{{.Name}}", {{.CValue}}, CONST_CS | CONST_PERSISTENT);
+        {{else if eq .PhpType "bool"}}REGISTER_NS_LONG_CONSTANT("{{cString $.Namespace}}", "{{.Name}}", {{if eq .Value "true"}}1{{else}}0{{end}}, CONST_CS | CONST_PERSISTENT);
+        {{else if eq .PhpType "float"}}REGISTER_NS_DOUBLE_CONSTANT("{{cString $.Namespace}}", "{{.Name}}", {{.CValue}}, CONST_CS | CONST_PERSISTENT);
+        {{else}}REGISTER_NS_LONG_CONSTANT("{{cString $.Namespace}}", "{{.Name}}", {{.CValue}}, CONST_CS | CONST_PERSISTENT);
+        {{- end}}
+    {{- else}}
     {{if .IsIota}}REGISTER_LONG_CONSTANT("{{.Name}}", {{.Name}}, CONST_CS | CONST_PERSISTENT);
     {{else if eq .PhpType "string"}}REGISTER_STRING_CONSTANT("{{.Name}}", {{.CValue}}, CONST_CS | CONST_PERSISTENT);
     {{else if eq .PhpType "bool"}}REGISTER_LONG_CONSTANT("{{.Name}}", {{if eq .Value "true"}}1{{else}}0{{end}}, CONST_CS | CONST_PERSISTENT);
@@ -167,12 +175,13 @@ PHP_MINIT_FUNCTION({{.BaseName}}) {
     {{- end}}
     {{- end}}
     {{- end}}
+    {{- end}}
     return SUCCESS;
 }
 
 zend_module_entry {{.BaseName}}_module_entry = {STANDARD_MODULE_HEADER,
                                          "{{.BaseName}}",
-                                         ext_functions,             /* Functions */
+                                         {{if .Functions}}ext_functions{{else}}NULL{{end}},             /* Functions */
                                          PHP_MINIT({{.BaseName}}),  /* MINIT */
                                          NULL,                      /* MSHUTDOWN */
                                          NULL,                      /* RINIT */

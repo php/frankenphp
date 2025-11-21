@@ -23,7 +23,7 @@ jobs:
   tests-linux:
     name: Tests (Linux, PHP ${{ matrix.php-versions }})
     runs-on: ubuntu-latest
-    continue-on-error: ${{ matrix.experimental || false }}
+    continue-on-error: false
     strategy:
       fail-fast: false
       matrix:
@@ -32,7 +32,6 @@ jobs:
           - php-versions: "8.3"
           - php-versions: "8.4"
           - php-versions: "8.5"
-            experimental: true
     env:
       GOMAXPROCS: 10
       LIBRARY_PATH: ${{ github.workspace }}/watcher/target/lib
@@ -84,18 +83,18 @@ jobs:
         run: ./reload_test.sh
       - name: Lint Go code
         uses: golangci/golangci-lint-action@v9
-        if: matrix.php-versions == '8.4'
+        if: matrix.php-versions == '8.5'
         with:
           version: latest
       - name: Ensure go.mod is tidy
-        if: matrix.php-versions == '8.4'
+        if: matrix.php-versions == '8.5'
         run: go mod tidy -diff
       - name: Ensure caddy/go.mod is tidy
-        if: matrix.php-versions == '8.4'
+        if: matrix.php-versions == '8.5'
         run: go mod tidy -diff
         working-directory: caddy/
   tests-mac:
-    name: Tests (macOS, PHP 8.4)
+    name: Tests (macOS, PHP 8.5)
     runs-on: macos-latest
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
@@ -111,7 +110,7 @@ jobs:
             caddy/go.sum
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: 8.4
+          php-version: 8.5
           ini-file: development
           coverage: none
           tools: none

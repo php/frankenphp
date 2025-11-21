@@ -1,6 +1,7 @@
 package frankenphp
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"time"
@@ -19,6 +20,7 @@ type WorkerOption func(*workerOpt) error
 //
 // If you change this, also update the Caddy module and the documentation.
 type opt struct {
+	ctx         context.Context
 	numThreads  int
 	maxThreads  int
 	workers     []workerOpt
@@ -32,6 +34,7 @@ type workerOpt struct {
 	name                   string
 	fileName               string
 	num                    int
+	maxThreads             int
 	env                    PreparedEnv
 	watch                  []string
 	maxConsecutiveFailures int
@@ -40,6 +43,15 @@ type workerOpt struct {
 	onThreadShutdown       func(int)
 	onServerStartup        func()
 	onServerShutdown       func()
+}
+
+// WithContext sets the main context to use.
+func WithContext(ctx context.Context) Option {
+	return func(h *opt) error {
+		h.ctx = ctx
+
+		return nil
+	}
 }
 
 // WithNumThreads configures the number of PHP threads to start.
@@ -143,6 +155,15 @@ func WithMaxWaitTime(maxWaitTime time.Duration) Option {
 func WithWorkerEnv(env map[string]string) WorkerOption {
 	return func(w *workerOpt) error {
 		w.env = PrepareEnv(env)
+
+		return nil
+	}
+}
+
+// WithWorkerMaxThreads sets the max number of threads for this specific worker
+func WithWorkerMaxThreads(num int) WorkerOption {
+	return func(w *workerOpt) error {
+		w.maxThreads = num
 
 		return nil
 	}
