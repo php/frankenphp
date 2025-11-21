@@ -7,7 +7,7 @@ variable "VERSION" {
 }
 
 variable "PHP_VERSION" {
-    default = "8.2,8.3,8.4"
+    default = "8.2,8.3,8.4,8.5"
 }
 
 variable "GO_VERSION" {
@@ -30,7 +30,7 @@ variable "CI" {
 }
 
 variable DEFAULT_PHP_VERSION {
-    default = "8.4"
+    default = "8.5"
 }
 
 function "tag" {
