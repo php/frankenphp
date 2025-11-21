@@ -69,16 +69,20 @@ func anotherHelper() {
 	goGen := GoFileGenerator{generator}
 	require.NoError(t, goGen.generate())
 
-	expectedFile := filepath.Join(tmpDir, "test.go")
-	require.FileExists(t, expectedFile)
+	sourceStillExists := filepath.Join(tmpDir, "test.go")
+	require.FileExists(t, sourceStillExists)
+	sourceStillContent, err := readFile(sourceStillExists)
+	require.NoError(t, err)
+	assert.Equal(t, sourceContent, sourceStillContent, "Source file should not be modified")
 
-	content, err := readFile(expectedFile)
+	generatedFile := filepath.Join(tmpDir, "test_generated.go")
+	require.FileExists(t, generatedFile)
+
+	generatedContent, err := readFile(generatedFile)
 	require.NoError(t, err)
 
-	testGoFileBasicStructure(t, content, "test")
-	testGoFileImports(t, content)
-	testGoFileExportedFunctions(t, content, generator.Functions)
-	testGoFileInternalFunctions(t, content)
+	testGeneratedFileBasicStructure(t, generatedContent, "main", "test")
+	testGeneratedFileWrappers(t, generatedContent, generator.Functions)
 }
 
 func TestGoFileGenerator_BuildContent(t *testing.T) {
@@ -112,8 +116,9 @@ func test() {
 				`import "C"`,
 				"func init()",
 				"frankenphp.RegisterExtension(",
-				"//export test",
-				"func test()",
+				"//export go_test",
+				"func go_test()",
+				"test()", // wrapper calls original function
 			},
 		},
 		{
@@ -146,8 +151,9 @@ func process(data *go_string) *go_value {
 				`"fmt"`,
 				`"strings"`,
 				`"encoding/json"`,
-				"//export process",
+				"//export go_process",
 				`"C"`,
+				"process(", // wrapper calls original function
 			},
 		},
 		{
@@ -173,9 +179,13 @@ func internalFunc2(data string) {
 				},
 			},
 			contains: []string{
+				"//export go_publicFunc",
+				"func go_publicFunc()",
+				"publicFunc()", // wrapper calls original function
+			},
+			notContains: []string{
 				"func internalFunc1() string",
 				"func internalFunc2(data string)",
-				"//export publicFunc",
 			},
 		},
 	}
@@ -194,6 +204,10 @@ func internalFunc2(data string) {
 
 			for _, expected := range tt.contains {
 				assert.Contains(t, content, expected, "Generated Go content should contain %q", expected)
+			}
+
+			for _, notExpected := range tt.notContains {
+				assert.NotContains(t, content, notExpected, "Generated Go content should NOT contain %q", notExpected)
 			}
 		})
 	}
@@ -720,5 +734,39 @@ func testGoFileInternalFunctions(t *testing.T, content string) {
 
 	if !foundInternal {
 		t.Log("No internal functions found (this may be expected)")
+	}
+}
+
+func testGeneratedFileBasicStructure(t *testing.T, content, expectedPackage, baseName string) {
+	requiredElements := []string{
+		"package " + expectedPackage,
+		"// #include <stdlib.h>",
+		`// #include "` + baseName + `.h"`,
+		`import "C"`,
+		"func init() {",
+		"frankenphp.RegisterExtension(",
+		"}",
+	}
+
+	for _, element := range requiredElements {
+		assert.Contains(t, content, element, "Generated file should contain: %s", element)
+	}
+
+	assert.NotContains(t, content, "func internalHelper", "Generated file should not contain internal functions from source")
+	assert.NotContains(t, content, "func anotherHelper", "Generated file should not contain internal functions from source")
+}
+
+func testGeneratedFileWrappers(t *testing.T, content string, functions []phpFunction) {
+	for _, fn := range functions {
+		exportDirective := "//export go_" + fn.Name
+		assert.Contains(t, content, exportDirective, "Generated file should contain export directive: %s", exportDirective)
+
+		wrapperFunc := "func go_" + fn.Name + "("
+		assert.Contains(t, content, wrapperFunc, "Generated file should contain wrapper function: %s", wrapperFunc)
+
+		funcName := extractGoFunctionName(fn.GoFunction)
+		if funcName != "" {
+			assert.Contains(t, content, funcName+"(", "Generated wrapper should call original function: %s", funcName)
+		}
 	}
 }
