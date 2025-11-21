@@ -2,7 +2,7 @@
 
 [FrankenPHP Docker 镜像](https://hub.docker.com/r/dunglas/frankenphp) 基于 [官方 PHP 镜像](https://hub.docker.com/_/php/)。提供适用于流行架构的 Debian 和 Alpine Linux 变体。推荐使用 Debian 变体。
 
-提供 PHP 8.2、8.3、8.5 和 8.5 的变体。
+提供 PHP 8.2、8.3、8.4 和 8.5 的变体。
 
 标签遵循此模式：`dunglas/frankenphp:<frankenphp-version>-php<php-version>-<os>`
 
