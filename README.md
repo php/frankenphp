@@ -58,7 +58,7 @@ sudo apt install frankenphp
 
 ### PHP Extensions
 
-PHP extensions can be installed with:
+PHP extensions can be installed with e.g.:
 
 ```console
 sudo dnf install php-zts-apcu # or apt
