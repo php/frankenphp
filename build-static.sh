@@ -60,20 +60,7 @@ if [ -n "${DEBUG_SYMBOLS}" ]; then
 fi
 # php version to build
 if [ -z "${PHP_VERSION}" ]; then
-	get_latest_php_version() {
-		input="$1"
-		json=$(curl -s "https://www.php.net/releases/index.php?json&version=$input")
-		latest=$(echo "$json" | jq -r '.version')
-
-		if [[ "$latest" == "$input"* ]]; then
-			echo "$latest"
-		else
-			echo "$input"
-		fi
-	}
-
-	PHP_VERSION="$(get_latest_php_version "8.4")"
-	export PHP_VERSION
+	export PHP_VERSION="8.4"
 fi
 # default extension set
 defaultExtensions="amqp,apcu,ast,bcmath,brotli,bz2,calendar,ctype,curl,dba,dom,exif,fileinfo,filter,ftp,gd,gmp,gettext,iconv,igbinary,imagick,intl,ldap,lz4,mbregex,mbstring,memcache,memcached,mysqli,mysqlnd,opcache,openssl,password-argon2,parallel,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pdo_sqlsrv,pgsql,phar,posix,protobuf,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,ssh2,sysvmsg,sysvsem,sysvshm,tidy,tokenizer,xlswriter,xml,xmlreader,xmlwriter,xsl,xz,zip,zlib,yaml,zstd"
@@ -187,14 +174,14 @@ if [ -z "${DEBUG_SYMBOLS}" ] && [ -z "${NO_COMPRESS}" ] && [ "${os}" = "linux" ]
 	SPC_OPT_INSTALL_ARGS="${SPC_OPT_INSTALL_ARGS} upx"
 fi
 
-export SPC_DEFAULT_C_FLAGS="-fPIC -O2"
-if [ -n "${DEBUG_SYMBOLS}" ]; then
-	SPC_CMD_VAR_PHP_MAKE_EXTRA_CFLAGS="${SPC_CMD_VAR_PHP_MAKE_EXTRA_CFLAGS} -fPIE -g"
-else
-	SPC_CMD_VAR_PHP_MAKE_EXTRA_CFLAGS="${SPC_CMD_VAR_PHP_MAKE_EXTRA_CFLAGS} -fPIE -fstack-protector-strong -O2 -w -s"
-fi
-export SPC_CMD_VAR_PHP_MAKE_EXTRA_CFLAGS
-export SPC_CMD_VAR_FRANKENPHP_XCADDY_MODULES="--with github.com/dunglas/mercure/caddy --with github.com/dunglas/vulcain/caddy --with github.com/dunglas/caddy-cbrotli"
+#export SPC_DEFAULT_C_FLAGS="-fPIC -O2"
+#if [ -n "${DEBUG_SYMBOLS}" ]; then
+#	SPC_CMD_VAR_PHP_MAKE_EXTRA_CFLAGS="${SPC_CMD_VAR_PHP_MAKE_EXTRA_CFLAGS} -fPIE -g"
+#else
+#	SPC_CMD_VAR_PHP_MAKE_EXTRA_CFLAGS="${SPC_CMD_VAR_PHP_MAKE_EXTRA_CFLAGS} -fPIE -fstack-protector-strong -O2 -w -s"
+#fi
+#export SPC_CMD_VAR_PHP_MAKE_EXTRA_CFLAGS
+#export SPC_CMD_VAR_FRANKENPHP_XCADDY_MODULES="--with github.com/dunglas/mercure/caddy --with github.com/dunglas/vulcain/caddy --with github.com/dunglas/caddy-cbrotli"
 
 # Build FrankenPHP
 ${spcCommand} doctor --auto-fix
@@ -204,7 +191,7 @@ done
 # shellcheck disable=SC2086
 ${spcCommand} download --with-php="${PHP_VERSION}" --for-extensions="${PHP_EXTENSIONS}" --for-libs="${PHP_EXTENSION_LIBS}" ${SPC_OPT_DOWNLOAD_ARGS}
 # shellcheck disable=SC2086
-FRANKENPHP_SOURCE_DIR=${CURRENT_DIR} ${spcCommand} build --enable-zts --build-embed --build-frankenphp ${SPC_OPT_BUILD_ARGS} "${PHP_EXTENSIONS}" --with-libs="${PHP_EXTENSION_LIBS}"
+FRANKENPHP_SOURCE_PATH=${CURRENT_DIR} ${spcCommand} build --enable-zts --build-embed --build-frankenphp ${SPC_OPT_BUILD_ARGS} "${PHP_EXTENSIONS}" --with-libs="${PHP_EXTENSION_LIBS}"
 
 if [ -n "$CI" ]; then
 	rm -rf ./downloads
