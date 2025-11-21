@@ -32,7 +32,6 @@ jobs:
           - php-versions: "8.3"
           - php-versions: "8.4"
           - php-versions: "8.5"
-            experimental: true
     env:
       GOMAXPROCS: 10
       LIBRARY_PATH: ${{ github.workspace }}/watcher/target/lib
