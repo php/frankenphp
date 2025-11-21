@@ -346,3 +346,69 @@ docker run -v $PWD:/app/public \
     -p 80:80 -p 443:443 -p 443:443/udp \
     dunglas/frankenphp
 ```
+
+## Shell Completion
+
+FrankenPHP provides built-in shell completion support for Bash, Zsh, Fish, and PowerShell. This enables autocompletion for all commands (including custom commands like `php-server`, `php-cli`, and `extension-init`) and their flags.
+
+### Bash
+
+To load completions in your current shell session:
+
+```console
+source <(frankenphp completion bash)
+```
+
+To load completions for every new session, run:
+
+**Linux:**
+
+```console
+frankenphp completion bash > /etc/bash_completion.d/frankenphp
+```
+
+**macOS:**
+
+```console
+frankenphp completion bash > $(brew --prefix)/etc/bash_completion.d/frankenphp
+```
+
+### Zsh
+
+If shell completion is not already enabled in your environment, you will need to enable it. You can execute the following once:
+
+```console
+echo "autoload -U compinit; compinit" >> ~/.zshrc
+```
+
+To load completions for each session, execute once:
+
+```console
+frankenphp completion zsh > "${fpath[1]}/_frankenphp"
+```
+
+You will need to start a new shell for this setup to take effect.
+
+### Fish
+
+To load completions in your current shell session:
+
+```console
+frankenphp completion fish | source
+```
+
+To load completions for every new session, execute once:
+
+```console
+frankenphp completion fish > ~/.config/fish/completions/frankenphp.fish
+```
+
+### PowerShell
+
+To load completions in your current shell session:
+
+```powershell
+frankenphp completion powershell | Out-String | Invoke-Expression
+```
+
+To load completions for every new session, add the output of the above command to your PowerShell profile.
