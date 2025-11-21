@@ -591,7 +591,18 @@ GEN_STUB_SCRIPT=php-src/build/gen_stub.php frankenphp extension-init my_extensio
 > [!NOTE]
 > Don't forget to set the `GEN_STUB_SCRIPT` environment variable to the path of the `gen_stub.php` file in the PHP sources you downloaded earlier. This is the same `gen_stub.php` script mentioned in the manual implementation section.
 
-If everything went well, a new directory named `build` should have been created. This directory contains the generated files for your extension, including the `my_extension.go` file with the generated PHP function stubs.
+If everything went well, your project directory should contain the following files for your extension:
+
+- **`my_extension.go`** - Your original source file (remains unchanged)
+- **`my_extension_generated.go`** - Generated file with CGO wrappers that call your functions
+- **`my_extension.stub.php`** - PHP stub file for IDE autocompletion
+- **`my_extension_arginfo.h`** - PHP argument information
+- **`my_extension.h`** - C header file
+- **`my_extension.c`** - C implementation file
+- **`README.md`** - Documentation
+
+> [!IMPORTANT]
+> **Your source file (`my_extension.go`) is never modified.** The generator creates a separate `_generated.go` file containing CGO wrappers that call your original functions. This means you can safely version control your source file without worrying about generated code polluting it.
 
 ### Integrating the Generated Extension into FrankenPHP
 
