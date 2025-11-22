@@ -108,7 +108,7 @@ func handleRequestWithRegularPHPThreads(ch contextHolder) error {
 	runtime.Gosched()
 
 	// Enforce FIFO ordering of requests
-	if err := regularSemaphore.Acquire(ch.ctx, 1); err != nil {
+	if err := regularSemaphore.Acquire(context.Background(), 1); err != nil {
 		return err
 	}
 	defer regularSemaphore.Release(1)
