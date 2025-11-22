@@ -63,7 +63,7 @@ PHP extensions can be installed with e.g.:
 sudo dnf install php-zts-apcu # or apt
 ```
 
-If an extension is not available by default, install it with pie
+If an extension is not available by default, install it with [PIE](https://github.com/php/pie).
 
 ```console
 sudo dnf install php-zts-devel # or apt
@@ -100,7 +100,7 @@ To serve the content of the current directory, run:
 frankenphp php-server
 ```
 
-If you need extensions, you will have to install them with [pie](https://github.com/php/pie).
+If you need extensions, you will have to install them with [PIE](https://github.com/php/pie).
 
 ### Docker
 
