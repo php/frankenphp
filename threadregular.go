@@ -150,7 +150,6 @@ func handleRequestWithRegularPHPThreads(ch contextHolder) error {
 		defer regularSemaphore.Release(1)
 	} else if scaleChan != nil {
 		// Only autoscaling enabled, no maxWaitTime
-	restartAutoscale:
 		ctx, cancel := context.WithTimeout(context.Background(), minStallTime)
 		err := regularSemaphore.Acquire(ctx, 1)
 		cancel()
@@ -163,7 +162,11 @@ func handleRequestWithRegularPHPThreads(ch contextHolder) error {
 				// scaleChan full, autoscaling already in progress
 			}
 
-			goto restartAutoscale
+			if err := regularSemaphore.Acquire(context.Background(), 1); err != nil {
+				ch.frankenPHPContext.reject(ErrMaxWaitTimeExceeded)
+				metrics.StopRequest()
+				return ErrMaxWaitTimeExceeded
+			}
 		}
 		defer regularSemaphore.Release(1)
 	} else {
