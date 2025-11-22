@@ -107,45 +107,82 @@ func handleRequestWithRegularPHPThreads(ch contextHolder) error {
 	// yield to ensure this goroutine doesn't end up on the same P queue
 	runtime.Gosched()
 
-	ctx := context.Background()
-	if maxWaitTime > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, maxWaitTime)
-		defer cancel()
-	}
-
-	if err := regularSemaphore.Acquire(ctx, 1); err != nil {
-		ch.frankenPHPContext.reject(ErrMaxWaitTimeExceeded)
-		metrics.StopRequest()
-		return ErrMaxWaitTimeExceeded
-	}
-	defer regularSemaphore.Release(1)
-
-	select {
-	case regularRequestChan <- ch:
-		// a thread was available to handle the request immediately
-		<-ch.frankenPHPContext.done
-		metrics.StopRequest()
-
-		return nil
-	default:
-		// no thread was available
-	}
-
-	// if no thread was available, mark the request as queued and fan it out to all threads
 	metrics.QueuedRequest()
-	for {
-		select {
-		case regularRequestChan <- ch:
-			metrics.DequeuedRequest()
-			<-ch.frankenPHPContext.done
-			metrics.StopRequest()
 
-			return nil
-		case scaleChan <- ch.frankenPHPContext:
-			// the request has triggered scaling, continue to wait for a thread
+	// Acquire semaphore with the appropriate strategy based on maxWaitTime and autoscaling
+	if maxWaitTime > 0 && scaleChan != nil {
+		// Both maxWaitTime and autoscaling enabled.
+		// Try with minStallTime first to trigger autoscaling, then enforce maxWaitTime.
+		// We just assume the operator is sane and minStallTime is less than maxWaitTime.
+		ctx, cancel := context.WithTimeout(context.Background(), minStallTime)
+		err := regularSemaphore.Acquire(ctx, 1)
+		cancel()
+
+		if err != nil {
+			// Timed out after minStallTime: signal autoscaling
+			select {
+			case scaleChan <- ch.frankenPHPContext:
+			default:
+				// scaleChan full, autoscaling already in progress
+			}
+
+			// Continue trying with maxWaitTime limit
+			ctx, cancel := context.WithTimeout(context.Background(), maxWaitTime)
+			defer cancel()
+
+			if err := regularSemaphore.Acquire(ctx, 1); err != nil {
+				ch.frankenPHPContext.reject(ErrMaxWaitTimeExceeded)
+				metrics.StopRequest()
+				return ErrMaxWaitTimeExceeded
+			}
 		}
+		defer regularSemaphore.Release(1)
+	} else if maxWaitTime > 0 {
+		// Only maxWaitTime enabled, no autoscaling
+		ctx, cancel := context.WithTimeout(context.Background(), maxWaitTime)
+		defer cancel()
+
+		if err := regularSemaphore.Acquire(ctx, 1); err != nil {
+			ch.frankenPHPContext.reject(ErrMaxWaitTimeExceeded)
+			metrics.StopRequest()
+			return ErrMaxWaitTimeExceeded
+		}
+		defer regularSemaphore.Release(1)
+	} else if scaleChan != nil {
+		// Only autoscaling enabled, no maxWaitTime
+	restartAutoscale:
+		ctx, cancel := context.WithTimeout(context.Background(), minStallTime)
+		err := regularSemaphore.Acquire(ctx, 1)
+		cancel()
+
+		if err != nil {
+			// Timed out: signal autoscaling
+			select {
+			case scaleChan <- ch.frankenPHPContext:
+			default:
+				// scaleChan full, autoscaling already in progress
+			}
+
+			goto restartAutoscale
+		}
+		defer regularSemaphore.Release(1)
+	} else {
+		// No maxWaitTime, no autoscaling: block indefinitely
+		if err := regularSemaphore.Acquire(context.Background(), 1); err != nil {
+			// Should never happen with Background context
+			ch.frankenPHPContext.reject(ErrMaxWaitTimeExceeded)
+			metrics.StopRequest()
+			return ErrMaxWaitTimeExceeded
+		}
+		defer regularSemaphore.Release(1)
 	}
+
+	regularRequestChan <- ch
+	metrics.DequeuedRequest()
+	<-ch.frankenPHPContext.done
+	metrics.StopRequest()
+
+	return nil
 }
 
 func attachRegularThread(thread *phpThread) {
