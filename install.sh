@@ -8,7 +8,7 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 if [ -z "${BIN_DIR}" ]; then
-	BIN_DIR=$(pwd)
+	BIN_DIR=/usr/local/bin
 fi
 
 THE_ARCH_BIN=""
@@ -42,7 +42,9 @@ Linux*)
 			${SUDO} dnf -y module enable php-zts:static-8.4 || true
 			${SUDO} dnf -y install frankenphp
 			echo
-			echo "🥳 FrankenPHP installed successfully"
+			echo "🥳 FrankenPHP installed to ${italic}/usr/bin/frankenphp${normal} successfully."
+			echo "❗ Your Caddyfile is found in ${italic}/etc/frankenphp/Caddyfile${normal}"
+			echo "❗ Your php.ini is found in ${italic}/etc/php-zts/php.ini${normal}"
 			echo
 			echo "⭐ If you like FrankenPHP, please give it a star on GitHub: ${italic}https://github.com/php/frankenphp${normal}"
 			exit 0
@@ -64,7 +66,9 @@ Linux*)
 				${SUDO} apt-get -y install frankenphp
 			fi
 			echo
-			echo "🥳 FrankenPHP installed successfully."
+			echo "🥳 FrankenPHP installed to ${italic}/usr/bin/frankenphp${normal} successfully."
+			echo "❗ Your Caddyfile is found in ${italic}/etc/frankenphp/Caddyfile${normal}"
+			echo "❗ Your php.ini is found in ${italic}/etc/php-zts/php.ini${normal}"
 			echo
 			echo "⭐ If you like FrankenPHP, please give it a star on GitHub: ${italic}https://github.com/php/frankenphp${normal}"
 			exit 0
@@ -131,13 +135,20 @@ ${SUDO} chmod +x "${DEST}"
 if command -v setcap >/dev/null 2>&1; then
 	${SUDO} setcap 'cap_net_bind_service=+ep' "${DEST}" || true
 else
-	echo "❗	install setcap (e.g. libcap2-bin) to allow FrankenPHP to bind to ports 80/443 without root:"
-	echo "	sudo setcap 'cap_net_bind_service=+ep' \"${DEST}\""
+	echo "❗ install setcap (e.g. libcap2-bin) to allow FrankenPHP to bind to ports 80/443 without root:"
+	echo "	 ${bold}sudo setcap 'cap_net_bind_service=+ep' \"${DEST}\"${normal}"
 fi
 
 echo
 echo "🥳 FrankenPHP downloaded successfully to ${italic}${DEST}${normal}"
-echo "🔧 Move the binary to ${italic}/usr/local/bin/${normal} or another directory in your ${italic}PATH${normal} to use it globally:"
-echo "	 ${bold}sudo mv ${DEST} /usr/local/bin/${normal}"
+echo "❗ It uses ${italic}/etc/frankenphp/php.ini${normal} if found."
+case ":$PATH:" in
+*":$DEST:"*) ;;
+*)
+	echo "🔧 Move the binary to ${italic}/usr/local/bin/${normal} or another directory in your ${italic}PATH${normal} to use it globally:"
+	echo "	${bold}sudo mv ${DEST} /usr/local/bin/${normal}"
+	;;
+esac
+
 echo
 echo "⭐ If you like FrankenPHP, please give it a star on GitHub: ${italic}https://github.com/php/frankenphp${normal}"

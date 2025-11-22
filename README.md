@@ -25,7 +25,6 @@ install an appropriate version for your platform:
 
 ```console
 curl https://frankenphp.dev/install.sh | sh
-mv frankenphp /usr/local/bin/
 ```
 
 ### Standalone Binary
@@ -43,11 +42,6 @@ Our maintainers offer rpm packages for all systems using `dnf`. To install, run:
 sudo dnf install https://rpm.henderkes.com/static-php-1-0.noarch.rpm
 sudo dnf module enable php-zts:static-8.4 # 8.2-8.5 available
 sudo dnf install frankenphp
-# to install extensions:
-sudo dnf install php-zts-xdebug
-# if an extension is not available by default, install it with pie
-sudo dnf install php-zts-devel
-sudo pie install asgrim/example-pie-extension --with-php-config=php-config-zts
 ```
 
 ### deb Packages
@@ -59,10 +53,20 @@ sudo curl -fsSL https://key.henderkes.com/static-php.gpg -o /usr/share/keyrings/
 echo "deb [signed-by=/usr/share/keyrings/static-php.gpg] https://deb.henderkes.com/ stable main" | sudo tee /etc/apt/sources.list.d/static-php.list && \
 sudo apt update
 sudo apt install frankenphp
-# to install extensions:
-sudo apt install php-zts-xdebug
-# if an extension is not available by default, install it with pie
-sudo apt install php-zts-devel
+```
+
+### PHP Extensions
+
+PHP extensions can be installed with e.g.:
+
+```console
+sudo dnf install php-zts-apcu # or apt
+```
+
+If an extension is not available by default, install it with [PIE](https://github.com/php/pie).
+
+```console
+sudo dnf install php-zts-devel # or apt
 sudo pie install asgrim/example-pie-extension --with-php-config=php-config-zts
 ```
 
@@ -96,7 +100,7 @@ To serve the content of the current directory, run:
 frankenphp php-server
 ```
 
-If you need extensions, you will have to install them with [pie](https://github.com/php/pie).
+If you need extensions, you will have to install them with [PIE](https://github.com/php/pie).
 
 ### Docker
 
