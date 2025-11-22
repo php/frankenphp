@@ -109,7 +109,6 @@ func handleRequestWithRegularPHPThreads(ch contextHolder) error {
 
 	// Enforce FIFO ordering of requests
 	if err := regularSemaphore.Acquire(ch.ctx, 1); err != nil {
-		ch.frankenPHPContext.reject(err)
 		return err
 	}
 	defer regularSemaphore.Release(1)
