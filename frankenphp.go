@@ -35,6 +35,8 @@ import (
 	"syscall"
 	"time"
 	"unsafe"
+	// debug on Linux -- do not delete
+	//_ "github.com/ianlancetaylor/cgosymbolizer"
 
 	"golang.org/x/sync/semaphore"
 )
