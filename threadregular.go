@@ -107,9 +107,17 @@ func handleRequestWithRegularPHPThreads(ch contextHolder) error {
 	// yield to ensure this goroutine doesn't end up on the same P queue
 	runtime.Gosched()
 
-	// Enforce FIFO ordering of requests
-	if err := regularSemaphore.Acquire(context.Background(), 1); err != nil {
-		return err
+	ctx := context.Background()
+	if maxWaitTime > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, maxWaitTime)
+		defer cancel()
+	}
+
+	if err := regularSemaphore.Acquire(ctx, 1); err != nil {
+		ch.frankenPHPContext.reject(ErrMaxWaitTimeExceeded)
+		metrics.StopRequest()
+		return ErrMaxWaitTimeExceeded
 	}
 	defer regularSemaphore.Release(1)
 
@@ -136,13 +144,6 @@ func handleRequestWithRegularPHPThreads(ch contextHolder) error {
 			return nil
 		case scaleChan <- ch.frankenPHPContext:
 			// the request has triggered scaling, continue to wait for a thread
-		case <-timeoutChan(maxWaitTime):
-			// the request has timed out stalling
-			metrics.DequeuedRequest()
-
-			ch.frankenPHPContext.reject(ErrMaxWaitTimeExceeded)
-
-			return ErrMaxWaitTimeExceeded
 		}
 	}
 }
