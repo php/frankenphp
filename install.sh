@@ -142,10 +142,14 @@ fi
 echo
 echo "🥳 FrankenPHP downloaded successfully to ${italic}${DEST}${normal}"
 echo "❗ It uses ${italic}/etc/frankenphp/php.ini${normal} if found."
-if [[ ":$PATH:" != *":$DEST:"* ]]; then
-	echo "🔧 Move the binary to ${italic}/usr/local/bin/${normal} or another directory in your ${italic}PATH${normal} to use it globally:"
-	echo "	 ${bold}sudo mv ${DEST} /usr/local/bin/${normal}"
-fi
+case ":$PATH:" in
+	*":$DEST:"*)
+		;;
+	*)
+		echo "🔧 Move the binary to ${italic}/usr/local/bin/${normal} or another directory in your ${italic}PATH${normal} to use it globally:"
+		echo "	${bold}sudo mv ${DEST} /usr/local/bin/${normal}"
+		;;
+esac
 
 echo
 echo "⭐ If you like FrankenPHP, please give it a star on GitHub: ${italic}https://github.com/php/frankenphp${normal}"
