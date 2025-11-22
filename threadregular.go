@@ -2,7 +2,10 @@ package frankenphp
 
 import (
 	"context"
+	"runtime"
 	"sync"
+
+	"golang.org/x/sync/semaphore"
 )
 
 // representation of a non-worker PHP thread
@@ -19,6 +22,7 @@ var (
 	regularThreads     []*phpThread
 	regularThreadMu    = &sync.RWMutex{}
 	regularRequestChan chan contextHolder
+	regularSemaphore   *semaphore.Weighted // FIFO admission control
 )
 
 func convertToRegularThread(thread *phpThread) {
@@ -99,6 +103,16 @@ func (handler *regularThread) afterRequest() {
 
 func handleRequestWithRegularPHPThreads(ch contextHolder) error {
 	metrics.StartRequest()
+
+	// yield to ensure this goroutine doesn't end up on the same P queue
+	runtime.Gosched()
+
+	// Enforce FIFO ordering of requests
+	if err := regularSemaphore.Acquire(ch.ctx, 1); err != nil {
+		ch.frankenPHPContext.reject(err)
+		return err
+	}
+	defer regularSemaphore.Release(1)
 
 	select {
 	case regularRequestChan <- ch:

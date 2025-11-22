@@ -35,8 +35,8 @@ import (
 	"syscall"
 	"time"
 	"unsafe"
-	// debug on Linux
-	//_ "github.com/ianlancetaylor/cgosymbolizer"
+
+	"golang.org/x/sync/semaphore"
 )
 
 type contextKeyStruct struct{}
@@ -307,9 +307,11 @@ func Init(options ...Option) error {
 		return err
 	}
 
-	regularRequestChan = make(chan contextHolder, opt.numThreads-workerThreadCount)
-	regularThreads = make([]*phpThread, 0, opt.numThreads-workerThreadCount)
-	for i := 0; i < opt.numThreads-workerThreadCount; i++ {
+	numRegularThreads := opt.numThreads - workerThreadCount
+	regularRequestChan = make(chan contextHolder)
+	regularSemaphore = semaphore.NewWeighted(int64(numRegularThreads))
+	regularThreads = make([]*phpThread, 0, numRegularThreads)
+	for i := 0; i < numRegularThreads; i++ {
 		convertToRegularThread(getInactivePHPThread())
 	}
 
