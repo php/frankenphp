@@ -25,7 +25,6 @@ install an appropriate version for your platform:
 
 ```console
 curl https://frankenphp.dev/install.sh | sh
-mv frankenphp /usr/local/bin/
 ```
 
 ### Standalone Binary
