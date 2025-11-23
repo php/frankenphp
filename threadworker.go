@@ -22,7 +22,8 @@ type workerThread struct {
 	workerFrankenPHPContext *frankenPHPContext
 	workerContext           context.Context
 	backoff                 *exponentialBackoff
-	isBootingScript         bool // true if the worker has not reached frankenphp_handle_request yet
+	isBootingScript         bool               // true if the worker has not reached frankenphp_handle_request yet
+	workReady               chan contextHolder // Channel to receive work directly from pool
 }
 
 func convertToWorkerThread(thread *phpThread, worker *worker) {
@@ -35,6 +36,7 @@ func convertToWorkerThread(thread *phpThread, worker *worker) {
 			minBackoff:             100 * time.Millisecond,
 			maxConsecutiveFailures: worker.maxConsecutiveFailures,
 		},
+		workReady: make(chan contextHolder, 1), // Buffered to avoid blocking sender
 	})
 	worker.attachThread(thread)
 }
@@ -210,6 +212,9 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 
 	handler.state.markAsWaiting(true)
 
+	// Put this thread in the pool for direct handoff
+	handler.worker.threadPool.Put(handler)
+
 	var requestCH contextHolder
 	select {
 	case <-handler.thread.drainChan:
@@ -225,7 +230,11 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 
 		return false, nil
 	case requestCH = <-handler.thread.requestChan:
+		// Fast path: direct thread affinity
+	case requestCH = <-handler.workReady:
+		// Medium path: pool handoff
 	case requestCH = <-handler.worker.requestChan:
+		// Slow path: global channel
 	}
 
 	handler.workerContext = requestCH.ctx

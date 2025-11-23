@@ -25,6 +25,7 @@ type worker struct {
 	semaphore              *semaphore.Weighted
 	threads                []*phpThread
 	threadMutex            sync.RWMutex
+	threadPool             sync.Pool // Pool of idle worker threads for direct handoff
 	allowPathMatching      bool
 	maxConsecutiveFailures int
 	onThreadReady          func(int)
@@ -249,23 +250,7 @@ func (worker *worker) isAtThreadLimit() bool {
 func (worker *worker) handleRequest(ch contextHolder) error {
 	metrics.StartWorkerRequest(worker.name)
 
-	// dispatch requests to all worker threads in order
-	worker.threadMutex.RLock()
-	for _, thread := range worker.threads {
-		select {
-		case thread.requestChan <- ch:
-			worker.threadMutex.RUnlock()
-			<-ch.frankenPHPContext.done
-			metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
-
-			return nil
-		default:
-			// thread is busy, continue
-		}
-	}
-	worker.threadMutex.RUnlock()
-
-	// if no thread was available, mark the request as queued and use semaphore admission control
+	// mark the request as queued and use admission control
 	metrics.QueuedWorkerRequest(worker.name)
 
 	workerScaleChan := scaleChan
@@ -281,6 +266,18 @@ func (worker *worker) handleRequest(ch contextHolder) error {
 	}
 	defer worker.semaphore.Release(1)
 
+	// Fast path: try to get an idle thread from the pool
+	if idle := worker.threadPool.Get(); idle != nil {
+		handler := idle.(*workerThread)
+		// Direct handoff - send work to the thread's dedicated channel
+		handler.workReady <- ch
+		metrics.DequeuedWorkerRequest(worker.name)
+		<-ch.frankenPHPContext.done
+		metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
+		return nil
+	}
+
+	// Slow path: no idle thread in pool, use the global channel
 	worker.requestChan <- ch
 	metrics.DequeuedWorkerRequest(worker.name)
 	<-ch.frankenPHPContext.done
