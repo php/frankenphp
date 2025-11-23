@@ -566,7 +566,7 @@ PHP_FUNCTION(frankenphp_log) {
   ret = go_log_attrs(thread_index, message, message_len, (int)level, context);
   if (ret != NULL) {
     zend_throw_exception(spl_ce_RuntimeException, ret, 0);
-    // free(ret); // NOTE: is the string copied by zend_throw ??
+    free(ret);
     RETURN_THROWS();
   }
 }
