@@ -248,6 +248,24 @@ func (worker *worker) isAtThreadLimit() bool {
 
 func (worker *worker) handleRequest(ch contextHolder) error {
 	metrics.StartWorkerRequest(worker.name)
+
+	// dispatch requests to all worker threads in order
+	worker.threadMutex.RLock()
+	for _, thread := range worker.threads {
+		select {
+		case thread.requestChan <- ch:
+			worker.threadMutex.RUnlock()
+			<-ch.frankenPHPContext.done
+			metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
+
+			return nil
+		default:
+			// thread is busy, continue
+		}
+	}
+	worker.threadMutex.RUnlock()
+
+	// if no thread was available, mark the request as queued and use semaphore admission control
 	metrics.QueuedWorkerRequest(worker.name)
 
 	workerScaleChan := scaleChan
