@@ -30,7 +30,7 @@ func convertToRegularThread(thread *phpThread) {
 	thread.setHandler(&regularThread{
 		thread:    thread,
 		state:     thread.state,
-		workReady: make(chan contextHolder, 1), // Buffered to avoid blocking sender
+		workReady: make(chan contextHolder),
 	})
 	attachRegularThread(thread)
 }
@@ -123,12 +123,15 @@ func handleRequestWithRegularPHPThreads(ch contextHolder) error {
 	// Fast path: try to get an idle thread from the pool
 	if idle := regularThreadPool.Get(); idle != nil {
 		handler := idle.(*regularThread)
-		// Send work to the thread's dedicated channel
-		handler.workReady <- ch
-		metrics.DequeuedRequest()
-		<-ch.frankenPHPContext.done
-		metrics.StopRequest()
-		return nil
+		// Non-blocking send: detect stale handlers (threads that transitioned)
+		select {
+		case handler.workReady <- ch:
+			metrics.DequeuedRequest()
+			<-ch.frankenPHPContext.done
+			metrics.StopRequest()
+			return nil
+		default:
+		}
 	}
 
 	// Slow path: no idle thread in pool, use the global channel

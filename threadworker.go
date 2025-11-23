@@ -36,7 +36,7 @@ func convertToWorkerThread(thread *phpThread, worker *worker) {
 			minBackoff:             100 * time.Millisecond,
 			maxConsecutiveFailures: worker.maxConsecutiveFailures,
 		},
-		workReady: make(chan contextHolder, 1), // Buffered to avoid blocking sender
+		workReady: make(chan contextHolder),
 	})
 	worker.attachThread(thread)
 }

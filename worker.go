@@ -269,12 +269,15 @@ func (worker *worker) handleRequest(ch contextHolder) error {
 	// Fast path: try to get an idle thread from the pool
 	if idle := worker.threadPool.Get(); idle != nil {
 		handler := idle.(*workerThread)
-		// Direct handoff - send work to the thread's dedicated channel
-		handler.workReady <- ch
-		metrics.DequeuedWorkerRequest(worker.name)
-		<-ch.frankenPHPContext.done
-		metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
-		return nil
+		// Non-blocking send: detect stale handlers (threads that transitioned)
+		select {
+		case handler.workReady <- ch:
+			metrics.DequeuedWorkerRequest(worker.name)
+			<-ch.frankenPHPContext.done
+			metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
+			return nil
+		default:
+		}
 	}
 
 	// Slow path: no idle thread in pool, use the global channel
