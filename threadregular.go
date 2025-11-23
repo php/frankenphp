@@ -13,8 +13,9 @@ import (
 type regularThread struct {
 	contextHolder
 
-	state  *threadState
-	thread *phpThread
+	state     *threadState
+	thread    *phpThread
+	workReady chan contextHolder // Channel to receive work directly
 }
 
 var (
@@ -22,12 +23,14 @@ var (
 	regularThreadMu    = &sync.RWMutex{}
 	regularRequestChan chan contextHolder
 	regularSemaphore   *semaphore.Weighted // FIFO admission control
+	regularThreadPool  sync.Pool           // Pool of idle threads for direct handoff
 )
 
 func convertToRegularThread(thread *phpThread) {
 	thread.setHandler(&regularThread{
-		thread: thread,
-		state:  thread.state,
+		thread:    thread,
+		state:     thread.state,
+		workReady: make(chan contextHolder, 1), // Buffered to avoid blocking sender
 	})
 	attachRegularThread(thread)
 }
@@ -77,13 +80,19 @@ func (handler *regularThread) waitForRequest() string {
 
 	handler.state.markAsWaiting(true)
 
-	var ch contextHolder
+	// Put this thread in the pool for direct handoff
+	regularThreadPool.Put(handler)
 
+	// Wait for work to be assigned (either via pool or fallback channel)
+	var ch contextHolder
 	select {
 	case <-handler.thread.drainChan:
 		// go back to beforeScriptExecution
 		return handler.beforeScriptExecution()
+	case ch = <-handler.workReady:
+		// Work received via direct handoff from the pool
 	case ch = <-regularRequestChan:
+		// Fallback: work came via global channel
 	}
 
 	handler.ctx = ch.ctx
@@ -111,6 +120,18 @@ func handleRequestWithRegularPHPThreads(ch contextHolder) error {
 	}
 	defer regularSemaphore.Release(1)
 
+	// Fast path: try to get an idle thread from the pool
+	if idle := regularThreadPool.Get(); idle != nil {
+		handler := idle.(*regularThread)
+		// Send work to the thread's dedicated channel
+		handler.workReady <- ch
+		metrics.DequeuedRequest()
+		<-ch.frankenPHPContext.done
+		metrics.StopRequest()
+		return nil
+	}
+
+	// Slow path: no idle thread in pool, use the global channel
 	regularRequestChan <- ch
 	metrics.DequeuedRequest()
 	<-ch.frankenPHPContext.done
