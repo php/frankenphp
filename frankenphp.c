@@ -556,13 +556,13 @@ PHP_FUNCTION(frankenphp_log) {
   zval *context = NULL;
 
   ZEND_PARSE_PARAMETERS_START(2, 3)
-    Z_PARAM_STRING(message, message_len)
-    Z_PARAM_LONG(level)
-    Z_PARAM_OPTIONAL
-    Z_PARAM_ARRAY(context)
+  Z_PARAM_STRING(message, message_len)
+  Z_PARAM_LONG(level)
+  Z_PARAM_OPTIONAL
+  Z_PARAM_ARRAY(context)
   ZEND_PARSE_PARAMETERS_END();
 
-  char * ret = NULL;
+  char *ret = NULL;
   ret = go_log_attrs(thread_index, message, message_len, (int)level, context);
   if (ret != NULL) {
     zend_throw_exception(spl_ce_RuntimeException, ret, 0);
