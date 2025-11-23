@@ -47,6 +47,7 @@ type testOptions struct {
 	realServer         bool
 	logger             *slog.Logger
 	initOpts           []frankenphp.Option
+	requestOpts        []frankenphp.RequestOption
 	phpIni             map[string]string
 }
 
@@ -83,7 +84,9 @@ func runTest(t *testing.T, test func(func(http.ResponseWriter, *http.Request), *
 	defer frankenphp.Shutdown()
 
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		req, err := frankenphp.NewRequestWithContext(r, frankenphp.WithRequestDocumentRoot(testDataDir, false))
+		opts.requestOpts = append(opts.requestOpts, frankenphp.WithRequestDocumentRoot(testDataDir, false))
+
+		req, err := frankenphp.NewRequestWithContext(r, opts.requestOpts...)
 		assert.NoError(t, err)
 
 		err = frankenphp.ServeHTTP(w, req)
