@@ -47,6 +47,7 @@ type testOptions struct {
 	realServer         bool
 	logger             *slog.Logger
 	initOpts           []frankenphp.Option
+	requestOpts        []frankenphp.RequestOption
 	phpIni             map[string]string
 }
 
@@ -82,8 +83,10 @@ func runTest(t *testing.T, test func(func(http.ResponseWriter, *http.Request), *
 	require.NoError(t, err)
 	defer frankenphp.Shutdown()
 
+	opts.requestOpts = append(opts.requestOpts, frankenphp.WithRequestDocumentRoot(testDataDir, false))
+
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		req, err := frankenphp.NewRequestWithContext(r, frankenphp.WithRequestDocumentRoot(testDataDir, false))
+		req, err := frankenphp.NewRequestWithContext(r, opts.requestOpts...)
 		assert.NoError(t, err)
 
 		err = frankenphp.ServeHTTP(w, req)
@@ -1003,6 +1006,7 @@ func FuzzRequest(f *testing.F) {
 			if strings.Contains(req.URL.Path, "\x00") {
 				assert.Equal(t, 400, resp.StatusCode)
 				assert.Contains(t, body, "invalid request path")
+
 				return
 			}
 
