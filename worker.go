@@ -3,14 +3,17 @@ package frankenphp
 // #include "frankenphp.h"
 import "C"
 import (
+	"context"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/dunglas/frankenphp/internal/fastabs"
 	"github.com/dunglas/frankenphp/internal/watcher"
+	"golang.org/x/sync/semaphore"
 )
 
 // represents a worker script and can have many threads assigned to it
@@ -21,6 +24,7 @@ type worker struct {
 	maxThreads             int
 	env                    PreparedEnv
 	requestChan            chan contextHolder
+	semaphore              *semaphore.Weighted
 	threads                []*phpThread
 	threadMutex            sync.RWMutex
 	allowPathMatching      bool
@@ -131,6 +135,7 @@ func newWorker(o workerOpt) (*worker, error) {
 		maxThreads:             o.maxThreads,
 		env:                    o.env,
 		requestChan:            make(chan contextHolder),
+		semaphore:              semaphore.NewWeighted(int64(o.num)),
 		threads:                make([]*phpThread, 0, o.num),
 		allowPathMatching:      allowPathMatching,
 		maxConsecutiveFailures: o.maxConsecutiveFailures,
@@ -246,46 +251,77 @@ func (worker *worker) isAtThreadLimit() bool {
 func (worker *worker) handleRequest(ch contextHolder) error {
 	metrics.StartWorkerRequest(worker.name)
 
-	// dispatch requests to all worker threads in order
-	worker.threadMutex.RLock()
-	for _, thread := range worker.threads {
-		select {
-		case thread.requestChan <- ch:
-			worker.threadMutex.RUnlock()
-			<-ch.frankenPHPContext.done
-			metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
+	runtime.Gosched()
 
-			return nil
-		default:
-			// thread is busy, continue
-		}
-	}
-	worker.threadMutex.RUnlock()
-
-	// if no thread was available, mark the request as queued and apply the scaling strategy
 	metrics.QueuedWorkerRequest(worker.name)
-	for {
-		workerScaleChan := scaleChan
-		if worker.isAtThreadLimit() {
-			workerScaleChan = nil // max_threads for this worker reached, do not attempt scaling
+
+	workerScaleChan := scaleChan
+	if worker.isAtThreadLimit() {
+		workerScaleChan = nil
+	}
+
+	if maxWaitTime > 0 && workerScaleChan != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), minStallTime)
+		err := worker.semaphore.Acquire(ctx, 1)
+		cancel()
+
+		if err != nil {
+			select {
+			case workerScaleChan <- ch.frankenPHPContext:
+			default:
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), maxWaitTime)
+			defer cancel()
+
+			if err := worker.semaphore.Acquire(ctx, 1); err != nil {
+				ch.frankenPHPContext.reject(ErrMaxWaitTimeExceeded)
+				metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
+				return ErrMaxWaitTimeExceeded
+			}
 		}
+		defer worker.semaphore.Release(1)
+	} else if maxWaitTime > 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), maxWaitTime)
+		defer cancel()
 
-		select {
-		case worker.requestChan <- ch:
-			metrics.DequeuedWorkerRequest(worker.name)
-			<-ch.frankenPHPContext.done
-			metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
-
-			return nil
-		case workerScaleChan <- ch.frankenPHPContext:
-			// the request has triggered scaling, continue to wait for a thread
-		case <-timeoutChan(maxWaitTime):
-			// the request has timed out stalling
-			metrics.DequeuedWorkerRequest(worker.name)
-
+		if err := worker.semaphore.Acquire(ctx, 1); err != nil {
 			ch.frankenPHPContext.reject(ErrMaxWaitTimeExceeded)
-
+			metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
 			return ErrMaxWaitTimeExceeded
 		}
+		defer worker.semaphore.Release(1)
+	} else if workerScaleChan != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), minStallTime)
+		err := worker.semaphore.Acquire(ctx, 1)
+		cancel()
+
+		if err != nil {
+			select {
+			case workerScaleChan <- ch.frankenPHPContext:
+			default:
+			}
+
+			if err := worker.semaphore.Acquire(context.Background(), 1); err != nil {
+				ch.frankenPHPContext.reject(ErrMaxWaitTimeExceeded)
+				metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
+				return ErrMaxWaitTimeExceeded
+			}
+		}
+		defer worker.semaphore.Release(1)
+	} else {
+		if err := worker.semaphore.Acquire(context.Background(), 1); err != nil {
+			ch.frankenPHPContext.reject(ErrMaxWaitTimeExceeded)
+			metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
+			return ErrMaxWaitTimeExceeded
+		}
+		defer worker.semaphore.Release(1)
 	}
+
+	worker.requestChan <- ch
+	metrics.DequeuedWorkerRequest(worker.name)
+	<-ch.frankenPHPContext.done
+	metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
+
+	return nil
 }
