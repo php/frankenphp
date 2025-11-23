@@ -19,11 +19,10 @@ func TestMercurePublish_worker(t *testing.T) {
 	testMercurePublish(t, &testOptions{workerScript: "index.php"})
 }
 func testMercurePublish(t *testing.T, opts *testOptions) {
-	h, err := mercure.NewHub(t.Context())
+	h, err := mercure.NewHub(t.Context(), mercure.WithTransport(mercure.NewLocalTransport(mercure.NewSubscriberList(0))))
 	require.NoError(t, err)
 
 	opts.requestOpts = []frankenphp.RequestOption{frankenphp.WithMercureHub(h)}
-	opts.nbParallelRequests = 1
 
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
 		body, _ := testGet(fmt.Sprintf("https://example.com/mercure-publish.php?i=%d", i), handler, t)

@@ -83,9 +83,9 @@ func runTest(t *testing.T, test func(func(http.ResponseWriter, *http.Request), *
 	require.NoError(t, err)
 	defer frankenphp.Shutdown()
 
-	handler := func(w http.ResponseWriter, r *http.Request) {
-		opts.requestOpts = append(opts.requestOpts, frankenphp.WithRequestDocumentRoot(testDataDir, false))
+	opts.requestOpts = append(opts.requestOpts, frankenphp.WithRequestDocumentRoot(testDataDir, false))
 
+	handler := func(w http.ResponseWriter, r *http.Request) {
 		req, err := frankenphp.NewRequestWithContext(r, opts.requestOpts...)
 		assert.NoError(t, err)
 
@@ -1006,6 +1006,7 @@ func FuzzRequest(f *testing.F) {
 			if strings.Contains(req.URL.Path, "\x00") {
 				assert.Equal(t, 400, resp.StatusCode)
 				assert.Contains(t, body, "invalid request path")
+
 				return
 			}
 
