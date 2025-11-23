@@ -377,6 +377,8 @@ func Shutdown() {
 
 // ServeHTTP executes a PHP script according to the given context.
 func ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) error {
+	runtime.Gosched()
+
 	h := responseWriter.Header()
 	if h["Server"] == nil {
 		h["Server"] = serverHeader
