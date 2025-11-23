@@ -275,6 +275,7 @@ func (worker *worker) handleRequest(ch contextHolder) error {
 			defer cancel()
 
 			if err := worker.semaphore.Acquire(ctx, 1); err != nil {
+				metrics.DequeuedWorkerRequest(worker.name)
 				ch.frankenPHPContext.reject(ErrMaxWaitTimeExceeded)
 				metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
 				return ErrMaxWaitTimeExceeded
@@ -286,6 +287,7 @@ func (worker *worker) handleRequest(ch contextHolder) error {
 		defer cancel()
 
 		if err := worker.semaphore.Acquire(ctx, 1); err != nil {
+			metrics.DequeuedWorkerRequest(worker.name)
 			ch.frankenPHPContext.reject(ErrMaxWaitTimeExceeded)
 			metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
 			return ErrMaxWaitTimeExceeded
@@ -303,6 +305,7 @@ func (worker *worker) handleRequest(ch contextHolder) error {
 			}
 
 			if err := worker.semaphore.Acquire(context.Background(), 1); err != nil {
+				metrics.DequeuedWorkerRequest(worker.name)
 				ch.frankenPHPContext.reject(ErrMaxWaitTimeExceeded)
 				metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
 				return ErrMaxWaitTimeExceeded
@@ -311,6 +314,7 @@ func (worker *worker) handleRequest(ch contextHolder) error {
 		defer worker.semaphore.Release(1)
 	} else {
 		if err := worker.semaphore.Acquire(context.Background(), 1); err != nil {
+			metrics.DequeuedWorkerRequest(worker.name)
 			ch.frankenPHPContext.reject(ErrMaxWaitTimeExceeded)
 			metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
 			return ErrMaxWaitTimeExceeded
