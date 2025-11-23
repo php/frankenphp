@@ -5,6 +5,7 @@ import "C"
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -19,7 +20,7 @@ type worker struct {
 	fileName               string
 	num                    int
 	maxThreads             int
-	env                    PreparedEnv
+	requestOptions         []RequestOption
 	requestChan            chan contextHolder
 	threads                []*phpThread
 	threadMutex            sync.RWMutex
@@ -127,9 +128,9 @@ func newWorker(o workerOpt) (*worker, error) {
 	w := &worker{
 		name:                   o.name,
 		fileName:               absFileName,
+		requestOptions:         o.requestOptions,
 		num:                    o.num,
 		maxThreads:             o.maxThreads,
-		env:                    o.env,
 		requestChan:            make(chan contextHolder),
 		threads:                make([]*phpThread, 0, o.num),
 		allowPathMatching:      allowPathMatching,
@@ -137,6 +138,12 @@ func newWorker(o workerOpt) (*worker, error) {
 		onThreadReady:          o.onThreadReady,
 		onThreadShutdown:       o.onThreadShutdown,
 	}
+
+	w.requestOptions = append(
+		w.requestOptions,
+		WithRequestDocumentRoot(filepath.Dir(o.fileName), false),
+		WithRequestPreparedEnv(o.env),
+	)
 
 	if o.extensionWorkers != nil {
 		o.extensionWorkers.internalWorker = w
