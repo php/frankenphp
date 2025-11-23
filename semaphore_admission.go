@@ -11,6 +11,10 @@ func acquireSemaphoreWithAdmissionControl(
 	scaleChan chan *frankenPHPContext,
 	fc *frankenPHPContext,
 ) error {
+	if sem.TryAcquire(1) {
+		return nil
+	}
+
 	if maxWaitTime > 0 && scaleChan != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), minStallTime)
 		err := sem.Acquire(ctx, 1)
