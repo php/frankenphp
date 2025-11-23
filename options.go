@@ -36,6 +36,7 @@ type workerOpt struct {
 	num                    int
 	maxThreads             int
 	env                    PreparedEnv
+	requestOptions         []RequestOption
 	watch                  []string
 	maxConsecutiveFailures int
 	extensionWorkers       *extensionWorkers
@@ -155,6 +156,15 @@ func WithMaxWaitTime(maxWaitTime time.Duration) Option {
 func WithWorkerEnv(env map[string]string) WorkerOption {
 	return func(w *workerOpt) error {
 		w.env = PrepareEnv(env)
+
+		return nil
+	}
+}
+
+// WithWorkerRequestOptions sets options for the main dummy request created for the worker
+func WithWorkerRequestOptions(options ...RequestOption) WorkerOption {
+	return func(w *workerOpt) error {
+		w.requestOptions = append(w.requestOptions, options...)
 
 		return nil
 	}
