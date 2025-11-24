@@ -278,13 +278,13 @@ func (worker *worker) handleRequest(ch contextHolder) error {
 	worker.queuedRequests.Add(1)
 	metrics.QueuedWorkerRequest(worker.name)
 
-	runtime.Gosched()
-
 	for {
 		workerScaleChan := scaleChan
 		if worker.isAtThreadLimit() {
 			workerScaleChan = nil // max_threads for this worker reached, do not attempt scaling
 		}
+
+		runtime.Gosched()
 
 		select {
 		case worker.requestChan <- ch:
