@@ -74,7 +74,7 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		return fmt.Errorf(`expected ctx.App("frankenphp") to return *FrankenPHPApp, got nil`)
 	}
 
-	f.assignMercureHubRequestOption(ctx)
+	f.assignMercureHub(ctx)
 
 	for i, wc := range f.Workers {
 		// make the file path absolute from the public directory
@@ -89,9 +89,6 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		}
 
 		wc.requestOptions = []frankenphp.RequestOption{frankenphp.WithRequestLogger(f.logger)}
-		if f.mercureHubRequestOption != nil {
-			wc.requestOptions = append(wc.requestOptions, *f.mercureHubRequestOption)
-		}
 
 		f.Workers[i] = wc
 	}

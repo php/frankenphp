@@ -31,6 +31,8 @@ type opt struct {
 }
 
 type workerOpt struct {
+	mercureContext
+
 	name                   string
 	fileName               string
 	num                    int

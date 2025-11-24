@@ -5,29 +5,23 @@ package watcher
 import (
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDisallowOnEventTypeBiggerThan3(t *testing.T) {
-	const fileName = "/some/path/watch-me.php"
-	const eventType = 4
+	w := watcher{name: "/some/path"}
+	require.NoError(t, w.parse())
 
-	watchPattern, err := parseFilePattern("/some/path")
-
-	assert.NoError(t, err)
-	assert.False(t, watchPattern.allowReload(fileName, eventType, 0))
+	assert.False(t, w.allowReload(&Event{PathName: "/some/path/watch-me.php", EffectType: EffectTypeOwner}))
 }
 
 func TestDisallowOnPathTypeBiggerThan2(t *testing.T) {
-	const fileName = "/some/path/watch-me.php"
-	const pathType = 3
+	w := watcher{name: "/some/path"}
+	require.NoError(t, w.parse())
 
-	watchPattern, err := parseFilePattern("/some/path")
-
-	assert.NoError(t, err)
-	assert.False(t, watchPattern.allowReload(fileName, 0, pathType))
+	assert.False(t, w.allowReload(&Event{PathName: "/some/path/watch-me.php", PathType: PathTypeSymLink}))
 }
 
 func TestWatchesCorrectDir(t *testing.T) {
@@ -36,7 +30,7 @@ func TestWatchesCorrectDir(t *testing.T) {
 	hasDir(t, "/path/**/*.php", "/path")
 	hasDir(t, "/path/*.php", "/path")
 	hasDir(t, "/path/*/*.php", "/path")
-	hasDir(t, "/path/?dir/*.php", "/path")
+	hasDir(t, "/path/?path/*.php", "/path")
 	hasDir(t, "/path/{dir1,dir2}/**/*.php", "/path")
 	hasDir(t, ".", relativeDir(t, ""))
 	hasDir(t, "./", relativeDir(t, ""))
@@ -147,19 +141,14 @@ func TestInValidExtendedPatterns(t *testing.T) {
 }
 
 func TestAnAssociatedEventTriggersTheWatcher(t *testing.T) {
-	watchPattern, err := parseFilePattern("/**/*.php")
-	assert.NoError(t, err)
-	watchPattern.trigger = make(chan string)
+	w := watcher{name: "/**/*.php"}
+	require.NoError(t, w.parse())
+	w.events = make(chan eventHolder)
 
-	go handleWatcherEvent(watchPattern, "/path/temorary_file", "/path/file.php", 0, 0)
+	e := &Event{PathName: "/path/temorary_file", AssociatedPathName: "/path/file.php"}
+	go w.handle(e)
 
-	var path string
-	select {
-	case path = <-watchPattern.trigger:
-		assert.Equal(t, "/path/file.php", path, "should be associated file path")
-	case <-time.After(2 * time.Second):
-		assert.Fail(t, "associated watchPattern did not trigger after 2s")
-	}
+	assert.Equal(t, e, (<-w.events).event)
 }
 
 func relativeDir(t *testing.T, relativePath string) string {
@@ -169,19 +158,28 @@ func relativeDir(t *testing.T, relativePath string) string {
 }
 
 func hasDir(t *testing.T, pattern string, dir string) {
-	watchPattern, err := parseFilePattern(pattern)
-	assert.NoError(t, err)
-	assert.Equal(t, dir, watchPattern.dir)
+	t.Helper()
+
+	w := watcher{name: pattern}
+	require.NoError(t, w.parse())
+
+	assert.Equal(t, dir, w.name)
 }
 
 func shouldMatch(t *testing.T, pattern string, fileName string) {
-	watchPattern, err := parseFilePattern(pattern)
-	assert.NoError(t, err)
-	assert.True(t, watchPattern.allowReload(fileName, 0, 0))
+	t.Helper()
+
+	w := watcher{name: pattern}
+	require.NoError(t, w.parse())
+
+	assert.Truef(t, w.allowReload(&Event{PathName: fileName}), "%s %s", pattern, fileName)
 }
 
 func shouldNotMatch(t *testing.T, pattern string, fileName string) {
-	watchPattern, err := parseFilePattern(pattern)
-	assert.NoError(t, err)
-	assert.False(t, watchPattern.allowReload(fileName, 0, 0))
+	t.Helper()
+
+	w := watcher{name: pattern}
+	require.NoError(t, w.parse())
+
+	assert.Falsef(t, w.allowReload(&Event{PathName: fileName}), "%s %s", pattern, fileName)
 }
