@@ -34,13 +34,13 @@ type ConfigStruct struct {
 	Mode int
 }
 
-// export_php:classconstant Config
+// export_php:classconst Config
 const MODE_DEBUG = 1
 
-// export_php:classconstant Config
+// export_php:classconst Config
 const MODE_PRODUCTION = 2
 
-// export_php:classconstant Config
+// export_php:classconst Config
 const DEFAULT_TIMEOUT = 30
 
 // export_php:method Config::setMode(int $mode): void

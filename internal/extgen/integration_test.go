@@ -75,7 +75,7 @@ func (s *IntegrationTestSuite) createGoModule(sourceFile string) (string, error)
 
 	goModContent := fmt.Sprintf(`module %s
 
-go 1.23
+go 1.25
 
 require github.com/dunglas/frankenphp v0.0.0
 
@@ -229,6 +229,21 @@ func (s *IntegrationTestSuite) verifyPHPSymbols(functions []string, classes []st
 	return nil
 }
 
+func (s *IntegrationTestSuite) verifyFunctionBehavior(phpCode string, expectedOutput string) error {
+	s.t.Helper()
+
+	output, err := s.runPHPCode(phpCode)
+	if err != nil {
+		return err
+	}
+
+	if !strings.Contains(output, expectedOutput) {
+		return fmt.Errorf("unexpected output.\nExpected to contain: %q\nGot: %q", expectedOutput, output)
+	}
+
+	return nil
+}
+
 func TestBasicFunction(t *testing.T) {
 	suite := setupTest(t)
 
@@ -268,6 +283,41 @@ func TestBasicFunction(t *testing.T) {
 		[]string{},
 	)
 	require.NoError(t, err, "all functions should be accessible from PHP")
+
+	err = suite.verifyFunctionBehavior(`<?php
+$result = test_uppercase("hello world");
+if ($result !== "HELLO WORLD") {
+	echo "FAIL: test_uppercase expected 'HELLO WORLD', got '$result'";
+	exit(1);
+}
+
+$result = test_uppercase("");
+if ($result !== "") {
+	echo "FAIL: test_uppercase with empty string expected '', got '$result'";
+	exit(1);
+}
+
+$sum = test_add_numbers(5, 7);
+if ($sum !== 12) {
+	echo "FAIL: test_add_numbers(5, 7) expected 12, got $sum";
+	exit(1);
+}
+
+$result = test_is_enabled(true);
+if ($result !== false) {
+	echo "FAIL: test_is_enabled(true) expected false, got " . ($result ? "true" : "false");
+	exit(1);
+}
+
+$result = test_is_enabled(false);
+if ($result !== true) {
+	echo "FAIL: test_is_enabled(false) expected true, got " . ($result ? "true" : "false");
+	exit(1);
+}
+
+echo "OK";
+`, "OK")
+	require.NoError(t, err, "all function calls should work correctly")
 }
 
 func TestClassMethodsIntegration(t *testing.T) {
@@ -292,6 +342,93 @@ func TestClassMethodsIntegration(t *testing.T) {
 		[]string{},
 	)
 	require.NoError(t, err, "all classes should be accessible from PHP")
+
+	err = suite.verifyFunctionBehavior(`<?php
+$counter = new Counter();
+if ($counter->getValue() !== 0) {
+	echo "FAIL: Counter initial value expected 0, got " . $counter->getValue();
+	exit(1);
+}
+
+$counter->increment();
+if ($counter->getValue() !== 1) {
+	echo "FAIL: Counter after increment expected 1, got " . $counter->getValue();
+	exit(1);
+}
+
+$counter->decrement();
+if ($counter->getValue() !== 0) {
+	echo "FAIL: Counter after decrement expected 0, got " . $counter->getValue();
+	exit(1);
+}
+
+$counter->setValue(10);
+if ($counter->getValue() !== 10) {
+	echo "FAIL: Counter after setValue(10) expected 10, got " . $counter->getValue();
+	exit(1);
+}
+
+$newValue = $counter->addValue(5);
+if ($newValue !== 15) {
+	echo "FAIL: Counter addValue(5) expected to return 15, got $newValue";
+	exit(1);
+}
+if ($counter->getValue() !== 15) {
+	echo "FAIL: Counter value after addValue(5) expected 15, got " . $counter->getValue();
+	exit(1);
+}
+
+$counter->updateWithNullable(50);
+if ($counter->getValue() !== 50) {
+	echo "FAIL: Counter after updateWithNullable(50) expected 50, got " . $counter->getValue();
+	exit(1);
+}
+
+$counter->updateWithNullable(null);
+if ($counter->getValue() !== 50) {
+	echo "FAIL: Counter after updateWithNullable(null) expected 50 (unchanged), got " . $counter->getValue();
+	exit(1);
+}
+
+$counter->reset();
+if ($counter->getValue() !== 0) {
+	echo "FAIL: Counter after reset expected 0, got " . $counter->getValue();
+	exit(1);
+}
+
+$counter1 = new Counter();
+$counter2 = new Counter();
+$counter1->setValue(100);
+$counter2->setValue(200);
+if ($counter1->getValue() !== 100 || $counter2->getValue() !== 200) {
+	echo "FAIL: Multiple Counter instances should be independent";
+	exit(1);
+}
+
+$holder = new StringHolder();
+$holder->setData("test string");
+if ($holder->getData() !== "test string") {
+	echo "FAIL: StringHolder getData expected 'test string', got '" . $holder->getData() . "'";
+	exit(1);
+}
+if ($holder->getLength() !== 11) {
+	echo "FAIL: StringHolder getLength expected 11, got " . $holder->getLength();
+	exit(1);
+}
+
+$holder->setData("");
+if ($holder->getData() !== "") {
+	echo "FAIL: StringHolder empty string expected '', got '" . $holder->getData() . "'";
+	exit(1);
+}
+if ($holder->getLength() !== 0) {
+	echo "FAIL: StringHolder empty string length expected 0, got " . $holder->getLength();
+	exit(1);
+}
+
+echo "OK";
+`, "OK")
+	require.NoError(t, err, "all class methods should work correctly")
 }
 
 func TestConstants(t *testing.T) {
@@ -319,6 +456,78 @@ func TestConstants(t *testing.T) {
 		},
 	)
 	require.NoError(t, err, "all constants, functions, and classes should be accessible from PHP")
+
+	err = suite.verifyFunctionBehavior(`<?php
+if (TEST_MAX_RETRIES !== 100) {
+	echo "FAIL: TEST_MAX_RETRIES expected 100, got " . TEST_MAX_RETRIES;
+	exit(1);
+}
+
+if (TEST_API_VERSION !== "2.0.0") {
+	echo "FAIL: TEST_API_VERSION expected '2.0.0', got '" . TEST_API_VERSION . "'";
+	exit(1);
+}
+
+if (TEST_ENABLED !== true) {
+var_dump(TEST_ENABLED);
+	echo "FAIL: TEST_ENABLED expected true, got " . (TEST_ENABLED ? "true" : "false");
+	exit(1);
+}
+
+if (abs(TEST_PI - 3.14159) > 0.00001) {
+	echo "FAIL: TEST_PI expected 3.14159, got " . TEST_PI;
+	exit(1);
+}
+
+if (Config::MODE_DEBUG !== 1) {
+	echo "FAIL: Config::MODE_DEBUG expected 1, got " . Config::MODE_DEBUG;
+	exit(1);
+}
+
+if (Config::MODE_PRODUCTION !== 2) {
+	echo "FAIL: Config::MODE_PRODUCTION expected 2, got " . Config::MODE_PRODUCTION;
+	exit(1);
+}
+
+if (Config::DEFAULT_TIMEOUT !== 30) {
+	echo "FAIL: Config::DEFAULT_TIMEOUT expected 30, got " . Config::DEFAULT_TIMEOUT;
+	exit(1);
+}
+
+$config = new Config();
+$config->setMode(Config::MODE_DEBUG);
+if ($config->getMode() !== Config::MODE_DEBUG) {
+	echo "FAIL: Config getMode expected MODE_DEBUG, got " . $config->getMode();
+	exit(1);
+}
+
+$result = test_with_constants(STATUS_PENDING);
+if ($result !== "pending") {
+	echo "FAIL: test_with_constants(STATUS_PENDING) expected 'pending', got '$result'";
+	exit(1);
+}
+
+$result = test_with_constants(STATUS_PROCESSING);
+if ($result !== "processing") {
+	echo "FAIL: test_with_constants(STATUS_PROCESSING) expected 'processing', got '$result'";
+	exit(1);
+}
+
+$result = test_with_constants(STATUS_COMPLETED);
+if ($result !== "completed") {
+	echo "FAIL: test_with_constants(STATUS_COMPLETED) expected 'completed', got '$result'";
+	exit(1);
+}
+
+$result = test_with_constants(999);
+if ($result !== "unknown") {
+	echo "FAIL: test_with_constants(999) expected 'unknown', got '$result'";
+	exit(1);
+}
+
+echo "OK";
+`, "OK")
+	require.NoError(t, err, "all constants should have correct values and functions should work")
 }
 
 func TestNamespace(t *testing.T) {
@@ -343,6 +552,71 @@ func TestNamespace(t *testing.T) {
 		[]string{`\\TestIntegration\\Extension\\NAMESPACE_VERSION`},
 	)
 	require.NoError(t, err, "all namespaced symbols should be accessible from PHP")
+
+	err = suite.verifyFunctionBehavior(`<?php
+use TestIntegration\Extension;
+
+if (Extension\NAMESPACE_VERSION !== "1.0.0") {
+	echo "FAIL: NAMESPACE_VERSION expected '1.0.0', got '" . Extension\NAMESPACE_VERSION . "'";
+	exit(1);
+}
+
+$greeting = Extension\greet("Alice");
+if ($greeting !== "Hello, Alice!") {
+	echo "FAIL: greet('Alice') expected 'Hello, Alice!', got '$greeting'";
+	exit(1);
+}
+
+$greeting = Extension\greet("");
+if ($greeting !== "Hello, !") {
+	echo "FAIL: greet('') expected 'Hello, !', got '$greeting'";
+	exit(1);
+}
+
+if (Extension\Person::DEFAULT_AGE !== 18) {
+	echo "FAIL: Person::DEFAULT_AGE expected 18, got " . Extension\Person::DEFAULT_AGE;
+	exit(1);
+}
+
+$person = new Extension\Person();
+$person->setName("Bob");
+$person->setAge(25);
+
+if ($person->getName() !== "Bob") {
+	echo "FAIL: Person getName expected 'Bob', got '" . $person->getName() . "'";
+	exit(1);
+}
+
+if ($person->getAge() !== 25) {
+	echo "FAIL: Person getAge expected 25, got " . $person->getAge();
+	exit(1);
+}
+
+$person->setAge(Extension\Person::DEFAULT_AGE);
+if ($person->getAge() !== 18) {
+	echo "FAIL: Person setAge(DEFAULT_AGE) expected 18, got " . $person->getAge();
+	exit(1);
+}
+
+$person1 = new Extension\Person();
+$person2 = new Extension\Person();
+$person1->setName("Alice");
+$person1->setAge(30);
+$person2->setName("Charlie");
+$person2->setAge(40);
+
+if ($person1->getName() !== "Alice" || $person1->getAge() !== 30) {
+	echo "FAIL: person1 should have independent state";
+	exit(1);
+}
+if ($person2->getName() !== "Charlie" || $person2->getAge() !== 40) {
+	echo "FAIL: person2 should have independent state";
+	exit(1);
+}
+
+echo "OK";
+`, "OK")
+	require.NoError(t, err, "all namespaced symbols should work correctly")
 }
 
 func TestInvalidSignature(t *testing.T) {
