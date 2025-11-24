@@ -1,5 +1,6 @@
 package phpheaders
 
+import "C"
 import (
 	"strings"
 

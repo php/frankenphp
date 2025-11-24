@@ -1,4 +1,4 @@
-package frankenphp
+package state
 
 import (
 	"testing"
@@ -8,37 +8,38 @@ import (
 )
 
 func Test2GoroutinesYieldToEachOtherViaStates(t *testing.T) {
-	threadState := &threadState{currentState: stateBooting}
+	threadState := &ThreadState{currentState: Booting}
 
 	go func() {
-		threadState.waitFor(stateInactive)
-		assert.True(t, threadState.is(stateInactive))
-		threadState.set(stateReady)
+		threadState.WaitFor(Inactive)
+		assert.True(t, threadState.Is(Inactive))
+		threadState.Set(Ready)
 	}()
 
-	threadState.set(stateInactive)
-	threadState.waitFor(stateReady)
-	assert.True(t, threadState.is(stateReady))
+	threadState.Set(Inactive)
+	threadState.WaitFor(Ready)
+	assert.True(t, threadState.Is(Ready))
 }
 
 func TestStateShouldHaveCorrectAmountOfSubscribers(t *testing.T) {
-	threadState := &threadState{currentState: stateBooting}
+	threadState := &ThreadState{currentState: Booting}
 
 	// 3 subscribers waiting for different states
-	go threadState.waitFor(stateInactive)
-	go threadState.waitFor(stateInactive, stateShuttingDown)
-	go threadState.waitFor(stateShuttingDown)
+	go threadState.WaitFor(Inactive)
+	go threadState.WaitFor(Inactive, ShuttingDown)
+	go threadState.WaitFor(ShuttingDown)
 
 	assertNumberOfSubscribers(t, threadState, 3)
 
-	threadState.set(stateInactive)
+	threadState.Set(Inactive)
 	assertNumberOfSubscribers(t, threadState, 1)
 
-	assert.True(t, threadState.compareAndSwap(stateInactive, stateShuttingDown))
+	assert.True(t, threadState.CompareAndSwap(Inactive, ShuttingDown))
 	assertNumberOfSubscribers(t, threadState, 0)
 }
 
-func assertNumberOfSubscribers(t *testing.T, threadState *threadState, expected int) {
+func assertNumberOfSubscribers(t *testing.T, threadState *ThreadState, expected int) {
+	t.Helper()
 	for range 10_000 { // wait for 1 second max
 		time.Sleep(100 * time.Microsecond)
 		threadState.mu.RLock()
