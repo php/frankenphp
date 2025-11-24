@@ -694,7 +694,7 @@ func go_log(threadIndex C.uintptr_t, message *C.char, level C.int) {
 }
 
 //export go_log_attrs
-func go_log_attrs(threadIndex C.uintptr_t, message *C.char, len C.int, level C.int, cattrs *C.zval) *C.char {
+func go_log_attrs(threadIndex C.uintptr_t, message *C.zend_string, level C.zend_long, cattrs *C.zval) *C.char {
 	var attrs map[string]any
 
 	if cattrs == nil {
@@ -707,13 +707,13 @@ func go_log_attrs(threadIndex C.uintptr_t, message *C.char, len C.int, level C.i
 		}
 	}
 
-	m := C.GoStringN(message, len)
-	lvl := slog.Level(level)
-
 	ctx := phpThreads[threadIndex].context()
 
-	if globalLogger.Enabled(ctx, lvl) {
-		globalLogger.LogAttrs(ctx, lvl, m, mapToAttr(attrs)...)
+	if globalLogger.Enabled(ctx, slog.Level(level)) {
+		globalLogger.LogAttrs(ctx,
+			slog.Level(level),
+			GoString(unsafe.Pointer(message)),
+			mapToAttr(attrs)...)
 	}
 
 	return nil
