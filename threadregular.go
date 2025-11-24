@@ -123,9 +123,8 @@ func handleRequestWithRegularPHPThreads(ch contextHolder) error {
 	queuedRegularThreads.Add(1)
 	metrics.QueuedRequest()
 
-	runtime.Gosched()
-
 	for {
+		runtime.Gosched()
 		select {
 		case regularRequestChan <- ch:
 			queuedRegularThreads.Add(-1)
