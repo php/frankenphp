@@ -46,5 +46,5 @@ func (p *PersonStruct) GetAge() int64 {
 	return int64(p.Age)
 }
 
-// export_php:classconstant Person
+// export_php:classconst Person
 const DEFAULT_AGE = 18
