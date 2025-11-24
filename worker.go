@@ -256,6 +256,8 @@ func (worker *worker) isAtThreadLimit() bool {
 func (worker *worker) handleRequest(ch contextHolder) error {
 	metrics.StartWorkerRequest(worker.name)
 
+	runtime.Gosched()
+
 	if worker.queuedRequests.Load() == 0 {
 		// dispatch requests to all worker threads in order
 		worker.threadMutex.RLock()
@@ -283,8 +285,6 @@ func (worker *worker) handleRequest(ch contextHolder) error {
 		if worker.isAtThreadLimit() {
 			workerScaleChan = nil // max_threads for this worker reached, do not attempt scaling
 		}
-
-		runtime.Gosched()
 
 		select {
 		case worker.requestChan <- ch:

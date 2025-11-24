@@ -104,6 +104,8 @@ func (handler *regularThread) afterRequest() {
 func handleRequestWithRegularPHPThreads(ch contextHolder) error {
 	metrics.StartRequest()
 
+	runtime.Gosched()
+
 	if queuedRegularThreads.Load() == 0 {
 		regularThreadMu.RLock()
 		for _, thread := range regularThreads {
@@ -124,7 +126,6 @@ func handleRequestWithRegularPHPThreads(ch contextHolder) error {
 	metrics.QueuedRequest()
 
 	for {
-		runtime.Gosched()
 		select {
 		case regularRequestChan <- ch:
 			queuedRegularThreads.Add(-1)
