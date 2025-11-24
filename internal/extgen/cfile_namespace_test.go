@@ -174,7 +174,7 @@ func TestCFileGenerationWithNamespacedConstants(t *testing.T) {
 				{Name: "TEST_BOOL", Value: "true", PhpType: phpBool},
 			},
 			contains: []string{
-				`REGISTER_NS_LONG_CONSTANT("Go\\Extension", "TEST_BOOL", 1, CONST_CS | CONST_PERSISTENT);`,
+				`REGISTER_NS_LONG_CONSTANT("Go\\Extension", "TEST_BOOL", ZEND_TRUE, CONST_CS | CONST_PERSISTENT);`,
 			},
 		},
 		{
@@ -286,7 +286,7 @@ func TestCFileGenerationWithoutNamespacedConstants(t *testing.T) {
 				{Name: "GLOBAL_BOOL", Value: "false", PhpType: phpBool},
 			},
 			contains: []string{
-				`REGISTER_LONG_CONSTANT("GLOBAL_BOOL", 0, CONST_CS | CONST_PERSISTENT);`,
+				`REGISTER_LONG_CONSTANT("GLOBAL_BOOL", ZEND_FALSE, CONST_CS | CONST_PERSISTENT);`,
 			},
 		},
 		{
