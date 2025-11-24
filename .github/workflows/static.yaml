@@ -62,7 +62,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REF: ${{ (github.ref_type == 'tag' && github.ref_name) || (github.event_name == 'workflow_dispatch' && inputs.version) || '' }}
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           ref: ${{ steps.check.outputs.ref }}
           persist-credentials: false
@@ -108,7 +108,7 @@ jobs:
         run: echo "sanitized_platform=${PLATFORM//\//-}" >> "${GITHUB_OUTPUT}"
         env:
           PLATFORM: ${{ matrix.platform }}
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           ref: ${{ needs.prepare.outputs.ref }}
           persist-credentials: false
@@ -260,7 +260,7 @@ jobs:
         run: echo "sanitized_platform=${PLATFORM//\//-}" >> "${GITHUB_OUTPUT}"
         env:
           PLATFORM: ${{ matrix.platform }}
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           ref: ${{ needs.prepare.outputs.ref }}
           persist-credentials: false
@@ -442,7 +442,7 @@ jobs:
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           ref: ${{ needs.prepare.outputs.ref }}
           persist-credentials: false

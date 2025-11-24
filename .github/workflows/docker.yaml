@@ -90,7 +90,7 @@ jobs:
             echo ref="${FRANKENPHP_LATEST_TAG}"
             echo skip=false
           } >> "${GITHUB_OUTPUT}"
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         if: ${{ !fromJson(steps.check.outputs.skip) }}
         with:
           ref: ${{ steps.check.outputs.ref }}
@@ -152,7 +152,7 @@ jobs:
         run: echo "sanitized_platform=${PLATFORM//\//-}" >> "${GITHUB_OUTPUT}"
         env:
           PLATFORM: ${{ matrix.platform }}
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           ref: ${{ needs.prepare.outputs.ref }}
           persist-credentials: false
