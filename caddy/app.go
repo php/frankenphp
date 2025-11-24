@@ -150,25 +150,13 @@ func (f *FrankenPHPApp) Start() error {
 	)
 
 	for _, w := range f.Workers {
-		workerOpts := make([]frankenphp.WorkerOption, 0, len(w.requestOptions)+4)
-
-		if w.requestOptions == nil {
-			workerOpts = append(workerOpts,
-				frankenphp.WithWorkerEnv(w.Env),
-				frankenphp.WithWorkerWatchMode(w.Watch),
-				frankenphp.WithWorkerMaxFailures(w.MaxConsecutiveFailures),
-				frankenphp.WithWorkerMaxThreads(w.MaxThreads),
-			)
-		} else {
-			workerOpts = append(
-				workerOpts,
-				frankenphp.WithWorkerEnv(w.Env),
-				frankenphp.WithWorkerWatchMode(w.Watch),
-				frankenphp.WithWorkerMaxFailures(w.MaxConsecutiveFailures),
-				frankenphp.WithWorkerMaxThreads(w.MaxThreads),
-				frankenphp.WithWorkerRequestOptions(w.requestOptions...),
-			)
-		}
+		workerOpts := w.appendMercureHubOption([]frankenphp.WorkerOption{
+			frankenphp.WithWorkerEnv(w.Env),
+			frankenphp.WithWorkerWatchMode(w.Watch),
+			frankenphp.WithWorkerMaxFailures(w.MaxConsecutiveFailures),
+			frankenphp.WithWorkerMaxThreads(w.MaxThreads),
+			frankenphp.WithWorkerRequestOptions(w.requestOptions...),
+		})
 
 		opts = append(opts, frankenphp.WithWorkers(w.Name, repl.ReplaceKnown(w.FileName, ""), w.Num, workerOpts...))
 	}

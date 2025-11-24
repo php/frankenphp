@@ -1,4 +1,5 @@
 //go:build nomercure
+
 package caddy
 
 import (
@@ -6,4 +7,11 @@ import (
 )
 
 func (f *FrankenPHPModule) assignMercureHubRequestOption(_ caddy.Context) {
+}
+
+type mercureContext struct {
+}
+
+func (wc *workerConfig) appendMercureHubOption(opts []frankenphp.WorkerOption) []frankenphp.WorkerOption {
+	return opts
 }

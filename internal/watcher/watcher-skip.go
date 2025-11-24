@@ -7,10 +7,14 @@ import (
 	"log/slog"
 )
 
-func InitWatcher(ct context.Context, filePatterns []string, callback func(), logger *slog.Logger) error {
-	logger.Error("watcher support is not enabled")
+func InitWatcher(ct context.Context, slogger *slog.Logger, _ []*PatternGroup, _ func()) error {
+	err := errors.New("globalWatcher support is not enabled")
 
-	return nil
+	if logger.Enabled(ct, slog.LevelError) {
+		logger.LogAttrs(ct, slog.LevelError, err)
+	}
+
+	return err
 }
 
 func DrainWatcher() {

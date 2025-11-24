@@ -22,6 +22,8 @@ import (
 //		}
 //	}
 type workerConfig struct {
+	mercureContext
+
 	// Name for the worker. Default: the filename for FrankenPHPApp workers, always prefixed with "m#" for FrankenPHPModule workers.
 	Name string `json:"name,omitempty"`
 	// FileName sets the path to the worker script.
@@ -39,7 +41,7 @@ type workerConfig struct {
 	// MaxConsecutiveFailures sets the maximum number of consecutive failures before panicking (defaults to 6, set to -1 to never panick)
 	MaxConsecutiveFailures int `json:"max_consecutive_failures,omitempty"`
 
-	requestOptions     []frankenphp.RequestOption
+	requestOptions []frankenphp.RequestOption
 }
 
 func parseWorkerConfig(d *caddyfile.Dispenser) (workerConfig, error) {

@@ -109,15 +109,20 @@ func (ts *threadState) notifySubscribers(nextState stateID) {
 	if len(ts.subscribers) == 0 {
 		return
 	}
-	newSubscribers := []stateSubscriber{}
+
+	var newSubscribers []stateSubscriber
+
 	// notify subscribers to the state change
 	for _, sub := range ts.subscribers {
 		if !slices.Contains(sub.states, nextState) {
 			newSubscribers = append(newSubscribers, sub)
+
 			continue
 		}
+
 		close(sub.ch)
 	}
+
 	ts.subscribers = newSubscribers
 }
 
@@ -144,18 +149,21 @@ func (ts *threadState) requestSafeStateChange(nextState stateID) bool {
 	// disallow state changes if shutting down or done
 	case stateShuttingDown, stateDone, stateReserved:
 		ts.mu.Unlock()
+
 		return false
 	// ready and inactive are safe states to transition from
 	case stateReady, stateInactive:
 		ts.currentState = nextState
 		ts.notifySubscribers(nextState)
 		ts.mu.Unlock()
+
 		return true
 	}
 	ts.mu.Unlock()
 
 	// wait for the state to change to a safe state
 	ts.waitFor(stateReady, stateInactive, stateShuttingDown)
+
 	return ts.requestSafeStateChange(nextState)
 }
 
