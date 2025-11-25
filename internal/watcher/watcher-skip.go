@@ -4,11 +4,12 @@ package watcher
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 )
 
-func InitWatcher(ct context.Context, slogger *slog.Logger, _ []*PatternGroup, _ func()) error {
-	err := errors.New("globalWatcher support is not enabled")
+func InitWatcher(ct context.Context, logger *slog.Logger, _ []*PatternGroup, _ func()) error {
+	err := errors.New("watcher support is not enabled")
 
 	if logger.Enabled(ct, slog.LevelError) {
 		logger.LogAttrs(ct, slog.LevelError, err)
