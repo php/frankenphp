@@ -101,7 +101,7 @@ func (p *pattern) allowReload(event *Event) bool {
 }
 
 func (p *pattern) handle(event *Event) {
-	// If the globalWatcher prematurely sends the die@ event, retry watching
+	// If the watcher prematurely sends the die@ event, retry watching
 	if event.PathType == PathTypeWatcher && strings.HasPrefix(event.PathName, "e/self/die@") && watcherIsActive.Load() {
 		p.retryWatching()
 
