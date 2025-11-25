@@ -191,7 +191,7 @@ func matchPatterns(patterns []string, fileName string) bool {
 	return true
 }
 
-// we also check for the following bracket syntax: /value/*.{php,twig,yaml}
+// we also check for the following bracket syntax: /path/*.{php,twig,yaml}
 func matchBracketPattern(pattern string, fileName string) bool {
 	openingBracket := strings.Index(pattern, "{")
 	closingBracket := strings.Index(pattern, "}")
