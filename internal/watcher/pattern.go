@@ -142,7 +142,7 @@ func isValidPattern(event *Event, dir string, patterns []string) bool {
 		fileName = event.PathName
 	}
 
-	// first we remove the value from the file name
+	// first we remove the dir from the file name
 	if !strings.HasPrefix(fileName, dir) {
 		return false
 	}
