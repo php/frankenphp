@@ -239,11 +239,11 @@ func go_handle_file_watcher_event(event C.struct_wtr_watcher_event, handle C.uin
 	p := cgo.Handle(handle).Value().(*pattern)
 
 	e := &Event{
-		time.Unix(int64(event.effect_time)/1000000000, int64(event.effect_time)%1000000000),
-		C.GoString(event.path_name),
-		C.GoString(event.associated_path_name),
-		EffectType(event.effect_type),
-		PathType(event.path_type),
+		EffectTime:         time.Unix(int64(event.effect_time)/1000000000, int64(event.effect_time)%1000000000),
+		PathName:           C.GoString(event.path_name),
+		AssociatedPathName: C.GoString(event.associated_path_name),
+		EffectType:         EffectType(event.effect_type),
+		PathType:           PathType(event.path_type),
 	}
 
 	p.handle(e)
