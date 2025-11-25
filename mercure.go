@@ -96,8 +96,12 @@ func (w *worker) publishHotReloadingUpdate() func([]*watcher.Event) {
 		}
 
 		data, err := json.Marshal(events)
-		if err != nil && globalLogger.Enabled(globalCtx, slog.LevelError) {
-			globalLogger.LogAttrs(globalCtx, slog.LevelError, "error marshaling watcher events", slog.Any("error", err))
+		if err != nil {
+			if globalLogger.Enabled(globalCtx, slog.LevelError) {
+				globalLogger.LogAttrs(globalCtx, slog.LevelError, "error marshaling watcher events", slog.Any("error", err))
+			}
+
+			return
 		}
 
 		if err := w.mercureHub.Publish(globalCtx, &mercure.Update{

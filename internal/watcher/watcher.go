@@ -14,25 +14,25 @@ import (
 const (
 	// duration to wait before triggering a reload after a file change
 	debounceDuration = 150 * time.Millisecond
-	// times to retry watching if the globalWatcher was closed prematurely
+	// times to retry watching if the watcher was closed prematurely
 	maxFailureCount      = 5
 	failureResetDuration = 5 * time.Second
 )
 
 var (
-	ErrAlreadyStarted        = errors.New("the globalWatcher is already running")
-	ErrUnableToStartWatching = errors.New("unable to start the globalWatcher")
+	ErrAlreadyStarted        = errors.New("watcher is already running")
+	ErrUnableToStartWatching = errors.New("unable to start watcher")
 
 	failureMu       sync.Mutex
 	watcherIsActive atomic.Bool
 
-	// the currently active file globalWatcher
+	// the currently active file watcher
 	activeWatcher *globalWatcher
-	// after stopping the globalWatcher we will wait for eventual reloads to finish
+	// after stopping the watcher we will wait for eventual reloads to finish
 	reloadWaitGroup sync.WaitGroup
-	// we are passing the context from the main package to the globalWatcher
+	// we are passing the context from the main package to the watcher
 	globalCtx context.Context
-	// we are passing the globalLogger from the main package to the globalWatcher
+	// we are passing the globalLogger from the main package to the watcher
 	globalLogger *slog.Logger
 )
 
@@ -42,7 +42,7 @@ type eventHolder struct {
 }
 
 type globalWatcher struct {
-	watchers       []*watcher
+	watchers       []*pattern
 	events         chan eventHolder
 	stop           chan struct{}
 	globalCallback func()
@@ -66,7 +66,7 @@ func InitWatcher(ct context.Context, slogger *slog.Logger, groups []*PatternGrou
 	for _, g := range groups {
 		pg := &patternGroup{callback: g.Callback}
 		for _, p := range g.Patterns {
-			activeWatcher.watchers = append(activeWatcher.watchers, &watcher{patternGroup: pg, name: p})
+			activeWatcher.watchers = append(activeWatcher.watchers, &pattern{patternGroup: pg, value: p})
 		}
 	}
 
@@ -85,7 +85,7 @@ func DrainWatcher() {
 	watcherIsActive.Store(false)
 
 	if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
-		globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "stopping globalWatcher")
+		globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "stopping watcher")
 	}
 
 	activeWatcher.stopWatching()
@@ -94,29 +94,29 @@ func DrainWatcher() {
 }
 
 // TODO: how to test this?
-func (p *watcher) retryWatching() {
+func (p *pattern) retryWatching() {
 	failureMu.Lock()
 	defer failureMu.Unlock()
 
 	if p.failureCount >= maxFailureCount {
 		if globalLogger.Enabled(globalCtx, slog.LevelWarn) {
-			globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "giving up watching", slog.String("watcher", p.name))
+			globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "giving up watching", slog.String("pattern", p.value))
 		}
 
 		return
 	}
 
 	if globalLogger.Enabled(globalCtx, slog.LevelInfo) {
-		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "globalWatcher was closed prematurely, retrying...", slog.String("name", p.name))
+		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "watcher was closed prematurely, retrying...", slog.String("pattern", p.value))
 	}
 
 	p.failureCount++
 
 	if err := p.startSession(); err != nil && globalLogger.Enabled(globalCtx, slog.LevelError) {
-		globalLogger.LogAttrs(globalCtx, slog.LevelError, "unable to start globalWatcher", slog.String("watcher", p.name), slog.Any("error", err))
+		globalLogger.LogAttrs(globalCtx, slog.LevelError, "unable to start watcher", slog.String("pattern", p.value), slog.Any("error", err))
 	}
 
-	// reset the failure-count if the globalWatcher hasn't reached max failures after 5 seconds
+	// reset the failure-count if the watcher hasn't reached max failures after 5 seconds
 	go func() {
 		time.Sleep(failureResetDuration)
 
@@ -175,6 +175,7 @@ func (g *globalWatcher) listenForFileEvents() {
 	for {
 		select {
 		case <-g.stop:
+			return
 		case eh := <-g.events:
 			timer.Reset(debounceDuration)
 
