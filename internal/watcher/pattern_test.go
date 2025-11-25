@@ -306,7 +306,7 @@ func TestAnAssociatedEventTriggersTheWatcher(t *testing.T) {
 	require.NoError(t, w.parse())
 	w.events = make(chan eventHolder)
 
-	e := &Event{PathName: "/path/temorary_file", AssociatedPathName: "/path/file.php"}
+	e := &Event{PathName: "/path/temporary_file", AssociatedPathName: "/path/file.php"}
 	go w.handle(e)
 
 	assert.Equal(t, e, (<-w.events).event)

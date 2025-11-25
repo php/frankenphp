@@ -9,7 +9,7 @@ void handle_event(struct wtr_watcher_event event, void *_ctx) {
 }
 
 uintptr_t start_new_watcher(char const *const path, uintptr_t _ctx) {
-  void *watcher = wtr_watcher_open(path, handle_event, (void *) _ctx);
+  void *watcher = wtr_watcher_open(path, handle_event, (void *)_ctx);
 
   if (watcher == NULL) {
     return 0;
