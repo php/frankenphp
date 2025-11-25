@@ -65,7 +65,7 @@ func (p *pattern) parse() error {
 
 	p.value = absPattern
 
-	// then we split the value to determine where the directory ends and the value starts
+	// then we split the pattern to determine where the directory ends and the pattern starts
 	splitPattern := strings.Split(absPattern, string(filepath.Separator))
 	patternWithoutDir := ""
 	for i, part := range splitPattern {
