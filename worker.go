@@ -41,12 +41,12 @@ var (
 )
 
 func initWorkers(opt []workerOpt) error {
-	workers = make([]*worker, 0, len(opt))
-
 	var (
 		workersReady  sync.WaitGroup
 		watchPatterns []*watcher.PatternGroup
 	)
+
+	workers = make([]*worker, 0, len(opt))
 
 	for _, o := range opt {
 		w, err := newWorker(o)
@@ -60,7 +60,9 @@ func initWorkers(opt []workerOpt) error {
 			watcherIsEnabled = true
 			watchPatterns = append(watchPatterns, &watcher.PatternGroup{Patterns: o.watch, Callback: w.publishHotReloadingUpdate()})
 		}
+	}
 
+	for _, w := range workers {
 		for i := 0; i < w.num; i++ {
 			thread := getInactivePHPThread()
 			convertToWorkerThread(thread, w)
