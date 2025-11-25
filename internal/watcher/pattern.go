@@ -29,14 +29,15 @@ type pattern struct {
 	events       chan eventHolder
 	failureCount int
 	watcher      C.uintptr_t
+	h            cgo.Handle
 }
 
 func (p *pattern) startSession() error {
-	handle := cgo.NewHandle(p)
+	p.h = cgo.NewHandle(p)
 	cDir := C.CString(p.value)
 	defer C.free(unsafe.Pointer(cDir))
 
-	p.watcher = C.start_new_watcher(cDir, C.uintptr_t(handle))
+	p.watcher = C.start_new_watcher(cDir, C.uintptr_t(p.h))
 	if p.watcher != 0 {
 		if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
 			globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "watching", slog.String("pattern", p.value))
@@ -48,6 +49,8 @@ func (p *pattern) startSession() error {
 	if globalLogger.Enabled(globalCtx, slog.LevelError) {
 		globalLogger.LogAttrs(globalCtx, slog.LevelError, "couldn't start watching", slog.String("pattern", p.value))
 	}
+
+	p.h.Delete()
 
 	return ErrUnableToStartWatching
 }
@@ -114,6 +117,8 @@ func (p *pattern) stop() {
 	if C.stop_watcher(p.watcher) == 0 && globalLogger.Enabled(globalCtx, slog.LevelWarn) {
 		globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "couldn't close the watcher")
 	}
+
+	p.h.Delete()
 }
 
 func isValidEventType(effectType EffectType) bool {

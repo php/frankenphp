@@ -136,9 +136,13 @@ func (g *globalWatcher) startWatching() error {
 		return err
 	}
 
-	for _, w := range g.watchers {
+	for i, w := range g.watchers {
 		w.events = g.events
 		if err := w.startSession(); err != nil {
+			for j := 0; j < i; j++ {
+				g.watchers[j].stop()
+			}
+
 			return err
 		}
 	}
