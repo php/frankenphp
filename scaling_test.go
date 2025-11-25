@@ -10,6 +10,8 @@ import (
 )
 
 func TestScaleARegularThreadUpAndDown(t *testing.T) {
+	t.Cleanup(Shutdown)
+
 	assert.NoError(t, Init(
 		WithNumThreads(1),
 		WithMaxThreads(2),
@@ -24,14 +26,14 @@ func TestScaleARegularThreadUpAndDown(t *testing.T) {
 	assert.IsType(t, &regularThread{}, autoScaledThread.handler)
 
 	// on down-scale, the thread will be marked as inactive
-	setLongWaitTime(autoScaledThread)
+	setLongWaitTime(t, autoScaledThread)
 	deactivateThreads()
 	assert.IsType(t, &inactiveThread{}, autoScaledThread.handler)
-
-	Shutdown()
 }
 
 func TestScaleAWorkerThreadUpAndDown(t *testing.T) {
+	t.Cleanup(Shutdown)
+
 	workerName := "worker1"
 	workerPath := testDataPath + "/transition-worker-1.php"
 	assert.NoError(t, Init(
@@ -52,14 +54,14 @@ func TestScaleAWorkerThreadUpAndDown(t *testing.T) {
 	assert.Equal(t, stateReady, autoScaledThread.state.get())
 
 	// on down-scale, the thread will be marked as inactive
-	setLongWaitTime(autoScaledThread)
+	setLongWaitTime(t, autoScaledThread)
 	deactivateThreads()
 	assert.IsType(t, &inactiveThread{}, autoScaledThread.handler)
-
-	Shutdown()
 }
 
-func setLongWaitTime(thread *phpThread) {
+func setLongWaitTime(t *testing.T, thread *phpThread) {
+	t.Helper()
+
 	thread.state.mu.Lock()
 	thread.state.waitingSince = time.Now().Add(-time.Hour)
 	thread.state.mu.Unlock()
