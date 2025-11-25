@@ -43,7 +43,7 @@ Linux*)
 			${SUDO} dnf -y install frankenphp
 			echo
 			echo "🥳 FrankenPHP installed to ${italic}/usr/bin/frankenphp${normal} successfully."
-			echo "❗ Your Caddyfile is found in ${italic}/etc/frankenphp/Caddyfile${normal}"
+			echo "❗ The systemd service uses the Caddyfile in ${italic}/etc/frankenphp/Caddyfile${normal}"
 			echo "❗ Your php.ini is found in ${italic}/etc/php-zts/php.ini${normal}"
 			echo
 			echo "⭐ If you like FrankenPHP, please give it a star on GitHub: ${italic}https://github.com/php/frankenphp${normal}"
@@ -67,7 +67,7 @@ Linux*)
 			fi
 			echo
 			echo "🥳 FrankenPHP installed to ${italic}/usr/bin/frankenphp${normal} successfully."
-			echo "❗ Your Caddyfile is found in ${italic}/etc/frankenphp/Caddyfile${normal}"
+			echo "❗ The systemd service uses the Caddyfile in ${italic}/etc/frankenphp/Caddyfile${normal}"
 			echo "❗ Your php.ini is found in ${italic}/etc/php-zts/php.ini${normal}"
 			echo
 			echo "⭐ If you like FrankenPHP, please give it a star on GitHub: ${italic}https://github.com/php/frankenphp${normal}"
