@@ -171,7 +171,7 @@ func matchPatterns(patterns []string, fileName string) bool {
 			cursor = len(partsToMatch) - patternSize
 		}
 
-		// the cursor will move through the fileName until the value matches
+		// the cursor will move through the fileName until the pattern matches
 		for j := cursor; j < len(partsToMatch); j++ {
 			cursor = j
 			subPattern := strings.Join(partsToMatch[j:j+patternSize], string(filepath.Separator))
