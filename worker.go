@@ -43,7 +43,10 @@ var (
 func initWorkers(opt []workerOpt) error {
 	workers = make([]*worker, 0, len(opt))
 
-	var watchPatterns []*watcher.PatternGroup
+	var (
+		workersReady  sync.WaitGroup
+		watchPatterns []*watcher.PatternGroup
+	)
 
 	for _, o := range opt {
 		w, err := newWorker(o)
@@ -53,12 +56,11 @@ func initWorkers(opt []workerOpt) error {
 
 		workers = append(workers, w)
 
-		watchPatterns = append(watchPatterns, &watcher.PatternGroup{Patterns: o.watch, Callback: w.publishHotReloadingUpdate()})
-	}
+		if len(o.watch) > 0 {
+			watcherIsEnabled = true
+			watchPatterns = append(watchPatterns, &watcher.PatternGroup{Patterns: o.watch, Callback: w.publishHotReloadingUpdate()})
+		}
 
-	var workersReady sync.WaitGroup
-
-	for _, w := range workers {
 		for i := 0; i < w.num; i++ {
 			thread := getInactivePHPThread()
 			convertToWorkerThread(thread, w)
@@ -71,15 +73,11 @@ func initWorkers(opt []workerOpt) error {
 
 	workersReady.Wait()
 
-	if len(watchPatterns) == 0 {
-		return nil
-	}
-
-	watcherIsEnabled = true
-
-	// TODO: It should be possible to restart only workers that changed instead of all workers
-	if err := watcher.InitWatcher(globalCtx, globalLogger, watchPatterns, RestartWorkers); err != nil {
-		return err
+	if watcherIsEnabled {
+		// TODO: It should be possible to restart only workers that changed instead of all workers
+		if err := watcher.InitWatcher(globalCtx, globalLogger, watchPatterns, RestartWorkers); err != nil {
+			return err
+		}
 	}
 
 	return nil
