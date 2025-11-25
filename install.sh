@@ -8,7 +8,7 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 if [ -z "${BIN_DIR}" ]; then
-BIN_DUR=$(pwd)
+	BIN_DIR=$(pwd)
 fi
 
 THE_ARCH_BIN=""
