@@ -80,7 +80,7 @@ func (p *pattern) parse() error {
 		}
 	}
 
-	// now we split the value according to the recursive '**' syntax
+	// now we split the pattern according to the recursive '**' syntax
 	p.parsedValues = strings.Split(patternWithoutDir, "**")
 	for i, pp := range p.parsedValues {
 		p.parsedValues[i] = strings.Trim(pp, string(filepath.Separator))
