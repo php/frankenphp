@@ -75,6 +75,16 @@ sudo apt install php-zts-devel
 sudo pie install asgrim/example-pie-extension --with-php-config=php-config-zts
 ```
 
+### Homebrew
+
+FrankenPHP is also available as a [Homebrew](https://brew.sh) package for macOS and Linux.
+
+```console
+brew install dunglas/frankenphp/frankenphp
+```
+
+**Installing extensions:** Use [PIE](https://github.com/php/pie).
+
 ### Usage
 
 To serve the content of the current directory, run:
@@ -89,15 +99,11 @@ You can also run command-line scripts with:
 frankenphp php-cli /path/to/your/script.php
 ```
 
-### Homebrew
-
-FrankenPHP is also available as a [Homebrew](https://brew.sh) package for macOS and Linux.
+For the deb and rpm packages, you can also start the systemd service:
 
 ```console
-brew install dunglas/frankenphp/frankenphp
+sudo systemctl start frankenphp
 ```
-
-**Installing extensions:** Use [PIE](https://github.com/php/pie).
 
 ### Docker
 
