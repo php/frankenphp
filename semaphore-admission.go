@@ -7,6 +7,7 @@ import (
 )
 
 func acquireSemaphoreWithAdmissionControl(
+	ctx context.Context,
 	sem *semaphore.Weighted,
 	scaleChan chan *frankenPHPContext,
 	fc *frankenPHPContext,
@@ -16,8 +17,8 @@ func acquireSemaphoreWithAdmissionControl(
 	}
 
 	if maxWaitTime > 0 && scaleChan != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), minStallTime)
-		err := sem.Acquire(ctx, 1)
+		ct, cancel := context.WithTimeout(ctx, minStallTime)
+		err := sem.Acquire(ct, 1)
 		cancel()
 
 		if err != nil {
@@ -26,22 +27,30 @@ func acquireSemaphoreWithAdmissionControl(
 			default:
 			}
 
-			ctx, cancel := context.WithTimeout(context.Background(), maxWaitTime)
+			ctx, cancel := context.WithTimeout(ctx, maxWaitTime)
 			defer cancel()
 
 			if err := sem.Acquire(ctx, 1); err != nil {
 				return ErrMaxWaitTimeExceeded
 			}
 		}
-	} else if maxWaitTime > 0 {
-		ctx, cancel := context.WithTimeout(context.Background(), maxWaitTime)
+
+		return nil
+	}
+
+	if maxWaitTime > 0 {
+		ctx, cancel := context.WithTimeout(ctx, maxWaitTime)
 		defer cancel()
 
 		if err := sem.Acquire(ctx, 1); err != nil {
 			return ErrMaxWaitTimeExceeded
 		}
-	} else if scaleChan != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), minStallTime)
+
+		return nil
+	}
+
+	if scaleChan != nil {
+		ctx, cancel := context.WithTimeout(ctx, minStallTime)
 		err := sem.Acquire(ctx, 1)
 		cancel()
 
@@ -51,14 +60,15 @@ func acquireSemaphoreWithAdmissionControl(
 			default:
 			}
 
-			if err := sem.Acquire(context.Background(), 1); err != nil {
+			if err := sem.Acquire(ctx, 1); err != nil {
 				return ErrMaxWaitTimeExceeded
 			}
 		}
-	} else {
-		if err := sem.Acquire(context.Background(), 1); err != nil {
-			return ErrMaxWaitTimeExceeded
-		}
+		return nil
+	}
+
+	if err := sem.Acquire(ctx, 1); err != nil {
+		return ErrMaxWaitTimeExceeded
 	}
 
 	return nil
