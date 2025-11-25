@@ -166,7 +166,7 @@ func matchPatterns(patterns []string, fileName string) bool {
 	for i, pattern := range patterns {
 		patternSize := strings.Count(pattern, string(filepath.Separator)) + 1
 
-		// if we are at the last value we will start matching from the end of the filename
+		// if we are at the last pattern we will start matching from the end of the filename
 		if i == len(patterns)-1 {
 			cursor = len(partsToMatch) - patternSize
 		}
