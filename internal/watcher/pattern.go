@@ -101,7 +101,7 @@ func (p *pattern) allowReload(event *Event) bool {
 }
 
 func (p *pattern) handle(event *Event) {
-	// If the globalWatcher prematurely sends the die@ event, retry watching
+	// If the watcher prematurely sends the die@ event, retry watching
 	if event.PathType == PathTypeWatcher && strings.HasPrefix(event.PathName, "e/self/die@") && watcherIsActive.Load() {
 		p.retryWatching()
 
@@ -239,11 +239,11 @@ func go_handle_file_watcher_event(event C.struct_wtr_watcher_event, handle C.uin
 	p := cgo.Handle(handle).Value().(*pattern)
 
 	e := &Event{
-		time.Unix(int64(event.effect_time)/1000000000, int64(event.effect_time)%1000000000),
-		C.GoString(event.path_name),
-		C.GoString(event.associated_path_name),
-		EffectType(event.effect_type),
-		PathType(event.path_type),
+		EffectTime:         time.Unix(int64(event.effect_time)/1000000000, int64(event.effect_time)%1000000000),
+		PathName:           C.GoString(event.path_name),
+		AssociatedPathName: C.GoString(event.associated_path_name),
+		EffectType:         EffectType(event.effect_type),
+		PathType:           PathType(event.path_type),
 	}
 
 	p.handle(e)
