@@ -1,4 +1,5 @@
 //go:build nomercure
+
 package caddy
 
 import (

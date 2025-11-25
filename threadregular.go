@@ -113,6 +113,8 @@ func handleRequestWithRegularPHPThreads(ch contextHolder) error {
 			case thread.requestChan <- ch:
 				regularThreadMu.RUnlock()
 				<-ch.frankenPHPContext.done
+				metrics.StopRequest()
+
 				return nil
 			default:
 				// thread was not available
@@ -141,6 +143,7 @@ func handleRequestWithRegularPHPThreads(ch contextHolder) error {
 			// the request has timed out stalling
 			queuedRegularThreads.Add(-1)
 			metrics.DequeuedRequest()
+			metrics.StopRequest()
 
 			ch.frankenPHPContext.reject(ErrMaxWaitTimeExceeded)
 

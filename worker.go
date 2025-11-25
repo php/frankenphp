@@ -300,6 +300,7 @@ func (worker *worker) handleRequest(ch contextHolder) error {
 			// the request has timed out stalling
 			worker.queuedRequests.Add(-1)
 			metrics.DequeuedWorkerRequest(worker.name)
+			metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
 
 			ch.frankenPHPContext.reject(ErrMaxWaitTimeExceeded)
 
