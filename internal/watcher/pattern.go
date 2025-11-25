@@ -137,12 +137,12 @@ func isValidPattern(event *Event, dir string, patterns []string) bool {
 		fileName = event.PathName
 	}
 
-	// first we remove the value from the value
+	// first we remove the value from the file name
 	if !strings.HasPrefix(fileName, dir) {
 		return false
 	}
 
-	// remove the value and separator from the filename
+	// remove the file name and separator from the filename
 	fileNameWithoutDir := strings.TrimPrefix(strings.TrimPrefix(fileName, dir), string(filepath.Separator))
 
 	// if the value has size 1 we can match it directly against the filename

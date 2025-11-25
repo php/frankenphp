@@ -6,7 +6,7 @@ import (
 	"github.com/caddyserver/caddy/v2"
 )
 
-func (f *FrankenPHPModule) assignMercureHubRequestOption(_ caddy.Context) {
+func (f *FrankenPHPModule) assignMercureHub(_ caddy.Context) {
 }
 
 type mercureContext struct {
