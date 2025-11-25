@@ -4,6 +4,7 @@ package caddy
 
 import (
 	"github.com/caddyserver/caddy/v2"
+	"github.com/dunglas/frankenphp"
 )
 
 func (f *FrankenPHPModule) assignMercureHub(_ caddy.Context) {
