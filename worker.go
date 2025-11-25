@@ -258,7 +258,7 @@ func (worker *worker) handleRequest(ch contextHolder) error {
 		workerScaleChan = nil
 	}
 
-	if err := acquireSemaphoreWithAdmissionControl(ch.ctx, worker.semaphore, workerScaleChan, ch.frankenPHPContext); err != nil {
+	if err := acquireSemaphoreWithAdmissionControl(worker.semaphore, workerScaleChan, ch.frankenPHPContext); err != nil {
 		metrics.DequeuedWorkerRequest(worker.name)
 		ch.frankenPHPContext.reject(err)
 		metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))

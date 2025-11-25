@@ -113,7 +113,7 @@ func handleRequestWithRegularPHPThreads(ch contextHolder) error {
 	metrics.StartRequest()
 	metrics.QueuedRequest()
 
-	if err := acquireSemaphoreWithAdmissionControl(ch.ctx, regularSemaphore, scaleChan, ch.frankenPHPContext); err != nil {
+	if err := acquireSemaphoreWithAdmissionControl(regularSemaphore, scaleChan, ch.frankenPHPContext); err != nil {
 		ch.frankenPHPContext.reject(err)
 		metrics.StopRequest()
 		return err
