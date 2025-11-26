@@ -53,7 +53,7 @@ func (e PathType) MarshalJSON() ([]byte, error) {
 type Event struct {
 	EffectTime         time.Time
 	PathName           string
-	AssociatedPathName string
+	AssociatedPathName string `json:",omitempty"`
 	EffectType         EffectType
 	PathType           PathType
 }
