@@ -76,7 +76,6 @@ func initWorkers(opt []workerOpt) error {
 	workersReady.Wait()
 
 	if watcherIsEnabled {
-		// TODO: It should be possible to restart only workers that changed instead of all workers
 		if err := watcher.InitWatcher(globalCtx, globalLogger, watchPatterns, RestartWorkers); err != nil {
 			return err
 		}
@@ -212,6 +211,7 @@ func drainWatcher() {
 }
 
 // RestartWorkers attempts to restart all workers gracefully
+// All workers must be restarted at the same time to prevent issues with opcache resetting.
 func RestartWorkers() {
 	// disallow scaling threads while restarting workers
 	scalingMu.Lock()
