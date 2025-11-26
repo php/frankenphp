@@ -204,9 +204,14 @@ func (g *globalWatcher) listenForFileEvents() {
 
 func scheduleReload(eventsPerGroup map[*patternGroup][]*Event) {
 	reloadWaitGroup.Add(1)
+
+	// The global callback must be called first to prevent a race condition:
+	// we need to be sure that the worker restarted before the Mercure events are sent
+	activeWatcher.globalCallback()
+
 	for group, events := range eventsPerGroup {
 		group.callback(events)
 	}
-	activeWatcher.globalCallback()
+
 	reloadWaitGroup.Done()
 }

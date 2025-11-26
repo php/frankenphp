@@ -86,7 +86,7 @@ func (w *worker) configureMercure(o *workerOpt) {
 		return
 	}
 
-	o.env["FRANKENPHP_HOT_RELOADING\x00"] = "/.well-known/mercure?topic=" + url.QueryEscape(o.name)
+	o.env["FRANKENPHP_HOT_RELOADING\x00"] = "/.well-known/mercure?topic=https%3A%2F%2Ffrankenphp.dev%2Fhot-reloading%2F" + url.QueryEscape(o.name)
 }
 
 func (w *worker) publishHotReloadingUpdate() func([]*watcher.Event) {
@@ -105,7 +105,7 @@ func (w *worker) publishHotReloadingUpdate() func([]*watcher.Event) {
 		}
 
 		if err := w.mercureHub.Publish(globalCtx, &mercure.Update{
-			Topics: []string{w.name},
+			Topics: []string{"https://frankenphp.dev/hot-reloading/"+w.name},
 			Event:  mercure.Event{Data: string(data)},
 			Debug:  globalLogger.Enabled(globalCtx, slog.LevelDebug),
 		}); err != nil && globalLogger.Enabled(globalCtx, slog.LevelError) {
