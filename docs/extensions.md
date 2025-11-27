@@ -211,6 +211,7 @@ func process_data_packed(arr *C.zval) unsafe.Pointer {
 - `frankenphp.GoAssociativeArray(arr unsafe.Pointer, ordered bool) frankenphp.AssociativeArray` - Convert a PHP array to an ordered Go `AssociativeArray` (map with order)
 - `frankenphp.GoMap(arr unsafe.Pointer) map[string]any` - Convert a PHP array to an unordered Go map
 - `frankenphp.GoPackedArray(arr unsafe.Pointer) []any` - Convert a PHP array to a Go slice
+- `frankenphp.IsPacked(zval unsafe.Pointer) bool` - Check if a PHP array is packed (indexed only) or associative (key-value pairs)
 
 ### Declaring a Native PHP Class
 
