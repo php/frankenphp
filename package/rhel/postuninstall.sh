@@ -15,7 +15,8 @@ if [ "$1" -eq 0 ]; then
 		semanage fcontext --delete --type httpd_exec_t '/usr/bin/frankenphp' 2>/dev/null || :
 		semanage fcontext --delete --type httpd_sys_content_t '/usr/share/frankenphp(/.*)?' 2>/dev/null || :
 		semanage fcontext --delete --type httpd_config_t '/etc/frankenphp(/.*)?' 2>/dev/null || :
-		semanage fcontext --delete --type httpd_sys_rw_content_t '/var/lib/frankenphp(/.*)?' 2>/dev/null || :
+		semanage fcontext --delete --type httpd_var_lib_t '/var/lib/frankenphp(/.*)?' 2>/dev/null || :
+		semanage fcontext --delete --type httpd_sys_rw_content_t '/var/lib/frankenphp(/.*\.db)' 2>/dev/null || :
 		# QUIC
 		semanage port --delete --type http_port_t --proto udp 80 2>/dev/null || :
 		semanage port --delete --type http_port_t --proto udp 443 2>/dev/null || :
