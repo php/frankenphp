@@ -95,7 +95,8 @@ And ensure the root directory exists in the image:
 ```
 RUN mkdir -p /srv/app/public
 ```
-This prevents Docker from overwriting internal Caddy directories and guarantees stable behavior during development.
+This prevents the bind-mount from overwriting internal Caddy directories and guarantees stable behavior during development.
+This setup matches the directory structure used in many production deployments and avoids subtle issues with Caddy startup sequencing.
 
 ## How to Install More PHP Extensions
 
