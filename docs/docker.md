@@ -35,6 +35,68 @@ docker run -it --rm --name my-running-app my-php-app
 For convenience, [a default `Caddyfile`](https://github.com/php/frankenphp/blob/main/caddy/frankenphp/Caddyfile) containing
 useful environment variables is provided in the image.
 
+## ⚠️ Important: Required Caddy storage directories inside Docker
+
+When running FrankenPHP inside Docker, Caddy uses two internal storage directories:
+
+- `/data/caddy` for the certificates, locks, cache
+- `/config/caddy` for the autosave file (`autosave.json`)
+
+These directories are **not created automatically**.
+
+If `/config/caddy` does not exist or is not writable, Caddy will fail to save its adapted configuration and will silently fall back to:
+```
+serving initial configuration
+```
+
+even if your `Caddyfile` is valid.
+
+### Recommended fix (Dockerfile)
+
+Add the following snippet to your Dockerfile **before switching to `www-data`**:
+
+```dockerfile
+RUN mkdir -p /data/caddy/locks \
+    && mkdir -p /config/caddy \
+    && touch /data/caddy/instance.uuid \
+    && chown -R www-data:www-data /data /config /etc/caddy
+```
+
+## Using Docker Compose: important note about the application directory
+
+When using Docker Compose with bind-mounted volumes (e.g. .:/app), Docker mounts the volume after the container starts.
+
+Caddy validates the root directive before the mount happens.
+
+If your application is mounted over /app, this overwrites internal Caddy files and may prevent it from accessing:
+ ```
+- /etc/caddy/Caddyfile
+- /data/caddy
+- /config/caddy
+```
+This results in Caddy failing validation and falling back to the initial configuration, even if everything else is correct.
+
+## Recommendation for Docker Compose users
+
+Do not mount your application into `/app`.
+
+Instead, use a dedicated directory such as: `/srv/app`
+
+
+Example:
+```
+services:
+    app:
+        volumes:
+            - .:/srv/app
+```
+
+And ensure the root directory exists in the image:
+```
+RUN mkdir -p /srv/app/public
+```
+This prevents Docker from overwriting internal Caddy directories and guarantees stable behavior during development.
+
 ## How to Install More PHP Extensions
 
 The [`docker-php-extension-installer`](https://github.com/mlocati/docker-php-extension-installer) script is provided in the base image.
