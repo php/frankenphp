@@ -10,12 +10,14 @@ import (
 
 type SourceAnalyzer struct{}
 
-func (sa *SourceAnalyzer) analyze(filename string) (imports []string, variables []string, internalFunctions []string, err error) {
+func (sa *SourceAnalyzer) analyze(filename string) (packageName string, imports []string, variables []string, internalFunctions []string, err error) {
 	fset := token.NewFileSet()
 	node, err := parser.ParseFile(fset, filename, nil, parser.ParseComments)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("parsing file: %w", err)
+		return "", nil, nil, nil, fmt.Errorf("parsing file: %w", err)
 	}
+
+	packageName = node.Name.Name
 
 	for _, imp := range node.Imports {
 		if imp.Path != nil {
@@ -30,13 +32,13 @@ func (sa *SourceAnalyzer) analyze(filename string) (imports []string, variables 
 
 	sourceContent, err := os.ReadFile(filename)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("reading source file: %w", err)
+		return "", nil, nil, nil, fmt.Errorf("reading source file: %w", err)
 	}
 
 	variables = sa.extractVariables(string(sourceContent))
 	internalFunctions = sa.extractInternalFunctions(string(sourceContent))
 
-	return imports, variables, internalFunctions, nil
+	return packageName, imports, variables, internalFunctions, nil
 }
 
 func (sa *SourceAnalyzer) extractVariables(content string) []string {
