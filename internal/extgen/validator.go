@@ -203,7 +203,9 @@ func (v *Validator) phpTypeToGoType(t phpType, isNullable bool) string {
 		baseType = "float64"
 	case phpBool:
 		baseType = "bool"
-	case phpArray, phpMixed:
+	case phpArray:
+		baseType = "*C.zend_array"
+	case phpMixed:
 		baseType = "*C.zval"
 	default:
 		baseType = "any"
