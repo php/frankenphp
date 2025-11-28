@@ -44,6 +44,9 @@ To start any Symfony application in a worker, install the FrankenPHP package of 
 composer require runtime/frankenphp-symfony
 ```
 
+> [!TIP]
+> Starting with Symfony 7.4, the `runtime/frankenphp-symfony` package isn't required anymore, as Symfony Runtime natively supports FrankenPHP worker mode.
+
 Start your app server by defining the `APP_RUNTIME` environment variable to use the FrankenPHP Symfony Runtime:
 
 ```console
