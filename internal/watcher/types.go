@@ -1,7 +1,6 @@
 package watcher
 
 import (
-	"encoding/json"
 	"time"
 )
 
@@ -11,51 +10,49 @@ type (
 )
 
 func (e EffectType) MarshalJSON() ([]byte, error) {
-	var s string
 	switch e {
 	case EffectTypeRename:
-		s = "rename"
+		return []byte(`"Rename"`), nil
 	case EffectTypeModify:
-		s = "modify"
+		return []byte(`"Modify"`), nil
 	case EffectTypeCreate:
-		s = "create"
+		return []byte(`"Create"`), nil
 	case EffectTypeDestroy:
-		s = "destroy"
+		return []byte(`"Destroy"`), nil
 	case EffectTypeOwner:
-		s = "owner"
+		return []byte(`"Owner"`), nil
 	case EffectTypeOther:
-		s = "other"
+		return []byte(`"Other"`), nil
 	}
 
-	return json.Marshal(s)
+	panic("unreachable")
 }
 
 func (e PathType) MarshalJSON() ([]byte, error) {
-	var s string
 	switch e {
 	case PathTypeDir:
-		s = "dir"
+		return []byte(`"Dir"`), nil
 	case PathTypeFile:
-		s = "file"
+		return []byte(`"File"`), nil
 	case PathTypeHardLink:
-		s = "hard_link"
+		return []byte(`"HardLink"`), nil
 	case PathTypeSymLink:
-		s = "sym_link"
+		return []byte(`"SymLink"`), nil
 	case PathTypeWatcher:
-		s = "watcher"
+		return []byte(`"Watcher"`), nil
 	case PathTypeOther:
-		s = "other"
+		return []byte(`"Other"`), nil
 	}
 
-	return json.Marshal(s)
+	panic("unreachable")
 }
 
 type Event struct {
-	EffectTime         time.Time
-	PathName           string
-	AssociatedPathName string `json:",omitempty"`
-	EffectType         EffectType
-	PathType           PathType
+	EffectTime         time.Time  `json:"effectTime"`
+	PathName           string     `json:"pathName"`
+	AssociatedPathName string     `json:"associatedPathName,omitempty"`
+	EffectType         EffectType `json:"effectType"`
+	PathType           PathType   `json:"pathType"`
 }
 
 const (
