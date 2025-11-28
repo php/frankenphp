@@ -102,8 +102,12 @@ xcaddy build \
     --output frankenphp \
     --with github.com/dunglas/frankenphp/caddy \
     --with github.com/dunglas/mercure/caddy \
-    --with github.com/dunglas/vulcain/caddy
+    --with github.com/dunglas/vulcain/caddy \
+    --with github.com/dunglas/caddy-cbrotli
     # 追加のCaddyモジュールとFrankenPHP拡張をここに追加
+    # 任意でfrankenphpのソースコードをコンパイルしたい場合:
+    # --with github.com/dunglas/frankenphp=$(pwd) \
+    # --with github.com/dunglas/frankenphp/caddy=$(pwd)/caddy
 ```
 
 > [!TIP]
