@@ -10,6 +10,8 @@ import (
 )
 
 func TestWorkersExtension(t *testing.T) {
+	t.Cleanup(Shutdown)
+
 	readyWorkers := 0
 	shutdownWorkers := 0
 	serverStarts := 0

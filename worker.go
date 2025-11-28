@@ -18,6 +18,8 @@ import (
 
 // represents a worker script and can have many threads assigned to it
 type worker struct {
+	mercureContext
+
 	name                   string
 	fileName               string
 	num                    int
@@ -39,19 +41,26 @@ var (
 )
 
 func initWorkers(opt []workerOpt) error {
+	var (
+		workersReady  sync.WaitGroup
+		watchPatterns []*watcher.PatternGroup
+	)
+
 	workers = make([]*worker, 0, len(opt))
-	directoriesToWatch := getDirectoriesToWatch(opt)
-	watcherIsEnabled = len(directoriesToWatch) > 0
 
 	for _, o := range opt {
 		w, err := newWorker(o)
 		if err != nil {
 			return err
 		}
-		workers = append(workers, w)
-	}
 
-	var workersReady sync.WaitGroup
+		workers = append(workers, w)
+
+		if len(o.watch) > 0 {
+			watcherIsEnabled = true
+			watchPatterns = append(watchPatterns, &watcher.PatternGroup{Patterns: o.watch, Callback: w.publishHotReloadingUpdate()})
+		}
+	}
 
 	for _, w := range workers {
 		for i := 0; i < w.num; i++ {
@@ -66,13 +75,10 @@ func initWorkers(opt []workerOpt) error {
 
 	workersReady.Wait()
 
-	if !watcherIsEnabled {
-		return nil
-	}
-
-	watcherIsEnabled = true
-	if err := watcher.InitWatcher(globalCtx, directoriesToWatch, RestartWorkers, globalLogger); err != nil {
-		return err
+	if watcherIsEnabled {
+		if err := watcher.InitWatcher(globalCtx, globalLogger, watchPatterns, RestartWorkers); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -142,6 +148,8 @@ func newWorker(o workerOpt) (*worker, error) {
 		onThreadShutdown:       o.onThreadShutdown,
 	}
 
+	w.configureMercure(&o)
+
 	w.requestOptions = append(
 		w.requestOptions,
 		WithRequestDocumentRoot(filepath.Dir(o.fileName), false),
@@ -161,27 +169,36 @@ func DrainWorkers() {
 }
 
 func drainWorkerThreads() []*phpThread {
-	ready := sync.WaitGroup{}
-	drainedThreads := make([]*phpThread, 0)
+	var (
+		ready          sync.WaitGroup
+		drainedThreads []*phpThread
+	)
+
 	for _, worker := range workers {
 		worker.threadMutex.RLock()
 		ready.Add(len(worker.threads))
+
 		for _, thread := range worker.threads {
 			if !thread.state.requestSafeStateChange(stateRestarting) {
 				ready.Done()
+
 				// no state change allowed == thread is shutting down
-				// we'll proceed to restart all other threads anyways
+				// we'll proceed to restart all other threads anyway
 				continue
 			}
+
 			close(thread.drainChan)
 			drainedThreads = append(drainedThreads, thread)
+
 			go func(thread *phpThread) {
 				thread.state.waitFor(stateYielding)
 				ready.Done()
 			}(thread)
 		}
+
 		worker.threadMutex.RUnlock()
 	}
+
 	ready.Wait()
 
 	return drainedThreads
@@ -194,6 +211,7 @@ func drainWatcher() {
 }
 
 // RestartWorkers attempts to restart all workers gracefully
+// All workers must be restarted at the same time to prevent issues with opcache resetting.
 func RestartWorkers() {
 	// disallow scaling threads while restarting workers
 	scalingMu.Lock()
@@ -205,14 +223,6 @@ func RestartWorkers() {
 		thread.drainChan = make(chan struct{})
 		thread.state.set(stateReady)
 	}
-}
-
-func getDirectoriesToWatch(workerOpts []workerOpt) []string {
-	directoriesToWatch := []string{}
-	for _, w := range workerOpts {
-		directoriesToWatch = append(directoriesToWatch, w.watch...)
-	}
-	return directoriesToWatch
 }
 
 func (worker *worker) attachThread(thread *phpThread) {
