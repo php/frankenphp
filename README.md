@@ -51,8 +51,8 @@ sudo dnf install frankenphp
 For extensions not available by default, use [PIE](https://github.com/php/pie):
 
 ```console
-sudo dnf install php-zts-devel
-sudo pie install asgrim/example-pie-extension --with-php-config=php-config-zts
+sudo dnf install pie-zts
+sudo pie-zts install asgrim/example-pie-extension
 ```
 
 ### deb Packages
@@ -72,7 +72,7 @@ For extensions not available by default, use [PIE](https://github.com/php/pie):
 
 ```console
 sudo apt install php-zts-devel
-sudo pie install asgrim/example-pie-extension --with-php-config=php-config-zts
+sudo pie-zts install asgrim/example-pie-extension
 ```
 
 ### Homebrew
