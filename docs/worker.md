@@ -185,3 +185,13 @@ $handler = static function () use ($workerServer) {
 
 // ...
 ```
+
+## Worker Mode for Extension Developers
+
+### Request Lifecycle
+
+In worker mode FrankenPHP only goes through `RINIT` and `RSHUTDOWN` once per worker thread. In case you need to observe a worker request start and end, you can not rely on `RINIT` and `RSHUTDOWN` phases of the extension lifecycle. Instead, you are able to hook into the `sapi_module.activate` / `sapi_module.deactivate` function pointers to achieve the same effect (you can validate that the current SAPI is FrankenPHP by checking the value of `sapi_module.name`).
+
+Upon entering the `frankenphp_handle_request()` function, FrankenPHP calls `sapi_deactivate()` in internals which calls the `sapi_module.deactivate` hook if initialized and finaly blocks until a request arrives. Once a request arrives for the worker to handle, FrankenPHP calls `sapi_activate()` in internals which calls the `sapi_module.activate` hook if initialized.
+
+Be aware that FrankenPHP worker mode injects a dummy request to start the worker even before the first request arrives.
