@@ -167,16 +167,8 @@ func drainWorkerThreads() []*phpThread {
 		worker.threadMutex.RLock()
 		ready.Add(len(worker.threads))
 		for _, thread := range worker.threads {
-			if !thread.state.requestSafeStateChange(stateRestarting) {
-				ready.Done()
-				// no state change allowed == thread is shutting down
-				// we'll proceed to restart all other threads anyways
-				continue
-			}
-			close(thread.drainChan)
-			drainedThreads = append(drainedThreads, thread)
 			go func(thread *phpThread) {
-				thread.state.waitFor(stateYielding)
+				thread.restart()
 				ready.Done()
 			}(thread)
 		}
