@@ -70,7 +70,7 @@ sudo apt install frankenphp
 Varsayılan olarak mevcut olmayan eklentiler için [PIE](https://github.com/php/pie) kullanın:
 
 ```console
-sudo apt install php-zts-devel
+sudo apt install pie-zts
 sudo pie-zts install asgrim/example-pie-extension
 ```
 

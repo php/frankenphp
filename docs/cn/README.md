@@ -70,7 +70,7 @@ sudo apt install frankenphp
 对于默认不可用的扩展，请使用 [PIE](https://github.com/php/pie)：
 
 ```console
-sudo apt install php-zts-devel
+sudo apt install pie-zts
 sudo pie-zts install asgrim/example-pie-extension
 ```
 
