@@ -307,7 +307,7 @@ PHP_FUNCTION(frankenphp_putenv) {
   }
 
   // cut the string at the first '='
-  char *eq_pos = strchr(setting, '=');
+  char *eq_pos = memchr(setting, '=', setting_len);
   bool put_env_success = true;
   if (eq_pos != NULL) {
     size_t name_len = eq_pos - setting;
@@ -315,13 +315,17 @@ PHP_FUNCTION(frankenphp_putenv) {
         (setting_len > name_len + 1) ? (setting_len - name_len - 1) : 0;
     put_env_success =
         go_putenv(setting, (int)name_len, eq_pos + 1, (int)value_len);
-    zval val = {0};
-    ZVAL_STRINGL(&val, eq_pos + 1, value_len);
-    zend_hash_str_update(sandboxed_env, setting, name_len, &val);
+    if (put_env_success){
+      zval val = {0};
+      ZVAL_STRINGL(&val, eq_pos + 1, value_len);
+      zend_hash_str_update(sandboxed_env, setting, name_len, &val);
+    }
   } else {
     // no '=' found, delete the variable
     put_env_success = go_putenv(setting, (int)setting_len, NULL, 0);
-    zend_hash_str_del(sandboxed_env, setting, setting_len);
+    if (put_env_success){
+      zend_hash_str_del(sandboxed_env, setting, setting_len);
+    }
   }
 
   RETURN_BOOL(put_env_success);
