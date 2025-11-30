@@ -17,7 +17,7 @@ type mercureContext struct {
 }
 
 //export go_mercure_publish
-func go_mercure_publish(threadIndex C.uintptr_t, topics *C.struct__zval_struct, data unsafe.Pointer, private bool, id, typ unsafe.Pointer, retry uint64) (generatedID *C.zend_string, error C.short) {
+func go_mercure_publish(threadIndex C.uintptr_t, topics *C.struct__zval_struct, data *C.zend_string, private bool, id, typ *C.zend_string, retry uint64) (generatedID *C.zend_string, error C.short) {
 	thread := phpThreads[threadIndex]
 	ctx := thread.context()
 	fc := thread.frankenPHPContext()
@@ -32,10 +32,10 @@ func go_mercure_publish(threadIndex C.uintptr_t, topics *C.struct__zval_struct, 
 
 	u := &mercure.Update{
 		Event: mercure.Event{
-			Data:  GoString(data),
-			ID:    GoString(id),
+			Data:  GoString(unsafe.Pointer(data)),
+			ID:    GoString(unsafe.Pointer(id)),
 			Retry: retry,
-			Type:  GoString(typ),
+			Type:  GoString(unsafe.Pointer(typ)),
 		},
 		Private: private,
 	}
@@ -43,7 +43,7 @@ func go_mercure_publish(threadIndex C.uintptr_t, topics *C.struct__zval_struct, 
 	zvalType := C.zval_get_type(topics)
 	switch zvalType {
 	case C.IS_STRING:
-		u.Topics = []string{GoString(unsafe.Pointer(topics))}
+		u.Topics = []string{GoString(unsafe.Pointer(*(**C.zend_string)(unsafe.Pointer(&topics.value[0]))))}
 	case C.IS_ARRAY:
 		ts, err := GoPackedArray[string](unsafe.Pointer(topics))
 		if err != nil {
