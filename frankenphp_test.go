@@ -749,6 +749,29 @@ func TestExecuteCLICode(t *testing.T) {
 	assert.Equal(t, stdoutStderrStr, `Hello World`)
 }
 
+func TestFrankenSendRequest(t *testing.T) {
+	var buf bytes.Buffer
+	handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	logger := slog.New(handler)
+	cwd, _ := os.Getwd()
+	workerFile := cwd + "/testdata/request-receiver.php"
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/request-sender.php?message=hi-from-go", handler, t)
+		assert.Equal(t, "request sent", body)
+	}, &testOptions{
+		logger: logger,
+		initOpts: []frankenphp.Option{frankenphp.WithWorkers(
+			"workerName",
+			workerFile,
+			1,
+			frankenphp.WithWorkerHTTPDisabled(true),
+		)},
+	})
+
+	assert.Contains(t, buf.String(), "hi-from-go")
+}
+
 func ExampleServeHTTP() {
 	if err := frankenphp.Init(); err != nil {
 		panic(err)

@@ -3,6 +3,7 @@ package frankenphp
 // #include "frankenphp.h"
 import "C"
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -355,8 +356,10 @@ func go_frankenphp_send_request(threadIndex C.uintptr_t, zv *C.zval, name *C.cha
 	fc.responseWriter = nil
 	fc.handlerParameters = message
 
+	ctx := context.WithValue(context.Background(), contextKey, fc)
+
 	go func() {
-		err := w.handleRequest(contextHolder{phpThreads[threadIndex].context(), fc})
+		err := w.handleRequest(contextHolder{ctx, fc})
 		if err != nil && globalLogger.Enabled(globalCtx, slog.LevelError) {
 			globalLogger.LogAttrs(
 				globalCtx,

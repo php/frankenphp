@@ -128,7 +128,6 @@ func setupWorkerScript(handler *workerThread, worker *worker) {
 
 	// non-http worker: instantly mark as ready
 	if !worker.httpEnabled {
-		handler.isBootingScript = false
 		handler.thread.state.Set(state.Ready)
 	}
 }
@@ -160,7 +159,7 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 	// worker has thrown a fatal error or has not reached frankenphp_handle_request
 	metrics.StopWorker(worker.name, StopReasonCrash)
 
-	if !handler.isBootingScript {
+	if !handler.isBootingScript || !worker.httpEnabled {
 		// fatal error (could be due to exit(1), timeouts, etc.)
 		if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
 			globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "restarting", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex), slog.Int("exit_status", exitStatus))
@@ -304,7 +303,7 @@ func go_frankenphp_finish_worker_request(threadIndex C.uintptr_t, retval *C.zval
 	thread.handler.(*workerThread).workerFrankenPHPContext = nil
 	thread.handler.(*workerThread).workerContext = nil
 
-	if globalLogger.Enabled(ctx, slog.LevelDebug) {
+	if globalLogger.Enabled(ctx, slog.LevelDebug) && thread.handler.(*workerThread).worker.httpEnabled {
 		if fc.request == nil {
 			fc.logger.LogAttrs(ctx, slog.LevelDebug, "request handling finished", slog.String("worker", fc.worker.name), slog.Int("thread", thread.threadIndex))
 		} else {
