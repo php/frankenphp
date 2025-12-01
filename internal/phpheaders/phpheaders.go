@@ -122,9 +122,9 @@ var headerKeyCache = otter.Must[string, string](&otter.Options[string, string]{M
 
 var headerNameReplacer = strings.NewReplacer(" ", "_", "-", "_")
 
-func GetUnCommonHeader(key string) string {
+func GetUnCommonHeader(ctx context.Context, key string) string {
 	phpHeaderKey, err := headerKeyCache.Get(
-		context.Background(),
+		ctx,
 		key,
 		otter.LoaderFunc[string, string](func(_ context.Context, key string) (string, error) {
 			return "HTTP_" + headerNameReplacer.Replace(strings.ToUpper(key)) + "\x00", nil
