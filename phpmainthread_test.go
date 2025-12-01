@@ -253,7 +253,7 @@ func TestAllCommonHeadersAreCorrect(t *testing.T) {
 
 	for header, phpHeader := range phpheaders.CommonRequestHeaders {
 		// verify that common and uncommon headers return the same result
-		expectedPHPHeader := phpheaders.GetUnCommonHeader(header)
+		expectedPHPHeader := phpheaders.GetUnCommonHeader(t.Context(), header)
 		assert.Equal(t, phpHeader+"\x00", expectedPHPHeader, "header is not well formed: "+phpHeader)
 
 		// net/http will capitalize lowercase headers, verify that headers are capitalized
