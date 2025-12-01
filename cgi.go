@@ -277,13 +277,13 @@ func splitPos(path string, splitPath []string) int {
 // See: https://github.com/php/php-src/blob/345e04b619c3bc11ea17ee02cdecad6ae8ce5891/main/SAPI.h#L72
 //
 //export go_update_request_info
-func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) C.bool {
+func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) {
 	thread := phpThreads[threadIndex]
 	fc := thread.frankenPHPContext()
 	request := fc.request
 
 	if request == nil {
-		return C.bool(fc.worker != nil)
+		return
 	}
 
 	authUser, authPassword, ok := request.BasicAuth()
@@ -311,8 +311,6 @@ func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) 
 	info.request_uri = thread.pinCString(request.URL.RequestURI())
 
 	info.proto_num = C.int(request.ProtoMajor*1000 + request.ProtoMinor)
-
-	return C.bool(fc.worker != nil)
 }
 
 // SanitizedPathJoin performs filepath.Join(root, reqPath) that
