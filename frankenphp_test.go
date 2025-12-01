@@ -776,22 +776,17 @@ func ExampleExecuteScriptCLI() {
 }
 
 func BenchmarkHelloWorld(b *testing.B) {
-	if err := frankenphp.Init(frankenphp.WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil)))); err != nil {
-		panic(err)
-	}
-	defer frankenphp.Shutdown()
+	require.NoError(b, frankenphp.Init())
+	b.Cleanup(frankenphp.Shutdown)
+
 	cwd, _ := os.Getwd()
 	testDataDir := cwd + "/testdata/"
 
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		req, err := frankenphp.NewRequestWithContext(r, frankenphp.WithRequestDocumentRoot(testDataDir, false))
-		if err != nil {
-			panic(err)
-		}
+		require.NoError(b, err)
 
-		if err := frankenphp.ServeHTTP(w, req); err != nil {
-			panic(err)
-		}
+		require.NoError(b, frankenphp.ServeHTTP(w, req))
 	}
 
 	req := httptest.NewRequest("GET", "http://example.com/index.php", nil)
@@ -803,21 +798,17 @@ func BenchmarkHelloWorld(b *testing.B) {
 }
 
 func BenchmarkEcho(b *testing.B) {
-	if err := frankenphp.Init(frankenphp.WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil)))); err != nil {
-		panic(err)
-	}
-	defer frankenphp.Shutdown()
+	require.NoError(b, frankenphp.Init())
+	b.Cleanup(frankenphp.Shutdown)
+
 	cwd, _ := os.Getwd()
 	testDataDir := cwd + "/testdata/"
 
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		req, err := frankenphp.NewRequestWithContext(r, frankenphp.WithRequestDocumentRoot(testDataDir, false))
-		if err != nil {
-			panic(err)
-		}
-		if err := frankenphp.ServeHTTP(w, req); err != nil {
-			panic(err)
-		}
+		require.NoError(b, err)
+
+		require.NoError(b, frankenphp.ServeHTTP(w, req))
 	}
 
 	const body = `{
@@ -869,10 +860,9 @@ func BenchmarkEcho(b *testing.B) {
 }
 
 func BenchmarkServerSuperGlobal(b *testing.B) {
-	if err := frankenphp.Init(frankenphp.WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil)))); err != nil {
-		panic(err)
-	}
-	defer frankenphp.Shutdown()
+	require.NoError(b, frankenphp.Init())
+	b.Cleanup(frankenphp.Shutdown)
+
 	cwd, _ := os.Getwd()
 	testDataDir := cwd + "/testdata/"
 
@@ -919,14 +909,11 @@ func BenchmarkServerSuperGlobal(b *testing.B) {
 
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		req, err := frankenphp.NewRequestWithContext(r, frankenphp.WithRequestDocumentRoot(testDataDir, false), frankenphp.WithRequestPreparedEnv(preparedEnv))
-		if err != nil {
-			panic(err)
-		}
+		require.NoError(b, err)
 
 		r.Header = headers
-		if err := frankenphp.ServeHTTP(w, req); err != nil {
-			panic(err)
-		}
+
+		require.NoError(b, frankenphp.ServeHTTP(w, req))
 	}
 
 	req := httptest.NewRequest("GET", "http://example.com/server-variable.php", nil)
