@@ -905,7 +905,7 @@ Once the worker pool is active, you can dispatch tasks to it. This can be done i
 
 Use `SendMessage` to pass raw data directly to your worker script. This is ideal for queues or simple commands.
 
-**Example: An Async Queue Extension**
+##### Example: An Async Queue Extension
 
 ```go
 // #include <Zend/zend_types.h>
@@ -998,7 +998,7 @@ FrankenPHP provides hooks to execute Go code at specific points in the lifecycle
 | **Thread** | `WithWorkerOnReady`          | `func(threadID int)` | Per-thread setup. Called when a thread starts. Receives the Thread ID. |
 | **Thread** | `WithWorkerOnShutdown`       | `func(threadID int)` | Per-thread cleanup. Receives the Thread ID.                            |
 
-**Example:**
+#### Example:
 
 ```go
 package myextension
