@@ -187,18 +187,39 @@ func packCgiVariable(key *C.zend_string, value string) C.ht_key_value_pair {
 }
 
 func addHeadersToServer(ctx context.Context, request *http.Request, trackVarsArray *C.zval) {
+	var totalCommonHeaders int
+
 	for field, val := range request.Header {
 		if k := mainThread.commonHeaders[field]; k != nil {
+			totalCommonHeaders++
 			v := strings.Join(val, ", ")
 			C.frankenphp_register_single(k, toUnsafeChar(v), C.size_t(len(v)), trackVarsArray)
+		}
+	}
+
+	if totalCommonHeaders == len(request.Header) {
+		return
+	}
+
+	// if the header name could not be cached, it needs to be registered safely
+	// this is more inefficient but allows additional sanitizing by PHP
+	nbUncommonHeaders := len(request.Header)-totalCommonHeaders
+	uncommonKeys := make([]string, nbUncommonHeaders)
+	uncommonHeaders := make(map[string]string, nbUncommonHeaders)
+	var i int
+
+	for field, val := range request.Header {
+		if k := mainThread.commonHeaders[field]; k != nil {
 			continue
 		}
 
-		// if the header name could not be cached, it needs to be registered safely
-		// this is more inefficient but allows additional sanitizing by PHP
-		k := phpheaders.GetUnCommonHeader(ctx, field)
-		v := strings.Join(val, ", ")
-		C.frankenphp_register_variable_safe(toUnsafeChar(k), toUnsafeChar(v), C.size_t(len(v)), trackVarsArray)
+		uncommonKeys[i] = field
+		uncommonHeaders[field] = strings.Join(val, ", ")
+	}
+
+	keys := phpheaders.GetUnCommonHeaders(ctx, uncommonKeys)
+	for k, v := range uncommonHeaders {
+		C.frankenphp_register_variable_safe(toUnsafeChar(keys[k]), toUnsafeChar(v), C.size_t(len(v)), trackVarsArray)
 	}
 }
 
