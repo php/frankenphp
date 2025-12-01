@@ -20,14 +20,15 @@ type WorkerOption func(*workerOpt) error
 //
 // If you change this, also update the Caddy module and the documentation.
 type opt struct {
-	ctx         context.Context
-	numThreads  int
-	maxThreads  int
-	workers     []workerOpt
-	logger      *slog.Logger
-	metrics     Metrics
-	phpIni      map[string]string
-	maxWaitTime time.Duration
+	ctx                  context.Context
+	numThreads           int
+	maxThreads           int
+	workers              []workerOpt
+	hotReloadingPatterns []string
+	logger               *slog.Logger
+	metrics              Metrics
+	phpIni               map[string]string
+	maxWaitTime          time.Duration
 }
 
 type workerOpt struct {

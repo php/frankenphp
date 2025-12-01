@@ -37,6 +37,8 @@ import (
 	"unsafe"
 	// debug on Linux
 	//_ "github.com/ianlancetaylor/cgosymbolizer"
+
+	"github.com/dunglas/frankenphp/internal/watcher"
 )
 
 type contextKeyStruct struct{}
@@ -317,10 +319,26 @@ func Init(options ...Option) error {
 		convertToRegularThread(getInactivePHPThread())
 	}
 
-	if err := initWorkers(opt.workers); err != nil {
+	var watchPatterns []*watcher.PatternGroup
+
+	if watchPatterns, err = initWorkers(opt.workers); err != nil {
 		Shutdown()
 		return err
 	}
+
+	for _, p := opt.hotReloadingPatterns {
+		watchPatterns[p] = mer
+	}
+
+	if watcherIsEnabled {
+			if err := watcher.InitWatcher(globalCtx, globalLogger, watchPatterns, func() {
+				if restartWorkers.Swap(false) {
+					RestartWorkers()
+				}
+			}); err != nil {
+				return err
+			}
+		}
 
 	initAutoScaling(mainThread)
 

@@ -37,28 +37,32 @@ type worker struct {
 
 var (
 	workers          []*worker
+	restartWorkers   atomic.Bool
 	watcherIsEnabled bool
 )
 
-func initWorkers(opt []workerOpt) error {
-	var (
-		workersReady  sync.WaitGroup
-		watchPatterns []*watcher.PatternGroup
-	)
+func initWorkers(opt []workerOpt) (watchPatterns []*watcher.PatternGroup, _ error) {
+	if len(opt) == 0 {
+		return nil, nil
+	}
+
+	var workersReady sync.WaitGroup
 
 	workers = make([]*worker, 0, len(opt))
 
 	for _, o := range opt {
 		w, err := newWorker(o)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		workers = append(workers, w)
 
 		if len(o.watch) > 0 {
 			watcherIsEnabled = true
-			watchPatterns = append(watchPatterns, &watcher.PatternGroup{Patterns: o.watch, Callback: w.publishHotReloadingUpdate()})
+			watchPatterns = append(watchPatterns, &watcher.PatternGroup{Patterns: o.watch, Callback: func(_ []*watcher.Event) {
+				restartWorkers.Store(true)
+			}})
 		}
 	}
 
@@ -75,13 +79,7 @@ func initWorkers(opt []workerOpt) error {
 
 	workersReady.Wait()
 
-	if watcherIsEnabled {
-		if err := watcher.InitWatcher(globalCtx, globalLogger, watchPatterns, RestartWorkers); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return watchPatterns, nil
 }
 
 func getWorkerByName(name string) *worker {
