@@ -897,7 +897,7 @@ If you plan to share your extension (like a generic queue or event listener), yo
 
 If you are embedding FrankenPHP in a standard Go application (without Caddy) using `frankenphp.ServeHTTP`, you can register extension workers using `frankenphp.WithExtensionWorkers` when initializing options.
 
-## Interacting with Workers
+### Interacting with Workers
 
 Once the worker pool is active, you can dispatch tasks to it. This can be done inside native functions exported to PHP, or from any Go logic such as a cron scheduler, an event listener (MQTT, Kafka), or a background goroutine.
 
@@ -965,7 +965,7 @@ func my_worker_http_request(path *C.zend_string) unsafe.Pointer {
 }
 ```
 
-#### Worker Script
+### Worker Script
 
 The PHP worker script runs in a loop and can handle both raw messages and HTTP requests.
 
