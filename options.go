@@ -44,6 +44,7 @@ type workerOpt struct {
 	onThreadShutdown       func(int)
 	onServerStartup        func()
 	onServerShutdown       func()
+	isHTTP                  bool
 }
 
 // WithContext sets the main context to use.
@@ -90,6 +91,7 @@ func WithWorkers(name, fileName string, num int, options ...WorkerOption) Option
 			env:                    PrepareEnv(nil),
 			watch:                  []string{},
 			maxConsecutiveFailures: defaultMaxConsecutiveFailures,
+			isHTTP:                 true
 		}
 
 		for _, option := range options {
@@ -233,6 +235,16 @@ func WithWorkerOnServerShutdown(f func()) WorkerOption {
 		return nil
 	}
 }
+
+// AsHTTPWorker determines if the worker will handle HTTP requests (true by default).
+func AsHTTPWorker(isHTTP bool) WorkerOption {
+	return func(w *workerOpt) error {
+		w.isHTTP = isHTTP
+
+		return nil
+	}
+}
+
 
 func withExtensionWorkers(w *extensionWorkers) WorkerOption {
 	return func(wo *workerOpt) error {
