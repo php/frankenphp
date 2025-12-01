@@ -494,6 +494,25 @@ PHP_FUNCTION(frankenphp_handle_request) {
   RETURN_TRUE;
 }
 
+PHP_FUNCTION(frankenphp_send_request) {
+  zval *zv;
+  char *worker_name = NULL;
+  size_t worker_name_len = 0;
+
+  ZEND_PARSE_PARAMETERS_START(1, 2);
+  Z_PARAM_ZVAL(zv);
+  Z_PARAM_OPTIONAL
+  Z_PARAM_STRING(worker_name, worker_name_len);
+  ZEND_PARSE_PARAMETERS_END();
+
+  char *error = go_frankenphp_send_request(thread_index, zv, worker_name,
+                                           worker_name_len);
+  if (error) {
+    zend_throw_exception(spl_ce_RuntimeException, error, 0);
+    RETURN_THROWS();
+  }
+}
+
 PHP_FUNCTION(headers_send) {
   zend_long response_code = 200;
 

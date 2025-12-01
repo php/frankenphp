@@ -125,6 +125,12 @@ func setupWorkerScript(handler *workerThread, worker *worker) {
 	if globalLogger.Enabled(ctx, slog.LevelDebug) {
 		globalLogger.LogAttrs(ctx, slog.LevelDebug, "starting", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex))
 	}
+
+	// non-http worker: instantly mark as ready
+	if !worker.httpEnabled {
+		handler.isBootingScript = false
+		handler.thread.state.Set(state.Ready)
+	}
 }
 
 func tearDownWorkerScript(handler *workerThread, exitStatus int) {

@@ -147,7 +147,7 @@ func parseWorkerConfig(d *caddyfile.Dispenser) (workerConfig, error) {
 
 			wc.MaxConsecutiveFailures = v
 		default:
-			return wc, wrongSubDirectiveError("worker", "name, file, num, env, watch, match, max_consecutive_failures, max_threads", v)
+			return wc, wrongSubDirectiveError("worker", "name, file, num, env, watch, match, max_consecutive_failures, max_threads, http_disabled", v)
 		}
 	}
 
