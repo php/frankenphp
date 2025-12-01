@@ -114,7 +114,10 @@ PHP_METHOD({{namespacedClassName $.Namespace .ClassName}}, {{.PhpName}}) {
     {{- if ne .ReturnType "void"}}
     {{- if eq .ReturnType "string"}}
     zend_string* result = {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "array"}}{{.Name}}{{end}}{{else}}{{.Name}}{{end}}{{end}}{{end}});
-    RETURN_STR(result);
+    if (result) {
+        RETURN_STR(result);
+    }
+    RETURN_EMPTY_STRING();
     {{- else if eq .ReturnType "int"}}
     zend_long result = {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "array"}}{{.Name}}{{end}}{{else}}{{if eq .PhpType "array"}}{{.Name}}{{else}}(long){{.Name}}{{end}}{{end}}{{end}}{{end}});
     RETURN_LONG(result);
