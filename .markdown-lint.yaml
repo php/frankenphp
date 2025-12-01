@@ -2,3 +2,5 @@
 no-hard-tabs: false
 MD013: false
 MD033: false
+MD060:
+  style: aligned
