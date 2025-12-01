@@ -32,7 +32,7 @@ type worker struct {
 	onThreadReady          func(int)
 	onThreadShutdown       func(int)
 	queuedRequests         atomic.Int32
-	isHTTP                 bool
+	httpEnabled            bool
 }
 
 var (
@@ -155,7 +155,7 @@ func newWorker(o workerOpt) (*worker, error) {
 		maxConsecutiveFailures: o.maxConsecutiveFailures,
 		onThreadReady:          o.onThreadReady,
 		onThreadShutdown:       o.onThreadShutdown,
-		isHTTP           o.isHTTP
+		httpEnabled:            !o.httpDisabled,
 	}
 
 	w.requestOptions = append(

@@ -54,7 +54,7 @@ func (handler *workerThread) beforeScriptExecution() string {
 		handler.state.WaitFor(state.Ready, state.ShuttingDown)
 		return handler.beforeScriptExecution()
 	case state.Ready, state.TransitionComplete:
-		handler.thread.updateContext(true)
+		handler.thread.updateContext(true, handler.worker.httpEnabled)
 		if handler.worker.onThreadReady != nil {
 			handler.worker.onThreadReady(handler.thread.threadIndex)
 		}
