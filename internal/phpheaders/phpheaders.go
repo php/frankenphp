@@ -1,9 +1,10 @@
 package phpheaders
 
 import (
+	"context"
 	"strings"
 
-	"github.com/maypok86/otter"
+	"github.com/maypok86/otter/v2"
 )
 
 // Translate header names to PHP header names
@@ -117,22 +118,20 @@ var CommonRequestHeaders = map[string]string{
 
 // Cache up to 256 uncommon headers
 // This is ~2.5x faster than converting the header each time
-var headerKeyCache = func() otter.Cache[string, string] {
-	c, err := otter.MustBuilder[string, string](256).Build()
-	if err != nil {
-		panic(err)
-	}
-
-	return c
-}()
+var headerKeyCache = otter.Must[string, string](&otter.Options[string, string]{MaximumSize: 256})
 
 var headerNameReplacer = strings.NewReplacer(" ", "_", "-", "_")
 
-func GetUnCommonHeader(key string) string {
-	phpHeaderKey, ok := headerKeyCache.Get(key)
-	if !ok {
-		phpHeaderKey = "HTTP_" + headerNameReplacer.Replace(strings.ToUpper(key)) + "\x00"
-		headerKeyCache.SetIfAbsent(key, phpHeaderKey)
+func GetUnCommonHeader(ctx context.Context, key string) string {
+	phpHeaderKey, err := headerKeyCache.Get(
+		ctx,
+		key,
+		otter.LoaderFunc[string, string](func(_ context.Context, key string) (string, error) {
+			return "HTTP_" + headerNameReplacer.Replace(strings.ToUpper(key)) + "\x00", nil
+		}),
+	)
+	if err != nil {
+		panic(err)
 	}
 
 	return phpHeaderKey
