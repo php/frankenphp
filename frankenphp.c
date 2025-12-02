@@ -51,7 +51,6 @@ frankenphp_version frankenphp_get_version() {
 
 frankenphp_config frankenphp_get_config() {
   return (frankenphp_config){
-      frankenphp_get_version(),
 #ifdef ZTS
       true,
 #else
@@ -77,6 +76,10 @@ __thread uintptr_t thread_index;
 __thread bool is_worker_thread = false;
 __thread HashTable *sandboxed_env = NULL;
 
+void frankenphp_update_local_thread_context(bool is_worker) {
+  is_worker_thread = is_worker;
+}
+
 static void frankenphp_update_request_context() {
   /* the server context is stored on the go side, still SG(server_context) needs
    * to not be NULL */
@@ -84,7 +87,7 @@ static void frankenphp_update_request_context() {
   /* status It is not reset by zend engine, set it to 200. */
   SG(sapi_headers).http_response_code = 200;
 
-  is_worker_thread = go_update_request_info(thread_index, &SG(request_info));
+  go_update_request_info(thread_index, &SG(request_info));
 }
 
 static void frankenphp_free_request_context() {
@@ -673,8 +676,9 @@ static char *frankenphp_read_cookies(void) {
 }
 
 /* all variables with well defined keys can safely be registered like this */
-void frankenphp_register_trusted_var(zend_string *z_key, char *value,
-                                     size_t val_len, HashTable *ht) {
+static inline void frankenphp_register_trusted_var(zend_string *z_key,
+                                                   char *value, size_t val_len,
+                                                   HashTable *ht) {
   if (value == NULL) {
     zval empty;
     ZVAL_EMPTY_STRING(&empty);

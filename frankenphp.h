@@ -23,12 +23,6 @@ typedef struct ht_key_value_pair {
   size_t val_len;
 } ht_key_value_pair;
 
-typedef struct php_variable {
-  const char *var;
-  size_t data_len;
-  char *data;
-} php_variable;
-
 typedef struct frankenphp_version {
   unsigned char major_version;
   unsigned char minor_version;
@@ -40,7 +34,6 @@ typedef struct frankenphp_version {
 frankenphp_version frankenphp_get_version();
 
 typedef struct frankenphp_config {
-  frankenphp_version version;
   bool zts;
   bool zend_signals;
   bool zend_max_execution_timers;
@@ -52,6 +45,7 @@ bool frankenphp_new_php_thread(uintptr_t thread_index);
 
 bool frankenphp_shutdown_dummy_request(void);
 int frankenphp_execute_script(char *file_name);
+void frankenphp_update_local_thread_context(bool is_worker);
 
 int frankenphp_execute_script_cli(char *script, int argc, char **argv,
                                   bool eval);

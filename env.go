@@ -3,6 +3,7 @@ package frankenphp
 // #cgo nocallback frankenphp_init_persistent_string
 // #cgo noescape frankenphp_init_persistent_string
 // #include "frankenphp.h"
+// #include <Zend/zend_API.h>
 import "C"
 import (
 	"os"

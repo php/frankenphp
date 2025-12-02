@@ -5,6 +5,8 @@ import (
 	"runtime"
 	"sync"
 	"sync/atomic"
+
+	"github.com/dunglas/frankenphp/internal/state"
 )
 
 // representation of a non-worker PHP thread
@@ -13,7 +15,7 @@ import (
 type regularThread struct {
 	contextHolder
 
-	state  *threadState
+	state  *state.ThreadState
 	thread *phpThread
 }
 
@@ -34,25 +36,27 @@ func convertToRegularThread(thread *phpThread) {
 
 // beforeScriptExecution returns the name of the script or an empty string on shutdown
 func (handler *regularThread) beforeScriptExecution() string {
-	switch handler.state.get() {
-	case stateTransitionRequested:
+	switch handler.state.Get() {
+	case state.TransitionRequested:
 		detachRegularThread(handler.thread)
 		return handler.thread.transitionToNewHandler()
 
-	case stateTransitionComplete:
-		handler.state.set(stateReady)
+	case state.TransitionComplete:
+		handler.thread.updateContext(false)
+		handler.state.Set(state.Ready)
+
 		return handler.waitForRequest()
 
-	case stateReady:
+	case state.Ready:
 		return handler.waitForRequest()
 
-	case stateShuttingDown:
+	case state.ShuttingDown:
 		detachRegularThread(handler.thread)
 		// signal to stop
 		return ""
 	}
 
-	panic("unexpected state: " + handler.state.name())
+	panic("unexpected state: " + handler.state.Name())
 }
 
 func (handler *regularThread) afterScriptExecution(_ int) {
@@ -72,7 +76,7 @@ func (handler *regularThread) name() string {
 }
 
 func (handler *regularThread) waitForRequest() string {
-	handler.state.markAsWaiting(true)
+	handler.state.MarkAsWaiting(true)
 
 	var ch contextHolder
 
@@ -86,7 +90,7 @@ func (handler *regularThread) waitForRequest() string {
 
 	handler.ctx = ch.ctx
 	handler.contextHolder.frankenPHPContext = ch.frankenPHPContext
-	handler.state.markAsWaiting(false)
+	handler.state.MarkAsWaiting(false)
 
 	// set the scriptFilename that should be executed
 	return handler.contextHolder.frankenPHPContext.scriptFilename
