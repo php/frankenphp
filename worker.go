@@ -345,7 +345,7 @@ func go_frankenphp_send_request(threadIndex C.uintptr_t, zv *C.zval, name *C.cha
 		return phpThreads[threadIndex].pinCString("No worker found to handle this task: " + C.GoStringN(name, C.int(nameLen)))
 	}
 
-	if w.httpEnabled == nil {
+	if w.httpEnabled {
 		return phpThreads[threadIndex].pinCString("Cannot call frankenphp_send_request() on a HTTP worker: " + C.GoStringN(name, C.int(nameLen)))
 	}
 
