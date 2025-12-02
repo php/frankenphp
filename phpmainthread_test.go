@@ -3,10 +3,12 @@ package frankenphp
 import (
 	"io"
 	"log/slog"
+	"maps"
 	"math/rand/v2"
 	"net/http/httptest"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -249,12 +251,13 @@ func allPossibleTransitions(worker1Path string, worker2Path string) []func(*phpT
 }
 
 func TestAllCommonHeadersAreCorrect(t *testing.T) {
+	keys := slices.Collect(maps.Keys(phpheaders.CommonRequestHeaders))
+	uncommonHeaders := phpheaders.GetUnCommonHeaders(t.Context(), keys)
 	fakeRequest := httptest.NewRequest("GET", "http://localhost", nil)
 
 	for header, phpHeader := range phpheaders.CommonRequestHeaders {
 		// verify that common and uncommon headers return the same result
-		expectedPHPHeader := phpheaders.GetUnCommonHeader(t.Context(), header)
-		assert.Equal(t, phpHeader+"\x00", expectedPHPHeader, "header is not well formed: "+phpHeader)
+		assert.Equal(t, phpHeader+"\x00", uncommonHeaders[header], "header is not well formed: "+phpHeader)
 
 		// net/http will capitalize lowercase headers, verify that headers are capitalized
 		fakeRequest.Header.Add(header, "foo")
