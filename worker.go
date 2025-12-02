@@ -345,6 +345,10 @@ func go_frankenphp_send_request(threadIndex C.uintptr_t, zv *C.zval, name *C.cha
 		return phpThreads[threadIndex].pinCString("No worker found to handle this task: " + C.GoStringN(name, C.int(nameLen)))
 	}
 
+	if w.httpEnabled == nil {
+		return phpThreads[threadIndex].pinCString("Cannot call frankenphp_send_request() on a HTTP worker: " + C.GoStringN(name, C.int(nameLen)))
+	}
+
 	message, err := goValue[any](zv)
 	if err != nil {
 		return phpThreads[threadIndex].pinCString("Failed to convert frankenphp_send_request() argument: " + err.Error())

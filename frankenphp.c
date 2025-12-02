@@ -170,7 +170,7 @@ static void frankenphp_release_temporary_streams() {
 
 /* Adapted from php_request_shutdown */
 static void frankenphp_worker_request_shutdown() {
-  if (!is_http_thread){
+  if (!is_http_thread) {
     return;
   }
   /* Flush all output buffers */
@@ -217,7 +217,7 @@ PHPAPI void get_full_env(zval *track_vars_array) {
 /* Adapted from php_request_startup() */
 static int frankenphp_worker_request_startup() {
   int retval = SUCCESS;
-  if (!is_http_thread){
+  if (!is_http_thread) {
     return retval;
   }
 

@@ -126,9 +126,11 @@ func setupWorkerScript(handler *workerThread, worker *worker) {
 		globalLogger.LogAttrs(ctx, slog.LevelDebug, "starting", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex))
 	}
 
-	// non-http worker: instantly mark as ready
+	// non-http worker: instantly gets marked as ready
 	if !worker.httpEnabled {
+		metrics.ReadyWorker(handler.worker.name)
 		handler.thread.state.Set(state.Ready)
+		handler.isBootingScript = false
 	}
 }
 
@@ -159,7 +161,7 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 	// worker has thrown a fatal error or has not reached frankenphp_handle_request
 	metrics.StopWorker(worker.name, StopReasonCrash)
 
-	if !handler.isBootingScript || !worker.httpEnabled {
+	if !handler.isBootingScript {
 		// fatal error (could be due to exit(1), timeouts, etc.)
 		if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
 			globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "restarting", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex), slog.Int("exit_status", exitStatus))
