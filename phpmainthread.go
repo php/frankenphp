@@ -39,11 +39,11 @@ var (
 // and reserves a fixed number of possible PHP threads
 func initPHPThreads(numThreads int, numMaxThreads int, phpIni map[string]string) (*phpMainThread, error) {
 	mainThread = &phpMainThread{
-		state:      state.NewThreadState(),
-		done:       make(chan struct{}),
-		numThreads: numThreads,
-		maxThreads: numMaxThreads,
-		phpIni:     phpIni,
+		state:        state.NewThreadState(),
+		done:         make(chan struct{}),
+		numThreads:   numThreads,
+		maxThreads:   numMaxThreads,
+		phpIni:       phpIni,
 	}
 
 	// initialize the first thread
