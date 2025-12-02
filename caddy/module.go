@@ -74,6 +74,8 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		return fmt.Errorf(`expected ctx.App("frankenphp") to return *FrankenPHPApp, got nil`)
 	}
 
+	f.assignMercureHubRequestOption(ctx)
+
 	for i, wc := range f.Workers {
 		// make the file path absolute from the public directory
 		// this can only be done if the root is defined inside php_server
@@ -85,6 +87,12 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		if f.Env != nil {
 			wc.inheritEnv(f.Env)
 		}
+
+		wc.requestOptions = []frankenphp.RequestOption{frankenphp.WithRequestLogger(f.logger)}
+		if f.mercureHubRequestOption != nil {
+			wc.requestOptions = append(wc.requestOptions, *f.mercureHubRequestOption)
+		}
+
 		f.Workers[i] = wc
 	}
 
@@ -145,8 +153,6 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 			}
 		}
 	}
-
-	f.assignMercureHubRequestOption(ctx)
 
 	return nil
 }
@@ -592,7 +598,7 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 // workers can also match a path without being in the public directory
 // in this case we need to prepend the worker routes to the existing routes
 func prependWorkerRoutes(routes caddyhttp.RouteList, h httpcaddyfile.Helper, f FrankenPHPModule, fsrv caddy.Module, disableFsrv bool) caddyhttp.RouteList {
-	allWorkerMatches := caddyhttp.MatchPath{}
+	var allWorkerMatches caddyhttp.MatchPath
 	for _, w := range f.Workers {
 		for _, path := range w.MatchPath {
 			allWorkerMatches = append(allWorkerMatches, path)
@@ -607,7 +613,7 @@ func prependWorkerRoutes(routes caddyhttp.RouteList, h httpcaddyfile.Helper, f F
 	if !disableFsrv {
 		routes = append(routes, caddyhttp.Route{
 			MatcherSetsRaw: []caddy.ModuleMap{
-				caddy.ModuleMap{
+				{
 					"file": h.JSON(fileserver.MatchFile{
 						TryFiles: []string{"{http.request.uri.path}"},
 						Root:     f.Root,

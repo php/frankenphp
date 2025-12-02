@@ -10,7 +10,7 @@ require (
 	github.com/caddyserver/caddy/v2 v2.10.2
 	github.com/caddyserver/certmagic v0.25.0
 	github.com/dunglas/caddy-cbrotli v1.0.1
-	github.com/dunglas/frankenphp v1.10.0
+	github.com/dunglas/frankenphp v1.10.1
 	github.com/dunglas/mercure/caddy v0.21.2
 	github.com/dunglas/vulcain/caddy v1.2.1
 	github.com/prometheus/client_golang v1.23.2
@@ -50,7 +50,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/chzyer/readline v1.5.1 // indirect
 	github.com/cloudflare/circl v1.6.1 // indirect
-	github.com/coreos/go-oidc/v3 v3.16.0 // indirect
+	github.com/coreos/go-oidc/v3 v3.17.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dgraph-io/badger v1.6.2 // indirect
@@ -58,7 +58,6 @@ require (
 	github.com/dgraph-io/ristretto v0.2.0 // indirect
 	github.com/dgryski/go-farm v0.0.0-20240924180020-3414d57e47da // indirect
 	github.com/dlclark/regexp2 v1.11.5 // indirect
-	github.com/dolthub/maphash v0.1.0 // indirect
 	github.com/dunglas/httpsfv v1.1.0 // indirect
 	github.com/dunglas/mercure v0.21.2 // indirect
 	github.com/dunglas/skipfilter v1.0.0 // indirect
@@ -67,7 +66,6 @@ require (
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
-	github.com/gammazero/deque v1.2.0 // indirect
 	github.com/getkin/kin-openapi v0.133.0 // indirect
 	github.com/go-chi/chi/v5 v5.2.3 // indirect
 	github.com/go-jose/go-jose/v3 v3.0.4 // indirect
@@ -110,7 +108,6 @@ require (
 	github.com/manifoldco/promptui v0.9.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/maypok86/otter v1.2.4 // indirect
 	github.com/maypok86/otter/v2 v2.2.1 // indirect
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d // indirect
 	github.com/mholt/acmez/v3 v3.1.4 // indirect
@@ -130,10 +127,10 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
-	github.com/prometheus/common v0.67.3 // indirect
+	github.com/prometheus/common v0.67.4 // indirect
 	github.com/prometheus/procfs v0.19.2 // indirect
-	github.com/quic-go/qpack v0.5.1 // indirect
-	github.com/quic-go/quic-go v0.56.0 // indirect
+	github.com/quic-go/qpack v0.6.0 // indirect
+	github.com/quic-go/quic-go v0.57.0 // indirect
 	github.com/rs/cors v1.11.1 // indirect
 	github.com/rs/xid v1.6.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
@@ -186,12 +183,12 @@ require (
 	go.step.sm/crypto v0.74.0 // indirect
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	go.uber.org/zap v1.27.0 // indirect
+	go.uber.org/zap v1.27.1 // indirect
 	go.uber.org/zap/exp v0.3.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/crypto v0.44.0 // indirect
-	golang.org/x/crypto/x509roots/fallback v0.0.0-20251117181716-2df4153a0311 // indirect
+	golang.org/x/crypto v0.45.0 // indirect
+	golang.org/x/crypto/x509roots/fallback v0.0.0-20251119195548-4e0068c0098b // indirect
 	golang.org/x/exp v0.0.0-20251113190631-e25ba8c21ef6 // indirect
 	golang.org/x/mod v0.30.0 // indirect
 	golang.org/x/net v0.47.0 // indirect

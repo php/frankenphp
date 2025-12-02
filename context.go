@@ -100,7 +100,7 @@ func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Reques
 
 // newDummyContext creates a fake context from a request path
 func newDummyContext(requestPath string, opts ...RequestOption) (*frankenPHPContext, error) {
-	r, err := http.NewRequest(http.MethodGet, requestPath, nil)
+	r, err := http.NewRequestWithContext(globalCtx, http.MethodGet, requestPath, nil)
 	if err != nil {
 		return nil, err
 	}

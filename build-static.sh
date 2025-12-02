@@ -77,7 +77,7 @@ if [ -z "${PHP_VERSION}" ]; then
 fi
 # default extension set
 defaultExtensions="amqp,apcu,ast,bcmath,brotli,bz2,calendar,ctype,curl,dba,dom,exif,fileinfo,filter,ftp,gd,gmp,gettext,iconv,igbinary,imagick,intl,ldap,lz4,mbregex,mbstring,memcache,memcached,mysqli,mysqlnd,opcache,openssl,password-argon2,parallel,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pdo_sqlsrv,pgsql,phar,posix,protobuf,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,ssh2,sysvmsg,sysvsem,sysvshm,tidy,tokenizer,xlswriter,xml,xmlreader,xmlwriter,xsl,xz,zip,zlib,yaml,zstd"
-defaultExtensionLibs="libavif,nghttp2,nghttp3,ngtcp2"
+defaultExtensionLibs="libavif,nghttp2,nghttp3,ngtcp2,watcher"
 
 if [ -z "${FRANKENPHP_VERSION}" ]; then
 	FRANKENPHP_VERSION="$(git rev-parse --verify HEAD)"

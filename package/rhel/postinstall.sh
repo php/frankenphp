@@ -16,6 +16,7 @@ if [ -x /usr/sbin/semanage ] && [ -x /usr/sbin/restorecon ]; then
 	semanage fcontext --add --type httpd_sys_content_t '/usr/share/frankenphp(/.*)?' 2>/dev/null || :
 	semanage fcontext --add --type httpd_config_t '/etc/frankenphp(/.*)?' 2>/dev/null || :
 	semanage fcontext --add --type httpd_var_lib_t '/var/lib/frankenphp(/.*)?' 2>/dev/null || :
+	semanage fcontext --add --type httpd_sys_rw_content_t "/var/lib/frankenphp(/.*\.db)" 2>/dev/null || :
 	restorecon -r /usr/bin/frankenphp /usr/share/frankenphp /etc/frankenphp /var/lib/frankenphp || :
 fi
 

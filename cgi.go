@@ -12,8 +12,10 @@ package frankenphp
 // #include "frankenphp.h"
 import "C"
 import (
+	"context"
 	"crypto/tls"
 	"net"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"unsafe"
@@ -66,7 +68,7 @@ var knownServerKeys = []string{
 //
 // TODO: handle this case https://github.com/caddyserver/caddy/issues/3718
 // Inspired by https://github.com/caddyserver/caddy/blob/master/modules/caddyhttp/reverseproxy/fastcgi/fastcgi.go
-func addKnownVariablesToServer(thread *phpThread, fc *frankenPHPContext, trackVarsArray *C.zval) {
+func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 	request := fc.request
 	keys := mainThread.knownServerKeys
 	// Separate remote IP and port; more lenient than net.SplitHostPort
@@ -82,10 +84,8 @@ func addKnownVariablesToServer(thread *phpThread, fc *frankenPHPContext, trackVa
 	ip = strings.Replace(ip, "[", "", 1)
 	ip = strings.Replace(ip, "]", "", 1)
 
-	var https string
-	var sslProtocol string
-	var sslCipher string
-	var rs string
+	var https, sslProtocol, sslCipher, rs string
+
 	if request.TLS == nil {
 		rs = "http"
 		https = ""
@@ -186,8 +186,8 @@ func packCgiVariable(key *C.zend_string, value string) C.ht_key_value_pair {
 	return C.ht_key_value_pair{key, toUnsafeChar(value), C.size_t(len(value))}
 }
 
-func addHeadersToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
-	for field, val := range fc.request.Header {
+func addHeadersToServer(ctx context.Context, request *http.Request, trackVarsArray *C.zval) {
+	for field, val := range request.Header {
 		if k := mainThread.commonHeaders[field]; k != nil {
 			v := strings.Join(val, ", ")
 			C.frankenphp_register_single(k, toUnsafeChar(v), C.size_t(len(v)), trackVarsArray)
@@ -196,7 +196,7 @@ func addHeadersToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 
 		// if the header name could not be cached, it needs to be registered safely
 		// this is more inefficient but allows additional sanitizing by PHP
-		k := phpheaders.GetUnCommonHeader(field)
+		k := phpheaders.GetUnCommonHeader(ctx, field)
 		v := strings.Join(val, ", ")
 		C.frankenphp_register_variable_safe(toUnsafeChar(k), toUnsafeChar(v), C.size_t(len(v)), trackVarsArray)
 	}
@@ -215,8 +215,8 @@ func go_register_variables(threadIndex C.uintptr_t, trackVarsArray *C.zval) {
 	fc := thread.frankenPHPContext()
 
 	if fc.request != nil {
-		addKnownVariablesToServer(thread, fc, trackVarsArray)
-		addHeadersToServer(fc, trackVarsArray)
+		addKnownVariablesToServer(fc, trackVarsArray)
+		addHeadersToServer(thread.context(), fc.request, trackVarsArray)
 	}
 
 	// The Prepared Environment is registered last and can overwrite any previous values

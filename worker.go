@@ -5,8 +5,11 @@ import "C"
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dunglas/frankenphp/internal/fastabs"
@@ -20,7 +23,7 @@ type worker struct {
 	fileName               string
 	num                    int
 	maxThreads             int
-	env                    PreparedEnv
+	requestOptions         []RequestOption
 	requestChan            chan contextHolder
 	threads                []*phpThread
 	threadMutex            sync.RWMutex
@@ -28,6 +31,7 @@ type worker struct {
 	maxConsecutiveFailures int
 	onThreadReady          func(int)
 	onThreadShutdown       func(int)
+	queuedRequests         atomic.Int32
 }
 
 var (
@@ -141,9 +145,9 @@ func newWorker(o workerOpt) (*worker, error) {
 	w := &worker{
 		name:                   o.name,
 		fileName:               absFileName,
+		requestOptions:         o.requestOptions,
 		num:                    o.num,
 		maxThreads:             o.maxThreads,
-		env:                    o.env,
 		requestChan:            make(chan contextHolder),
 		threads:                make([]*phpThread, 0, o.num),
 		allowPathMatching:      allowPathMatching,
@@ -151,6 +155,12 @@ func newWorker(o workerOpt) (*worker, error) {
 		onThreadReady:          o.onThreadReady,
 		onThreadShutdown:       o.onThreadShutdown,
 	}
+
+	w.requestOptions = append(
+		w.requestOptions,
+		WithRequestDocumentRoot(filepath.Dir(o.fileName), false),
+		WithRequestPreparedEnv(o.env),
+	)
 
 	if o.extensionWorkers != nil {
 		o.extensionWorkers.internalWorker = w
@@ -260,24 +270,30 @@ func (worker *worker) isAtThreadLimit() bool {
 func (worker *worker) handleRequest(ch contextHolder) error {
 	metrics.StartWorkerRequest(worker.name)
 
-	// dispatch requests to all worker threads in order
-	worker.threadMutex.RLock()
-	for _, thread := range worker.threads {
-		select {
-		case thread.requestChan <- ch:
-			worker.threadMutex.RUnlock()
-			<-ch.frankenPHPContext.done
-			metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
+	runtime.Gosched()
 
-			return nil
-		default:
-			// thread is busy, continue
+	if worker.queuedRequests.Load() == 0 {
+		// dispatch requests to all worker threads in order
+		worker.threadMutex.RLock()
+		for _, thread := range worker.threads {
+			select {
+			case thread.requestChan <- ch:
+				worker.threadMutex.RUnlock()
+				<-ch.frankenPHPContext.done
+				metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
+
+				return nil
+			default:
+				// thread is busy, continue
+			}
 		}
+		worker.threadMutex.RUnlock()
 	}
-	worker.threadMutex.RUnlock()
 
 	// if no thread was available, mark the request as queued and apply the scaling strategy
+	worker.queuedRequests.Add(1)
 	metrics.QueuedWorkerRequest(worker.name)
+
 	for {
 		workerScaleChan := scaleChan
 		if worker.isAtThreadLimit() {
@@ -286,6 +302,7 @@ func (worker *worker) handleRequest(ch contextHolder) error {
 
 		select {
 		case worker.requestChan <- ch:
+			worker.queuedRequests.Add(-1)
 			metrics.DequeuedWorkerRequest(worker.name)
 			<-ch.frankenPHPContext.done
 			metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
@@ -295,7 +312,9 @@ func (worker *worker) handleRequest(ch contextHolder) error {
 			// the request has triggered scaling, continue to wait for a thread
 		case <-timeoutChan(maxWaitTime):
 			// the request has timed out stalling
+			worker.queuedRequests.Add(-1)
 			metrics.DequeuedWorkerRequest(worker.name)
+			metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
 
 			ch.frankenPHPContext.reject(ErrMaxWaitTimeExceeded)
 

@@ -108,8 +108,7 @@ func setupWorkerScript(handler *workerThread, worker *worker) {
 	// Create a dummy request to set up the worker
 	fc, err := newDummyContext(
 		filepath.Base(worker.fileName),
-		WithRequestDocumentRoot(filepath.Dir(worker.fileName), false),
-		WithRequestPreparedEnv(worker.env),
+		worker.requestOptions...,
 	)
 	if err != nil {
 		panic(err)

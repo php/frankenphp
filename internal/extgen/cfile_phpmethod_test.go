@@ -185,3 +185,32 @@ func TestCFile_PHP_METHOD_Integration(t *testing.T) {
 		require.NotContains(t, fullContent, old, "Did not expect to find old declaration %q in full C file content", old)
 	}
 }
+
+func TestCFile_ClassMethodStringReturn(t *testing.T) {
+	generator := &Generator{
+		BaseName: "test_extension",
+		Classes: []phpClass{
+			{
+				Name:     "TestClass",
+				GoStruct: "TestClass",
+				Methods: []phpClassMethod{
+					{
+						Name:       "getString",
+						PhpName:    "getString",
+						ReturnType: "string",
+						ClassName:  "TestClass",
+					},
+				},
+			},
+		},
+		BuildDir: t.TempDir(),
+	}
+
+	cFileGen := cFileGenerator{generator: generator}
+	content, err := cFileGen.getTemplateContent()
+	require.NoError(t, err)
+
+	require.Contains(t, content, "if (result)", "Expected NULL check for string return")
+	require.Contains(t, content, "RETURN_STR(result)", "Expected RETURN_STR macro")
+	require.Contains(t, content, "RETURN_EMPTY_STRING()", "Expected RETURN_EMPTY_STRING fallback")
+}

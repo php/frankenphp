@@ -307,7 +307,7 @@ func Init(options ...Option) error {
 		return err
 	}
 
-	regularRequestChan = make(chan contextHolder, opt.numThreads-workerThreadCount)
+	regularRequestChan = make(chan contextHolder)
 	regularThreads = make([]*phpThread, 0, opt.numThreads-workerThreadCount)
 	for i := 0; i < opt.numThreads-workerThreadCount; i++ {
 		convertToRegularThread(getInactivePHPThread())
