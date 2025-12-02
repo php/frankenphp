@@ -80,10 +80,6 @@ void frankenphp_update_local_thread_context(bool is_worker) {
   is_worker_thread = is_worker;
 }
 
-void frankenphp_update_local_thread_context(bool is_worker) {
-  is_worker_thread = is_worker;
-}
-
 static void frankenphp_update_request_context() {
   /* the server context is stored on the go side, still SG(server_context) needs
    * to not be NULL */
