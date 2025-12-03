@@ -3,7 +3,9 @@ package frankenphp
 // #include "frankenphp.h"
 import "C"
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -32,6 +34,7 @@ type worker struct {
 	onThreadReady          func(int)
 	onThreadShutdown       func(int)
 	queuedRequests         atomic.Int32
+	httpEnabled            bool
 }
 
 var (
@@ -154,6 +157,7 @@ func newWorker(o workerOpt) (*worker, error) {
 		maxConsecutiveFailures: o.maxConsecutiveFailures,
 		onThreadReady:          o.onThreadReady,
 		onThreadShutdown:       o.onThreadShutdown,
+		httpEnabled:            !o.httpDisabled,
 	}
 
 	w.requestOptions = append(
@@ -321,4 +325,55 @@ func (worker *worker) handleRequest(ch contextHolder) error {
 			return ErrMaxWaitTimeExceeded
 		}
 	}
+}
+
+//export go_frankenphp_send_request
+func go_frankenphp_send_request(threadIndex C.uintptr_t, zv *C.zval, name *C.char, nameLen C.size_t) *C.char {
+	var w *worker
+	if nameLen != 0 {
+		w = getWorkerByName(C.GoStringN(name, C.int(nameLen)))
+	} else {
+		for _, worker := range workers {
+			if !worker.httpEnabled {
+				w = worker
+				break
+			}
+		}
+	}
+
+	if w == nil {
+		return phpThreads[threadIndex].pinCString("No worker found to handle this task: " + C.GoStringN(name, C.int(nameLen)))
+	}
+
+	if w.httpEnabled {
+		return phpThreads[threadIndex].pinCString("Cannot call frankenphp_send_request() on a HTTP worker: " + C.GoStringN(name, C.int(nameLen)))
+	}
+
+	message, err := goValue[any](zv)
+	if err != nil {
+		return phpThreads[threadIndex].pinCString("Failed to convert frankenphp_send_request() argument: " + err.Error())
+	}
+
+	fc := newFrankenPHPContext()
+	fc.logger = globalLogger
+	fc.worker = w
+	fc.responseWriter = nil
+	fc.handlerParameters = message
+
+	ctx := context.WithValue(context.Background(), contextKey, fc)
+
+	go func() {
+		err := w.handleRequest(contextHolder{ctx, fc})
+		if err != nil && globalLogger.Enabled(globalCtx, slog.LevelError) {
+			globalLogger.LogAttrs(
+				globalCtx,
+				slog.LevelError,
+				"error while handling non-http message",
+				slog.String("error", err.Error()),
+				slog.String("worker", w.name),
+			)
+		}
+	}()
+
+	return nil
 }

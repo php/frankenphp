@@ -44,6 +44,7 @@ type workerOpt struct {
 	onThreadShutdown       func(int)
 	onServerStartup        func()
 	onServerShutdown       func()
+	httpDisabled           bool
 }
 
 // WithContext sets the main context to use.
@@ -229,6 +230,15 @@ func WithWorkerOnServerStartup(f func()) WorkerOption {
 func WithWorkerOnServerShutdown(f func()) WorkerOption {
 	return func(w *workerOpt) error {
 		w.onServerShutdown = f
+
+		return nil
+	}
+}
+
+// AsHTTPWorker determines if the worker will handle HTTP requests (true by default).
+func WithWorkerHTTPDisabled(isDisabled bool) WorkerOption {
+	return func(w *workerOpt) error {
+		w.httpDisabled = isDisabled
 
 		return nil
 	}

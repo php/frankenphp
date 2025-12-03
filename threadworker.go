@@ -54,7 +54,7 @@ func (handler *workerThread) beforeScriptExecution() string {
 		handler.state.WaitFor(state.Ready, state.ShuttingDown)
 		return handler.beforeScriptExecution()
 	case state.Ready, state.TransitionComplete:
-		handler.thread.updateContext(true)
+		handler.thread.updateContext(true, handler.worker.httpEnabled)
 		if handler.worker.onThreadReady != nil {
 			handler.worker.onThreadReady(handler.thread.threadIndex)
 		}
@@ -124,6 +124,13 @@ func setupWorkerScript(handler *workerThread, worker *worker) {
 
 	if globalLogger.Enabled(ctx, slog.LevelDebug) {
 		globalLogger.LogAttrs(ctx, slog.LevelDebug, "starting", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex))
+	}
+
+	// non-http worker: instantly gets marked as ready
+	if !worker.httpEnabled {
+		metrics.ReadyWorker(handler.worker.name)
+		handler.thread.state.Set(state.Ready)
+		handler.isBootingScript = false
 	}
 }
 
@@ -298,7 +305,7 @@ func go_frankenphp_finish_worker_request(threadIndex C.uintptr_t, retval *C.zval
 	thread.handler.(*workerThread).workerFrankenPHPContext = nil
 	thread.handler.(*workerThread).workerContext = nil
 
-	if globalLogger.Enabled(ctx, slog.LevelDebug) {
+	if globalLogger.Enabled(ctx, slog.LevelDebug) && thread.handler.(*workerThread).worker.httpEnabled {
 		if fc.request == nil {
 			fc.logger.LogAttrs(ctx, slog.LevelDebug, "request handling finished", slog.String("worker", fc.worker.name), slog.Int("thread", thread.threadIndex))
 		} else {

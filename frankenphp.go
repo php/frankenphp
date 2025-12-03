@@ -48,6 +48,7 @@ var (
 	ErrMainThreadCreation = errors.New("error creating the main thread")
 	ErrScriptExecution    = errors.New("error during PHP script execution")
 	ErrNotRunning         = errors.New("FrankenPHP is not running. For proper configuration visit: https://frankenphp.dev/docs/config/#caddyfile-config")
+	ErrNotHTTPWorker      = errors.New("worker is not an HTTP worker")
 
 	ErrInvalidRequestPath         = ErrRejected{"invalid request path", http.StatusBadRequest}
 	ErrInvalidContentLengthHeader = ErrRejected{"invalid Content-Length header", http.StatusBadRequest}
@@ -399,6 +400,9 @@ func ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) error 
 
 	// Detect if a worker is available to handle this request
 	if fc.worker != nil {
+		if !fc.worker.httpEnabled {
+			return ErrNotHTTPWorker
+		}
 		return fc.worker.handleRequest(ch)
 	}
 

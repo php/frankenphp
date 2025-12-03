@@ -38,6 +38,8 @@ type workerConfig struct {
 	MatchPath []string `json:"match_path,omitempty"`
 	// MaxConsecutiveFailures sets the maximum number of consecutive failures before panicking (defaults to 6, set to -1 to never panick)
 	MaxConsecutiveFailures int `json:"max_consecutive_failures,omitempty"`
+	// DisableHTTP specifies if the worker handles HTTP requests
+	DisableHTTP bool `json:"http_disabled,omitempty"`
 
 	requestOptions []frankenphp.RequestOption
 }
@@ -116,6 +118,11 @@ func parseWorkerConfig(d *caddyfile.Dispenser) (workerConfig, error) {
 			} else {
 				wc.Watch = append(wc.Watch, d.Val())
 			}
+		case "http_disabled":
+			if d.NextArg() {
+				return wc, d.ArgErr()
+			}
+			wc.DisableHTTP = true
 		case "match":
 			// provision the path so it's identical to Caddy match rules
 			// see: https://github.com/caddyserver/caddy/blob/master/modules/caddyhttp/matchers.go
@@ -140,7 +147,7 @@ func parseWorkerConfig(d *caddyfile.Dispenser) (workerConfig, error) {
 
 			wc.MaxConsecutiveFailures = v
 		default:
-			return wc, wrongSubDirectiveError("worker", "name, file, num, env, watch, match, max_consecutive_failures, max_threads", v)
+			return wc, wrongSubDirectiveError("worker", "name, file, num, env, watch, match, max_consecutive_failures, max_threads, http_disabled", v)
 		}
 	}
 

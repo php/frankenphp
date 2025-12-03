@@ -158,6 +158,7 @@ func (f *FrankenPHPApp) Start() error {
 				frankenphp.WithWorkerWatchMode(w.Watch),
 				frankenphp.WithWorkerMaxFailures(w.MaxConsecutiveFailures),
 				frankenphp.WithWorkerMaxThreads(w.MaxThreads),
+				frankenphp.WithWorkerHTTPDisabled(w.DisableHTTP),
 			)
 		} else {
 			workerOpts = append(
@@ -167,6 +168,7 @@ func (f *FrankenPHPApp) Start() error {
 				frankenphp.WithWorkerMaxFailures(w.MaxConsecutiveFailures),
 				frankenphp.WithWorkerMaxThreads(w.MaxThreads),
 				frankenphp.WithWorkerRequestOptions(w.requestOptions...),
+				frankenphp.WithWorkerHTTPDisabled(w.DisableHTTP),
 			)
 		}
 

@@ -42,7 +42,7 @@ func (handler *regularThread) beforeScriptExecution() string {
 		return handler.thread.transitionToNewHandler()
 
 	case state.TransitionComplete:
-		handler.thread.updateContext(false)
+		handler.thread.updateContext(false, true)
 		handler.state.Set(state.Ready)
 
 		return handler.waitForRequest()

@@ -143,8 +143,8 @@ func (thread *phpThread) pinCString(s string) *C.char {
 	return thread.pinString(s + "\x00")
 }
 
-func (*phpThread) updateContext(isWorker bool) {
-	C.frankenphp_update_local_thread_context(C.bool(isWorker))
+func (*phpThread) updateContext(isWorker bool, httpEnabled bool) {
+	C.frankenphp_update_local_thread_context(C.bool(isWorker), C.bool(httpEnabled))
 }
 
 //export go_frankenphp_before_script_execution
