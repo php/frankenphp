@@ -682,6 +682,42 @@ func go_log(threadIndex C.uintptr_t, message *C.char, level C.int) {
 	}
 }
 
+//export go_log_attrs
+func go_log_attrs(threadIndex C.uintptr_t, message *C.zend_string, level C.zend_long, cattrs *C.zval) *C.char {
+	var attrs map[string]any
+
+	if cattrs == nil {
+		attrs = nil
+	} else {
+		var err error
+		if attrs, err = GoMap[any](unsafe.Pointer(cattrs)); err != nil {
+			// NOTE: return value is already formatted for a PHP exception message.
+			return C.CString("Failed to log message: converting attrs: " + err.Error())
+		}
+	}
+
+	ctx := phpThreads[threadIndex].context()
+
+	if globalLogger.Enabled(ctx, slog.Level(level)) {
+		globalLogger.LogAttrs(ctx,
+			slog.Level(level),
+			GoString(unsafe.Pointer(message)),
+			mapToAttr(attrs)...)
+	}
+
+	return nil
+}
+
+func mapToAttr(input map[string]any) []slog.Attr {
+	out := make([]slog.Attr, 0, len(input))
+
+	for key, val := range input {
+		out = append(out, slog.Any(key, val))
+	}
+
+	return out
+}
+
 //export go_is_context_done
 func go_is_context_done(threadIndex C.uintptr_t) C.bool {
 	return C.bool(phpThreads[threadIndex].frankenPHPContext().isDone)
