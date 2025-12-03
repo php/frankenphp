@@ -41,6 +41,8 @@ func TestWorkersShouldNotReloadOnExcludingPattern(t *testing.T) {
 }
 
 func pollForWorkerReset(t *testing.T, handler func(http.ResponseWriter, *http.Request), limit int) bool {
+	t.Helper()
+
 	// first we make an initial request to start the request counter
 	body, _ := testGet("http://example.com/worker-with-counter.php", handler, t)
 	assert.Equal(t, "requests:1", body)
@@ -54,6 +56,7 @@ func pollForWorkerReset(t *testing.T, handler func(http.ResponseWriter, *http.Re
 			return true
 		}
 	}
+
 	return false
 }
 

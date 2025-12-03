@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/dunglas/frankenphp/internal/fastabs"
+	"github.com/dunglas/frankenphp/internal/state"
 	"github.com/dunglas/frankenphp/internal/watcher"
 )
 
@@ -39,6 +40,7 @@ var (
 	workers          []*worker
 	restartWorkers   atomic.Bool
 	watcherIsEnabled bool
+	startupFailChan  chan error
 )
 
 func initWorkers(opt []workerOpt) (watchPatterns []*watcher.PatternGroup, _ error) {
@@ -46,7 +48,10 @@ func initWorkers(opt []workerOpt) (watchPatterns []*watcher.PatternGroup, _ erro
 		return nil, nil
 	}
 
-	var workersReady sync.WaitGroup
+	var (
+		workersReady        sync.WaitGroup
+		totalThreadsToStart int
+	)
 
 	workers = make([]*worker, 0, len(opt))
 
@@ -56,6 +61,7 @@ func initWorkers(opt []workerOpt) (watchPatterns []*watcher.PatternGroup, _ erro
 			return nil, err
 		}
 
+		totalThreadsToStart += w.num
 		workers = append(workers, w)
 
 		if len(o.watch) > 0 {
@@ -66,18 +72,29 @@ func initWorkers(opt []workerOpt) (watchPatterns []*watcher.PatternGroup, _ erro
 		}
 	}
 
+	startupFailChan = make(chan error, totalThreadsToStart)
+
 	for _, w := range workers {
 		for i := 0; i < w.num; i++ {
 			thread := getInactivePHPThread()
 			convertToWorkerThread(thread, w)
 
 			workersReady.Go(func() {
-				thread.state.waitFor(stateReady)
+				thread.state.WaitFor(state.Ready, state.ShuttingDown, state.Done)
 			})
 		}
 	}
 
 	workersReady.Wait()
+
+	select {
+	case err := <-startupFailChan:
+		// at least 1 worker has failed, return an error
+		return nil, fmt.Errorf("failed to initialize workers: %w", err)
+	default:
+		// all workers started successfully
+		startupFailChan = nil
+	}
 
 	return watchPatterns, nil
 }
@@ -177,7 +194,7 @@ func drainWorkerThreads() []*phpThread {
 		ready.Add(len(worker.threads))
 
 		for _, thread := range worker.threads {
-			if !thread.state.requestSafeStateChange(stateRestarting) {
+			if !thread.state.RequestSafeStateChange(state.Restarting) {
 				ready.Done()
 
 				// no state change allowed == thread is shutting down
@@ -189,7 +206,7 @@ func drainWorkerThreads() []*phpThread {
 			drainedThreads = append(drainedThreads, thread)
 
 			go func(thread *phpThread) {
-				thread.state.waitFor(stateYielding)
+				thread.state.WaitFor(state.Yielding)
 				ready.Done()
 			}(thread)
 		}
@@ -219,7 +236,7 @@ func RestartWorkers() {
 
 	for _, thread := range threadsToRestart {
 		thread.drainChan = make(chan struct{})
-		thread.state.set(stateReady)
+		thread.state.Set(state.Ready)
 	}
 }
 
