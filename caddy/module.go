@@ -175,12 +175,12 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 	if f.Name == "" {
 		var b bytes.Buffer
 		if err := gob.NewEncoder(&b).Encode(f); err != nil {
-			return fmt.Errorf("unable to generated unique name: %w", err)
+			return fmt.Errorf("unable to generate unique name: %w", err)
 		}
 
 		h := fnv.New64a()
 		if _, err := h.Write(b.Bytes()); err != nil {
-			return fmt.Errorf("unable to generated unique name: %w", err)
+			return fmt.Errorf("unable to generate unique name: %w", err)
 		}
 
 		f.Name = fmt.Sprintf("%016x", h.Sum64())
