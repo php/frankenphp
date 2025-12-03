@@ -8,12 +8,13 @@ import "C"
 import (
 	"encoding/json"
 	"log/slog"
-	"net/url"
 	"unsafe"
 
 	"github.com/dunglas/frankenphp/internal/watcher"
 	"github.com/dunglas/mercure"
 )
+
+var workersRestarted = make(chan struct{})
 
 type mercureContext struct {
 	mercureHub *mercure.Hub
@@ -81,36 +82,43 @@ func (w *worker) configureMercure(o *workerOpt) {
 	}
 
 	w.mercureHub = o.mercureHub
-
-	if len(o.watch) == 0 {
-		return
-	}
-
-	o.env["FRANKENPHP_HOT_RELOADING\x00"] = "/.well-known/mercure?topic=https%3A%2F%2Ffrankenphp.dev%2Fhot-reloading%2F" + url.QueryEscape(o.name)
 }
 
-func (w *worker) publishHotReloadingUpdate() func([]*watcher.Event) {
-	return func(events []*watcher.Event) {
-		if w.mercureHub == nil {
-			return
-		}
+func broadcastHotReloadEvents() {
+	close(workersRestarted)
+	workersRestarted = make(chan struct{})
+}
 
-		data, err := json.Marshal(events)
-		if err != nil {
-			if globalLogger.Enabled(globalCtx, slog.LevelError) {
-				globalLogger.LogAttrs(globalCtx, slog.LevelError, "error marshaling watcher events", slog.Any("error", err))
-			}
+// WithHotReload sets files to watch for file changes to trigger a hot reload update.
+func WithHotReload(name string, hub *mercure.Hub, patterns []string) Option {
+	return func(o *opt) error {
+		o.hotReload = append(o.hotReload, &watcher.PatternGroup{
+			Patterns: patterns,
+			Callback: func(events []*watcher.Event) {
+				// Wait for workers to restart before sending the update
+				go func() {
+					data, err := json.Marshal(events)
+					if err != nil {
+						if globalLogger.Enabled(globalCtx, slog.LevelError) {
+							globalLogger.LogAttrs(globalCtx, slog.LevelError, "error marshaling watcher events", slog.Any("error", err))
+						}
 
-			return
-		}
+						return
+					}
 
-		if err := w.mercureHub.Publish(globalCtx, &mercure.Update{
-			Topics: []string{"https://frankenphp.dev/hot-reloading/"+w.name},
-			Event:  mercure.Event{Data: string(data)},
-			Debug:  globalLogger.Enabled(globalCtx, slog.LevelDebug),
-		}); err != nil && globalLogger.Enabled(globalCtx, slog.LevelError) {
-			globalLogger.LogAttrs(globalCtx, slog.LevelError, "error publishing hot reloading Mercure update", slog.Any("error", err))
-		}
+					<-workersRestarted
+					if err := hub.Publish(globalCtx, &mercure.Update{
+						Topics: []string{"https://frankenphp.dev/hot-reload/" + name},
+						Event:  mercure.Event{Data: string(data)},
+						Debug:  globalLogger.Enabled(globalCtx, slog.LevelDebug),
+					}); err != nil && globalLogger.Enabled(globalCtx, slog.LevelError) {
+						globalLogger.LogAttrs(globalCtx, slog.LevelError, "error publishing hot reloading Mercure update", slog.Any("error", err))
+					}
+				}()
+			},
+		})
+
+		return nil
 	}
 }
 

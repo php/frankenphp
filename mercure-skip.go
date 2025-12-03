@@ -5,9 +5,6 @@ package frankenphp
 // #include <stdint.h>
 // #include <php.h>
 import "C"
-import (
-	"github.com/dunglas/frankenphp/internal/watcher"
-)
 
 type mercureContext struct {
 }
@@ -17,9 +14,8 @@ func go_mercure_publish(threadIndex C.uintptr_t, topics *C.struct__zval_struct, 
 	return nil, 3
 }
 
-func (w *worker) publishHotReloadingUpdate() func([]*watcher.Event) {
-	return func(events []*watcher.Event) {}
+func (w *worker) configureMercure(o *workerOpt) {
 }
 
-func (w *worker) configureMercure(o *workerOpt) {
+func broadcastHotReloadEvents() {
 }

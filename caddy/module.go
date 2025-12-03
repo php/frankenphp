@@ -1,9 +1,12 @@
 package caddy
 
 import (
+	"bytes"
+	"encoding/gob"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"log/slog"
 	"net/http"
 	"path/filepath"
@@ -33,6 +36,10 @@ var serverHeader = []string{"FrankenPHP Caddy"}
 //		}
 //	}
 type FrankenPHPModule struct {
+	mercureContext
+
+	// Name for the server. Default: to the worker filename if any, a unique ID otherwise.
+	Name string `json:"name,omitempty"`
 	// Root sets the root folder to the site. Default: `root` directive, or the path of the public directory of the embed app it exists.
 	Root string `json:"root,omitempty"`
 	// SplitPath sets the substrings for splitting the URI into two parts. The first matching substring will be used to split the "path info" from the path. The first piece is suffixed with the matching substring and will be assumed as the actual resource (CGI script) name. The second piece will be set to PATH_INFO for the CGI script to use. Default: `.php`.
@@ -43,6 +50,8 @@ type FrankenPHPModule struct {
 	Env map[string]string `json:"env,omitempty"`
 	// Workers configures the worker scripts to start.
 	Workers []workerConfig `json:"workers,omitempty"`
+	// HotReload specifies files to watch for file changes to trigger hot reloads updates. Supports the glob syntax.
+	HotReload []string `json:"hot_reload,omitempty"`
 
 	resolvedDocumentRoot        string
 	preparedEnv                 frankenphp.PreparedEnv
@@ -76,6 +85,13 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 
 	f.assignMercureHub(ctx)
 
+	// If there is only one worker, and a name is set for the server,
+	// use the server name for the worker if none is set.
+	if len(f.Workers) == 1 && f.Name != "" && f.Workers[0].Name == "" {
+		f.Workers[0].Name = f.Name
+	}
+
+	opts := []frankenphp.RequestOption{frankenphp.WithRequestLogger(f.logger)}
 	for i, wc := range f.Workers {
 		// make the file path absolute from the public directory
 		// this can only be done if the root is defined inside php_server
@@ -88,7 +104,7 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 			wc.inheritEnv(f.Env)
 		}
 
-		wc.requestOptions = []frankenphp.RequestOption{frankenphp.WithRequestLogger(f.logger)}
+		wc.requestOptions = opts
 
 		f.Workers[i] = wc
 	}
@@ -99,18 +115,23 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 	}
 	f.Workers = workers
 
+	// If there is only one worker, and no name is set for the server,
+	// use the worker name without the "m#" prefix
+	if len(f.Workers) == 1 && f.Name == "" && f.Workers[0].Name != "" {
+		f.Workers[0].Name = strings.TrimPrefix(f.Workers[0].Name, "m#")
+	}
+
 	if f.Root == "" {
 		if frankenphp.EmbeddedAppPath == "" {
 			f.Root = "{http.vars.root}"
 		} else {
-			rrs := false
 			f.Root = filepath.Join(frankenphp.EmbeddedAppPath, defaultDocumentRoot)
+
+			var rrs bool
 			f.ResolveRootSymlink = &rrs
 		}
-	} else {
-		if frankenphp.EmbeddedAppPath != "" && filepath.IsLocal(f.Root) {
-			f.Root = filepath.Join(frankenphp.EmbeddedAppPath, f.Root)
-		}
+	} else if frankenphp.EmbeddedAppPath != "" && filepath.IsLocal(f.Root) {
+		f.Root = filepath.Join(frankenphp.EmbeddedAppPath, f.Root)
 	}
 
 	if len(f.SplitPath) == 0 {
@@ -151,6 +172,25 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		}
 	}
 
+	// Generate a unique name if none is provided
+	if f.Name == "" {
+		var b bytes.Buffer
+		if err := gob.NewEncoder(&b).Encode(f); err != nil {
+			return fmt.Errorf("unable to generated unique name: %w", err)
+		}
+
+		h := fnv.New64a()
+		if _, err := h.Write(b.Bytes()); err != nil {
+			return fmt.Errorf("unable to generated unique name: %w", err)
+		}
+
+		f.Name = fmt.Sprintf("%016x", h.Sum64())
+	}
+
+	if err := f.configureHotReload(fapp); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -161,11 +201,15 @@ func needReplacement(s string) bool {
 
 // ServeHTTP implements caddyhttp.MiddlewareHandler.
 func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ caddyhttp.Handler) error {
-	origReq := r.Context().Value(caddyhttp.OriginalRequestCtxKey).(http.Request)
-	repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
+	ctx := r.Context()
+	origReq := ctx.Value(caddyhttp.OriginalRequestCtxKey).(http.Request)
+	repl := ctx.Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
 
-	var documentRootOption frankenphp.RequestOption
-	var documentRoot string
+	var (
+		documentRootOption frankenphp.RequestOption
+		documentRoot       string
+	)
+
 	if f.resolvedDocumentRoot == "" {
 		documentRoot = repl.ReplaceKnown(f.Root, "")
 		if documentRoot == "" && frankenphp.EmbeddedAppPath != "" {
@@ -237,6 +281,12 @@ func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	for d.Next() {
 		for d.NextBlock(0) {
 			switch d.Val() {
+			case "name":
+				if !d.NextArg() {
+					return d.ArgErr()
+				}
+
+				f.Name = d.Val()
 			case "root":
 				if !d.NextArg() {
 					return d.ArgErr()
@@ -279,10 +329,21 @@ func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				if err != nil {
 					return err
 				}
+
 				f.Workers = append(f.Workers, wc)
 
+			case "hot_reload":
+				patterns := d.RemainingArgs()
+				if len(patterns) == 0 {
+					f.HotReload = append(f.HotReload, defaultHotReloadPattern)
+
+					continue
+				}
+
+				f.HotReload = append(f.HotReload, d.RemainingArgs()...)
+
 			default:
-				return wrongSubDirectiveError("php or php_server", "root, split, env, resolve_root_symlink, worker", d.Val())
+				return wrongSubDirectiveError("php or php_server", "hot_reload, name, root, split, env, resolve_root_symlink, worker", d.Val())
 			}
 		}
 	}
@@ -291,7 +352,7 @@ func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	fileNames := make(map[string]struct{}, len(f.Workers))
 	for _, w := range f.Workers {
 		if _, ok := fileNames[w.FileName]; ok {
-			return fmt.Errorf(`workers in a single "php_server" block must not have duplicate filenames: %q`, w.FileName)
+			return fmt.Errorf(`workers in a single "php" or "php_server" block must not have duplicate filenames: %q`, w.FileName)
 		}
 
 		if len(w.MatchPath) == 0 {

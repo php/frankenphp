@@ -323,22 +323,23 @@ func Init(options ...Option) error {
 
 	if watchPatterns, err = initWorkers(opt.workers); err != nil {
 		Shutdown()
+
 		return err
 	}
 
-	for _, p := opt.hotReloadingPatterns {
-		watchPatterns[p] = mer
-	}
+	watchPatterns = append(watchPatterns, opt.hotReload...)
 
-	if watcherIsEnabled {
-			if err := watcher.InitWatcher(globalCtx, globalLogger, watchPatterns, func() {
-				if restartWorkers.Swap(false) {
-					RestartWorkers()
-				}
-			}); err != nil {
-				return err
+	if len(watchPatterns) > 0 {
+		if err := watcher.InitWatcher(globalCtx, globalLogger, watchPatterns, func() {
+			if restartWorkers.Swap(false) {
+				RestartWorkers()
 			}
+
+			broadcastHotReloadEvents()
+		}); err != nil {
+			return err
 		}
+	}
 
 	initAutoScaling(mainThread)
 

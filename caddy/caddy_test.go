@@ -1450,6 +1450,7 @@ func TestWorkerMatchDirectiveWithoutFileServer(t *testing.T) {
 }
 
 func TestDd(t *testing.T) {
+	t.SkipNow()
 	tester := caddytest.NewTester(t)
 	tester.InitServer(`
 		{

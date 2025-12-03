@@ -49,13 +49,14 @@ type FrankenPHPApp struct {
 	NumThreads int `json:"num_threads,omitempty"`
 	// MaxThreads limits how many threads can be started at runtime. Default 2x NumThreads
 	MaxThreads int `json:"max_threads,omitempty"`
-	// Workers configures the worker scripts to start.
+	// Workers configures the worker scripts to start
 	Workers []workerConfig `json:"workers,omitempty"`
 	// Overwrites the default php ini configuration
 	PhpIni map[string]string `json:"php_ini,omitempty"`
 	// The maximum amount of time a request may be stalled waiting for a thread
 	MaxWaitTime time.Duration `json:"max_wait_time,omitempty"`
 
+	opts    []frankenphp.Option
 	metrics frankenphp.Metrics
 	ctx     context.Context
 	logger  *slog.Logger
@@ -75,6 +76,9 @@ func (f FrankenPHPApp) CaddyModule() caddy.ModuleInfo {
 func (f *FrankenPHPApp) Provision(ctx caddy.Context) error {
 	f.ctx = ctx
 	f.logger = ctx.Slogger()
+
+	// We have at least 7 hardcoded options
+	f.opts = make([]frankenphp.Option, 0, 7+len(options))
 
 	if httpApp, err := ctx.AppIfConfigured("http"); err == nil {
 		if httpApp.(*caddyhttp.App).Metrics != nil {
@@ -135,11 +139,10 @@ func (f *FrankenPHPApp) Start() error {
 	repl := caddy.NewReplacer()
 
 	optionsMU.RLock()
-	opts := make([]frankenphp.Option, 0, len(options)+len(f.Workers)+7)
-	opts = append(opts, options...)
+	f.opts = append(f.opts, options...)
 	optionsMU.RUnlock()
 
-	opts = append(opts,
+	f.opts = append(f.opts,
 		frankenphp.WithContext(f.ctx),
 		frankenphp.WithLogger(f.logger),
 		frankenphp.WithNumThreads(f.NumThreads),
@@ -158,11 +161,11 @@ func (f *FrankenPHPApp) Start() error {
 			frankenphp.WithWorkerRequestOptions(w.requestOptions...),
 		})
 
-		opts = append(opts, frankenphp.WithWorkers(w.Name, repl.ReplaceKnown(w.FileName, ""), w.Num, workerOpts...))
+		f.opts = append(f.opts, frankenphp.WithWorkers(w.Name, repl.ReplaceKnown(w.FileName, ""), w.Num, workerOpts...))
 	}
 
 	frankenphp.Shutdown()
-	if err := frankenphp.Init(opts...); err != nil {
+	if err := frankenphp.Init(f.opts...); err != nil {
 		return err
 	}
 
