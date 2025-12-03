@@ -36,8 +36,7 @@ func (f *FrankenPHPModule) configureHotReload(app *FrankenPHPApp) error {
 }
 
 func (f *FrankenPHPModule) assignMercureHub(ctx caddy.Context) {
-	f.mercureHub = mercureCaddy.FindHub(ctx.Modules())
-	if f.mercureHub == nil {
+	if f.mercureHub = mercureCaddy.FindHub(ctx.Modules()); f.mercureHub == nil {
 		return
 	}
 
@@ -46,15 +45,8 @@ func (f *FrankenPHPModule) assignMercureHub(ctx caddy.Context) {
 
 	for i, wc := range f.Workers {
 		wc.mercureHub = f.mercureHub
+		wc.options = append(wc.options, frankenphp.WithWorkerMercureHub(wc.mercureHub))
 
 		f.Workers[i] = wc
 	}
-}
-
-func (wc *workerConfig) appendMercureHubOption(opts []frankenphp.WorkerOption) []frankenphp.WorkerOption {
-	if wc.mercureHub != nil {
-		opts = append(opts, frankenphp.WithWorkerMercureHub(wc.mercureHub))
-	}
-
-	return opts
 }

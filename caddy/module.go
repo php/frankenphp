@@ -91,7 +91,7 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		f.Workers[0].Name = f.Name
 	}
 
-	opts := []frankenphp.RequestOption{frankenphp.WithRequestLogger(f.logger)}
+	loggerOpt := frankenphp.WithRequestLogger(f.logger)
 	for i, wc := range f.Workers {
 		// make the file path absolute from the public directory
 		// this can only be done if the root is defined inside php_server
@@ -104,8 +104,7 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 			wc.inheritEnv(f.Env)
 		}
 
-		wc.requestOptions = opts
-
+		wc.requestOptions = append(wc.requestOptions, loggerOpt)
 		f.Workers[i] = wc
 	}
 
@@ -118,7 +117,7 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 	// If there is only one worker, and no name is set for the server,
 	// use the worker name without the "m#" prefix
 	if len(f.Workers) == 1 && f.Name == "" && f.Workers[0].Name != "" {
-		f.Workers[0].Name = strings.TrimPrefix(f.Workers[0].Name, "m#")
+		f.Name = strings.TrimPrefix(f.Workers[0].Name, "m#")
 	}
 
 	if f.Root == "" {

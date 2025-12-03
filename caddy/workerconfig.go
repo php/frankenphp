@@ -41,6 +41,7 @@ type workerConfig struct {
 	// MaxConsecutiveFailures sets the maximum number of consecutive failures before panicking (defaults to 6, set to -1 to never panick)
 	MaxConsecutiveFailures int `json:"max_consecutive_failures,omitempty"`
 
+	options []frankenphp.WorkerOption
 	requestOptions []frankenphp.RequestOption
 }
 
