@@ -1346,7 +1346,6 @@ func TestWorkerMatchDirective(t *testing.T) {
 	tester := caddytest.NewTester(t)
 	tester.InitServer(`
 		{
-			debug
 			skip_install_trust
 			admin localhost:2999
 		}
