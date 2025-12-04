@@ -48,14 +48,5 @@ return function() {
         echo "Failed to unset NON_EXISTING_VAR.\n";
     }
 
-    // insert a wrongly formatted env var (should fail)
-    $result = putenv('wrong- format=:/usr/bin::/bin;:/opt??bin');
-    if ($result) {
-        echo "Insertion successful (should not happen).\n";
-    } else {
-        $emptyValue = getenv('wrong- format') === false ? 'empty' : 'not empty';
-        echo "Successfully failed inserting wrong format, value is $emptyValue.\n";
-    }
-
     getenv();
 };

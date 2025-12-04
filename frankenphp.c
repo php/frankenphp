@@ -326,7 +326,7 @@ PHP_FUNCTION(frankenphp_putenv) {
   } else {
     // no '=' found, delete the variable
     put_env_success = go_putenv(setting, (int)setting_len, NULL, 0);
-    if (put_env_success){
+    if (put_env_success) {
       zend_hash_str_del(sandboxed_env, setting, setting_len);
     }
   }
