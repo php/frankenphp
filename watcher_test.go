@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // we have to wait a few milliseconds for the watcher debounce to take effect
@@ -62,13 +63,13 @@ func pollForWorkerReset(t *testing.T, handler func(http.ResponseWriter, *http.Re
 
 func updateTestFile(fileName string, content string, t *testing.T) {
 	absFileName, err := filepath.Abs(fileName)
-	assert.NoError(t, err)
+	require.NoError(t, err)
+
 	dirName := filepath.Dir(absFileName)
-	if _, err := os.Stat(dirName); os.IsNotExist(err) {
+	if _, err = os.Stat(dirName); os.IsNotExist(err) {
 		err = os.MkdirAll(dirName, 0700)
-		assert.NoError(t, err)
 	}
-	bytes := []byte(content)
-	err = os.WriteFile(absFileName, bytes, 0644)
-	assert.NoError(t, err)
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(absFileName, []byte(content), 0644))
 }

@@ -339,7 +339,7 @@ func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					continue
 				}
 
-				f.HotReload = append(f.HotReload, d.RemainingArgs()...)
+				f.HotReload = append(f.HotReload, patterns...)
 
 			default:
 				return wrongSubDirectiveError("php or php_server", "hot_reload, name, root, split, env, resolve_root_symlink, worker", d.Val())

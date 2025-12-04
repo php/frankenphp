@@ -56,7 +56,7 @@ func (p *pattern) startSession() error {
 }
 
 // this method prepares the pattern struct (aka /path/*pattern)
-func (p *pattern) parse() error {
+func (p *pattern) parse() (err error) {
 	// first we clean the value
 	absPattern, err := fastabs.FastAbs(p.value)
 	if err != nil {
@@ -86,8 +86,14 @@ func (p *pattern) parse() error {
 		p.parsedValues[i] = strings.Trim(pp, string(filepath.Separator))
 	}
 
-	// finally, we remove the trailing separator and add leading separator
+	// remove the trailing separator and add leading separator
 	p.value = string(filepath.Separator) + strings.Trim(p.value, string(filepath.Separator))
+
+	// try to canonicalize the path
+	canonicalPattern, err := filepath.EvalSymlinks(p.value)
+	if err == nil {
+		p.value = canonicalPattern
+	}
 
 	return nil
 }
@@ -97,7 +103,7 @@ func (p *pattern) allowReload(event *Event) bool {
 		return false
 	}
 
-	return isValidPattern(event, p.value, p.parsedValues)
+	return p.isValidPattern(event)
 }
 
 func (p *pattern) handle(event *Event) {
@@ -136,38 +142,38 @@ func isValidPathType(event *Event) bool {
 // some editors create temporary files and never actually modify the original file
 // so we need to also check Event.AssociatedPathName
 // see https://github.com/php/frankenphp/issues/1375
-func isValidPattern(event *Event, dir string, patterns []string) bool {
+func (p *pattern) isValidPattern(event *Event) bool {
 	fileName := event.AssociatedPathName
 	if fileName == "" {
 		fileName = event.PathName
 	}
 
 	// first we remove the dir from the file name
-	if !strings.HasPrefix(fileName, dir) {
+	if !strings.HasPrefix(fileName, p.value) {
 		return false
 	}
 
 	// remove the file name and separator from the filename
-	fileNameWithoutDir := strings.TrimPrefix(strings.TrimPrefix(fileName, dir), string(filepath.Separator))
+	fileNameWithoutDir := strings.TrimPrefix(strings.TrimPrefix(fileName, p.value), string(filepath.Separator))
 
 	// if the pattern has size 1 we can match it directly against the filename
-	if len(patterns) == 1 {
-		return matchBracketPattern(patterns[0], fileNameWithoutDir)
+	if len(p.parsedValues) == 1 {
+		return matchBracketPattern(p.parsedValues[0], fileNameWithoutDir)
 	}
 
-	return matchPatterns(patterns, fileNameWithoutDir)
+	return p.matchPatterns(fileNameWithoutDir)
 }
 
-func matchPatterns(patterns []string, fileName string) bool {
+func (p *pattern) matchPatterns(fileName string) bool {
 	partsToMatch := strings.Split(fileName, string(filepath.Separator))
 	cursor := 0
 
 	// if there are multiple parsedValues due to '**' we need to match them individually
-	for i, pattern := range patterns {
+	for i, pattern := range p.parsedValues {
 		patternSize := strings.Count(pattern, string(filepath.Separator)) + 1
 
 		// if we are at the last pattern we will start matching from the end of the filename
-		if i == len(patterns)-1 {
+		if i == len(p.parsedValues)-1 {
 			cursor = len(partsToMatch) - patternSize
 		}
 

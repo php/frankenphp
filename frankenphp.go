@@ -319,9 +319,8 @@ func Init(options ...Option) error {
 		convertToRegularThread(getInactivePHPThread())
 	}
 
-	var watchPatterns []*watcher.PatternGroup
-
-	if watchPatterns, err = initWorkers(opt.workers); err != nil {
+	watchPatterns, err := initWorkers(opt.workers)
+	if err != nil {
 		Shutdown()
 
 		return err
