@@ -336,6 +336,7 @@ func Init(options ...Option) error {
 
 			broadcastHotReloadEvents()
 		}); err != nil {
+			Shutdown()
 			return err
 		}
 	}
