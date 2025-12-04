@@ -318,7 +318,7 @@ PHP_FUNCTION(frankenphp_putenv) {
         (setting_len > name_len + 1) ? (setting_len - name_len - 1) : 0;
     put_env_success =
         go_putenv(setting, (int)name_len, eq_pos + 1, (int)value_len);
-    if (put_env_success){
+    if (put_env_success) {
       zval val = {0};
       ZVAL_STRINGL(&val, eq_pos + 1, value_len);
       zend_hash_str_update(sandboxed_env, setting, name_len, &val);
