@@ -96,6 +96,14 @@ func initWorkers(opt []workerOpt) (watchPatterns []*watcher.PatternGroup, _ erro
 		startupFailChan = nil
 	}
 
+	watchPatterns = append(watchPatterns, &watcher.PatternGroup{
+		Callback: func(_ []*watcher.Event) {
+			if restartWorkers.Swap(false) {
+				RestartWorkers()
+			}
+		},
+	})
+
 	return watchPatterns, nil
 }
 
@@ -217,12 +225,6 @@ func drainWorkerThreads() []*phpThread {
 	ready.Wait()
 
 	return drainedThreads
-}
-
-func drainWatcher() {
-	if watcherIsEnabled {
-		watcher.DrainWatcher()
-	}
 }
 
 // RestartWorkers attempts to restart all workers gracefully

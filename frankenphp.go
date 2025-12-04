@@ -329,13 +329,7 @@ func Init(options ...Option) error {
 	watchPatterns = append(watchPatterns, opt.hotReload...)
 
 	if len(watchPatterns) > 0 {
-		if err := watcher.InitWatcher(globalCtx, globalLogger, watchPatterns, func() {
-			if restartWorkers.Swap(false) {
-				RestartWorkers()
-			}
-
-			broadcastHotReloadEvents()
-		}); err != nil {
+		if err := watcher.InitWatcher(globalCtx, globalLogger, watchPatterns); err != nil {
 			Shutdown()
 			return err
 		}
@@ -376,7 +370,7 @@ func Shutdown() {
 		fn()
 	}
 
-	drainWatcher()
+	watcher.DrainWatcher()
 	drainAutoScaling()
 	drainPHPThreads()
 

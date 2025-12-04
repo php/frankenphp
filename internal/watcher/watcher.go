@@ -42,13 +42,12 @@ type eventHolder struct {
 }
 
 type globalWatcher struct {
-	watchers       []*pattern
-	events         chan eventHolder
-	stop           chan struct{}
-	globalCallback func()
+	watchers []*pattern
+	events   chan eventHolder
+	stop     chan struct{}
 }
 
-func InitWatcher(ct context.Context, slogger *slog.Logger, groups []*PatternGroup, globalCallback func()) error {
+func InitWatcher(ct context.Context, slogger *slog.Logger, groups []*PatternGroup) error {
 	if len(groups) == 0 {
 		return nil
 	}
@@ -61,12 +60,17 @@ func InitWatcher(ct context.Context, slogger *slog.Logger, groups []*PatternGrou
 	globalCtx = ct
 	globalLogger = slogger
 
-	activeWatcher = &globalWatcher{globalCallback: globalCallback}
+	activeWatcher = &globalWatcher{}
 
 	for _, g := range groups {
 		pg := &patternGroup{callback: g.Callback}
-		for _, p := range g.Patterns {
-			activeWatcher.watchers = append(activeWatcher.watchers, &pattern{patternGroup: pg, value: p})
+
+		if len(g.Patterns) == 0 {
+			activeWatcher.watchers = append(activeWatcher.watchers, &pattern{patternGroup: pg})
+		} else {
+			for _, p := range g.Patterns {
+				activeWatcher.watchers = append(activeWatcher.watchers, &pattern{patternGroup: pg, value: p})
+			}
 		}
 	}
 
@@ -196,20 +200,25 @@ func (g *globalWatcher) listenForFileEvents() {
 				globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "filesystem changes detected", slog.Any("events", events))
 			}
 
-			scheduleReload(eventsPerGroup)
+			g.scheduleReload(eventsPerGroup)
 			eventsPerGroup = make(map[*patternGroup][]*Event)
 		}
 	}
 }
 
-func scheduleReload(eventsPerGroup map[*patternGroup][]*Event) {
+func (g *globalWatcher) scheduleReload(eventsPerGroup map[*patternGroup][]*Event) {
 	reloadWaitGroup.Add(1)
 
-	// we need to be sure that the worker restarted before the Mercure events are sent
-	for group, events := range eventsPerGroup {
-		group.callback(events)
+	// Call callbacks in order
+	for _, w := range g.watchers {
+		if w.value == "" {
+			w.patternGroup.callback(nil)
+		}
+
+		if e, ok := eventsPerGroup[w.patternGroup]; ok {
+			w.patternGroup.callback(e)
+		}
 	}
-	activeWatcher.globalCallback()
 
 	reloadWaitGroup.Done()
 }

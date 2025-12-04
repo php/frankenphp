@@ -8,16 +8,10 @@ import "C"
 import (
 	"encoding/json"
 	"log/slog"
-	"sync"
 	"unsafe"
 
 	"github.com/dunglas/frankenphp/internal/watcher"
 	"github.com/dunglas/mercure"
-)
-
-var (
-	hotReloadChans []chan struct{}
-	hotReloadMu    sync.Mutex
 )
 
 type mercureContext struct {
@@ -88,23 +82,9 @@ func (w *worker) configureMercure(o *workerOpt) {
 	w.mercureHub = o.mercureHub
 }
 
-func broadcastHotReloadEvents() {
-	hotReloadMu.Lock()
-	for _, ch := range hotReloadChans {
-		ch <- struct{}{}
-	}
-	hotReloadMu.Unlock()
-}
-
 // WithHotReload sets files to watch for file changes to trigger a hot reload update.
 func WithHotReload(name string, hub *mercure.Hub, patterns []string) Option {
 	return func(o *opt) error {
-		ch := make(chan struct{})
-
-		hotReloadMu.Lock()
-		hotReloadChans = append(hotReloadChans, ch)
-		hotReloadMu.Unlock()
-
 		o.hotReload = append(o.hotReload, &watcher.PatternGroup{
 			Patterns: patterns,
 			Callback: func(events []*watcher.Event) {
@@ -119,7 +99,6 @@ func WithHotReload(name string, hub *mercure.Hub, patterns []string) Option {
 						return
 					}
 
-					<-ch
 					if err := hub.Publish(globalCtx, &mercure.Update{
 						Topics: []string{"https://frankenphp.dev/hot-reload/" + name},
 						Event:  mercure.Event{Data: string(data)},
