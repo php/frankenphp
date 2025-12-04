@@ -838,8 +838,9 @@ static inline void register_server_variable_filtered(const char *key,
 static void frankenphp_register_variables(zval *track_vars_array) {
   /* https://www.php.net/manual/en/reserved.variables.server.php */
 
-  /* In CGI mode, we consider the environment to be a part of the server
-   * variables.
+  /* In CGI mode, the environment is part of the $_SERVER variables.
+   * $_SERVER and $_ENV should only contain values from the original
+   * environment, not values added though putenv
    */
   zend_hash_copy(Z_ARR_P(track_vars_array), main_thread_env, NULL);
 
