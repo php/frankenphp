@@ -171,19 +171,11 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		}
 	}
 
-	// Generate a unique name if none is provided
 	if f.Name == "" {
-		var b bytes.Buffer
-		if err := gob.NewEncoder(&b).Encode(f); err != nil {
-			return fmt.Errorf("unable to generate unique name: %w", err)
+		// Generate a unique name if none is provided
+		if f.Name, err = uniqueID(f); err != nil {
+			return err
 		}
-
-		h := fnv.New64a()
-		if _, err := h.Write(b.Bytes()); err != nil {
-			return fmt.Errorf("unable to generate unique name: %w", err)
-		}
-
-		f.Name = fmt.Sprintf("%016x", h.Sum64())
 	}
 
 	if err := f.configureHotReload(fapp); err != nil {
@@ -699,6 +691,21 @@ func prependWorkerRoutes(routes caddyhttp.RouteList, h httpcaddyfile.Helper, f F
 	})
 
 	return routes
+}
+
+func uniqueID(s any) (string, error) {
+	var b bytes.Buffer
+
+	if err := gob.NewEncoder(&b).Encode(s); err != nil {
+		return "", fmt.Errorf("unable to generate unique name: %w", err)
+	}
+
+	h := fnv.New64a()
+	if _, err := h.Write(b.Bytes()); err != nil {
+		return "", fmt.Errorf("unable to generate unique name: %w", err)
+	}
+
+	return fmt.Sprintf("%016x", h.Sum64()), nil
 }
 
 // Interface guards
