@@ -99,7 +99,10 @@ func (p *pattern) allowReload(event *Event) bool {
 		return false
 	}
 
-	return p.isValidPattern(event)
+	// some editors create temporary files and never actually modify the original file
+	// so we need to also check Event.AssociatedPathName
+	// see https://github.com/php/frankenphp/issues/1375
+	return p.isValidPattern(event.PathName) || p.isValidPattern(event.AssociatedPathName)
 }
 
 func (p *pattern) handle(event *Event) {
@@ -135,13 +138,9 @@ func isValidPathType(event *Event) bool {
 	return event.PathType <= PathTypeHardLink
 }
 
-// some editors create temporary files and never actually modify the original file
-// so we need to also check Event.AssociatedPathName
-// see https://github.com/php/frankenphp/issues/1375
-func (p *pattern) isValidPattern(event *Event) bool {
-	fileName := event.AssociatedPathName
+func (p *pattern) isValidPattern(fileName string) bool {
 	if fileName == "" {
-		fileName = event.PathName
+		return false
 	}
 
 	// first we remove the dir from the file name
