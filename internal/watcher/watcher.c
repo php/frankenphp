@@ -1,8 +1,8 @@
 // clang-format off
 //go:build !nowatcher
 // clang-format on
+#include <wtr/watcher-c.h>
 #include "_cgo_export.h"
-#include "wtr/watcher-c.h"
 
 void handle_event(struct wtr_watcher_event event, void *_ctx) {
   go_handle_file_watcher_event(event, (uintptr_t)_ctx);
