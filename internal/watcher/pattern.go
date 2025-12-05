@@ -18,12 +18,8 @@ import (
 	"github.com/dunglas/frankenphp/internal/fastabs"
 )
 
-type patternGroup struct {
-	callback callbackFunc
-}
-
 type pattern struct {
-	patternGroup *patternGroup
+	patternGroup *PatternGroup
 	value        string
 	parsedValues []string
 	events       chan eventHolder
@@ -33,10 +29,6 @@ type pattern struct {
 }
 
 func (p *pattern) startSession() error {
-	if p.value == "" {
-		return nil
-	}
-
 	p.h = cgo.NewHandle(p)
 	cDir := C.CString(p.value)
 	defer C.free(unsafe.Pointer(cDir))
@@ -61,10 +53,6 @@ func (p *pattern) startSession() error {
 
 // this method prepares the pattern struct (aka /path/*pattern)
 func (p *pattern) parse() (err error) {
-	if p.value == "" {
-		return nil
-	}
-
 	// first we clean the value
 	absPattern, err := fastabs.FastAbs(p.value)
 	if err != nil {
@@ -128,10 +116,6 @@ func (p *pattern) handle(event *Event) {
 }
 
 func (p *pattern) stop() {
-	if p.value == "" {
-		return
-	}
-
 	if C.stop_watcher(p.watcher) == 0 && globalLogger.Enabled(globalCtx, slog.LevelWarn) {
 		globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "couldn't close the watcher")
 	}

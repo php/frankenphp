@@ -37,11 +37,12 @@ var (
 )
 
 type eventHolder struct {
-	patternGroup *patternGroup
+	patternGroup *PatternGroup
 	event        *Event
 }
 
 type globalWatcher struct {
+	groups   []*PatternGroup
 	watchers []*pattern
 	events   chan eventHolder
 	stop     chan struct{}
@@ -60,17 +61,11 @@ func InitWatcher(ct context.Context, slogger *slog.Logger, groups []*PatternGrou
 	globalCtx = ct
 	globalLogger = slogger
 
-	activeWatcher = &globalWatcher{}
+	activeWatcher = &globalWatcher{groups: groups}
 
 	for _, g := range groups {
-		pg := &patternGroup{callback: g.Callback}
-
-		if len(g.Patterns) == 0 {
-			activeWatcher.watchers = append(activeWatcher.watchers, &pattern{patternGroup: pg})
-		} else {
-			for _, p := range g.Patterns {
-				activeWatcher.watchers = append(activeWatcher.watchers, &pattern{patternGroup: pg, value: p})
-			}
+		for _, p := range g.Patterns {
+			activeWatcher.watchers = append(activeWatcher.watchers, &pattern{patternGroup: g, value: p})
 		}
 	}
 
@@ -177,7 +172,7 @@ func (g *globalWatcher) listenForFileEvents() {
 	timer := time.NewTimer(debounceDuration)
 	timer.Stop()
 
-	eventsPerGroup := make(map[*patternGroup][]*Event)
+	eventsPerGroup := make(map[*PatternGroup][]*Event, len(g.groups))
 
 	defer timer.Stop()
 	for {
@@ -201,22 +196,22 @@ func (g *globalWatcher) listenForFileEvents() {
 			}
 
 			g.scheduleReload(eventsPerGroup)
-			eventsPerGroup = make(map[*patternGroup][]*Event)
+			eventsPerGroup = make(map[*PatternGroup][]*Event, len(g.groups))
 		}
 	}
 }
 
-func (g *globalWatcher) scheduleReload(eventsPerGroup map[*patternGroup][]*Event) {
+func (g *globalWatcher) scheduleReload(eventsPerGroup map[*PatternGroup][]*Event) {
 	reloadWaitGroup.Add(1)
 
 	// Call callbacks in order
-	for _, w := range g.watchers {
-		if w.value == "" {
-			w.patternGroup.callback(nil)
+	for _, g := range g.groups {
+		if len(g.Patterns) == 0 {
+			g.Callback(nil)
 		}
 
-		if e, ok := eventsPerGroup[w.patternGroup]; ok {
-			w.patternGroup.callback(e)
+		if e, ok := eventsPerGroup[g]; ok {
+			g.Callback(e)
 		}
 	}
 
