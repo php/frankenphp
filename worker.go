@@ -96,13 +96,15 @@ func initWorkers(opt []workerOpt) (watchPatterns []*watcher.PatternGroup, _ erro
 		startupFailChan = nil
 	}
 
-	watchPatterns = append(watchPatterns, &watcher.PatternGroup{
-		Callback: func(_ []*watcher.Event) {
-			if restartWorkers.Swap(false) {
-				RestartWorkers()
-			}
-		},
-	})
+	if watcherIsEnabled {
+		watchPatterns = append(watchPatterns, &watcher.PatternGroup{
+			Callback: func(_ []*watcher.Event) {
+				if restartWorkers.Swap(false) {
+					RestartWorkers()
+				}
+			},
+		})
+	}
 
 	return watchPatterns, nil
 }
