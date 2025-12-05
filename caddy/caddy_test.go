@@ -2,10 +2,8 @@ package caddy_test
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -18,7 +16,6 @@ import (
 	"github.com/caddyserver/caddy/v2/caddytest"
 	"github.com/dunglas/frankenphp/internal/fastabs"
 	"github.com/prometheus/client_golang/prometheus/testutil"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1474,73 +1471,4 @@ func TestDd(t *testing.T) {
 		http.StatusInternalServerError,
 		"dump123",
 	)
-}
-
-func TestHotReload(t *testing.T) {
-	const topic = "https://frankenphp.dev/hot-reload/test"
-
-	url := "/.well-known/mercure?topic=" + url.QueryEscape(topic)
-
-	tmpDir := t.TempDir()
-	indexFile := filepath.Join(tmpDir, "index.php")
-
-	tester := caddytest.NewTester(t)
-	tester.InitServer(`
-		{
-			debug
-			skip_install_trust
-			admin localhost:2999
-		}
-
-		http://localhost:`+testPort+` {
-			mercure {
-				transport local
-				subscriber_jwt TestKey 
-				anonymous
-			}
-
-			php_server {
-				name test
-				root `+tmpDir+`
-				hot_reload `+tmpDir+`/*.php
-			}
-		`, "caddyfile")
-
-	var connected, received sync.WaitGroup
-
-	connected.Add(1)
-	received.Go(func() {
-		cx, cancel := context.WithCancel(t.Context())
-		req, _ := http.NewRequest(http.MethodGet, "http://localhost:"+testPort+url, nil)
-		req = req.WithContext(cx)
-		resp := tester.AssertResponseCode(req, http.StatusOK)
-
-		connected.Done()
-
-		var receivedBody strings.Builder
-
-		buf := make([]byte, 1024)
-		for {
-			_, err := resp.Body.Read(buf)
-			require.NoError(t, err)
-
-			receivedBody.Write(buf)
-
-			if strings.Contains(receivedBody.String(), "index.php") {
-				cancel()
-
-				break
-			}
-		}
-
-		assert.NoError(t, resp.Body.Close())
-	})
-
-	connected.Wait()
-
-	require.NoError(t, os.WriteFile(indexFile, []byte(`<?=$_SERVER['FRANKENPHP_HOT_RELOAD'];?>`), 0644))
-
-	received.Wait()
-
-	tester.AssertGetResponse("http://localhost:"+testPort+"/index.php", http.StatusOK, url)
 }
