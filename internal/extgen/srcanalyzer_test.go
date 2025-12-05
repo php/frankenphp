@@ -227,7 +227,7 @@ func testFunction() {
 			require.NoError(t, os.WriteFile(filename, []byte(tt.sourceContent), 0644))
 
 			analyzer := &SourceAnalyzer{}
-			imports, variables, functions, err := analyzer.analyze(filename)
+			_, imports, variables, functions, err := analyzer.analyze(filename)
 
 			if tt.expectError {
 				assert.Error(t, err, "expected error")
@@ -254,7 +254,7 @@ func TestSourceAnalyzer_Analyze_InvalidFile(t *testing.T) {
 	analyzer := &SourceAnalyzer{}
 
 	t.Run("nonexistent file", func(t *testing.T) {
-		_, _, _, err := analyzer.analyze("/nonexistent/file.go")
+		_, _, _, _, err := analyzer.analyze("/nonexistent/file.go")
 		assert.Error(t, err, "expected error for nonexistent file")
 	})
 
@@ -269,7 +269,7 @@ func TestSourceAnalyzer_Analyze_InvalidFile(t *testing.T) {
 
 		require.NoError(t, os.WriteFile(filename, []byte(invalidContent), 0644))
 
-		_, _, _, err := analyzer.analyze(filename)
+		_, _, _, _, err := analyzer.analyze(filename)
 		assert.Error(t, err, "expected error for invalid syntax")
 	})
 }
@@ -419,7 +419,7 @@ func internalTwo() {
 	analyzer := &SourceAnalyzer{}
 
 	for b.Loop() {
-		_, _, _, err := analyzer.analyze(filename)
+		_, _, _, _, err := analyzer.analyze(filename)
 		require.NoError(b, err)
 	}
 }
