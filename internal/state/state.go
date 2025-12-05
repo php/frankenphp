@@ -96,15 +96,20 @@ func (ts *ThreadState) notifySubscribers(nextState State) {
 	if len(ts.subscribers) == 0 {
 		return
 	}
-	newSubscribers := []stateSubscriber{}
+
+	var newSubscribers []stateSubscriber
+
 	// notify subscribers to the state change
 	for _, sub := range ts.subscribers {
 		if !slices.Contains(sub.states, nextState) {
 			newSubscribers = append(newSubscribers, sub)
+
 			continue
 		}
+
 		close(sub.ch)
 	}
+
 	ts.subscribers = newSubscribers
 }
 
@@ -131,22 +136,25 @@ func (ts *ThreadState) RequestSafeStateChange(nextState State) bool {
 	// disallow state changes if shutting down or done
 	case ShuttingDown, Done, Reserved:
 		ts.mu.Unlock()
+
 		return false
 	// ready and inactive are safe states to transition from
 	case Ready, Inactive:
 		ts.currentState = nextState
 		ts.notifySubscribers(nextState)
 		ts.mu.Unlock()
+
 		return true
 	}
 	ts.mu.Unlock()
 
 	// wait for the state to change to a safe state
 	ts.WaitFor(Ready, Inactive, ShuttingDown)
+
 	return ts.RequestSafeStateChange(nextState)
 }
 
-// markAsWaiting hints that the thread reached a stable state and is waiting for requests or shutdown
+// MarkAsWaiting hints that the thread reached a stable state and is waiting for requests or shutdown
 func (ts *ThreadState) MarkAsWaiting(isWaiting bool) {
 	ts.mu.Lock()
 	if isWaiting {
@@ -158,15 +166,16 @@ func (ts *ThreadState) MarkAsWaiting(isWaiting bool) {
 	ts.mu.Unlock()
 }
 
-// isWaitingState returns true if a thread is waiting for a request or shutdown
+// IsInWaitingState returns true if a thread is waiting for a request or shutdown
 func (ts *ThreadState) IsInWaitingState() bool {
 	ts.mu.RLock()
 	isWaiting := ts.isWaiting
 	ts.mu.RUnlock()
+
 	return isWaiting
 }
 
-// waitTime returns the time since the thread is waiting in a stable state in ms
+// WaitTime returns the time since the thread is waiting in a stable state in ms
 func (ts *ThreadState) WaitTime() int64 {
 	ts.mu.RLock()
 	waitTime := int64(0)
@@ -174,6 +183,7 @@ func (ts *ThreadState) WaitTime() int64 {
 		waitTime = time.Now().UnixMilli() - ts.waitingSince.UnixMilli()
 	}
 	ts.mu.RUnlock()
+
 	return waitTime
 }
 

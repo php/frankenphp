@@ -6,6 +6,23 @@ import (
 	"os"
 	"path/filepath"
 )
+var (
+	wd string
+	wderr error
+)
+
+func init() {
+	wd, wderr = os.Getwd()
+
+	if wderr != nil {
+		return
+	}
+
+	canonicalWD, err := filepath.EvalSymlinks(wd)
+	if err != nil {
+		wd = canonicalWD
+	}
+}
 
 // FastAbs is an optimized version of filepath.Abs for Unix systems,
 // since we don't expect the working directory to ever change once
@@ -22,4 +39,3 @@ func FastAbs(path string) (string, error) {
 	return filepath.Join(wd, path), nil
 }
 
-var wd, wderr = os.Getwd()

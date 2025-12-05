@@ -12,7 +12,8 @@ import (
 
 const (
 	defaultDocumentRoot = "public"
-	defaultWatchPattern = "./**/*.{php,yaml,yml,twig,env}"
+	defaultWatchPattern = "./**/*.{env,php,twig,yaml,yml}"
+	defaultHotReloadPattern = "./**/*.{css,env,gif,htm,html,jpg,jpeg,js,mjs,php,png,svg,twig,webp,xml,yaml,yml}"
 )
 
 func init() {

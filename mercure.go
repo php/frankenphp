@@ -6,9 +6,11 @@ package frankenphp
 // #include <php.h>
 import "C"
 import (
+	"encoding/json"
 	"log/slog"
 	"unsafe"
 
+	"github.com/dunglas/frankenphp/internal/watcher"
 	"github.com/dunglas/mercure"
 )
 
@@ -38,6 +40,7 @@ func go_mercure_publish(threadIndex C.uintptr_t, topics *C.struct__zval_struct, 
 			Type:  GoString(unsafe.Pointer(typ)),
 		},
 		Private: private,
+		Debug:   fc.logger.Enabled(ctx, slog.LevelDebug),
 	}
 
 	zvalType := C.zval_get_type(topics)
@@ -71,10 +74,61 @@ func go_mercure_publish(threadIndex C.uintptr_t, topics *C.struct__zval_struct, 
 	return (*C.zend_string)(PHPString(u.ID, false)), 0
 }
 
+func (w *worker) configureMercure(o *workerOpt) {
+	if o.mercureHub == nil {
+		return
+	}
+
+	w.mercureHub = o.mercureHub
+}
+
+// WithHotReload sets files to watch for file changes to trigger a hot reload update.
+func WithHotReload(name string, hub *mercure.Hub, patterns []string) Option {
+	return func(o *opt) error {
+		o.hotReload = append(o.hotReload, &watcher.PatternGroup{
+			Patterns: patterns,
+			Callback: func(events []*watcher.Event) {
+				// Wait for workers to restart before sending the update
+				go func() {
+					data, err := json.Marshal(events)
+					if err != nil {
+						if globalLogger.Enabled(globalCtx, slog.LevelError) {
+							globalLogger.LogAttrs(globalCtx, slog.LevelError, "error marshaling watcher events", slog.Any("error", err))
+						}
+
+						return
+					}
+
+					if err := hub.Publish(globalCtx, &mercure.Update{
+						Topics: []string{"https://frankenphp.dev/hot-reload/" + name},
+						Event:  mercure.Event{Data: string(data)},
+						Debug:  globalLogger.Enabled(globalCtx, slog.LevelDebug),
+					}); err != nil && globalLogger.Enabled(globalCtx, slog.LevelError) {
+						globalLogger.LogAttrs(globalCtx, slog.LevelError, "error publishing hot reloading Mercure update", slog.Any("error", err))
+					}
+				}()
+			},
+		})
+
+		return nil
+	}
+}
+
 // WithMercureHub sets the mercure.Hub to use to publish updates
 func WithMercureHub(hub *mercure.Hub) RequestOption {
 	return func(o *frankenPHPContext) error {
 		o.mercureHub = hub
+
+		return nil
+	}
+}
+
+// WithWorkerMercureHub sets the mercure.Hub in the worker script and used to dispatch hot reloading-related mercure.Update.
+func WithWorkerMercureHub(hub *mercure.Hub) WorkerOption {
+	return func(w *workerOpt) error {
+		w.mercureHub = hub
+
+		w.requestOptions = append(w.requestOptions, WithMercureHub(hub))
 
 		return nil
 	}

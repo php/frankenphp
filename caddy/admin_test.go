@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/dunglas/frankenphp/internal/fastabs"
 	"io"
 	"net/http"
 	"sync"
 	"testing"
+
+	"github.com/dunglas/frankenphp/internal/fastabs"
 
 	"github.com/caddyserver/caddy/v2/caddytest"
 	"github.com/dunglas/frankenphp"

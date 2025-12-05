@@ -37,6 +37,8 @@ import (
 	"unsafe"
 	// debug on Linux
 	//_ "github.com/ianlancetaylor/cgosymbolizer"
+
+	"github.com/dunglas/frankenphp/internal/watcher"
 )
 
 type contextKeyStruct struct{}
@@ -251,6 +253,7 @@ func Init(options ...Option) error {
 	opt := &opt{}
 	for _, o := range options {
 		if err := o(opt); err != nil {
+			Shutdown()
 			return err
 		}
 	}
@@ -277,6 +280,7 @@ func Init(options ...Option) error {
 
 	workerThreadCount, err := calculateMaxThreads(opt)
 	if err != nil {
+		Shutdown()
 		return err
 	}
 
@@ -285,6 +289,7 @@ func Init(options ...Option) error {
 	config := Config()
 
 	if config.Version.MajorVersion < 8 || (config.Version.MajorVersion == 8 && config.Version.MinorVersion < 2) {
+		Shutdown()
 		return ErrInvalidPHPVersion
 	}
 
@@ -304,6 +309,7 @@ func Init(options ...Option) error {
 
 	mainThread, err := initPHPThreads(opt.numThreads, opt.maxThreads, opt.phpIni)
 	if err != nil {
+		Shutdown()
 		return err
 	}
 
@@ -313,8 +319,20 @@ func Init(options ...Option) error {
 		convertToRegularThread(getInactivePHPThread())
 	}
 
-	if err := initWorkers(opt.workers); err != nil {
+	watchPatterns, err := initWorkers(opt.workers)
+	if err != nil {
+		Shutdown()
+
 		return err
+	}
+
+	watchPatterns = append(watchPatterns, opt.hotReload...)
+
+	if len(watchPatterns) > 0 {
+		if err := watcher.InitWatcher(globalCtx, globalLogger, watchPatterns); err != nil {
+			Shutdown()
+			return err
+		}
 	}
 
 	initAutoScaling(mainThread)
@@ -352,7 +370,7 @@ func Shutdown() {
 		fn()
 	}
 
-	drainWatcher()
+	watcher.DrainWatcher()
 	drainAutoScaling()
 	drainPHPThreads()
 
@@ -739,5 +757,6 @@ func resetGlobals() {
 	globalCtx = context.Background()
 	globalLogger = slog.Default()
 	workers = nil
+	watcherIsEnabled = false
 	globalMu.Unlock()
 }

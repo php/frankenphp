@@ -22,6 +22,8 @@ import (
 //		}
 //	}
 type workerConfig struct {
+	mercureContext
+
 	// Name for the worker. Default: the filename for FrankenPHPApp workers, always prefixed with "m#" for FrankenPHPModule workers.
 	Name string `json:"name,omitempty"`
 	// FileName sets the path to the worker script.
@@ -39,6 +41,7 @@ type workerConfig struct {
 	// MaxConsecutiveFailures sets the maximum number of consecutive failures before panicking (defaults to 6, set to -1 to never panick)
 	MaxConsecutiveFailures int `json:"max_consecutive_failures,omitempty"`
 
+	options []frankenphp.WorkerOption
 	requestOptions []frankenphp.RequestOption
 }
 
@@ -110,11 +113,12 @@ func parseWorkerConfig(d *caddyfile.Dispenser) (workerConfig, error) {
 			}
 			wc.Env[args[0]] = args[1]
 		case "watch":
-			if !d.NextArg() {
+			patterns := d.RemainingArgs()
+			if len(patterns) == 0 {
 				// the default if the watch directory is left empty:
 				wc.Watch = append(wc.Watch, defaultWatchPattern)
 			} else {
-				wc.Watch = append(wc.Watch, d.Val())
+				wc.Watch = append(wc.Watch, patterns...)
 			}
 		case "match":
 			// provision the path so it's identical to Caddy match rules
