@@ -8,14 +8,10 @@ import (
 	"log/slog"
 )
 
-func InitWatcher(ct context.Context, logger *slog.Logger, _ []*PatternGroup) error {
-	err := errors.New("watcher support is not enabled")
+var errWatcherNotEnabled = errors.New("watcher support is not enabled")
 
-	if logger.Enabled(ct, slog.LevelError) {
-		logger.LogAttrs(ct, slog.LevelError, err.Error())
-	}
-
-	return err
+func InitWatcher(_ context.Context, _ *slog.Logger, _ []*PatternGroup) error {
+	return errWatcherNotEnabled
 }
 
 func DrainWatcher() {
