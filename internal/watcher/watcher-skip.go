@@ -8,7 +8,7 @@ import (
 	"log/slog"
 )
 
-func InitWatcher(ct context.Context, logger *slog.Logger, _ []*PatternGroup, _ func()) error {
+func InitWatcher(ct context.Context, logger *slog.Logger, _ []*PatternGroup) error {
 	err := errors.New("watcher support is not enabled")
 
 	if logger.Enabled(ct, slog.LevelError) {
