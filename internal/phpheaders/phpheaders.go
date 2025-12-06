@@ -5,7 +5,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/maypok86/otter/v2"
+	"github.com/bottledcode/cloxcache/cache"
 )
 
 // Translate header names to PHP header names
@@ -119,21 +119,19 @@ var CommonRequestHeaders = map[string]string{
 
 // Cache up to 256 uncommon headers
 // This is ~2.5x faster than converting the header each time
-var headerKeyCache = otter.Must[string, string](&otter.Options[string, string]{MaximumSize: 256})
+var headerKeyCache = func() *cache.CloxCache[string, string] {
+	cfg := cache.ConfigFromMemorySize(5 * 1024) // 5kb
+	return cache.NewCloxCache[string, string](cfg)
+}()
 
 var headerNameReplacer = strings.NewReplacer(" ", "_", "-", "_")
 
 func GetUnCommonHeader(ctx context.Context, key string) string {
-	phpHeaderKey, err := headerKeyCache.Get(
-		ctx,
-		key,
-		otter.LoaderFunc[string, string](func(_ context.Context, key string) (string, error) {
-			return "HTTP_" + headerNameReplacer.Replace(strings.ToUpper(key)) + "\x00", nil
-		}),
-	)
-	if err != nil {
-		panic(err)
+	if val, ok := headerKeyCache.Get(key); !ok {
+		val = "HTTP_" + headerNameReplacer.Replace(strings.ToUpper(key)) + "\x00"
+		headerKeyCache.Put(key, "HTTP_"+headerNameReplacer.Replace(strings.ToUpper(key))+"\x00")
+		return val
+	} else {
+		return val
 	}
-
-	return phpHeaderKey
 }
