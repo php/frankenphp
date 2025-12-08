@@ -113,7 +113,7 @@ Follow these steps to package your Laravel app as a standalone binary for Linux:
 
    # Build the static binary
    WORKDIR /go/src/app/
-   RUN EMBED=dist/app/ ./build-static.sh
+   RUN EMBED=/go/src/app/dist/app/ ./build-static.sh
    ```
 
    > [!CAUTION]

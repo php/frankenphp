@@ -63,7 +63,7 @@ The easiest way to create a Linux binary is to use the Docker-based builder we p
 
    # Build the static binary
    WORKDIR /go/src/app/
-   RUN EMBED=dist/app/ ./build-static.sh
+   RUN EMBED=/go/src/app/dist/app/ ./build-static.sh
    ```
 
    > [!CAUTION]

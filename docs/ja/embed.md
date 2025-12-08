@@ -63,7 +63,7 @@ Linux用バイナリを作成する最も簡単な方法は、提供されてい
 
    # 静的バイナリをビルド
    WORKDIR /go/src/app/
-   RUN EMBED=dist/app/ ./build-static.sh
+   RUN EMBED=/go/src/app/dist/app/ ./build-static.sh
    ```
 
    > [!CAUTION]
