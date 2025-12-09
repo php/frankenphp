@@ -29,7 +29,7 @@ Depending on your installation method, FrankenPHP and the PHP interpreter will l
 FrankenPHP:
 
 - `/etc/frankenphp/Caddyfile`: the main configuration file
-- `/etc/frankenphp/caddy.d/*.caddy`: additional configuration files that are loaded automatically
+- `/etc/frankenphp/Caddyfile.d/*.caddyfile`: additional configuration files that are loaded automatically
 
 PHP:
 
