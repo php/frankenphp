@@ -6,11 +6,9 @@ package frankenphp
 // #include <php.h>
 import "C"
 import (
-	"encoding/json"
 	"log/slog"
 	"unsafe"
 
-	"github.com/dunglas/frankenphp/internal/watcher"
 	"github.com/dunglas/mercure"
 )
 
@@ -80,38 +78,6 @@ func (w *worker) configureMercure(o *workerOpt) {
 	}
 
 	w.mercureHub = o.mercureHub
-}
-
-// WithHotReload sets files to watch for file changes to trigger a hot reload update.
-func WithHotReload(name string, hub *mercure.Hub, patterns []string) Option {
-	return func(o *opt) error {
-		o.hotReload = append(o.hotReload, &watcher.PatternGroup{
-			Patterns: patterns,
-			Callback: func(events []*watcher.Event) {
-				// Wait for workers to restart before sending the update
-				go func() {
-					data, err := json.Marshal(events)
-					if err != nil {
-						if globalLogger.Enabled(globalCtx, slog.LevelError) {
-							globalLogger.LogAttrs(globalCtx, slog.LevelError, "error marshaling watcher events", slog.Any("error", err))
-						}
-
-						return
-					}
-
-					if err := hub.Publish(globalCtx, &mercure.Update{
-						Topics: []string{"https://frankenphp.dev/hot-reload/" + name},
-						Event:  mercure.Event{Data: string(data)},
-						Debug:  globalLogger.Enabled(globalCtx, slog.LevelDebug),
-					}); err != nil && globalLogger.Enabled(globalCtx, slog.LevelError) {
-						globalLogger.LogAttrs(globalCtx, slog.LevelError, "error publishing hot reloading Mercure update", slog.Any("error", err))
-					}
-				}()
-			},
-		})
-
-		return nil
-	}
 }
 
 // WithMercureHub sets the mercure.Hub to use to publish updates

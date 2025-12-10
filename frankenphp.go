@@ -319,20 +319,15 @@ func Init(options ...Option) error {
 		convertToRegularThread(getInactivePHPThread())
 	}
 
-	watchPatterns, err := initWorkers(opt.workers)
-	if err != nil {
+	if err := initWorkers(opt.workers); err != nil {
 		Shutdown()
 
 		return err
 	}
 
-	watchPatterns = append(watchPatterns, opt.hotReload...)
-
-	if len(watchPatterns) > 0 {
-		if err := watcher.InitWatcher(globalCtx, globalLogger, watchPatterns); err != nil {
-			Shutdown()
-			return err
-		}
+	if err := initWatchers(opt); err != nil {
+		Shutdown()
+		return err
 	}
 
 	initAutoScaling(mainThread)

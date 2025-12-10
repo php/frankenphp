@@ -14,8 +14,5 @@ func go_mercure_publish(threadIndex C.uintptr_t, topics *C.struct__zval_struct, 
 	return nil, 3
 }
 
-func (w *worker) configureMercure(o *workerOpt) {
-}
-
-func broadcastHotReloadEvents() {
+func (w *worker) configureMercure(_ *workerOpt) {
 }

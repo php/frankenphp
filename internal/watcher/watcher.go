@@ -5,10 +5,13 @@ package watcher
 import (
 	"context"
 	"errors"
+	"log"
 	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/e-dant/watcher/watcher-go"
 )
 
 const (
@@ -20,8 +23,7 @@ const (
 )
 
 var (
-	ErrAlreadyStarted        = errors.New("watcher is already running")
-	ErrUnableToStartWatching = errors.New("unable to start watcher")
+	ErrAlreadyStarted = errors.New("watcher is already running")
 
 	failureMu       sync.Mutex
 	watcherIsActive atomic.Bool
@@ -36,9 +38,14 @@ var (
 	globalLogger *slog.Logger
 )
 
+type PatternGroup struct {
+	Patterns []string
+	Callback func([]*watcher.Event)
+}
+
 type eventHolder struct {
 	patternGroup *PatternGroup
-	event        *Event
+	event        *watcher.Event
 }
 
 type globalWatcher struct {
@@ -63,7 +70,13 @@ func InitWatcher(ct context.Context, slogger *slog.Logger, groups []*PatternGrou
 
 	activeWatcher = &globalWatcher{groups: groups}
 
+	log.Printf("#%v", groups)
+
 	for _, g := range groups {
+		if len(g.Patterns) == 0 {
+			continue
+		}
+
 		for _, p := range g.Patterns {
 			activeWatcher.watchers = append(activeWatcher.watchers, &pattern{patternGroup: g, value: p})
 		}
@@ -111,9 +124,7 @@ func (p *pattern) retryWatching() {
 
 	p.failureCount++
 
-	if err := p.startSession(); err != nil && globalLogger.Enabled(globalCtx, slog.LevelError) {
-		globalLogger.LogAttrs(globalCtx, slog.LevelError, "unable to start watcher", slog.String("pattern", p.value), slog.Any("error", err))
-	}
+	p.startSession()
 
 	// reset the failure-count if the watcher hasn't reached max failures after 5 seconds
 	go func() {
@@ -135,15 +146,9 @@ func (g *globalWatcher) startWatching() error {
 		return err
 	}
 
-	for i, w := range g.watchers {
+	for _, w := range g.watchers {
 		w.events = g.events
-		if err := w.startSession(); err != nil {
-			for j := 0; j < i; j++ {
-				g.watchers[j].stop()
-			}
-
-			return err
-		}
+		w.startSession()
 	}
 
 	go g.listenForFileEvents()
@@ -172,7 +177,7 @@ func (g *globalWatcher) listenForFileEvents() {
 	timer := time.NewTimer(debounceDuration)
 	timer.Stop()
 
-	eventsPerGroup := make(map[*PatternGroup][]*Event, len(g.groups))
+	eventsPerGroup := make(map[*PatternGroup][]*watcher.Event, len(g.groups))
 
 	defer timer.Stop()
 	for {
@@ -187,7 +192,7 @@ func (g *globalWatcher) listenForFileEvents() {
 			timer.Stop()
 
 			if globalLogger.Enabled(globalCtx, slog.LevelInfo) {
-				var events []*Event
+				var events []*watcher.Event
 				for _, eventList := range eventsPerGroup {
 					events = append(events, eventList...)
 				}
@@ -196,12 +201,12 @@ func (g *globalWatcher) listenForFileEvents() {
 			}
 
 			g.scheduleReload(eventsPerGroup)
-			eventsPerGroup = make(map[*PatternGroup][]*Event, len(g.groups))
+			eventsPerGroup = make(map[*PatternGroup][]*watcher.Event, len(g.groups))
 		}
 	}
 }
 
-func (g *globalWatcher) scheduleReload(eventsPerGroup map[*PatternGroup][]*Event) {
+func (g *globalWatcher) scheduleReload(eventsPerGroup map[*PatternGroup][]*watcher.Event) {
 	reloadWaitGroup.Add(1)
 
 	// Call callbacks in order

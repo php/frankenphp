@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
-
-	"github.com/dunglas/frankenphp/internal/watcher"
 )
 
 // defaultMaxConsecutiveFailures is the default maximum number of consecutive failures before panicking
@@ -22,11 +20,12 @@ type WorkerOption func(*workerOpt) error
 //
 // If you change this, also update the Caddy module and the documentation.
 type opt struct {
+	hotReloadOpt
+
 	ctx         context.Context
 	numThreads  int
 	maxThreads  int
 	workers     []workerOpt
-	hotReload   []*watcher.PatternGroup
 	logger      *slog.Logger
 	metrics     Metrics
 	phpIni      map[string]string

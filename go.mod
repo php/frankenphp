@@ -1,6 +1,6 @@
 module github.com/dunglas/frankenphp
 
-go 1.25.0
+go 1.25.4
 
 retract v1.0.0-rc.1 // Human error
 
@@ -26,6 +26,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dunglas/skipfilter v1.0.0 // indirect
+	github.com/e-dant/watcher/watcher-go v0.0.0-20251208164151-f88ec3b7e146 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect

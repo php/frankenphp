@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/e-dant/watcher/watcher-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -14,14 +15,14 @@ func TestDisallowOnEventTypeBiggerThan3(t *testing.T) {
 	w := pattern{value: "/some/path"}
 	require.NoError(t, w.parse())
 
-	assert.False(t, w.allowReload(&Event{PathName: "/some/path/watch-me.php", EffectType: EffectTypeOwner}))
+	assert.False(t, w.allowReload(&watcher.Event{PathName: "/some/path/watch-me.php", EffectType: watcher.EffectTypeOwner}))
 }
 
 func TestDisallowOnPathTypeBiggerThan2(t *testing.T) {
 	w := pattern{value: "/some/path"}
 	require.NoError(t, w.parse())
 
-	assert.False(t, w.allowReload(&Event{PathName: "/some/path/watch-me.php", PathType: PathTypeSymLink}))
+	assert.False(t, w.allowReload(&watcher.Event{PathName: "/some/path/watch-me.php", PathType: watcher.PathTypeSymLink}))
 }
 
 func TestWatchesCorrectDir(t *testing.T) {
@@ -306,7 +307,7 @@ func TestAnAssociatedEventTriggersTheWatcher(t *testing.T) {
 	require.NoError(t, w.parse())
 	w.events = make(chan eventHolder)
 
-	e := &Event{PathName: "/path/temporary_file", AssociatedPathName: "/path/file.php"}
+	e := &watcher.Event{PathName: "/path/temporary_file", AssociatedPathName: "/path/file.php"}
 	go w.handle(e)
 
 	assert.Equal(t, e, (<-w.events).event)
@@ -333,7 +334,7 @@ func shouldMatch(t *testing.T, p string, fileName string) {
 	w := pattern{value: p}
 	require.NoError(t, w.parse())
 
-	assert.True(t, w.allowReload(&Event{PathName: fileName}))
+	assert.True(t, w.allowReload(&watcher.Event{PathName: fileName}))
 }
 
 func shouldNotMatch(t *testing.T, p string, fileName string) {
@@ -342,5 +343,5 @@ func shouldNotMatch(t *testing.T, p string, fileName string) {
 	w := pattern{value: p}
 	require.NoError(t, w.parse())
 
-	assert.False(t, w.allowReload(&Event{PathName: fileName}))
+	assert.False(t, w.allowReload(&watcher.Event{PathName: fileName}))
 }

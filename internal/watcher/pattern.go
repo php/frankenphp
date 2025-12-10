@@ -2,20 +2,13 @@
 
 package watcher
 
-// #cgo LDFLAGS: -lwatcher-c -lstdc++
-// #include <stdint.h>
-// #include <stdlib.h>
-// #include "watcher.h"
-import "C"
 import (
 	"log/slog"
 	"path/filepath"
-	"runtime/cgo"
 	"strings"
-	"time"
-	"unsafe"
 
 	"github.com/dunglas/frankenphp/internal/fastabs"
+	"github.com/e-dant/watcher/watcher-go"
 )
 
 type pattern struct {
@@ -24,31 +17,16 @@ type pattern struct {
 	parsedValues []string
 	events       chan eventHolder
 	failureCount int
-	watcher      C.uintptr_t
-	h            cgo.Handle
+
+	watcher *watcher.Watcher
 }
 
-func (p *pattern) startSession() error {
-	p.h = cgo.NewHandle(p)
-	cDir := C.CString(p.value)
-	defer C.free(unsafe.Pointer(cDir))
+func (p *pattern) startSession() {
+	p.watcher = watcher.NewWatcher(p.value, p.handle)
 
-	p.watcher = C.start_new_watcher(cDir, C.uintptr_t(p.h))
-	if p.watcher != 0 {
-		if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
-			globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "watching", slog.String("pattern", p.value))
-		}
-
-		return nil
+	if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
+		globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "watching", slog.String("pattern", p.value))
 	}
-
-	if globalLogger.Enabled(globalCtx, slog.LevelError) {
-		globalLogger.LogAttrs(globalCtx, slog.LevelError, "couldn't start watching", slog.String("pattern", p.value))
-	}
-
-	p.h.Delete()
-
-	return ErrUnableToStartWatching
 }
 
 // this method prepares the pattern struct (aka /path/*pattern)
@@ -94,7 +72,7 @@ func (p *pattern) parse() (err error) {
 	return nil
 }
 
-func (p *pattern) allowReload(event *Event) bool {
+func (p *pattern) allowReload(event *watcher.Event) bool {
 	if !isValidEventType(event.EffectType) || !isValidPathType(event) {
 		return false
 	}
@@ -105,9 +83,9 @@ func (p *pattern) allowReload(event *Event) bool {
 	return p.isValidPattern(event.PathName) || p.isValidPattern(event.AssociatedPathName)
 }
 
-func (p *pattern) handle(event *Event) {
+func (p *pattern) handle(event *watcher.Event) {
 	// If the watcher prematurely sends the die@ event, retry watching
-	if event.PathType == PathTypeWatcher && strings.HasPrefix(event.PathName, "e/self/die@") && watcherIsActive.Load() {
+	if event.PathType == watcher.PathTypeWatcher && strings.HasPrefix(event.PathName, "e/self/die@") && watcherIsActive.Load() {
 		p.retryWatching()
 
 		return
@@ -119,23 +97,19 @@ func (p *pattern) handle(event *Event) {
 }
 
 func (p *pattern) stop() {
-	if C.stop_watcher(p.watcher) == 0 && globalLogger.Enabled(globalCtx, slog.LevelWarn) {
-		globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "couldn't close the watcher")
-	}
-
-	p.h.Delete()
+	p.watcher.Close()
 }
 
-func isValidEventType(effectType EffectType) bool {
-	return effectType <= EffectTypeDestroy
+func isValidEventType(effectType watcher.EffectType) bool {
+	return effectType <= watcher.EffectTypeDestroy
 }
 
-func isValidPathType(event *Event) bool {
-	if event.PathType == PathTypeWatcher && globalLogger.Enabled(globalCtx, slog.LevelDebug) {
+func isValidPathType(event *watcher.Event) bool {
+	if event.PathType == watcher.PathTypeWatcher && globalLogger.Enabled(globalCtx, slog.LevelDebug) {
 		globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "special e-dant/watcher event", slog.Any("event", event))
 	}
 
-	return event.PathType <= PathTypeHardLink
+	return event.PathType <= watcher.PathTypeHardLink
 }
 
 func (p *pattern) isValidPattern(fileName string) bool {
@@ -233,19 +207,4 @@ func matchPattern(pattern string, fileName string) bool {
 	}
 
 	return patternMatches
-}
-
-//export go_handle_file_watcher_event
-func go_handle_file_watcher_event(event C.struct_wtr_watcher_event, handle C.uintptr_t) {
-	p := cgo.Handle(handle).Value().(*pattern)
-
-	e := &Event{
-		EffectTime:         time.Unix(int64(event.effect_time)/1000000000, int64(event.effect_time)%1000000000),
-		PathName:           C.GoString(event.path_name),
-		AssociatedPathName: C.GoString(event.associated_path_name),
-		EffectType:         EffectType(event.effect_type),
-		PathType:           PathType(event.path_type),
-	}
-
-	p.handle(e)
 }

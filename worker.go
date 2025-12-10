@@ -14,7 +14,6 @@ import (
 
 	"github.com/dunglas/frankenphp/internal/fastabs"
 	"github.com/dunglas/frankenphp/internal/state"
-	"github.com/dunglas/frankenphp/internal/watcher"
 )
 
 // represents a worker script and can have many threads assigned to it
@@ -38,14 +37,13 @@ type worker struct {
 
 var (
 	workers          []*worker
-	restartWorkers   atomic.Bool
 	watcherIsEnabled bool
 	startupFailChan  chan error
 )
 
-func initWorkers(opt []workerOpt) (watchPatterns []*watcher.PatternGroup, _ error) {
+func initWorkers(opt []workerOpt) error {
 	if len(opt) == 0 {
-		return nil, nil
+		return nil
 	}
 
 	var (
@@ -58,18 +56,11 @@ func initWorkers(opt []workerOpt) (watchPatterns []*watcher.PatternGroup, _ erro
 	for _, o := range opt {
 		w, err := newWorker(o)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		totalThreadsToStart += w.num
 		workers = append(workers, w)
-
-		if len(o.watch) > 0 {
-			watcherIsEnabled = true
-			watchPatterns = append(watchPatterns, &watcher.PatternGroup{Patterns: o.watch, Callback: func(_ []*watcher.Event) {
-				restartWorkers.Store(true)
-			}})
-		}
 	}
 
 	startupFailChan = make(chan error, totalThreadsToStart)
@@ -90,23 +81,13 @@ func initWorkers(opt []workerOpt) (watchPatterns []*watcher.PatternGroup, _ erro
 	select {
 	case err := <-startupFailChan:
 		// at least 1 worker has failed, return an error
-		return nil, fmt.Errorf("failed to initialize workers: %w", err)
+		return fmt.Errorf("failed to initialize workers: %w", err)
 	default:
 		// all workers started successfully
 		startupFailChan = nil
 	}
 
-	if watcherIsEnabled {
-		watchPatterns = append(watchPatterns, &watcher.PatternGroup{
-			Callback: func(_ []*watcher.Event) {
-				if restartWorkers.Swap(false) {
-					RestartWorkers()
-				}
-			},
-		})
-	}
-
-	return watchPatterns, nil
+	return nil
 }
 
 func getWorkerByName(name string) *worker {
