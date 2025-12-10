@@ -41,3 +41,7 @@ func initWatchers(o *opt) error {
 
 	return watcher.InitWatcher(globalCtx, globalLogger, append(watchPatterns, o.hotReload...))
 }
+
+func drainWatchers() {
+	watcher.DrainWatcher()
+}

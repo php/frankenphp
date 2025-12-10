@@ -2,6 +2,8 @@
 
 package frankenphp
 
+import "errors"
+
 type hotReloadOpt struct {
 }
 
@@ -15,4 +17,7 @@ func initWatchers(o *opt) error {
 	}
 
 	return nil
+}
+
+func drainWatchers() {
 }

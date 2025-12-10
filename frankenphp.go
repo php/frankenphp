@@ -37,8 +37,6 @@ import (
 	"unsafe"
 	// debug on Linux
 	//_ "github.com/ianlancetaylor/cgosymbolizer"
-
-	"github.com/dunglas/frankenphp/internal/watcher"
 )
 
 type contextKeyStruct struct{}
@@ -365,7 +363,7 @@ func Shutdown() {
 		fn()
 	}
 
-	watcher.DrainWatcher()
+	drainWatchers()
 	drainAutoScaling()
 	drainPHPThreads()
 
