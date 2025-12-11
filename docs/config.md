@@ -53,7 +53,7 @@ RUN cp $PHP_INI_DIR/php.ini-development $PHP_INI_DIR/php.ini
 FrankenPHP:
 
 - `/etc/frankenphp/Caddyfile`: the main configuration file
-- `/etc/frankenphp/caddy.d/*.caddy`: additional configuration files that are loaded automatically
+- `/etc/frankenphp/caddy.d/*.caddyfile`: additional configuration files that are loaded automatically
 
 PHP:
 
