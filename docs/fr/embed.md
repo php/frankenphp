@@ -64,7 +64,7 @@ La manière la plus simple de créer un binaire Linux est d'utiliser le builder 
    COPY . .
 
    WORKDIR /go/src/app/
-   RUN EMBED=dist/app/ ./build-static.sh
+   RUN EMBED=/go/src/app/dist/app/ ./build-static.sh
    ```
 
    > [!CAUTION]

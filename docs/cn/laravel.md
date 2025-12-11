@@ -111,7 +111,7 @@ php artisan octane:frankenphp
 
    # 构建静态二进制文件
    WORKDIR /go/src/app/
-   RUN EMBED=dist/app/ ./build-static.sh
+   RUN EMBED=/go/src/app/dist/app/ ./build-static.sh
    ```
 
    > [!CAUTION]

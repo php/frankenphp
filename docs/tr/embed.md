@@ -55,7 +55,7 @@ Bir Linux binary çıktısı almanın en kolay yolu, sağladığımız Docker ta
 
    # Statik binary dosyasını oluşturun, yalnızca istediğiniz PHP eklentilerini seçtiğinizden emin olun
    WORKDIR /go/src/app/
-   RUN EMBED=dist/app/ \
+   RUN EMBED=/go/src/app/dist/app/ \
        ./build-static.sh
    ```
 

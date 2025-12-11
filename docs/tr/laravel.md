@@ -111,7 +111,7 @@ Linux için Laravel uygulamanızı bağımsız bir çalıştırılabilir olarak 
 
    # Statik ikiliyi derleyin
    WORKDIR /go/src/app/
-   RUN EMBED=dist/app/ ./build-static.sh
+   RUN EMBED=/go/src/app/dist/app/ ./build-static.sh
    ```
 
    > [!CAUTION]

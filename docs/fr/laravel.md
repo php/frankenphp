@@ -111,7 +111,7 @@ Suivez ces étapes pour empaqueter votre application Laravel en tant que binaire
 
    # Construire le binaire statique
    WORKDIR /go/src/app/
-   RUN EMBED=dist/app/ ./build-static.sh
+   RUN EMBED=/go/src/app/dist/app/ ./build-static.sh
    ```
 
    > [!CAUTION]
