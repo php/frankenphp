@@ -2,7 +2,11 @@
 
 package caddy
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
+)
 
 type hotReloadContext struct {
 }
