@@ -5,7 +5,6 @@ package watcher
 import (
 	"context"
 	"errors"
-	"log"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -69,8 +68,6 @@ func InitWatcher(ct context.Context, slogger *slog.Logger, groups []*PatternGrou
 	globalLogger = slogger
 
 	activeWatcher = &globalWatcher{groups: groups}
-
-	log.Printf("#%v", groups)
 
 	for _, g := range groups {
 		if len(g.Patterns) == 0 {
