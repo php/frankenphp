@@ -607,15 +607,6 @@ static zend_module_entry frankenphp_module = {
     TOSTRING(FRANKENPHP_VERSION),
     STANDARD_MODULE_PROPERTIES};
 
-static void frankenphp_request_shutdown() {
-  if (sandboxed_env != NULL) {
-    zend_hash_release(sandboxed_env);
-    sandboxed_env = NULL;
-  }
-  frankenphp_free_request_context();
-  php_request_shutdown((void *)0);
-}
-
 static int frankenphp_startup(sapi_module_struct *sapi_module) {
   php_import_environment_variables = get_full_env;
 
@@ -1015,10 +1006,6 @@ static void *php_main(void *arg) {
     frankenphp_sapi_module.ini_entries = NULL;
   }
 
-  /* free the main thread environment, necessary for tests */
-  zend_hash_release(main_thread_env);
-  main_thread_env = NULL;
-
   go_frankenphp_shutdown_main_thread();
 
   return NULL;
@@ -1079,7 +1066,14 @@ int frankenphp_execute_script(char *file_name) {
 
   zend_destroy_file_handle(&file_handle);
 
-  frankenphp_request_shutdown();
+  /* Reset env varibales added through putenv() */
+  if (sandboxed_env != NULL) {
+    zend_hash_release(sandboxed_env);
+    sandboxed_env = NULL;
+  }
+
+  frankenphp_free_request_context();
+  php_request_shutdown((void *)0);
 
   return status;
 }

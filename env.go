@@ -12,7 +12,7 @@ import (
 )
 
 //export go_init_os_env
-func go_init_os_env(trackVarsArray *C.HashTable) {
+func go_init_os_env(mainThreadEnv *C.zend_array) {
 	env := os.Environ()
 	for _, envVar := range env {
 		key, val, _ := strings.Cut(envVar, "=")
@@ -22,7 +22,7 @@ func go_init_os_env(trackVarsArray *C.HashTable) {
 		var zval C.zval
 		*(*uint32)(unsafe.Pointer(&zval.u1)) = C.IS_INTERNED_STRING_EX
 		*(**C.zend_string)(unsafe.Pointer(&zval.value)) = zvalStr
-		C.zend_hash_update(trackVarsArray, zkey, &zval)
+		C.zend_hash_update(mainThreadEnv, zkey, &zval)
 	}
 }
 
