@@ -305,6 +305,11 @@ PHP_FUNCTION(frankenphp_putenv) {
     RETURN_FALSE;
   }
 
+  if (setting_len == 0 || setting[0] == '=') {
+    zend_argument_value_error(1, "must have a valid syntax");
+    RETURN_THROWS();
+  }
+
   if (sandboxed_env == NULL) {
     sandboxed_env = zend_array_dup(main_thread_env);
   }
@@ -1066,7 +1071,7 @@ int frankenphp_execute_script(char *file_name) {
 
   zend_destroy_file_handle(&file_handle);
 
-  /* Reset env varibales added through putenv() */
+  /* Reset values added through putenv() */
   if (sandboxed_env != NULL) {
     zend_hash_release(sandboxed_env);
     sandboxed_env = NULL;
