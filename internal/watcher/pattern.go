@@ -144,10 +144,18 @@ func (p *pattern) matchPatterns(fileName string) bool {
 		// if we are at the last pattern we will start matching from the end of the filename
 		if i == len(p.parsedValues)-1 {
 			cursor = len(partsToMatch) - patternSize
+
+			if cursor < 0 {
+				return false
+			}
 		}
 
 		// the cursor will move through the fileName until the pattern matches
 		for j := cursor; j < len(partsToMatch); j++ {
+			if j+patternSize > len(partsToMatch) {
+				return false
+			}
+
 			cursor = j
 			subPattern := strings.Join(partsToMatch[j:j+patternSize], string(filepath.Separator))
 

@@ -189,6 +189,9 @@ func TestInvalidRecursiveFilePatterns(t *testing.T) {
 		{"**/*.php", "/other/file.php"},
 		{".**/*.php", "/other/file.php"},
 		{"./**/*.php", "/other/file.php"},
+		{"/a/**/very/long/path.php", "/a/short.php"},
+		{"", ""},
+		{"/a/**/b/c/d/**/e.php", "/a/x/e.php"},
 	}
 
 	for _, d := range data {
