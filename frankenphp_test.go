@@ -147,6 +147,9 @@ func TestMain(m *testing.M) {
 		slog.SetDefault(slog.New(slog.DiscardHandler))
 	}
 
+	// setup custom environment var for TestWorkerHasOSEnvironmentVariableInSERVER
+	os.Setenv("CUSTOM_OS_ENV_VARIABLE", "custom_env_variable_value")
+
 	os.Exit(m.Run())
 }
 
@@ -645,7 +648,7 @@ func testEnv(t *testing.T, opts *testOptions) {
 		stdoutStderr, err := cmd.CombinedOutput()
 		if err != nil {
 			// php is not installed or other issue, use the hardcoded output below:
-			stdoutStderr = []byte("Set MY_VAR successfully.\nMY_VAR = HelloWorld\nUnset MY_VAR successfully.\nMY_VAR is unset.\nMY_VAR set to empty successfully.\nMY_VAR = \nUnset NON_EXISTING_VAR successfully.\nSuccessfully failed inserting wrong format, value is empty\n")
+			stdoutStderr = []byte("Set MY_VAR successfully.\nMY_VAR = HelloWorld\nUnset MY_VAR successfully.\nMY_VAR is unset.\nMY_VAR set to empty successfully.\nMY_VAR = \nUnset NON_EXISTING_VAR successfully.\n")
 		}
 
 		assert.Equal(t, string(stdoutStderr), body)

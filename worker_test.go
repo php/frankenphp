@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -148,8 +147,6 @@ func ExampleServeHTTP_workers() {
 }
 
 func TestWorkerHasOSEnvironmentVariableInSERVER(t *testing.T) {
-	assert.NoError(t, os.Setenv("CUSTOM_OS_ENV_VARIABLE", "custom_env_variable_value"))
-
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
 		req := httptest.NewRequest("GET", "http://example.com/worker.php", nil)
 		w := httptest.NewRecorder()
