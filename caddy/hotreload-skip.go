@@ -2,6 +2,8 @@
 
 package caddy
 
+import "errors"
+
 type hotReloadContext struct {
 }
 
@@ -10,5 +12,5 @@ func (_ *FrankenPHPModule) configureHotReload(_ *FrankenPHPApp) error {
 }
 
 func (_ *FrankenPHPModule) unmarshalHotReload(d *caddyfile.Dispenser) error {
-	return errors.New("Hot reload support disabled")
+	return errors.New("hot reload support disabled")
 }
