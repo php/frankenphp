@@ -4,7 +4,6 @@ import (
 	"bytes"
 	_ "embed"
 	"fmt"
-	"os"
 	"path/filepath"
 	"text/template"
 
@@ -30,16 +29,7 @@ type goTemplateData struct {
 }
 
 func (gg *GoFileGenerator) generate() error {
-	filename := filepath.Join(gg.generator.BuildDir, gg.generator.BaseName+".go")
-
-	if _, err := os.Stat(filename); err == nil {
-		backupFilename := filename + ".bak"
-		if err := os.Rename(filename, backupFilename); err != nil {
-			return fmt.Errorf("backing up existing Go file: %w", err)
-		}
-
-		gg.generator.SourceFile = backupFilename
-	}
+	filename := filepath.Join(gg.generator.BuildDir, gg.generator.BaseName+"_generated.go")
 
 	content, err := gg.buildContent()
 	if err != nil {
@@ -51,7 +41,7 @@ func (gg *GoFileGenerator) generate() error {
 
 func (gg *GoFileGenerator) buildContent() (string, error) {
 	sourceAnalyzer := SourceAnalyzer{}
-	imports, variables, internalFunctions, err := sourceAnalyzer.analyze(gg.generator.SourceFile)
+	packageName, imports, variables, internalFunctions, err := sourceAnalyzer.analyze(gg.generator.SourceFile)
 	if err != nil {
 		return "", fmt.Errorf("analyzing source file: %w", err)
 	}
@@ -80,7 +70,7 @@ func (gg *GoFileGenerator) buildContent() (string, error) {
 	}
 
 	templateContent, err := gg.getTemplateContent(goTemplateData{
-		PackageName:       SanitizePackageName(gg.generator.BaseName),
+		PackageName:       packageName,
 		BaseName:          gg.generator.BaseName,
 		Imports:           filteredImports,
 		Constants:         gg.generator.Constants,
@@ -106,6 +96,10 @@ func (gg *GoFileGenerator) getTemplateContent(data goTemplateData) (string, erro
 	funcMap["isVoid"] = func(t phpType) bool {
 		return t == phpVoid
 	}
+	funcMap["extractGoFunctionName"] = extractGoFunctionName
+	funcMap["extractGoFunctionSignatureParams"] = extractGoFunctionSignatureParams
+	funcMap["extractGoFunctionSignatureReturn"] = extractGoFunctionSignatureReturn
+	funcMap["extractGoFunctionCallParams"] = extractGoFunctionCallParams
 
 	tmpl := template.Must(template.New("gofile").Funcs(funcMap).Parse(goFileContent))
 
@@ -144,4 +138,120 @@ func (gg *GoFileGenerator) phpTypeToGoType(phpT phpType) string {
 	}
 
 	return "any"
+}
+
+// extractGoFunctionName extracts the Go function name from a Go function signature string.
+func extractGoFunctionName(goFunction string) string {
+	start := 0
+	funcBytes := []byte(goFunction)
+	if idx := bytes.Index(funcBytes, []byte("func ")); idx != -1 {
+		start = idx + len("func ")
+	} else {
+		return ""
+	}
+
+	end := start
+	for end < len(goFunction) && goFunction[end] != '(' {
+		end++
+	}
+
+	if end >= len(goFunction) {
+		return ""
+	}
+
+	return string(bytes.TrimSpace(funcBytes[start:end]))
+}
+
+// extractGoFunctionSignatureParams extracts the parameters from a Go function signature.
+func extractGoFunctionSignatureParams(goFunction string) string {
+	start := bytes.IndexByte([]byte(goFunction), '(')
+	if start == -1 {
+		return ""
+	}
+	start++
+
+	depth := 1
+	end := start
+	for end < len(goFunction) && depth > 0 {
+		switch goFunction[end] {
+		case '(':
+			depth++
+		case ')':
+			depth--
+		}
+		if depth > 0 {
+			end++
+		}
+	}
+
+	if end >= len(goFunction) {
+		return ""
+	}
+
+	return string(bytes.TrimSpace([]byte(goFunction[start:end])))
+}
+
+// extractGoFunctionSignatureReturn extracts the return type from a Go function signature.
+func extractGoFunctionSignatureReturn(goFunction string) string {
+	start := bytes.IndexByte([]byte(goFunction), '(')
+	if start == -1 {
+		return ""
+	}
+
+	depth := 1
+	pos := start + 1
+	for pos < len(goFunction) && depth > 0 {
+		switch goFunction[pos] {
+		case '(':
+			depth++
+		case ')':
+			depth--
+		}
+		pos++
+	}
+
+	if pos >= len(goFunction) {
+		return ""
+	}
+
+	end := bytes.IndexByte([]byte(goFunction[pos:]), '{')
+	if end == -1 {
+		return ""
+	}
+	end += pos
+
+	returnType := string(bytes.TrimSpace([]byte(goFunction[pos:end])))
+	return returnType
+}
+
+// extractGoFunctionCallParams extracts just the parameter names for calling a function.
+func extractGoFunctionCallParams(goFunction string) string {
+	params := extractGoFunctionSignatureParams(goFunction)
+	if params == "" {
+		return ""
+	}
+
+	var names []string
+	parts := bytes.Split([]byte(params), []byte(","))
+	for _, part := range parts {
+		part = bytes.TrimSpace(part)
+		if len(part) == 0 {
+			continue
+		}
+
+		words := bytes.Fields(part)
+		if len(words) > 0 {
+			names = append(names, string(words[0]))
+		}
+	}
+
+	var result []byte
+	for i, name := range names {
+		if i > 0 {
+			result = append(result, []byte(", ")...)
+		}
+		result = append(result, []byte(name)...)
+	}
+
+	return string(result)
 }
