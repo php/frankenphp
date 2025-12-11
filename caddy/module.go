@@ -1,12 +1,9 @@
 package caddy
 
 import (
-	"bytes"
-	"encoding/gob"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"log/slog"
 	"net/http"
 	"path/filepath"
@@ -37,9 +34,8 @@ var serverHeader = []string{"FrankenPHP Caddy"}
 //	}
 type FrankenPHPModule struct {
 	mercureContext
+	hotReloadContext
 
-	// Name for the server. Default: to the worker filename if any, a unique ID otherwise.
-	Name string `json:"name,omitempty"`
 	// Root sets the root folder to the site. Default: `root` directive, or the path of the public directory of the embed app it exists.
 	Root string `json:"root,omitempty"`
 	// SplitPath sets the substrings for splitting the URI into two parts. The first matching substring will be used to split the "path info" from the path. The first piece is suffixed with the matching substring and will be assumed as the actual resource (CGI script) name. The second piece will be set to PATH_INFO for the CGI script to use. Default: `.php`.
@@ -50,8 +46,6 @@ type FrankenPHPModule struct {
 	Env map[string]string `json:"env,omitempty"`
 	// Workers configures the worker scripts to start.
 	Workers []workerConfig `json:"workers,omitempty"`
-	// HotReload specifies files to watch for file changes to trigger hot reloads updates. Supports the glob syntax.
-	HotReload []string `json:"hot_reload,omitempty"`
 
 	resolvedDocumentRoot        string
 	preparedEnv                 frankenphp.PreparedEnv
@@ -85,12 +79,6 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 
 	f.assignMercureHub(ctx)
 
-	// If there is only one worker, and a name is set for the server,
-	// use the server name for the worker if none is set.
-	if len(f.Workers) == 1 && f.Name != "" && f.Workers[0].Name == "" {
-		f.Workers[0].Name = f.Name
-	}
-
 	loggerOpt := frankenphp.WithRequestLogger(f.logger)
 	for i, wc := range f.Workers {
 		// make the file path absolute from the public directory
@@ -113,12 +101,6 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		return err
 	}
 	f.Workers = workers
-
-	// If there is only one worker, and no name is set for the server,
-	// use the worker name without the "m#" prefix
-	if len(f.Workers) == 1 && f.Name == "" && f.Workers[0].Name != "" {
-		f.Name = strings.TrimPrefix(f.Workers[0].Name, "m#")
-	}
 
 	if f.Root == "" {
 		if frankenphp.EmbeddedAppPath == "" {
@@ -168,13 +150,6 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 
 				break
 			}
-		}
-	}
-
-	if f.Name == "" {
-		// Generate a unique name if none is provided
-		if f.Name, err = uniqueID(f); err != nil {
-			return err
 		}
 	}
 
@@ -272,12 +247,6 @@ func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	for d.Next() {
 		for d.NextBlock(0) {
 			switch d.Val() {
-			case "name":
-				if !d.NextArg() {
-					return d.ArgErr()
-				}
-
-				f.Name = d.Val()
 			case "root":
 				if !d.NextArg() {
 					return d.ArgErr()
@@ -316,7 +285,7 @@ func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				f.ResolveRootSymlink = &v
 
 			case "worker":
-				wc, err := parseWorkerConfig(d)
+				wc, err := unmarshalWorker(d)
 				if err != nil {
 					return err
 				}
@@ -324,14 +293,9 @@ func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				f.Workers = append(f.Workers, wc)
 
 			case "hot_reload":
-				patterns := d.RemainingArgs()
-				if len(patterns) == 0 {
-					f.HotReload = append(f.HotReload, defaultHotReloadPattern)
-
-					continue
+				if err := f.unmarshalHotReload(d); err != nil {
+					return err
 				}
-
-				f.HotReload = append(f.HotReload, patterns...)
 
 			default:
 				return wrongSubDirectiveError("php or php_server", "hot_reload, name, root, split, env, resolve_root_symlink, worker", d.Val())
@@ -691,21 +655,6 @@ func prependWorkerRoutes(routes caddyhttp.RouteList, h httpcaddyfile.Helper, f F
 	})
 
 	return routes
-}
-
-func uniqueID(s any) (string, error) {
-	var b bytes.Buffer
-
-	if err := gob.NewEncoder(&b).Encode(s); err != nil {
-		return "", fmt.Errorf("unable to generate unique name: %w", err)
-	}
-
-	h := fnv.New64a()
-	if _, err := h.Write(b.Bytes()); err != nil {
-		return "", fmt.Errorf("unable to generate unique name: %w", err)
-	}
-
-	return fmt.Sprintf("%016x", h.Sum64()), nil
 }
 
 // Interface guards

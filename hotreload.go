@@ -12,7 +12,7 @@ import (
 )
 
 // WithHotReload sets files to watch for file changes to trigger a hot reload update.
-func WithHotReload(name string, hub *mercure.Hub, patterns []string) Option {
+func WithHotReload(topic string, hub *mercure.Hub, patterns []string) Option {
 	return func(o *opt) error {
 		o.hotReload = append(o.hotReload, &watcher.PatternGroup{
 			Patterns: patterns,
@@ -29,7 +29,7 @@ func WithHotReload(name string, hub *mercure.Hub, patterns []string) Option {
 					}
 
 					if err := hub.Publish(globalCtx, &mercure.Update{
-						Topics: []string{"https://frankenphp.dev/hot-reload/" + name},
+						Topics: []string{topic},
 						Event:  mercure.Event{Data: string(data)},
 						Debug:  globalLogger.Enabled(globalCtx, slog.LevelDebug),
 					}); err != nil && globalLogger.Enabled(globalCtx, slog.LevelError) {
