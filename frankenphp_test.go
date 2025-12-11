@@ -648,7 +648,7 @@ func testEnv(t *testing.T, opts *testOptions) {
 		stdoutStderr, err := cmd.CombinedOutput()
 		if err != nil {
 			// php is not installed or other issue, use the hardcoded output below:
-			stdoutStderr = []byte("Set MY_VAR successfully.\nMY_VAR = HelloWorld\nUnset MY_VAR successfully.\nMY_VAR is unset.\nMY_VAR set to empty successfully.\nMY_VAR = \nUnset NON_EXISTING_VAR successfully.\n")
+			stdoutStderr = []byte("Set MY_VAR successfully.\nMY_VAR = HelloWorld\nMY_VAR not found in $_SERVER.\nUnset MY_VAR successfully.\nMY_VAR is unset.\nMY_VAR set to empty successfully.\nMY_VAR = \nUnset NON_EXISTING_VAR successfully.\nInvalid value was not inserted.\n")
 		}
 
 		assert.Equal(t, string(stdoutStderr), body)

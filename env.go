@@ -31,7 +31,7 @@ func go_putenv(name *C.char, nameLen C.int, val *C.char, valLen C.int) C.bool {
 	goName := C.GoStringN(name, nameLen)
 
 	if val == nil {
-		// Unset the environment variable
+		// If no "=" is present in putenv(...), unset the environment variable
 		return C.bool(os.Unsetenv(goName) == nil)
 	}
 
