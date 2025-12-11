@@ -37,6 +37,9 @@ frankenphp php-server --worker /path/to/your/worker/script.php --watch="/path/to
 
 ## Runtime Symfony
 
+> [!TIP]
+> La section suivante est nécessaire uniquement avant Symfony 7.4, où le support natif du mode worker de FrankenPHP a été introduit.
+
 Le mode worker de FrankenPHP est pris en charge par le [Composant Runtime de Symfony](https://symfony.com/doc/current/components/runtime.html).
 Pour démarrer une application Symfony dans un worker, installez le package FrankenPHP de [PHP Runtime](https://github.com/php-runtime/runtime) :
 
