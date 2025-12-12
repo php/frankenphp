@@ -103,8 +103,13 @@ xcaddy build \
     --output frankenphp \
     --with github.com/dunglas/frankenphp/caddy \
     --with github.com/dunglas/mercure/caddy \
-    --with github.com/dunglas/vulcain/caddy
+    --with github.com/dunglas/vulcain/caddy \
+    --with github.com/dunglas/caddy-cbrotli
     # Add extra Caddy modules and FrankenPHP extensions here
+    # optionally, if you would like to compile from your frankenphp sources:
+    # --with github.com/dunglas/frankenphp=$(pwd) \
+    # --with github.com/dunglas/frankenphp/caddy=$(pwd)/caddy
+
 ```
 
 > [!TIP]

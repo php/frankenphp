@@ -5,11 +5,15 @@ import "C"
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dunglas/frankenphp/internal/fastabs"
+	"github.com/dunglas/frankenphp/internal/state"
 	"github.com/dunglas/frankenphp/internal/watcher"
 )
 
@@ -19,7 +23,7 @@ type worker struct {
 	fileName               string
 	num                    int
 	maxThreads             int
-	env                    PreparedEnv
+	requestOptions         []RequestOption
 	requestChan            chan contextHolder
 	threads                []*phpThread
 	threadMutex            sync.RWMutex
@@ -27,27 +31,32 @@ type worker struct {
 	maxConsecutiveFailures int
 	onThreadReady          func(int)
 	onThreadShutdown       func(int)
+	queuedRequests         atomic.Int32
 }
 
 var (
 	workers          []*worker
 	watcherIsEnabled bool
+	startupFailChan  chan (error)
 )
 
 func initWorkers(opt []workerOpt) error {
 	workers = make([]*worker, 0, len(opt))
 	directoriesToWatch := getDirectoriesToWatch(opt)
 	watcherIsEnabled = len(directoriesToWatch) > 0
+	totalThreadsToStart := 0
 
 	for _, o := range opt {
 		w, err := newWorker(o)
 		if err != nil {
 			return err
 		}
+		totalThreadsToStart += w.num
 		workers = append(workers, w)
 	}
 
 	var workersReady sync.WaitGroup
+	startupFailChan = make(chan error, totalThreadsToStart)
 
 	for _, w := range workers {
 		for i := 0; i < w.num; i++ {
@@ -55,18 +64,27 @@ func initWorkers(opt []workerOpt) error {
 			convertToWorkerThread(thread, w)
 
 			workersReady.Go(func() {
-				thread.state.waitFor(stateReady)
+				thread.state.WaitFor(state.Ready, state.ShuttingDown, state.Done)
 			})
 		}
 	}
 
 	workersReady.Wait()
 
+	select {
+	case err := <-startupFailChan:
+		// at least 1 worker has failed, shut down and return an error
+		Shutdown()
+		return fmt.Errorf("failed to initialize workers: %w", err)
+	default:
+		// all workers started successfully
+		startupFailChan = nil
+	}
+
 	if !watcherIsEnabled {
 		return nil
 	}
 
-	watcherIsEnabled = true
 	if err := watcher.InitWatcher(globalCtx, directoriesToWatch, RestartWorkers, globalLogger); err != nil {
 		return err
 	}
@@ -127,9 +145,9 @@ func newWorker(o workerOpt) (*worker, error) {
 	w := &worker{
 		name:                   o.name,
 		fileName:               absFileName,
+		requestOptions:         o.requestOptions,
 		num:                    o.num,
 		maxThreads:             o.maxThreads,
-		env:                    o.env,
 		requestChan:            make(chan contextHolder),
 		threads:                make([]*phpThread, 0, o.num),
 		allowPathMatching:      allowPathMatching,
@@ -137,6 +155,12 @@ func newWorker(o workerOpt) (*worker, error) {
 		onThreadReady:          o.onThreadReady,
 		onThreadShutdown:       o.onThreadShutdown,
 	}
+
+	w.requestOptions = append(
+		w.requestOptions,
+		WithRequestDocumentRoot(filepath.Dir(o.fileName), false),
+		WithRequestPreparedEnv(o.env),
+	)
 
 	if o.extensionWorkers != nil {
 		o.extensionWorkers.internalWorker = w
@@ -157,7 +181,7 @@ func drainWorkerThreads() []*phpThread {
 		worker.threadMutex.RLock()
 		ready.Add(len(worker.threads))
 		for _, thread := range worker.threads {
-			if !thread.state.requestSafeStateChange(stateRestarting) {
+			if !thread.state.RequestSafeStateChange(state.Restarting) {
 				ready.Done()
 				// no state change allowed == thread is shutting down
 				// we'll proceed to restart all other threads anyways
@@ -166,7 +190,7 @@ func drainWorkerThreads() []*phpThread {
 			close(thread.drainChan)
 			drainedThreads = append(drainedThreads, thread)
 			go func(thread *phpThread) {
-				thread.state.waitFor(stateYielding)
+				thread.state.WaitFor(state.Yielding)
 				ready.Done()
 			}(thread)
 		}
@@ -193,7 +217,7 @@ func RestartWorkers() {
 
 	for _, thread := range threadsToRestart {
 		thread.drainChan = make(chan struct{})
-		thread.state.set(stateReady)
+		thread.state.Set(state.Ready)
 	}
 }
 
@@ -246,24 +270,30 @@ func (worker *worker) isAtThreadLimit() bool {
 func (worker *worker) handleRequest(ch contextHolder) error {
 	metrics.StartWorkerRequest(worker.name)
 
-	// dispatch requests to all worker threads in order
-	worker.threadMutex.RLock()
-	for _, thread := range worker.threads {
-		select {
-		case thread.requestChan <- ch:
-			worker.threadMutex.RUnlock()
-			<-ch.frankenPHPContext.done
-			metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
+	runtime.Gosched()
 
-			return nil
-		default:
-			// thread is busy, continue
+	if worker.queuedRequests.Load() == 0 {
+		// dispatch requests to all worker threads in order
+		worker.threadMutex.RLock()
+		for _, thread := range worker.threads {
+			select {
+			case thread.requestChan <- ch:
+				worker.threadMutex.RUnlock()
+				<-ch.frankenPHPContext.done
+				metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
+
+				return nil
+			default:
+				// thread is busy, continue
+			}
 		}
+		worker.threadMutex.RUnlock()
 	}
-	worker.threadMutex.RUnlock()
 
 	// if no thread was available, mark the request as queued and apply the scaling strategy
+	worker.queuedRequests.Add(1)
 	metrics.QueuedWorkerRequest(worker.name)
+
 	for {
 		workerScaleChan := scaleChan
 		if worker.isAtThreadLimit() {
@@ -272,6 +302,7 @@ func (worker *worker) handleRequest(ch contextHolder) error {
 
 		select {
 		case worker.requestChan <- ch:
+			worker.queuedRequests.Add(-1)
 			metrics.DequeuedWorkerRequest(worker.name)
 			<-ch.frankenPHPContext.done
 			metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
@@ -281,7 +312,9 @@ func (worker *worker) handleRequest(ch contextHolder) error {
 			// the request has triggered scaling, continue to wait for a thread
 		case <-timeoutChan(maxWaitTime):
 			// the request has timed out stalling
+			worker.queuedRequests.Add(-1)
 			metrics.DequeuedWorkerRequest(worker.name)
+			metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
 
 			ch.frankenPHPContext.reject(ErrMaxWaitTimeExceeded)
 

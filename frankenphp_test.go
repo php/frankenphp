@@ -47,6 +47,7 @@ type testOptions struct {
 	realServer         bool
 	logger             *slog.Logger
 	initOpts           []frankenphp.Option
+	requestOpts        []frankenphp.RequestOption
 	phpIni             map[string]string
 }
 
@@ -82,8 +83,10 @@ func runTest(t *testing.T, test func(func(http.ResponseWriter, *http.Request), *
 	require.NoError(t, err)
 	defer frankenphp.Shutdown()
 
+	opts.requestOpts = append(opts.requestOpts, frankenphp.WithRequestDocumentRoot(testDataDir, false))
+
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		req, err := frankenphp.NewRequestWithContext(r, frankenphp.WithRequestDocumentRoot(testDataDir, false))
+		req, err := frankenphp.NewRequestWithContext(r, opts.requestOpts...)
 		assert.NoError(t, err)
 
 		err = frankenphp.ServeHTTP(w, req)
@@ -615,10 +618,12 @@ func testRequestHeaders(t *testing.T, opts *testOptions) {
 }
 
 func TestFailingWorker(t *testing.T) {
-	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
-		body, _ := testGet("http://example.com/failing-worker.php", handler, t)
-		assert.Contains(t, body, "ok")
-	}, &testOptions{workerScript: "failing-worker.php"})
+	err := frankenphp.Init(
+		frankenphp.WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
+		frankenphp.WithWorkers("failing worker", "testdata/failing-worker.php", 4, frankenphp.WithWorkerMaxFailures(1)),
+		frankenphp.WithNumThreads(5),
+	)
+	assert.Error(t, err, "should return an immediate error if workers fail on startup")
 }
 
 func TestEnv(t *testing.T) {
@@ -773,22 +778,18 @@ func ExampleExecuteScriptCLI() {
 }
 
 func BenchmarkHelloWorld(b *testing.B) {
-	if err := frankenphp.Init(frankenphp.WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil)))); err != nil {
-		panic(err)
-	}
-	defer frankenphp.Shutdown()
+	require.NoError(b, frankenphp.Init())
+	b.Cleanup(frankenphp.Shutdown)
+
 	cwd, _ := os.Getwd()
 	testDataDir := cwd + "/testdata/"
 
+	opt := frankenphp.WithRequestDocumentRoot(testDataDir, false)
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		req, err := frankenphp.NewRequestWithContext(r, frankenphp.WithRequestDocumentRoot(testDataDir, false))
-		if err != nil {
-			panic(err)
-		}
+		req, err := frankenphp.NewRequestWithContext(r, opt)
+		require.NoError(b, err)
 
-		if err := frankenphp.ServeHTTP(w, req); err != nil {
-			panic(err)
-		}
+		require.NoError(b, frankenphp.ServeHTTP(w, req))
 	}
 
 	req := httptest.NewRequest("GET", "http://example.com/index.php", nil)
@@ -834,21 +835,18 @@ func BenchmarkHelloWorldWorker(b *testing.B) {
 }
 
 func BenchmarkEcho(b *testing.B) {
-	if err := frankenphp.Init(frankenphp.WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil)))); err != nil {
-		panic(err)
-	}
-	defer frankenphp.Shutdown()
+	require.NoError(b, frankenphp.Init())
+	b.Cleanup(frankenphp.Shutdown)
+
 	cwd, _ := os.Getwd()
 	testDataDir := cwd + "/testdata/"
 
+	opt := frankenphp.WithRequestDocumentRoot(testDataDir, false)
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		req, err := frankenphp.NewRequestWithContext(r, frankenphp.WithRequestDocumentRoot(testDataDir, false))
-		if err != nil {
-			panic(err)
-		}
-		if err := frankenphp.ServeHTTP(w, req); err != nil {
-			panic(err)
-		}
+		req, err := frankenphp.NewRequestWithContext(r, opt)
+		require.NoError(b, err)
+
+		require.NoError(b, frankenphp.ServeHTTP(w, req))
 	}
 
 	const body = `{
@@ -900,10 +898,9 @@ func BenchmarkEcho(b *testing.B) {
 }
 
 func BenchmarkServerSuperGlobal(b *testing.B) {
-	if err := frankenphp.Init(frankenphp.WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil)))); err != nil {
-		panic(err)
-	}
-	defer frankenphp.Shutdown()
+	require.NoError(b, frankenphp.Init())
+	b.Cleanup(frankenphp.Shutdown)
+
 	cwd, _ := os.Getwd()
 	testDataDir := cwd + "/testdata/"
 
@@ -948,16 +945,62 @@ func BenchmarkServerSuperGlobal(b *testing.B) {
 
 	preparedEnv := frankenphp.PrepareEnv(env)
 
+	opts := []frankenphp.RequestOption{frankenphp.WithRequestDocumentRoot(testDataDir, false), frankenphp.WithRequestPreparedEnv(preparedEnv)}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		req, err := frankenphp.NewRequestWithContext(r, frankenphp.WithRequestDocumentRoot(testDataDir, false), frankenphp.WithRequestPreparedEnv(preparedEnv))
-		if err != nil {
-			panic(err)
-		}
+		req, err := frankenphp.NewRequestWithContext(r, opts...)
+		require.NoError(b, err)
 
 		r.Header = headers
-		if err := frankenphp.ServeHTTP(w, req); err != nil {
-			panic(err)
-		}
+
+		require.NoError(b, frankenphp.ServeHTTP(w, req))
+	}
+
+	req := httptest.NewRequest("GET", "http://example.com/server-variable.php", nil)
+	w := httptest.NewRecorder()
+
+	for b.Loop() {
+		handler(w, req)
+	}
+}
+
+func BenchmarkUncommonHeaders(b *testing.B) {
+	require.NoError(b, frankenphp.Init())
+	b.Cleanup(frankenphp.Shutdown)
+
+	cwd, _ := os.Getwd()
+	testDataDir := cwd + "/testdata/"
+
+	// Mimics headers of a request sent by Firefox to GitHub
+	headers := http.Header{}
+	headers.Add(strings.Clone("Accept"), strings.Clone("text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"))
+	headers.Add(strings.Clone("Accept-Encoding"), strings.Clone("gzip, deflate, br"))
+	headers.Add(strings.Clone("Accept-Language"), strings.Clone("fr,fr-FR;q=0.8,en-US;q=0.5,en;q=0.3"))
+	headers.Add(strings.Clone("Cache-Control"), strings.Clone("no-cache"))
+	headers.Add(strings.Clone("Connection"), strings.Clone("keep-alive"))
+	headers.Add(strings.Clone("Cookie"), strings.Clone("user_session=myrandomuuid; __Host-user_session_same_site=myotherrandomuuid; dotcom_user=dunglas; logged_in=yes; _foo=barbarbarbarbarbar; _device_id=anotherrandomuuid; color_mode=foobarfoobarfoobarfoobarfoobarfoobarfoobarfoobarfoobarfoobarfoobarfoobarfoobarfoobarfoobarfoobarfoobarfoobarfoobarfoobarfoobarfoobarfoobarfoobar; preferred_color_mode=light; tz=Europe%2FParis; has_recent_activity=1"))
+	headers.Add(strings.Clone("DNT"), strings.Clone("1"))
+	headers.Add(strings.Clone("Host"), strings.Clone("example.com"))
+	headers.Add(strings.Clone("Pragma"), strings.Clone("no-cache"))
+	headers.Add(strings.Clone("Sec-Fetch-Dest"), strings.Clone("document"))
+	headers.Add(strings.Clone("Sec-Fetch-Mode"), strings.Clone("navigate"))
+	headers.Add(strings.Clone("Sec-Fetch-Site"), strings.Clone("cross-site"))
+	headers.Add(strings.Clone("Sec-GPC"), strings.Clone("1"))
+	headers.Add(strings.Clone("Upgrade-Insecure-Requests"), strings.Clone("1"))
+	headers.Add(strings.Clone("User-Agent"), strings.Clone("Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:122.0) Gecko/20100101 Firefox/122.0"))
+	// Some uncommon headers
+	headers.Add(strings.Clone("X-Super-Custom"), strings.Clone("Foo"))
+	headers.Add(strings.Clone("Super-Super-Custom"), strings.Clone("Foo"))
+	headers.Add(strings.Clone("Super-Super-Custom"), strings.Clone("Bar"))
+	headers.Add(strings.Clone("Very-Custom"), strings.Clone("1"))
+
+	opt := frankenphp.WithRequestDocumentRoot(testDataDir, false)
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		req, err := frankenphp.NewRequestWithContext(r, opt)
+		require.NoError(b, err)
+
+		r.Header = headers
+
+		require.NoError(b, frankenphp.ServeHTTP(w, req))
 	}
 
 	req := httptest.NewRequest("GET", "http://example.com/server-variable.php", nil)
@@ -1037,6 +1080,7 @@ func FuzzRequest(f *testing.F) {
 			if strings.Contains(req.URL.Path, "\x00") {
 				assert.Equal(t, 400, resp.StatusCode)
 				assert.Contains(t, body, "invalid request path")
+
 				return
 			}
 

@@ -114,23 +114,32 @@ retry:
 func (f *FrankenPHPApp) addModuleWorkers(workers ...workerConfig) ([]workerConfig, error) {
 	for i := range workers {
 		w := &workers[i]
+
 		if frankenphp.EmbeddedAppPath != "" && filepath.IsLocal(w.FileName) {
 			w.FileName = filepath.Join(frankenphp.EmbeddedAppPath, w.FileName)
 		}
+
 		if w.Name == "" {
 			w.Name = f.generateUniqueModuleWorkerName(w.FileName)
 		} else if !strings.HasPrefix(w.Name, "m#") {
 			w.Name = "m#" + w.Name
 		}
+
 		f.Workers = append(f.Workers, *w)
 	}
+
 	return workers, nil
 }
 
 func (f *FrankenPHPApp) Start() error {
 	repl := caddy.NewReplacer()
 
-	opts := []frankenphp.Option{
+	optionsMU.RLock()
+	opts := make([]frankenphp.Option, 0, len(options)+len(f.Workers)+7)
+	opts = append(opts, options...)
+	optionsMU.RUnlock()
+
+	opts = append(opts,
 		frankenphp.WithContext(f.ctx),
 		frankenphp.WithLogger(f.logger),
 		frankenphp.WithNumThreads(f.NumThreads),
@@ -138,18 +147,27 @@ func (f *FrankenPHPApp) Start() error {
 		frankenphp.WithMetrics(f.metrics),
 		frankenphp.WithPhpIni(f.PhpIni),
 		frankenphp.WithMaxWaitTime(f.MaxWaitTime),
-	}
+	)
 
-	optionsMU.RLock()
-	opts = append(opts, options...)
-	optionsMU.RUnlock()
+	for _, w := range f.Workers {
+		workerOpts := make([]frankenphp.WorkerOption, 0, len(w.requestOptions)+4)
 
-	for _, w := range append(f.Workers) {
-		workerOpts := []frankenphp.WorkerOption{
-			frankenphp.WithWorkerEnv(w.Env),
-			frankenphp.WithWorkerWatchMode(w.Watch),
-			frankenphp.WithWorkerMaxFailures(w.MaxConsecutiveFailures),
-			frankenphp.WithWorkerMaxThreads(w.MaxThreads),
+		if w.requestOptions == nil {
+			workerOpts = append(workerOpts,
+				frankenphp.WithWorkerEnv(w.Env),
+				frankenphp.WithWorkerWatchMode(w.Watch),
+				frankenphp.WithWorkerMaxFailures(w.MaxConsecutiveFailures),
+				frankenphp.WithWorkerMaxThreads(w.MaxThreads),
+			)
+		} else {
+			workerOpts = append(
+				workerOpts,
+				frankenphp.WithWorkerEnv(w.Env),
+				frankenphp.WithWorkerWatchMode(w.Watch),
+				frankenphp.WithWorkerMaxFailures(w.MaxConsecutiveFailures),
+				frankenphp.WithWorkerMaxThreads(w.MaxThreads),
+				frankenphp.WithWorkerRequestOptions(w.requestOptions...),
+			)
 		}
 
 		opts = append(opts, frankenphp.WithWorkers(w.Name, repl.ReplaceKnown(w.FileName, ""), w.Num, workerOpts...))
