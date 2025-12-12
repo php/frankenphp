@@ -694,27 +694,26 @@ func go_log(threadIndex C.uintptr_t, message *C.char, level C.int) {
 }
 
 //export go_log_attrs
-func go_log_attrs(threadIndex C.uintptr_t, message *C.zend_string, level C.zend_long, cattrs *C.zval) *C.char {
+func go_log_attrs(threadIndex C.uintptr_t, message *C.zend_string, cLevel C.zend_long, cAttrs *C.zval) *C.char {
+	ctx := phpThreads[threadIndex].context()
+
+	level := slog.Level(cLevel)
+
+	if !globalLogger.Enabled(ctx, level) {
+		return nil
+	}
+
 	var attrs map[string]any
 
-	if cattrs == nil {
-		attrs = nil
-	} else {
+	if cAttrs != nil {
 		var err error
-		if attrs, err = GoMap[any](unsafe.Pointer(cattrs)); err != nil {
-			// NOTE: return value is already formatted for a PHP exception message.
+		if attrs, err = GoMap[any](unsafe.Pointer(cAttrs)); err != nil {
+			// PHP exception message.
 			return C.CString("Failed to log message: converting attrs: " + err.Error())
 		}
 	}
 
-	ctx := phpThreads[threadIndex].context()
-
-	if globalLogger.Enabled(ctx, slog.Level(level)) {
-		globalLogger.LogAttrs(ctx,
-			slog.Level(level),
-			GoString(unsafe.Pointer(message)),
-			mapToAttr(attrs)...)
-	}
+	globalLogger.LogAttrs(ctx, level, GoString(unsafe.Pointer(message)), mapToAttr(attrs)...)
 
 	return nil
 }
