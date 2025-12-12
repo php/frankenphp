@@ -251,6 +251,7 @@ func Init(options ...Option) error {
 	opt := &opt{}
 	for _, o := range options {
 		if err := o(opt); err != nil {
+			Shutdown()
 			return err
 		}
 	}
@@ -277,6 +278,7 @@ func Init(options ...Option) error {
 
 	workerThreadCount, err := calculateMaxThreads(opt)
 	if err != nil {
+		Shutdown()
 		return err
 	}
 
@@ -285,6 +287,7 @@ func Init(options ...Option) error {
 	config := Config()
 
 	if config.Version.MajorVersion < 8 || (config.Version.MajorVersion == 8 && config.Version.MinorVersion < 2) {
+		Shutdown()
 		return ErrInvalidPHPVersion
 	}
 
@@ -304,6 +307,7 @@ func Init(options ...Option) error {
 
 	mainThread, err := initPHPThreads(opt.numThreads, opt.maxThreads, opt.phpIni)
 	if err != nil {
+		Shutdown()
 		return err
 	}
 
@@ -314,6 +318,13 @@ func Init(options ...Option) error {
 	}
 
 	if err := initWorkers(opt.workers); err != nil {
+		Shutdown()
+
+		return err
+	}
+
+	if err := initWatchers(opt); err != nil {
+		Shutdown()
 		return err
 	}
 
@@ -352,7 +363,7 @@ func Shutdown() {
 		fn()
 	}
 
-	drainWatcher()
+	drainWatchers()
 	drainAutoScaling()
 	drainPHPThreads()
 
@@ -739,5 +750,6 @@ func resetGlobals() {
 	globalCtx = context.Background()
 	globalLogger = slog.Default()
 	workers = nil
+	watcherIsEnabled = false
 	globalMu.Unlock()
 }

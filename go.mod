@@ -1,12 +1,13 @@
 module github.com/dunglas/frankenphp
 
-go 1.25.0
+go 1.25.4
 
 retract v1.0.0-rc.1 // Human error
 
 require (
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/dunglas/mercure v0.21.2
+	github.com/e-dant/watcher/watcher-go v0.0.0-20251208164151-f88ec3b7e146
 	github.com/maypok86/otter/v2 v2.2.1
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1

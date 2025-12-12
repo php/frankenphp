@@ -2,55 +2,60 @@
 
 package watcher
 
-// #include <stdint.h>
-// #include <stdlib.h>
-// #include "watcher.h"
-import "C"
 import (
 	"context"
 	"errors"
 	"log/slog"
-	"runtime/cgo"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-	"unsafe"
+
+	"github.com/e-dant/watcher/watcher-go"
 )
 
-type watcher struct {
-	sessions []C.uintptr_t
-	callback func()
-	trigger  chan string
-	stop     chan struct{}
-}
-
-// duration to wait before triggering a reload after a file change
-const debounceDuration = 150 * time.Millisecond
-
-// times to retry watching if the watcher was closed prematurely
-const maxFailureCount = 5
-const failureResetDuration = 5 * time.Second
-
-var failureMu = sync.Mutex{}
-var watcherIsActive = atomic.Bool{}
+const (
+	// duration to wait before triggering a reload after a file change
+	debounceDuration = 150 * time.Millisecond
+	// times to retry watching if the watcher was closed prematurely
+	maxFailureCount      = 5
+	failureResetDuration = 5 * time.Second
+)
 
 var (
-	ErrAlreadyStarted        = errors.New("the watcher is already running")
-	ErrUnableToStartWatching = errors.New("unable to start the watcher")
+	ErrAlreadyStarted = errors.New("watcher is already running")
+
+	failureMu       sync.Mutex
+	watcherIsActive atomic.Bool
 
 	// the currently active file watcher
-	activeWatcher *watcher
+	activeWatcher *globalWatcher
 	// after stopping the watcher we will wait for eventual reloads to finish
 	reloadWaitGroup sync.WaitGroup
 	// we are passing the context from the main package to the watcher
-	ctx context.Context
-	// we are passing the logger from the main package to the watcher
-	logger *slog.Logger
+	globalCtx context.Context
+	// we are passing the globalLogger from the main package to the watcher
+	globalLogger *slog.Logger
 )
 
-func InitWatcher(ct context.Context, filePatterns []string, callback func(), slogger *slog.Logger) error {
-	if len(filePatterns) == 0 {
+type PatternGroup struct {
+	Patterns []string
+	Callback func([]*watcher.Event)
+}
+
+type eventHolder struct {
+	patternGroup *PatternGroup
+	event        *watcher.Event
+}
+
+type globalWatcher struct {
+	groups   []*PatternGroup
+	watchers []*pattern
+	events   chan eventHolder
+	stop     chan struct{}
+}
+
+func InitWatcher(ct context.Context, slogger *slog.Logger, groups []*PatternGroup) error {
+	if len(groups) == 0 {
 		return nil
 	}
 
@@ -59,11 +64,22 @@ func InitWatcher(ct context.Context, filePatterns []string, callback func(), slo
 	}
 
 	watcherIsActive.Store(true)
-	ctx = ct
-	logger = slogger
-	activeWatcher = &watcher{callback: callback}
+	globalCtx = ct
+	globalLogger = slogger
 
-	if err := activeWatcher.startWatching(ctx, filePatterns); err != nil {
+	activeWatcher = &globalWatcher{groups: groups}
+
+	for _, g := range groups {
+		if len(g.Patterns) == 0 {
+			continue
+		}
+
+		for _, p := range g.Patterns {
+			activeWatcher.watchers = append(activeWatcher.watchers, &pattern{patternGroup: g, value: p})
+		}
+	}
+
+	if err := activeWatcher.startWatching(); err != nil {
 		return err
 	}
 
@@ -77,8 +93,8 @@ func DrainWatcher() {
 
 	watcherIsActive.Store(false)
 
-	if logger.Enabled(ctx, slog.LevelDebug) {
-		logger.LogAttrs(ctx, slog.LevelDebug, "stopping watcher")
+	if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
+		globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "stopping watcher")
 	}
 
 	activeWatcher.stopWatching()
@@ -87,142 +103,119 @@ func DrainWatcher() {
 }
 
 // TODO: how to test this?
-func retryWatching(watchPattern *watchPattern) {
+func (p *pattern) retryWatching() {
 	failureMu.Lock()
 	defer failureMu.Unlock()
-	if watchPattern.failureCount >= maxFailureCount {
-		if logger.Enabled(ctx, slog.LevelWarn) {
-			logger.LogAttrs(ctx, slog.LevelWarn, "giving up watching", slog.String("dir", watchPattern.dir))
+
+	if p.failureCount >= maxFailureCount {
+		if globalLogger.Enabled(globalCtx, slog.LevelWarn) {
+			globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "giving up watching", slog.String("pattern", p.value))
 		}
 
 		return
 	}
 
-	if logger.Enabled(ctx, slog.LevelInfo) {
-		logger.LogAttrs(ctx, slog.LevelInfo, "watcher was closed prematurely, retrying...", slog.String("dir", watchPattern.dir))
+	if globalLogger.Enabled(globalCtx, slog.LevelInfo) {
+		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "watcher was closed prematurely, retrying...", slog.String("pattern", p.value))
 	}
 
-	watchPattern.failureCount++
-	session, err := startSession(watchPattern)
-	if err != nil {
-		activeWatcher.sessions = append(activeWatcher.sessions, session)
-	}
+	p.failureCount++
+
+	p.startSession()
 
 	// reset the failure-count if the watcher hasn't reached max failures after 5 seconds
 	go func() {
-		time.Sleep(failureResetDuration * time.Second)
+		time.Sleep(failureResetDuration)
+
 		failureMu.Lock()
-		if watchPattern.failureCount < maxFailureCount {
-			watchPattern.failureCount = 0
+		if p.failureCount < maxFailureCount {
+			p.failureCount = 0
 		}
 		failureMu.Unlock()
 	}()
 }
 
-func (w *watcher) startWatching(ctx context.Context, filePatterns []string) error {
-	w.trigger = make(chan string)
-	w.stop = make(chan struct{})
-	w.sessions = make([]C.uintptr_t, len(filePatterns))
-	watchPatterns, err := parseFilePatterns(filePatterns)
-	if err != nil {
+func (g *globalWatcher) startWatching() error {
+	g.events = make(chan eventHolder)
+	g.stop = make(chan struct{})
+
+	if err := g.parseFilePatterns(); err != nil {
 		return err
 	}
-	for i, watchPattern := range watchPatterns {
-		watchPattern.trigger = w.trigger
-		session, err := startSession(watchPattern)
-		if err != nil {
-			return err
-		}
-		w.sessions[i] = session
+
+	for _, w := range g.watchers {
+		w.events = g.events
+		w.startSession()
 	}
-	go listenForFileEvents(w.trigger, w.stop)
+
+	go g.listenForFileEvents()
+
 	return nil
 }
 
-func (w *watcher) stopWatching() {
-	close(w.stop)
-	for _, session := range w.sessions {
-		stopSession(session)
-	}
-}
-
-func startSession(w *watchPattern) (C.uintptr_t, error) {
-	handle := cgo.NewHandle(w)
-	cDir := C.CString(w.dir)
-	defer C.free(unsafe.Pointer(cDir))
-	watchSession := C.start_new_watcher(cDir, C.uintptr_t(handle))
-	if watchSession != 0 {
-		if logger.Enabled(ctx, slog.LevelDebug) {
-			logger.LogAttrs(ctx, slog.LevelDebug, "watching", slog.String("dir", w.dir), slog.Any("patterns", w.patterns))
+func (g *globalWatcher) parseFilePatterns() error {
+	for _, w := range g.watchers {
+		if err := w.parse(); err != nil {
+			return err
 		}
-
-		return watchSession, nil
 	}
 
-	if logger.Enabled(ctx, slog.LevelError) {
-		logger.LogAttrs(ctx, slog.LevelError, "couldn't start watching", slog.String("dir", w.dir))
-	}
-
-	return watchSession, ErrUnableToStartWatching
+	return nil
 }
 
-func stopSession(session C.uintptr_t) {
-	success := C.stop_watcher(session)
-	if success == 0 && logger.Enabled(ctx, slog.LevelWarn) {
-		logger.LogAttrs(ctx, slog.LevelWarn, "couldn't close the watcher")
+func (g *globalWatcher) stopWatching() {
+	close(g.stop)
+	for _, w := range g.watchers {
+		w.stop()
 	}
 }
 
-//export go_handle_file_watcher_event
-func go_handle_file_watcher_event(path *C.char, associatedPath *C.char, eventType C.int, pathType C.int, handle C.uintptr_t) {
-	watchPattern := cgo.Handle(handle).Value().(*watchPattern)
-	handleWatcherEvent(watchPattern, C.GoString(path), C.GoString(associatedPath), int(eventType), int(pathType))
-}
-
-func handleWatcherEvent(watchPattern *watchPattern, path string, associatedPath string, eventType int, pathType int) {
-	// If the watcher prematurely sends the die@ event, retry watching
-	if pathType == 4 && strings.HasPrefix(path, "e/self/die@") && watcherIsActive.Load() {
-		retryWatching(watchPattern)
-		return
-	}
-
-	if watchPattern.allowReload(path, eventType, pathType) {
-		watchPattern.trigger <- path
-		return
-	}
-
-	// some editors create temporary files and never actually modify the original file
-	// so we need to also check the associated path of an event
-	// see https://github.com/php/frankenphp/issues/1375
-	if associatedPath != "" && watchPattern.allowReload(associatedPath, eventType, pathType) {
-		watchPattern.trigger <- associatedPath
-	}
-}
-
-func listenForFileEvents(triggerWatcher chan string, stopWatcher chan struct{}) {
+func (g *globalWatcher) listenForFileEvents() {
 	timer := time.NewTimer(debounceDuration)
 	timer.Stop()
-	lastChangedFile := ""
+
+	eventsPerGroup := make(map[*PatternGroup][]*watcher.Event, len(g.groups))
+
 	defer timer.Stop()
 	for {
 		select {
-		case <-stopWatcher:
-		case lastChangedFile = <-triggerWatcher:
+		case <-g.stop:
+			return
+		case eh := <-g.events:
 			timer.Reset(debounceDuration)
+
+			eventsPerGroup[eh.patternGroup] = append(eventsPerGroup[eh.patternGroup], eh.event)
 		case <-timer.C:
 			timer.Stop()
 
-			if logger.Enabled(ctx, slog.LevelInfo) {
-				logger.LogAttrs(ctx, slog.LevelInfo, "filesystem change detected", slog.String("file", lastChangedFile))
+			if globalLogger.Enabled(globalCtx, slog.LevelInfo) {
+				var events []*watcher.Event
+				for _, eventList := range eventsPerGroup {
+					events = append(events, eventList...)
+				}
+
+				globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "filesystem changes detected", slog.Any("events", events))
 			}
 
-			scheduleReload()
+			g.scheduleReload(eventsPerGroup)
+			eventsPerGroup = make(map[*PatternGroup][]*watcher.Event, len(g.groups))
 		}
 	}
 }
 
-func scheduleReload() {
+func (g *globalWatcher) scheduleReload(eventsPerGroup map[*PatternGroup][]*watcher.Event) {
 	reloadWaitGroup.Add(1)
-	activeWatcher.callback()
+
+	// Call callbacks in order
+	for _, g := range g.groups {
+		if len(g.Patterns) == 0 {
+			g.Callback(nil)
+		}
+
+		if e, ok := eventsPerGroup[g]; ok {
+			g.Callback(e)
+		}
+	}
+
 	reloadWaitGroup.Done()
 }

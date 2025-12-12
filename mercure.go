@@ -38,6 +38,7 @@ func go_mercure_publish(threadIndex C.uintptr_t, topics *C.struct__zval_struct, 
 			Type:  GoString(unsafe.Pointer(typ)),
 		},
 		Private: private,
+		Debug:   fc.logger.Enabled(ctx, slog.LevelDebug),
 	}
 
 	zvalType := C.zval_get_type(topics)
@@ -71,10 +72,29 @@ func go_mercure_publish(threadIndex C.uintptr_t, topics *C.struct__zval_struct, 
 	return (*C.zend_string)(PHPString(u.ID, false)), 0
 }
 
+func (w *worker) configureMercure(o *workerOpt) {
+	if o.mercureHub == nil {
+		return
+	}
+
+	w.mercureHub = o.mercureHub
+}
+
 // WithMercureHub sets the mercure.Hub to use to publish updates
 func WithMercureHub(hub *mercure.Hub) RequestOption {
 	return func(o *frankenPHPContext) error {
 		o.mercureHub = hub
+
+		return nil
+	}
+}
+
+// WithWorkerMercureHub sets the mercure.Hub in the worker script and used to dispatch hot reloading-related mercure.Update.
+func WithWorkerMercureHub(hub *mercure.Hub) WorkerOption {
+	return func(w *workerOpt) error {
+		w.mercureHub = hub
+
+		w.requestOptions = append(w.requestOptions, WithMercureHub(hub))
 
 		return nil
 	}

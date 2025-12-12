@@ -20,6 +20,8 @@ type WorkerOption func(*workerOpt) error
 //
 // If you change this, also update the Caddy module and the documentation.
 type opt struct {
+	hotReloadOpt
+
 	ctx         context.Context
 	numThreads  int
 	maxThreads  int
@@ -31,6 +33,8 @@ type opt struct {
 }
 
 type workerOpt struct {
+	mercureContext
+
 	name                   string
 	fileName               string
 	num                    int
