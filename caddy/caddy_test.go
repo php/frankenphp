@@ -21,6 +21,14 @@ import (
 
 var testPort = "9080"
 
+func TestMain(m *testing.M) {
+	// setup custom environment vars for TestOsEnv
+	os.Setenv("ENV1", "value1")
+	os.Setenv("ENV2", "value2")
+
+	os.Exit(m.Run())
+}
+
 func TestPHP(t *testing.T) {
 	var wg sync.WaitGroup
 	tester := caddytest.NewTester(t)
@@ -904,8 +912,6 @@ func testSingleIniConfiguration(tester *caddytest.Tester, key string, value stri
 }
 
 func TestOsEnv(t *testing.T) {
-	os.Setenv("ENV1", "value1")
-	os.Setenv("ENV2", "value2")
 	tester := caddytest.NewTester(t)
 	tester.InitServer(`
 		{
