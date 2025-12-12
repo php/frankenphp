@@ -127,7 +127,7 @@ func (p *pattern) isValidPattern(fileName string) bool {
 
 	// if the pattern has size 1 we can match it directly against the filename
 	if len(p.parsedValues) == 1 {
-		return matchBracketPattern(p.parsedValues[0], fileNameWithoutDir)
+		return matchCurlyBracePattern(p.parsedValues[0], fileNameWithoutDir)
 	}
 
 	return p.matchPatterns(fileNameWithoutDir)
@@ -159,7 +159,7 @@ func (p *pattern) matchPatterns(fileName string) bool {
 			cursor = j
 			subPattern := strings.Join(partsToMatch[j:j+patternSize], string(filepath.Separator))
 
-			if matchBracketPattern(pattern, subPattern) {
+			if matchCurlyBracePattern(pattern, subPattern) {
 				cursor = j + patternSize - 1
 
 				break
@@ -174,29 +174,37 @@ func (p *pattern) matchPatterns(fileName string) bool {
 	return true
 }
 
-// we also check for the following bracket syntax: /path/*.{php,twig,yaml}
-func matchBracketPattern(pattern string, fileName string) bool {
-	openingBracket := strings.Index(pattern, "{")
-	closingBracket := strings.Index(pattern, "}")
-
-	// if there are no brackets we can match regularly
-	if openingBracket == -1 || closingBracket == -1 {
-		return matchPattern(pattern, fileName)
-	}
-
-	beforeTheBrackets := pattern[:openingBracket]
-	betweenTheBrackets := pattern[openingBracket+1 : closingBracket]
-	afterTheBrackets := pattern[closingBracket+1:]
-
-	// all bracket entries are checked individually, only one needs to match
-	// *.{php,twig,yaml} -> *.php, *.twig, *.yaml
-	for pattern := range strings.SplitSeq(betweenTheBrackets, ",") {
-		if matchPattern(beforeTheBrackets+pattern+afterTheBrackets, fileName) {
+// we also check for the following syntax: /path/*.{php,twig,yaml}
+func matchCurlyBracePattern(pattern string, fileName string) bool {
+	for _, subPattern := range expandCurlyBraces(pattern) {
+		if matchPattern(subPattern, fileName) {
 			return true
 		}
 	}
 
 	return false
+}
+
+// {dir1,dir2}/path -> []string{"dir1/path", "dir2/path"}
+func expandCurlyBraces(s string) []string {
+	start := strings.Index(s, "{")
+	if start == -1 {
+		return []string{s}
+	}
+	end := strings.Index(s[start:], "}")
+	if end == -1 {
+		return []string{s}
+	}
+
+	j := start + end
+	var out []string
+	for _, opt := range strings.Split(s[start+1:j], ",") {
+		subPattern := s[:start] + opt + s[j+1:]
+		allSubPatterns := expandCurlyBraces(subPattern)
+		out = append(out, allSubPatterns...)
+	}
+
+	return out
 }
 
 func matchPattern(pattern string, fileName string) bool {
