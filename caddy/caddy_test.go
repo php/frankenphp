@@ -23,8 +23,10 @@ var testPort = "9080"
 
 func TestMain(m *testing.M) {
 	// setup custom environment vars for TestOsEnv
-	os.Setenv("ENV1", "value1")
-	os.Setenv("ENV2", "value2")
+	if os.Setenv("ENV1", "value1") != nil || os.Setenv("ENV2", "value2") != nil {
+		fmt.Println("Failed to set environment variables for tests")
+		os.Exit(1)
+	}
 
 	os.Exit(m.Run())
 }

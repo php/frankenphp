@@ -13,8 +13,7 @@ import (
 
 //export go_init_os_env
 func go_init_os_env(mainThreadEnv *C.zend_array) {
-	env := os.Environ()
-	for _, envVar := range env {
+	for _, envVar := range os.Environ() {
 		key, val, _ := strings.Cut(envVar, "=")
 		zkey := C.frankenphp_init_persistent_string(toUnsafeChar(key), C.size_t(len(key)))
 		zvalStr := C.frankenphp_init_persistent_string(toUnsafeChar(val), C.size_t(len(val)))
@@ -31,7 +30,7 @@ func go_putenv(name *C.char, nameLen C.int, val *C.char, valLen C.int) C.bool {
 	goName := C.GoStringN(name, nameLen)
 
 	if val == nil {
-		// If no "=" is present in putenv(...), unset the environment variable
+		// If no "=" is present, unset the environment variable
 		return C.bool(os.Unsetenv(goName) == nil)
 	}
 

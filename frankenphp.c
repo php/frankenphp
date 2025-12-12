@@ -1071,7 +1071,7 @@ int frankenphp_execute_script(char *file_name) {
 
   zend_destroy_file_handle(&file_handle);
 
-  /* Reset values added through putenv() */
+  /* Reset values the sandboxed environment */
   if (sandboxed_env != NULL) {
     zend_hash_release(sandboxed_env);
     sandboxed_env = NULL;

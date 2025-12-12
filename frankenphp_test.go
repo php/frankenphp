@@ -148,7 +148,10 @@ func TestMain(m *testing.M) {
 	}
 
 	// setup custom environment var for TestWorkerHasOSEnvironmentVariableInSERVER
-	os.Setenv("CUSTOM_OS_ENV_VARIABLE", "custom_env_variable_value")
+	if os.Setenv("CUSTOM_OS_ENV_VARIABLE", "custom_env_variable_value") != nil {
+		fmt.Println("Failed to set environment variable for tests")
+		os.Exit(1)
+	}
 
 	os.Exit(m.Run())
 }
