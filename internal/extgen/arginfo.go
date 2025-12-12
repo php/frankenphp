@@ -29,7 +29,7 @@ func (ag *arginfoGenerator) generate() error {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Print("gen_stub.php output:\n", string(output))
-		return fmt.Errorf("running gen_stub script: %w", err)
+		return fmt.Errorf("running gen_stub script: %w\nOutput: %s", err, string(output))
 	}
 
 	return ag.fixArginfoFile(stubFile)
