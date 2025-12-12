@@ -51,7 +51,6 @@ frankenphp_version frankenphp_get_version() {
 
 frankenphp_config frankenphp_get_config() {
   return (frankenphp_config){
-      frankenphp_get_version(),
 #ifdef ZTS
       true,
 #else
@@ -75,6 +74,10 @@ __thread uintptr_t thread_index;
 __thread bool is_worker_thread = false;
 __thread zval *os_environment = NULL;
 
+void frankenphp_update_local_thread_context(bool is_worker) {
+  is_worker_thread = is_worker;
+}
+
 static void frankenphp_update_request_context() {
   /* the server context is stored on the go side, still SG(server_context) needs
    * to not be NULL */
@@ -82,7 +85,7 @@ static void frankenphp_update_request_context() {
   /* status It is not reset by zend engine, set it to 200. */
   SG(sapi_headers).http_response_code = 200;
 
-  is_worker_thread = go_update_request_info(thread_index, &SG(request_info));
+  go_update_request_info(thread_index, &SG(request_info));
 }
 
 static void frankenphp_free_request_context() {
@@ -204,11 +207,6 @@ bool frankenphp_shutdown_dummy_request(void) {
 
 PHPAPI void get_full_env(zval *track_vars_array) {
   go_getfullenv(thread_index, track_vars_array);
-}
-
-void frankenphp_add_assoc_str_ex(zval *track_vars_array, char *key,
-                                 size_t keylen, zend_string *val) {
-  add_assoc_str_ex(track_vars_array, key, keylen, val);
 }
 
 /* Adapted from php_request_startup() */
@@ -509,6 +507,48 @@ PHP_FUNCTION(headers_send) {
   RETURN_LONG(sapi_send_headers());
 }
 
+PHP_FUNCTION(mercure_publish) {
+  zval *topics;
+  zend_string *data = NULL, *id = NULL, *type = NULL;
+  zend_bool private = 0;
+  zend_long retry = 0;
+  bool retry_is_null = 1;
+
+  ZEND_PARSE_PARAMETERS_START(1, 6)
+  Z_PARAM_ZVAL(topics)
+  Z_PARAM_OPTIONAL
+  Z_PARAM_STR_OR_NULL(data)
+  Z_PARAM_BOOL(private)
+  Z_PARAM_STR_OR_NULL(id)
+  Z_PARAM_STR_OR_NULL(type)
+  Z_PARAM_LONG_OR_NULL(retry, retry_is_null)
+  ZEND_PARSE_PARAMETERS_END();
+
+  if (Z_TYPE_P(topics) != IS_ARRAY && Z_TYPE_P(topics) != IS_STRING) {
+    zend_argument_type_error(1, "must be of type array|string");
+    RETURN_THROWS();
+  }
+
+  struct go_mercure_publish_return result =
+      go_mercure_publish(thread_index, topics, data, private, id, type, retry);
+
+  switch (result.r1) {
+  case 0:
+    RETURN_STR(result.r0);
+  case 1:
+    zend_throw_exception(spl_ce_RuntimeException, "No Mercure hub configured",
+                         0);
+    RETURN_THROWS();
+  case 2:
+    zend_throw_exception(spl_ce_RuntimeException, "Publish failed", 0);
+    RETURN_THROWS();
+  }
+
+  zend_throw_exception(spl_ce_RuntimeException,
+                       "FrankenPHP not built with Mercure support", 0);
+  RETURN_THROWS();
+}
+
 PHP_MINIT_FUNCTION(frankenphp) {
   zend_function *func;
 
@@ -610,8 +650,9 @@ static char *frankenphp_read_cookies(void) {
 }
 
 /* all variables with well defined keys can safely be registered like this */
-void frankenphp_register_trusted_var(zend_string *z_key, char *value,
-                                     size_t val_len, HashTable *ht) {
+static inline void frankenphp_register_trusted_var(zend_string *z_key,
+                                                   char *value, size_t val_len,
+                                                   HashTable *ht) {
   if (value == NULL) {
     zval empty;
     ZVAL_EMPTY_STRING(&empty);

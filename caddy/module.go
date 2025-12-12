@@ -33,6 +33,9 @@ var serverHeader = []string{"FrankenPHP Caddy"}
 //		}
 //	}
 type FrankenPHPModule struct {
+	mercureContext
+	hotReloadContext
+
 	// Root sets the root folder to the site. Default: `root` directive, or the path of the public directory of the embed app it exists.
 	Root string `json:"root,omitempty"`
 	// SplitPath sets the substrings for splitting the URI into two parts. The first matching substring will be used to split the "path info" from the path. The first piece is suffixed with the matching substring and will be assumed as the actual resource (CGI script) name. The second piece will be set to PATH_INFO for the CGI script to use. Default: `.php`.
@@ -48,6 +51,7 @@ type FrankenPHPModule struct {
 	preparedEnv                 frankenphp.PreparedEnv
 	preparedEnvNeedsReplacement bool
 	logger                      *slog.Logger
+	mercureHubRequestOption     *frankenphp.RequestOption
 }
 
 // CaddyModule returns the Caddy module information.
@@ -73,6 +77,9 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		return fmt.Errorf(`expected ctx.App("frankenphp") to return *FrankenPHPApp, got nil`)
 	}
 
+	f.assignMercureHub(ctx)
+
+	loggerOpt := frankenphp.WithRequestLogger(f.logger)
 	for i, wc := range f.Workers {
 		// make the file path absolute from the public directory
 		// this can only be done if the root is defined inside php_server
@@ -84,6 +91,8 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		if f.Env != nil {
 			wc.inheritEnv(f.Env)
 		}
+
+		wc.requestOptions = append(wc.requestOptions, loggerOpt)
 		f.Workers[i] = wc
 	}
 
@@ -97,14 +106,13 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		if frankenphp.EmbeddedAppPath == "" {
 			f.Root = "{http.vars.root}"
 		} else {
-			rrs := false
 			f.Root = filepath.Join(frankenphp.EmbeddedAppPath, defaultDocumentRoot)
+
+			var rrs bool
 			f.ResolveRootSymlink = &rrs
 		}
-	} else {
-		if frankenphp.EmbeddedAppPath != "" && filepath.IsLocal(f.Root) {
-			f.Root = filepath.Join(frankenphp.EmbeddedAppPath, f.Root)
-		}
+	} else if frankenphp.EmbeddedAppPath != "" && filepath.IsLocal(f.Root) {
+		f.Root = filepath.Join(frankenphp.EmbeddedAppPath, f.Root)
 	}
 
 	if len(f.SplitPath) == 0 {
@@ -145,6 +153,10 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		}
 	}
 
+	if err := f.configureHotReload(fapp); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -155,11 +167,15 @@ func needReplacement(s string) bool {
 
 // ServeHTTP implements caddyhttp.MiddlewareHandler.
 func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ caddyhttp.Handler) error {
-	origReq := r.Context().Value(caddyhttp.OriginalRequestCtxKey).(http.Request)
-	repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
+	ctx := r.Context()
+	origReq := ctx.Value(caddyhttp.OriginalRequestCtxKey).(http.Request)
+	repl := ctx.Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
 
-	var documentRootOption frankenphp.RequestOption
-	var documentRoot string
+	var (
+		documentRootOption frankenphp.RequestOption
+		documentRoot       string
+	)
+
 	if f.resolvedDocumentRoot == "" {
 		documentRoot = repl.ReplaceKnown(f.Root, "")
 		if documentRoot == "" && frankenphp.EmbeddedAppPath != "" {
@@ -187,14 +203,32 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 		}
 	}
 
-	fr, err := frankenphp.NewRequestWithContext(
-		r,
-		documentRootOption,
-		frankenphp.WithRequestSplitPath(f.SplitPath),
-		frankenphp.WithRequestPreparedEnv(env),
-		frankenphp.WithOriginalRequest(&origReq),
-		frankenphp.WithWorkerName(workerName),
+	var (
+		err error
+		fr  *http.Request
 	)
+
+	if f.mercureHubRequestOption == nil {
+		fr, err = frankenphp.NewRequestWithContext(
+			r,
+			documentRootOption,
+			frankenphp.WithRequestSplitPath(f.SplitPath),
+			frankenphp.WithRequestPreparedEnv(env),
+			frankenphp.WithOriginalRequest(&origReq),
+			frankenphp.WithWorkerName(workerName),
+		)
+	} else {
+		fr, err = frankenphp.NewRequestWithContext(
+			r,
+			documentRootOption,
+			frankenphp.WithRequestSplitPath(f.SplitPath),
+			frankenphp.WithRequestPreparedEnv(env),
+			frankenphp.WithOriginalRequest(&origReq),
+			frankenphp.WithWorkerName(workerName),
+			*f.mercureHubRequestOption,
+		)
+	}
+
 	if err != nil {
 		return caddyhttp.Error(http.StatusInternalServerError, err)
 	}
@@ -251,15 +285,20 @@ func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				f.ResolveRootSymlink = &v
 
 			case "worker":
-				wc, err := parseWorkerConfig(d)
+				wc, err := unmarshalWorker(d)
 				if err != nil {
 					return err
 				}
+
 				f.Workers = append(f.Workers, wc)
 
+			case "hot_reload":
+				if err := f.unmarshalHotReload(d); err != nil {
+					return err
+				}
+
 			default:
-				allowedDirectives := "root, split, env, resolve_root_symlink, worker"
-				return wrongSubDirectiveError("php or php_server", allowedDirectives, d.Val())
+				return wrongSubDirectiveError("php or php_server", "hot_reload, name, root, split, env, resolve_root_symlink, worker", d.Val())
 			}
 		}
 	}
@@ -268,7 +307,7 @@ func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	fileNames := make(map[string]struct{}, len(f.Workers))
 	for _, w := range f.Workers {
 		if _, ok := fileNames[w.FileName]; ok {
-			return fmt.Errorf(`workers in a single "php_server" block must not have duplicate filenames: %q`, w.FileName)
+			return fmt.Errorf(`workers in a single "php" or "php_server" block must not have duplicate filenames: %q`, w.FileName)
 		}
 
 		if len(w.MatchPath) == 0 {
@@ -572,7 +611,7 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 // workers can also match a path without being in the public directory
 // in this case we need to prepend the worker routes to the existing routes
 func prependWorkerRoutes(routes caddyhttp.RouteList, h httpcaddyfile.Helper, f FrankenPHPModule, fsrv caddy.Module, disableFsrv bool) caddyhttp.RouteList {
-	allWorkerMatches := caddyhttp.MatchPath{}
+	var allWorkerMatches caddyhttp.MatchPath
 	for _, w := range f.Workers {
 		for _, path := range w.MatchPath {
 			allWorkerMatches = append(allWorkerMatches, path)
@@ -587,7 +626,7 @@ func prependWorkerRoutes(routes caddyhttp.RouteList, h httpcaddyfile.Helper, f F
 	if !disableFsrv {
 		routes = append(routes, caddyhttp.Route{
 			MatcherSetsRaw: []caddy.ModuleMap{
-				caddy.ModuleMap{
+				{
 					"file": h.JSON(fileserver.MatchFile{
 						TryFiles: []string{"{http.request.uri.path}"},
 						Root:     f.Root,

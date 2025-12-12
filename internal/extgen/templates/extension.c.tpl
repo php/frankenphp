@@ -113,8 +113,11 @@ PHP_METHOD({{namespacedClassName $.Namespace .ClassName}}, {{.PhpName}}) {
     
     {{- if ne .ReturnType "void"}}
     {{- if eq .ReturnType "string"}}
-    zend_string* result = {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "array"}}{{.Name}} ? Z_ARRVAL_P({{.Name}}) : NULL{{end}}{{else}}{{if eq .PhpType "array"}}Z_ARRVAL_P({{.Name}}){{else}}{{.Name}}{{end}}{{end}}{{end}}{{end}});
-    RETURN_STR(result);
+    zend_string* result = {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "array"}}{{.Name}}{{end}}{{else}}{{.Name}}{{end}}{{end}}{{end}});
+    if (result) {
+        RETURN_STR(result);
+    }
+    RETURN_EMPTY_STRING();
     {{- else if eq .ReturnType "int"}}
     zend_long result = {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "array"}}{{.Name}} ? Z_ARRVAL_P({{.Name}}) : NULL{{end}}{{else}}{{if eq .PhpType "array"}}Z_ARRVAL_P({{.Name}}){{else}}(long){{.Name}}{{end}}{{end}}{{end}}{{end}});
     RETURN_LONG(result);
@@ -159,11 +162,20 @@ PHP_MINIT_FUNCTION({{.BaseName}}) {
 
     {{- range .Constants}}
     {{- if eq .ClassName ""}}
+    {{- if $.Namespace}}
+        {{if .IsIota}}REGISTER_NS_LONG_CONSTANT("{{cString $.Namespace}}", "{{.Name}}", {{.Name}}, CONST_CS | CONST_PERSISTENT);
+        {{else if eq .PhpType "string"}}REGISTER_NS_STRING_CONSTANT("{{cString $.Namespace}}", "{{.Name}}", {{.CValue}}, CONST_CS | CONST_PERSISTENT);
+        {{else if eq .PhpType "bool"}}REGISTER_NS_BOOL_CONSTANT("{{cString $.Namespace}}", "{{.Name}}", {{if eq .Value "true"}}true{{else}}false{{end}}, CONST_CS | CONST_PERSISTENT);
+        {{else if eq .PhpType "float"}}REGISTER_NS_DOUBLE_CONSTANT("{{cString $.Namespace}}", "{{.Name}}", {{.CValue}}, CONST_CS | CONST_PERSISTENT);
+        {{else}}REGISTER_NS_LONG_CONSTANT("{{cString $.Namespace}}", "{{.Name}}", {{.CValue}}, CONST_CS | CONST_PERSISTENT);
+        {{- end}}
+    {{- else}}
     {{if .IsIota}}REGISTER_LONG_CONSTANT("{{.Name}}", {{.Name}}, CONST_CS | CONST_PERSISTENT);
     {{else if eq .PhpType "string"}}REGISTER_STRING_CONSTANT("{{.Name}}", {{.CValue}}, CONST_CS | CONST_PERSISTENT);
-    {{else if eq .PhpType "bool"}}REGISTER_LONG_CONSTANT("{{.Name}}", {{if eq .Value "true"}}1{{else}}0{{end}}, CONST_CS | CONST_PERSISTENT);
+    {{else if eq .PhpType "bool"}}REGISTER_BOOL_CONSTANT("{{.Name}}", {{if eq .Value "true"}}true{{else}}false{{end}}, CONST_CS | CONST_PERSISTENT);
     {{else if eq .PhpType "float"}}REGISTER_DOUBLE_CONSTANT("{{.Name}}", {{.CValue}}, CONST_CS | CONST_PERSISTENT);
     {{else}}REGISTER_LONG_CONSTANT("{{.Name}}", {{.CValue}}, CONST_CS | CONST_PERSISTENT);
+    {{- end}}
     {{- end}}
     {{- end}}
     {{- end}}

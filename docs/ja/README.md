@@ -16,31 +16,62 @@ FrankenPHPはあらゆるPHPアプリと連携し、ワーカーモードの公�
 
 ## はじめに
 
-### スタンドアロンバイナリ
-
-LinuxとmacOS向けに、[PHP 8.4](https://www.php.net/releases/8.4/en.php)と人気のPHP拡張モジュールを含む静的な
-FrankenPHPバイナリを提供しています。
-
 Windowsをお使いの場合は、[WSL](https://learn.microsoft.com/windows/wsl/)を使用してFrankenPHPを実行してください。
 
-[FrankenPHPをダウンロード](https://github.com/php/frankenphp/releases)するか、以下のコマンドを
-ターミナルにコピーして実行すると、環境に合ったバージョンが自動的にインストールされます：
+### インストールスクリプト
+
+以下のコマンドをターミナルに貼り付けると、環境に合ったバージョンが自動的にインストールされます：
 
 ```console
 curl https://frankenphp.dev/install.sh | sh
-mv frankenphp /usr/local/bin/
 ```
 
-現在のディレクトリのコンテンツを配信するには、以下を実行してください：
+### スタンドアロンバイナリ
+
+LinuxとmacOS向けに、開発用途の静的FrankenPHPバイナリを提供しています。
+[PHP 8.4](https://www.php.net/releases/8.4/en.php)と主要なPHP拡張が含まれます。
+
+[FrankenPHPをダウンロード](https://github.com/php/frankenphp/releases)
+
+**拡張のインストール：** よく使われる拡張は同梱されています。追加の拡張をインストールすることはできません。
+
+### rpm パッケージ
+
+メンテナーが `dnf` を使用するすべてのシステム向けに rpm パッケージを提供しています。インストール方法：
 
 ```console
-frankenphp php-server
+sudo dnf install https://rpm.henderkes.com/static-php-1-0.noarch.rpm
+sudo dnf module enable php-zts:static-8.4 # 8.2-8.5 利用可能
+sudo dnf install frankenphp
 ```
 
-コマンドラインスクリプトも実行できます：
+**拡張のインストール：** `sudo dnf install php-zts-<extension>`
+
+デフォルトで提供されていない拡張については [PIE](https://github.com/php/pie) を使用してください：
 
 ```console
-frankenphp php-cli /path/to/your/script.php
+sudo dnf install pie-zts
+sudo pie-zts install asgrim/example-pie-extension
+```
+
+### deb パッケージ
+
+メンテナーが `apt` を使用するすべてのシステム向けに deb パッケージを提供しています。インストール方法：
+
+```console
+sudo curl -fsSL https://key.henderkes.com/static-php.gpg -o /usr/share/keyrings/static-php.gpg && \
+echo "deb [signed-by=/usr/share/keyrings/static-php.gpg] https://deb.henderkes.com/ stable main" | sudo tee /etc/apt/sources.list.d/static-php.list && \
+sudo apt update
+sudo apt install frankenphp
+```
+
+**拡張のインストール：** `sudo apt install php-zts-<extension>`
+
+デフォルトで提供されていない拡張については [PIE](https://github.com/php/pie) を使用してください：
+
+```console
+sudo apt install pie-zts
+sudo pie-zts install asgrim/example-pie-extension
 ```
 
 ### Docker
@@ -70,10 +101,26 @@ FrankenPHPはmacOSおよびLinux向けに[Homebrew](https://brew.sh)パッケー
 brew install dunglas/frankenphp/frankenphp
 ```
 
+**拡張のインストール：** [PIE](https://github.com/php/pie) を使用してください。
+
+### 使い方
+
 現在のディレクトリのコンテンツを配信するには、以下を実行してください：
 
 ```console
 frankenphp php-server
+```
+
+コマンドラインスクリプトも実行できます：
+
+```console
+frankenphp php-cli /path/to/your/script.php
+```
+
+deb / rpm パッケージの場合は、systemd サービスを起動することもできます：
+
+```console
+sudo systemctl start frankenphp
 ```
 
 ## ドキュメント

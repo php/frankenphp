@@ -1,4 +1,5 @@
 ---
-no-hard-tabs: false
+MD010: false
 MD013: false
 MD033: false
+MD060: false

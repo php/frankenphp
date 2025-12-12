@@ -20,6 +20,8 @@ type WorkerOption func(*workerOpt) error
 //
 // If you change this, also update the Caddy module and the documentation.
 type opt struct {
+	hotReloadOpt
+
 	ctx         context.Context
 	numThreads  int
 	maxThreads  int
@@ -31,10 +33,14 @@ type opt struct {
 }
 
 type workerOpt struct {
+	mercureContext
+
 	name                   string
 	fileName               string
 	num                    int
+	maxThreads             int
 	env                    PreparedEnv
+	requestOptions         []RequestOption
 	watch                  []string
 	maxConsecutiveFailures int
 	extensionWorkers       *extensionWorkers
@@ -154,6 +160,24 @@ func WithMaxWaitTime(maxWaitTime time.Duration) Option {
 func WithWorkerEnv(env map[string]string) WorkerOption {
 	return func(w *workerOpt) error {
 		w.env = PrepareEnv(env)
+
+		return nil
+	}
+}
+
+// WithWorkerRequestOptions sets options for the main dummy request created for the worker
+func WithWorkerRequestOptions(options ...RequestOption) WorkerOption {
+	return func(w *workerOpt) error {
+		w.requestOptions = append(w.requestOptions, options...)
+
+		return nil
+	}
+}
+
+// WithWorkerMaxThreads sets the max number of threads for this specific worker
+func WithWorkerMaxThreads(num int) WorkerOption {
+	return func(w *workerOpt) error {
+		w.maxThreads = num
 
 		return nil
 	}

@@ -87,19 +87,19 @@ Alors que le premier point parle de lui-même, le second peut être plus diffici
 Bien que certains types de variables aient la même représentation mémoire entre C/PHP et Go, certains types nécessitent plus de logique pour être directement utilisés. C'est peut-être la partie la plus difficile quand il s'agit d'écrire des extensions car cela nécessite de comprendre les fonctionnements internes du moteur Zend et comment les variables sont stockées dans le moteur de PHP. Ce tableau résume ce que vous devez savoir :
 
 | Type PHP           | Type Go                       | Conversion directe | Assistant C vers Go               | Assistant Go vers C                | Support des Méthodes de Classe |
-|--------------------|-------------------------------|--------------------|-----------------------------------|------------------------------------|--------------------------------|
-| `int`              | `int64`                       | ✅                  | -                                 | -                                  | ✅                              |
-| `?int`             | `*int64`                      | ✅                  | -                                 | -                                  | ✅                              |
-| `float`            | `float64`                     | ✅                  | -                                 | -                                  | ✅                              |
-| `?float`           | `*float64`                    | ✅                  | -                                 | -                                  | ✅                              |
-| `bool`             | `bool`                        | ✅                  | -                                 | -                                  | ✅                              |
-| `?bool`            | `*bool`                       | ✅                  | -                                 | -                                  | ✅                              |
-| `string`/`?string` | `*C.zend_string`              | ❌                  | frankenphp.GoString()             | frankenphp.PHPString()             | ✅                              |
-| `array`            | `frankenphp.AssociativeArray` | ❌                  | `frankenphp.GoAssociativeArray()` | `frankenphp.PHPAssociativeArray()` | ✅                              |
-| `array`            | `map[string]any`              | ❌                  | `frankenphp.GoMap()`              | `frankenphp.PHPMap()`              | ✅                              |
-| `array`            | `[]any`                       | ❌                  | `frankenphp.GoPackedArray()`      | `frankenphp.PHPPackedArray()`      | ✅                              |
-| `mixed`            | `any`                         | ❌                  | `GoValue()`                       | `PHPValue()`                       | ❌                              |
-| `object`           | `struct`                      | ❌                  | _Pas encore implémenté_           | _Pas encore implémenté_            | ❌                              |
+| ------------------ | ----------------------------- | ------------------ | --------------------------------- | ---------------------------------- | ------------------------------ |
+| `int`              | `int64`                       | ✅                 | -                                 | -                                  | ✅                             |
+| `?int`             | `*int64`                      | ✅                 | -                                 | -                                  | ✅                             |
+| `float`            | `float64`                     | ✅                 | -                                 | -                                  | ✅                             |
+| `?float`           | `*float64`                    | ✅                 | -                                 | -                                  | ✅                             |
+| `bool`             | `bool`                        | ✅                 | -                                 | -                                  | ✅                             |
+| `?bool`            | `*bool`                       | ✅                 | -                                 | -                                  | ✅                             |
+| `string`/`?string` | `*C.zend_string`              | ❌                 | frankenphp.GoString()             | frankenphp.PHPString()             | ✅                             |
+| `array`            | `frankenphp.AssociativeArray` | ❌                 | `frankenphp.GoAssociativeArray()` | `frankenphp.PHPAssociativeArray()` | ✅                             |
+| `array`            | `map[string]any`              | ❌                 | `frankenphp.GoMap()`              | `frankenphp.PHPMap()`              | ✅                             |
+| `array`            | `[]any`                       | ❌                 | `frankenphp.GoPackedArray()`      | `frankenphp.PHPPackedArray()`      | ✅                             |
+| `mixed`            | `any`                         | ❌                 | `GoValue()`                       | `PHPValue()`                       | ❌                             |
+| `object`           | `struct`                      | ❌                 | _Pas encore implémenté_           | _Pas encore implémenté_            | ❌                             |
 
 > [!NOTE]
 > Ce tableau n'est pas encore exhaustif et sera complété au fur et à mesure que l'API de types FrankenPHP deviendra plus complète.
@@ -349,7 +349,7 @@ Cette conception garantit que votre code Go a un contrôle complet sur la façon
 
 ### Déclarer des Constantes
 
-Le générateur prend en charge l'exportation de constantes Go vers PHP en utilisant deux directives : `//export_php:const` pour les constantes globales et `//export_php:classconstant` pour les constantes de classe. Cela vous permet de partager des valeurs de configuration, des codes de statut et d'autres constantes entre le code Go et PHP.
+Le générateur prend en charge l'exportation de constantes Go vers PHP en utilisant deux directives : `//export_php:const` pour les constantes globales et `//export_php:classconst` pour les constantes de classe. Cela vous permet de partager des valeurs de configuration, des codes de statut et d'autres constantes entre le code Go et PHP.
 
 #### Constantes Globales
 
@@ -373,27 +373,27 @@ const STATUS_ERROR = iota
 
 #### Constantes de Classe
 
-Utilisez la directive `//export_php:classconstant ClassName` pour créer des constantes qui appartiennent à une classe PHP spécifique :
+Utilisez la directive `//export_php:classconst ClassName` pour créer des constantes qui appartiennent à une classe PHP spécifique :
 
 ```go
 package example
 
-//export_php:classconstant User
+//export_php:classconst User
 const STATUS_ACTIVE = 1
 
-//export_php:classconstant User
+//export_php:classconst User
 const STATUS_INACTIVE = 0
 
-//export_php:classconstant User
+//export_php:classconst User
 const ROLE_ADMIN = "admin"
 
-//export_php:classconstant Order
+//export_php:classconst Order
 const STATE_PENDING = iota
 
-//export_php:classconstant Order
+//export_php:classconst Order
 const STATE_PROCESSING = iota
 
-//export_php:classconstant Order
+//export_php:classconst Order
 const STATE_COMPLETED = iota
 ```
 
@@ -434,10 +434,10 @@ const STR_REVERSE = iota
 //export_php:const
 const STR_NORMAL = iota
 
-//export_php:classconstant StringProcessor
+//export_php:classconst StringProcessor
 const MODE_LOWERCASE = 1
 
-//export_php:classconstant StringProcessor
+//export_php:classconst StringProcessor
 const MODE_UPPERCASE = 2
 
 //export_php:function repeat_this(string $str, int $count, int $mode): string

@@ -412,7 +412,7 @@ segurança de tipos.
 ### Declarando constantes
 
 O gerador suporta a exportação de constantes Go para PHP usando duas diretivas:
-`//export_php:const` para constantes globais e `//export_php:classconstant` para
+`//export_php:const` para constantes globais e `//export_php:classconst` para
 constantes de classe.
 Isso permite que você compartilhe valores de configuração, códigos de status e
 outras constantes entre código Go e PHP.
@@ -437,26 +437,26 @@ const STATUS_ERROR = iota
 
 #### Constantes de classe
 
-Use a diretiva `//export_php:classconstant ClassName` para criar constantes que
+Use a diretiva `//export_php:classconst ClassName` para criar constantes que
 pertencem a uma classe PHP específica:
 
 ```go
-//export_php:classconstant User
+//export_php:classconst User
 const STATUS_ACTIVE = 1
 
-//export_php:classconstant User
+//export_php:classconst User
 const STATUS_INACTIVE = 0
 
-//export_php:classconstant User
+//export_php:classconst User
 const ROLE_ADMIN = "admin"
 
-//export_php:classconstant Order
+//export_php:classconst Order
 const STATE_PENDING = iota
 
-//export_php:classconstant Order
+//export_php:classconst Order
 const STATE_PROCESSING = iota
 
-//export_php:classconstant Order
+//export_php:classconst Order
 const STATE_COMPLETED = iota
 ```
 
@@ -502,10 +502,10 @@ const STR_REVERSE = iota
 //export_php:const
 const STR_NORMAL = iota
 
-//export_php:classconstant StringProcessor
+//export_php:classconst StringProcessor
 const MODE_LOWERCASE = 1
 
-//export_php:classconstant StringProcessor
+//export_php:classconst StringProcessor
 const MODE_UPPERCASE = 2
 
 //export_php:function repeat_this(string $str, int $count, int $mode): string

@@ -32,3 +32,7 @@ function frankenphp_response_headers(): array|bool {}
  */
 function apache_response_headers(): array|bool {}
 
+/**
+ * @param string|string[] $topics
+ */
+function mercure_publish(string|array $topics, string $data = '', bool $private = false, ?string $id = null, ?string $type = null, ?int $retry = null): string {}

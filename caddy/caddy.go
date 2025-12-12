@@ -12,7 +12,7 @@ import (
 
 const (
 	defaultDocumentRoot = "public"
-	defaultWatchPattern = "./**/*.{php,yaml,yml,twig,env}"
+	defaultWatchPattern = "./**/*.{env,php,twig,yaml,yml}"
 )
 
 func init() {
@@ -29,7 +29,7 @@ func init() {
 	httpcaddyfile.RegisterDirectiveOrder("php_server", "before", "file_server")
 }
 
-// return a nice error message
-func wrongSubDirectiveError(module string, allowedDriectives string, wrongValue string) error {
-	return fmt.Errorf("unknown '%s' subdirective: '%s' (allowed directives are: %s)", module, wrongValue, allowedDriectives)
+// wrongSubDirectiveError returns a nice error message.
+func wrongSubDirectiveError(module string, allowedDirectives string, wrongValue string) error {
+	return fmt.Errorf("unknown %q subdirective: %s (allowed directives are: %s)", module, wrongValue, allowedDirectives)
 }
