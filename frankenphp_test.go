@@ -425,7 +425,7 @@ my_autoloader`, i), body)
 
 func TestLog_module(t *testing.T) { testLog(t, &testOptions{}) }
 func TestLog_worker(t *testing.T) {
-	testLog(t, &testOptions{workerScript: "log.php"})
+	testLog(t, &testOptions{workerScript: "log-error_log.php"})
 }
 func testLog(t *testing.T, opts *testOptions) {
 	logger, logs := observer.New(zapcore.InfoLevel)
@@ -1064,21 +1064,17 @@ func FuzzRequest(f *testing.F) {
 
 func TestFrankenPHPLog(t *testing.T) {
 	var buf bytes.Buffer
-	handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
-	logger := slog.New(handler)
 
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
-		body, _ := testGet("http://example.com/log_to_slog.php", handler, t)
+		body, _ := testGet("http://example.com/log-frankenphp_log.php", handler, t)
 		assert.Empty(t, body)
 	}, &testOptions{
-		logger:             logger,
+		logger:             slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})),
 		nbParallelRequests: 1,
 		nbWorkers:          1,
 	})
 
 	logOutput := buf.String()
-
-	t.Logf("captured log output: %s", logOutput)
 
 	for level, needle := range map[string]string{
 		"debug attrs": `level=DEBUG msg="some debug message" "key int"=1`,
