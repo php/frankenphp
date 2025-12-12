@@ -72,10 +72,12 @@ frankenphp_config frankenphp_get_config() {
 bool should_filter_var = 0;
 __thread uintptr_t thread_index;
 __thread bool is_worker_thread = false;
+__thread bool is_http_thread = true;
 __thread zval *os_environment = NULL;
 
-void frankenphp_update_local_thread_context(bool is_worker) {
+void frankenphp_update_local_thread_context(bool is_worker, bool httpEnabled) {
   is_worker_thread = is_worker;
+  is_http_thread = httpEnabled;
 }
 
 static void frankenphp_update_request_context() {
@@ -168,6 +170,9 @@ static void frankenphp_release_temporary_streams() {
 
 /* Adapted from php_request_shutdown */
 static void frankenphp_worker_request_shutdown() {
+  if (!is_http_thread) {
+    return;
+  }
   /* Flush all output buffers */
   zend_try { php_output_end_all(); }
   zend_end_try();
@@ -212,6 +217,9 @@ PHPAPI void get_full_env(zval *track_vars_array) {
 /* Adapted from php_request_startup() */
 static int frankenphp_worker_request_startup() {
   int retval = SUCCESS;
+  if (!is_http_thread) {
+    return retval;
+  }
 
   frankenphp_update_request_context();
 
@@ -484,6 +492,25 @@ PHP_FUNCTION(frankenphp_handle_request) {
   }
 
   RETURN_TRUE;
+}
+
+PHP_FUNCTION(frankenphp_send_request) {
+  zval *zv;
+  char *worker_name = NULL;
+  size_t worker_name_len = 0;
+
+  ZEND_PARSE_PARAMETERS_START(1, 2);
+  Z_PARAM_ZVAL(zv);
+  Z_PARAM_OPTIONAL
+  Z_PARAM_STRING(worker_name, worker_name_len);
+  ZEND_PARSE_PARAMETERS_END();
+
+  char *error = go_frankenphp_send_request(thread_index, zv, worker_name,
+                                           worker_name_len);
+  if (error) {
+    zend_throw_exception(spl_ce_RuntimeException, error, 0);
+    RETURN_THROWS();
+  }
 }
 
 PHP_FUNCTION(headers_send) {

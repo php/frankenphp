@@ -4,6 +4,8 @@
 
 function frankenphp_handle_request(callable $callback): bool {}
 
+function frankenphp_send_request(mixed $message, string $workerName = ""): bool {}
+
 function headers_send(int $status = 200): int {}
 
 function frankenphp_finish_request(): bool {}
