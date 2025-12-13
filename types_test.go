@@ -218,22 +218,6 @@ func BenchmarkMap5Entries(b *testing.B) {
 	})
 }
 
-func BenchmarkMap50Entries(b *testing.B) {
-	originalMap := map[string]any{}
-	for i := 0; i < 10; i++ {
-		originalMap[fmt.Sprintf("foo%d", i*5)] = fmt.Sprintf("val%d", i)
-		originalMap[fmt.Sprintf("foo%d", i*5+1)] = "Error" // interned string
-		originalMap[fmt.Sprintf("foo%d", i*5+2)] = true
-		originalMap[fmt.Sprintf("foo%d", i*5+3)] = 3.12
-		originalMap[fmt.Sprintf("foo%d", i*5+4)] = nil
-	}
-	benchOnPHPThread(b, b.N, func() {
-		phpArray := PHPMap(originalMap)
-		_, _ = GoMap[any](phpArray)
-		zendArrayRelease(phpArray)
-	})
-}
-
 func BenchmarkAssociativeArray5Entries(b *testing.B) {
 	originalArray := AssociativeArray[any]{
 		Map: map[string]any{
@@ -253,10 +237,26 @@ func BenchmarkAssociativeArray5Entries(b *testing.B) {
 }
 
 func BenchmarkSlice5Entries(b *testing.B) {
-	originalSlice := []any{"bar1", "bar2", "bar3", "bar4", "bar5"}
+	originalSlice := []any{"bar1", int64(2), true, 3.14, nil}
 	benchOnPHPThread(b, b.N, func() {
 		phpArray := PHPPackedArray(originalSlice)
 		_, _ = GoPackedArray[any](phpArray)
+		zendArrayRelease(phpArray)
+	})
+}
+
+func BenchmarkMap50Entries(b *testing.B) {
+	originalMap := map[string]any{}
+	for i := 0; i < 10; i++ {
+		originalMap[fmt.Sprintf("foo%d", i*5)] = fmt.Sprintf("val%d", i)
+		originalMap[fmt.Sprintf("foo%d", i*5+1)] = "Error" // interned string
+		originalMap[fmt.Sprintf("foo%d", i*5+2)] = true
+		originalMap[fmt.Sprintf("foo%d", i*5+3)] = 3.12
+		originalMap[fmt.Sprintf("foo%d", i*5+4)] = nil
+	}
+	benchOnPHPThread(b, b.N, func() {
+		phpArray := PHPMap(originalMap)
+		_, _ = GoMap[any](phpArray)
 		zendArrayRelease(phpArray)
 	})
 }
