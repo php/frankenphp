@@ -259,7 +259,7 @@ func TestInvalidDirectoryPatterns(t *testing.T) {
 	}
 }
 
-func TestValidExtendedPatterns(t *testing.T) {
+func TestValidCurlyBracePatterns(t *testing.T) {
 	data := []struct {
 		pattern string
 		dir     string
@@ -272,6 +272,10 @@ func TestValidExtendedPatterns(t *testing.T) {
 		{"/path/{dir1,dir2}/file.php", "/path/dir2/file.php"},
 		{"/app/{app,config,resources}/**/*.php", "/app/app/subpath/file.php"},
 		{"/app/{app,config,resources}/**/*.php", "/app/config/subpath/file.php"},
+		{"/path/{dir1,dir2}/{a,b}{a,b}.php", "/path/dir1/ab.php"},
+		{"/path/{dir1,dir2}/{a,b}{a,b}.php", "/path/dir2/aa.php"},
+		{"/path/{dir1,dir2}/{a,b}{a,b}.php", "/path/dir2/bb.php"},
+		{"/path/{dir1/test.php,dir2/test.php}", "/path/dir1/test.php"},
 	}
 
 	for _, d := range data {
@@ -283,7 +287,7 @@ func TestValidExtendedPatterns(t *testing.T) {
 	}
 }
 
-func TestInvalidExtendedPatterns(t *testing.T) {
+func TestInvalidCurlyBracePatterns(t *testing.T) {
 	data := []struct {
 		pattern string
 		dir     string
@@ -293,6 +297,9 @@ func TestInvalidExtendedPatterns(t *testing.T) {
 		{"/path/{file.php,file.twig}", "/path/file.txt"},
 		{"/path/{dir1,dir2}/file.php", "/path/dir3/file.php"},
 		{"/path/{dir1,dir2}/**/*.php", "/path/dir1/subpath/file.txt"},
+		{"/path/{dir1,dir2}/{a,b}{a,b}.php", "/path/dir1/ac.php"},
+		{"/path/{}/{a,b}{a,b}.php", "/path/dir1/ac.php"},
+		{"/path/}dir{/{a,b}{a,b}.php", "/path/dir1/aa.php"},
 	}
 
 	for _, d := range data {
