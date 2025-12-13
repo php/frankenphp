@@ -57,9 +57,8 @@ FrankenPHP:
 
 PHP:
 
-- `php.ini`: `/etc/frankenphp/php.ini` (a `php.ini` file with production presets is provided by default)
-- additional configuration files: `/etc/frankenphp/php.d/*.ini`
-- PHP extensions: `/usr/lib/frankenphp/modules/`
+- `php.ini`: `/etc/php-zts/php.ini` (a `php.ini` file with production presets is provided by default)
+- additional configuration files: `/etc/php-zts/conf.d/*.ini`
 
 ## Static binary
 
