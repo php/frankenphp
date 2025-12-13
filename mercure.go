@@ -46,7 +46,7 @@ func go_mercure_publish(threadIndex C.uintptr_t, topics *C.struct__zval_struct, 
 	case C.IS_STRING:
 		u.Topics = []string{GoString(unsafe.Pointer(*(**C.zend_string)(unsafe.Pointer(&topics.value[0]))))}
 	case C.IS_ARRAY:
-		ts, err := GoPackedArray[string](unsafe.Pointer(topics))
+		ts, err := GoPackedArray[string](unsafe.Pointer(*(**C.zend_array)(unsafe.Pointer(&topics.value[0]))))
 		if err != nil {
 			if fc.logger.Enabled(ctx, slog.LevelError) {
 				fc.logger.LogAttrs(ctx, slog.LevelError, "invalid topics type", slog.Any("error", err))

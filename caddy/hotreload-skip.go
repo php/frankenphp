@@ -5,7 +5,7 @@ package caddy
 import (
 	"errors"
 
-	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
+	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 )
 
 type hotReloadContext struct {
