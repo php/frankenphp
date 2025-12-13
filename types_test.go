@@ -194,14 +194,6 @@ func BenchmarkString(b *testing.B) {
 	})
 }
 
-func BenchmarkStringOnlyPHP(b *testing.B) {
-	message := "Hello, World!"
-	benchOnPHPThread(b, b.N, func() {
-		phpString := PHPString(message, false)
-		zendStringRelease(phpString)
-	})
-}
-
 func BenchmarkEmptyMap(b *testing.B) {
 	originalMap := map[string]any{}
 	benchOnPHPThread(b, b.N, func() {
@@ -222,21 +214,6 @@ func BenchmarkMap5Entries(b *testing.B) {
 	benchOnPHPThread(b, b.N, func() {
 		phpArray := PHPMap(originalMap)
 		_, _ = GoMap[any](phpArray)
-		zendArrayRelease(phpArray)
-	})
-}
-
-func BenchmarkMap50EntriesOnlyPHP(b *testing.B) {
-	originalMap := map[string]any{}
-	for i := 0; i < 10; i++ {
-		originalMap[fmt.Sprintf("foo%d", i*5)] = fmt.Sprintf("val%d", i)
-		originalMap[fmt.Sprintf("foo%d", i*5+1)] = "Error" // interned string
-		originalMap[fmt.Sprintf("foo%d", i*5+2)] = true
-		originalMap[fmt.Sprintf("foo%d", i*5+3)] = 3.12
-		originalMap[fmt.Sprintf("foo%d", i*5+4)] = nil
-	}
-	benchOnPHPThread(b, b.N, func() {
-		phpArray := PHPMap(originalMap)
 		zendArrayRelease(phpArray)
 	})
 }

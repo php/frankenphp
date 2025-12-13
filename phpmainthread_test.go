@@ -97,7 +97,7 @@ func TestTransitionThreadsWhileDoingRequests(t *testing.T) {
 
 	var (
 		isDone atomic.Bool
-		wg sync.WaitGroup
+		wg     sync.WaitGroup
 	)
 
 	numThreads := 10
