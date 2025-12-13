@@ -1,15 +1,19 @@
 <?php
 
-frankenphp_log("some debug message", -4, [
-    "key int"    => 1,
-]);
+require_once __DIR__.'/_executor.php';
 
-frankenphp_log("some info message", 0, [
-    "key string" => "string",
-]);
+return function () {
+	frankenphp_log("some debug message {$_GET['i']}", FRANKENPHP_LOG_LEVEL_DEBUG, [
+		"key int"    => 1,
+	]);
 
-frankenphp_log("some warn message", 4);
+	frankenphp_log("some info message {$_GET['i']}", FRANKENPHP_LOG_LEVEL_INFO, [
+		"key string" => "string",
+	]);
 
-frankenphp_log("some error message", 8, [
-    "err" => ["a", "v"],
-]);
+	frankenphp_log("some warn message {$_GET['i']}", FRANKENPHP_LOG_LEVEL_WARN);
+
+	frankenphp_log("some error message {$_GET['i']}", FRANKENPHP_LOG_LEVEL_ERROR, [
+		"err" => ["a", "v"],
+	]);
+};

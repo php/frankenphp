@@ -423,20 +423,45 @@ my_autoloader`, i), body)
 	}, opts)
 }
 
-func TestLog_module(t *testing.T) { testLog(t, &testOptions{}) }
-func TestLog_worker(t *testing.T) {
-	testLog(t, &testOptions{workerScript: "log-error_log.php"})
+func TestLog_error_log_module(t *testing.T) { testLog_error_log(t, &testOptions{}) }
+func TestLog_error_log_worker(t *testing.T) {
+	testLog_error_log(t, &testOptions{workerScript: "log-error_log.php"})
 }
-func testLog(t *testing.T, opts *testOptions) {
-	logger, logs := observer.New(zapcore.InfoLevel)
-	opts.logger = slog.New(zapslog.NewHandler(logger))
+func testLog_error_log(t *testing.T, opts *testOptions) {
+	var buf bytes.Buffer
+	opts.logger = slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
-		req := httptest.NewRequest("GET", fmt.Sprintf("http://example.com/log.php?i=%d", i), nil)
+		req := httptest.NewRequest("GET", fmt.Sprintf("http://example.com/log-error_log.php?i=%d", i), nil)
 		w := httptest.NewRecorder()
 		handler(w, req)
 
-		for logs.FilterMessage(fmt.Sprintf("request %d", i)).Len() <= 0 {
+		assert.Contains(t, buf.String(), fmt.Sprintf("request %d", i))
+	}, opts)
+}
+
+func TestLog_frankenphp_log_module(t *testing.T) { testLog_frankenphp_log(t, &testOptions{}) }
+func TestLog_frankenphp_log_worker(t *testing.T) {
+	testLog_frankenphp_log(t, &testOptions{workerScript: "log-frankenphp_log.php"})
+}
+func testLog_frankenphp_log(t *testing.T, opts *testOptions) {
+	var buf bytes.Buffer
+
+	opts.logger = slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		req := httptest.NewRequest("GET", fmt.Sprintf("http://example.com/log-frankenphp_log.php?i=%d", i), nil)
+		w := httptest.NewRecorder()
+		handler(w, req)
+
+		logs := buf.String()
+		for _, message := range []string{
+			fmt.Sprintf(`level=DEBUG msg="some debug message %d" "key int"=1`, i),
+			fmt.Sprintf(`level=INFO msg="some info message %d" "key string"=string`, i),
+			fmt.Sprintf(`level=WARN msg="some warn message %d"`, i),
+			fmt.Sprintf(`level=ERROR msg="some error message %d" err="[a v]"`, i),
+		} {
+			assert.Contains(t, logs, message)
 		}
 	}, opts)
 }
@@ -1060,28 +1085,4 @@ func FuzzRequest(f *testing.F) {
 			assert.Contains(t, body, fmt.Sprintf("[HTTP_FUZZED] => %s", fuzzedString))
 		}, &testOptions{workerScript: "request-headers.php"})
 	})
-}
-
-func TestFrankenPHPLog(t *testing.T) {
-	var buf bytes.Buffer
-
-	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
-		body, _ := testGet("http://example.com/log-frankenphp_log.php", handler, t)
-		assert.Empty(t, body)
-	}, &testOptions{
-		logger:             slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})),
-		nbParallelRequests: 1,
-		nbWorkers:          1,
-	})
-
-	logOutput := buf.String()
-
-	for level, needle := range map[string]string{
-		"debug attrs": `level=DEBUG msg="some debug message" "key int"=1`,
-		"info attrs":  `level=INFO msg="some info message" "key string"=string`,
-		"warn attrs":  `level=WARN msg="some warn message"`,
-		"error attrs": `level=ERROR msg="some error message" err="[a v]"`,
-	} {
-		assert.Containsf(t, logOutput, needle, "should contains %q log", level)
-	}
 }
