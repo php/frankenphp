@@ -571,6 +571,8 @@ PHP_FUNCTION(frankenphp_log) {
 }
 
 PHP_MINIT_FUNCTION(frankenphp) {
+  register_frankenphp_symbols(module_number);
+
   zend_function *func;
 
   // Override putenv
