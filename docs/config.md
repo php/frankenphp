@@ -29,7 +29,7 @@ Depending on your installation method, FrankenPHP and the PHP interpreter will l
 FrankenPHP:
 
 - `/etc/frankenphp/Caddyfile`: the main configuration file
-- `/etc/frankenphp/caddy.d/*.caddy`: additional configuration files that are loaded automatically
+- `/etc/frankenphp/Caddyfile.d/*.caddyfile`: additional configuration files that are loaded automatically
 
 PHP:
 
@@ -53,13 +53,12 @@ RUN cp $PHP_INI_DIR/php.ini-development $PHP_INI_DIR/php.ini
 FrankenPHP:
 
 - `/etc/frankenphp/Caddyfile`: the main configuration file
-- `/etc/frankenphp/caddy.d/*.caddy`: additional configuration files that are loaded automatically
+- `/etc/frankenphp/Caddyfile.d/*.caddyfile`: additional configuration files that are loaded automatically
 
 PHP:
 
-- `php.ini`: `/etc/frankenphp/php.ini` (a `php.ini` file with production presets is provided by default)
-- additional configuration files: `/etc/frankenphp/php.d/*.ini`
-- PHP extensions: `/usr/lib/frankenphp/modules/`
+- `php.ini`: `/etc/php-zts/php.ini` (a `php.ini` file with production presets is provided by default)
+- additional configuration files: `/etc/php-zts/conf.d/*.ini`
 
 ## Static binary
 

@@ -1,6 +1,6 @@
 module github.com/dunglas/frankenphp/caddy
 
-go 1.25.0
+go 1.25.4
 
 replace github.com/dunglas/frankenphp => ../
 
@@ -11,6 +11,7 @@ require (
 	github.com/caddyserver/certmagic v0.25.0
 	github.com/dunglas/caddy-cbrotli v1.0.1
 	github.com/dunglas/frankenphp v1.10.1
+	github.com/dunglas/mercure v0.21.2
 	github.com/dunglas/mercure/caddy v0.21.2
 	github.com/dunglas/vulcain/caddy v1.2.1
 	github.com/prometheus/client_golang v1.23.2
@@ -44,7 +45,7 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bits-and-blooms/bitset v1.24.4 // indirect
 	github.com/caddyserver/zerossl v0.1.3 // indirect
-	github.com/ccoveille/go-safecast v1.8.2 // indirect
+	github.com/ccoveille/go-safecast/v2 v2.0.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -58,16 +59,14 @@ require (
 	github.com/dgraph-io/ristretto v0.2.0 // indirect
 	github.com/dgryski/go-farm v0.0.0-20240924180020-3414d57e47da // indirect
 	github.com/dlclark/regexp2 v1.11.5 // indirect
-	github.com/dolthub/maphash v0.1.0 // indirect
 	github.com/dunglas/httpsfv v1.1.0 // indirect
-	github.com/dunglas/mercure v0.21.2 // indirect
 	github.com/dunglas/skipfilter v1.0.0 // indirect
 	github.com/dunglas/vulcain v1.2.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/e-dant/watcher/watcher-go v0.0.0-20251208164151-f88ec3b7e146 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
-	github.com/gammazero/deque v1.2.0 // indirect
 	github.com/getkin/kin-openapi v0.133.0 // indirect
 	github.com/go-chi/chi/v5 v5.2.3 // indirect
 	github.com/go-jose/go-jose/v3 v3.0.4 // indirect
@@ -110,7 +109,6 @@ require (
 	github.com/manifoldco/promptui v0.9.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/maypok86/otter v1.2.4 // indirect
 	github.com/maypok86/otter/v2 v2.2.1 // indirect
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d // indirect
 	github.com/mholt/acmez/v3 v3.1.4 // indirect
@@ -142,7 +140,7 @@ require (
 	github.com/shurcooL/sanitized_anchor_name v1.0.0 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/slackhq/nebula v1.9.7 // indirect
-	github.com/smallstep/certificates v0.28.4 // indirect
+	github.com/smallstep/certificates v0.29.0 // indirect
 	github.com/smallstep/cli-utils v0.12.2 // indirect
 	github.com/smallstep/linkedca v0.25.0 // indirect
 	github.com/smallstep/nosql v0.7.0 // indirect

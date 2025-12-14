@@ -6,10 +6,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dunglas/frankenphp/internal/state"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestScaleARegularThreadUpAndDown(t *testing.T) {
+	t.Cleanup(Shutdown)
+
 	assert.NoError(t, Init(
 		WithNumThreads(1),
 		WithMaxThreads(2),
@@ -20,18 +23,18 @@ func TestScaleARegularThreadUpAndDown(t *testing.T) {
 
 	// scale up
 	scaleRegularThread()
-	assert.Equal(t, stateReady, autoScaledThread.state.get())
+	assert.Equal(t, state.Ready, autoScaledThread.state.Get())
 	assert.IsType(t, &regularThread{}, autoScaledThread.handler)
 
 	// on down-scale, the thread will be marked as inactive
-	setLongWaitTime(autoScaledThread)
+	setLongWaitTime(t, autoScaledThread)
 	deactivateThreads()
 	assert.IsType(t, &inactiveThread{}, autoScaledThread.handler)
-
-	Shutdown()
 }
 
 func TestScaleAWorkerThreadUpAndDown(t *testing.T) {
+	t.Cleanup(Shutdown)
+
 	workerName := "worker1"
 	workerPath := testDataPath + "/transition-worker-1.php"
 	assert.NoError(t, Init(
@@ -49,18 +52,16 @@ func TestScaleAWorkerThreadUpAndDown(t *testing.T) {
 
 	// scale up
 	scaleWorkerThread(getWorkerByPath(workerPath))
-	assert.Equal(t, stateReady, autoScaledThread.state.get())
+	assert.Equal(t, state.Ready, autoScaledThread.state.Get())
 
 	// on down-scale, the thread will be marked as inactive
-	setLongWaitTime(autoScaledThread)
+	setLongWaitTime(t, autoScaledThread)
 	deactivateThreads()
 	assert.IsType(t, &inactiveThread{}, autoScaledThread.handler)
-
-	Shutdown()
 }
 
-func setLongWaitTime(thread *phpThread) {
-	thread.state.mu.Lock()
-	thread.state.waitingSince = time.Now().Add(-time.Hour)
-	thread.state.mu.Unlock()
+func setLongWaitTime(t *testing.T, thread *phpThread) {
+	t.Helper()
+
+	thread.state.SetWaitTime(time.Now().Add(-time.Hour))
 }

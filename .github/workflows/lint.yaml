@@ -47,3 +47,5 @@ jobs:
           VALIDATE_BIOME_LINT: false
           # Conflicts with MARKDOWN
           VALIDATE_MARKDOWN_PRETTIER: false
+          # To re-enable when https://github.com/super-linter/super-linter/issues/7244 will be closed
+          VALIDATE_EDITORCONFIG: false
