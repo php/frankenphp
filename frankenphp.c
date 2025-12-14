@@ -73,6 +73,7 @@ bool should_filter_var = 0;
 __thread uintptr_t thread_index;
 __thread bool is_worker_thread = false;
 __thread zval *os_environment = NULL;
+zif_handler orig_opcache_reset;
 
 void frankenphp_update_local_thread_context(bool is_worker) {
   is_worker_thread = is_worker;
@@ -340,6 +341,15 @@ PHP_FUNCTION(frankenphp_getenv) {
   }
 } /* }}} */
 
+/* {{{ thread-safe opcache reset */
+PHP_FUNCTION(frankenphp_opcache_reset) {
+  if (go_schedule_opcache_reset(thread_index)) {
+    orig_opcache_reset(INTERNAL_FUNCTION_PARAM_PASSTHRU);
+  }
+
+  RETVAL_FALSE;
+} /* }}} */
+
 /* {{{ Fetch all HTTP request headers */
 PHP_FUNCTION(frankenphp_request_headers) {
   ZEND_PARSE_PARAMETERS_NONE();
@@ -568,6 +578,15 @@ PHP_MINIT_FUNCTION(frankenphp) {
     ((zend_internal_function *)func)->handler = ZEND_FN(frankenphp_getenv);
   } else {
     php_error(E_WARNING, "Failed to find built-in getenv function");
+  }
+
+  // Override opcache_reset
+  func = zend_hash_str_find_ptr(CG(function_table), "opcache_reset",
+                                sizeof("opcache_reset") - 1);
+  if (func != NULL && func->type == ZEND_INTERNAL_FUNCTION) {
+    orig_opcache_reset = ((zend_internal_function *)func)->handler;
+    ((zend_internal_function *)func)->handler =
+        ZEND_FN(frankenphp_opcache_reset);
   }
 
   return SUCCESS;

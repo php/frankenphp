@@ -213,6 +213,8 @@ func drainWorkerThreads() []*phpThread {
 // RestartWorkers attempts to restart all workers gracefully
 // All workers must be restarted at the same time to prevent issues with opcache resetting.
 func RestartWorkers() {
+	threadsAreRestarting.Store(true)
+	defer threadsAreRestarting.Store(false)
 	// disallow scaling threads while restarting workers
 	scalingMu.Lock()
 	defer scalingMu.Unlock()

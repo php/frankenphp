@@ -32,11 +32,14 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 	"unsafe"
 	// debug on Linux
 	//_ "github.com/ianlancetaylor/cgosymbolizer"
+
+	"github.com/dunglas/frankenphp/internal/state"
 )
 
 type contextKeyStruct struct{}
@@ -56,8 +59,10 @@ var (
 	contextKey   = contextKeyStruct{}
 	serverHeader = []string{"FrankenPHP"}
 
-	isRunning        bool
-	onServerShutdown []func()
+	isRunning            bool
+	isOpcacheResetting   atomic.Bool
+	threadsAreRestarting atomic.Bool
+	onServerShutdown     []func()
 
 	// Set default values to make Shutdown() idempotent
 	globalMu     sync.Mutex
@@ -696,6 +701,61 @@ func go_log(threadIndex C.uintptr_t, message *C.char, level C.int) {
 //export go_is_context_done
 func go_is_context_done(threadIndex C.uintptr_t) C.bool {
 	return C.bool(phpThreads[threadIndex].frankenPHPContext().isDone)
+}
+
+//export go_schedule_opcache_reset
+func go_schedule_opcache_reset(threadIndex C.uintptr_t) C.bool {
+	if isOpcacheResetting.CompareAndSwap(false, true) {
+		restartThreadsForOpcacheReset(nil)
+		return C.bool(true)
+	}
+
+	return C.bool(phpThreads[threadIndex].state.Is(state.Restarting))
+}
+
+// restart all threads for an opcache_reset
+func restartThreadsForOpcacheReset(exceptThisThread *phpThread) {
+	if threadsAreRestarting.Load() {
+		// ignore reloads while a restart is already ongoing
+		return
+	}
+
+	// disallow scaling threads while restarting workers
+	scalingMu.Lock()
+	defer scalingMu.Unlock()
+
+	// drain workers
+	globalLogger.Info("Restarting all PHP threads for opcache_reset")
+	threadsToRestart := drainWorkerThreads()
+
+	// drain regular threads
+	globalLogger.Info("Draining regular PHP threads for opcache_reset")
+	wg := sync.WaitGroup{}
+	for _, thread := range regularThreads {
+		if thread.state.Is(state.Ready) {
+			threadsToRestart = append(threadsToRestart, thread)
+			thread.state.Set(state.Restarting)
+			close(thread.drainChan)
+
+			wg.Go(func() {
+				thread.state.WaitFor(state.Yielding)
+			})
+		}
+	}
+
+	// other threads may not parse new scripts while this thread is scheduling an opcache_reset
+	// sleeping a bit here makes this much less likely to happen
+	// waiting for all other threads to drain first can potentially deadlock
+	time.Sleep(100 * time.Millisecond)
+
+	go func() {
+		wg.Wait()
+		for _, thread := range threadsToRestart {
+			thread.drainChan = make(chan struct{})
+			thread.state.Set(state.Ready)
+			isOpcacheResetting.Store(false)
+		}
+	}()
 }
 
 // ExecuteScriptCLI executes the PHP script passed as parameter.

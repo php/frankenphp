@@ -1,5 +1,7 @@
 package frankenphp
 
+// #include "frankenphp.h"
+import "C"
 import (
 	"context"
 	"runtime"
@@ -46,6 +48,10 @@ func (handler *regularThread) beforeScriptExecution() string {
 		handler.state.Set(state.Ready)
 
 		return handler.waitForRequest()
+	case state.Restarting:
+		handler.state.Set(state.Yielding)
+		handler.state.WaitFor(state.Ready, state.ShuttingDown)
+		return handler.beforeScriptExecution()
 
 	case state.Ready:
 		return handler.waitForRequest()
