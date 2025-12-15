@@ -420,7 +420,7 @@ func TestLog_error_log_worker(t *testing.T) {
 	testLog_error_log(t, &testOptions{workerScript: "log-error_log.php"})
 }
 func testLog_error_log(t *testing.T, opts *testOptions) {
-	var buf bytes.Buffer
+	var buf syncBuffer
 	opts.logger = slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
@@ -437,7 +437,7 @@ func TestLog_frankenphp_log_worker(t *testing.T) {
 	testLog_frankenphp_log(t, &testOptions{workerScript: "log-frankenphp_log.php"})
 }
 func testLog_frankenphp_log(t *testing.T, opts *testOptions) {
-	var buf bytes.Buffer
+	var buf syncBuffer
 
 	opts.logger = slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
@@ -465,7 +465,7 @@ func TestConnectionAbort_worker(t *testing.T) {
 func testConnectionAbort(t *testing.T, opts *testOptions) {
 	testFinish := func(finish string) {
 		t.Run(fmt.Sprintf("finish=%s", finish), func(t *testing.T) {
-			var buf bytes.Buffer
+			var buf syncBuffer
 			opts.logger = slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 			runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
@@ -1077,4 +1077,24 @@ func FuzzRequest(f *testing.F) {
 			assert.Contains(t, body, fmt.Sprintf("[HTTP_FUZZED] => %s", fuzzedString))
 		}, &testOptions{workerScript: "request-headers.php"})
 	})
+}
+
+// SyncBuffer is a thread-safe buffer for capturing logs in tests.
+type syncBuffer struct {
+	b  bytes.Buffer
+	mu sync.RWMutex
+}
+
+func (s *syncBuffer) Write(p []byte) (n int, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.b.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.b.String()
 }
