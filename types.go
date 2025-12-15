@@ -416,6 +416,16 @@ func createNewArray(size uint32) *C.zend_array {
 	return (*C.zend_array)(unsafe.Pointer(arr))
 }
 
+// IsPacked determines if the given zend_array is a packed array (list).
+// Returns false if the array is nil or not packed.
+func IsPacked(arr unsafe.Pointer) bool {
+	if arr == nil {
+		return false
+	}
+
+	return htIsPacked((*C.zend_array)(arr))
+}
+
 // htIsPacked checks if a zend_array is a list (packed) or hashmap (not packed).
 func htIsPacked(ht *C.zend_array) bool {
 	flags := *(*C.uint32_t)(unsafe.Pointer(&ht.u[0]))
