@@ -4,6 +4,9 @@ concurrency:
   cancel-in-progress: true
   group: ${{ github.workflow }}-${{ github.ref }}
 
+env:
+  SPC_OPT_BUILD_ARGS: --debug
+
 on:
   pull_request:
     branches:
