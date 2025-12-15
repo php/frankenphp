@@ -32,10 +32,6 @@ import (
 	"github.com/dunglas/frankenphp/internal/fastabs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/exp/zapslog"
-	"go.uber.org/zap/zapcore"
-	"go.uber.org/zap/zaptest"
-	"go.uber.org/zap/zaptest/observer"
 )
 
 type testOptions struct {
@@ -61,10 +57,6 @@ func runTest(t *testing.T, test func(func(http.ResponseWriter, *http.Request), *
 
 	cwd, _ := os.Getwd()
 	testDataDir := cwd + "/testdata/"
-
-	if opts.logger == nil {
-		opts.logger = slog.New(zapslog.NewHandler(zaptest.NewLogger(t).Core()))
-	}
 
 	initOpts := []frankenphp.Option{frankenphp.WithLogger(opts.logger)}
 	if opts.workerScript != "" {
@@ -468,16 +460,16 @@ func testLog_frankenphp_log(t *testing.T, opts *testOptions) {
 
 func TestConnectionAbort_module(t *testing.T) { testConnectionAbort(t, &testOptions{}) }
 func TestConnectionAbort_worker(t *testing.T) {
-	testConnectionAbort(t, &testOptions{workerScript: "connectionStatusLog.php"})
+	testConnectionAbort(t, &testOptions{workerScript: "connection_status.php"})
 }
 func testConnectionAbort(t *testing.T, opts *testOptions) {
 	testFinish := func(finish string) {
 		t.Run(fmt.Sprintf("finish=%s", finish), func(t *testing.T) {
-			logger, logs := observer.New(zapcore.InfoLevel)
-			opts.logger = slog.New(zapslog.NewHandler(logger))
+			var buf bytes.Buffer
+			opts.logger = slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 			runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
-				req := httptest.NewRequest("GET", fmt.Sprintf("http://example.com/connectionStatusLog.php?i=%d&finish=%s", i, finish), nil)
+				req := httptest.NewRequest("GET", fmt.Sprintf("http://example.com/connection_status.php?i=%d&finish=%s", i, finish), nil)
 				w := httptest.NewRecorder()
 
 				ctx, cancel := context.WithCancel(req.Context())
@@ -485,7 +477,7 @@ func testConnectionAbort(t *testing.T, opts *testOptions) {
 				cancel()
 				handler(w, req)
 
-				for logs.FilterMessage(fmt.Sprintf("request %d: 1", i)).Len() <= 0 {
+				for !strings.Contains(buf.String(), fmt.Sprintf("request %d: 1", i)) {
 				}
 			}, opts)
 		})
