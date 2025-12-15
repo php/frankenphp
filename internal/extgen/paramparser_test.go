@@ -145,14 +145,14 @@ func TestParameterParser_GenerateParamDeclarations(t *testing.T) {
 			params: []phpParameter{
 				{Name: "items", PhpType: phpArray, HasDefault: false},
 			},
-			expected: "    zval *items = NULL;",
+			expected: "    zend_array *items = NULL;",
 		},
 		{
 			name: "nullable array parameter",
 			params: []phpParameter{
 				{Name: "items", PhpType: phpArray, HasDefault: false, IsNullable: true},
 			},
-			expected: "    zval *items = NULL;",
+			expected: "    zend_array *items = NULL;",
 		},
 		{
 			name: "mixed types with array",
@@ -161,7 +161,7 @@ func TestParameterParser_GenerateParamDeclarations(t *testing.T) {
 				{Name: "items", PhpType: phpArray, HasDefault: false},
 				{Name: "count", PhpType: phpInt, HasDefault: true, DefaultValue: "5"},
 			},
-			expected: "    zend_string *name = NULL;\n    zval *items = NULL;\n    zend_long count = 5;",
+			expected: "    zend_string *name = NULL;\n    zend_array *items = NULL;\n    zend_long count = 5;",
 		},
 		{
 			name: "mixed parameter",
@@ -198,7 +198,7 @@ func TestParameterParser_GenerateParamDeclarations(t *testing.T) {
 				{Name: "callback", PhpType: phpCallable, HasDefault: false},
 				{Name: "options", PhpType: phpInt, HasDefault: true, DefaultValue: "0"},
 			},
-			expected: "    zval *data = NULL;\n    zval *callback_callback;\n    zend_long options = 0;",
+			expected: "    zend_array *data = NULL;\n    zval *callback_callback;\n    zend_long options = 0;",
 		},
 	}
 
@@ -399,12 +399,12 @@ func TestParameterParser_GenerateParamParsingMacro(t *testing.T) {
 		{
 			name:     "array parameter",
 			param:    phpParameter{Name: "items", PhpType: phpArray},
-			expected: "\n        Z_PARAM_ARRAY(items)",
+			expected: "\n        Z_PARAM_ARRAY_HT(items)",
 		},
 		{
 			name:     "nullable array parameter",
 			param:    phpParameter{Name: "items", PhpType: phpArray, IsNullable: true},
-			expected: "\n        Z_PARAM_ARRAY_OR_NULL(items)",
+			expected: "\n        Z_PARAM_ARRAY_HT_OR_NULL(items)",
 		},
 		{
 			name:     "mixed parameter",
@@ -617,12 +617,12 @@ func TestParameterParser_GenerateSingleParamDeclaration(t *testing.T) {
 		{
 			name:     "array parameter",
 			param:    phpParameter{Name: "items", PhpType: phpArray, HasDefault: false},
-			expected: []string{"zval *items = NULL;"},
+			expected: []string{"zend_array *items = NULL;"},
 		},
 		{
 			name:     "nullable array parameter",
 			param:    phpParameter{Name: "items", PhpType: phpArray, HasDefault: false, IsNullable: true},
-			expected: []string{"zval *items = NULL;"},
+			expected: []string{"zend_array *items = NULL;"},
 		},
 		{
 			name:     "callable parameter",

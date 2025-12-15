@@ -830,7 +830,7 @@ func TestValidateGoFunctionSignature(t *testing.T) {
 					{Name: "callback", PhpType: phpCallable},
 					{Name: "options", PhpType: "int"},
 				},
-				GoFunction: `func mixedCallableFunc(data *C.zval, callback *C.zval, options int64) unsafe.Pointer {
+				GoFunction: `func mixedCallableFunc(data *C.zend_array, callback *C.zval, options int64) unsafe.Pointer {
 	return nil
 }`,
 			},

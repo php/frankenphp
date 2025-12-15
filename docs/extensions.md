@@ -221,23 +221,19 @@ To showcase this, let's create our own `array_map()` function that takes a calla
 
 ```go
 // export_php:function my_array_map(array $data, callable $callback): array
-func my_array_map(arr *C.zval, callback *C.zval) unsafe.Pointer {
-	goArr := frankenphp.GoArray(unsafe.Pointer(arr))
-	result := &frankenphp.Array{}
-
-	for i := uint32(0); i < goArr.Len(); i++ {
-		key, value := goArr.At(i)
-
-		callbackResult := frankenphp.CallPHPCallable(unsafe.Pointer(callback), []interface{}{value})
-
-		if key.Type == frankenphp.PHPIntKey {
-			result.SetInt(key.Int, callbackResult)
-		} else {
-			result.SetString(key.Str, callbackResult)
-		}
+func my_array_map(arr *C.zend_array, callback *C.zval) unsafe.Pointer {
+	goSlice, err := frankenphp.GoPackedArray[any](unsafe.Pointer(arr))
+	if err != nil {
+		panic(err)
 	}
 
-	return frankenphp.PHPArray(result)
+	result := make([]any, len(goSlice))
+
+	for index, value := range goSlice {
+		result[index] = frankenphp.CallPHPCallable(unsafe.Pointer(callback), []interface{}{value})
+	}
+
+	return frankenphp.PHPPackedArray(result)
 }
 ```
 
@@ -246,19 +242,11 @@ Notice how we use `frankenphp.CallPHPCallable()` to call the PHP callable passed
 ```php
 <?php
 
-$strArray = ['a' => 'hello', 'b' => 'world', 'c' => 'php'];
-$result = my_array_map($strArray, 'strtoupper'); // $result will be ['a' => 'HELLO', 'b' => 'WORLD', 'c' => 'PHP']
+$result = my_array_map([1, 2, 3], function($x) { return $x * 2; });
+// $result will be [2, 4, 6]
 
-$arr = [1, 2, 3, 4, [5, 6]];
-$result = my_array_map($arr, function($item) {
-    if (\is_array($item)) {
-        return my_array_map($item, function($subItem) {
-            return $subItem * 2;
-        });
-    }
-
-    return $item * 3;
-}); // $result will be [3, 6, 9, 12, [10, 12]]
+$result = my_array_map(['hello', 'world'], 'strtoupper');
+// $result will be ['HELLO', 'WORLD']
 ```
 
 ### Declaring a Native PHP Class
