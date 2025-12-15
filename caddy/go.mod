@@ -15,7 +15,7 @@ require (
 	github.com/dunglas/mercure/caddy v0.21.2
 	github.com/dunglas/vulcain/caddy v1.2.1
 	github.com/prometheus/client_golang v1.23.2
-	github.com/spf13/cobra v1.10.1
+	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
 )
 
