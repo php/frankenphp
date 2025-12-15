@@ -187,21 +187,19 @@ func matchCurlyBracePattern(pattern string, fileName string) bool {
 
 // {dir1,dir2}/path -> []string{"dir1/path", "dir2/path"}
 func expandCurlyBraces(s string) []string {
-	start := strings.Index(s, "{")
-	if start == -1 {
-		return []string{s}
-	}
-	end := strings.Index(s[start:], "}")
-	if end == -1 {
+	before, rest, found := strings.Cut(s, "{")
+	if !found {
 		return []string{s}
 	}
 
-	j := start + end
+	inside, after, found := strings.Cut(rest, "}")
+	if !found {
+		return []string{s} // no closing brace
+	}
+
 	var out []string
-	for _, opt := range strings.Split(s[start+1:j], ",") {
-		subPattern := s[:start] + opt + s[j+1:]
-		allSubPatterns := expandCurlyBraces(subPattern)
-		out = append(out, allSubPatterns...)
+	for _, subPattern := range strings.Split(inside, ",") {
+		out = append(out, expandCurlyBraces(before+subPattern+after)...)
 	}
 
 	return out
