@@ -212,7 +212,7 @@ func process_data_packed(arr *C.zend_array) unsafe.Pointer {
 - `frankenphp.GoAssociativeArray(arr unsafe.Pointer, ordered bool) frankenphp.AssociativeArray` - Convert a PHP array to an ordered Go `AssociativeArray` (map with order)
 - `frankenphp.GoMap(arr unsafe.Pointer) map[string]any` - Convert a PHP array to an unordered Go map
 - `frankenphp.GoPackedArray(arr unsafe.Pointer) []any` - Convert a PHP array to a Go slice
-- `frankenphp.IsPacked(zval unsafe.Pointer) bool` - Check if a PHP array is packed (indexed only) or associative (key-value pairs)
+- `frankenphp.IsPacked(zval *C.zend_array) bool` - Check if a PHP array is packed (indexed only) or associative (key-value pairs)
 
 ### Working with Callables
 

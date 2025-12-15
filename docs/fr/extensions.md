@@ -209,6 +209,7 @@ func process_data_packed(arr *C.zval) unsafe.Pointer {
 - `frankenphp.GoAssociativeArray(arr unsafe.Pointer, ordered bool) frankenphp.AssociativeArray` - Convertir un tableau PHP vers un `AssociativeArray` Go ordonné (map avec ordre)
 - `frankenphp.GoMap(arr unsafe.Pointer) map[string]any` - Convertir un tableau PHP vers une map Go non ordonnée
 - `frankenphp.GoPackedArray(arr unsafe.Pointer) []any` - Convertir un tableau PHP vers un slice Go
+- `frankenphp.IsPacked(zval *C.zend_array) bool` - Vérifie si le tableau PHP est une liste ou un tableau associatif
 
 ### Travailler avec des Callables
 
