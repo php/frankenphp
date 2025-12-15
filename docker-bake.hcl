@@ -14,6 +14,10 @@ variable "GO_VERSION" {
     default = "1.25"
 }
 
+variable "SPC_OPT_BUILD_ARGS" {
+    default = ""
+}
+
 variable "SHA" {}
 
 variable "LATEST" {
@@ -146,6 +150,7 @@ target "static-builder-musl" {
     args = {
         FRANKENPHP_VERSION = VERSION
         CI = CI
+        SPC_OPT_BUILD_ARGS = SPC_OPT_BUILD_ARGS
     }
     secret = ["id=github-token,env=GITHUB_TOKEN"]
 }
@@ -171,6 +176,7 @@ target "static-builder-gnu" {
         FRANKENPHP_VERSION = VERSION
         GO_VERSION = GO_VERSION
         CI = CI
+        SPC_OPT_BUILD_ARGS = SPC_OPT_BUILD_ARGS
     }
     secret = ["id=github-token,env=GITHUB_TOKEN"]
 }
