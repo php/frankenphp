@@ -1,8 +1,6 @@
 package frankenphp
 
 import (
-	"io"
-	"log/slog"
 	"testing"
 	"time"
 
@@ -16,7 +14,6 @@ func TestScaleARegularThreadUpAndDown(t *testing.T) {
 	assert.NoError(t, Init(
 		WithNumThreads(1),
 		WithMaxThreads(2),
-		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
 	))
 
 	autoScaledThread := phpThreads[1]
@@ -45,7 +42,6 @@ func TestScaleAWorkerThreadUpAndDown(t *testing.T) {
 			WithWorkerWatchMode([]string{}),
 			WithWorkerMaxFailures(0),
 		),
-		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
 	))
 
 	autoScaledThread := phpThreads[2]

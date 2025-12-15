@@ -1,7 +1,6 @@
 package frankenphp_test
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -95,8 +94,7 @@ func TestWorkerEnv(t *testing.T) {
 }
 
 func TestWorkerGetOpt(t *testing.T) {
-	var buf bytes.Buffer
-	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	logger, buf := newTestLogger(t, slog.LevelInfo)
 
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
 		req := httptest.NewRequest("GET", fmt.Sprintf("http://example.com/worker-getopt.php?i=%d", i), nil)

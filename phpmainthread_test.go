@@ -2,7 +2,6 @@ package frankenphp
 
 import (
 	"io"
-	"log/slog"
 	"math/rand/v2"
 	"net/http/httptest"
 	"path/filepath"
@@ -119,7 +118,6 @@ func TestTransitionThreadsWhileDoingRequests(t *testing.T) {
 			WithWorkerWatchMode([]string{}),
 			WithWorkerMaxFailures(0),
 		),
-		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
 	))
 
 	// try all possible permutations of transition, transition every ms
