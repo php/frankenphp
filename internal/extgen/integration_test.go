@@ -118,6 +118,30 @@ func (s *IntegrationTestSuite) runExtensionInit(sourceFile string) error {
 	return nil
 }
 
+// cleanupGeneratedFiles removes generated files from the original source directory
+func (s *IntegrationTestSuite) cleanupGeneratedFiles(originalSourceFile string) {
+	s.t.Helper()
+
+	sourceDir := filepath.Dir(originalSourceFile)
+	baseName := SanitizePackageName(strings.TrimSuffix(filepath.Base(originalSourceFile), ".go"))
+
+	generatedFiles := []string{
+		baseName + ".stub.php",
+		baseName + "_arginfo.h",
+		baseName + ".h",
+		baseName + ".c",
+		baseName + ".go",
+		"README.md",
+	}
+
+	for _, file := range generatedFiles {
+		fullPath := filepath.Join(sourceDir, file)
+		if _, err := os.Stat(fullPath); err == nil {
+			os.Remove(fullPath)
+		}
+	}
+}
+
 // compileFrankenPHP compiles FrankenPHP with the generated extension
 func (s *IntegrationTestSuite) compileFrankenPHP(moduleDir string) (string, error) {
 	s.t.Helper()
@@ -250,6 +274,7 @@ func TestBasicFunction(t *testing.T) {
 	sourceFile := filepath.Join("..", "..", "testdata", "integration", "basic_function.go")
 	sourceFile, err := filepath.Abs(sourceFile)
 	require.NoError(t, err)
+	defer suite.cleanupGeneratedFiles(sourceFile)
 
 	targetFile, err := suite.createGoModule(sourceFile)
 	require.NoError(t, err)
@@ -326,6 +351,7 @@ func TestClassMethodsIntegration(t *testing.T) {
 	sourceFile := filepath.Join("..", "..", "testdata", "integration", "class_methods.go")
 	sourceFile, err := filepath.Abs(sourceFile)
 	require.NoError(t, err)
+	defer suite.cleanupGeneratedFiles(sourceFile)
 
 	targetFile, err := suite.createGoModule(sourceFile)
 	require.NoError(t, err)
@@ -437,6 +463,7 @@ func TestConstants(t *testing.T) {
 	sourceFile := filepath.Join("..", "..", "testdata", "integration", "constants.go")
 	sourceFile, err := filepath.Abs(sourceFile)
 	require.NoError(t, err)
+	defer suite.cleanupGeneratedFiles(sourceFile)
 
 	targetFile, err := suite.createGoModule(sourceFile)
 	require.NoError(t, err)
@@ -536,6 +563,7 @@ func TestNamespace(t *testing.T) {
 	sourceFile := filepath.Join("..", "..", "testdata", "integration", "namespace.go")
 	sourceFile, err := filepath.Abs(sourceFile)
 	require.NoError(t, err)
+	defer suite.cleanupGeneratedFiles(sourceFile)
 
 	targetFile, err := suite.createGoModule(sourceFile)
 	require.NoError(t, err)
@@ -625,6 +653,7 @@ func TestInvalidSignature(t *testing.T) {
 	sourceFile := filepath.Join("..", "..", "testdata", "integration", "invalid_signature.go")
 	sourceFile, err := filepath.Abs(sourceFile)
 	require.NoError(t, err)
+	defer suite.cleanupGeneratedFiles(sourceFile)
 
 	targetFile, err := suite.createGoModule(sourceFile)
 	require.NoError(t, err)
@@ -640,6 +669,7 @@ func TestTypeMismatch(t *testing.T) {
 	sourceFile := filepath.Join("..", "..", "testdata", "integration", "type_mismatch.go")
 	sourceFile, err := filepath.Abs(sourceFile)
 	require.NoError(t, err)
+	defer suite.cleanupGeneratedFiles(sourceFile)
 
 	targetFile, err := suite.createGoModule(sourceFile)
 	require.NoError(t, err)
@@ -680,4 +710,84 @@ func dummy() {}
 	err = gen.Generate()
 	assert.Error(t, err, "should fail when gen_stub.php is missing")
 	assert.Contains(t, err.Error(), "gen_stub.php", "error should mention missing script")
+}
+
+func TestCallable(t *testing.T) {
+	suite := setupTest(t)
+
+	sourceFile := filepath.Join("..", "..", "testdata", "integration", "callable.go")
+	sourceFile, err := filepath.Abs(sourceFile)
+	require.NoError(t, err)
+	defer suite.cleanupGeneratedFiles(sourceFile)
+
+	targetFile, err := suite.createGoModule(sourceFile)
+	require.NoError(t, err)
+
+	err = suite.runExtensionInit(targetFile)
+	require.NoError(t, err)
+
+	_, err = suite.compileFrankenPHP(filepath.Dir(targetFile))
+	require.NoError(t, err)
+
+	err = suite.verifyPHPSymbols(
+		[]string{"my_array_map", "my_filter"},
+		[]string{"Processor"},
+		[]string{},
+	)
+	require.NoError(t, err, "all functions and classes should be accessible from PHP")
+
+	err = suite.verifyFunctionBehavior(`<?php
+
+$result = my_array_map([1, 2, 3], function($x) { return $x * 2; });
+if ($result !== [2, 4, 6]) {
+	echo "FAIL: my_array_map with closure expected [2, 4, 6], got " . json_encode($result);
+	exit(1);
+}
+
+$result = my_array_map(['hello', 'world'], 'strtoupper');
+if ($result !== ['HELLO', 'WORLD']) {
+	echo "FAIL: my_array_map with function name expected ['HELLO', 'WORLD'], got " . json_encode($result);
+	exit(1);
+}
+
+$result = my_array_map([], function($x) { return $x; });
+if ($result !== []) {
+	echo "FAIL: my_array_map with empty array expected [], got " . json_encode($result);
+	exit(1);
+}
+
+$result = my_filter([1, 2, 3, 4, 5, 6], function($x) { return $x % 2 === 0; });
+if ($result !== [2, 4, 6]) {
+	echo "FAIL: my_filter expected [2, 4, 6], got " . json_encode($result);
+	exit(1);
+}
+
+$result = my_filter([1, 2, 3, 4], null);
+if ($result !== [1, 2, 3, 4]) {
+	echo "FAIL: my_filter with null callback expected [1, 2, 3, 4], got " . json_encode($result);
+	exit(1);
+}
+
+$processor = new Processor();
+$result = $processor->transform('hello', function($s) { return strtoupper($s); });
+if ($result !== 'HELLO') {
+	echo "FAIL: Processor::transform with closure expected 'HELLO', got '$result'";
+	exit(1);
+}
+
+$result = $processor->transform('world', 'strtoupper');
+if ($result !== 'WORLD') {
+	echo "FAIL: Processor::transform with function name expected 'WORLD', got '$result'";
+	exit(1);
+}
+
+$result = $processor->transform('  test  ', 'trim');
+if ($result !== 'test') {
+	echo "FAIL: Processor::transform with trim expected 'test', got '$result'";
+	exit(1);
+}
+
+echo "OK";
+`, "OK")
+	require.NoError(t, err, "all callable tests should pass")
 }
