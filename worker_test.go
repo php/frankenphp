@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -94,7 +93,7 @@ func TestWorkerEnv(t *testing.T) {
 }
 
 func TestWorkerGetOpt(t *testing.T) {
-	logger, buf := newTestLogger(t, slog.LevelInfo)
+	logger, buf := newTestLogger(t)
 
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
 		req := httptest.NewRequest("GET", fmt.Sprintf("http://example.com/worker-getopt.php?i=%d", i), nil)
@@ -110,7 +109,7 @@ func TestWorkerGetOpt(t *testing.T) {
 		assert.Contains(t, string(body), fmt.Sprintf("[REQUEST_URI] => /worker-getopt.php?i=%d", i))
 	}, &testOptions{logger: logger, workerScript: "worker-getopt.php", env: map[string]string{"FOO": "bar"}})
 
-	assert.NotContains(t, buf.String(), "exit_status")
+	assert.NotRegexp(t, buf.String(), "exit_status=[1-9]")
 }
 
 func ExampleServeHTTP_workers() {

@@ -421,7 +421,7 @@ func TestLog_error_log_worker(t *testing.T) {
 }
 func testLog_error_log(t *testing.T, opts *testOptions) {
 	var buf fmt.Stringer
-	opts.logger, buf = newTestLogger(t, slog.LevelDebug)
+	opts.logger, buf = newTestLogger(t)
 
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
 		req := httptest.NewRequest("GET", fmt.Sprintf("http://example.com/log-error_log.php?i=%d", i), nil)
@@ -438,7 +438,7 @@ func TestLog_frankenphp_log_worker(t *testing.T) {
 }
 func testLog_frankenphp_log(t *testing.T, opts *testOptions) {
 	var buf fmt.Stringer
-	opts.logger, buf = newTestLogger(t, slog.LevelDebug)
+	opts.logger, buf = newTestLogger(t)
 
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
 		req := httptest.NewRequest("GET", fmt.Sprintf("http://example.com/log-frankenphp_log.php?i=%d", i), nil)
