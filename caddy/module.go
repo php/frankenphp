@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig"
@@ -235,11 +236,62 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 
 	// TODO: set caddyhttp.ServerHeader when https://github.com/caddyserver/caddy/pull/7338 will be released
 	w.Header()["Server"] = serverHeader
-	if err = frankenphp.ServeHTTP(w, fr); err != nil && !errors.As(err, &frankenphp.ErrRejected{}) {
+	err = frankenphp.ServeHTTP(w, fr)
+
+	// Retrieve and add stats to the Caddy Replacer
+	stats, ok := frankenphp.StatusFromContext(fr.Context())
+	if ok {
+		repl.Map(func(key string) (any, bool) {
+			switch key {
+			case "http.frankenphp.cpu_usage":
+				return stats.CpuUsage.Nanoseconds(), true
+			case "http.frankenphp.cpu_usage_human":
+				return stats.CpuUsage.String(), true
+			case "http.frankenphp.memory_usage":
+				return stats.MemoryUsage, true
+			case "http.frankenphp.memory_usage_human":
+				return formatBytes(stats.MemoryUsage), true
+			case "http.frankenphp.script":
+				return stats.Script, true
+			case "http.frankenphp.script_filename":
+				return stats.ScriptFilename, true
+			default:
+				return "", false
+			}
+		})
+	}
+
+	if err != nil && !errors.As(err, &frankenphp.ErrRejected{}) {
 		return caddyhttp.Error(http.StatusInternalServerError, err)
 	}
 
 	return nil
+}
+
+func formatDuration(d time.Duration) string {
+	if d.Hours() >= 1 {
+		return fmt.Sprintf("%.2f h", d.Hours())
+	}
+	if d.Minutes() >= 1 {
+		return fmt.Sprintf("%.2f m", d.Minutes())
+	}
+	if d.Seconds() >= 1 {
+		return fmt.Sprintf("%.2f s", d.Seconds())
+	}
+	return fmt.Sprintf("%d ms", d.Milliseconds())
+}
+
+func formatBytes(b uint64) string {
+	if (b >> 30) > 0 {
+		return fmt.Sprintf("%.2f GB", float64(b)/float64(1<<30))
+	}
+	if (b >> 20) > 0 {
+		return fmt.Sprintf("%.2f MB", float64(b)/float64(1<<20))
+	}
+	if (b >> 10) > 0 {
+		return fmt.Sprintf("%.2f KB", float64(b)/float64(1<<10))
+	}
+	return fmt.Sprintf("%d B", b)
 }
 
 // UnmarshalCaddyfile implements caddyfile.Unmarshaler.

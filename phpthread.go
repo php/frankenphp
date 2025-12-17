@@ -7,6 +7,7 @@ import (
 	"context"
 	"runtime"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/dunglas/frankenphp/internal/state"
@@ -16,13 +17,16 @@ import (
 // identified by the index in the phpThreads slice
 type phpThread struct {
 	runtime.Pinner
-	threadIndex  int
-	requestChan  chan contextHolder
-	drainChan    chan struct{}
-	handlerMu    sync.Mutex
-	handler      threadHandler
-	state        *state.ThreadState
-	sandboxedEnv map[string]*C.zend_string
+	threadIndex            int
+	requestChan            chan contextHolder
+	drainChan              chan struct{}
+	handlerMu              sync.Mutex
+	handler                threadHandler
+	state                  *state.ThreadState
+	sandboxedEnv           map[string]*C.zend_string
+	cpuRequestStartTime    C.struct_timespec
+	lastRequestCpuUsage    time.Duration
+	lastRequestMemoryUsage uint64
 }
 
 // interface that defines how the callbacks from the C thread should be handled
@@ -147,6 +151,12 @@ func (*phpThread) updateContext(isWorker bool) {
 	C.frankenphp_update_local_thread_context(C.bool(isWorker))
 }
 
+func (thread *phpThread) requestCpuUsage() time.Duration {
+	var cpuEndTime C.struct_timespec
+	C.clock_gettime(C.CLOCK_THREAD_CPUTIME_ID, &cpuEndTime)
+	return time.Duration(float64(cpuEndTime.tv_sec-thread.cpuRequestStartTime.tv_sec)*1e9 + float64(cpuEndTime.tv_nsec-thread.cpuRequestStartTime.tv_nsec))
+}
+
 //export go_frankenphp_before_script_execution
 func go_frankenphp_before_script_execution(threadIndex C.uintptr_t) *C.char {
 	thread := phpThreads[threadIndex]
@@ -167,10 +177,20 @@ func go_frankenphp_after_script_execution(threadIndex C.uintptr_t, exitStatus C.
 	if exitStatus < 0 {
 		panic(ErrScriptExecution)
 	}
+
+	// Calculate CPU usage
+	thread.lastRequestCpuUsage = thread.requestCpuUsage()
+
 	thread.handler.afterScriptExecution(int(exitStatus))
 
 	// unpin all memory used during script execution
 	thread.Unpin()
+}
+
+//export go_frankenphp_set_memory_peak_usage
+func go_frankenphp_set_memory_peak_usage(threadIndex C.uintptr_t, memoryPeakUsage C.size_t) {
+	thread := phpThreads[threadIndex]
+	thread.lastRequestMemoryUsage = uint64(memoryPeakUsage)
 }
 
 //export go_frankenphp_on_thread_shutdown

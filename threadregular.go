@@ -100,6 +100,8 @@ func (handler *regularThread) waitForRequest() string {
 }
 
 func (handler *regularThread) afterRequest() {
+	handler.contextHolder.frankenPHPContext.cpuUsage = handler.thread.lastRequestCpuUsage
+	handler.contextHolder.frankenPHPContext.memoryUsage = handler.thread.lastRequestMemoryUsage
 	handler.contextHolder.frankenPHPContext.closeContext()
 	handler.contextHolder.frankenPHPContext = nil
 	handler.ctx = nil

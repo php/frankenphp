@@ -285,6 +285,12 @@ func go_frankenphp_finish_worker_request(threadIndex C.uintptr_t, retval *C.zval
 	ctx := thread.context()
 	fc := ctx.Value(contextKey).(*frankenPHPContext)
 
+	// Stats
+	thread.lastRequestCpuUsage = thread.requestCpuUsage()
+	thread.lastRequestMemoryUsage = uint64(C.zend_memory_peak_usage(C.bool(true)))
+	fc.cpuUsage = thread.lastRequestCpuUsage
+	fc.memoryUsage = thread.lastRequestMemoryUsage
+
 	if retval != nil {
 		r, err := GoValue[any](unsafe.Pointer(retval))
 		if err != nil && globalLogger.Enabled(ctx, slog.LevelError) {
