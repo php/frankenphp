@@ -10,7 +10,7 @@ import (
 )
 
 type hotReloadOpt struct {
-	hotReload   []*watcher.PatternGroup
+	hotReload []*watcher.PatternGroup
 }
 
 var restartWorkers atomic.Bool
