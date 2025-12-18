@@ -10,7 +10,7 @@ require (
 	github.com/caddyserver/caddy/v2 v2.10.2
 	github.com/caddyserver/certmagic v0.25.0
 	github.com/dunglas/caddy-cbrotli v1.0.1
-	github.com/dunglas/frankenphp v1.10.1
+	github.com/dunglas/frankenphp v1.11.0
 	github.com/dunglas/mercure v0.21.4
 	github.com/dunglas/mercure/caddy v0.21.4
 	github.com/dunglas/vulcain/caddy v1.2.1
