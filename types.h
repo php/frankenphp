@@ -17,6 +17,7 @@ void __zend_hash_init__(HashTable *ht, uint32_t nSize, dtor_func_t pDestructor,
 
 int __zend_is_callable__(zval *cb);
 int __call_user_function__(zval *function_name, zval *retval,
+                           uint32_t param_count, zval params[]);
 
 zend_array *__zend_new_array__(uint32_t size);
 zend_string *__zend_string_init_existing_interned__(const char *str,

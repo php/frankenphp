@@ -1,15 +1,13 @@
 package frankenphp
 
-/*
-#cgo noescape __zend_new_array__
-#cgo noescape __zend_string_init_existing_interned__
-#cgo noescape zend_hash_bulk_insert
-#cgo noescape zend_hash_bulk_next_index_insert
-#cgo noescape get_ht_bucket
-#cgo noescape get_ht_packed_data
-#include "zend_API.h"
-#include "types.h"
-*/
+//#cgo noescape __zend_new_array__
+//#cgo noescape __zend_string_init_existing_interned__
+//#cgo noescape zend_hash_bulk_insert
+//#cgo noescape zend_hash_bulk_next_index_insert
+//#cgo noescape get_ht_bucket
+//#cgo noescape get_ht_packed_data
+//#include "zend_API.h"
+//#include "types.h"
 import "C"
 import (
 	"fmt"
@@ -437,8 +435,8 @@ func goValue[T any](zval *C.zval) (res T, err error) {
 // More types may be supported in the future.
 func PHPValue(value any) unsafe.Pointer {
 	zval := (*C.zval)(C.__emalloc__(C.size_t(unsafe.Sizeof(C.zval{}))))
-	phpValue(&zval, value)
-	return unsafe.Pointer(&zval)
+	phpValue(zval, value)
+	return unsafe.Pointer(zval)
 }
 
 func phpValue(zval *C.zval, value any) {
@@ -495,8 +493,6 @@ func phpValue(zval *C.zval, value any) {
 	default:
 		panic(fmt.Sprintf("unsupported Go type %T", v))
 	}
-
-	return &zval
 }
 
 // createNewArray creates a new zend_array with the specified size.
@@ -572,9 +568,7 @@ func CallPHPCallable(cb unsafe.Pointer, params []interface{}) interface{} {
 
 		for i, param := range params {
 			targetZval := (*C.zval)(unsafe.Pointer(uintptr(unsafe.Pointer(paramStorage)) + uintptr(i)*unsafe.Sizeof(C.zval{})))
-			sourceZval := phpValue(param)
-			*targetZval = *sourceZval
-			C.__efree__(unsafe.Pointer(sourceZval))
+			phpValue(targetZval, param)
 		}
 	}
 
