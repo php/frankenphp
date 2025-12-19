@@ -436,7 +436,7 @@ func goValue[T any](zval *C.zval) (res T, err error) {
 // Any other type will cause a panic.
 // More types may be supported in the future.
 func PHPValue(value any) unsafe.Pointer {
-	var zval C.zval // TODO: should this be allocated on heap?
+	zval := (*C.zval)(C.__emalloc__(C.size_t(unsafe.Sizeof(C.zval{}))))
 	phpValue(&zval, value)
 	return unsafe.Pointer(&zval)
 }
@@ -495,6 +495,8 @@ func phpValue(zval *C.zval, value any) {
 	default:
 		panic(fmt.Sprintf("unsupported Go type %T", v))
 	}
+
+	return &zval
 }
 
 // createNewArray creates a new zend_array with the specified size.
@@ -504,6 +506,16 @@ func createNewArray(size int) *C.zend_array {
 		return (*C.zend_array)(&C.zend_empty_array)
 	}
 	return C.__zend_new_array__(C.uint32_t(size))
+}
+
+// IsPacked determines if the given zend_array is a packed array (list).
+// Returns false if the array is nil or not packed.
+func IsPacked(arr unsafe.Pointer) bool {
+	if arr == nil {
+		return false
+	}
+
+	return htIsPacked((*C.zend_array)(arr))
 }
 
 // htIsPacked checks if a zend_array is a list (packed) or hashmap (not packed).
@@ -528,4 +540,57 @@ func zendStringRelease(p unsafe.Pointer) {
 // used in tests for cleanup
 func zendArrayRelease(p unsafe.Pointer) {
 	C.zend_array_release((*C.zend_array)(p))
+}
+
+// EXPERIMENTAL: CallPHPCallable executes a PHP callable with the given parameters.
+// Returns the result of the callable as a Go interface{}, or nil if the call failed.
+func CallPHPCallable(cb unsafe.Pointer, params []interface{}) interface{} {
+	if cb == nil {
+		return nil
+	}
+
+	callback := (*C.zval)(cb)
+	if callback == nil {
+		return nil
+	}
+
+	if C.__zend_is_callable__(callback) == 0 {
+		return nil
+	}
+
+	paramCount := len(params)
+	var paramStorage *C.zval
+	if paramCount > 0 {
+		paramStorage = (*C.zval)(C.__emalloc__(C.size_t(paramCount) * C.size_t(unsafe.Sizeof(C.zval{}))))
+		defer func() {
+			for i := 0; i < paramCount; i++ {
+				targetZval := (*C.zval)(unsafe.Pointer(uintptr(unsafe.Pointer(paramStorage)) + uintptr(i)*unsafe.Sizeof(C.zval{})))
+				C.zval_ptr_dtor(targetZval)
+			}
+			C.__efree__(unsafe.Pointer(paramStorage))
+		}()
+
+		for i, param := range params {
+			targetZval := (*C.zval)(unsafe.Pointer(uintptr(unsafe.Pointer(paramStorage)) + uintptr(i)*unsafe.Sizeof(C.zval{})))
+			sourceZval := phpValue(param)
+			*targetZval = *sourceZval
+			C.__efree__(unsafe.Pointer(sourceZval))
+		}
+	}
+
+	var retval C.zval
+
+	result := C.__call_user_function__(callback, &retval, C.uint32_t(paramCount), paramStorage)
+	if result != C.SUCCESS {
+		return nil
+	}
+
+	goResult, err := goValue[any](&retval)
+	C.zval_ptr_dtor(&retval)
+
+	if err != nil {
+		return nil
+	}
+
+	return goResult
 }

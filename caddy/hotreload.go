@@ -55,11 +55,8 @@ func (f *FrankenPHPModule) configureHotReload(app *FrankenPHPApp) error {
 }
 
 func (f *FrankenPHPModule) unmarshalHotReload(d *caddyfile.Dispenser) error {
-	patterns := d.RemainingArgs()
-	if len(patterns) > 0 {
-		f.HotReload = &hotReloadConfig{
-			Watch: patterns,
-		}
+	f.HotReload = &hotReloadConfig{
+		Watch: d.RemainingArgs(),
 	}
 
 	for d.NextBlock(1) {
@@ -79,10 +76,6 @@ func (f *FrankenPHPModule) unmarshalHotReload(d *caddyfile.Dispenser) error {
 			patterns := d.RemainingArgs()
 			if len(patterns) == 0 {
 				return d.ArgErr()
-			}
-
-			if f.HotReload == nil {
-				f.HotReload = &hotReloadConfig{}
 			}
 
 			f.HotReload.Watch = append(f.HotReload.Watch, patterns...)

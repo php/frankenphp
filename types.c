@@ -16,6 +16,8 @@ Bucket *get_ht_bucket(HashTable *ht) {
 
 void *__emalloc__(size_t size) { return emalloc(size); }
 
+void __efree__(void *ptr) { efree(ptr); }
+
 void __zend_hash_init__(HashTable *ht, uint32_t nSize, dtor_func_t pDestructor,
                         bool persistent) {
   zend_hash_init(ht, nSize, NULL, pDestructor, persistent);
@@ -71,4 +73,12 @@ zend_array *zend_hash_bulk_next_index_insert(zend_array *arr,
   zend_hash_next_index_insert(arr, val4);
 
   return arr;
+}
+
+int __zend_is_callable__(zval *cb) { return zend_is_callable(cb, 0, NULL); }
+
+int __call_user_function__(zval *function_name, zval *retval,
+                           uint32_t param_count, zval params[]) {
+  return call_user_function(CG(function_table), NULL, function_name, retval,
+                            param_count, params);
 }

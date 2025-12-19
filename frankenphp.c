@@ -549,7 +549,30 @@ PHP_FUNCTION(mercure_publish) {
   RETURN_THROWS();
 }
 
+PHP_FUNCTION(frankenphp_log) {
+  zend_string *message = NULL;
+  zend_long level = 0;
+  zval *context = NULL;
+
+  ZEND_PARSE_PARAMETERS_START(1, 3)
+  Z_PARAM_STR(message)
+  Z_PARAM_OPTIONAL
+  Z_PARAM_LONG(level)
+  Z_PARAM_ARRAY(context)
+  ZEND_PARSE_PARAMETERS_END();
+
+  char *ret = NULL;
+  ret = go_log_attrs(thread_index, message, level, context);
+  if (ret != NULL) {
+    zend_throw_exception(spl_ce_RuntimeException, ret, 0);
+    free(ret);
+    RETURN_THROWS();
+  }
+}
+
 PHP_MINIT_FUNCTION(frankenphp) {
+  register_frankenphp_symbols(module_number);
+
   zend_function *func;
 
   // Override putenv

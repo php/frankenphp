@@ -95,7 +95,9 @@ PHP_METHOD({{namespacedClassName $.Namespace .ClassName}}, {{.PhpName}}) {
     zend_bool {{$param.Name}} = {{if $param.HasDefault}}{{if eq $param.DefaultValue "true"}}1{{else}}0{{end}}{{else}}0{{end}};{{if $param.IsNullable}}
     zend_bool {{$param.Name}}_is_null = 0;{{end}}
     {{- else if eq $param.PhpType "array"}}
-    zval *{{$param.Name}} = NULL;
+    zend_array *{{$param.Name}} = NULL;
+    {{- else if eq $param.PhpType "callable"}}
+    zval *{{$param.Name}}_callback;
     {{- end}}
     {{- end}}
     
@@ -104,7 +106,7 @@ PHP_METHOD({{namespacedClassName $.Namespace .ClassName}}, {{.PhpName}}) {
         {{$optionalStarted := false}}{{range .Params}}{{if .HasDefault}}{{if not $optionalStarted -}}
         Z_PARAM_OPTIONAL
         {{$optionalStarted = true}}{{end}}{{end -}}
-        {{if .IsNullable}}{{if eq .PhpType "string"}}Z_PARAM_STR_OR_NULL({{.Name}}, {{.Name}}_is_null){{else if eq .PhpType "int"}}Z_PARAM_LONG_OR_NULL({{.Name}}, {{.Name}}_is_null){{else if eq .PhpType "float"}}Z_PARAM_DOUBLE_OR_NULL({{.Name}}, {{.Name}}_is_null){{else if eq .PhpType "bool"}}Z_PARAM_BOOL_OR_NULL({{.Name}}, {{.Name}}_is_null){{else if eq .PhpType "array"}}Z_PARAM_ARRAY_OR_NULL({{.Name}}){{end}}{{else}}{{if eq .PhpType "string"}}Z_PARAM_STR({{.Name}}){{else if eq .PhpType "int"}}Z_PARAM_LONG({{.Name}}){{else if eq .PhpType "float"}}Z_PARAM_DOUBLE({{.Name}}){{else if eq .PhpType "bool"}}Z_PARAM_BOOL({{.Name}}){{else if eq .PhpType "array"}}Z_PARAM_ARRAY({{.Name}}){{end}}{{end}}
+        {{if .IsNullable}}{{if eq .PhpType "string"}}Z_PARAM_STR_OR_NULL({{.Name}}, {{.Name}}_is_null){{else if eq .PhpType "int"}}Z_PARAM_LONG_OR_NULL({{.Name}}, {{.Name}}_is_null){{else if eq .PhpType "float"}}Z_PARAM_DOUBLE_OR_NULL({{.Name}}, {{.Name}}_is_null){{else if eq .PhpType "bool"}}Z_PARAM_BOOL_OR_NULL({{.Name}}, {{.Name}}_is_null){{else if eq .PhpType "array"}}Z_PARAM_ARRAY_HT_OR_NULL({{.Name}}){{else if eq .PhpType "callable"}}Z_PARAM_ZVAL_OR_NULL({{.Name}}_callback){{end}}{{else}}{{if eq .PhpType "string"}}Z_PARAM_STR({{.Name}}){{else if eq .PhpType "int"}}Z_PARAM_LONG({{.Name}}){{else if eq .PhpType "float"}}Z_PARAM_DOUBLE({{.Name}}){{else if eq .PhpType "bool"}}Z_PARAM_BOOL({{.Name}}){{else if eq .PhpType "array"}}Z_PARAM_ARRAY_HT({{.Name}}){{else if eq .PhpType "callable"}}Z_PARAM_ZVAL({{.Name}}_callback){{end}}{{end}}
         {{end -}}
     ZEND_PARSE_PARAMETERS_END();
     {{else}}
@@ -113,22 +115,22 @@ PHP_METHOD({{namespacedClassName $.Namespace .ClassName}}, {{.PhpName}}) {
     
     {{- if ne .ReturnType "void"}}
     {{- if eq .ReturnType "string"}}
-    zend_string* result = {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "array"}}{{.Name}}{{end}}{{else}}{{.Name}}{{end}}{{end}}{{end}});
+    zend_string* result = {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "array"}}{{.Name}}{{else if eq .PhpType "callable"}}{{.Name}}_callback{{end}}{{else}}{{if eq .PhpType "array"}}{{.Name}}{{else if eq .PhpType "callable"}}{{.Name}}_callback{{else}}{{.Name}}{{end}}{{end}}{{end}}{{end}});
     if (result) {
         RETURN_STR(result);
     }
     RETURN_EMPTY_STRING();
     {{- else if eq .ReturnType "int"}}
-    zend_long result = {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "array"}}{{.Name}} ? Z_ARRVAL_P({{.Name}}) : NULL{{end}}{{else}}{{if eq .PhpType "array"}}Z_ARRVAL_P({{.Name}}){{else}}(long){{.Name}}{{end}}{{end}}{{end}}{{end}});
+    zend_long result = {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "array"}}{{.Name}}{{else if eq .PhpType "callable"}}{{.Name}}_callback{{end}}{{else}}{{if eq .PhpType "array"}}{{.Name}}{{else if eq .PhpType "callable"}}{{.Name}}_callback{{else}}(long){{.Name}}{{end}}{{end}}{{end}}{{end}});
     RETURN_LONG(result);
     {{- else if eq .ReturnType "float"}}
-    double result = {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "array"}}{{.Name}} ? Z_ARRVAL_P({{.Name}}) : NULL{{end}}{{else}}{{if eq .PhpType "array"}}Z_ARRVAL_P({{.Name}}){{else}}(double){{.Name}}{{end}}{{end}}{{end}}{{end}});
+    double result = {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "array"}}{{.Name}}{{else if eq .PhpType "callable"}}{{.Name}}_callback{{end}}{{else}}{{if eq .PhpType "array"}}{{.Name}}{{else if eq .PhpType "callable"}}{{.Name}}_callback{{else}}(double){{.Name}}{{end}}{{end}}{{end}}{{end}});
     RETURN_DOUBLE(result);
     {{- else if eq .ReturnType "bool"}}
-    int result = {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "array"}}{{.Name}} ? Z_ARRVAL_P({{.Name}}) : NULL{{end}}{{else}}{{if eq .PhpType "array"}}Z_ARRVAL_P({{.Name}}){{else}}(int){{.Name}}{{end}}{{end}}{{end}}{{end}});
+    int result = {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "array"}}{{.Name}}{{else if eq .PhpType "callable"}}{{.Name}}_callback{{end}}{{else}}{{if eq .PhpType "array"}}{{.Name}}{{else if eq .PhpType "callable"}}{{.Name}}_callback{{else}}(int){{.Name}}{{end}}{{end}}{{end}}{{end}});
     RETURN_BOOL(result);
     {{- else if eq .ReturnType "array"}}
-    void* result = {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "array"}}{{.Name}} ? Z_ARRVAL_P({{.Name}}) : NULL{{end}}{{else}}{{if eq .PhpType "array"}}Z_ARRVAL_P({{.Name}}){{else}}{{.Name}}{{end}}{{end}}{{end}}{{end}});
+    void* result = {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "array"}}{{.Name}}{{else if eq .PhpType "callable"}}{{.Name}}_callback{{end}}{{else}}{{if eq .PhpType "array"}}{{.Name}}{{else if eq .PhpType "callable"}}{{.Name}}_callback{{else}}{{.Name}}{{end}}{{end}}{{end}}{{end}});
     if (result != NULL) {
         HashTable *ht = (HashTable*)result;
         RETURN_ARR(ht);
@@ -137,7 +139,7 @@ PHP_METHOD({{namespacedClassName $.Namespace .ClassName}}, {{.PhpName}}) {
     }
     {{- end}}
     {{- else}}
-    {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "array"}}{{.Name}} ? Z_ARRVAL_P({{.Name}}) : NULL{{end}}{{else}}{{if eq .PhpType "string"}}{{.Name}}{{else if eq .PhpType "int"}}(long){{.Name}}{{else if eq .PhpType "float"}}(double){{.Name}}{{else if eq .PhpType "bool"}}(int){{.Name}}{{else if eq .PhpType "array"}}Z_ARRVAL_P({{.Name}}){{end}}{{end}}{{end}}{{end}});
+    {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "array"}}{{.Name}}{{else if eq .PhpType "callable"}}{{.Name}}_callback{{end}}{{else}}{{if eq .PhpType "string"}}{{.Name}}{{else if eq .PhpType "int"}}(long){{.Name}}{{else if eq .PhpType "float"}}(double){{.Name}}{{else if eq .PhpType "bool"}}(int){{.Name}}{{else if eq .PhpType "array"}}{{.Name}}{{else if eq .PhpType "callable"}}{{.Name}}_callback{{end}}{{end}}{{end}}{{end}});
     {{- end}}
 }
 {{end}}{{end}}
