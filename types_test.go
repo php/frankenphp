@@ -169,6 +169,7 @@ func BenchmarkBool(b *testing.B) {
 	benchOnPHPThread(b, b.N, func() {
 		phpBool := PHPValue(true)
 		_, _ = GoValue[bool](phpBool)
+		efree(phpBool)
 	})
 }
 
@@ -176,6 +177,7 @@ func BenchmarkInt(b *testing.B) {
 	benchOnPHPThread(b, b.N, func() {
 		phpInt := PHPValue(int64(42))
 		_, _ = GoValue[int64](phpInt)
+		efree(phpInt)
 	})
 }
 
@@ -183,6 +185,7 @@ func BenchmarkFloat(b *testing.B) {
 	benchOnPHPThread(b, b.N, func() {
 		phpFloat := PHPValue(3.14)
 		_, _ = GoValue[float64](phpFloat)
+		efree(phpFloat)
 	})
 }
 

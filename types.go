@@ -538,6 +538,11 @@ func zendArrayRelease(p unsafe.Pointer) {
 	C.zend_array_release((*C.zend_array)(p))
 }
 
+// used in tests for cleanup
+func efree(p unsafe.Pointer) {
+	C.__efree__(p)
+}
+
 // EXPERIMENTAL: CallPHPCallable executes a PHP callable with the given parameters.
 // Returns the result of the callable as a Go interface{}, or nil if the call failed.
 func CallPHPCallable(cb unsafe.Pointer, params []interface{}) interface{} {
