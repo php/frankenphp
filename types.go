@@ -462,13 +462,22 @@ func extractZvalValue(zval *C.zval, expectedType C.uint8_t) (unsafe.Pointer, err
 }
 
 func zendStringRelease(p unsafe.Pointer) {
-	zs := (*C.zend_string)(p)
-	C.zend_string_release(zs)
+	C.zend_string_release((*C.zend_string)(p))
+}
+
+// used in tests for cleanup
+func zendArrayRelease(p unsafe.Pointer) {
+	C.zend_array_release((*C.zend_array)(p))
 }
 
 func zendHashDestroy(p unsafe.Pointer) {
 	ht := (*C.zend_array)(p)
 	C.zend_hash_destroy(ht)
+}
+
+// used in tests for cleanup
+func efree(p unsafe.Pointer) {
+	C.__efree__(p)
 }
 
 // EXPERIMENTAL: CallPHPCallable executes a PHP callable with the given parameters.
