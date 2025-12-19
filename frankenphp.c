@@ -554,10 +554,10 @@ PHP_FUNCTION(frankenphp_log) {
   zend_long level = 0;
   zval *context = NULL;
 
-  ZEND_PARSE_PARAMETERS_START(2, 3)
+  ZEND_PARSE_PARAMETERS_START(1, 3)
   Z_PARAM_STR(message)
-  Z_PARAM_LONG(level)
   Z_PARAM_OPTIONAL
+  Z_PARAM_LONG(level)
   Z_PARAM_ARRAY(context)
   ZEND_PARSE_PARAMETERS_END();
 
