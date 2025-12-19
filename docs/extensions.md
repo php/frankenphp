@@ -406,10 +406,10 @@ const MAX_CONNECTIONS = 100
 const API_VERSION = "1.2.3"
 
 //export_php:const
-const STATUS_OK = iota
-
-//export_php:const
-const STATUS_ERROR = iota
+const (
+	STATUS_OK = iota
+	STATUS_ERROR
+)
 ```
 
 #### Class Constants
@@ -429,13 +429,11 @@ const STATUS_INACTIVE = 0
 const ROLE_ADMIN = "admin"
 
 //export_php:classconst Order
-const STATE_PENDING = iota
-
-//export_php:classconst Order
-const STATE_PROCESSING = iota
-
-//export_php:classconst Order
-const STATE_COMPLETED = iota
+const (
+	STATE_PENDING = iota
+	STATE_PROCESSING
+	STATE_COMPLETED
+)
 ```
 
 Class constants are accessible using the class name scope in PHP:
