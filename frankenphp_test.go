@@ -447,6 +447,7 @@ func testLog_frankenphp_log(t *testing.T, opts *testOptions) {
 
 		logs := buf.String()
 		for _, message := range []string{
+			`level=INFO msg="default level message"`,
 			fmt.Sprintf(`level=DEBUG msg="some debug message %d" "key int"=1`, i),
 			fmt.Sprintf(`level=INFO msg="some info message %d" "key string"=string`, i),
 			fmt.Sprintf(`level=WARN msg="some warn message %d"`, i),
