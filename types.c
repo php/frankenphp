@@ -25,15 +25,6 @@ void __zend_hash_init__(HashTable *ht, uint32_t nSize, dtor_func_t pDestructor,
 
 zend_array *__zend_new_array__(uint32_t size) { return zend_new_array(size); }
 
-/* Returns existing interned string or creates a new zend_string. */
-zend_string *__zend_string_init_existing_interned__(const char *str,
-                                                    size_t size,
-                                                    bool permanent) {
-  return zend_string_init(str, size, permanent);
-  // TODO: use this once it's possible to test the behavior
-  // return zend_string_init_existing_interned(str, size, permanent);
-}
-
 zend_array *zend_hash_bulk_insert(zend_array *arr, size_t num_entries,
                                   size_t bulk_size, char *key1, char *key2,
                                   char *key3, char *key4, size_t key_len1,

@@ -20,9 +20,6 @@ int __call_user_function__(zval *function_name, zval *retval,
                            uint32_t param_count, zval params[]);
 
 zend_array *__zend_new_array__(uint32_t size);
-zend_string *__zend_string_init_existing_interned__(const char *str,
-                                                    size_t size,
-                                                    bool permanent);
 
 zend_array *zend_hash_bulk_insert(zend_array *arr, size_t num_entries,
                                   size_t bulk_size, char *key1, char *key2,

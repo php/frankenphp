@@ -1,7 +1,6 @@
 package frankenphp
 
 //#cgo noescape __zend_new_array__
-//#cgo noescape __zend_string_init_existing_interned__
 //#cgo noescape zend_hash_bulk_insert
 //#cgo noescape zend_hash_bulk_next_index_insert
 //#cgo noescape get_ht_bucket
@@ -13,7 +12,6 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
-	"sync"
 	"unsafe"
 )
 
@@ -30,35 +28,8 @@ func GoString(s unsafe.Pointer) string {
 	return goString((*C.zend_string)(s))
 }
 
-var internedStrings = sync.Map{}
-
 func goString(zendStr *C.zend_string) string {
-
-	// interned strings can be global or thread-local, but their number is limited
-	if isInternedString(zendStr) {
-		if v, ok := internedStrings.Load(zendStr); ok {
-			return v.(string)
-		}
-		str := C.GoStringN((*C.char)(unsafe.Pointer(&zendStr.val)), C.int(zendStr.len))
-		internedStrings.Store(zendStr, str)
-
-		return str
-	}
-
 	return C.GoStringN((*C.char)(unsafe.Pointer(&zendStr.val)), C.int(zendStr.len))
-}
-
-// equivalent of ZSTR_IS_INTERNED
-// interned strings are global strings used by the zend_engine (like classnames, function names, etc)
-func isInternedString(zs *C.zend_string) bool {
-	// mirror of zend_refcounted_h struct
-	type zendRefcountedH struct {
-		refcount uint32
-		typeInfo uint32
-	}
-
-	gc := (*zendRefcountedH)(unsafe.Pointer(zs))
-	return (gc.typeInfo & C.IS_STR_INTERNED) != 0
 }
 
 // EXPERIMENTAL: PHPString converts a Go string to a zend_string with copy. The string can be
@@ -73,10 +44,10 @@ func phpString(s string, persistent bool) *C.zend_string {
 		return C.zend_empty_string
 	}
 
-	return C.__zend_string_init_existing_interned__(
-		toUnsafeChar(s),
+	return C.zend_string_init(
+		(*C.char)(unsafe.Pointer(unsafe.StringData(s))),
 		C.size_t(len(s)),
-		C.bool(persistent),
+		C._Bool(persistent),
 	)
 }
 

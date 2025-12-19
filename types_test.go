@@ -198,6 +198,15 @@ func BenchmarkString(b *testing.B) {
 	})
 }
 
+func BenchmarkInternedString(b *testing.B) {
+	message := "Error"
+	benchOnPHPThread(b, b.N, func() {
+		phpString := PHPString(message, false)
+		_ = GoString(phpString)
+		zendStringRelease(phpString)
+	})
+}
+
 func BenchmarkEmptyMap(b *testing.B) {
 	originalMap := map[string]any{}
 	benchOnPHPThread(b, b.N, func() {
