@@ -1,8 +1,6 @@
 package frankenphp
 
 import (
-	"io"
-	"log/slog"
 	"testing"
 	"time"
 
@@ -11,10 +9,11 @@ import (
 )
 
 func TestScaleARegularThreadUpAndDown(t *testing.T) {
+	t.Cleanup(Shutdown)
+
 	assert.NoError(t, Init(
 		WithNumThreads(1),
 		WithMaxThreads(2),
-		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
 	))
 
 	autoScaledThread := phpThreads[1]
@@ -25,14 +24,14 @@ func TestScaleARegularThreadUpAndDown(t *testing.T) {
 	assert.IsType(t, &regularThread{}, autoScaledThread.handler)
 
 	// on down-scale, the thread will be marked as inactive
-	setLongWaitTime(autoScaledThread)
+	setLongWaitTime(t, autoScaledThread)
 	deactivateThreads()
 	assert.IsType(t, &inactiveThread{}, autoScaledThread.handler)
-
-	Shutdown()
 }
 
 func TestScaleAWorkerThreadUpAndDown(t *testing.T) {
+	t.Cleanup(Shutdown)
+
 	workerName := "worker1"
 	workerPath := testDataPath + "/transition-worker-1.php"
 	assert.NoError(t, Init(
@@ -43,7 +42,6 @@ func TestScaleAWorkerThreadUpAndDown(t *testing.T) {
 			WithWorkerWatchMode([]string{}),
 			WithWorkerMaxFailures(0),
 		),
-		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
 	))
 
 	autoScaledThread := phpThreads[2]
@@ -53,13 +51,13 @@ func TestScaleAWorkerThreadUpAndDown(t *testing.T) {
 	assert.Equal(t, state.Ready, autoScaledThread.state.Get())
 
 	// on down-scale, the thread will be marked as inactive
-	setLongWaitTime(autoScaledThread)
+	setLongWaitTime(t, autoScaledThread)
 	deactivateThreads()
 	assert.IsType(t, &inactiveThread{}, autoScaledThread.handler)
-
-	Shutdown()
 }
 
-func setLongWaitTime(thread *phpThread) {
+func setLongWaitTime(t *testing.T, thread *phpThread) {
+	t.Helper()
+
 	thread.state.SetWaitTime(time.Now().Add(-time.Hour))
 }

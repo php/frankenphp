@@ -107,8 +107,8 @@ func TestPHPFunctionGenerator_Generate(t *testing.T) {
 			},
 			contains: []string{
 				"PHP_FUNCTION(process_array)",
-				"zval *input = NULL;",
-				"Z_PARAM_ARRAY(input)",
+				"zend_array *input = NULL;",
+				"Z_PARAM_ARRAY_HT(input)",
 				"zend_array *result = process_array(input);",
 				"RETURN_ARR(result)",
 			},
@@ -126,10 +126,10 @@ func TestPHPFunctionGenerator_Generate(t *testing.T) {
 			},
 			contains: []string{
 				"PHP_FUNCTION(filter_array)",
-				"zval *data = NULL;",
+				"zend_array *data = NULL;",
 				"zend_string *key = NULL;",
 				"zend_long limit = 10;",
-				"Z_PARAM_ARRAY(data)",
+				"Z_PARAM_ARRAY_HT(data)",
 				"Z_PARAM_STR(key)",
 				"Z_PARAM_LONG(limit)",
 				"ZEND_PARSE_PARAMETERS_START(2, 3)",
@@ -201,7 +201,7 @@ func TestPHPFunctionGenerator_GenerateParamDeclarations(t *testing.T) {
 				{Name: "items", PhpType: phpArray},
 			},
 			contains: []string{
-				"zval *items = NULL;",
+				"zend_array *items = NULL;",
 			},
 		},
 		{
@@ -213,7 +213,7 @@ func TestPHPFunctionGenerator_GenerateParamDeclarations(t *testing.T) {
 			},
 			contains: []string{
 				"zend_string *name = NULL;",
-				"zval *data = NULL;",
+				"zend_array *data = NULL;",
 				"zend_long count = 0;",
 			},
 		},

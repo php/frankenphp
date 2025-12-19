@@ -2,7 +2,6 @@ package frankenphp
 
 import (
 	"io"
-	"log/slog"
 	"math/rand/v2"
 	"net/http/httptest"
 	"path/filepath"
@@ -93,10 +92,15 @@ func TestTransitionAThreadBetween2DifferentWorkers(t *testing.T) {
 // try all possible handler transitions
 // takes around 200ms and is supposed to force race conditions
 func TestTransitionThreadsWhileDoingRequests(t *testing.T) {
+	t.Cleanup(Shutdown)
+
+	var (
+		isDone atomic.Bool
+		wg sync.WaitGroup
+	)
+
 	numThreads := 10
 	numRequestsPerThread := 100
-	isDone := atomic.Bool{}
-	wg := sync.WaitGroup{}
 	worker1Path := testDataPath + "/transition-worker-1.php"
 	worker1Name := "worker-1"
 	worker2Path := testDataPath + "/transition-worker-2.php"
@@ -114,7 +118,6 @@ func TestTransitionThreadsWhileDoingRequests(t *testing.T) {
 			WithWorkerWatchMode([]string{}),
 			WithWorkerMaxFailures(0),
 		),
-		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
 	))
 
 	// try all possible permutations of transition, transition every ms
@@ -155,7 +158,6 @@ func TestTransitionThreadsWhileDoingRequests(t *testing.T) {
 	// we are finished as soon as all 1000 requests are done
 	wg.Wait()
 	isDone.Store(true)
-	Shutdown()
 }
 
 func TestFinishBootingAWorkerScript(t *testing.T) {

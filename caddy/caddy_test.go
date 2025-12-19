@@ -1370,7 +1370,7 @@ func TestWorkerMatchDirective(t *testing.T) {
 		}
 		`, "caddyfile")
 
-	// worker is outside of public directory, match anyways
+	// worker is outside public directory, match anyway
 	tester.AssertGetResponse("http://localhost:"+testPort+"/matched-path", http.StatusOK, "requests:1")
 	tester.AssertGetResponse("http://localhost:"+testPort+"/matched-path/anywhere", http.StatusOK, "requests:2")
 
@@ -1478,5 +1478,33 @@ func TestDd(t *testing.T) {
 		"http://localhost:"+testPort+"/some-path?output=dump123",
 		http.StatusInternalServerError,
 		"dump123",
+	)
+}
+
+func TestLog(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	tester.InitServer(`
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		http://localhost:`+testPort+` {
+			log {
+				output stdout
+				format json
+			}
+
+			root ../testdata
+			php_server {
+				worker ../testdata/log-frankenphp_log.php
+			}
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse(
+		"http://localhost:"+testPort+"/log-frankenphp_log.php?i=0",
+		http.StatusOK,
+		"",
 	)
 }
