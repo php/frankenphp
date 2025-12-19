@@ -660,10 +660,23 @@ func go_read_cookies(threadIndex C.uintptr_t) *C.char {
 	return C.CString(cookie)
 }
 
+func getLogger(threadIndex C.uintptr_t) (*slog.Logger, context.Context) {
+	ctxHolder := phpThreads[threadIndex]
+	if ctxHolder == nil {
+		return globalLogger, globalCtx
+	}
+
+	fCtx := ctxHolder.frankenPHPContext()
+	if fCtx == nil {
+		return globalLogger, globalCtx
+	}
+
+	return fCtx.logger, ctxHolder.context()
+}
+
 //export go_log
 func go_log(threadIndex C.uintptr_t, message *C.char, level C.int) {
-	ctx := phpThreads[threadIndex].context()
-	logger := phpThreads[threadIndex].frankenPHPContext().logger
+	logger, ctx := getLogger(threadIndex)
 
 	m := C.GoString(message)
 	le := syslogLevelInfo
@@ -697,8 +710,7 @@ func go_log(threadIndex C.uintptr_t, message *C.char, level C.int) {
 
 //export go_log_attrs
 func go_log_attrs(threadIndex C.uintptr_t, message *C.zend_string, cLevel C.zend_long, cAttrs *C.zval) *C.char {
-	ctx := phpThreads[threadIndex].context()
-	logger := phpThreads[threadIndex].frankenPHPContext().logger
+	logger, ctx := getLogger(threadIndex)
 
 	level := slog.Level(cLevel)
 
