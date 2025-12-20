@@ -544,9 +544,9 @@ func CallPHPCallable(cb unsafe.Pointer, params []interface{}) interface{} {
 
 		for i, param := range params {
 			var sourceZval C.zval
-			phpValue(sourceZval, param)
+			phpValue(&sourceZval, param)
 			targetZval := (*C.zval)(unsafe.Pointer(uintptr(unsafe.Pointer(paramStorage)) + uintptr(i)*unsafe.Sizeof(C.zval{})))
-			*targetZval = *sourceZval
+			*targetZval = sourceZval
 		}
 	}
 
