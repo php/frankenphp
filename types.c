@@ -36,11 +36,17 @@ zend_array *zend_hash_bulk_insert(zend_array *arr, size_t num_entries,
   }
 
   zend_hash_str_update(arr, key1, key_len1, val1);
-  if (bulk_size < 1) { return arr; }
+  if (bulk_size < 1) {
+    return arr;
+  }
   zend_hash_str_update(arr, key2, key_len2, val2);
-  if (bulk_size < 2) { return arr; }
+  if (bulk_size < 2) {
+    return arr;
+  }
   zend_hash_str_update(arr, key3, key_len3, val3);
-  if (bulk_size < 3) { return arr; }
+  if (bulk_size < 3) {
+    return arr;
+  }
   zend_hash_str_update(arr, key4, key_len4, val4);
 
   return arr;
@@ -56,11 +62,17 @@ zend_array *zend_hash_bulk_next_index_insert(zend_array *arr,
   }
 
   zend_hash_next_index_insert(arr, val1);
-  if (bulk_size < 1) { return arr; }
+  if (bulk_size < 1) {
+    return arr;
+  }
   zend_hash_next_index_insert(arr, val2);
-  if (bulk_size < 2) { return arr; }
+  if (bulk_size < 2) {
+    return arr;
+  }
   zend_hash_next_index_insert(arr, val3);
-  if (bulk_size < 3) { return arr; }
+  if (bulk_size < 3) {
+    return arr;
+  }
   zend_hash_next_index_insert(arr, val4);
 
   return arr;

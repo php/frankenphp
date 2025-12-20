@@ -543,8 +543,10 @@ func CallPHPCallable(cb unsafe.Pointer, params []interface{}) interface{} {
 		}()
 
 		for i, param := range params {
+			var sourceZval C.zval
+			phpValue(sourceZval, param)
 			targetZval := (*C.zval)(unsafe.Pointer(uintptr(unsafe.Pointer(paramStorage)) + uintptr(i)*unsafe.Sizeof(C.zval{})))
-			phpValue(targetZval, param)
+			*targetZval = *sourceZval
 		}
 	}
 
@@ -556,7 +558,6 @@ func CallPHPCallable(cb unsafe.Pointer, params []interface{}) interface{} {
 	}
 
 	goResult, err := goValue[any](&retval)
-	C.zval_ptr_dtor(&retval)
 
 	if err != nil {
 		return nil
