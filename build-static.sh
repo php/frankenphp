@@ -180,13 +180,12 @@ fi
 if [ -n "${EMBED}" ] && [ -d "${EMBED}" ]; then
 	case "${EMBED}" in
 	/*)
-		EMBED="${EMBED}"
 		;;
 	*)
 		EMBED="${CURRENT_DIR}/${EMBED}"
 		;;
 	esac
-	SPC_OPT_BUILD_ARGS="${SPC_OPT_BUILD_ARGS} --with-frankenphp-app=\"${EMBED}\""
+	SPC_OPT_BUILD_ARGS="${SPC_OPT_BUILD_ARGS} --with-frankenphp-app='${EMBED}'"
 fi
 
 SPC_OPT_INSTALL_ARGS="go-xcaddy"
