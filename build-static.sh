@@ -181,6 +181,7 @@ if [ -n "${EMBED}" ] && [ -d "${EMBED}" ]; then
 	if [[ "${EMBED}" != /* ]]; then
 		EMBED="${CURRENT_DIR}/${EMBED}"
 	fi
+	# shellcheck disable=SC2089
 	SPC_OPT_BUILD_ARGS="${SPC_OPT_BUILD_ARGS} --with-frankenphp-app='${EMBED}'"
 fi
 
@@ -207,7 +208,7 @@ done
 # shellcheck disable=SC2086
 ${spcCommand} download --with-php="${PHP_VERSION}" --for-extensions="${PHP_EXTENSIONS}" --for-libs="${PHP_EXTENSION_LIBS}" ${SPC_OPT_DOWNLOAD_ARGS}
 export FRANKENPHP_SOURCE_PATH="${CURRENT_DIR}"
-# shellcheck disable=SC2086
+# shellcheck disable=SC2086,SC2090
 ${spcCommand} build --enable-zts --build-embed --build-frankenphp ${SPC_OPT_BUILD_ARGS} "${PHP_EXTENSIONS}" --with-libs="${PHP_EXTENSION_LIBS}"
 
 if [ -n "$CI" ]; then
