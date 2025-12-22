@@ -4,7 +4,7 @@ FrankenPHP includes a built-in **hot reload** feature designed to vastly improve
 
 ![Mercure](hot-reload.png)
 
-This feature provides a workflow similar to **Hot Module Replacement (HMR)** found in modern JavaScript tooling (like Vite or Webpack).
+This feature provides a workflow similar to **Hot Module Replacement (HMR)** found in modern JavaScript tooling (like Vite or webpack).
 Instead of manually refreshing the browser after every file change (PHP code, templates, JavaScript and CSS files...),
 FrankenPHP updates the content in real-time.
 
@@ -15,8 +15,8 @@ When a file is modified, it pushes a [Mercure](mercure.md) update to the browser
 
 Depending on your setup, the browser will either:
 
-* **Morph the DOM** (preserving scroll position and input state) if [Idiomorph](https://github.com/bigskysoftware/idiomorph) is loaded.
-* **Reload the page** (standard live reload) if Idiomorph is not present.
+- **Morph the DOM** (preserving scroll position and input state) if [Idiomorph](https://github.com/bigskysoftware/idiomorph) is loaded.
+- **Reload the page** (standard live reload) if Idiomorph is not present.
 
 ## Configuration
 
@@ -107,8 +107,8 @@ This means changes to your PHP code will not be reflected immediately, even if t
 
 For the best developer experience, you should combine `hot_reload` with [the `watch` sub-directive in the `worker` directive](config.md#watching-for-file-changes).
 
-* `hot_reload`: refreshes the **browser** when files change
-* `worker.watch`: restarts the worker when files change
+- `hot_reload`: refreshes the **browser** when files change
+- `worker.watch`: restarts the worker when files change
 
 ```caddy
 localhost
@@ -134,5 +134,6 @@ php_server {
 3. **Push**: a JSON payload containing the list of changed files is sent to the built-in [Mercure hub](https://mercure.rocks).
 4. **Receive**: The browser, listening via the JavaScript library, receives the Mercure event.
 5. **Update**:
-* If **Idiomorph** is detected, it fetches the updated content and morphs the current HTML to match the new state, applying changes instantly without losing state.
-* Otherwise, `window.location.reload()` is called to refresh the page.
+
+- If **Idiomorph** is detected, it fetches the updated content and morphs the current HTML to match the new state, applying changes instantly without losing state.
+- Otherwise, `window.location.reload()` is called to refresh the page.
