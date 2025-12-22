@@ -265,10 +265,7 @@ func go_frankenphp_worker_handle_request_start(threadIndex C.uintptr_t) (C.bool,
 			return C.bool(hasRequest), (*C.zval)(p)
 
 		default:
-			var zval C.zval
-			phpValue(&zval, p)
-			handler.thread.Pin(unsafe.Pointer(&zval))
-			return C.bool(hasRequest), &zval
+			return C.bool(hasRequest), (*C.zval)(PHPValue(p))
 		}
 	}
 

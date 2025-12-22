@@ -738,42 +738,36 @@ func TestCallable(t *testing.T) {
 
 	err = suite.verifyFunctionBehavior(`<?php
 
-echo "Testing my_array_map([1, 2, 3])\n";
 $result = my_array_map([1, 2, 3], function($x) { return $x * 2; });
 if ($result !== [2, 4, 6]) {
 	echo "FAIL: my_array_map with closure expected [2, 4, 6], got " . json_encode($result);
 	exit(1);
 }
 
-echo "Testing my_array_map(['hello', 'world'])\n";
 $result = my_array_map(['hello', 'world'], 'strtoupper');
 if ($result !== ['HELLO', 'WORLD']) {
 	echo "FAIL: my_array_map with function name expected ['HELLO', 'WORLD'], got " . json_encode($result);
 	exit(1);
 }
 
-echo "Testing my_array_map with trim function\n";
 $result = my_array_map([], function($x) { return $x; });
 if ($result !== []) {
 	echo "FAIL: my_array_map with empty array expected [], got " . json_encode($result);
 	exit(1);
 }
 
-echo "Testing my_filter([1, 2, 3, 4, 5, 6])\n";
 $result = my_filter([1, 2, 3, 4, 5, 6], function($x) { return $x % 2 === 0; });
 if ($result !== [2, 4, 6]) {
 	echo "FAIL: my_filter expected [2, 4, 6], got " . json_encode($result);
 	exit(1);
 }
 
-echo "Testing my_filter with null callback\n";
 $result = my_filter([1, 2, 3, 4], null);
 if ($result !== [1, 2, 3, 4]) {
 	echo "FAIL: my_filter with null callback expected [1, 2, 3, 4], got " . json_encode($result);
 	exit(1);
 }
 
-echo "Testing Processor::transform\n";
 $processor = new Processor();
 $result = $processor->transform('hello', function($s) { return strtoupper($s); });
 if ($result !== 'HELLO') {
@@ -781,14 +775,12 @@ if ($result !== 'HELLO') {
 	exit(1);
 }
 
-echo "Testing Processor::transform with function name\n";
 $result = $processor->transform('world', 'strtoupper');
 if ($result !== 'WORLD') {
 	echo "FAIL: Processor::transform with function name expected 'WORLD', got '$result'";
 	exit(1);
 }
 
-echo "Testing Processor::transform with trim function\n";
 $result = $processor->transform('  test  ', 'trim');
 if ($result !== 'test') {
 	echo "FAIL: Processor::transform with trim expected 'test', got '$result'";
