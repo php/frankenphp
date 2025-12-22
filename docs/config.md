@@ -213,7 +213,9 @@ This is useful for development environments.
 }
 ```
 
-If the `watch` directory is not specified, it will fall back to `./**/*.{php,yaml,yml,twig,env}`,
+This feature is often used in combination with [hot reload](hot-reload.md)
+
+If the `watch` directory is not specified, it will fall back to `./**/*.{env,php,twig,yaml,yml}`,
 which watches all `.php`, `.yaml`, `.yml`, `.twig` and `.env` files in the directory and subdirectories
 where the FrankenPHP process was started. You can instead also specify one or more directories via a
 [shell filename pattern](https://pkg.go.dev/path/filepath#Match):
@@ -239,7 +241,7 @@ where the FrankenPHP process was started. You can instead also specify one or mo
 
 The file watcher is based on [e-dant/watcher](https://github.com/e-dant/watcher).
 
-## Matching the worker to a path
+## Matching the Worker To a Path
 
 In traditional PHP applications, scripts are always placed in the public directory.
 This is also true for worker scripts, which are treated like any other PHP script.
