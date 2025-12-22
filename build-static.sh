@@ -178,13 +178,9 @@ fi
 
 # Embed PHP app, if any
 if [ -n "${EMBED}" ] && [ -d "${EMBED}" ]; then
-	case "${EMBED}" in
-	/*)
-		;;
-	*)
+	if [[ "${EMBED}" != /* ]]; then
 		EMBED="${CURRENT_DIR}/${EMBED}"
-		;;
-	esac
+	fi
 	SPC_OPT_BUILD_ARGS="${SPC_OPT_BUILD_ARGS} --with-frankenphp-app='${EMBED}'"
 fi
 
