@@ -178,7 +178,15 @@ fi
 
 # Embed PHP app, if any
 if [ -n "${EMBED}" ] && [ -d "${EMBED}" ]; then
-	SPC_OPT_BUILD_ARGS="${SPC_OPT_BUILD_ARGS} --with-frankenphp-app=${EMBED}"
+	case "${EMBED}" in
+		/*)
+			EMBED_ABS="${EMBED}"
+			;;
+		*)
+			EMBED_ABS="${CURRENT_DIR}/${EMBED}"
+			;;
+	esac
+	SPC_OPT_BUILD_ARGS="${SPC_OPT_BUILD_ARGS} --with-frankenphp-app=${EMBED_ABS}"
 fi
 
 SPC_OPT_INSTALL_ARGS="go-xcaddy"
