@@ -186,7 +186,7 @@ if [ -n "${EMBED}" ] && [ -d "${EMBED}" ]; then
 			EMBED_ABS="${CURRENT_DIR}/${EMBED}"
 			;;
 	esac
-	SPC_OPT_BUILD_ARGS="${SPC_OPT_BUILD_ARGS} --with-frankenphp-app=${EMBED_ABS}"
+	SPC_OPT_BUILD_ARGS="${SPC_OPT_BUILD_ARGS} --with-frankenphp-app=\"${EMBED_ABS}\""
 fi
 
 SPC_OPT_INSTALL_ARGS="go-xcaddy"
