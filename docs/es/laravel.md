@@ -212,4 +212,3 @@ PATH="$PWD:$PATH" frankenphp php-cli artisan octane:frankenphp
 >
 > Para que el comando funcione, el binario autónomo **debe** llamarse `frankenphp`
 > porque Octane necesita un programa llamado `frankenphp` disponible en la ruta.
-```
