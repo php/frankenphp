@@ -213,7 +213,7 @@ This is useful for development environments.
 }
 ```
 
-This feature is often used in combination with [hot reload](hot-reload.md)
+This feature is often used in combination with [hot reload](hot-reload.md).
 
 If the `watch` directory is not specified, it will fall back to `./**/*.{env,php,twig,yaml,yml}`,
 which watches all `.php`, `.yaml`, `.yml`, `.twig` and `.env` files in the directory and subdirectories
