@@ -58,7 +58,7 @@ func (p *Processor) Transform(input *C.zend_string, callback *C.zval) unsafe.Poi
 
 	resultStr, ok := callResult.(string)
 	if !ok {
-		return unsafe.Pointer(input)
+		return frankenphp.PHPString(input, false)
 	}
 
 	return frankenphp.PHPString(resultStr, false)
