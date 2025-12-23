@@ -752,7 +752,7 @@ if ($result !== ['HELLO', 'WORLD']) {
 	exit(1);
 }
 
-echo "Testing my_array_map with trim function\n";
+echo "Testing my_array_map with empty array\n";
 $result = my_array_map([], function($x) { return $x; });
 if ($result !== []) {
 	echo "FAIL: my_array_map with empty array expected [], got " . json_encode($result);

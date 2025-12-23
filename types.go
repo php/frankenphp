@@ -468,10 +468,6 @@ func phpValue(zval *C.zval, value any) {
 
 // createNewArray creates a new zend_array with the specified size.
 func createNewArray(size int) *C.zend_array {
-	if size == 0 {
-		// use the global empty array instance
-		return (*C.zend_array)(&C.zend_empty_array)
-	}
 	return C.__zend_new_array__(C.uint32_t(size))
 }
 
