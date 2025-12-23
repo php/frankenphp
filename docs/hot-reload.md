@@ -80,7 +80,7 @@ php_server {
 ## Client-Side Integration
 
 While the server detects changes, the browser needs to subscribe to these events to update the page.
-FrankenPHP exposes the Mercure Hub URL to use for the subscribing to file changes via the `$_SERVER['FRANKENPHP_HOT_RELOAD']` environment variable.
+FrankenPHP exposes the Mercure Hub URL to use for subscribing to file changes via the `$_SERVER['FRANKENPHP_HOT_RELOAD']` environment variable.
 
 A convenience JavaScript library, [frankenphp-hot-reload](https://www.npmjs.com/package/frankenphp-hot-reload), is also available to handle the client-side logic.
 To use it, add the following to your main layout:
