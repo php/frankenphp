@@ -85,7 +85,7 @@ Para enviar una actualización a los suscriptores conectados, envía una solicit
 <?php
 // public/publish.php
 
-const JWT = 'eyJhbGciOiJIUzI1NiJ9.eyJtZXJjdXJlIjp7InB1Ymxpc2giOlsiKiJdfX0.PXwpfIGng6KObfZlcOXvcnWCJOWTFLtswGI5DZuWSK4';
+const JWT_SECRET = '!ChangeThisMercureHubJWTSecretKey!'; // Debe ser la misma que mercure.publisher_jwt en Caddyfile
 
 $updateID = file_get_contents('https://localhost/.well-known/mercure', context: stream_context_create(['http' => [
     'method'  => 'POST',
