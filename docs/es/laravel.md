@@ -200,7 +200,7 @@ Alternativamente, consulta [la documentación de Mercure](mercure.md) para hacer
 
 ¡Incluso es posible empaquetar aplicaciones Laravel Octane como binarios autónomos!
 
-Para hacerlo, [instala Octane correctamente](#laravel-octane) y sigue los pasos descritos en [la sección anterior](#laravel-apps-as-standalone-binaries).
+Para hacerlo, [instala Octane correctamente](#laravel-octane) y sigue los pasos descritos en [la sección anterior](#aplicaciones-laravel-como-binarios-autónomos).
 
 Luego, para iniciar FrankenPHP en modo worker a través de Octane, ejecuta:
 
