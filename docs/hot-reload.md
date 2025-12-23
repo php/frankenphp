@@ -95,7 +95,7 @@ To use it, add the following to your main layout:
 <?php endif ?>
 ```
 
-The library will automatically subscribe to the Mercure hub, fetch current URL in the background when a file change is detected and morph the DOM.
+The library will automatically subscribe to the Mercure hub, fetch the current URL in the background when a file change is detected and morph the DOM.
 It is available as a [npm](https://www.npmjs.com/package/frankenphp-hot-reload) package and on [GitHub](https://github.com/dunglas/frankenphp-hot-reload).
 
 Alternatively, you can implement your own client-side logic by subscribing directly to the Mercure hub using the `EventSource` native JavaScript class.
