@@ -216,7 +216,7 @@ This is useful for development environments.
 This feature is often used in combination with [hot reload](hot-reload.md).
 
 If the `watch` directory is not specified, it will fall back to `./**/*.{env,php,twig,yaml,yml}`,
-which watches all `.php`, `.yaml`, `.yml`, `.twig` and `.env` files in the directory and subdirectories
+which watches all `.env`, `.php`, `.twig`, `.yaml` and `.yml` files in the directory and subdirectories
 where the FrankenPHP process was started. You can instead also specify one or more directories via a
 [shell filename pattern](https://pkg.go.dev/path/filepath#Match):
 
