@@ -478,6 +478,7 @@ PHP_FUNCTION(frankenphp_handle_request) {
   go_frankenphp_finish_worker_request(thread_index, callback_ret);
   if (result.r1 != NULL) {
     zval_ptr_dtor(result.r1);
+    efree(result.r1);
   }
   if (callback_ret != NULL) {
     zval_ptr_dtor(&retval);
