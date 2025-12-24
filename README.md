@@ -128,6 +128,7 @@ Go to `https://localhost`, and enjoy!
 - [Worker mode](https://frankenphp.dev/docs/worker/)
 - [Early Hints support (103 HTTP status code)](https://frankenphp.dev/docs/early-hints/)
 - [Real-time](https://frankenphp.dev/docs/mercure/)
+- [Hot reloading](https://frankenphp.dev/docs/hot-reload/)
 - [Efficiently Serving Large Static Files](https://frankenphp.dev/docs/x-sendfile/)
 - [Configuration](https://frankenphp.dev/docs/config/)
 - [Writing PHP Extensions in Go](https://frankenphp.dev/docs/extensions/)
