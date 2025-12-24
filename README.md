@@ -140,6 +140,7 @@ Go to `https://localhost`, and enjoy!
 - [Create static binaries](https://frankenphp.dev/docs/static/)
 - [Compile from sources](https://frankenphp.dev/docs/compile/)
 - [Monitoring FrankenPHP](https://frankenphp.dev/docs/metrics/)
+- [WordPress integration](https://frankenphp.dev/docs/wordpress/)
 - [Laravel integration](https://frankenphp.dev/docs/laravel/)
 - [Known issues](https://frankenphp.dev/docs/known-issues/)
 - [Demo app (Symfony) and benchmarks](https://github.com/dunglas/frankenphp-demo)
