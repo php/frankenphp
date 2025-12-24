@@ -6,7 +6,7 @@ structured logging capabilities.
 
 ## `frankenphp_log()`
 
-The `frankenphp_log()` function allows you to emit structured logs directly from your PHP application
+The `frankenphp_log()` function allows you to emit structured logs directly from your PHP application,
 making ingestion into platforms like Datadog, Grafana Loki, or Elastic, as well as OpenTelemetry support, much easier.
 
 Under the hood, `frankenphp_log()` wraps [Go's `log/slog` package](https://pkg.go.dev/log/slog) to provide rich logging
