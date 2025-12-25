@@ -213,10 +213,12 @@ Esto es útil para entornos de desarrollo.
 }
 ```
 
-Si no se especifica el directorio `watch`, volverá a `./**/*.{php,yaml,yml,twig,env}`,
-que observa todos los archivos `.php`, `.yaml`, `.yml`, `.twig` y `.env` en el directorio y subdirectorios
-donde se inició el proceso de FrankenPHP. En su lugar, también puede especificar uno o más directorios mediante un
-[patrón de nombre de archivo de shell](https://pkg.go.dev/path/filepath#Match):
+Esta función se utiliza frecuentemente en combinación con [hot reload](hot-reload.md).
+
+Si el directorio `watch` no está especificado, retrocederá a `./**/*.{env,php,twig,yaml,yml}`,
+lo cual vigila todos los archivos `.env`, `.php`, `.twig`, `.yaml` y `.yml` en el directorio y subdirectorios
+donde se inició el proceso de FrankenPHP. También puede especificar uno o más directorios mediante un
+[patrón de nombres de ficheros de shell](https://pkg.go.dev/path/filepath#Match):
 
 ```caddyfile
 {
