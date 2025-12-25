@@ -57,7 +57,7 @@ estos mensajes se redirigen al registrador de Caddy.
 Por omisión, los mensajes enviados a través de `error_log()` se tratan como texto no estructurado.
 Son útiles para la compatibilidad con aplicaciones o bibliotecas existentes que dependen de la biblioteca estándar de PHP.
 
-### Ejemplo
+### Uso
 
 ```php
 error_log("Fallo en la conexión a la base de datos", 4);
