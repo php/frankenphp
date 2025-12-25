@@ -200,6 +200,80 @@ Las imágenes Docker se construyen:
 - Cuando se etiqueta una nueva versión
 - Diariamente a las 4 am UTC, si hay nuevas versiones de las imágenes oficiales de PHP disponibles
 
+## Endurecimiento de Imágenes
+
+Para reducir aún más la superficie de ataque y el tamaño de tus imágenes Docker de FrankenPHP, también es posible construirlas sobre una imagen
+[Google distroless](https://github.com/GoogleContainerTools/distroless) o
+[Docker hardened](https://www.docker.com/products/hardened-images).
+
+> [!WARNING]
+> Estas imágenes base mínimas no incluyen un shell ni gestor de paquetes, lo que hace que la depuración sea más difícil.
+> Por lo tanto, se recomiendan solo para producción si la seguridad es una alta prioridad.
+
+Cuando agregues extensiones PHP adicionales, necesitarás una etapa de construcción intermedia:
+
+```dockerfile
+FROM dunglas/frankenphp AS builder
+
+# Agregar extensiones PHP adicionales aquí
+RUN install-php-extensions pdo_mysql pdo_pgsql #...
+
+# Copiar bibliotecas compartidas de frankenphp y todas las extensiones instaladas a una ubicación temporal
+# También puedes hacer este paso manualmente analizando la salida de ldd del binario frankenphp y cada archivo .so de extensión
+RUN apt-get update && apt-get install -y libtree && \
+    EXT_DIR="$(php -r 'echo ini_get("extension_dir");')" && \
+    FRANKENPHP_BIN="$(which frankenphp)"; \
+    LIBS_TMP_DIR="/tmp/libs"; \
+    mkdir -p "$LIBS_TMP_DIR"; \
+    for target in "$FRANKENPHP_BIN" $(find "$EXT_DIR" -maxdepth 2 -type f -name "*.so"); do \
+        libtree -pv "$target" | sed 's/.*── \(.*\) \[.*/\1/' | grep -v "^$target" | while IFS= read -r lib; do \
+            [ -z "$lib" ] && continue; \
+            base=$(basename "$lib"); \
+            destfile="$LIBS_TMP_DIR/$base"; \
+            if [ ! -f "$destfile" ]; then \
+                cp "$lib" "$destfile"; \
+            fi; \
+        done; \
+    done
+
+
+# Imagen base distroless de Debian, asegúrate de que sea la misma versión de Debian que la imagen base
+FROM gcr.io/distroless/base-debian13
+# Alternativa de imagen endurecida de Docker
+# FROM dhi.io/debian:13
+
+# Ubicación de tu aplicación y Caddyfile que se copiará al contenedor
+ARG PATH_TO_APP="."
+ARG PATH_TO_CADDYFILE="./Caddyfile"
+
+# Copiar tu aplicación en /app
+# Para mayor endurecimiento asegúrate de que solo las rutas escribibles sean propiedad del usuario nonroot
+COPY --chown=nonroot:nonroot "$PATH_TO_APP" /app
+COPY "$PATH_TO_CADDYFILE" /etc/caddy/Caddyfile
+
+# Copiar frankenphp y bibliotecas necesarias
+COPY --from=builder /usr/local/bin/frankenphp /usr/local/bin/frankenphp
+COPY --from=builder /usr/local/lib/php/extensions /usr/local/lib/php/extensions
+COPY --from=builder /tmp/libs /usr/lib
+
+# Copiar archivos de configuración php.ini
+COPY --from=builder /usr/local/etc/php/conf.d /usr/local/etc/php/conf.d
+COPY --from=builder /usr/local/etc/php/php.ini-production /usr/local/etc/php/php.ini
+
+# Directorios de datos de Caddy — deben ser escribibles para nonroot, incluso en un sistema de archivos raíz de solo lectura
+ENV XDG_CONFIG_HOME=/config \
+    XDG_DATA_HOME=/data
+COPY --from=builder --chown=nonroot:nonroot /data/caddy /data/caddy
+COPY --from=builder --chown=nonroot:nonroot /config/caddy /config/caddy
+
+USER nonroot
+
+WORKDIR /app
+
+# punto de entrada para ejecutar frankenphp con el Caddyfile proporcionado
+ENTRYPOINT ["/usr/local/bin/frankenphp", "run", "-c", "/etc/caddy/Caddyfile"]
+```
+
 ## Versiones de desarrollo
 
 Las versiones de desarrollo están disponibles en el [repositorio Docker `dunglas/frankenphp-dev`](https://hub.docker.com/repository/docker/dunglas/frankenphp-dev).

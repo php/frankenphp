@@ -19,6 +19,8 @@ localhost
 mercure {
     # La clave secreta usada para firmar los tokens JWT para los publicadores
     publisher_jwt !CambiaEstaClaveSecretaJWTDelHubMercure!
+    # Cuando se establece publisher_jwt, ¡también debes establecer subscriber_jwt!
+    subscriber_jwt !CambiaEstaClaveSecretaJWTDelHubMercure!
     # Permite suscriptores anónimos (sin JWT)
     anonymous
 }
