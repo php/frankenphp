@@ -35,6 +35,8 @@ El siguiente comando activará un reinicio si algún archivo que termine en `.ph
 frankenphp php-server --worker /ruta/a/tu/script/worker.php --watch="/ruta/a/tu/app/**/*.php"
 ```
 
+Esta función se utiliza frecuentemente en combinación con [hot reloading](hot-reload.md).
+
 ## Symfony Runtime
 
 > [!TIP]
