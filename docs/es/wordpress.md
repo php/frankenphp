@@ -7,9 +7,11 @@ Ejecute [WordPress](https://wordpress.org/) con FrankenPHP para disfrutar de una
 1. [Descargue WordPress](https://wordpress.org/download/)
 2. Extraiga el archivo ZIP y abra una terminal en el directorio extraído
 3. Ejecute:
+
    ```console
    frankenphp php-server
    ```
+
 4. Vaya a `http://localhost/wp-admin/` y siga las instrucciones de instalación
 5. ¡Listo!
 
