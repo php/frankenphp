@@ -38,8 +38,8 @@ Linux*)
 				echo "❗ Enter your password to grant sudo powers for package installation"
 				${SUDO} -v || true
 			fi
-			${SUDO} dnf -y install https://rpm.henderkes.com/static-php-1-0.noarch.rpm
-			${SUDO} dnf -y module enable php-zts:static-8.4 || true
+			${SUDO} dnf -y install https://rpm.henderkes.com/static-php-1-1.noarch.rpm
+			${SUDO} dnf -y module enable php-zts:static-8.5 || true
 			${SUDO} dnf -y install frankenphp
 			echo
 			echo "🥳 FrankenPHP installed to ${italic}/usr/bin/frankenphp${normal} successfully."
@@ -56,8 +56,8 @@ Linux*)
 				echo "❗ Enter your password to grant sudo powers for package installation"
 				${SUDO} -v || true
 			fi
-			${SUDO} sh -c 'curl -fsSL https://key.henderkes.com/static-php.gpg -o /usr/share/keyrings/static-php.gpg'
-			${SUDO} sh -c 'echo "deb [signed-by=/usr/share/keyrings/static-php.gpg] https://deb.henderkes.com/ stable main" > /etc/apt/sources.list.d/static-php.list'
+			${SUDO} sh -c 'curl -fsSL https://pkg.henderkes.com/api/packages/85/debian/repository.key -o /etc/apt/keyrings/static-php85.asc'
+			${SUDO} sh -c 'echo "deb [signed-by=/etc/apt/keyrings/static-php85.asc] https://pkg.henderkes.com/api/packages/85/debian php-zts main" | sudo tee -a /etc/apt/sources.list.d/static-php85.list'
 			if command -v apt >/dev/null 2>&1; then
 				${SUDO} apt update
 				${SUDO} apt -y install frankenphp
@@ -65,6 +65,35 @@ Linux*)
 				${SUDO} apt-get update
 				${SUDO} apt-get -y install frankenphp
 			fi
+			echo
+			echo "🥳 FrankenPHP installed to ${italic}/usr/bin/frankenphp${normal} successfully."
+			echo "❗ The systemd service uses the Caddyfile in ${italic}/etc/frankenphp/Caddyfile${normal}"
+			echo "❗ Your php.ini is found in ${italic}/etc/php-zts/php.ini${normal}"
+			echo
+			echo "⭐ If you like FrankenPHP, please give it a star on GitHub: ${italic}https://github.com/php/frankenphp${normal}"
+			exit 0
+		fi
+
+		if command -v apk >/dev/null 2>&1; then
+			echo "📦 Detected apk. Installing FrankenPHP from APK repository..."
+			if [ -n "${SUDO}" ]; then
+				echo "❗ Enter your password to grant sudo powers for package installation"
+				${SUDO} -v || true
+			fi
+
+			KEY_URL="https://pkg.henderkes.com/api/packages/85/alpine/key"
+			${SUDO} sh -c "cd /etc/apk/keys && curl -JOsS \"$KEY_URL\" 2>/dev/null || true"
+
+			REPO_URL="https://pkg.henderkes.com/api/packages/85/alpine/main/php-zts"
+			if grep -q "$REPO_URL" /etc/apk/repositories 2>/dev/null; then
+				echo "Repository already exists in /etc/apk/repositories"
+			else
+				${SUDO} sh -c "echo \"$REPO_URL\" >> /etc/apk/repositories"
+				${SUDO} apk update
+				echo "Repository added to /etc/apk/repositories"
+			fi
+
+			${SUDO} apk add frankenphp
 			echo
 			echo "🥳 FrankenPHP installed to ${italic}/usr/bin/frankenphp${normal} successfully."
 			echo "❗ The systemd service uses the Caddyfile in ${italic}/etc/frankenphp/Caddyfile${normal}"
