@@ -35,6 +35,8 @@ The following command will trigger a restart if any file ending in `.php` in the
 frankenphp php-server --worker /path/to/your/worker/script.php --watch="/path/to/your/app/**/*.php"
 ```
 
+This feature is often used in combination with [hot reloading](hot-reload.md).
+
 ## Symfony Runtime
 
 > [!TIP]
