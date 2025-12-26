@@ -227,7 +227,7 @@ func testFunction() {
 			require.NoError(t, os.WriteFile(filename, []byte(tt.sourceContent), 0644))
 
 			analyzer := &SourceAnalyzer{}
-			imports, variables, functions, err := analyzer.analyze(filename)
+			_, variables, functions, err := analyzer.analyze(filename)
 
 			if tt.expectError {
 				assert.Error(t, err, "expected error")
@@ -235,10 +235,6 @@ func testFunction() {
 			}
 
 			assert.NoError(t, err, "unexpected error")
-
-			if len(imports) != 0 && len(tt.expectedImports) != 0 {
-				assert.Equal(t, tt.expectedImports, imports, "imports mismatch")
-			}
 
 			assert.Equal(t, tt.expectedVariables, variables, "variables mismatch")
 			assert.Len(t, functions, len(tt.expectedFunctions), "function count mismatch")
@@ -383,6 +379,110 @@ var x = 10`,
 			}
 		})
 	}
+}
+
+func TestSourceAnalyzer_InternalFunctionPreservation(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	sourceContent := `package main
+
+import (
+	"fmt"
+	"strings"
+)
+
+//export_php: exported1(): string
+func exported1() *go_value {
+	return String(internal1())
+}
+
+func internal1() string {
+	return "helper1"
+}
+
+//export_php: exported2(): void
+func exported2() {
+	internal2()
+}
+
+func internal2() {
+	fmt.Println("helper2")
+}
+
+func internal3(data string) string {
+	return strings.ToUpper(data)
+}`
+
+	sourceFile := filepath.Join(tmpDir, "test.go")
+	require.NoError(t, os.WriteFile(sourceFile, []byte(sourceContent), 0644))
+
+	analyzer := &SourceAnalyzer{}
+	packageName, variables, internalFuncs, err := analyzer.analyze(sourceFile)
+	require.NoError(t, err)
+
+	assert.Equal(t, "main", packageName)
+
+	assert.Len(t, internalFuncs, 3, "Should extract exactly 3 internal functions")
+
+	expectedInternalFuncs := []string{
+		`func internal1() string {
+	return "helper1"
+}`,
+		`func internal2() {
+	fmt.Println("helper2")
+}`,
+		`func internal3(data string) string {
+	return strings.ToUpper(data)
+}`,
+	}
+
+	for i, expected := range expectedInternalFuncs {
+		assert.Equal(t, expected, internalFuncs[i], "Internal function %d should match", i)
+	}
+
+	assert.Empty(t, variables, "Should not have variables")
+}
+
+func TestSourceAnalyzer_VariableBlockPreservation(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	sourceContent := `package main
+
+import (
+	"sync"
+)
+
+var (
+	mu    sync.RWMutex
+	cache = make(map[string]string)
+)
+
+var globalCounter int = 0
+
+//export_php: test(): void
+func test() {}`
+
+	sourceFile := filepath.Join(tmpDir, "test.go")
+	require.NoError(t, os.WriteFile(sourceFile, []byte(sourceContent), 0644))
+
+	analyzer := &SourceAnalyzer{}
+	packageName, variables, internalFuncs, err := analyzer.analyze(sourceFile)
+	require.NoError(t, err)
+
+	assert.Equal(t, "main", packageName)
+
+	assert.Len(t, variables, 2, "Should extract exactly 2 variable declarations")
+
+	expectedVar1 := `var (
+	mu    sync.RWMutex
+	cache = make(map[string]string)
+)`
+	expectedVar2 := `var globalCounter int = 0`
+
+	assert.Equal(t, expectedVar1, variables[0], "First variable block should match")
+	assert.Equal(t, expectedVar2, variables[1], "Second variable declaration should match")
+
+	assert.Empty(t, internalFuncs, "Should not have internal functions (only exported function)")
 }
 
 func BenchmarkSourceAnalyzer_Analyze(b *testing.B) {
