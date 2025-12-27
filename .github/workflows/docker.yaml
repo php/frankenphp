@@ -208,7 +208,7 @@ jobs:
           VARIANT: ${{ matrix.variant }}
       - name: Upload builder metadata
         if: fromJson(needs.prepare.outputs.push)
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: metadata-builder-${{ matrix.variant }}-${{ steps.prepare.outputs.sanitized_platform }}
           path: /tmp/metadata/builder/*
@@ -216,7 +216,7 @@ jobs:
           retention-days: 1
       - name: Upload runner metadata
         if: fromJson(needs.prepare.outputs.push)
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: metadata-runner-${{ matrix.variant }}-${{ steps.prepare.outputs.sanitized_platform }}
           path: /tmp/metadata/runner/*
@@ -248,7 +248,7 @@ jobs:
         target: ["builder", "runner"]
     steps:
       - name: Download metadata
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           pattern: metadata-${{ matrix.target }}-${{ matrix.variant }}-*
           path: /tmp/metadata
