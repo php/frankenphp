@@ -410,6 +410,11 @@ func PHPValue(value any) unsafe.Pointer {
 	return unsafe.Pointer(zval)
 }
 
+// EXPERIMENTAL: PHPReturnValue is equivalent to PHPValue, but will populate the provided *C.zval directly.
+func PHPReturnValue(zval unsafe.Pointer, value any) unsafe.Pointer {
+	phpValue((*C.zval)(zval), value)
+}
+
 func phpValue(zval *C.zval, value any) {
 	if toZvalObj, ok := value.(toZval); ok {
 		toZvalObj.toZval(zval)
