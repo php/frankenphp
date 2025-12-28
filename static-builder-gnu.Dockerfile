@@ -12,9 +12,11 @@ ENV PHP_VERSION=${PHP_VERSION}
 # args passed to static-php-cli
 ARG PHP_EXTENSIONS=''
 ARG PHP_EXTENSION_LIBS=''
+ARG SPC_OPT_BUILD_ARGS
 
 # args passed to xcaddy
-ARG XCADDY_ARGS=''
+ARG XCADDY_ARGS='--with github.com/dunglas/caddy-cbrotli --with github.com/dunglas/mercure/caddy --with github.com/dunglas/vulcain/caddy'
+ENV SPC_CMD_VAR_FRANKENPHP_XCADDY_MODULES="${XCADDY_ARGS}"
 ARG CLEAN=''
 ARG EMBED=''
 ARG DEBUG_SYMBOLS=''
@@ -121,7 +123,8 @@ ENV SPC_DEFAULT_C_FLAGS='-fPIE -fPIC -O3'
 ENV SPC_LIBC='glibc'
 ENV SPC_CMD_VAR_PHP_MAKE_EXTRA_LDFLAGS_PROGRAM='-Wl,-O3 -pie'
 ENV SPC_CMD_VAR_PHP_MAKE_EXTRA_LIBS='-ldl -lpthread -lm -lresolv -lutil -lrt'
-ENV SPC_OPT_BUILD_ARGS='--with-config-file-path=/etc/frankenphp --with-config-file-scan-dir=/etc/frankenphp/php.d'
+# Keep default config paths and append any externally provided SPC_OPT_BUILD_ARGS (e.g., from CI)
+ENV SPC_OPT_BUILD_ARGS="--with-config-file-path=/etc/frankenphp --with-config-file-scan-dir=/etc/frankenphp/php.d ${SPC_OPT_BUILD_ARGS}"
 ENV SPC_REL_TYPE='binary'
 ENV EXTENSION_DIR='/usr/lib/frankenphp/modules'
 

@@ -76,7 +76,7 @@ func create_{{.GoStruct}}_object() C.uintptr_t {
 {{- end}}
 {{- range .Methods}}
 //export {{.Name}}_wrapper
-func {{.Name}}_wrapper(handle C.uintptr_t{{range .Params}}{{if eq .PhpType "string"}}, {{.Name}} *C.zend_string{{else if eq .PhpType "array"}}, {{.Name}} *C.zval{{else}}, {{.Name}} {{if .IsNullable}}*{{end}}{{phpTypeToGoType .PhpType}}{{end}}{{end}}){{if not (isVoid .ReturnType)}}{{if isStringOrArray .ReturnType}} unsafe.Pointer{{else}} {{phpTypeToGoType .ReturnType}}{{end}}{{end}} {
+func {{.Name}}_wrapper(handle C.uintptr_t{{range .Params}}{{if eq .PhpType "string"}}, {{.Name}} *C.zend_string{{else if eq .PhpType "array"}}, {{.Name}} *C.zval{{else if eq .PhpType "callable"}}, {{.Name}} *C.zval{{else}}, {{.Name}} {{if .IsNullable}}*{{end}}{{phpTypeToGoType .PhpType}}{{end}}{{end}}){{if not (isVoid .ReturnType)}}{{if isStringOrArray .ReturnType}} unsafe.Pointer{{else}} {{phpTypeToGoType .ReturnType}}{{end}}{{end}} {
 	obj := getGoObject(handle)
 	if obj == nil {
 {{- if not (isVoid .ReturnType)}}

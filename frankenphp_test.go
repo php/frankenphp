@@ -32,10 +32,6 @@ import (
 	"github.com/dunglas/frankenphp/internal/fastabs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/exp/zapslog"
-	"go.uber.org/zap/zapcore"
-	"go.uber.org/zap/zaptest"
-	"go.uber.org/zap/zaptest/observer"
 )
 
 type testOptions struct {
@@ -61,10 +57,6 @@ func runTest(t *testing.T, test func(func(http.ResponseWriter, *http.Request), *
 
 	cwd, _ := os.Getwd()
 	testDataDir := cwd + "/testdata/"
-
-	if opts.logger == nil {
-		opts.logger = slog.New(zapslog.NewHandler(zaptest.NewLogger(t).Core()))
-	}
 
 	initOpts := []frankenphp.Option{frankenphp.WithLogger(opts.logger)}
 	if opts.workerScript != "" {
@@ -423,36 +415,61 @@ my_autoloader`, i), body)
 	}, opts)
 }
 
-func TestLog_module(t *testing.T) { testLog(t, &testOptions{}) }
-func TestLog_worker(t *testing.T) {
-	testLog(t, &testOptions{workerScript: "log.php"})
+func TestLog_error_log_module(t *testing.T) { testLog_error_log(t, &testOptions{}) }
+func TestLog_error_log_worker(t *testing.T) {
+	testLog_error_log(t, &testOptions{workerScript: "log-error_log.php"})
 }
-func testLog(t *testing.T, opts *testOptions) {
-	logger, logs := observer.New(zapcore.InfoLevel)
-	opts.logger = slog.New(zapslog.NewHandler(logger))
+func testLog_error_log(t *testing.T, opts *testOptions) {
+	var buf fmt.Stringer
+	opts.logger, buf = newTestLogger(t)
 
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
-		req := httptest.NewRequest("GET", fmt.Sprintf("http://example.com/log.php?i=%d", i), nil)
+		req := httptest.NewRequest("GET", fmt.Sprintf("http://example.com/log-error_log.php?i=%d", i), nil)
 		w := httptest.NewRecorder()
 		handler(w, req)
 
-		for logs.FilterMessage(fmt.Sprintf("request %d", i)).Len() <= 0 {
+		assert.Contains(t, buf.String(), fmt.Sprintf("request %d", i))
+	}, opts)
+}
+
+func TestLog_frankenphp_log_module(t *testing.T) { testLog_frankenphp_log(t, &testOptions{}) }
+func TestLog_frankenphp_log_worker(t *testing.T) {
+	testLog_frankenphp_log(t, &testOptions{workerScript: "log-frankenphp_log.php"})
+}
+func testLog_frankenphp_log(t *testing.T, opts *testOptions) {
+	var buf fmt.Stringer
+	opts.logger, buf = newTestLogger(t)
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		req := httptest.NewRequest("GET", fmt.Sprintf("http://example.com/log-frankenphp_log.php?i=%d", i), nil)
+		w := httptest.NewRecorder()
+		handler(w, req)
+
+		logs := buf.String()
+		for _, message := range []string{
+			`level=INFO msg="default level message"`,
+			fmt.Sprintf(`level=DEBUG msg="some debug message %d" "key int"=1`, i),
+			fmt.Sprintf(`level=INFO msg="some info message %d" "key string"=string`, i),
+			fmt.Sprintf(`level=WARN msg="some warn message %d"`, i),
+			fmt.Sprintf(`level=ERROR msg="some error message %d" err="[a v]"`, i),
+		} {
+			assert.Contains(t, logs, message)
 		}
 	}, opts)
 }
 
 func TestConnectionAbort_module(t *testing.T) { testConnectionAbort(t, &testOptions{}) }
 func TestConnectionAbort_worker(t *testing.T) {
-	testConnectionAbort(t, &testOptions{workerScript: "connectionStatusLog.php"})
+	testConnectionAbort(t, &testOptions{workerScript: "connection_status.php"})
 }
 func testConnectionAbort(t *testing.T, opts *testOptions) {
 	testFinish := func(finish string) {
 		t.Run(fmt.Sprintf("finish=%s", finish), func(t *testing.T) {
-			logger, logs := observer.New(zapcore.InfoLevel)
-			opts.logger = slog.New(zapslog.NewHandler(logger))
+			var buf syncBuffer
+			opts.logger = slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 			runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
-				req := httptest.NewRequest("GET", fmt.Sprintf("http://example.com/connectionStatusLog.php?i=%d&finish=%s", i, finish), nil)
+				req := httptest.NewRequest("GET", fmt.Sprintf("http://example.com/connection_status.php?i=%d&finish=%s", i, finish), nil)
 				w := httptest.NewRecorder()
 
 				ctx, cancel := context.WithCancel(req.Context())
@@ -460,7 +477,7 @@ func testConnectionAbort(t *testing.T, opts *testOptions) {
 				cancel()
 				handler(w, req)
 
-				for logs.FilterMessage(fmt.Sprintf("request %d: 1", i)).Len() <= 0 {
+				for !strings.Contains(buf.String(), fmt.Sprintf("request %d: 1", i)) {
 				}
 			}, opts)
 		})
@@ -1058,7 +1075,6 @@ func FuzzRequest(f *testing.F) {
 			// Headers should always be present even if empty
 			assert.Contains(t, body, fmt.Sprintf("[CONTENT_TYPE] => %s", fuzzedString))
 			assert.Contains(t, body, fmt.Sprintf("[HTTP_FUZZED] => %s", fuzzedString))
-
 		}, &testOptions{workerScript: "request-headers.php"})
 	})
 }

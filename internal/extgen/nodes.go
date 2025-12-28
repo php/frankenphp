@@ -9,17 +9,18 @@ import (
 type phpType string
 
 const (
-	phpString phpType = "string"
-	phpInt    phpType = "int"
-	phpFloat  phpType = "float"
-	phpBool   phpType = "bool"
-	phpArray  phpType = "array"
-	phpObject phpType = "object"
-	phpMixed  phpType = "mixed"
-	phpVoid   phpType = "void"
-	phpNull   phpType = "null"
-	phpTrue   phpType = "true"
-	phpFalse  phpType = "false"
+	phpString   phpType = "string"
+	phpInt      phpType = "int"
+	phpFloat    phpType = "float"
+	phpBool     phpType = "bool"
+	phpArray    phpType = "array"
+	phpObject   phpType = "object"
+	phpMixed    phpType = "mixed"
+	phpVoid     phpType = "void"
+	phpNull     phpType = "null"
+	phpTrue     phpType = "true"
+	phpFalse    phpType = "false"
+	phpCallable phpType = "callable"
 )
 
 type phpFunction struct {

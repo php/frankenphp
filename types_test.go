@@ -1,7 +1,6 @@
 package frankenphp
 
 import (
-	"io"
 	"log/slog"
 	"testing"
 
@@ -13,7 +12,8 @@ import (
 // this is necessary if tests make use of PHP's internal allocation
 func testOnDummyPHPThread(t *testing.T, test func()) {
 	t.Helper()
-	globalLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	globalLogger = slog.Default()
 	_, err := initPHPThreads(1, 1, nil) // boot 1 thread
 	assert.NoError(t, err)
 	handler := convertToTaskThread(phpThreads[0])

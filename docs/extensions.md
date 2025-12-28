@@ -100,6 +100,7 @@ This table summarizes what you need to know:
 | `array`            | `map[string]any`              | ❌                | `frankenphp.GoMap()`              | `frankenphp.PHPMap()`              | ✅                    |
 | `array`            | `[]any`                       | ❌                | `frankenphp.GoPackedArray()`      | `frankenphp.PHPPackedArray()`      | ✅                    |
 | `mixed`            | `any`                         | ❌                | `GoValue()`                       | `PHPValue()`                       | ❌                    |
+| `callable`         | `*C.zval`                     | ❌                | -                                 | frankenphp.CallPHPCallable()       | ❌                    |
 | `object`           | `struct`                      | ❌                | _Not yet implemented_             | _Not yet implemented_              | ❌                    |
 
 > [!NOTE]
@@ -211,6 +212,43 @@ func process_data_packed(arr *C.zend_array) unsafe.Pointer {
 - `frankenphp.GoAssociativeArray(arr unsafe.Pointer, ordered bool) frankenphp.AssociativeArray` - Convert a PHP array to an ordered Go `AssociativeArray` (map with order)
 - `frankenphp.GoMap(arr unsafe.Pointer) map[string]any` - Convert a PHP array to an unordered Go map
 - `frankenphp.GoPackedArray(arr unsafe.Pointer) []any` - Convert a PHP array to a Go slice
+- `frankenphp.IsPacked(zval *C.zend_array) bool` - Check if a PHP array is packed (indexed only) or associative (key-value pairs)
+
+### Working with Callables
+
+FrankenPHP provides a way to work with PHP callables using the `frankenphp.CallPHPCallable` helper. This allows you to call PHP functions or methods from Go code.
+
+To showcase this, let's create our own `array_map()` function that takes a callable and an array, applies the callable to each element of the array, and returns a new array with the results:
+
+```go
+// export_php:function my_array_map(array $data, callable $callback): array
+func my_array_map(arr *C.zend_array, callback *C.zval) unsafe.Pointer {
+	goSlice, err := frankenphp.GoPackedArray[any](unsafe.Pointer(arr))
+	if err != nil {
+		panic(err)
+	}
+
+	result := make([]any, len(goSlice))
+
+	for index, value := range goSlice {
+		result[index] = frankenphp.CallPHPCallable(unsafe.Pointer(callback), []interface{}{value})
+	}
+
+	return frankenphp.PHPPackedArray(result)
+}
+```
+
+Notice how we use `frankenphp.CallPHPCallable()` to call the PHP callable passed as a parameter. This function takes a pointer to the callable and an array of arguments, and it returns the result of the callable execution. You can use the callable syntax you're used to:
+
+```php
+<?php
+
+$result = my_array_map([1, 2, 3], function($x) { return $x * 2; });
+// $result will be [2, 4, 6]
+
+$result = my_array_map(['hello', 'world'], 'strtoupper');
+// $result will be ['HELLO', 'WORLD']
+```
 
 ### Declaring a Native PHP Class
 

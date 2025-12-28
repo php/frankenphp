@@ -128,14 +128,15 @@ type GoParameter struct {
 	Type string
 }
 
-var phpToGoTypeMap = map[phpType]string{
-	phpString: "string",
-	phpInt:    "int64",
-	phpFloat:  "float64",
-	phpBool:   "bool",
-	phpArray:  "*frankenphp.Array",
-	phpMixed:  "any",
-	phpVoid:   "",
+var phpToGoTypeMap= map[phpType]string{
+	phpString:   "string",
+	phpInt:      "int64",
+	phpFloat:    "float64",
+	phpBool:     "bool",
+	phpArray:    "*frankenphp.Array",
+	phpMixed:    "any",
+	phpVoid:     "",
+	phpCallable: "*C.zval",
 }
 
 func (gg *GoFileGenerator) phpTypeToGoType(phpT phpType) string {

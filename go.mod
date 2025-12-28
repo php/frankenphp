@@ -6,14 +6,12 @@ retract v1.0.0-rc.1 // Human error
 
 require (
 	github.com/Masterminds/sprig/v3 v3.3.0
-	github.com/dunglas/mercure v0.21.2
+	github.com/dunglas/mercure v0.21.4
 	github.com/e-dant/watcher/watcher-go v0.0.0-20251208164151-f88ec3b7e146
 	github.com/maypok86/otter/v2 v2.2.1
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
-	go.uber.org/zap v1.27.1
-	go.uber.org/zap/exp v0.3.0
-	golang.org/x/net v0.47.0
+	golang.org/x/net v0.48.0
 )
 
 require (
@@ -58,12 +56,11 @@ require (
 	github.com/unrolled/secure v1.17.0 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.etcd.io/bbolt v1.4.3 // indirect
-	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/crypto v0.45.0 // indirect
-	golang.org/x/sys v0.38.0 // indirect
-	golang.org/x/text v0.31.0 // indirect
-	google.golang.org/protobuf v1.36.10 // indirect
+	golang.org/x/crypto v0.46.0 // indirect
+	golang.org/x/sys v0.39.0 // indirect
+	golang.org/x/text v0.32.0 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
