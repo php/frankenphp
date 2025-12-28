@@ -765,11 +765,12 @@ func go_schedule_opcache_reset(threadIndex C.uintptr_t) C.bool {
 		return C.bool(true)
 	}
 
+	// always call the original opcache_reset if already restarting
 	return C.bool(phpThreads[threadIndex].state.Is(state.Restarting))
 }
 
 // restart all threads for an opcache_reset
-func restartThreadsForOpcacheReset(exceptThisThread *phpThread) {
+func restartThreadsForOpcacheReset(callingThread *phpThread) {
 	if threadsAreRestarting.Load() {
 		// ignore reloads while a restart is already ongoing
 		return
@@ -792,16 +793,13 @@ func restartThreadsForOpcacheReset(exceptThisThread *phpThread) {
 			thread.state.Set(state.Restarting)
 			close(thread.drainChan)
 
-			if thread == exceptThisThread {
-				continue
-			}
-
 			wg.Go(func() {
 				thread.state.WaitFor(state.Yielding)
 			})
 		}
 	}
 
+	wg.Done() // ignore the calling thread
 	done := make(chan struct{})
 	go func() {
 		wg.Wait()
@@ -816,7 +814,7 @@ func restartThreadsForOpcacheReset(exceptThisThread *phpThread) {
 	}
 
 	go func() {
-		exceptThisThread.state.WaitFor(state.Yielding)
+		callingThread.state.WaitFor(state.Yielding)
 		for _, thread := range threadsToRestart {
 			thread.drainChan = make(chan struct{})
 			thread.state.Set(state.Ready)
