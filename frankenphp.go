@@ -706,7 +706,7 @@ func go_is_context_done(threadIndex C.uintptr_t) C.bool {
 //export go_schedule_opcache_reset
 func go_schedule_opcache_reset(threadIndex C.uintptr_t) C.bool {
 	if isOpcacheResetting.CompareAndSwap(false, true) {
-		restartThreadsForOpcacheReset(nil)
+		restartThreadsForOpcacheReset(phpThreads[threadIndex])
 		return C.bool(true)
 	}
 
@@ -737,19 +737,31 @@ func restartThreadsForOpcacheReset(exceptThisThread *phpThread) {
 			thread.state.Set(state.Restarting)
 			close(thread.drainChan)
 
+			if thread == exceptThisThread {
+				continue
+			}
+
 			wg.Go(func() {
 				thread.state.WaitFor(state.Yielding)
 			})
 		}
 	}
 
-	// other threads may not parse new scripts while this thread is scheduling an opcache_reset
-	// sleeping a bit here makes this much less likely to happen
-	// waiting for all other threads to drain first can potentially deadlock
-	time.Sleep(100 * time.Millisecond)
-
+	done := make(chan struct{})
 	go func() {
 		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// all other threads are drained
+	case <-time.After(time.Second):
+		// probably a deadlock, continue anyway and hope for the best
+	}
+
+	go func() {
+		exceptThisThread.state.WaitFor(state.Yielding)
 		for _, thread := range threadsToRestart {
 			thread.drainChan = make(chan struct{})
 			thread.state.Set(state.Ready)
