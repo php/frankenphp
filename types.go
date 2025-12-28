@@ -411,7 +411,7 @@ func PHPValue(value any) unsafe.Pointer {
 }
 
 // EXPERIMENTAL: PHPReturnValue is equivalent to PHPValue, but will populate the provided *C.zval directly.
-func PHPReturnValue(zval unsafe.Pointer, value any) unsafe.Pointer {
+func PHPReturnValue(zval unsafe.Pointer, value any) {
 	phpValue((*C.zval)(zval), value)
 }
 
