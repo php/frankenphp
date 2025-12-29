@@ -50,6 +50,7 @@ func (handler *regularThread) beforeScriptExecution() string {
 		return handler.waitForRequest()
 	case state.Restarting:
 		handler.state.Set(state.Yielding)
+		scheduleOpcacheReset(handler.thread)
 		handler.state.WaitFor(state.Ready, state.ShuttingDown)
 		return handler.beforeScriptExecution()
 

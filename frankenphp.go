@@ -59,10 +59,9 @@ var (
 	contextKey   = contextKeyStruct{}
 	serverHeader = []string{"FrankenPHP"}
 
-	isRunning            bool
-	isOpcacheResetting   atomic.Bool
-	threadsAreRestarting atomic.Bool
-	onServerShutdown     []func()
+	isRunning        bool
+	restartCounter   atomic.Int32
+	onServerShutdown []func()
 
 	// Set default values to make Shutdown() idempotent
 	globalMu     sync.Mutex
@@ -759,68 +758,49 @@ func go_is_context_done(threadIndex C.uintptr_t) C.bool {
 }
 
 //export go_schedule_opcache_reset
-func go_schedule_opcache_reset(threadIndex C.uintptr_t) C.bool {
-	if isOpcacheResetting.CompareAndSwap(false, true) {
-		restartThreadsForOpcacheReset(phpThreads[threadIndex])
-		return C.bool(true)
+func go_schedule_opcache_reset(threadIndex C.uintptr_t) {
+	if restartCounter.CompareAndSwap(0, 1) {
+		go restartThreadsForOpcacheReset()
 	}
-
-	// always call the original opcache_reset if already restarting
-	return C.bool(phpThreads[threadIndex].state.Is(state.Restarting))
 }
 
 // restart all threads for an opcache_reset
-func restartThreadsForOpcacheReset(callingThread *phpThread) {
-	if threadsAreRestarting.Load() {
-		// ignore reloads while a restart is already ongoing
-		return
-	}
-
+func restartThreadsForOpcacheReset() {
 	// disallow scaling threads while restarting workers
 	scalingMu.Lock()
 	defer scalingMu.Unlock()
 
-	// drain workers
-	globalLogger.Info("Restarting all PHP threads for opcache_reset")
-	threadsToRestart := drainWorkerThreads()
+	threadsToRestart := drainWorkerThreads(true)
 
-	// drain regular threads
-	globalLogger.Info("Draining regular PHP threads for opcache_reset")
-	wg := sync.WaitGroup{}
-	for _, thread := range regularThreads {
-		if thread.state.Is(state.Ready) {
-			threadsToRestart = append(threadsToRestart, thread)
-			thread.state.Set(state.Restarting)
-			close(thread.drainChan)
+	for _, thread := range threadsToRestart {
+		thread.drainChan = make(chan struct{})
+		thread.state.Set(state.Ready)
+	}
+}
 
-			wg.Go(func() {
-				thread.state.WaitFor(state.Yielding)
-			})
-		}
+func scheduleOpcacheReset(thread *phpThread) {
+	restartCounter.Add(-1)
+	if restartCounter.Load() != 1 {
+		return // only the last restarting thread will trigger an actual opcache_reset
+	}
+	workerThread, ok := thread.handler.(*workerThread)
+	fc, _ := newDummyContext("/opcache_reset")
+	if ok && workerThread.worker != nil {
+		workerThread.dummyFrankenPHPContext = fc
+		defer func() { workerThread.dummyFrankenPHPContext = nil }()
 	}
 
-	wg.Done() // ignore the calling thread
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-		// all other threads are drained
-	case <-time.After(time.Second):
-		// probably a deadlock, continue anyway and hope for the best
+	regularThread, ok := thread.handler.(*regularThread)
+	if ok {
+		regularThread.contextHolder.frankenPHPContext = fc
+		defer func() { regularThread.contextHolder.frankenPHPContext = nil }()
 	}
 
-	go func() {
-		callingThread.state.WaitFor(state.Yielding)
-		for _, thread := range threadsToRestart {
-			thread.drainChan = make(chan struct{})
-			thread.state.Set(state.Ready)
-			isOpcacheResetting.Store(false)
-		}
-	}()
+	globalLogger.Info("resetting opcache in all threads")
+	C.frankenphp_reset_opcache()
+
+	// all threads should have restarted now
+	restartCounter.Store(0)
 }
 
 // ExecuteScriptCLI executes the PHP script passed as parameter.

@@ -171,10 +171,10 @@ func newWorker(o workerOpt) (*worker, error) {
 
 // EXPERIMENTAL: DrainWorkers finishes all worker scripts before a graceful shutdown
 func DrainWorkers() {
-	_ = drainWorkerThreads()
+	_ = drainWorkerThreads(false)
 }
 
-func drainWorkerThreads() []*phpThread {
+func drainWorkerThreads(withRegularThreads bool) []*phpThread {
 	var (
 		ready          sync.WaitGroup
 		drainedThreads []*phpThread
@@ -192,7 +192,7 @@ func drainWorkerThreads() []*phpThread {
 				// we'll proceed to restart all other threads anyway
 				continue
 			}
-
+			restartCounter.Add(1)
 			close(thread.drainChan)
 			drainedThreads = append(drainedThreads, thread)
 
@@ -205,6 +205,31 @@ func drainWorkerThreads() []*phpThread {
 		worker.threadMutex.RUnlock()
 	}
 
+	if withRegularThreads {
+		regularThreadMu.RLock()
+		ready.Add(len(regularThreads))
+
+		for _, thread := range regularThreads {
+			if !thread.state.RequestSafeStateChange(state.Restarting) {
+				ready.Done()
+
+				// no state change allowed == thread is shutting down
+				// we'll proceed to restart all other threads anyway
+				continue
+			}
+			restartCounter.Add(1)
+			close(thread.drainChan)
+			drainedThreads = append(drainedThreads, thread)
+
+			go func(thread *phpThread) {
+				thread.state.WaitFor(state.Yielding)
+				ready.Done()
+			}(thread)
+		}
+
+		regularThreadMu.RUnlock()
+	}
+
 	ready.Wait()
 
 	return drainedThreads
@@ -213,13 +238,14 @@ func drainWorkerThreads() []*phpThread {
 // RestartWorkers attempts to restart all workers gracefully
 // All workers must be restarted at the same time to prevent issues with opcache resetting.
 func RestartWorkers() {
-	threadsAreRestarting.Store(true)
-	defer threadsAreRestarting.Store(false)
+	if !restartCounter.CompareAndSwap(0, 1) {
+		return // another restart is already in progress
+	}
 	// disallow scaling threads while restarting workers
 	scalingMu.Lock()
 	defer scalingMu.Unlock()
 
-	threadsToRestart := drainWorkerThreads()
+	threadsToRestart := drainWorkerThreads(false)
 
 	for _, thread := range threadsToRestart {
 		thread.drainChan = make(chan struct{})

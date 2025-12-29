@@ -343,11 +343,9 @@ PHP_FUNCTION(frankenphp_getenv) {
 
 /* {{{ thread-safe opcache reset */
 PHP_FUNCTION(frankenphp_opcache_reset) {
-  if (go_schedule_opcache_reset(thread_index)) {
-    orig_opcache_reset(INTERNAL_FUNCTION_PARAM_PASSTHRU);
-  }
+  go_schedule_opcache_reset(thread_index);
 
-  RETVAL_FALSE;
+  RETVAL_TRUE;
 } /* }}} */
 
 /* {{{ Fetch all HTTP request headers */
@@ -1270,11 +1268,15 @@ int frankenphp_execute_script_cli(char *script, int argc, char **argv,
 }
 
 int frankenphp_reset_opcache(void) {
+  php_request_startup();
   zend_function *opcache_reset =
       zend_hash_str_find_ptr(CG(function_table), ZEND_STRL("opcache_reset"));
   if (opcache_reset) {
+    ((zend_internal_function *)opcache_reset)->handler = orig_opcache_reset;
     zend_call_known_function(opcache_reset, NULL, NULL, NULL, 0, NULL, NULL);
+    ((zend_internal_function *)opcache_reset)->handler = ZEND_FN(frankenphp_opcache_reset);
   }
+  php_request_shutdown((void *)0);
 
   return 0;
 }
