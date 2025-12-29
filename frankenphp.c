@@ -1268,15 +1268,15 @@ int frankenphp_execute_script_cli(char *script, int argc, char **argv,
 }
 
 int frankenphp_reset_opcache(void) {
-  php_request_startup();
   zend_function *opcache_reset =
       zend_hash_str_find_ptr(CG(function_table), ZEND_STRL("opcache_reset"));
   if (opcache_reset) {
+    php_request_startup();
     ((zend_internal_function *)opcache_reset)->handler = orig_opcache_reset;
     zend_call_known_function(opcache_reset, NULL, NULL, NULL, 0, NULL, NULL);
     ((zend_internal_function *)opcache_reset)->handler = ZEND_FN(frankenphp_opcache_reset);
+    php_request_shutdown((void *)0);
   }
-  php_request_shutdown((void *)0);
 
   return 0;
 }

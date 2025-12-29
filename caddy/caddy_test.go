@@ -1489,7 +1489,6 @@ func TestOpcacheReset(t *testing.T) {
 				num_threads 40
 				php_ini {
 					opcache.enable 1
-					zend_extension opcache.so
 					opcache.log_verbosity_level 4
 				}
 			}

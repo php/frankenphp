@@ -798,6 +798,7 @@ func scheduleOpcacheReset(thread *phpThread) {
 
 	globalLogger.Info("resetting opcache in all threads")
 	C.frankenphp_reset_opcache()
+	time.Sleep(200 * time.Millisecond) // opcache_reset grace period
 
 	// all threads should have restarted now
 	restartCounter.Store(0)
