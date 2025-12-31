@@ -1,6 +1,6 @@
 <?php
 
-if (isset($_SERVER['FRANKENPHP_WORKER']) && $_SERVER['FRANKENPHP_WORKER'] === '1') {
+if (isset($_SERVER['FRANKENPHP_WORKER'])) {
     $i = 0;
     do {
         $ok = frankenphp_handle_request(function () use ($i): void {
