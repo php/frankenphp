@@ -1,12 +1,14 @@
 package caddy
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/caddyserver/caddy/v2"
@@ -17,6 +19,22 @@ import (
 	"github.com/dunglas/frankenphp"
 	"github.com/dunglas/frankenphp/internal/fastabs"
 )
+
+var (
+	options   []frankenphp.Option
+	optionsMU sync.RWMutex
+)
+
+// EXPERIMENTAL: RegisterWorkers provides a way for extensions to register frankenphp.Workers
+func RegisterWorkers(name, fileName string, num int, wo ...frankenphp.WorkerOption) frankenphp.Workers {
+	w, opt := frankenphp.WithExtensionWorkers(name, fileName, num, wo...)
+
+	optionsMU.Lock()
+	options = append(options, opt)
+	optionsMU.Unlock()
+
+	return w
+}
 
 // FrankenPHPApp represents the global "frankenphp" directive in the Caddyfile
 // it's responsible for starting up the global PHP instance and all threads
@@ -31,18 +49,20 @@ type FrankenPHPApp struct {
 	NumThreads int `json:"num_threads,omitempty"`
 	// MaxThreads limits how many threads can be started at runtime. Default 2x NumThreads
 	MaxThreads int `json:"max_threads,omitempty"`
-	// Workers configures the worker scripts to start.
+	// Workers configures the worker scripts to start
 	Workers []workerConfig `json:"workers,omitempty"`
 	// Overwrites the default php ini configuration
 	PhpIni map[string]string `json:"php_ini,omitempty"`
 	// The maximum amount of time a request may be stalled waiting for a thread
 	MaxWaitTime time.Duration `json:"max_wait_time,omitempty"`
 
+	opts    []frankenphp.Option
 	metrics frankenphp.Metrics
+	ctx     context.Context
 	logger  *slog.Logger
 }
 
-var iniError = errors.New("'php_ini' must be in the format: php_ini \"<key>\" \"<value>\"")
+var iniError = errors.New(`"php_ini" must be in the format: php_ini "<key>" "<value>"`)
 
 // CaddyModule returns the Caddy module information.
 func (f FrankenPHPApp) CaddyModule() caddy.ModuleInfo {
@@ -54,7 +74,11 @@ func (f FrankenPHPApp) CaddyModule() caddy.ModuleInfo {
 
 // Provision sets up the module.
 func (f *FrankenPHPApp) Provision(ctx caddy.Context) error {
+	f.ctx = ctx
 	f.logger = ctx.Slogger()
+
+	// We have at least 7 hardcoded options
+	f.opts = make([]frankenphp.Option, 0, 7+len(options))
 
 	if httpApp, err := ctx.AppIfConfigured("http"); err == nil {
 		if httpApp.(*caddyhttp.App).Metrics != nil {
@@ -62,7 +86,12 @@ func (f *FrankenPHPApp) Provision(ctx caddy.Context) error {
 		}
 	} else {
 		// if the http module is not configured (this should never happen) then collect the metrics by default
-		f.metrics = frankenphp.NewPrometheusMetrics(ctx.GetMetricsRegistry())
+		if errors.Is(err, caddy.ErrNotConfigured) {
+			f.metrics = frankenphp.NewPrometheusMetrics(ctx.GetMetricsRegistry())
+		} else {
+			// the http module failed to provision due to invalid configuration
+			return fmt.Errorf("failed to provision caddy http: %w", err)
+		}
 	}
 
 	return nil
@@ -89,36 +118,54 @@ retry:
 func (f *FrankenPHPApp) addModuleWorkers(workers ...workerConfig) ([]workerConfig, error) {
 	for i := range workers {
 		w := &workers[i]
+
 		if frankenphp.EmbeddedAppPath != "" && filepath.IsLocal(w.FileName) {
 			w.FileName = filepath.Join(frankenphp.EmbeddedAppPath, w.FileName)
 		}
+
 		if w.Name == "" {
 			w.Name = f.generateUniqueModuleWorkerName(w.FileName)
 		} else if !strings.HasPrefix(w.Name, "m#") {
 			w.Name = "m#" + w.Name
 		}
+
 		f.Workers = append(f.Workers, *w)
 	}
+
 	return workers, nil
 }
 
 func (f *FrankenPHPApp) Start() error {
 	repl := caddy.NewReplacer()
 
-	opts := []frankenphp.Option{
+	optionsMU.RLock()
+	f.opts = append(f.opts, options...)
+	optionsMU.RUnlock()
+
+	f.opts = append(f.opts,
+		frankenphp.WithContext(f.ctx),
+		frankenphp.WithLogger(f.logger),
 		frankenphp.WithNumThreads(f.NumThreads),
 		frankenphp.WithMaxThreads(f.MaxThreads),
-		frankenphp.WithLogger(f.logger),
 		frankenphp.WithMetrics(f.metrics),
 		frankenphp.WithPhpIni(f.PhpIni),
 		frankenphp.WithMaxWaitTime(f.MaxWaitTime),
-	}
-	for _, w := range append(f.Workers) {
-		opts = append(opts, frankenphp.WithWorkers(w.Name, repl.ReplaceKnown(w.FileName, ""), w.Num, w.Env, w.Watch))
+	)
+
+	for _, w := range f.Workers {
+		w.options = append(w.options,
+			frankenphp.WithWorkerEnv(w.Env),
+			frankenphp.WithWorkerWatchMode(w.Watch),
+			frankenphp.WithWorkerMaxFailures(w.MaxConsecutiveFailures),
+			frankenphp.WithWorkerMaxThreads(w.MaxThreads),
+			frankenphp.WithWorkerRequestOptions(w.requestOptions...),
+		)
+
+		f.opts = append(f.opts, frankenphp.WithWorkers(w.Name, repl.ReplaceKnown(w.FileName, ""), w.Num, w.options...))
 	}
 
 	frankenphp.Shutdown()
-	if err := frankenphp.Init(opts...); err != nil {
+	if err := frankenphp.Init(f.opts...); err != nil {
 		return err
 	}
 
@@ -126,7 +173,11 @@ func (f *FrankenPHPApp) Start() error {
 }
 
 func (f *FrankenPHPApp) Stop() error {
-	f.logger.Info("FrankenPHP stopped 🐘")
+	ctx := caddy.ActiveContext()
+
+	if f.logger.Enabled(caddy.ActiveContext(), slog.LevelInfo) {
+		f.logger.LogAttrs(ctx, slog.LevelInfo, "FrankenPHP stopped 🐘")
+	}
 
 	// attempt a graceful shutdown if caddy is exiting
 	// note: Exiting() is currently marked as 'experimental'
@@ -139,6 +190,10 @@ func (f *FrankenPHPApp) Stop() error {
 	f.Workers = nil
 	f.NumThreads = 0
 	f.MaxWaitTime = 0
+
+	optionsMU.Lock()
+	options = nil
+	optionsMU.Unlock()
 
 	return nil
 }
@@ -183,7 +238,7 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 
 				v, err := time.ParseDuration(d.Val())
 				if err != nil {
-					return errors.New("max_wait_time must be a valid duration (example: 10s)")
+					return d.Err("max_wait_time must be a valid duration (example: 10s)")
 				}
 
 				f.MaxWaitTime = v
@@ -191,14 +246,14 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				parseIniLine := func(d *caddyfile.Dispenser) error {
 					key := d.Val()
 					if !d.NextArg() {
-						return iniError
+						return d.WrapErr(iniError)
 					}
 					if f.PhpIni == nil {
 						f.PhpIni = make(map[string]string)
 					}
 					f.PhpIni[key] = d.Val()
 					if d.NextArg() {
-						return iniError
+						return d.WrapErr(iniError)
 					}
 
 					return nil
@@ -215,7 +270,7 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 
 				if !isBlock {
 					if !d.NextArg() {
-						return iniError
+						return d.WrapErr(iniError)
 					}
 					err := parseIniLine(d)
 					if err != nil {
@@ -224,7 +279,7 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				}
 
 			case "worker":
-				wc, err := parseWorkerConfig(d)
+				wc, err := unmarshalWorker(d)
 				if err != nil {
 					return err
 				}
@@ -232,31 +287,30 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					wc.FileName = filepath.Join(frankenphp.EmbeddedAppPath, wc.FileName)
 				}
 				if strings.HasPrefix(wc.Name, "m#") {
-					return fmt.Errorf(`global worker names must not start with "m#": %q`, wc.Name)
+					return d.Errf(`global worker names must not start with "m#": %q`, wc.Name)
 				}
 				// check for duplicate workers
 				for _, existingWorker := range f.Workers {
 					if existingWorker.FileName == wc.FileName {
-						return fmt.Errorf("global workers must not have duplicate filenames: %q", wc.FileName)
+						return d.Errf("global workers must not have duplicate filenames: %q", wc.FileName)
 					}
 				}
 
 				f.Workers = append(f.Workers, wc)
 			default:
-				allowedDirectives := "num_threads, max_threads, php_ini, worker, max_wait_time"
-				return wrongSubDirectiveError("frankenphp", allowedDirectives, d.Val())
+				return wrongSubDirectiveError("frankenphp", "num_threads, max_threads, php_ini, worker, max_wait_time", d.Val())
 			}
 		}
 	}
 
 	if f.MaxThreads > 0 && f.NumThreads > 0 && f.MaxThreads < f.NumThreads {
-		return errors.New(`"max_threads"" must be greater than or equal to "num_threads"`)
+		return d.Err(`"max_threads"" must be greater than or equal to "num_threads"`)
 	}
 
 	return nil
 }
 
-func parseGlobalOption(d *caddyfile.Dispenser, _ interface{}) (interface{}, error) {
+func parseGlobalOption(d *caddyfile.Dispenser, _ any) (any, error) {
 	app := &FrankenPHPApp{}
 	if err := app.UnmarshalCaddyfile(d); err != nil {
 		return nil, err
@@ -268,3 +322,8 @@ func parseGlobalOption(d *caddyfile.Dispenser, _ interface{}) (interface{}, erro
 		Value: caddyconfig.JSON(app, nil),
 	}, nil
 }
+
+var (
+	_ caddy.App         = (*FrankenPHPApp)(nil)
+	_ caddy.Provisioner = (*FrankenPHPApp)(nil)
+)

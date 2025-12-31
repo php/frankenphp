@@ -76,7 +76,7 @@ GITHUB_TOKEN="xxx" docker --load buildx bake static-builder
 Запустите следующий скрипт, чтобы создать статический бинарный файл для macOS (должен быть установлен [Homebrew](https://brew.sh/)):
 
 ```console
-git clone https://github.com/dunglas/frankenphp
+git clone https://github.com/php/frankenphp
 cd frankenphp
 ./build-static.sh
 ```

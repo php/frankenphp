@@ -197,7 +197,7 @@ docker buildx bake -f docker-bake.hcl --pull --no-cache --push
 ## Ressources Liées à Docker
 
 - [Définition du fichier Bake](https://docs.docker.com/build/customize/bake/file-definition/)
-- [docker buildx build](https://docs.docker.com/engine/reference/commandline/buildx_build/)
+- [`docker buildx build`](https://docs.docker.com/engine/reference/commandline/buildx_build/)
 
 ## Commande utile
 

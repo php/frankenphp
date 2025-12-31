@@ -82,7 +82,7 @@ Certaines fonctionnalités de FrankenPHP nécessitent des dépendances optionnel
 Ces fonctionnalités peuvent également être désactivées en passant des tags de compilation au compilateur Go.
 
 | Fonctionnalité                                          | Dépendance                                                            | Tag de compilation pour la désactiver |
-|---------------------------------------------------------|-----------------------------------------------------------------------|---------------------------------------|
+| ------------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------- |
 | Compression Brotli                                      | [Brotli](https://github.com/google/brotli)                            | nobrotli                              |
 | Redémarrage des workers en cas de changement de fichier | [Watcher C](https://github.com/e-dant/watcher/tree/release/watcher-c) | nowatcher                             |
 
@@ -122,7 +122,7 @@ xcaddy build \
 Il est également possible de compiler FrankenPHP sans `xcaddy` en utilisant directement la commande `go` :
 
 ```console
-curl -L https://github.com/dunglas/frankenphp/archive/refs/heads/main.tar.gz | tar xz
+curl -L https://github.com/php/frankenphp/archive/refs/heads/main.tar.gz | tar xz
 cd frankenphp-main/caddy/frankenphp
 CGO_CFLAGS=$(php-config --includes) CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)" go build -tags=nobadger,nomysql,nopgx
 ```

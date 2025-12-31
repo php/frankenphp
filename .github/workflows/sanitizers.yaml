@@ -1,5 +1,8 @@
 ---
 name: Sanitizers
+concurrency:
+  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
 on:
   pull_request:
     branches:
@@ -32,20 +35,24 @@ jobs:
       USE_ZEND_ALLOC: 0
       LIBRARY_PATH: ${{ github.workspace }}/php/target/lib:${{ github.workspace }}/watcher/target/lib
       LD_LIBRARY_PATH: ${{ github.workspace }}/php/target/lib
+      # PHP doesn't free some memory on purpose, we have to disable leaks detection: https://go.dev/doc/go1.25#go-command
+      ASAN_OPTIONS: detect_leaks=0
     steps:
       - name: Remove local PHP
         run: sudo apt-get remove --purge --autoremove 'php*' 'libmemcached*'
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
         with:
-          go-version: "1.24"
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25"
           cache-dependency-path: |
             go.sum 
             caddy/go.sum
       - name: Determine PHP version
         id: determine-php-version
         run: |
-          curl -fsSL 'https://www.php.net/releases/index.php?json&max=1&version=8.4' -o version.json
+          curl -fsSL 'https://www.php.net/releases/index.php?json&max=1&version=8.5' -o version.json
           echo version="$(jq -r 'keys[0]' version.json)" >> "$GITHUB_OUTPUT"
           echo archive="$(jq -r '.[] .source[] | select(.filename |endswith(".xz")) | "https://www.php.net/distributions/" + .filename' version.json)" >> "$GITHUB_OUTPUT"
       - name: Cache PHP
@@ -58,7 +65,7 @@ jobs:
         name: Compile PHP
         run: |
           mkdir php/
-          curl -fsSL "${{ steps.determine-php-version.outputs.archive }}" | tar -Jx -C php --strip-components=1
+          curl -fsSL "${URL}" | tar -Jx -C php --strip-components=1
           cd php/
           ./configure \
             CFLAGS="$CFLAGS" \
@@ -88,6 +95,8 @@ jobs:
             --prefix="$(pwd)/target/"
           make -j"$(getconf _NPROCESSORS_ONLN)"
           make install
+        env:
+          URL: ${{ steps.determine-php-version.outputs.archive }}
       - name: Add PHP to the PATH
         run: echo "$(pwd)/php/target/bin" >> "$GITHUB_PATH"
       - name: Install e-dant/watcher
@@ -99,6 +108,6 @@ jobs:
             echo "CGO_LDFLAGS=$LDFLAGS $(php-config --ldflags) $(php-config --libs)"
           } >> "$GITHUB_ENV"
       - name: Compile tests
-        run: go test  ${{ matrix.sanitizer == 'msan' && '-tags=nowatcher' || '' }} -${{ matrix.sanitizer }} -v -x -c
+        run: go test ${{ matrix.sanitizer == 'msan' && '-tags=nowatcher' || '' }} -${{ matrix.sanitizer }} -v -x -c
       - name: Run tests
         run: ./frankenphp.test -test.v

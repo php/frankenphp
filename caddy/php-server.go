@@ -41,7 +41,7 @@ will be changed to the HTTPS port and the server will use HTTPS. If using
 a public domain, ensure A/AAAA records are properly configured before
 using this option.
 
-For more advanced use cases, see https://github.com/dunglas/frankenphp/blob/main/docs/config.md`,
+For more advanced use cases, see https://github.com/php/frankenphp/blob/main/docs/config.md`,
 		CobraFunc: func(cmd *cobra.Command) {
 			cmd.Flags().StringP("domain", "d", "", "Domain name at which to serve the files")
 			cmd.Flags().StringP("root", "r", "", "The path to the root of the site")

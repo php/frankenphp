@@ -12,16 +12,6 @@ package frankenphp
 //
 // We also set these flags for hardening: https://github.com/docker-library/php/blob/master/8.2/bookworm/zts/Dockerfile#L57-L59
 
-// #cgo nocallback frankenphp_update_server_context
-// #cgo noescape frankenphp_update_server_context
-// #cgo darwin pkg-config: libxml-2.0
-// #cgo CFLAGS: -Wall -Werror
-// #cgo CFLAGS: -I/usr/local/include -I/usr/local/include/php -I/usr/local/include/php/main -I/usr/local/include/php/TSRM -I/usr/local/include/php/Zend -I/usr/local/include/php/ext -I/usr/local/include/php/ext/date/lib
-// #cgo linux CFLAGS: -D_GNU_SOURCE
-// #cgo darwin CFLAGS: -I/opt/homebrew/include
-// #cgo LDFLAGS: -L/usr/local/lib -L/usr/lib -lphp -lm -lutil
-// #cgo linux LDFLAGS: -ldl -lresolv
-// #cgo darwin LDFLAGS: -Wl,-rpath,/usr/local/lib -L/opt/homebrew/lib -L/opt/homebrew/opt/libiconv/lib -liconv -ldl
 // #include <stdlib.h>
 // #include <stdint.h>
 // #include <php_variables.h>
@@ -40,7 +30,6 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -52,55 +41,71 @@ import (
 
 type contextKeyStruct struct{}
 
-var contextKey = contextKeyStruct{}
-
 var (
-	ErrInvalidRequest         = errors.New("not a FrankenPHP request")
-	ErrAlreadyStarted         = errors.New("FrankenPHP is already started")
-	ErrInvalidPHPVersion      = errors.New("FrankenPHP is only compatible with PHP 8.2+")
-	ErrMainThreadCreation     = errors.New("error creating the main thread")
-	ErrRequestContextCreation = errors.New("error during request context creation")
-	ErrScriptExecution        = errors.New("error during PHP script execution")
-	ErrNotRunning             = errors.New("FrankenPHP is not running. For proper configuration visit: https://frankenphp.dev/docs/config/#caddyfile-config")
+	ErrInvalidRequest     = errors.New("not a FrankenPHP request")
+	ErrAlreadyStarted     = errors.New("FrankenPHP is already started")
+	ErrInvalidPHPVersion  = errors.New("FrankenPHP is only compatible with PHP 8.2+")
+	ErrMainThreadCreation = errors.New("error creating the main thread")
+	ErrScriptExecution    = errors.New("error during PHP script execution")
+	ErrNotRunning         = errors.New("FrankenPHP is not running. For proper configuration visit: https://frankenphp.dev/docs/config/#caddyfile-config")
 
-	isRunning bool
+	ErrInvalidRequestPath         = ErrRejected{"invalid request path", http.StatusBadRequest}
+	ErrInvalidContentLengthHeader = ErrRejected{"invalid Content-Length header", http.StatusBadRequest}
+	ErrMaxWaitTimeExceeded        = ErrRejected{"maximum request handling time exceeded", http.StatusServiceUnavailable}
 
-	loggerMu sync.RWMutex
-	logger   *slog.Logger
+	contextKey   = contextKeyStruct{}
+	serverHeader = []string{"FrankenPHP"}
+
+	isRunning        bool
+	onServerShutdown []func()
+
+	// Set default values to make Shutdown() idempotent
+	globalMu     sync.Mutex
+	globalCtx    = context.Background()
+	globalLogger = slog.Default()
 
 	metrics Metrics = nullMetrics{}
 
 	maxWaitTime time.Duration
 )
 
+type ErrRejected struct {
+	message string
+	status  int
+}
+
+func (e ErrRejected) Error() string {
+	return e.message
+}
+
 type syslogLevel int
 
 const (
-	emerg   syslogLevel = iota // system is unusable
-	alert                      // action must be taken immediately
-	crit                       // critical conditions
-	err                        // error conditions
-	warning                    // warning conditions
-	notice                     // normal but significant condition
-	info                       // informational
-	debug                      // debug-level messages
+	syslogLevelEmerg  syslogLevel = iota // system is unusable
+	syslogLevelAlert                     // action must be taken immediately
+	syslogLevelCrit                      // critical conditions
+	syslogLevelErr                       // error conditions
+	syslogLevelWarn                      // warning conditions
+	syslogLevelNotice                    // normal but significant condition
+	syslogLevelInfo                      // informational
+	syslogLevelDebug                     // debug-level messages
 )
 
 func (l syslogLevel) String() string {
 	switch l {
-	case emerg:
+	case syslogLevelEmerg:
 		return "emerg"
-	case alert:
+	case syslogLevelAlert:
 		return "alert"
-	case crit:
+	case syslogLevelCrit:
 		return "crit"
-	case err:
+	case syslogLevelErr:
 		return "err"
-	case warning:
+	case syslogLevelWarn:
 		return "warning"
-	case notice:
+	case syslogLevelNotice:
 		return "notice"
-	case debug:
+	case syslogLevelDebug:
 		return "debug"
 	default:
 		return "info"
@@ -148,48 +153,65 @@ func Config() PHPConfig {
 	}
 }
 
-// MaxThreads is internally used during tests. It is written to, but never read and may go away in the future.
-var MaxThreads int
-
-func calculateMaxThreads(opt *opt) (int, int, int, error) {
+func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 	maxProcs := runtime.GOMAXPROCS(0) * 2
+	maxThreadsFromWorkers := 0
 
-	var numWorkers int
 	for i, w := range opt.workers {
 		if w.num <= 0 {
-			// https://github.com/dunglas/frankenphp/issues/126
+			// https://github.com/php/frankenphp/issues/126
 			opt.workers[i].num = maxProcs
 		}
 		metrics.TotalWorkers(w.name, w.num)
 
 		numWorkers += opt.workers[i].num
+
+		if w.maxThreads > 0 {
+			if w.maxThreads < w.num {
+				return 0, fmt.Errorf("worker max_threads (%d) must be greater or equal to worker num (%d) (%q)", w.maxThreads, w.num, w.fileName)
+			}
+
+			if w.maxThreads > opt.maxThreads && opt.maxThreads > 0 {
+				return 0, fmt.Errorf("worker max_threads (%d) cannot be greater than total max_threads (%d) (%q)", w.maxThreads, opt.maxThreads, w.fileName)
+			}
+
+			maxThreadsFromWorkers += w.maxThreads - w.num
+		}
 	}
 
 	numThreadsIsSet := opt.numThreads > 0
 	maxThreadsIsSet := opt.maxThreads != 0
 	maxThreadsIsAuto := opt.maxThreads < 0 // maxthreads < 0 signifies auto mode (see phpmaintread.go)
 
+	// if max_threads is only defined in workers, scale up to the sum of all worker max_threads
+	if !maxThreadsIsSet && maxThreadsFromWorkers > 0 {
+		maxThreadsIsSet = true
+		if numThreadsIsSet {
+			opt.maxThreads = opt.numThreads + maxThreadsFromWorkers
+		} else {
+			opt.maxThreads = numWorkers + 1 + maxThreadsFromWorkers
+		}
+	}
+
 	if numThreadsIsSet && !maxThreadsIsSet {
 		opt.maxThreads = opt.numThreads
 		if opt.numThreads <= numWorkers {
-			err := fmt.Errorf("num_threads (%d) must be greater than the number of worker threads (%d)", opt.numThreads, numWorkers)
-			return 0, 0, 0, err
+			return 0, fmt.Errorf("num_threads (%d) must be greater than the number of worker threads (%d)", opt.numThreads, numWorkers)
 		}
 
-		return opt.numThreads, numWorkers, opt.maxThreads, nil
+		return numWorkers, nil
 	}
 
 	if maxThreadsIsSet && !numThreadsIsSet {
 		opt.numThreads = numWorkers + 1
 		if !maxThreadsIsAuto && opt.numThreads > opt.maxThreads {
-			err := fmt.Errorf("max_threads (%d) must be greater than the number of worker threads (%d)", opt.maxThreads, numWorkers)
-			return 0, 0, 0, err
+			return 0, fmt.Errorf("max_threads (%d) must be greater than the number of worker threads (%d)", opt.maxThreads, numWorkers)
 		}
 
-		return opt.numThreads, numWorkers, opt.maxThreads, nil
+		return numWorkers, nil
 	}
 
-	if !numThreadsIsSet {
+	if !maxThreadsIsSet && !numThreadsIsSet {
 		if numWorkers >= maxProcs {
 			// Start at least as many threads as workers, and keep a free thread to handle requests in non-worker mode
 			opt.numThreads = numWorkers + 1
@@ -198,21 +220,19 @@ func calculateMaxThreads(opt *opt) (int, int, int, error) {
 		}
 		opt.maxThreads = opt.numThreads
 
-		return opt.numThreads, numWorkers, opt.maxThreads, nil
+		return numWorkers, nil
 	}
 
 	// both num_threads and max_threads are set
 	if opt.numThreads <= numWorkers {
-		err := fmt.Errorf("num_threads (%d) must be greater than the number of worker threads (%d)", opt.numThreads, numWorkers)
-		return 0, 0, 0, err
+		return 0, fmt.Errorf("num_threads (%d) must be greater than the number of worker threads (%d)", opt.numThreads, numWorkers)
 	}
 
 	if !maxThreadsIsAuto && opt.maxThreads < opt.numThreads {
-		err := fmt.Errorf("max_threads (%d) must be greater than or equal to num_threads (%d)", opt.maxThreads, opt.numThreads)
-		return 0, 0, 0, err
+		return 0, fmt.Errorf("max_threads (%d) must be greater than or equal to num_threads (%d)", opt.maxThreads, opt.numThreads)
 	}
 
-	return opt.numThreads, numWorkers, opt.maxThreads, nil
+	return numWorkers, nil
 }
 
 // Init starts the PHP runtime and the configured workers.
@@ -222,30 +242,33 @@ func Init(options ...Option) error {
 	}
 	isRunning = true
 
-	// Ignore all SIGPIPE signals to prevent weird issues with systemd: https://github.com/dunglas/frankenphp/issues/1020
+	// Ignore all SIGPIPE signals to prevent weird issues with systemd: https://github.com/php/frankenphp/issues/1020
 	// Docker/Moby has a similar hack: https://github.com/moby/moby/blob/d828b032a87606ae34267e349bf7f7ccb1f6495a/cmd/dockerd/docker.go#L87-L90
 	signal.Ignore(syscall.SIGPIPE)
+
+	registerExtensions()
 
 	opt := &opt{}
 	for _, o := range options {
 		if err := o(opt); err != nil {
+			Shutdown()
 			return err
 		}
 	}
 
-	if opt.logger == nil {
-		// set a default logger
-		// to disable logging, set the logger to slog.New(slog.NewTextHandler(io.Discard, nil))
-		l := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	globalMu.Lock()
 
-		loggerMu.Lock()
-		logger = l
-		loggerMu.Unlock()
-	} else {
-		loggerMu.Lock()
-		logger = opt.logger
-		loggerMu.Unlock()
+	if opt.ctx != nil {
+		globalCtx = opt.ctx
+		opt.ctx = nil
 	}
+
+	if opt.logger != nil {
+		globalLogger = opt.logger
+		opt.logger = nil
+	}
+
+	globalMu.Unlock()
 
 	if opt.metrics != nil {
 		metrics = opt.metrics
@@ -253,50 +276,77 @@ func Init(options ...Option) error {
 
 	maxWaitTime = opt.maxWaitTime
 
-	totalThreadCount, workerThreadCount, maxThreadCount, err := calculateMaxThreads(opt)
+	workerThreadCount, err := calculateMaxThreads(opt)
 	if err != nil {
+		Shutdown()
 		return err
 	}
 
-	metrics.TotalThreads(totalThreadCount)
-	MaxThreads = totalThreadCount
+	metrics.TotalThreads(opt.numThreads)
 
 	config := Config()
 
 	if config.Version.MajorVersion < 8 || (config.Version.MajorVersion == 8 && config.Version.MinorVersion < 2) {
+		Shutdown()
 		return ErrInvalidPHPVersion
 	}
 
 	if config.ZTS {
 		if !config.ZendMaxExecutionTimers && runtime.GOOS == "linux" {
-			logger.Warn(`Zend Max Execution Timers are not enabled, timeouts (e.g. "max_execution_time") are disabled, recompile PHP with the "--enable-zend-max-execution-timers" configuration option to fix this issue`)
+			if globalLogger.Enabled(globalCtx, slog.LevelWarn) {
+				globalLogger.LogAttrs(globalCtx, slog.LevelWarn, `Zend Max Execution Timers are not enabled, timeouts (e.g. "max_execution_time") are disabled, recompile PHP with the "--enable-zend-max-execution-timers" configuration option to fix this issue`)
+			}
 		}
 	} else {
-		totalThreadCount = 1
-		logger.Warn(`ZTS is not enabled, only 1 thread will be available, recompile PHP using the "--enable-zts" configuration option or performance will be degraded`)
+		opt.numThreads = 1
+
+		if globalLogger.Enabled(globalCtx, slog.LevelWarn) {
+			globalLogger.LogAttrs(globalCtx, slog.LevelWarn, `ZTS is not enabled, only 1 thread will be available, recompile PHP using the "--enable-zts" configuration option or performance will be degraded`)
+		}
 	}
 
-	mainThread, err := initPHPThreads(totalThreadCount, maxThreadCount, opt.phpIni)
+	mainThread, err := initPHPThreads(opt.numThreads, opt.maxThreads, opt.phpIni)
 	if err != nil {
+		Shutdown()
 		return err
 	}
 
-	regularRequestChan = make(chan *frankenPHPContext, totalThreadCount-workerThreadCount)
-	regularThreads = make([]*phpThread, 0, totalThreadCount-workerThreadCount)
-	for i := 0; i < totalThreadCount-workerThreadCount; i++ {
+	regularRequestChan = make(chan contextHolder)
+	regularThreads = make([]*phpThread, 0, opt.numThreads-workerThreadCount)
+	for i := 0; i < opt.numThreads-workerThreadCount; i++ {
 		convertToRegularThread(getInactivePHPThread())
 	}
 
 	if err := initWorkers(opt.workers); err != nil {
+		Shutdown()
+
+		return err
+	}
+
+	if err := initWatchers(opt); err != nil {
+		Shutdown()
 		return err
 	}
 
 	initAutoScaling(mainThread)
 
-	ctx := context.Background()
-	logger.LogAttrs(ctx, slog.LevelInfo, "FrankenPHP started 🐘", slog.String("php_version", Version().Version), slog.Int("num_threads", mainThread.numThreads), slog.Int("max_threads", mainThread.maxThreads))
-	if EmbeddedAppPath != "" {
-		logger.LogAttrs(ctx, slog.LevelInfo, "embedded PHP app 📦", slog.String("path", EmbeddedAppPath))
+	if globalLogger.Enabled(globalCtx, slog.LevelInfo) {
+		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "FrankenPHP started 🐘", slog.String("php_version", Version().Version), slog.Int("num_threads", mainThread.numThreads), slog.Int("max_threads", mainThread.maxThreads))
+
+		if EmbeddedAppPath != "" {
+			globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "embedded PHP app 📦", slog.String("path", EmbeddedAppPath))
+		}
+	}
+
+	// register the startup/shutdown hooks (mainly useful for extensions)
+	onServerShutdown = nil
+	for _, w := range opt.workers {
+		if w.onServerStartup != nil {
+			w.onServerStartup()
+		}
+		if w.onServerShutdown != nil {
+			onServerShutdown = append(onServerShutdown, w.onServerShutdown)
+		}
 	}
 
 	return nil
@@ -308,7 +358,12 @@ func Shutdown() {
 		return
 	}
 
-	drainWatcher()
+	// call the shutdown hooks (mainly useful for extensions)
+	for _, fn := range onServerShutdown {
+		fn()
+	}
+
+	drainWatchers()
 	drainAutoScaling()
 	drainPHPThreads()
 
@@ -320,100 +375,52 @@ func Shutdown() {
 	}
 
 	isRunning = false
-	logger.Debug("FrankenPHP shut down")
-}
-
-func updateServerContext(thread *phpThread, fc *frankenPHPContext, isWorkerRequest bool) error {
-	request := fc.request
-	authUser, authPassword, ok := request.BasicAuth()
-	var cAuthUser, cAuthPassword *C.char
-	if ok && authPassword != "" {
-		cAuthPassword = thread.pinCString(authPassword)
-	}
-	if ok && authUser != "" {
-		cAuthUser = thread.pinCString(authUser)
+	if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
+		globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "FrankenPHP shut down")
 	}
 
-	cMethod := thread.pinCString(request.Method)
-	cQueryString := thread.pinCString(request.URL.RawQuery)
-	contentLengthStr := request.Header.Get("Content-Length")
-	contentLength := 0
-	if contentLengthStr != "" {
-		var err error
-		contentLength, err = strconv.Atoi(contentLengthStr)
-		if err != nil || contentLength < 0 {
-			return fmt.Errorf("invalid Content-Length header: %w", err)
-		}
-	}
-
-	contentType := request.Header.Get("Content-Type")
-	var cContentType *C.char
-	if contentType != "" {
-		cContentType = thread.pinCString(contentType)
-	}
-
-	// compliance with the CGI specification requires that
-	// PATH_TRANSLATED should only exist if PATH_INFO is defined.
-	// Info: https://www.ietf.org/rfc/rfc3875 Page 14
-	var cPathTranslated *C.char
-	if fc.pathInfo != "" {
-		cPathTranslated = thread.pinCString(sanitizedPathJoin(fc.documentRoot, fc.pathInfo)) // Info: http://www.oreilly.com/openbook/cgi/ch02_04.html
-	}
-
-	cRequestUri := thread.pinCString(request.URL.RequestURI())
-
-	ret := C.frankenphp_update_server_context(
-		C.bool(isWorkerRequest || fc.responseWriter == nil),
-
-		cMethod,
-		cQueryString,
-		C.zend_long(contentLength),
-		cPathTranslated,
-		cRequestUri,
-		cContentType,
-		cAuthUser,
-		cAuthPassword,
-		C.int(request.ProtoMajor*1000+request.ProtoMinor),
-	)
-
-	if ret > 0 {
-		return ErrRequestContextCreation
-	}
-
-	return nil
+	resetGlobals()
 }
 
 // ServeHTTP executes a PHP script according to the given context.
 func ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) error {
+	h := responseWriter.Header()
+	if h["Server"] == nil {
+		h["Server"] = serverHeader
+	}
+
 	if !isRunning {
 		return ErrNotRunning
 	}
 
-	fc, ok := fromContext(request.Context())
+	ctx := request.Context()
+	fc, ok := fromContext(ctx)
+
+	ch := contextHolder{ctx, fc}
+
 	if !ok {
 		return ErrInvalidRequest
 	}
 
 	fc.responseWriter = responseWriter
 
-	if !fc.validate() {
-		return nil
+	if err := fc.validate(); err != nil {
+		return err
 	}
 
 	// Detect if a worker is available to handle this request
-	if worker, ok := workers[getWorkerKey(fc.workerName, fc.scriptFilename)]; ok {
-		worker.handleRequest(fc)
-		return nil
+	if fc.worker != nil {
+		return fc.worker.handleRequest(ch)
 	}
 
 	// If no worker was available, send the request to non-worker threads
-	handleRequestWithRegularPHPThreads(fc)
-	return nil
+	return handleRequestWithRegularPHPThreads(ch)
 }
 
 //export go_ub_write
 func go_ub_write(threadIndex C.uintptr_t, cBuf *C.char, length C.int) (C.size_t, C.bool) {
-	fc := phpThreads[threadIndex].getRequestContext()
+	thread := phpThreads[threadIndex]
+	fc := thread.frankenPHPContext()
 
 	if fc.isDone {
 		return 0, C.bool(true)
@@ -428,14 +435,27 @@ func go_ub_write(threadIndex C.uintptr_t, cBuf *C.char, length C.int) (C.size_t,
 		writer = fc.responseWriter
 	}
 
+	var ctx context.Context
+
 	i, e := writer.Write(unsafe.Slice((*byte)(unsafe.Pointer(cBuf)), length))
 	if e != nil {
-		fc.logger.LogAttrs(context.Background(), slog.LevelWarn, "write error", slog.Any("error", e))
+		ctx = thread.context()
+
+		if fc.logger.Enabled(ctx, slog.LevelWarn) {
+			fc.logger.LogAttrs(ctx, slog.LevelWarn, "write error", slog.Any("error", e))
+		}
 	}
 
 	if fc.responseWriter == nil {
 		// probably starting a worker script, log the output
-		fc.logger.Info(writer.(*bytes.Buffer).String())
+
+		if ctx == nil {
+			ctx = thread.context()
+		}
+
+		if fc.logger.Enabled(ctx, slog.LevelInfo) {
+			fc.logger.LogAttrs(ctx, slog.LevelInfo, writer.(*bytes.Buffer).String())
+		}
 	}
 
 	return C.size_t(i), C.bool(fc.clientHasClosed())
@@ -444,12 +464,15 @@ func go_ub_write(threadIndex C.uintptr_t, cBuf *C.char, length C.int) (C.size_t,
 //export go_apache_request_headers
 func go_apache_request_headers(threadIndex C.uintptr_t) (*C.go_string, C.size_t) {
 	thread := phpThreads[threadIndex]
-	fc := thread.getRequestContext()
+	ctx := thread.context()
+	fc := thread.frankenPHPContext()
 
 	if fc.responseWriter == nil {
 		// worker mode, not handling a request
 
-		logger.LogAttrs(context.Background(), slog.LevelDebug, "apache_request_headers() called in non-HTTP context", slog.String("worker", fc.scriptFilename))
+		if globalLogger.Enabled(ctx, slog.LevelDebug) {
+			globalLogger.LogAttrs(ctx, slog.LevelDebug, "apache_request_headers() called in non-HTTP context", slog.String("worker", fc.worker.name))
+		}
 
 		return nil, 0
 	}
@@ -477,21 +500,53 @@ func go_apache_request_headers(threadIndex C.uintptr_t) (*C.go_string, C.size_t)
 	return sd, C.size_t(len(fc.request.Header))
 }
 
-func addHeader(fc *frankenPHPContext, cString *C.char, length C.int) {
-	parts := strings.SplitN(C.GoStringN(cString, length), ": ", 2)
-	if len(parts) != 2 {
-		fc.logger.LogAttrs(context.Background(), slog.LevelDebug, "invalid header", slog.String("header", parts[0]))
+func addHeader(ctx context.Context, fc *frankenPHPContext, cString *C.char, length C.int) {
+	key, val := splitRawHeader(cString, int(length))
+	if key == "" {
+		if fc.logger.Enabled(ctx, slog.LevelDebug) {
+			fc.logger.LogAttrs(ctx, slog.LevelDebug, "invalid header", slog.String("header", C.GoStringN(cString, length)))
+		}
 
 		return
 	}
+	fc.responseWriter.Header().Add(key, val)
+}
 
-	fc.responseWriter.Header().Add(parts[0], parts[1])
+// split the raw header coming from C with minimal allocations
+func splitRawHeader(rawHeader *C.char, length int) (string, string) {
+	buf := unsafe.Slice((*byte)(unsafe.Pointer(rawHeader)), length)
+
+	// Search for the colon in 'Header-Key: value'
+	var i int
+	for i = 0; i < length; i++ {
+		if buf[i] == ':' {
+			break
+		}
+	}
+
+	if i == length {
+		return "", "" // No colon found, invalid header
+	}
+
+	headerKey := C.GoStringN(rawHeader, C.int(i))
+
+	// skip whitespaces after the colon
+	j := i + 1
+	for j < length && buf[j] == ' ' {
+		j++
+	}
+
+	// anything left is the header value
+	valuePtr := (*C.char)(unsafe.Pointer(uintptr(unsafe.Pointer(rawHeader)) + uintptr(j)))
+	headerValue := C.GoStringN(valuePtr, C.int(length-j))
+
+	return headerKey, headerValue
 }
 
 //export go_write_headers
 func go_write_headers(threadIndex C.uintptr_t, status C.int, headers *C.zend_llist) C.bool {
-	fc := phpThreads[threadIndex].getRequestContext()
-
+	thread := phpThreads[threadIndex]
+	fc := thread.frankenPHPContext()
 	if fc == nil {
 		return C.bool(false)
 	}
@@ -509,13 +564,27 @@ func go_write_headers(threadIndex C.uintptr_t, status C.int, headers *C.zend_lli
 	for current != nil {
 		h := (*C.sapi_header_struct)(unsafe.Pointer(&(current.data)))
 
-		addHeader(fc, h.header, C.int(h.header_len))
+		addHeader(thread.context(), fc, h.header, C.int(h.header_len))
 		current = current.next
 	}
 
-	fc.responseWriter.WriteHeader(int(status))
+	goStatus := int(status)
 
-	if status >= 100 && status < 200 {
+	// go panics on invalid status code
+	// https://github.com/golang/go/blob/9b8742f2e79438b9442afa4c0a0139d3937ea33f/src/net/http/server.go#L1162
+	if goStatus < 100 || goStatus > 999 {
+		ctx := thread.context()
+
+		if globalLogger.Enabled(ctx, slog.LevelWarn) {
+			globalLogger.LogAttrs(ctx, slog.LevelWarn, "Invalid response status code", slog.Int("status_code", goStatus))
+		}
+
+		goStatus = 500
+	}
+
+	fc.responseWriter.WriteHeader(goStatus)
+
+	if goStatus < 200 {
 		// Clear headers, it's not automatically done by ResponseWriter.WriteHeader() for 1xx responses
 		h := fc.responseWriter.Header()
 		for k := range h {
@@ -528,8 +597,13 @@ func go_write_headers(threadIndex C.uintptr_t, status C.int, headers *C.zend_lli
 
 //export go_sapi_flush
 func go_sapi_flush(threadIndex C.uintptr_t) bool {
-	fc := phpThreads[threadIndex].getRequestContext()
-	if fc == nil || fc.responseWriter == nil {
+	thread := phpThreads[threadIndex]
+	fc := thread.frankenPHPContext()
+	if fc == nil {
+		return false
+	}
+
+	if fc.responseWriter == nil {
 		return false
 	}
 
@@ -538,7 +612,11 @@ func go_sapi_flush(threadIndex C.uintptr_t) bool {
 	}
 
 	if err := http.NewResponseController(fc.responseWriter).Flush(); err != nil {
-		logger.LogAttrs(context.Background(), slog.LevelWarn, "the current responseWriter is not a flusher, if you are not using a custom build, please report this issue", slog.Any("error", err))
+		ctx := thread.context()
+
+		if globalLogger.Enabled(ctx, slog.LevelWarn) {
+			globalLogger.LogAttrs(ctx, slog.LevelWarn, "the current responseWriter is not a flusher, if you are not using a custom build, please report this issue", slog.Any("error", err))
+		}
 	}
 
 	return false
@@ -546,7 +624,7 @@ func go_sapi_flush(threadIndex C.uintptr_t) bool {
 
 //export go_read_post
 func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (readBytes C.size_t) {
-	fc := phpThreads[threadIndex].getRequestContext()
+	fc := phpThreads[threadIndex].frankenPHPContext()
 
 	if fc.responseWriter == nil {
 		return 0
@@ -565,8 +643,12 @@ func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (r
 
 //export go_read_cookies
 func go_read_cookies(threadIndex C.uintptr_t) *C.char {
-	cookies := phpThreads[threadIndex].getRequestContext().request.Header.Values("Cookie")
-	cookie := strings.Join(cookies, "; ")
+	request := phpThreads[threadIndex].frankenPHPContext().request
+	if request == nil {
+		return nil
+	}
+
+	cookie := strings.Join(request.Header.Values("Cookie"), "; ")
 	if cookie == "" {
 		return nil
 	}
@@ -578,39 +660,105 @@ func go_read_cookies(threadIndex C.uintptr_t) *C.char {
 	return C.CString(cookie)
 }
 
-//export go_log
-func go_log(message *C.char, level C.int) {
-	m := C.GoString(message)
+func getLogger(threadIndex C.uintptr_t) (*slog.Logger, context.Context) {
+	ctxHolder := phpThreads[threadIndex]
+	if ctxHolder == nil {
+		return globalLogger, globalCtx
+	}
 
-	var le syslogLevel
-	if level < C.int(emerg) || level > C.int(debug) {
-		le = info
-	} else {
+	ctx := ctxHolder.context()
+	if ctxHolder.handler == nil {
+		return globalLogger, ctx
+	}
+
+	fCtx := ctxHolder.frankenPHPContext()
+	if fCtx == nil || fCtx.logger == nil {
+		return globalLogger, ctx
+	}
+
+	return fCtx.logger, ctx
+}
+
+//export go_log
+func go_log(threadIndex C.uintptr_t, message *C.char, level C.int) {
+	logger, ctx := getLogger(threadIndex)
+
+	m := C.GoString(message)
+	le := syslogLevelInfo
+
+	if level >= C.int(syslogLevelEmerg) && level <= C.int(syslogLevelDebug) {
 		le = syslogLevel(level)
 	}
 
 	switch le {
-	case emerg, alert, crit, err:
-		logger.LogAttrs(context.Background(), slog.LevelError, m, slog.String("syslog_level", syslogLevel(level).String()))
+	case syslogLevelEmerg, syslogLevelAlert, syslogLevelCrit, syslogLevelErr:
+		if logger.Enabled(ctx, slog.LevelError) {
+			logger.LogAttrs(ctx, slog.LevelError, m, slog.String("syslog_level", le.String()))
+		}
 
-	case warning:
-		logger.LogAttrs(context.Background(), slog.LevelWarn, m, slog.String("syslog_level", syslogLevel(level).String()))
-	case debug:
-		logger.LogAttrs(context.Background(), slog.LevelDebug, m, slog.String("syslog_level", syslogLevel(level).String()))
+	case syslogLevelWarn:
+		if logger.Enabled(ctx, slog.LevelWarn) {
+			logger.LogAttrs(ctx, slog.LevelWarn, m, slog.String("syslog_level", le.String()))
+		}
+
+	case syslogLevelDebug:
+		if logger.Enabled(ctx, slog.LevelDebug) {
+			logger.LogAttrs(ctx, slog.LevelDebug, m, slog.String("syslog_level", le.String()))
+		}
 
 	default:
-		logger.LogAttrs(context.Background(), slog.LevelInfo, m, slog.String("syslog_level", syslogLevel(level).String()))
+		if logger.Enabled(ctx, slog.LevelInfo) {
+			logger.LogAttrs(ctx, slog.LevelInfo, m, slog.String("syslog_level", le.String()))
+		}
 	}
+}
+
+//export go_log_attrs
+func go_log_attrs(threadIndex C.uintptr_t, message *C.zend_string, cLevel C.zend_long, cAttrs *C.zval) *C.char {
+	logger, ctx := getLogger(threadIndex)
+
+	level := slog.Level(cLevel)
+
+	if !logger.Enabled(ctx, level) {
+		return nil
+	}
+
+	var attrs map[string]any
+
+	if cAttrs != nil {
+		var err error
+		if attrs, err = GoMap[any](unsafe.Pointer(*(**C.zend_array)(unsafe.Pointer(&cAttrs.value[0])))); err != nil {
+			// PHP exception message.
+			return C.CString("Failed to log message: converting attrs: " + err.Error())
+		}
+	}
+
+	logger.LogAttrs(ctx, level, GoString(unsafe.Pointer(message)), mapToAttr(attrs)...)
+
+	return nil
+}
+
+func mapToAttr(input map[string]any) []slog.Attr {
+	out := make([]slog.Attr, 0, len(input))
+
+	for key, val := range input {
+		out = append(out, slog.Any(key, val))
+	}
+
+	return out
 }
 
 //export go_is_context_done
 func go_is_context_done(threadIndex C.uintptr_t) C.bool {
-	return C.bool(phpThreads[threadIndex].getRequestContext().isDone)
+	return C.bool(phpThreads[threadIndex].frankenPHPContext().isDone)
 }
 
 // ExecuteScriptCLI executes the PHP script passed as parameter.
 // It returns the exit status code of the script.
 func ExecuteScriptCLI(script string, args []string) int {
+	// Ensure extensions are registered before CLI execution
+	registerExtensions()
+
 	cScript := C.CString(script)
 	defer C.free(unsafe.Pointer(cScript))
 
@@ -621,6 +769,9 @@ func ExecuteScriptCLI(script string, args []string) int {
 }
 
 func ExecutePHPCode(phpCode string) int {
+	// Ensure extensions are registered before CLI execution
+	registerExtensions()
+
 	cCode := C.CString(phpCode)
 	defer C.free(unsafe.Pointer(cCode))
 	return int(C.frankenphp_execute_script_cli(cCode, 0, nil, true))
@@ -647,4 +798,13 @@ func timeoutChan(timeout time.Duration) <-chan time.Time {
 	}
 
 	return time.After(timeout)
+}
+
+func resetGlobals() {
+	globalMu.Lock()
+	globalCtx = context.Background()
+	globalLogger = slog.Default()
+	workers = nil
+	watcherIsEnabled = false
+	globalMu.Unlock()
 }

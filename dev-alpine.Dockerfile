@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 #checkov:skip=CKV_DOCKER_2
 #checkov:skip=CKV_DOCKER_3
-FROM golang:1.24-alpine
+FROM golang:1.25-alpine
 
 ENV GOTOOLCHAIN=local
 ENV CFLAGS="-ggdb3"
@@ -32,7 +32,7 @@ RUN apk add --no-cache \
 	zlib-dev \
 	bison \
 	nss-tools \
-	# file watcher
+	# file watcher \
 	libstdc++ \
 	linux-headers \
 	# Dev tools \
@@ -48,8 +48,8 @@ RUN apk add --no-cache \
 	echo 'set auto-load safe-path /' > /root/.gdbinit
 
 WORKDIR /usr/local/src/php
-RUN git clone --branch=PHP-8.4 https://github.com/php/php-src.git . && \
-	# --enable-embed is only necessary to generate libphp.so, we don't use this SAPI directly
+RUN git clone --branch=PHP-8.5 https://github.com/php/php-src.git . && \
+	# --enable-embed is necessary to generate libphp.so, but we don't use this SAPI directly
 	./buildconf --force && \
 	EXTENSION_DIR=/usr/lib/frankenphp/modules ./configure \
 		--enable-embed \
@@ -71,7 +71,7 @@ RUN git clone --branch=PHP-8.4 https://github.com/php/php-src.git . && \
 # Install e-dant/watcher (necessary for file watching)
 WORKDIR /usr/local/src/watcher
 RUN git clone https://github.com/e-dant/watcher . && \
-    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && \
+		cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && \
 	cmake --build build/ && \
 	cmake --install build
 
@@ -79,7 +79,7 @@ WORKDIR /go/src/app
 COPY . .
 
 WORKDIR /go/src/app/caddy/frankenphp
-RUN go build
+RUN ../../go.sh build -buildvcs=false
 
 WORKDIR /go/src/app
 CMD [ "zsh" ]

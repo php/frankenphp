@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -17,9 +16,6 @@ import (
 
 	"github.com/dunglas/frankenphp"
 	"github.com/stretchr/testify/assert"
-	"go.uber.org/zap/exp/zapslog"
-	"go.uber.org/zap/zapcore"
-	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestWorker(t *testing.T) {
@@ -97,8 +93,7 @@ func TestWorkerEnv(t *testing.T) {
 }
 
 func TestWorkerGetOpt(t *testing.T) {
-	obs, logs := observer.New(zapcore.InfoLevel)
-	logger := slog.New(zapslog.NewHandler(obs))
+	logger, buf := newTestLogger(t)
 
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
 		req := httptest.NewRequest("GET", fmt.Sprintf("http://example.com/worker-getopt.php?i=%d", i), nil)
@@ -114,15 +109,21 @@ func TestWorkerGetOpt(t *testing.T) {
 		assert.Contains(t, string(body), fmt.Sprintf("[REQUEST_URI] => /worker-getopt.php?i=%d", i))
 	}, &testOptions{logger: logger, workerScript: "worker-getopt.php", env: map[string]string{"FOO": "bar"}})
 
-	for _, l := range logs.FilterFieldKey("exit_status").All() {
-		assert.Failf(t, "unexpected exit status", "exit status: %d", l.ContextMap()["exit_status"])
-	}
+	assert.NotRegexp(t, buf.String(), "exit_status=[1-9]")
 }
 
 func ExampleServeHTTP_workers() {
 	if err := frankenphp.Init(
-		frankenphp.WithWorkers("worker1", "worker1.php", 4, map[string]string{"ENV1": "foo"}, []string{}),
-		frankenphp.WithWorkers("worker2", "worker2.php", 2, map[string]string{"ENV2": "bar"}, []string{}),
+		frankenphp.WithWorkers("worker1", "worker1.php", 4,
+			frankenphp.WithWorkerEnv(map[string]string{"ENV1": "foo"}),
+			frankenphp.WithWorkerWatchMode([]string{}),
+			frankenphp.WithWorkerMaxFailures(0),
+		),
+		frankenphp.WithWorkers("worker2", "worker2.php", 2,
+			frankenphp.WithWorkerEnv(map[string]string{"ENV2": "bar"}),
+			frankenphp.WithWorkerWatchMode([]string{}),
+			frankenphp.WithWorkerMaxFailures(0),
+		),
 	); err != nil {
 		panic(err)
 	}

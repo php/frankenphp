@@ -76,7 +76,7 @@ docker run \
 
 ## `@php` Referanslı Composer Betikler
 
-[Composer betikleri](https://getcomposer.org/doc/articles/scripts.md) bazı görevler için bir PHP binary çalıştırmak isteyebilir, örneğin [bir Laravel projesinde](laravel.md) `@php artisan package:discover --ansi` çalıştırmak. Bu [şu anda mümkün değil](https://github.com/dunglas/frankenphp/issues/483#issuecomment-1899890915) ve 2 nedeni var:
+[Composer betikleri](https://getcomposer.org/doc/articles/scripts.md) bazı görevler için bir PHP binary çalıştırmak isteyebilir, örneğin [bir Laravel projesinde](laravel.md) `@php artisan package:discover --ansi` çalıştırmak. Bu [şu anda mümkün değil](https://github.com/php/frankenphp/issues/483#issuecomment-1899890915) ve 2 nedeni var:
 
 - Composer FrankenPHP binary dosyasını nasıl çağıracağını bilmiyor;
 - Composer, FrankenPHP'nin henüz desteklemediği `-d` bayrağını kullanarak PHP ayarlarını komuta ekleyebilir.

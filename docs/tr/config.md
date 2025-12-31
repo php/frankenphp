@@ -88,13 +88,15 @@ Aynı sunucuda birden fazla uygulamaya hizmet veriyorsanız birden fazla işçi 
 
 ```caddyfile
 app.example.com {
+	root /path/to/app/public
 	php_server {
-		root /path/to/app/public
+		root /path/to/app/public # daha iyi önbelleğe almayı sağlar
 		worker index.php <num>
 	}
 }
 
 other.example.com {
+	root /path/to/other/public
 	php_server {
 		root /path/to/other/public
 		worker index.php <num>

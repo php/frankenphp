@@ -41,11 +41,9 @@ especially when compiled in ZTS mode (thread-safe), which is required for Franke
 
 Also, [some bugs only happen when using musl](https://github.com/php/php-src/issues?q=sort%3Aupdated-desc+is%3Aissue+is%3Aopen+label%3ABug+musl).
 
-In production environments, we recommend using FrankenPHP linked against glibc.
+In production environments, we recommend using FrankenPHP linked against glibc, compiled with an appropriate optimization level.
 
-This can be achieved by using the Debian Docker images (the default), downloading the -gnu suffix binary from our [Releases](https://github.com/dunglas/frankenphp/releases), or by [compiling FrankenPHP from sources](compile.md).
-
-Alternatively, we provide static musl binaries compiled with [the mimalloc allocator](https://github.com/microsoft/mimalloc), which alleviates the problems in threaded scenarios.
+This can be achieved by using the Debian Docker images, using our maintainers [.deb](https://debs.henderkes.com) or [.rpm](https://rpms.henderkes.com) packages, or by [compiling FrankenPHP from sources](compile.md).
 
 ## Go Runtime Configuration
 
@@ -155,3 +153,36 @@ In particular:
 
 For more details, read [the dedicated Symfony documentation entry](https://symfony.com/doc/current/performance.html)
 (most tips are useful even if you don't use Symfony).
+
+## Splitting The Thread Pool
+
+It is common for applications to interact with slow external services, like an
+API that tends to be unreliable under high load or consistently takes 10+ seconds to respond.
+In such cases, it can be beneficial to split the thread pool to have dedicated "slow" pools.
+This prevents the slow endpoints from consuming all server resources/threads and
+limits the concurrency of requests going towards the slow endpoint, similar to a
+connection pool.
+
+```caddyfile
+{
+    frankenphp {
+        max_threads 100 # max 100 threads shared by all workers
+    }
+}
+
+example.com {
+    php_server {
+        root /app/public # the root of your application
+        worker index.php {
+            match /slow-endpoint/* # all requests with path /slow-endpoint/* are handled by this thread pool
+            num 10 # minimum 10 threads for requests matching /slow-endpoint/*
+        }
+        worker index.php {
+            match * # all other requests are handled separately
+            num 20 # minimum 20 threads for other requests, even if the slow endppoints start hanging
+        }
+    }
+}
+```
+
+Generally it's also advisable to handle very slow endpoints asynchronously, by using relevant mechanisms such as message queues.

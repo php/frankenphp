@@ -7,11 +7,15 @@ variable "VERSION" {
 }
 
 variable "PHP_VERSION" {
-    default = "8.2,8.3,8.4"
+    default = "8.2,8.3,8.4,8.5"
 }
 
 variable "GO_VERSION" {
-    default = "1.24"
+    default = "1.25"
+}
+
+variable "SPC_OPT_BUILD_ARGS" {
+    default = ""
 }
 
 variable "SHA" {}
@@ -24,17 +28,22 @@ variable "CACHE" {
     default = ""
 }
 
+variable "CI" {
+    # CI flag coming from the environment or --set; empty by default
+    default = ""
+}
+
 variable DEFAULT_PHP_VERSION {
-    default = "8.4"
+    default = "8.5"
 }
 
 function "tag" {
     params = [version, os, php-version, tgt]
     result = [
         version == "" ? "" : "${IMAGE_NAME}:${trimprefix("${version}${tgt == "builder" ? "-builder" : ""}-php${php-version}-${os}", "latest-")}",
-        php-version == DEFAULT_PHP_VERSION && os == "bookworm" && version != "" ? "${IMAGE_NAME}:${trimprefix("${version}${tgt == "builder" ? "-builder" : ""}", "latest-")}" : "",
+        php-version == DEFAULT_PHP_VERSION && os == "trixie" && version != "" ? "${IMAGE_NAME}:${trimprefix("${version}${tgt == "builder" ? "-builder" : ""}", "latest-")}" : "",
         php-version == DEFAULT_PHP_VERSION && version != "" ? "${IMAGE_NAME}:${trimprefix("${version}${tgt == "builder" ? "-builder" : ""}-${os}", "latest-")}" : "",
-        os == "bookworm" && version != "" ? "${IMAGE_NAME}:${trimprefix("${version}${tgt == "builder" ? "-builder" : ""}-php${php-version}", "latest-")}" : "",
+        os == "trixie" && version != "" ? "${IMAGE_NAME}:${trimprefix("${version}${tgt == "builder" ? "-builder" : ""}-php${php-version}", "latest-")}" : "",
     ]
 }
 
@@ -76,7 +85,7 @@ function "_php_version" {
 target "default" {
     name = "${tgt}-php-${replace(php-version, ".", "-")}-${os}"
     matrix = {
-        os = ["bookworm", "alpine"]
+        os = ["trixie", "bookworm", "alpine"]
         php-version = split(",", PHP_VERSION)
         tgt = ["builder", "runner"]
     }
@@ -91,8 +100,7 @@ target "default" {
     platforms = os == "alpine" ? [
         "linux/amd64",
         "linux/386",
-        # FIXME: armv6 doesn't build in GitHub actions because we use a custom Go build
-        #"linux/arm/v6",
+        "linux/arm/v6",
         "linux/arm/v7",
         "linux/arm64",
     ] : [
@@ -116,6 +124,7 @@ target "default" {
     args = {
         FRANKENPHP_VERSION = VERSION
     }
+    secret = ["id=github-token,env=GITHUB_TOKEN"]
 }
 
 target "static-builder-musl" {
@@ -140,6 +149,8 @@ target "static-builder-musl" {
     }
     args = {
         FRANKENPHP_VERSION = VERSION
+        CI = CI
+        SPC_OPT_BUILD_ARGS = SPC_OPT_BUILD_ARGS
     }
     secret = ["id=github-token,env=GITHUB_TOKEN"]
 }
@@ -164,6 +175,8 @@ target "static-builder-gnu" {
     args = {
         FRANKENPHP_VERSION = VERSION
         GO_VERSION = GO_VERSION
+        CI = CI
+        SPC_OPT_BUILD_ARGS = SPC_OPT_BUILD_ARGS
     }
     secret = ["id=github-token,env=GITHUB_TOKEN"]
 }

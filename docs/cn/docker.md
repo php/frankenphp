@@ -1,7 +1,15 @@
 # 构建自定义 Docker 镜像
 
-[FrankenPHP Docker 镜像](https://hub.docker.com/r/dunglas/frankenphp) 基于 [官方 PHP 镜像](https://hub.docker.com/_/php/)。
-Alpine Linux 和 Debian 衍生版适用于常见的处理器架构，支持 PHP 8.2、8.3 和 8.4。。[查看 Tags](https://hub.docker.com/r/dunglas/frankenphp/tags)。
+[FrankenPHP Docker 镜像](https://hub.docker.com/r/dunglas/frankenphp) 基于 [官方 PHP 镜像](https://hub.docker.com/_/php/)。提供适用于流行架构的 Debian 和 Alpine Linux 变体。推荐使用 Debian 变体。
+
+提供 PHP 8.2、8.3、8.4 和 8.5 的变体。
+
+标签遵循此模式：`dunglas/frankenphp:<frankenphp-version>-php<php-version>-<os>`
+
+- `<frankenphp-version>` 和 `<php-version>` 分别是 FrankenPHP 和 PHP 的版本号，范围从主版本（例如 `1`）、次版本（例如 `1.2`）到补丁版本（例如 `1.2.3`）。
+- `<os>` 要么是 `bookworm`（用于 Debian Bookworm）要么是 `alpine`（用于 Alpine 的最新稳定版本）。
+
+[浏览标签](https://hub.docker.com/r/dunglas/frankenphp/tags)。
 
 ## 如何使用镜像
 
@@ -71,13 +79,13 @@ FROM dunglas/frankenphp AS runner
 COPY --from=builder /usr/local/bin/frankenphp /usr/local/bin/frankenphp
 ```
 
-FrankenPHP 提供的 `builder` 镜像包含 libphp 的编译版本。
+FrankenPHP 提供的 `builder` 镜像包含 `libphp` 的编译版本。
 [用于构建的镜像](https://hub.docker.com/r/dunglas/frankenphp/tags?name=builder) 适用于所有版本的 FrankenPHP 和 PHP，包括 Alpine 和 Debian。
 
 > [!TIP]
 >
 > 如果你的系统基于 musl libc（Alpine Linux 上默认使用）并搭配 Symfony 使用，
-> 您可能需要 [增加默认堆栈大小](compile.md#使用-xcaddy)。
+> 你可能需要 [增加默认堆栈大小](compile.md#using-xcaddy)。
 
 ## 默认启用 worker 模式
 
@@ -136,7 +144,7 @@ volumes:
 
 FrankenPHP 可以在 Docker 中以非 root 用户身份运行。
 
-下面是一个示例 Dockerfile：
+下面是一个示例 `Dockerfile`：
 
 ```dockerfile
 FROM dunglas/frankenphp
@@ -148,18 +156,45 @@ RUN \
 	useradd ${USER}; \
 	# 需要开放80和443端口的权限
 	setcap CAP_NET_BIND_SERVICE=+eip /usr/local/bin/frankenphp; \
-	# 需要 /data/caddy 和 /config/caddy 目录的写入权限
-	chown -R ${USER}:${USER} /data/caddy && chown -R ${USER}:${USER} /config/caddy;
+	# 需要 /config/caddy 和 /data/caddy 目录的写入权限
+	chown -R ${USER}:${USER} /config/caddy /data/caddy
 
 USER ${USER}
 ```
+
+### 无权限运行
+
+即使在无根运行时，FrankenPHP 也需要 `CAP_NET_BIND_SERVICE` 权限来将
+Web 服务器绑定到特权端口（80 和 443）。
+
+如果你在非特权端口（1024 及以上）上公开 FrankenPHP，则可以以非 root 用户身份运行
+Web 服务器，并且不需要任何权限：
+
+```dockerfile
+FROM dunglas/frankenphp
+
+ARG USER=appuser
+
+RUN \
+	# 在基于 alpine 的发行版使用 "adduser -D ${USER}"
+	useradd ${USER}; \
+	# 移除默认权限
+	setcap -r /usr/local/bin/frankenphp; \
+	# 给予 /config/caddy 和 /data/caddy 写入权限
+	chown -R ${USER}:${USER} /config/caddy /data/caddy
+
+USER ${USER}
+```
+
+接下来，设置 `SERVER_NAME` 环境变量以使用非特权端口。
+示例：`:8000`
 
 ## 更新
 
 Docker 镜像会按照以下条件更新：
 
-* 发布新的版本后
-* 每日 4:00（UTC 时间）检查新的 PHP 镜像
+- 发布新的版本后
+- 每日 4:00（UTC 时间）检查新的 PHP 镜像
 
 ## 开发版本
 

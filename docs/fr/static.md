@@ -105,7 +105,7 @@ GITHUB_TOKEN="xxx" docker --load buildx bake static-builder-musl
 Exécutez le script suivant pour créer un binaire statique pour macOS (vous devez avoir [Homebrew](https://brew.sh/) d'installé) :
 
 ```console
-git clone https://github.com/dunglas/frankenphp
+git clone https://github.com/php/frankenphp
 cd frankenphp
 ./build-static.sh
 ```

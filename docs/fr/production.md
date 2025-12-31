@@ -18,6 +18,9 @@ ENV SERVER_NAME=your-domain-name.example.com
 # Si vous souhaitez désactiver HTTPS, utilisez cette valeur à la place :
 #ENV SERVER_NAME=:80
 
+# Si votre projet n'utilise pas le répertoire "public" comme racine web, vous pouvez le définir ici :
+# ENV SERVER_ROOT=web/
+
 # Activer les paramètres de production de PHP
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 

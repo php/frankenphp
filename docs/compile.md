@@ -25,8 +25,8 @@ brew link --overwrite --force shivammathur/php/php-zts
 ### By Compiling PHP
 
 Alternatively, you can compile PHP from sources with the options needed by FrankenPHP by following these steps.
-~~
-~~First, [get the PHP sources](https://www.php.net/downloads.php) and extract them:
+
+First, [get the PHP sources](https://www.php.net/downloads.php) and extract them:
 
 ```console
 tar xf php-*
@@ -79,10 +79,11 @@ sudo make install
 Some FrankenPHP features depend on optional system dependencies that must be installed.
 Alternatively, these features can be disabled by passing build tags to the Go compiler.
 
-| Feature                        | Dependency                                                            | Build tag to disable it |
-|--------------------------------|-----------------------------------------------------------------------|-------------------------|
-| Brotli compression             | [Brotli](https://github.com/google/brotli)                            | nobrotli                |
-| Restart workers on file change | [Watcher C](https://github.com/e-dant/watcher/tree/release/watcher-c) | nowatcher               |
+| Feature                        | Dependency                                                                                                   | Build tag to disable it |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------ | ----------------------- |
+| Brotli compression             | [Brotli](https://github.com/google/brotli)                                                                   | nobrotli                |
+| Restart workers on file change | [Watcher C](https://github.com/e-dant/watcher/tree/release/watcher-c)                                        | nowatcher               |
+| [Mercure](mercure.md)          | [Mercure Go library](https://pkg.go.dev/github.com/dunglas/mercure) (automatically installed, AGPL licensed) | nomercure               |
 
 ## Compile the Go App
 
@@ -102,8 +103,13 @@ xcaddy build \
     --output frankenphp \
     --with github.com/dunglas/frankenphp/caddy \
     --with github.com/dunglas/mercure/caddy \
-    --with github.com/dunglas/vulcain/caddy
+    --with github.com/dunglas/vulcain/caddy \
+    --with github.com/dunglas/caddy-cbrotli
     # Add extra Caddy modules and FrankenPHP extensions here
+    # optionally, if you would like to compile from your frankenphp sources:
+    # --with github.com/dunglas/frankenphp=$(pwd) \
+    # --with github.com/dunglas/frankenphp/caddy=$(pwd)/caddy
+
 ```
 
 > [!TIP]
@@ -121,7 +127,7 @@ xcaddy build \
 Alternatively, it's possible to compile FrankenPHP without `xcaddy` by using the `go` command directly:
 
 ```console
-curl -L https://github.com/dunglas/frankenphp/archive/refs/heads/main.tar.gz | tar xz
+curl -L https://github.com/php/frankenphp/archive/refs/heads/main.tar.gz | tar xz
 cd frankenphp-main/caddy/frankenphp
 CGO_CFLAGS=$(php-config --includes) CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)" go build -tags=nobadger,nomysql,nopgx
 ```

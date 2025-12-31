@@ -1,13 +1,15 @@
 # Building Custom Docker Image
 
-[FrankenPHP Docker images](https://hub.docker.com/r/dunglas/frankenphp) are based on [official PHP images](https://hub.docker.com/_/php/). Debian and Alpine Linux variants are provided for popular architectures. Debian variants are recommended.
+[FrankenPHP Docker images](https://hub.docker.com/r/dunglas/frankenphp) are based on [official PHP images](https://hub.docker.com/_/php/).
+Debian and Alpine Linux variants are provided for popular architectures.
+Debian variants are recommended.
 
-Variants for PHP 8.2, 8.3 and 8.4 are provided.
+Variants for PHP 8.2, 8.3, 8.4 and 8.5 are provided.
 
 The tags follow this pattern: `dunglas/frankenphp:<frankenphp-version>-php<php-version>-<os>`
 
 - `<frankenphp-version>` and `<php-version>` are version numbers of FrankenPHP and PHP respectively, ranging from major (e.g. `1`), minor (e.g. `1.2`) to patch versions (e.g. `1.2.3`).
-- `<os>` is either `bookworm` (for Debian Bookworm) or `alpine` (for the latest stable version of Alpine).
+- `<os>` is either `trixie` (for Debian Trixie), `bookworm` (for Debian Bookworm), or `alpine` (for the latest stable version of Alpine).
 
 [Browse tags](https://hub.docker.com/r/dunglas/frankenphp/tags).
 
@@ -27,6 +29,11 @@ Then, run these commands to build and run the Docker image:
 docker build -t my-php-app .
 docker run -it --rm --name my-running-app my-php-app
 ```
+
+## How to Tweak the Configuration
+
+For convenience, [a default `Caddyfile`](https://github.com/php/frankenphp/blob/main/caddy/frankenphp/Caddyfile) containing
+useful environment variables is provided in the image.
 
 ## How to Install More PHP Extensions
 
@@ -156,8 +163,8 @@ RUN \
 	useradd ${USER}; \
 	# Add additional capability to bind to port 80 and 443
 	setcap CAP_NET_BIND_SERVICE=+eip /usr/local/bin/frankenphp; \
-	# Give write access to /data/caddy and /config/caddy
-	chown -R ${USER}:${USER} /data/caddy && chown -R ${USER}:${USER} /config/caddy
+	# Give write access to /config/caddy and /data/caddy
+	chown -R ${USER}:${USER} /config/caddy /data/caddy
 
 USER ${USER}
 ```
@@ -180,8 +187,8 @@ RUN \
 	useradd ${USER}; \
 	# Remove default capability
 	setcap -r /usr/local/bin/frankenphp; \
-	# Give write access to /data/caddy and /config/caddy
-	chown -R ${USER}:${USER} /data/caddy && chown -R ${USER}:${USER} /config/caddy
+	# Give write access to /config/caddy and /data/caddy
+	chown -R ${USER}:${USER} /config/caddy /data/caddy
 
 USER ${USER}
 ```

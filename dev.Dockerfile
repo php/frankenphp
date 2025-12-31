@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 #checkov:skip=CKV_DOCKER_2
 #checkov:skip=CKV_DOCKER_3
-FROM golang:1.24
+FROM golang:1.25
 
 ENV GOTOOLCHAIN=local
 ENV CFLAGS="-ggdb3"
@@ -50,7 +50,7 @@ RUN apt-get update && \
 	apt-get clean
 
 WORKDIR /usr/local/src/php
-RUN git clone --branch=PHP-8.4 https://github.com/php/php-src.git . && \
+RUN git clone --branch=PHP-8.5 https://github.com/php/php-src.git . && \
 	# --enable-embed is only necessary to generate libphp.so, we don't use this SAPI directly
 	./buildconf --force && \
 	EXTENSION_DIR=/usr/lib/frankenphp/modules ./configure \
@@ -80,10 +80,10 @@ RUN git clone https://github.com/e-dant/watcher . && \
 	ldconfig
 
 WORKDIR /go/src/app
-COPY . .
+COPY --link . ./
 
 WORKDIR /go/src/app/caddy/frankenphp
-RUN go build -buildvcs=false -tags 'nobadger,nomysql,nopgx'
+RUN ../../go.sh build -buildvcs=false
 
 WORKDIR /go/src/app
 CMD [ "zsh" ]

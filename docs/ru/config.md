@@ -89,13 +89,15 @@ localhost {
 
 ```caddyfile
 app.example.com {
+	root /path/to/app/public
 	php_server {
-		root /path/to/app/public
+		root /path/to/app/public # позволяет лучше кэшировать
 		worker index.php <num>
 	}
 }
 
 other.example.com {
+	root /path/to/other/public
 	php_server {
 		root /path/to/other/public
 		worker index.php <num>

@@ -14,7 +14,6 @@ import (
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddytest"
-	"github.com/dunglas/frankenphp"
 	"github.com/dunglas/frankenphp/internal/fastabs"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
@@ -42,7 +41,7 @@ func TestPHP(t *testing.T) {
 		}
 		`, "caddyfile")
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		wg.Add(1)
 
 		go func(i int) {
@@ -105,7 +104,7 @@ func TestWorker(t *testing.T) {
 		}
 		`, "caddyfile")
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		wg.Add(1)
 
 		go func(i int) {
@@ -157,7 +156,7 @@ func TestGlobalAndModuleWorker(t *testing.T) {
 		}
 		`, "caddyfile")
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 
 		go func(i int) {
@@ -167,6 +166,28 @@ func TestGlobalAndModuleWorker(t *testing.T) {
 		}(i)
 	}
 	wg.Wait()
+}
+
+func TestModuleWorkerInheritsEnv(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	tester.InitServer(`
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		http://localhost:`+testPort+` {
+			route {
+				php {
+					root ../testdata
+					env APP_ENV inherit_this
+					worker worker-with-env.php
+				}
+			}
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/worker-with-env.php", http.StatusOK, "Worker has APP_ENV=inherit_this")
 }
 
 func TestNamedModuleWorkers(t *testing.T) {
@@ -209,7 +230,7 @@ func TestNamedModuleWorkers(t *testing.T) {
 		}
 		`, "caddyfile")
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 
 		go func(i int) {
@@ -386,7 +407,7 @@ func TestPHPServerDirective(t *testing.T) {
 		`, "caddyfile")
 
 	tester.AssertGetResponse("http://localhost:"+testPort, http.StatusOK, "I am by birth a Genevese (i not set)")
-	tester.AssertGetResponse("http://localhost:"+testPort+"/hello.txt", http.StatusOK, "Hello")
+	tester.AssertGetResponse("http://localhost:"+testPort+"/hello.txt", http.StatusOK, "Hello\n")
 	tester.AssertGetResponse("http://localhost:"+testPort+"/not-found.txt", http.StatusOK, "I am by birth a Genevese (i not set)")
 }
 
@@ -456,7 +477,7 @@ func TestMetrics(t *testing.T) {
 	`, "caddyfile")
 
 	// Make some requests
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(i int) {
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/index.php?i=%d", i), http.StatusOK, fmt.Sprintf("I am by birth a Genevese (%d)", i))
@@ -475,7 +496,7 @@ func TestMetrics(t *testing.T) {
 	_, err = metrics.ReadFrom(resp.Body)
 	require.NoError(t, err, "failed to read metrics")
 
-	cpus := fmt.Sprintf("%d", frankenphp.MaxThreads)
+	cpus := strconv.Itoa(getNumThreads(t, tester))
 
 	// Check metrics
 	expectedMetrics := `
@@ -529,7 +550,7 @@ func TestWorkerMetrics(t *testing.T) {
 	workerName, _ := fastabs.FastAbs("../testdata/index.php")
 
 	// Make some requests
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(i int) {
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/index.php?i=%d", i), http.StatusOK, fmt.Sprintf("I am by birth a Genevese (%d)", i))
@@ -548,7 +569,7 @@ func TestWorkerMetrics(t *testing.T) {
 	_, err = metrics.ReadFrom(resp.Body)
 	require.NoError(t, err, "failed to read metrics")
 
-	cpus := fmt.Sprintf("%d", frankenphp.MaxThreads)
+	cpus := strconv.Itoa(getNumThreads(t, tester))
 
 	// Check metrics
 	expectedMetrics := `
@@ -621,7 +642,7 @@ func TestNamedWorkerMetrics(t *testing.T) {
 	`, "caddyfile")
 
 	// Make some requests
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(i int) {
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/index.php?i=%d", i), http.StatusOK, fmt.Sprintf("I am by birth a Genevese (%d)", i))
@@ -640,7 +661,7 @@ func TestNamedWorkerMetrics(t *testing.T) {
 	_, err = metrics.ReadFrom(resp.Body)
 	require.NoError(t, err, "failed to read metrics")
 
-	cpus := fmt.Sprintf("%d", frankenphp.MaxThreads)
+	cpus := strconv.Itoa(getNumThreads(t, tester))
 
 	// Check metrics
 	expectedMetrics := `
@@ -712,7 +733,7 @@ func TestAutoWorkerConfig(t *testing.T) {
 	workerName, _ := fastabs.FastAbs("../testdata/index.php")
 
 	// Make some requests
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(i int) {
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/index.php?i=%d", i), http.StatusOK, fmt.Sprintf("I am by birth a Genevese (%d)", i))
@@ -731,8 +752,9 @@ func TestAutoWorkerConfig(t *testing.T) {
 	_, err = metrics.ReadFrom(resp.Body)
 	require.NoError(t, err, "failed to read metrics")
 
-	cpus := fmt.Sprintf("%d", frankenphp.MaxThreads)
-	workers := fmt.Sprintf("%d", frankenphp.MaxThreads-1)
+	numThreads := getNumThreads(t, tester)
+	cpus := strconv.Itoa(numThreads)
+	workers := strconv.Itoa(numThreads - 1)
 
 	// Check metrics
 	expectedMetrics := `
@@ -872,7 +894,7 @@ func TestPHPIniBlockConfiguration(t *testing.T) {
 
 func testSingleIniConfiguration(tester *caddytest.Tester, key string, value string) {
 	// test twice to ensure the ini setting is not lost
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		tester.AssertGetResponse(
 			"http://localhost:"+testPort+"/ini.php?key="+key,
 			http.StatusOK,
@@ -940,10 +962,10 @@ func TestMaxWaitTime(t *testing.T) {
 	wg := sync.WaitGroup{}
 	success := atomic.Bool{}
 	wg.Add(10)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		go func() {
 			statusCode := getStatusCode("http://localhost:"+testPort+"/sleep.php?sleep=10", t)
-			if statusCode == http.StatusGatewayTimeout {
+			if statusCode == http.StatusServiceUnavailable {
 				success.Store(true)
 			}
 			wg.Done()
@@ -951,7 +973,7 @@ func TestMaxWaitTime(t *testing.T) {
 	}
 	wg.Wait()
 
-	require.True(t, success.Load(), "At least one request should have failed with a 504 Gateway Timeout status")
+	require.True(t, success.Load(), "At least one request should have failed with a 503 Service Unavailable status")
 }
 
 func TestMaxWaitTimeWorker(t *testing.T) {
@@ -987,26 +1009,29 @@ func TestMaxWaitTimeWorker(t *testing.T) {
 	wg := sync.WaitGroup{}
 	success := atomic.Bool{}
 	wg.Add(10)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		go func() {
-			statusCode := getStatusCode("http://localhost:"+testPort+"/sleep.php?sleep=10000&iteration=1", t)
-			if statusCode == http.StatusGatewayTimeout {
+			statusCode := getStatusCode("http://localhost:"+testPort+"/sleep.php?sleep=10&iteration=1", t)
+			if statusCode == http.StatusServiceUnavailable {
 				success.Store(true)
 			}
 			wg.Done()
 		}()
 	}
 	wg.Wait()
-	require.True(t, success.Load(), "At least one request should have failed with a 504 Gateway Timeout status")
+	require.True(t, success.Load(), "At least one request should have failed with a 503 Service Unavailable status")
 
 	// Fetch metrics
 	resp, err := http.Get("http://localhost:2999/metrics")
 	require.NoError(t, err, "failed to fetch metrics")
-	defer resp.Body.Close()
+	t.Cleanup(func() {
+		require.NoError(t, resp.Body.Close())
+	})
 
 	// Read and parse metrics
 	metrics := new(bytes.Buffer)
 	_, err = metrics.ReadFrom(resp.Body)
+	require.NoError(t, err)
 
 	expectedMetrics := `
 	# TYPE frankenphp_worker_queue_depth gauge
@@ -1074,7 +1099,7 @@ func TestMultiWorkersMetrics(t *testing.T) {
 	`, "caddyfile")
 
 	// Make some requests
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(i int) {
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/index.php?i=%d", i), http.StatusOK, fmt.Sprintf("I am by birth a Genevese (%d)", i))
@@ -1093,7 +1118,7 @@ func TestMultiWorkersMetrics(t *testing.T) {
 	_, err = metrics.ReadFrom(resp.Body)
 	require.NoError(t, err, "failed to read metrics")
 
-	cpus := fmt.Sprintf("%d", frankenphp.MaxThreads)
+	cpus := strconv.Itoa(getNumThreads(t, tester))
 
 	// Check metrics
 	expectedMetrics := `
@@ -1180,7 +1205,7 @@ func TestDisabledMetrics(t *testing.T) {
 	`, "caddyfile")
 
 	// Make some requests
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(i int) {
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/index.php?i=%d", i), http.StatusOK, fmt.Sprintf("I am by birth a Genevese (%d)", i))
@@ -1285,7 +1310,7 @@ func TestWorkerRestart(t *testing.T) {
 		))
 
 	// Make some requests
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(i int) {
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/worker-restart.php?i=%d", i), http.StatusOK, fmt.Sprintf("Counter (%d)", i))
@@ -1315,4 +1340,163 @@ func TestWorkerRestart(t *testing.T) {
 			"frankenphp_ready_workers",
 			"frankenphp_worker_restarts",
 		))
+}
+
+func TestWorkerMatchDirective(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	tester.InitServer(`
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		http://localhost:`+testPort+` {
+			php_server {
+				root ../testdata/files
+				worker {
+					file ../worker-with-counter.php
+					match /matched-path*
+					num 1
+				}
+			}
+		}
+		`, "caddyfile")
+
+	// worker is outside public directory, match anyway
+	tester.AssertGetResponse("http://localhost:"+testPort+"/matched-path", http.StatusOK, "requests:1")
+	tester.AssertGetResponse("http://localhost:"+testPort+"/matched-path/anywhere", http.StatusOK, "requests:2")
+
+	// 404 on unmatched paths
+	tester.AssertGetResponse("http://localhost:"+testPort+"/elsewhere", http.StatusNotFound, "")
+
+	// static file will be served by the fileserver
+	expectedFileResponse, err := os.ReadFile("../testdata/files/static.txt")
+	require.NoError(t, err, "static.txt file must be readable for this test")
+	tester.AssertGetResponse("http://localhost:"+testPort+"/static.txt", http.StatusOK, string(expectedFileResponse))
+}
+
+func TestWorkerMatchDirectiveWithMultipleWorkers(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	tester.InitServer(`
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+		http://localhost:`+testPort+` {
+			php_server {
+				root ../testdata
+				worker {
+					file worker-with-counter.php
+					match /counter/*
+					num 1
+				}
+				worker {
+					file index.php
+					match /index/*
+					num 1
+				}
+			}
+		}
+		`, "caddyfile")
+
+	// match 2 workers respectively (in the public directory)
+	tester.AssertGetResponse("http://localhost:"+testPort+"/counter/sub-path", http.StatusOK, "requests:1")
+	tester.AssertGetResponse("http://localhost:"+testPort+"/index/sub-path", http.StatusOK, "I am by birth a Genevese (i not set)")
+
+	// static file will be served by the fileserver
+	expectedFileResponse, err := os.ReadFile("../testdata/files/static.txt")
+	require.NoError(t, err, "static.txt file must be readable for this test")
+	tester.AssertGetResponse("http://localhost:"+testPort+"/files/static.txt", http.StatusOK, string(expectedFileResponse))
+
+	// serve php file directly as fallback
+	tester.AssertGetResponse("http://localhost:"+testPort+"/hello.php", http.StatusOK, "Hello from PHP")
+
+	// serve index.php file directly as fallback
+	tester.AssertGetResponse("http://localhost:"+testPort+"/index.php", http.StatusOK, "I am by birth a Genevese (i not set)")
+	tester.AssertGetResponse("http://localhost:"+testPort+"/not-matched", http.StatusOK, "I am by birth a Genevese (i not set)")
+}
+
+func TestWorkerMatchDirectiveWithoutFileServer(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	tester.InitServer(`
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		http://localhost:`+testPort+` {
+			route {
+				php_server {
+					index off
+					file_server off
+					root ../testdata/files
+					worker {
+						file ../worker-with-counter.php
+						match /some-path
+					}
+				}
+
+				respond "Request falls through" 404
+			}
+		}
+		`, "caddyfile")
+
+	// find the worker at some-path
+	tester.AssertGetResponse("http://localhost:"+testPort+"/some-path", http.StatusOK, "requests:1")
+
+	// do not find the file at static.txt
+	// the request should completely fall through the php_server module
+	tester.AssertGetResponse("http://localhost:"+testPort+"/static.txt", http.StatusNotFound, "Request falls through")
+}
+
+func TestDd(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	tester.InitServer(`
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		http://localhost:`+testPort+` {
+			php {
+				worker ../testdata/dd.php 1 {
+					match *
+				}
+			}
+		`, "caddyfile")
+
+	// simulate Symfony's dd()
+	tester.AssertGetResponse(
+		"http://localhost:"+testPort+"/some-path?output=dump123",
+		http.StatusInternalServerError,
+		"dump123",
+	)
+}
+
+func TestLog(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	tester.InitServer(`
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		http://localhost:`+testPort+` {
+			log {
+				output stdout
+				format json
+			}
+
+			root ../testdata
+			php_server {
+				worker ../testdata/log-frankenphp_log.php
+			}
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse(
+		"http://localhost:"+testPort+"/log-frankenphp_log.php?i=0",
+		http.StatusOK,
+		"",
+	)
 }

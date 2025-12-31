@@ -37,6 +37,9 @@ frankenphp php-server --worker /path/to/your/worker/script.php --watch="/path/to
 
 ## Runtime Symfony
 
+> [!TIP]
+> La section suivante est nécessaire uniquement avant Symfony 7.4, où le support natif du mode worker de FrankenPHP a été introduit.
+
 Le mode worker de FrankenPHP est pris en charge par le [Composant Runtime de Symfony](https://symfony.com/doc/current/components/runtime.html).
 Pour démarrer une application Symfony dans un worker, installez le package FrankenPHP de [PHP Runtime](https://github.com/php-runtime/runtime) :
 
@@ -149,6 +152,17 @@ Si un script de worker se plante avec un code de sortie non nul, FrankenPHP le r
 Si le script worker reste en place plus longtemps que le dernier backoff \* 2, FrankenPHP ne pénalisera pas le script et le redémarrera à nouveau.
 Toutefois, si le script de worker continue d'échouer avec un code de sortie non nul dans un court laps de temps
 (par exemple, une faute de frappe dans un script), FrankenPHP plantera avec l'erreur : `too many consecutive failures` (trop d'échecs consécutifs).
+
+Le nombre d'échecs consécutifs peut être configuré dans votre [Caddyfile](config.md#configuration-du-caddyfile) avec l'option `max_consecutive_failures` :
+
+```caddyfile
+frankenphp {
+    worker {
+        # ...
+        max_consecutive_failures 10
+    }
+}
+```
 
 ## Comportement des superglobales
 

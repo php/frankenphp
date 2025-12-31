@@ -10,7 +10,7 @@ body:
         Before submitting a bug, please double-check that your problem [is not
         a known issue](https://frankenphp.dev/docs/known-issues/)
         (especially if you use XDebug or Tideways), and that is has not
-        [already been reported](https://github.com/dunglas/frankenphp/issues).
+        [already been reported](https://github.com/php/frankenphp/issues).
   - type: textarea
     id: what-happened
     attributes:
@@ -26,10 +26,12 @@ body:
       label: Build Type
       description: What build of FrankenPHP do you use?
       options:
+        - Docker (Debian Trixie)
         - Docker (Debian Bookworm)
         - Docker (Alpine)
-        - Official static build
-        - Standalone binary
+        - deb packages
+        - rpm packages
+        - Static binary
         - Custom (tell us more in the description)
       default: 0
     validations:

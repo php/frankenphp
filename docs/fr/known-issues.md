@@ -23,7 +23,7 @@ La fonction [get_browser()](https://www.php.net/manual/fr/function.get-browser.p
 
 ## Binaire autonome et images Docker basées sur Alpine
 
-Le binaire autonome et les images docker basées sur Alpine (`dunglas/frankenphp:*-alpine`) utilisent [musl libc](https://musl.libc.org/) au lieu de [glibc et ses amis](https://www.etalabs.net/compare_libcs.html), pour garder une taille de binaire plus petite. Cela peut entraîner des problèmes de compatibilité. En particulier, le drapeau glob `GLOB_BRACE` n'est [pas disponible](https://www.php.net/manual/fr/function.glob.php).
+Le binaire autonome et les images Docker basées sur Alpine (`dunglas/frankenphp:*-alpine`) utilisent [musl libc](https://musl.libc.org/) au lieu de [glibc et ses amis](https://www.etalabs.net/compare_libcs.html), pour garder une taille de binaire plus petite. Cela peut entraîner des problèmes de compatibilité. En particulier, le drapeau glob `GLOB_BRACE` n'est [pas disponible](https://www.php.net/manual/fr/function.glob.php).
 
 ## Utilisation de `https://127.0.0.1` avec Docker
 
@@ -78,7 +78,7 @@ docker run \
 
 ## Scripts Composer Faisant Références à `@php`
 
-Les [scripts Composer](https://getcomposer.org/doc/articles/scripts.md) peuvent vouloir exécuter un binaire PHP pour certaines tâches, par exemple dans [un projet Laravel](laravel.md) pour exécuter `@php artisan package:discover --ansi`. Cela [echoue actuellement](https://github.com/dunglas/frankenphp/issues/483#issuecomment-1899890915) pour deux raisons :
+Les [scripts Composer](https://getcomposer.org/doc/articles/scripts.md) peuvent vouloir exécuter un binaire PHP pour certaines tâches, par exemple dans [un projet Laravel](laravel.md) pour exécuter `@php artisan package:discover --ansi`. Cela [echoue actuellement](https://github.com/php/frankenphp/issues/483#issuecomment-1899890915) pour deux raisons :
 
 - Composer ne sait pas comment appeler le binaire FrankenPHP ;
 - Composer peut ajouter des paramètres PHP en utilisant le paramètre `-d` dans la commande, ce que FrankenPHP ne supporte pas encore.
@@ -130,7 +130,7 @@ pour trouver l'endroit où les certificats CA doivent être installés et stocke
 > Les contextes Web et CLI peuvent avoir des paramètres différents.
 > Assurez-vous d'exécuter `openssl_get_cert_locations()` dans le bon contexte.
 
-[Les certificats CA extraits de Mozilla peuvent être téléchargés sur le site curl](https://curl.se/docs/caextract.html).
+[Les certificats CA extraits de Mozilla peuvent être téléchargés sur le site de cURL](https://curl.se/docs/caextract.html).
 
 Alternativement, de nombreuses distributions, y compris Debian, Ubuntu, et Alpine fournissent des paquets nommés `ca-certificates` qui contiennent ces certificats.
 

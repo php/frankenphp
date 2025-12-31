@@ -25,13 +25,11 @@
 	#	}
 	#}
 
-	root public/
+	root {$SERVER_ROOT:public/}
 	encode zstd br gzip
 
 	# Uncomment the following lines to enable Mercure and Vulcain modules
 	#mercure {
-	#	# Transport to use (default to Bolt)
-	#	transport_url {$MERCURE_TRANSPORT_URL:bolt:///data/mercure.db}
 	#	# Publisher JWT key
 	#	publisher_jwt {env.MERCURE_PUBLISHER_JWT_KEY} {env.MERCURE_PUBLISHER_JWT_ALG}
 	#	# Subscriber JWT key

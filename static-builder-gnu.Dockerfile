@@ -6,17 +6,17 @@ FROM centos:7
 ARG FRANKENPHP_VERSION=''
 ENV FRANKENPHP_VERSION=${FRANKENPHP_VERSION}
 
-ARG BUILD_PACKAGES=''
-
 ARG PHP_VERSION=''
 ENV PHP_VERSION=${PHP_VERSION}
 
 # args passed to static-php-cli
 ARG PHP_EXTENSIONS=''
 ARG PHP_EXTENSION_LIBS=''
+ARG SPC_OPT_BUILD_ARGS
 
 # args passed to xcaddy
-ARG XCADDY_ARGS=''
+ARG XCADDY_ARGS='--with github.com/dunglas/caddy-cbrotli --with github.com/dunglas/mercure/caddy --with github.com/dunglas/vulcain/caddy'
+ENV SPC_CMD_VAR_FRANKENPHP_XCADDY_MODULES="${XCADDY_ARGS}"
 ARG CLEAN=''
 ARG EMBED=''
 ARG DEBUG_SYMBOLS=''
@@ -27,11 +27,18 @@ ARG NO_COMPRESS=''
 ARG GO_VERSION
 ENV GOTOOLCHAIN=local
 
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+# Pass through CI environment flag so build-static.sh can detect CI context
+ARG CI
+ENV CI=${CI}
+
 # labels, same as static-builder.Dockerfile
+
 LABEL org.opencontainers.image.title=FrankenPHP
 LABEL org.opencontainers.image.description="The modern PHP app server"
 LABEL org.opencontainers.image.url=https://frankenphp.dev
-LABEL org.opencontainers.image.source=https://github.com/dunglas/frankenphp
+LABEL org.opencontainers.image.source=https://github.com/php/frankenphp
 LABEL org.opencontainers.image.licenses=MIT
 LABEL org.opencontainers.image.vendor="Kévin Dunglas"
 
@@ -60,12 +67,6 @@ RUN if [ "$(uname -m)" = "aarch64" ]; then \
 	echo "source scl_source enable devtoolset-10" >> /etc/bashrc && \
 	source /etc/bashrc
 
-# install newer cmake to build some newer libs
-RUN curl -o cmake.tar.gz -fsSL https://github.com/Kitware/CMake/releases/download/v3.31.4/cmake-3.31.4-linux-$(uname -m).tar.gz && \
-	mkdir /cmake && \
-	tar -xzf cmake.tar.gz -C /cmake --strip-components 1 && \
-	rm cmake.tar.gz
-
 # install build essentials
 RUN yum install -y \
 		perl \
@@ -93,6 +94,15 @@ RUN yum install -y \
 	ln -sf /usr/local/bin/make /usr/bin/make && \
 	cd .. && \
 	rm -Rf make* && \
+	curl -o cmake.tar.gz -fsSL https://github.com/Kitware/CMake/releases/download/v4.1.2/cmake-4.1.2-linux-$(uname -m).tar.gz && \
+	mkdir /cmake && \
+	tar -xzf cmake.tar.gz -C /cmake --strip-components 1 && \
+	rm cmake.tar.gz && \
+	curl -fsSL -o patchelf.tar.gz https://github.com/NixOS/patchelf/releases/download/0.18.0/patchelf-0.18.0-$(uname -m).tar.gz && \
+	mkdir -p /patchelf && \
+	tar -xzf patchelf.tar.gz -C /patchelf --strip-components=1 && \
+	cp /patchelf/bin/patchelf /usr/bin/ && \
+	rm patchelf.tar.gz && \
 	if [ "$(uname -m)" = "aarch64" ]; then \
 		GO_ARCH="arm64" ; \
 	else \
@@ -106,46 +116,20 @@ RUN yum install -y \
 	rm go.tar.gz && \
 	/usr/local/go/bin/go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
 
-ENV PATH="/cmake/bin:/usr/local/go/bin:$PATH"
+ENV PATH="/opt/rh/devtoolset-10/root/usr/bin:/cmake/bin:/usr/local/go/bin:$PATH"
 
 # Apply GNU mode
-ENV CC='/opt/rh/devtoolset-10/root/usr/bin/gcc'
-ENV CXX='/opt/rh/devtoolset-10/root/usr/bin/g++'
-ENV AR='/opt/rh/devtoolset-10/root/usr/bin/ar'
-ENV LD='/opt/rh/devtoolset-10/root/usr/bin/ld'
 ENV SPC_DEFAULT_C_FLAGS='-fPIE -fPIC -O3'
 ENV SPC_LIBC='glibc'
 ENV SPC_CMD_VAR_PHP_MAKE_EXTRA_LDFLAGS_PROGRAM='-Wl,-O3 -pie'
 ENV SPC_CMD_VAR_PHP_MAKE_EXTRA_LIBS='-ldl -lpthread -lm -lresolv -lutil -lrt'
-ENV SPC_OPT_BUILD_ARGS='--with-config-file-path=/etc/frankenphp --with-config-file-scan-dir=/etc/frankenphp/php.d'
+# Keep default config paths and append any externally provided SPC_OPT_BUILD_ARGS (e.g., from CI)
+ENV SPC_OPT_BUILD_ARGS="--with-config-file-path=/etc/frankenphp --with-config-file-scan-dir=/etc/frankenphp/php.d ${SPC_OPT_BUILD_ARGS}"
 ENV SPC_REL_TYPE='binary'
 ENV EXTENSION_DIR='/usr/lib/frankenphp/modules'
 
 # not sure if this is needed
 ENV COMPOSER_ALLOW_SUPERUSER=1
-
-# install tools to build packages, if requested - needs gcc 10
-RUN if [ -n "${BUILD_PACKAGES}" ]; then \
-	yum install -y \
-		bzip2 \
-		libffi-devel \
-		libyaml \
-		libyaml-devel \
-		make \
-		openssl-devel \
-		rpm-build \
-		sudo \
-		zlib-devel && \
-	  curl -o ruby.tar.gz -fsSL https://cache.ruby-lang.org/pub/ruby/3.4/ruby-3.4.4.tar.gz && \
-	  tar -xzf ruby.tar.gz && \
-	  cd ruby-* && \
-	  ./configure --without-baseruby && \
-	  make && \
-	  make install && \
-	  cd .. && \
-	  rm -rf ruby* && \
-	  gem install fpm; \
-fi
 
 WORKDIR /go/src/app
 COPY go.mod go.sum ./
@@ -161,10 +145,4 @@ COPY --link caddy caddy
 COPY --link internal internal
 COPY --link package package
 
-RUN --mount=type=secret,id=github-token \
-	set -eux; \
-	./build-static.sh && \
-	if [ -n "${BUILD_PACKAGES}" ]; then \
-		./build-packages.sh; \
-	fi; \
-	rm -Rf dist/static-php-cli/source/*
+RUN --mount=type=secret,id=github-token GITHUB_TOKEN=$(cat /run/secrets/github-token) ./build-static.sh

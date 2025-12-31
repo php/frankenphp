@@ -2,12 +2,12 @@
 
 [Docker-образы FrankenPHP](https://hub.docker.com/r/dunglas/frankenphp) основаны на [официальных PHP-образах](https://hub.docker.com/_/php/). Доступны варианты для Debian и Alpine Linux для популярных архитектур. Рекомендуется использовать Debian-варианты.
 
-Доступны версии для PHP 8.2, 8.3 и 8.4.
+Доступны версии для PHP 8.2, 8.3, 8.4 и 8.5.
 
 Теги следуют следующему шаблону: `dunglas/frankenphp:<frankenphp-version>-php<php-version>-<os>`.
 
 - `<frankenphp-version>` и `<php-version>` — версии FrankenPHP и PHP соответственно: от основных (например, `1`) до минорных (например, `1.2`) и патч-версий (например, `1.2.3`).
-- `<os>` может быть `bookworm` (для Debian Bookworm) или `alpine` (для последней стабильной версии Alpine).
+- `<os>` может быть `trixie` (для Debian Trixie), `bookworm` (для Debian Bookworm) или `alpine` (для последней стабильной версии Alpine).
 
 [Просмотреть доступные теги](https://hub.docker.com/r/dunglas/frankenphp/tags).
 

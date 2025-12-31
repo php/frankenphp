@@ -4,80 +4,116 @@ package frankenphp
 import "C"
 import (
 	"fmt"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dunglas/frankenphp/internal/fastabs"
-	"github.com/dunglas/frankenphp/internal/watcher"
+	"github.com/dunglas/frankenphp/internal/state"
 )
 
 // represents a worker script and can have many threads assigned to it
 type worker struct {
-	name        string
-	fileName    string
-	num         int
-	env         PreparedEnv
-	requestChan chan *frankenPHPContext
-	threads     []*phpThread
-	threadMutex sync.RWMutex
+	mercureContext
+
+	name                   string
+	fileName               string
+	num                    int
+	maxThreads             int
+	requestOptions         []RequestOption
+	requestChan            chan contextHolder
+	threads                []*phpThread
+	threadMutex            sync.RWMutex
+	allowPathMatching      bool
+	maxConsecutiveFailures int
+	onThreadReady          func(int)
+	onThreadShutdown       func(int)
+	queuedRequests         atomic.Int32
 }
 
 var (
-	workers          map[string]*worker
+	workers          []*worker
 	watcherIsEnabled bool
+	startupFailChan  chan error
 )
 
 func initWorkers(opt []workerOpt) error {
-	workers = make(map[string]*worker, len(opt))
-	workersReady := sync.WaitGroup{}
-	directoriesToWatch := getDirectoriesToWatch(opt)
-	watcherIsEnabled = len(directoriesToWatch) > 0
+	if len(opt) == 0 {
+		return nil
+	}
+
+	var (
+		workersReady        sync.WaitGroup
+		totalThreadsToStart int
+	)
+
+	workers = make([]*worker, 0, len(opt))
 
 	for _, o := range opt {
-		worker, err := newWorker(o)
+		w, err := newWorker(o)
 		if err != nil {
 			return err
 		}
 
-		workersReady.Add(o.num)
-		for i := 0; i < worker.num; i++ {
+		totalThreadsToStart += w.num
+		workers = append(workers, w)
+	}
+
+	startupFailChan = make(chan error, totalThreadsToStart)
+
+	for _, w := range workers {
+		for i := 0; i < w.num; i++ {
 			thread := getInactivePHPThread()
-			convertToWorkerThread(thread, worker)
-			go func() {
-				thread.state.waitFor(stateReady)
-				workersReady.Done()
-			}()
+			convertToWorkerThread(thread, w)
+
+			workersReady.Go(func() {
+				thread.state.WaitFor(state.Ready, state.ShuttingDown, state.Done)
+			})
 		}
 	}
 
 	workersReady.Wait()
 
-	if !watcherIsEnabled {
-		return nil
-	}
-
-	watcherIsEnabled = true
-	if err := watcher.InitWatcher(directoriesToWatch, RestartWorkers, logger); err != nil {
-		return err
+	select {
+	case err := <-startupFailChan:
+		// at least 1 worker has failed, return an error
+		return fmt.Errorf("failed to initialize workers: %w", err)
+	default:
+		// all workers started successfully
+		startupFailChan = nil
 	}
 
 	return nil
 }
 
-func getWorkerKey(name string, filename string) string {
-	key := filename
-	if strings.HasPrefix(name, "m#") {
-		key = name
+func getWorkerByName(name string) *worker {
+	for _, w := range workers {
+		if w.name == name {
+			return w
+		}
 	}
-	return key
+
+	return nil
+}
+
+func getWorkerByPath(path string) *worker {
+	for _, w := range workers {
+		if w.fileName == path && w.allowPathMatching {
+			return w
+		}
+	}
+
+	return nil
 }
 
 func newWorker(o workerOpt) (*worker, error) {
-	//Order is important!
-	//This order ensures that FrankenPHP started from inside a symlinked directory will properly resolve any paths.
-	//If it is started from outside a symlinked directory, it is resolved to the same path that we use in the Caddy module.
+	// Order is important!
+	// This order ensures that FrankenPHP started from inside a symlinked directory will properly resolve any paths.
+	// If it is started from outside a symlinked directory, it is resolved to the same path that we use in the Caddy module.
 	absFileName, err := filepath.EvalSymlinks(o.fileName)
 	if err != nil {
 		return nil, fmt.Errorf("worker filename is invalid %q: %w", o.fileName, err)
@@ -87,34 +123,55 @@ func newWorker(o workerOpt) (*worker, error) {
 		return nil, fmt.Errorf("worker filename is invalid %q: %w", o.fileName, err)
 	}
 
-	key := getWorkerKey(o.name, absFileName)
-	if _, ok := workers[key]; ok {
-		return nil, fmt.Errorf("two workers cannot use the same key %q", key)
-	}
-	for _, w := range workers {
-		if w.name == o.name {
-			return w, fmt.Errorf("two workers cannot have the same name: %q", o.name)
-		}
-	}
-
-	if o.env == nil {
-		o.env = make(PreparedEnv, 1)
+	if _, err := os.Stat(absFileName); err != nil {
+		return nil, fmt.Errorf("worker file not found %q: %w", absFileName, err)
 	}
 
 	if o.name == "" {
 		o.name = absFileName
 	}
 
+	// workers that have a name starting with "m#" are module workers
+	// they can only be matched by their name, not by their path
+	allowPathMatching := !strings.HasPrefix(o.name, "m#")
+
+	if w := getWorkerByPath(absFileName); w != nil && allowPathMatching {
+		return w, fmt.Errorf("two workers cannot have the same filename: %q", absFileName)
+	}
+	if w := getWorkerByName(o.name); w != nil {
+		return w, fmt.Errorf("two workers cannot have the same name: %q", o.name)
+	}
+
+	if o.env == nil {
+		o.env = make(PreparedEnv, 1)
+	}
+
 	o.env["FRANKENPHP_WORKER\x00"] = "1"
 	w := &worker{
-		name:        o.name,
-		fileName:    absFileName,
-		num:         o.num,
-		env:         o.env,
-		requestChan: make(chan *frankenPHPContext),
-		threads:     make([]*phpThread, 0, o.num),
+		name:                   o.name,
+		fileName:               absFileName,
+		requestOptions:         o.requestOptions,
+		num:                    o.num,
+		maxThreads:             o.maxThreads,
+		requestChan:            make(chan contextHolder),
+		threads:                make([]*phpThread, 0, o.num),
+		allowPathMatching:      allowPathMatching,
+		maxConsecutiveFailures: o.maxConsecutiveFailures,
+		onThreadReady:          o.onThreadReady,
+		onThreadShutdown:       o.onThreadShutdown,
 	}
-	workers[key] = w
+
+	w.configureMercure(&o)
+
+	w.requestOptions = append(
+		w.requestOptions,
+		WithRequestDocumentRoot(filepath.Dir(o.fileName), false),
+		WithRequestPreparedEnv(o.env),
+	)
+
+	if o.extensionWorkers != nil {
+		o.extensionWorkers.internalWorker = w
+	}
 
 	return w, nil
 }
@@ -125,38 +182,43 @@ func DrainWorkers() {
 }
 
 func drainWorkerThreads() []*phpThread {
-	ready := sync.WaitGroup{}
-	drainedThreads := make([]*phpThread, 0)
+	var (
+		ready          sync.WaitGroup
+		drainedThreads []*phpThread
+	)
+
 	for _, worker := range workers {
 		worker.threadMutex.RLock()
 		ready.Add(len(worker.threads))
+
 		for _, thread := range worker.threads {
-			if !thread.state.requestSafeStateChange(stateRestarting) {
+			if !thread.state.RequestSafeStateChange(state.Restarting) {
+				ready.Done()
+
 				// no state change allowed == thread is shutting down
-				// we'll proceed to restart all other threads anyways
+				// we'll proceed to restart all other threads anyway
 				continue
 			}
+
 			close(thread.drainChan)
 			drainedThreads = append(drainedThreads, thread)
+
 			go func(thread *phpThread) {
-				thread.state.waitFor(stateYielding)
+				thread.state.WaitFor(state.Yielding)
 				ready.Done()
 			}(thread)
 		}
+
 		worker.threadMutex.RUnlock()
 	}
+
 	ready.Wait()
 
 	return drainedThreads
 }
 
-func drainWatcher() {
-	if watcherIsEnabled {
-		watcher.DrainWatcher()
-	}
-}
-
 // RestartWorkers attempts to restart all workers gracefully
+// All workers must be restarted at the same time to prevent issues with opcache resetting.
 func RestartWorkers() {
 	// disallow scaling threads while restarting workers
 	scalingMu.Lock()
@@ -166,16 +228,8 @@ func RestartWorkers() {
 
 	for _, thread := range threadsToRestart {
 		thread.drainChan = make(chan struct{})
-		thread.state.set(stateReady)
+		thread.state.Set(state.Ready)
 	}
-}
-
-func getDirectoriesToWatch(workerOpts []workerOpt) []string {
-	directoriesToWatch := []string{}
-	for _, w := range workerOpts {
-		directoriesToWatch = append(directoriesToWatch, w.watch...)
-	}
-	return directoriesToWatch
 }
 
 func (worker *worker) attachThread(thread *phpThread) {
@@ -203,40 +257,71 @@ func (worker *worker) countThreads() int {
 	return l
 }
 
-func (worker *worker) handleRequest(fc *frankenPHPContext) {
-	metrics.StartWorkerRequest(worker.name)
-
-	// dispatch requests to all worker threads in order
-	worker.threadMutex.RLock()
-	for _, thread := range worker.threads {
-		select {
-		case thread.requestChan <- fc:
-			worker.threadMutex.RUnlock()
-			<-fc.done
-			metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
-			return
-		default:
-			// thread is busy, continue
-		}
+// check if max_threads has been reached
+func (worker *worker) isAtThreadLimit() bool {
+	if worker.maxThreads <= 0 {
+		return false
 	}
+
+	worker.threadMutex.RLock()
+	atMaxThreads := len(worker.threads) >= worker.maxThreads
 	worker.threadMutex.RUnlock()
 
+	return atMaxThreads
+}
+
+func (worker *worker) handleRequest(ch contextHolder) error {
+	metrics.StartWorkerRequest(worker.name)
+
+	runtime.Gosched()
+
+	if worker.queuedRequests.Load() == 0 {
+		// dispatch requests to all worker threads in order
+		worker.threadMutex.RLock()
+		for _, thread := range worker.threads {
+			select {
+			case thread.requestChan <- ch:
+				worker.threadMutex.RUnlock()
+				<-ch.frankenPHPContext.done
+				metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
+
+				return nil
+			default:
+				// thread is busy, continue
+			}
+		}
+		worker.threadMutex.RUnlock()
+	}
+
 	// if no thread was available, mark the request as queued and apply the scaling strategy
+	worker.queuedRequests.Add(1)
 	metrics.QueuedWorkerRequest(worker.name)
+
 	for {
+		workerScaleChan := scaleChan
+		if worker.isAtThreadLimit() {
+			workerScaleChan = nil // max_threads for this worker reached, do not attempt scaling
+		}
+
 		select {
-		case worker.requestChan <- fc:
+		case worker.requestChan <- ch:
+			worker.queuedRequests.Add(-1)
 			metrics.DequeuedWorkerRequest(worker.name)
-			<-fc.done
-			metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
-			return
-		case scaleChan <- fc:
+			<-ch.frankenPHPContext.done
+			metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
+
+			return nil
+		case workerScaleChan <- ch.frankenPHPContext:
 			// the request has triggered scaling, continue to wait for a thread
 		case <-timeoutChan(maxWaitTime):
-			metrics.DequeuedWorkerRequest(worker.name)
 			// the request has timed out stalling
-			fc.reject(504, "Gateway Timeout")
-			return
+			worker.queuedRequests.Add(-1)
+			metrics.DequeuedWorkerRequest(worker.name)
+			metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
+
+			ch.frankenPHPContext.reject(ErrMaxWaitTimeExceeded)
+
+			return ErrMaxWaitTimeExceeded
 		}
 	}
 }

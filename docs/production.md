@@ -18,6 +18,9 @@ ENV SERVER_NAME=your-domain-name.example.com
 # If you want to disable HTTPS, use this value instead:
 #ENV SERVER_NAME=:80
 
+# If your project is not using the "public" directory as the web root, you can set it here:
+# ENV SERVER_ROOT=web/
+
 # Enable PHP production settings
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 

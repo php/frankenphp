@@ -2,35 +2,47 @@ package frankenphp
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
 
 // frankenPHPContext provides contextual information about the Request to handle.
 type frankenPHPContext struct {
+	mercureContext
+
 	documentRoot    string
 	splitPath       []string
 	env             PreparedEnv
 	logger          *slog.Logger
 	request         *http.Request
 	originalRequest *http.Request
+	worker          *worker
 
 	docURI         string
 	pathInfo       string
 	scriptName     string
 	scriptFilename string
-	workerName     string
 
 	// Whether the request is already closed by us
 	isDone bool
 
-	responseWriter http.ResponseWriter
+	responseWriter    http.ResponseWriter
+	handlerParameters any
+	handlerReturn     any
 
-	done      chan interface{}
+	done      chan any
 	startedAt time.Time
+}
+
+type contextHolder struct {
+	ctx               context.Context
+	frankenPHPContext *frankenPHPContext
 }
 
 // fromContext extracts the frankenPHPContext from a context.
@@ -39,13 +51,18 @@ func fromContext(ctx context.Context) (fctx *frankenPHPContext, ok bool) {
 	return
 }
 
+func newFrankenPHPContext() *frankenPHPContext {
+	return &frankenPHPContext{
+		done:      make(chan any),
+		startedAt: time.Now(),
+	}
+}
+
 // NewRequestWithContext creates a new FrankenPHP request context.
 func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Request, error) {
-	fc := &frankenPHPContext{
-		done:      make(chan interface{}),
-		startedAt: time.Now(),
-		request:   r,
-	}
+	fc := newFrankenPHPContext()
+	fc.request = r
+
 	for _, o := range opts {
 		if err := o(fc); err != nil {
 			return nil, err
@@ -53,7 +70,7 @@ func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Reques
 	}
 
 	if fc.logger == nil {
-		fc.logger = logger
+		fc.logger = globalLogger
 	}
 
 	if fc.documentRoot == "" {
@@ -67,37 +84,23 @@ func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Reques
 		}
 	}
 
-	if fc.splitPath == nil {
-		fc.splitPath = []string{".php"}
+	// If a worker is already assigned explicitly, use its filename and skip parsing path variables
+	if fc.worker != nil {
+		fc.scriptFilename = fc.worker.fileName
+	} else {
+		// If no worker was assigned, split the path into the "traditional" CGI path variables.
+		// This needs to already happen here in case a worker script still matches the path.
+		splitCgiPath(fc)
 	}
 
-	if fc.env == nil {
-		fc.env = make(map[string]string)
-	}
-
-	if splitPos := splitPos(fc, r.URL.Path); splitPos > -1 {
-		fc.docURI = r.URL.Path[:splitPos]
-		fc.pathInfo = r.URL.Path[splitPos:]
-
-		// Strip PATH_INFO from SCRIPT_NAME
-		fc.scriptName = strings.TrimSuffix(r.URL.Path, fc.pathInfo)
-
-		// Ensure the SCRIPT_NAME has a leading slash for compliance with RFC3875
-		// Info: https://tools.ietf.org/html/rfc3875#section-4.1.13
-		if fc.scriptName != "" && !strings.HasPrefix(fc.scriptName, "/") {
-			fc.scriptName = "/" + fc.scriptName
-		}
-	}
-
-	// SCRIPT_FILENAME is the absolute path of SCRIPT_NAME
-	fc.scriptFilename = sanitizedPathJoin(fc.documentRoot, fc.scriptName)
 	c := context.WithValue(r.Context(), contextKey, fc)
 
 	return r.WithContext(c), nil
 }
 
+// newDummyContext creates a fake context from a request path
 func newDummyContext(requestPath string, opts ...RequestOption) (*frankenPHPContext, error) {
-	r, err := http.NewRequest(http.MethodGet, requestPath, nil)
+	r, err := http.NewRequestWithContext(globalCtx, http.MethodGet, requestPath, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -123,17 +126,32 @@ func (fc *frankenPHPContext) closeContext() {
 }
 
 // validate checks if the request should be outright rejected
-func (fc *frankenPHPContext) validate() bool {
-	if !strings.Contains(fc.request.URL.Path, "\x00") {
-		return true
+func (fc *frankenPHPContext) validate() error {
+	if strings.Contains(fc.request.URL.Path, "\x00") {
+		fc.reject(ErrInvalidRequestPath)
+
+		return ErrInvalidRequestPath
 	}
 
-	fc.rejectBadRequest("Invalid request path")
+	contentLengthStr := fc.request.Header.Get("Content-Length")
+	if contentLengthStr != "" {
+		if contentLength, err := strconv.Atoi(contentLengthStr); err != nil || contentLength < 0 {
+			e := fmt.Errorf("%w: %q", ErrInvalidContentLengthHeader, contentLengthStr)
 
-	return false
+			fc.reject(e)
+
+			return e
+		}
+	}
+
+	return nil
 }
 
 func (fc *frankenPHPContext) clientHasClosed() bool {
+	if fc.request == nil {
+		return false
+	}
+
 	select {
 	case <-fc.request.Context().Done():
 		return true
@@ -142,16 +160,22 @@ func (fc *frankenPHPContext) clientHasClosed() bool {
 	}
 }
 
-// reject sends a response with the given status code and message
-func (fc *frankenPHPContext) reject(statusCode int, message string) {
+// reject sends a response with the given status code and error
+func (fc *frankenPHPContext) reject(err error) {
 	if fc.isDone {
 		return
 	}
 
+	re := &ErrRejected{}
+	if !errors.As(err, re) {
+		// Should never happen
+		panic("only instance of ErrRejected can be passed to reject")
+	}
+
 	rw := fc.responseWriter
 	if rw != nil {
-		rw.WriteHeader(statusCode)
-		_, _ = rw.Write([]byte(message))
+		rw.WriteHeader(re.status)
+		_, _ = rw.Write([]byte(err.Error()))
 
 		if f, ok := rw.(http.Flusher); ok {
 			f.Flush()
@@ -159,8 +183,4 @@ func (fc *frankenPHPContext) reject(statusCode int, message string) {
 	}
 
 	fc.closeContext()
-}
-
-func (fc *frankenPHPContext) rejectBadRequest(message string) {
-	fc.reject(http.StatusBadRequest, message)
 }

@@ -1,13 +1,13 @@
 # 使用 GitHub Actions
 
 此存储库构建 Docker 镜像并将其部署到 [Docker Hub](https://hub.docker.com/r/dunglas/frankenphp) 上
-每个批准的拉取请求或设置后在您自己的分支上。
+每个批准的拉取请求或设置后在你自己的分支上。
 
 ## 设置 GitHub Actions
 
 在存储库设置中的 `secrets` 下，添加以下字段：
 
-- `REGISTRY_LOGIN_SERVER`: 要使用的 docker registry（如 `docker.io`）。
+- `REGISTRY_LOGIN_SERVER`: 要使用的 Docker registry（如 `docker.io`）。
 - `REGISTRY_USERNAME`: 用于登录 registry 的用户名（如 `dunglas`）。
 - `REGISTRY_PASSWORD`: 用于登录 registry 的密码（如 `access key`）。
 - `IMAGE_NAME`: 镜像的名称（如 `dunglas/frankenphp`）。

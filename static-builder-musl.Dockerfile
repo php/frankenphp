@@ -12,9 +12,14 @@ ENV FRANKENPHP_VERSION=${FRANKENPHP_VERSION}
 ARG PHP_VERSION=''
 ENV PHP_VERSION=${PHP_VERSION}
 
+# args passed to static-php-cli
 ARG PHP_EXTENSIONS=''
 ARG PHP_EXTENSION_LIBS=''
-ARG XCADDY_ARGS=''
+ARG SPC_OPT_BUILD_ARGS
+
+# args passed to xcaddy
+ARG XCADDY_ARGS='--with github.com/dunglas/caddy-cbrotli --with github.com/dunglas/mercure/caddy --with github.com/dunglas/vulcain/caddy'
+ENV SPC_CMD_VAR_FRANKENPHP_XCADDY_MODULES="${XCADDY_ARGS}"
 ARG CLEAN=''
 ARG EMBED=''
 ARG DEBUG_SYMBOLS=''
@@ -25,10 +30,13 @@ ENV GOTOOLCHAIN=local
 
 SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
 
+ARG CI
+ENV CI=${CI}
+
 LABEL org.opencontainers.image.title=FrankenPHP
 LABEL org.opencontainers.image.description="The modern PHP app server"
 LABEL org.opencontainers.image.url=https://frankenphp.dev
-LABEL org.opencontainers.image.source=https://github.com/dunglas/frankenphp
+LABEL org.opencontainers.image.source=https://github.com/php/frankenphp
 LABEL org.opencontainers.image.licenses=MIT
 LABEL org.opencontainers.image.vendor="Kévin Dunglas"
 
@@ -61,6 +69,7 @@ RUN apk update; \
 		php84-ctype \
 		php84-curl \
 		php84-dom \
+		php84-iconv \
 		php84-mbstring \
 		php84-openssl \
 		php84-pcntl \
@@ -95,9 +104,9 @@ COPY --link . ./
 ENV SPC_DEFAULT_C_FLAGS='-fPIE -fPIC -O3'
 ENV SPC_LIBC='musl'
 ENV SPC_CMD_VAR_PHP_MAKE_EXTRA_LDFLAGS_PROGRAM='-Wl,-O3 -pie'
-ENV SPC_OPT_BUILD_ARGS='--with-config-file-path=/etc/frankenphp --with-config-file-scan-dir=/etc/frankenphp/php.d'
+# Keep default config paths and append any externally provided SPC_OPT_BUILD_ARGS (e.g., from CI)
+ENV SPC_OPT_BUILD_ARGS="--with-config-file-path=/etc/frankenphp --with-config-file-scan-dir=/etc/frankenphp/php.d ${SPC_OPT_BUILD_ARGS}"
 ENV SPC_REL_TYPE='binary'
 ENV EXTENSION_DIR='/usr/lib/frankenphp/modules'
 
-RUN --mount=type=secret,id=github-token GITHUB_TOKEN=$(cat /run/secrets/github-token) ./build-static.sh && \
-	rm -Rf dist/static-php-cli/source/*
+RUN --mount=type=secret,id=github-token GITHUB_TOKEN=$(cat /run/secrets/github-token) ./build-static.sh

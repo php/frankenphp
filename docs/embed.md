@@ -54,7 +54,8 @@ The easiest way to create a Linux binary is to use the Docker-based builder we p
 1. Create a file named `static-build.Dockerfile` in the repository of your app:
 
    ```dockerfile
-   FROM --platform=linux/amd64 dunglas/frankenphp:static-builder
+   FROM --platform=linux/amd64 dunglas/frankenphp:static-builder-gnu
+   # If you intend to run the binary on musl-libc systems, use static-builder-musl instead
 
    # Copy your app
    WORKDIR /go/src/app/dist/app
@@ -89,7 +90,7 @@ The resulting binary is the file named `my-app` in the current directory.
 If you don't want to use Docker, or want to build a macOS binary, use the shell script we provide:
 
 ```console
-git clone https://github.com/dunglas/frankenphp
+git clone https://github.com/php/frankenphp
 cd frankenphp
 EMBED=/path/to/your/app ./build-static.sh
 ```

@@ -16,6 +16,64 @@ FrankenPHP, PHP'yi `net/http` kullanarak herhangi bir uygulamaya yerleştirmek i
 
 ## Başlarken
 
+Windows üzerinde FrankenPHP çalıştırmak için [WSL](https://learn.microsoft.com/windows/wsl/) kullanın.
+
+### Kurulum Betiği
+
+Platformunuza uygun sürümü otomatik olarak kurmak için bu satırı terminalinize kopyalayabilirsiniz:
+
+```console
+curl https://frankenphp.dev/install.sh | sh
+```
+
+### Binary Çıktısı
+
+Docker kullanmayı tercih etmiyorsanız, Linux ve macOS için geliştirme amaçlı bağımsız (statik) FrankenPHP binary dosyaları sağlıyoruz;
+[PHP 8.4](https://www.php.net/releases/8.4/en.php) ve en popüler PHP eklentilerinin çoğu dahildir.
+
+[FrankenPHP'yi indirin](https://github.com/php/frankenphp/releases)
+
+**Eklenti kurulumu:** Yaygın eklentiler paketle birlikte gelir. Daha fazla eklenti yüklemek mümkün değildir.
+
+### rpm Paketleri
+
+Bakımcılarımız `dnf` kullanan tüm sistemler için rpm paketleri sunuyor. Kurulum için:
+
+```console
+sudo dnf install https://rpm.henderkes.com/static-php-1-0.noarch.rpm
+sudo dnf module enable php-zts:static-8.4 # 8.2-8.5 mevcut
+sudo dnf install frankenphp
+```
+
+**Eklenti kurulumu:** `sudo dnf install php-zts-<extension>`
+
+Varsayılan olarak mevcut olmayan eklentiler için [PIE](https://github.com/php/pie) kullanın:
+
+```console
+sudo dnf install pie-zts
+sudo pie-zts install asgrim/example-pie-extension
+```
+
+### deb Paketleri
+
+Bakımcılarımız `apt` kullanan tüm sistemler için deb paketleri sunuyor. Kurulum için:
+
+```console
+sudo curl -fsSL https://key.henderkes.com/static-php.gpg -o /usr/share/keyrings/static-php.gpg && \
+echo "deb [signed-by=/usr/share/keyrings/static-php.gpg] https://deb.henderkes.com/ stable main" | sudo tee /etc/apt/sources.list.d/static-php.list && \
+sudo apt update
+sudo apt install frankenphp
+```
+
+**Eklenti kurulumu:** `sudo apt install php-zts-<extension>`
+
+Varsayılan olarak mevcut olmayan eklentiler için [PIE](https://github.com/php/pie) kullanın:
+
+```console
+sudo apt install pie-zts
+sudo pie-zts install asgrim/example-pie-extension
+```
+
 ### Docker
 
 ```console
@@ -31,21 +89,34 @@ docker run -v $PWD:/app/public \
 > `https://127.0.0.1` kullanmaya çalışmayın. `https://localhost` kullanın ve kendinden imzalı sertifikayı kabul edin.
 > Kullanılacak alan adını değiştirmek için [`SERVER_NAME` ortam değişkenini](https://frankenphp.dev/tr/docs/config#ortam-değişkenleri) kullanın.
 
-### Binary Çıktısı
+### Homebrew
 
-Docker kullanmayı tercih etmiyorsanız, Linux ve macOS için bağımsız FrankenPHP binary dosyası sağlıyoruz
-[PHP 8.4](https://www.php.net/releases/8.4/en.php) ve en popüler PHP eklentilerini de içermekte: [FrankenPHP](https://github.com/dunglas/frankenphp/releases) indirin
-
-Geçerli dizinin içeriğini başlatmak için çalıştırın:
+FrankenPHP, macOS ve Linux için [Homebrew](https://brew.sh) paketi olarak da mevcuttur.
 
 ```console
-./frankenphp php-server
+brew install dunglas/frankenphp/frankenphp
 ```
 
-Ayrıca aşağıdaki tek komut satırı ile de çalıştırabilirsiniz:
+**Eklenti kurulumu:** [PIE](https://github.com/php/pie) kullanın.
+
+### Kullanım
+
+Geçerli dizinin içeriğini sunmak için çalıştırın:
 
 ```console
-./frankenphp php-cli /path/to/your/script.php
+frankenphp php-server
+```
+
+Komut satırı betiklerini şu şekilde çalıştırabilirsiniz:
+
+```console
+frankenphp php-cli /path/to/your/script.php
+```
+
+deb ve rpm paketleri için systemd servisini de başlatabilirsiniz:
+
+```console
+sudo systemctl start frankenphp
 ```
 
 ## Docs

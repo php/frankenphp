@@ -17,7 +17,7 @@ docker run --cap-add=SYS_PTRACE --security-opt seccomp=unconfined -p 8080:8080 -
 - 附加配置文件: `/etc/frankenphp/php.d/*.ini`
 - php 扩展: `/usr/lib/frankenphp/modules/`
 
-如果您的 docker 版本低于 23.0，则会因为 dockerignore [pattern issue](https://github.com/moby/moby/pull/42676) 而导致构建失败。将目录添加到 `.dockerignore`。
+如果你的 Docker 版本低于 23.0，则会因为 dockerignore [pattern issue](https://github.com/moby/moby/pull/42676) 而导致构建失败。将目录添加到 `.dockerignore`。
 
 ```patch
  !testdata/*.php
@@ -42,7 +42,7 @@ go test -tags watcher -race -v ./...
 
 ```console
 cd caddy/frankenphp/
-go build
+go build -tags watcher,brotli,nobadger,nomysql,nopgx
 cd ../../
 ```
 
@@ -53,10 +53,13 @@ cd testdata/
 ../caddy/frankenphp/frankenphp run
 ```
 
-服务器正在监听 `127.0.0.1:8080`：
+服务器正在监听 `127.0.0.1:80`：
+
+> [!NOTE]
+> 如果您正在使用 Docker，您必须绑定容器的 80 端口或者在容器内部执行命令。
 
 ```console
-curl -vk https://localhost/phpinfo.php
+curl -vk http://127.0.0.1/phpinfo.php
 ```
 
 ## 最小测试服务器
@@ -112,22 +115,22 @@ docker buildx bake -f docker-bake.hcl --pull --no-cache --push
 
 1. 从 GitHub 下载 FrankenPHP 二进制文件的调试版本或创建包含调试符号的自定义静态构建：
 
-    ```console
-    docker buildx bake \
-        --load \
-        --set static-builder.args.DEBUG_SYMBOLS=1 \
-        --set "static-builder.platform=linux/amd64" \
-        static-builder
-    docker cp $(docker create --name static-builder-musl dunglas/frankenphp:static-builder-musl):/go/src/app/dist/frankenphp-linux-$(uname -m) frankenphp
-    ```
+   ```console
+   docker buildx bake \
+       --load \
+       --set static-builder.args.DEBUG_SYMBOLS=1 \
+       --set "static-builder.platform=linux/amd64" \
+       static-builder
+   docker cp $(docker create --name static-builder-musl dunglas/frankenphp:static-builder-musl):/go/src/app/dist/frankenphp-linux-$(uname -m) frankenphp
+   ```
 
 2. 将当前版本的 `frankenphp` 替换为 debug FrankenPHP 可执行文件
 3. 照常启动 FrankenPHP（或者，你可以直接使用 GDB 启动 FrankenPHP： `gdb --args frankenphp run`）
 4. 使用 GDB 附加到进程：
 
-    ```console
-    gdb -p `pidof frankenphp`
-    ```
+   ```console
+   gdb -p `pidof frankenphp`
+   ```
 
 5. 如有必要，请在 GDB shell 中输入 `continue`
 6. 使 FrankenPHP 崩溃
@@ -139,45 +142,42 @@ docker buildx bake -f docker-bake.hcl --pull --no-cache --push
 1. 打开 `.github/workflows/tests.yml`
 2. 启用 PHP 调试符号
 
-    ```patch
-        - uses: shivammathur/setup-php@v2
-          # ...
-          env:
-            phpts: ts
-    +       debug: true
-    ```
+   ```patch
+       - uses: shivammathur/setup-php@v2
+         # ...
+         env:
+           phpts: ts
+   +       debug: true
+   ```
 
 3. 启用 `tmate` 以连接到容器
 
-    ```patch
-        -
-          name: Set CGO flags
-          run: echo "CGO_CFLAGS=$(php-config --includes)" >> "$GITHUB_ENV"
-    +   -
-    +     run: |
-    +       sudo apt install gdb
-    +       mkdir -p /home/runner/.config/gdb/
-    +       printf "set auto-load safe-path /\nhandle SIG34 nostop noprint pass" > /home/runner/.config/gdb/gdbinit
-    +   -
-    +     uses: mxschmitt/action-tmate@v3
-    ```
+   ```patch
+       - name: Set CGO flags
+         run: echo "CGO_CFLAGS=$(php-config --includes)" >> "$GITHUB_ENV"
+   +   - run: |
+   +       sudo apt install gdb
+   +       mkdir -p /home/runner/.config/gdb/
+   +       printf "set auto-load safe-path /\nhandle SIG34 nostop noprint pass" > /home/runner/.config/gdb/gdbinit
+   +   - uses: mxschmitt/action-tmate@v3
+   ```
 
 4. 连接到容器
 5. 打开 `frankenphp.go`
 6. 启用 `cgosymbolizer`
 
-    ```patch
-    -	//_ "github.com/ianlancetaylor/cgosymbolizer"
-    +	_ "github.com/ianlancetaylor/cgosymbolizer"
-    ```
+   ```patch
+   -	//_ "github.com/ianlancetaylor/cgosymbolizer"
+   +	_ "github.com/ianlancetaylor/cgosymbolizer"
+   ```
 
 7. 下载模块： `go get`
 8. 在容器中，可以使用 GDB 和以下：
 
-    ```console
-    go test -tags watcher -c -ldflags=-w
-    gdb --args frankenphp.test -test.run ^MyTest$
-    ```
+   ```console
+   go test -tags watcher -c -ldflags=-w
+   gdb --args frankenphp.test -test.run ^MyTest$
+   ```
 
 9. 当错误修复后，恢复所有这些更改
 
@@ -190,13 +190,12 @@ docker buildx bake -f docker-bake.hcl --pull --no-cache --push
 - [PHP 嵌入 C++](https://gist.github.com/paresy/3cbd4c6a469511ac7479aa0e7c42fea7)
 - [扩展和嵌入 PHP 作者：Sara Golemon](https://books.google.fr/books?id=zMbGvK17_tYC&pg=PA254&lpg=PA254#v=onepage&q&f=false)
 - [TSRMLS_CC到底是什么？](http://blog.golemon.com/2006/06/what-heck-is-tsrmlscc-anyway.html)
-- [Mac 上的 PHP 嵌入](https://gist.github.com/jonnywang/61427ffc0e8dde74fff40f479d147db4)
 - [SDL 绑定](https://pkg.go.dev/github.com/veandco/go-sdl2@v0.4.21/sdl#Main)
 
 ## Docker 相关资源
 
 - [Bake 文件定义](https://docs.docker.com/build/customize/bake/file-definition/)
-- [docker buildx 构建](https://docs.docker.com/engine/reference/commandline/buildx_build/)
+- [`docker buildx build`](https://docs.docker.com/engine/reference/commandline/buildx_build/)
 
 ## 有用的命令
 

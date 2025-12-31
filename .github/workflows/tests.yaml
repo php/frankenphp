@@ -1,5 +1,8 @@
 ---
 name: Tests
+concurrency:
+  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
 on:
   pull_request:
     branches:
@@ -20,18 +23,25 @@ jobs:
   tests-linux:
     name: Tests (Linux, PHP ${{ matrix.php-versions }})
     runs-on: ubuntu-latest
+    continue-on-error: false
     strategy:
       fail-fast: false
       matrix:
-        php-versions: ["8.2", "8.3", "8.4"]
+        include:
+          - php-versions: "8.2"
+          - php-versions: "8.3"
+          - php-versions: "8.4"
+          - php-versions: "8.5"
     env:
       GOMAXPROCS: 10
       LIBRARY_PATH: ${{ github.workspace }}/watcher/target/lib
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
         with:
-          go-version: "1.24"
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25"
           cache-dependency-path: |
             go.sum 
             caddy/go.sum
@@ -53,8 +63,10 @@ jobs:
       - name: Build testcli binary
         working-directory: internal/testcli/
         run: go build
+      - name: Compile library tests
+        run: go test -race -v -x -c
       - name: Run library tests
-        run: go test -race -v ./...
+        run: ./frankenphp.test -test.v
       - name: Run Caddy module tests
         working-directory: caddy/
         run: go test -tags nobadger,nomysql,nopgx -race -v ./...
@@ -70,26 +82,78 @@ jobs:
       - name: Run integrations tests
         run: ./reload_test.sh
       - name: Lint Go code
-        uses: golangci/golangci-lint-action@v8
-        if: matrix.php-versions == '8.4'
+        uses: golangci/golangci-lint-action@v9
+        if: matrix.php-versions == '8.5'
         with:
           version: latest
+      - name: Ensure go.mod is tidy
+        if: matrix.php-versions == '8.5'
+        run: go mod tidy -diff
+      - name: Ensure caddy/go.mod is tidy
+        if: matrix.php-versions == '8.5'
+        run: go mod tidy -diff
+        working-directory: caddy/
+  integration-tests:
+    name: Integration Tests (Linux, PHP ${{ matrix.php-versions }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php-versions: ["8.3", "8.4", "8.5"]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25"
+          cache-dependency-path: |
+            go.sum
+            caddy/go.sum
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-versions }}
+          ini-file: development
+          coverage: none
+          tools: none
+        env:
+          phpts: ts
+          debug: true
+      - name: Install PHP development libraries
+        run: sudo apt-get update && sudo apt-get install -y libkrb5-dev libsodium-dev libargon2-dev
+      - name: Install xcaddy
+        run: go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+      - name: Download PHP sources
+        run: |
+          PHP_VERSION=$(php -r "echo PHP_VERSION;")
+          wget -q "https://www.php.net/distributions/php-${PHP_VERSION}.tar.gz"
+          tar xzf "php-${PHP_VERSION}.tar.gz"
+          echo "GEN_STUB_SCRIPT=${PWD}/php-${PHP_VERSION}/build/gen_stub.php" >> "${GITHUB_ENV}"
+      - name: Set CGO flags
+        run: |
+          echo "CGO_CFLAGS=$(php-config --includes)" >> "${GITHUB_ENV}"
+          echo "CGO_LDFLAGS=$(php-config --ldflags) $(php-config --libs)" >> "${GITHUB_ENV}"
+      - name: Run integration tests
+        working-directory: internal/extgen/
+        run: go test -tags integration -v -timeout 30m
   tests-mac:
-    name: Tests (macOS, PHP 8.4)
+    name: Tests (macOS, PHP 8.5)
     runs-on: macos-latest
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
         with:
-          go-version: "1.24"
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25"
           cache-dependency-path: |
-            go.sum 
+            go.sum
             caddy/go.sum
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: 8.4
+          php-version: 8.5
           ini-file: development
           coverage: none
           tools: none
