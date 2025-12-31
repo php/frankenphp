@@ -138,6 +138,15 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 			}
 
 			f.resolvedDocumentRoot = root
+
+			// Also resolve symlinks in worker file paths when resolve_root_symlink is true
+			for i, wc := range f.Workers {
+				if !filepath.IsAbs(wc.FileName) {
+					continue
+				}
+				resolvedPath, _ := filepath.EvalSymlinks(wc.FileName)
+				f.Workers[i].FileName = resolvedPath
+			}
 		}
 	}
 
