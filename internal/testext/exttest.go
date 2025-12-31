@@ -5,7 +5,7 @@ package testext
 // #cgo CFLAGS: -I/usr/local/include -I/usr/local/include/php -I/usr/local/include/php/main -I/usr/local/include/php/TSRM -I/usr/local/include/php/Zend -I/usr/local/include/php/ext -I/usr/local/include/php/ext/date/lib
 // #cgo linux CFLAGS: -D_GNU_SOURCE
 // #cgo darwin CFLAGS: -I/opt/homebrew/include
-// #cgo LDFLAGS: -L/usr/local/lib -L/usr/lib -lphp-zts-85 -lm -lutil
+// #cgo LDFLAGS: -L/usr/local/lib -L/usr/lib -lphp -lm -lutil
 // #cgo linux LDFLAGS: -ldl -lresolv
 // #cgo darwin LDFLAGS: -Wl,-rpath,/usr/local/lib -L/opt/homebrew/lib -L/opt/homebrew/opt/libiconv/lib -liconv -ldl
 // #include "extension.h"
