@@ -181,9 +181,9 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 		if documentRoot == "" && frankenphp.EmbeddedAppPath != "" {
 			documentRoot = frankenphp.EmbeddedAppPath
 		}
-		//If we do not have a resolved document root, then we cannot resolve the symlink of our cwd because it may
-		//resolve to a different directory than the one we are currently in.
-		//This is especially important if there are workers running.
+		// If we do not have a resolved document root, then we cannot resolve the symlink of our cwd because it may
+		// resolve to a different directory than the one we are currently in.
+		// This is especially important if there are workers running.
 		documentRootOption = frankenphp.WithRequestDocumentRoot(documentRoot, false)
 	} else {
 		documentRoot = f.resolvedDocumentRoot
