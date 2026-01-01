@@ -50,6 +50,7 @@ type eventHolder struct {
 type globalWatcher struct {
 	groups   []*PatternGroup
 	watchers []*pattern
+	excludes map[*PatternGroup][]*pattern
 	events   chan eventHolder
 	stop     chan struct{}
 }
@@ -138,9 +139,16 @@ func (p *pattern) retryWatching() {
 func (g *globalWatcher) startWatching() error {
 	g.events = make(chan eventHolder)
 	g.stop = make(chan struct{})
+	g.excludes = make(map[*PatternGroup][]*pattern)
 
 	if err := g.parseFilePatterns(); err != nil {
 		return err
+	}
+
+	for _, w := range g.watchers {
+		if w.isExclude {
+			g.excludes[w.patternGroup] = append(g.excludes[w.patternGroup], w)
+		}
 	}
 
 	for _, w := range g.watchers {
@@ -170,6 +178,17 @@ func (g *globalWatcher) stopWatching() {
 	}
 }
 
+func (g *globalWatcher) isExcludedEvent(pg *PatternGroup, e *watcher.Event) bool {
+	excludes := g.excludes[pg]
+	for _, ex := range excludes {
+		if ex.matchesEvent(e) {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (g *globalWatcher) listenForFileEvents() {
 	timer := time.NewTimer(debounceDuration)
 	timer.Stop()
@@ -182,8 +201,11 @@ func (g *globalWatcher) listenForFileEvents() {
 		case <-g.stop:
 			return
 		case eh := <-g.events:
-			timer.Reset(debounceDuration)
+			if g.isExcludedEvent(eh.patternGroup, eh.event) {
+				continue
+			}
 
+			timer.Reset(debounceDuration)
 			eventsPerGroup[eh.patternGroup] = append(eventsPerGroup[eh.patternGroup], eh.event)
 		case <-timer.C:
 			timer.Stop()
