@@ -42,5 +42,5 @@ if [ "$1" -eq 1 ] && [ -x /usr/bin/frankenphp ]; then
 fi
 
 if [ -x /usr/bin/frankenphp ]; then
-	/usr/bin/frankenphp completion bash | sed 's/caddy/frankenphp/g' > /etc/bash_completion.d/frankenphp
+	/usr/bin/frankenphp completion bash | sed 's/caddy/frankenphp/g' >/etc/bash_completion.d/frankenphp
 fi
