@@ -171,86 +171,13 @@ func newWorker(o workerOpt) (*worker, error) {
 
 // EXPERIMENTAL: DrainWorkers finishes all worker scripts before a graceful shutdown
 func DrainWorkers() {
-	_ = drainWorkerThreads(false)
-}
-
-func drainWorkerThreads(withRegularThreads bool) []*phpThread {
-	var (
-		ready          sync.WaitGroup
-		drainedThreads []*phpThread
-	)
-
-	for _, worker := range workers {
-		worker.threadMutex.RLock()
-		ready.Add(len(worker.threads))
-
-		for _, thread := range worker.threads {
-			if !thread.state.RequestSafeStateChange(state.Restarting) {
-				ready.Done()
-
-				// no state change allowed == thread is shutting down
-				// we'll proceed to restart all other threads anyway
-				continue
-			}
-			restartCounter.Add(1)
-			close(thread.drainChan)
-			drainedThreads = append(drainedThreads, thread)
-
-			go func(thread *phpThread) {
-				thread.state.WaitFor(state.Yielding)
-				ready.Done()
-			}(thread)
-		}
-
-		worker.threadMutex.RUnlock()
-	}
-
-	if withRegularThreads {
-		regularThreadMu.RLock()
-		ready.Add(len(regularThreads))
-
-		for _, thread := range regularThreads {
-			if !thread.state.RequestSafeStateChange(state.Restarting) {
-				ready.Done()
-
-				// no state change allowed == thread is shutting down
-				// we'll proceed to restart all other threads anyway
-				continue
-			}
-			restartCounter.Add(1)
-			close(thread.drainChan)
-			drainedThreads = append(drainedThreads, thread)
-
-			go func(thread *phpThread) {
-				thread.state.WaitFor(state.Yielding)
-				ready.Done()
-			}(thread)
-		}
-
-		regularThreadMu.RUnlock()
-	}
-
-	ready.Wait()
-
-	return drainedThreads
+	_ = drainThreads(false)
 }
 
 // RestartWorkers attempts to restart all workers gracefully
 // All workers must be restarted at the same time to prevent issues with opcache resetting.
 func RestartWorkers() {
-	if !restartCounter.CompareAndSwap(0, 1) {
-		return // another restart is already in progress
-	}
-	// disallow scaling threads while restarting workers
-	scalingMu.Lock()
-	defer scalingMu.Unlock()
-
-	threadsToRestart := drainWorkerThreads(false)
-
-	for _, thread := range threadsToRestart {
-		thread.drainChan = make(chan struct{})
-		thread.state.Set(state.Ready)
-	}
+	restartThreadsAndOpcacheReset(false)
 }
 
 func (worker *worker) attachThread(thread *phpThread) {
