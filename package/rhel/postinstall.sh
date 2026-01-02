@@ -32,9 +32,10 @@ if command -v setcap >/dev/null 2>&1; then
 	setcap cap_net_bind_service=+ep /usr/bin/frankenphp || :
 fi
 
-if [ -x /usr/bin/frankenphp ]; then
+if [ "$1" -eq 1 ] && [ -x /usr/bin/frankenphp ]; then
 	HOME=/var/lib/frankenphp /usr/bin/frankenphp run --config /dev/null &
 	FRANKENPHP_PID=$!
+	sleep 2
 	HOME=/var/lib/frankenphp /usr/bin/frankenphp trust || :
 	kill "$FRANKENPHP_PID" || :
 	wait "$FRANKENPHP_PID" 2>/dev/null || :
