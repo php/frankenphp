@@ -862,8 +862,9 @@ func scheduleOpcacheReset(thread *phpThread) {
 		defer func() { regularThread.contextHolder.frankenPHPContext = nil }()
 	}
 
-	globalLogger.Info("resetting opcache in all threads")
+	globalLogger.Info("resetting opcache", "thread", thread.name())
 	C.frankenphp_reset_opcache()
+	globalLogger.Info("opcache reset completed", "thread", thread.name())
 }
 
 // ExecuteScriptCLI executes the PHP script passed as parameter.

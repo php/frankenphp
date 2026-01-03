@@ -177,7 +177,7 @@ func DrainWorkers() {
 // RestartWorkers attempts to restart all workers gracefully
 // All workers must be restarted at the same time to prevent issues with opcache resetting.
 func RestartWorkers() {
-	restartThreadsAndOpcacheReset(false)
+	restartThreadsAndOpcacheReset(true)
 }
 
 func (worker *worker) attachThread(thread *phpThread) {
