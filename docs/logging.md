@@ -59,7 +59,7 @@ these messages are routed to the Caddy logger.
 By default, messages sent via `error_log()` are treated as unstructured text.
 They are useful for compatibility with existing applications or libraries that rely on the standard PHP library.
 
-### Usage
+### Example with error_log()
 
 ```php
 error_log("Database connection failed", 4);

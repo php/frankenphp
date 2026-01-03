@@ -111,7 +111,14 @@ func getWorkerByPath(path string) *worker {
 }
 
 func newWorker(o workerOpt) (*worker, error) {
-	absFileName, err := fastabs.FastAbs(o.fileName)
+	// Order is important!
+	// This order ensures that FrankenPHP started from inside a symlinked directory will properly resolve any paths.
+	// If it is started from outside a symlinked directory, it is resolved to the same path that we use in the Caddy module.
+	absFileName, err := filepath.EvalSymlinks(o.fileName)
+	if err != nil {
+		return nil, fmt.Errorf("worker filename is invalid %q: %w", o.fileName, err)
+	}
+	absFileName, err = fastabs.FastAbs(absFileName)
 	if err != nil {
 		return nil, fmt.Errorf("worker filename is invalid %q: %w", o.fileName, err)
 	}
