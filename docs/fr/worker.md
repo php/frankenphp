@@ -3,6 +3,37 @@
 Démarrez votre application une fois et gardez-la en mémoire.
 FrankenPHP traitera les requêtes entrantes en quelques millisecondes.
 
+## Avertissement sur la conception Stateful
+
+Contrairement au modèle PHP-FPM traditionnel, l'application reste **chargée en mémoire** entre les requêtes. Par conséquent, tout état stocké dans vos services (propriétés d'objet, singletons, etc.) sera conservé et partagé entre les requêtes successives traitées par le même worker. Cela peut entraîner des fuites de données et de mémoires ou des états incohérents si votre application n'est pas conçue pour cela.
+
+### Concevoir une application Stateless
+
+Le défi est de gérer le cycle de vie de vos objets, en particulier ceux qui sont des instances partagées par le conteneur de dépendances.
+
+Principes à respecter :
+
+- **Éviter l'état global :** Les variables globales et les propriétés statiques ne doivent pas être modifiées.
+- **Prudence avec les services :** Évitez de stocker des valeurs via des setters ou de modifier les propriétés publiques d'un service partagé, car ces changements affecteront la prochaine requête.
+- **Priorité aux nouveaux objets :** Tout ce qui est lié à la requête ou aux paramètres utilisateur doit être retourné comme un nouvel objet pour chaque requête.
+
+### Détection des problèmes (Analyse Statique)
+
+Des outils d'analyse statique peuvent vous aider à identifier les services potentiellement stateful. Ces outils vérifient notamment :
+
+- L'utilisation de propriétés publiques ou statiques mutables dans les services partagés.
+- L'usage de fonctions comme `die()` ou `exit()`.
+
+Un outil notable est **[denzyldick/phanalist](https://github.com/denzyldick/phanalist)**. Après installation, vous pouvez l'exécuter spécifiquement avec la règle E0012 (pour "Service compatibility with Shared Memory Model") pour obtenir une liste des endroits problématiques dans votre code.
+
+### L'interface de réinitialisation (Symfony)
+
+L'approche idéale est de concevoir vos services pour qu'ils soient naturellement `stateless`.
+
+Toutefois, dans les cas où il vous est difficile de rendre un service partagé complètement stateless (par exemple, un service avec un cache interne ou une configuration spécifique à la requête), vous pouvez utiliser l'interface `Symfony\Contracts\Service\ResetInterface`.
+
+Lorsqu'un service implémente cette interface, sa méthode reset() est automatiquement appelée par le conteneur de services à la fin de chaque requête. Cela permet de nettoyer spécifiquement l'état interne du service (par exemple, vider un cache interne, réinitialiser des propriétés...).
+
 ## Démarrage des scripts workers
 
 ### Docker
