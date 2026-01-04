@@ -1,6 +1,7 @@
 package frankenphp
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"path/filepath"
@@ -102,6 +103,14 @@ func WithRequestEnv(env map[string]string) RequestOption {
 func WithRequestPreparedEnv(env PreparedEnv) RequestOption {
 	return func(o *frankenPHPContext) error {
 		o.env = env
+
+		return nil
+	}
+}
+
+func WithRequestContext(ctx context.Context) RequestOption {
+	return func(o *frankenPHPContext) error {
+		o.ctx = ctx
 
 		return nil
 	}
