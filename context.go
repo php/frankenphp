@@ -50,8 +50,10 @@ func newFrankenPHPContext(responseWriter http.ResponseWriter, r *http.Request, o
 		responseWriter: responseWriter,
 	}
 
-	if fc.ctx == nil && r != nil {
+	if r != nil {
 		fc.ctx = r.Context()
+	} else {
+		fc.ctx = context.Background()
 	}
 
 	for _, o := range opts {

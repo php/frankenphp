@@ -227,7 +227,6 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 			frankenphp.WithRequestPreparedEnv(env),
 			frankenphp.WithOriginalRequest(&origReq),
 			frankenphp.WithWorkerName(workerName),
-			frankenphp.WithRequestContext(ctx),
 		)
 	} else {
 		err = frankenphp.ServeHTTP(
@@ -238,7 +237,6 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 			frankenphp.WithRequestPreparedEnv(env),
 			frankenphp.WithOriginalRequest(&origReq),
 			frankenphp.WithWorkerName(workerName),
-			frankenphp.WithRequestContext(ctx),
 			*f.mercureHubRequestOption,
 		)
 	}

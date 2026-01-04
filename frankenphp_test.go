@@ -78,7 +78,7 @@ func runTest(t *testing.T, test func(func(http.ResponseWriter, *http.Request), *
 	opts.requestOpts = append(opts.requestOpts, frankenphp.WithRequestDocumentRoot(testDataDir, false))
 
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		err = frankenphp.ServeHTTP(w, r, opts.requestOpts...)
+		err := frankenphp.ServeHTTP(w, r, opts.requestOpts...)
 		if err != nil && !errors.As(err, &frankenphp.ErrRejected{}) {
 			assert.Fail(t, fmt.Sprintf("Received unexpected error:\n%+v", err))
 		}
