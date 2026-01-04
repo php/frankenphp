@@ -25,7 +25,7 @@ type worker struct {
 	num                    int
 	maxThreads             int
 	requestOptions         []RequestOption
-	requestChan            chan contextHolder
+	requestChan            chan *frankenPHPContext
 	threads                []*phpThread
 	threadMutex            sync.RWMutex
 	allowPathMatching      bool
@@ -153,7 +153,7 @@ func newWorker(o workerOpt) (*worker, error) {
 		requestOptions:         o.requestOptions,
 		num:                    o.num,
 		maxThreads:             o.maxThreads,
-		requestChan:            make(chan contextHolder),
+		requestChan:            make(chan *frankenPHPContext),
 		threads:                make([]*phpThread, 0, o.num),
 		allowPathMatching:      allowPathMatching,
 		maxConsecutiveFailures: o.maxConsecutiveFailures,
@@ -270,7 +270,7 @@ func (worker *worker) isAtThreadLimit() bool {
 	return atMaxThreads
 }
 
-func (worker *worker) handleRequest(ch contextHolder) error {
+func (worker *worker) handleRequest(fc *frankenPHPContext) error {
 	metrics.StartWorkerRequest(worker.name)
 
 	runtime.Gosched()
@@ -280,10 +280,10 @@ func (worker *worker) handleRequest(ch contextHolder) error {
 		worker.threadMutex.RLock()
 		for _, thread := range worker.threads {
 			select {
-			case thread.requestChan <- ch:
+			case thread.requestChan <- fc:
 				worker.threadMutex.RUnlock()
-				<-ch.frankenPHPContext.done
-				metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
+				<-fc.done
+				metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
 
 				return nil
 			default:
@@ -304,22 +304,22 @@ func (worker *worker) handleRequest(ch contextHolder) error {
 		}
 
 		select {
-		case worker.requestChan <- ch:
+		case worker.requestChan <- fc:
 			worker.queuedRequests.Add(-1)
 			metrics.DequeuedWorkerRequest(worker.name)
-			<-ch.frankenPHPContext.done
-			metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
+			<-fc.done
+			metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
 
 			return nil
-		case workerScaleChan <- ch.frankenPHPContext:
+		case workerScaleChan <- fc:
 			// the request has triggered scaling, continue to wait for a thread
 		case <-timeoutChan(maxWaitTime):
 			// the request has timed out stalling
 			worker.queuedRequests.Add(-1)
 			metrics.DequeuedWorkerRequest(worker.name)
-			metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
+			metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
 
-			ch.frankenPHPContext.reject(ErrMaxWaitTimeExceeded)
+			fc.reject(ErrMaxWaitTimeExceeded)
 
 			return ErrMaxWaitTimeExceeded
 		}

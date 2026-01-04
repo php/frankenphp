@@ -26,17 +26,12 @@ type extensionWorkers struct {
 
 // EXPERIMENTAL: SendRequest sends an HTTP request to the worker and writes the response to the provided ResponseWriter.
 func (w *extensionWorkers) SendRequest(rw http.ResponseWriter, r *http.Request) error {
-	fr, err := NewRequestWithContext(
+	return ServeHTTP(
+		rw,
 		r,
 		WithOriginalRequest(r),
 		WithWorkerName(w.name),
 	)
-
-	if err != nil {
-		return err
-	}
-
-	return ServeHTTP(rw, fr)
 }
 
 func (w *extensionWorkers) NumThreads() int {
@@ -45,13 +40,16 @@ func (w *extensionWorkers) NumThreads() int {
 
 // EXPERIMENTAL: SendMessage sends a message to the worker and waits for a response.
 func (w *extensionWorkers) SendMessage(ctx context.Context, message any, rw http.ResponseWriter) (any, error) {
-	fc := newFrankenPHPContext()
-	fc.logger = globalLogger
-	fc.worker = w.internalWorker
-	fc.responseWriter = rw
-	fc.handlerParameters = message
+	fc := &frankenPHPContext{
+		done:              make(chan any),
+		logger:            globalLogger,
+		responseWriter:    rw,
+		worker:            w.internalWorker,
+		handlerParameters: message,
+		ctx:               ctx,
+	}
 
-	err := w.internalWorker.handleRequest(contextHolder{context.WithValue(ctx, contextKey, fc), fc})
+	err := w.internalWorker.handleRequest(fc)
 
 	return fc.handlerReturn, err
 }

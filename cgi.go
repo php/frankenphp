@@ -216,7 +216,7 @@ func go_register_variables(threadIndex C.uintptr_t, trackVarsArray *C.zval) {
 
 	if fc.request != nil {
 		addKnownVariablesToServer(fc, trackVarsArray)
-		addHeadersToServer(thread.context(), fc.request, trackVarsArray)
+		addHeadersToServer(fc.ctx, fc.request, trackVarsArray)
 	}
 
 	// The Prepared Environment is registered last and can overwrite any previous values

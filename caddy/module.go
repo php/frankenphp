@@ -2,7 +2,6 @@ package caddy
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -215,13 +214,13 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 		}
 	}
 
-	var (
-		err error
-		fr  *http.Request
-	)
+	// TODO: set caddyhttp.ServerHeader when https://github.com/caddyserver/caddy/pull/7338 will be released
+	w.Header()["Server"] = serverHeader
 
+	var err error
 	if f.mercureHubRequestOption == nil {
-		fr, err = frankenphp.NewRequestWithContext(
+		err = frankenphp.ServeHTTP(
+			w,
 			r,
 			documentRootOption,
 			frankenphp.WithRequestSplitPath(f.SplitPath),
@@ -230,7 +229,8 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 			frankenphp.WithWorkerName(workerName),
 		)
 	} else {
-		fr, err = frankenphp.NewRequestWithContext(
+		err = frankenphp.ServeHTTP(
+			w,
 			r,
 			documentRootOption,
 			frankenphp.WithRequestSplitPath(f.SplitPath),
@@ -242,12 +242,6 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 	}
 
 	if err != nil {
-		return caddyhttp.Error(http.StatusInternalServerError, err)
-	}
-
-	// TODO: set caddyhttp.ServerHeader when https://github.com/caddyserver/caddy/pull/7338 will be released
-	w.Header()["Server"] = serverHeader
-	if err = frankenphp.ServeHTTP(w, fr); err != nil && !errors.As(err, &frankenphp.ErrRejected{}) {
 		return caddyhttp.Error(http.StatusInternalServerError, err)
 	}
 

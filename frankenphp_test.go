@@ -78,10 +78,7 @@ func runTest(t *testing.T, test func(func(http.ResponseWriter, *http.Request), *
 	opts.requestOpts = append(opts.requestOpts, frankenphp.WithRequestDocumentRoot(testDataDir, false))
 
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		req, err := frankenphp.NewRequestWithContext(r, opts.requestOpts...)
-		assert.NoError(t, err)
-
-		err = frankenphp.ServeHTTP(w, req)
+		err = frankenphp.ServeHTTP(w, r, opts.requestOpts...)
 		if err != nil && !errors.As(err, &frankenphp.ErrRejected{}) {
 			assert.Fail(t, fmt.Sprintf("Received unexpected error:\n%+v", err))
 		}
@@ -219,13 +216,12 @@ func testPathInfo(t *testing.T, opts *testOptions) {
 			requestURI := r.URL.RequestURI()
 			r.URL.Path = path
 
-			rewriteRequest, err := frankenphp.NewRequestWithContext(r,
+			err := frankenphp.ServeHTTP(
+				w,
+				r,
 				frankenphp.WithRequestDocumentRoot(testDataDir, false),
 				frankenphp.WithRequestEnv(map[string]string{"REQUEST_URI": requestURI}),
 			)
-			assert.NoError(t, err)
-
-			err = frankenphp.ServeHTTP(w, rewriteRequest)
 			assert.NoError(t, err)
 		}
 
@@ -774,12 +770,7 @@ func ExampleServeHTTP() {
 	defer frankenphp.Shutdown()
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		req, err := frankenphp.NewRequestWithContext(r, frankenphp.WithRequestDocumentRoot("/path/to/document/root", false))
-		if err != nil {
-			panic(err)
-		}
-
-		if err := frankenphp.ServeHTTP(w, req); err != nil {
+		if err := frankenphp.ServeHTTP(w, r, frankenphp.WithRequestDocumentRoot("/path/to/document/root", false)); err != nil {
 			panic(err)
 		}
 	})
@@ -804,10 +795,7 @@ func BenchmarkHelloWorld(b *testing.B) {
 
 	opt := frankenphp.WithRequestDocumentRoot(testDataDir, false)
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		req, err := frankenphp.NewRequestWithContext(r, opt)
-		require.NoError(b, err)
-
-		require.NoError(b, frankenphp.ServeHTTP(w, req))
+		require.NoError(b, frankenphp.ServeHTTP(w, r, opt))
 	}
 
 	req := httptest.NewRequest("GET", "http://example.com/index.php", nil)
@@ -827,10 +815,7 @@ func BenchmarkEcho(b *testing.B) {
 
 	opt := frankenphp.WithRequestDocumentRoot(testDataDir, false)
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		req, err := frankenphp.NewRequestWithContext(r, opt)
-		require.NoError(b, err)
-
-		require.NoError(b, frankenphp.ServeHTTP(w, req))
+		require.NoError(b, frankenphp.ServeHTTP(w, r, opt))
 	}
 
 	const body = `{
@@ -931,12 +916,8 @@ func BenchmarkServerSuperGlobal(b *testing.B) {
 
 	opts := []frankenphp.RequestOption{frankenphp.WithRequestDocumentRoot(testDataDir, false), frankenphp.WithRequestPreparedEnv(preparedEnv)}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		req, err := frankenphp.NewRequestWithContext(r, opts...)
-		require.NoError(b, err)
-
 		r.Header = headers
-
-		require.NoError(b, frankenphp.ServeHTTP(w, req))
+		require.NoError(b, frankenphp.ServeHTTP(w, r, opts...))
 	}
 
 	req := httptest.NewRequest("GET", "http://example.com/server-variable.php", nil)
@@ -979,12 +960,9 @@ func BenchmarkUncommonHeaders(b *testing.B) {
 
 	opt := frankenphp.WithRequestDocumentRoot(testDataDir, false)
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		req, err := frankenphp.NewRequestWithContext(r, opt)
-		require.NoError(b, err)
-
 		r.Header = headers
 
-		require.NoError(b, frankenphp.ServeHTTP(w, req))
+		require.NoError(b, frankenphp.ServeHTTP(w, r, opt))
 	}
 
 	req := httptest.NewRequest("GET", "http://example.com/server-variable.php", nil)
