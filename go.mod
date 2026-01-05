@@ -8,7 +8,7 @@ require (
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/dunglas/mercure v0.21.4
 	github.com/e-dant/watcher/watcher-go v0.0.0-20251208164151-f88ec3b7e146
-	github.com/maypok86/otter/v2 v2.2.1
+	github.com/maypok86/otter/v2 v2.3.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/net v0.48.0
