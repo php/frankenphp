@@ -13,11 +13,13 @@ import (
 	"time"
 
 	"github.com/dunglas/frankenphp/internal/fastabs"
-	"github.com/dunglas/frankenphp/internal/watcher"
+	"github.com/dunglas/frankenphp/internal/state"
 )
 
 // represents a worker script and can have many threads assigned to it
 type worker struct {
+	mercureContext
+
 	name                   string
 	fileName               string
 	num                    int
@@ -36,22 +38,32 @@ type worker struct {
 var (
 	workers          []*worker
 	watcherIsEnabled bool
+	startupFailChan  chan error
 )
 
 func initWorkers(opt []workerOpt) error {
+	if len(opt) == 0 {
+		return nil
+	}
+
+	var (
+		workersReady        sync.WaitGroup
+		totalThreadsToStart int
+	)
+
 	workers = make([]*worker, 0, len(opt))
-	directoriesToWatch := getDirectoriesToWatch(opt)
-	watcherIsEnabled = len(directoriesToWatch) > 0
 
 	for _, o := range opt {
 		w, err := newWorker(o)
 		if err != nil {
 			return err
 		}
+
+		totalThreadsToStart += w.num
 		workers = append(workers, w)
 	}
 
-	var workersReady sync.WaitGroup
+	startupFailChan = make(chan error, totalThreadsToStart)
 
 	for _, w := range workers {
 		for i := 0; i < w.num; i++ {
@@ -59,20 +71,20 @@ func initWorkers(opt []workerOpt) error {
 			convertToWorkerThread(thread, w)
 
 			workersReady.Go(func() {
-				thread.state.waitFor(stateReady)
+				thread.state.WaitFor(state.Ready, state.ShuttingDown, state.Done)
 			})
 		}
 	}
 
 	workersReady.Wait()
 
-	if !watcherIsEnabled {
-		return nil
-	}
-
-	watcherIsEnabled = true
-	if err := watcher.InitWatcher(globalCtx, directoriesToWatch, RestartWorkers, globalLogger); err != nil {
-		return err
+	select {
+	case err := <-startupFailChan:
+		// at least 1 worker has failed, return an error
+		return fmt.Errorf("failed to initialize workers: %w", err)
+	default:
+		// all workers started successfully
+		startupFailChan = nil
 	}
 
 	return nil
@@ -99,7 +111,14 @@ func getWorkerByPath(path string) *worker {
 }
 
 func newWorker(o workerOpt) (*worker, error) {
-	absFileName, err := fastabs.FastAbs(o.fileName)
+	// Order is important!
+	// This order ensures that FrankenPHP started from inside a symlinked directory will properly resolve any paths.
+	// If it is started from outside a symlinked directory, it is resolved to the same path that we use in the Caddy module.
+	absFileName, err := filepath.EvalSymlinks(o.fileName)
+	if err != nil {
+		return nil, fmt.Errorf("worker filename is invalid %q: %w", o.fileName, err)
+	}
+	absFileName, err = fastabs.FastAbs(absFileName)
 	if err != nil {
 		return nil, fmt.Errorf("worker filename is invalid %q: %w", o.fileName, err)
 	}
@@ -142,6 +161,8 @@ func newWorker(o workerOpt) (*worker, error) {
 		onThreadShutdown:       o.onThreadShutdown,
 	}
 
+	w.configureMercure(&o)
+
 	w.requestOptions = append(
 		w.requestOptions,
 		WithRequestDocumentRoot(filepath.Dir(o.fileName), false),
@@ -161,39 +182,43 @@ func DrainWorkers() {
 }
 
 func drainWorkerThreads() []*phpThread {
-	ready := sync.WaitGroup{}
-	drainedThreads := make([]*phpThread, 0)
+	var (
+		ready          sync.WaitGroup
+		drainedThreads []*phpThread
+	)
+
 	for _, worker := range workers {
 		worker.threadMutex.RLock()
 		ready.Add(len(worker.threads))
+
 		for _, thread := range worker.threads {
-			if !thread.state.requestSafeStateChange(stateRestarting) {
+			if !thread.state.RequestSafeStateChange(state.Restarting) {
 				ready.Done()
+
 				// no state change allowed == thread is shutting down
-				// we'll proceed to restart all other threads anyways
+				// we'll proceed to restart all other threads anyway
 				continue
 			}
+
 			close(thread.drainChan)
 			drainedThreads = append(drainedThreads, thread)
+
 			go func(thread *phpThread) {
-				thread.state.waitFor(stateYielding)
+				thread.state.WaitFor(state.Yielding)
 				ready.Done()
 			}(thread)
 		}
+
 		worker.threadMutex.RUnlock()
 	}
+
 	ready.Wait()
 
 	return drainedThreads
 }
 
-func drainWatcher() {
-	if watcherIsEnabled {
-		watcher.DrainWatcher()
-	}
-}
-
 // RestartWorkers attempts to restart all workers gracefully
+// All workers must be restarted at the same time to prevent issues with opcache resetting.
 func RestartWorkers() {
 	// disallow scaling threads while restarting workers
 	scalingMu.Lock()
@@ -203,16 +228,8 @@ func RestartWorkers() {
 
 	for _, thread := range threadsToRestart {
 		thread.drainChan = make(chan struct{})
-		thread.state.set(stateReady)
+		thread.state.Set(state.Ready)
 	}
-}
-
-func getDirectoriesToWatch(workerOpts []workerOpt) []string {
-	directoriesToWatch := []string{}
-	for _, w := range workerOpts {
-		directoriesToWatch = append(directoriesToWatch, w.watch...)
-	}
-	return directoriesToWatch
 }
 
 func (worker *worker) attachThread(thread *phpThread) {

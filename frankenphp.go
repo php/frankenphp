@@ -251,6 +251,7 @@ func Init(options ...Option) error {
 	opt := &opt{}
 	for _, o := range options {
 		if err := o(opt); err != nil {
+			Shutdown()
 			return err
 		}
 	}
@@ -277,6 +278,7 @@ func Init(options ...Option) error {
 
 	workerThreadCount, err := calculateMaxThreads(opt)
 	if err != nil {
+		Shutdown()
 		return err
 	}
 
@@ -285,6 +287,7 @@ func Init(options ...Option) error {
 	config := Config()
 
 	if config.Version.MajorVersion < 8 || (config.Version.MajorVersion == 8 && config.Version.MinorVersion < 2) {
+		Shutdown()
 		return ErrInvalidPHPVersion
 	}
 
@@ -304,6 +307,7 @@ func Init(options ...Option) error {
 
 	mainThread, err := initPHPThreads(opt.numThreads, opt.maxThreads, opt.phpIni)
 	if err != nil {
+		Shutdown()
 		return err
 	}
 
@@ -314,6 +318,13 @@ func Init(options ...Option) error {
 	}
 
 	if err := initWorkers(opt.workers); err != nil {
+		Shutdown()
+
+		return err
+	}
+
+	if err := initWatchers(opt); err != nil {
+		Shutdown()
 		return err
 	}
 
@@ -352,7 +363,7 @@ func Shutdown() {
 		fn()
 	}
 
-	drainWatcher()
+	drainWatchers()
 	drainAutoScaling()
 	drainPHPThreads()
 
@@ -649,9 +660,28 @@ func go_read_cookies(threadIndex C.uintptr_t) *C.char {
 	return C.CString(cookie)
 }
 
+func getLogger(threadIndex C.uintptr_t) (*slog.Logger, context.Context) {
+	ctxHolder := phpThreads[threadIndex]
+	if ctxHolder == nil {
+		return globalLogger, globalCtx
+	}
+
+	ctx := ctxHolder.context()
+	if ctxHolder.handler == nil {
+		return globalLogger, ctx
+	}
+
+	fCtx := ctxHolder.frankenPHPContext()
+	if fCtx == nil || fCtx.logger == nil {
+		return globalLogger, ctx
+	}
+
+	return fCtx.logger, ctx
+}
+
 //export go_log
 func go_log(threadIndex C.uintptr_t, message *C.char, level C.int) {
-	ctx := phpThreads[threadIndex].context()
+	logger, ctx := getLogger(threadIndex)
 
 	m := C.GoString(message)
 	le := syslogLevelInfo
@@ -662,24 +692,60 @@ func go_log(threadIndex C.uintptr_t, message *C.char, level C.int) {
 
 	switch le {
 	case syslogLevelEmerg, syslogLevelAlert, syslogLevelCrit, syslogLevelErr:
-		if globalLogger.Enabled(ctx, slog.LevelError) {
-			globalLogger.LogAttrs(ctx, slog.LevelError, m, slog.String("syslog_level", syslogLevel(level).String()))
+		if logger.Enabled(ctx, slog.LevelError) {
+			logger.LogAttrs(ctx, slog.LevelError, m, slog.String("syslog_level", le.String()))
 		}
 
 	case syslogLevelWarn:
-		if globalLogger.Enabled(ctx, slog.LevelWarn) {
-			globalLogger.LogAttrs(ctx, slog.LevelWarn, m, slog.String("syslog_level", syslogLevel(level).String()))
+		if logger.Enabled(ctx, slog.LevelWarn) {
+			logger.LogAttrs(ctx, slog.LevelWarn, m, slog.String("syslog_level", le.String()))
 		}
+
 	case syslogLevelDebug:
-		if globalLogger.Enabled(ctx, slog.LevelDebug) {
-			globalLogger.LogAttrs(ctx, slog.LevelDebug, m, slog.String("syslog_level", syslogLevel(level).String()))
+		if logger.Enabled(ctx, slog.LevelDebug) {
+			logger.LogAttrs(ctx, slog.LevelDebug, m, slog.String("syslog_level", le.String()))
 		}
 
 	default:
-		if globalLogger.Enabled(ctx, slog.LevelInfo) {
-			globalLogger.LogAttrs(ctx, slog.LevelInfo, m, slog.String("syslog_level", syslogLevel(level).String()))
+		if logger.Enabled(ctx, slog.LevelInfo) {
+			logger.LogAttrs(ctx, slog.LevelInfo, m, slog.String("syslog_level", le.String()))
 		}
 	}
+}
+
+//export go_log_attrs
+func go_log_attrs(threadIndex C.uintptr_t, message *C.zend_string, cLevel C.zend_long, cAttrs *C.zval) *C.char {
+	logger, ctx := getLogger(threadIndex)
+
+	level := slog.Level(cLevel)
+
+	if !logger.Enabled(ctx, level) {
+		return nil
+	}
+
+	var attrs map[string]any
+
+	if cAttrs != nil {
+		var err error
+		if attrs, err = GoMap[any](unsafe.Pointer(*(**C.zend_array)(unsafe.Pointer(&cAttrs.value[0])))); err != nil {
+			// PHP exception message.
+			return C.CString("Failed to log message: converting attrs: " + err.Error())
+		}
+	}
+
+	logger.LogAttrs(ctx, level, GoString(unsafe.Pointer(message)), mapToAttr(attrs)...)
+
+	return nil
+}
+
+func mapToAttr(input map[string]any) []slog.Attr {
+	out := make([]slog.Attr, 0, len(input))
+
+	for key, val := range input {
+		out = append(out, slog.Any(key, val))
+	}
+
+	return out
 }
 
 //export go_is_context_done
@@ -739,5 +805,6 @@ func resetGlobals() {
 	globalCtx = context.Background()
 	globalLogger = slog.Default()
 	workers = nil
+	watcherIsEnabled = false
 	globalMu.Unlock()
 }

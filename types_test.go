@@ -1,7 +1,6 @@
 package frankenphp
 
 import (
-	"io"
 	"log/slog"
 	"testing"
 
@@ -13,7 +12,8 @@ import (
 // this is necessary if tests make use of PHP's internal allocation
 func testOnDummyPHPThread(t *testing.T, test func()) {
 	t.Helper()
-	globalLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	globalLogger = slog.Default()
 	_, err := initPHPThreads(1, 1, nil) // boot 1 thread
 	assert.NoError(t, err)
 	handler := convertToTaskThread(phpThreads[0])
@@ -29,9 +29,10 @@ func TestGoString(t *testing.T) {
 	testOnDummyPHPThread(t, func() {
 		originalString := "Hello, World!"
 
-		convertedString := GoString(PHPString(originalString, false))
+		phpString := PHPString(originalString, false)
+		defer zendStringRelease(phpString)
 
-		assert.Equal(t, originalString, convertedString, "string -> zend_string -> string should yield an equal string")
+		assert.Equal(t, originalString, GoString(phpString), "string -> zend_string -> string should yield an equal string")
 	})
 }
 
@@ -42,7 +43,9 @@ func TestPHPMap(t *testing.T) {
 			"foo2": "bar2",
 		}
 
-		convertedMap, err := GoMap[string](PHPMap(originalMap))
+		phpArray := PHPMap(originalMap)
+		defer zendHashDestroy(phpArray)
+		convertedMap, err := GoMap[string](phpArray)
 		require.NoError(t, err)
 
 		assert.Equal(t, originalMap, convertedMap, "associative array should be equal after conversion")
@@ -59,7 +62,9 @@ func TestOrderedPHPAssociativeArray(t *testing.T) {
 			Order: []string{"foo2", "foo1"},
 		}
 
-		convertedArray, err := GoAssociativeArray[string](PHPAssociativeArray(originalArray))
+		phpArray := PHPAssociativeArray(originalArray)
+		defer zendHashDestroy(phpArray)
+		convertedArray, err := GoAssociativeArray[string](phpArray)
 		require.NoError(t, err)
 
 		assert.Equal(t, originalArray, convertedArray, "associative array should be equal after conversion")
@@ -70,7 +75,9 @@ func TestPHPPackedArray(t *testing.T) {
 	testOnDummyPHPThread(t, func() {
 		originalSlice := []string{"bar1", "bar2"}
 
-		convertedSlice, err := GoPackedArray[string](PHPPackedArray(originalSlice))
+		phpArray := PHPPackedArray(originalSlice)
+		defer zendHashDestroy(phpArray)
+		convertedSlice, err := GoPackedArray[string](phpArray)
 		require.NoError(t, err)
 
 		assert.Equal(t, originalSlice, convertedSlice, "slice should be equal after conversion")
@@ -85,7 +92,9 @@ func TestPHPPackedArrayToGoMap(t *testing.T) {
 			"1": "bar2",
 		}
 
-		convertedMap, err := GoMap[string](PHPPackedArray(originalSlice))
+		phpArray := PHPPackedArray(originalSlice)
+		defer zendHashDestroy(phpArray)
+		convertedMap, err := GoMap[string](phpArray)
 		require.NoError(t, err)
 
 		assert.Equal(t, expectedMap, convertedMap, "convert a packed to an associative array")
@@ -103,7 +112,9 @@ func TestPHPAssociativeArrayToPacked(t *testing.T) {
 		}
 		expectedSlice := []string{"bar1", "bar2"}
 
-		convertedSlice, err := GoPackedArray[string](PHPAssociativeArray(originalArray))
+		phpArray := PHPAssociativeArray(originalArray)
+		defer zendHashDestroy(phpArray)
+		convertedSlice, err := GoPackedArray[string](phpArray)
 		require.NoError(t, err)
 
 		assert.Equal(t, expectedSlice, convertedSlice, "convert an associative array to a slice")
@@ -126,7 +137,9 @@ func TestNestedMixedArray(t *testing.T) {
 			},
 		}
 
-		convertedArray, err := GoMap[any](PHPMap(originalArray))
+		phpArray := PHPMap(originalArray)
+		defer zendHashDestroy(phpArray)
+		convertedArray, err := GoMap[any](phpArray)
 		require.NoError(t, err)
 
 		assert.Equal(t, originalArray, convertedArray, "nested mixed array should be equal after conversion")

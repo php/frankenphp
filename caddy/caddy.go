@@ -12,7 +12,7 @@ import (
 
 const (
 	defaultDocumentRoot = "public"
-	defaultWatchPattern = "./**/*.{php,yaml,yml,twig,env}"
+	defaultWatchPattern = "./**/*.{env,php,twig,yaml,yml}"
 )
 
 func init() {

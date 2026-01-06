@@ -29,7 +29,7 @@ Depending on your installation method, FrankenPHP and the PHP interpreter will l
 FrankenPHP:
 
 - `/etc/frankenphp/Caddyfile`: the main configuration file
-- `/etc/frankenphp/caddy.d/*.caddy`: additional configuration files that are loaded automatically
+- `/etc/frankenphp/Caddyfile.d/*.caddyfile`: additional configuration files that are loaded automatically
 
 PHP:
 
@@ -53,13 +53,12 @@ RUN cp $PHP_INI_DIR/php.ini-development $PHP_INI_DIR/php.ini
 FrankenPHP:
 
 - `/etc/frankenphp/Caddyfile`: the main configuration file
-- `/etc/frankenphp/caddy.d/*.caddy`: additional configuration files that are loaded automatically
+- `/etc/frankenphp/Caddyfile.d/*.caddyfile`: additional configuration files that are loaded automatically
 
 PHP:
 
-- `php.ini`: `/etc/frankenphp/php.ini` (a `php.ini` file with production presets is provided by default)
-- additional configuration files: `/etc/frankenphp/php.d/*.ini`
-- PHP extensions: `/usr/lib/frankenphp/modules/`
+- `php.ini`: `/etc/php-zts/php.ini` (a `php.ini` file with production presets is provided by default)
+- additional configuration files: `/etc/php-zts/conf.d/*.ini`
 
 ## Static binary
 
@@ -214,8 +213,10 @@ This is useful for development environments.
 }
 ```
 
-If the `watch` directory is not specified, it will fall back to `./**/*.{php,yaml,yml,twig,env}`,
-which watches all `.php`, `.yaml`, `.yml`, `.twig` and `.env` files in the directory and subdirectories
+This feature is often used in combination with [hot reload](hot-reload.md).
+
+If the `watch` directory is not specified, it will fall back to `./**/*.{env,php,twig,yaml,yml}`,
+which watches all `.env`, `.php`, `.twig`, `.yaml` and `.yml` files in the directory and subdirectories
 where the FrankenPHP process was started. You can instead also specify one or more directories via a
 [shell filename pattern](https://pkg.go.dev/path/filepath#Match):
 
@@ -240,7 +241,7 @@ where the FrankenPHP process was started. You can instead also specify one or mo
 
 The file watcher is based on [e-dant/watcher](https://github.com/e-dant/watcher).
 
-## Matching the worker to a path
+## Matching the Worker To a Path
 
 In traditional PHP applications, scripts are always placed in the public directory.
 This is also true for worker scripts, which are treated like any other PHP script.

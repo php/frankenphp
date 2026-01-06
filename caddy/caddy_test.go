@@ -1362,7 +1362,7 @@ func TestWorkerMatchDirective(t *testing.T) {
 		}
 		`, "caddyfile")
 
-	// worker is outside of public directory, match anyways
+	// worker is outside public directory, match anyway
 	tester.AssertGetResponse("http://localhost:"+testPort+"/matched-path", http.StatusOK, "requests:1")
 	tester.AssertGetResponse("http://localhost:"+testPort+"/matched-path/anywhere", http.StatusOK, "requests:2")
 
@@ -1471,4 +1471,282 @@ func TestDd(t *testing.T) {
 		http.StatusInternalServerError,
 		"dump123",
 	)
+}
+
+func TestLog(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	tester.InitServer(`
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		http://localhost:`+testPort+` {
+			log {
+				output stdout
+				format json
+			}
+
+			root ../testdata
+			php_server {
+				worker ../testdata/log-frankenphp_log.php
+			}
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse(
+		"http://localhost:"+testPort+"/log-frankenphp_log.php?i=0",
+		http.StatusOK,
+		"",
+	)
+}
+
+// TestSymlinkWorkerPaths tests different ways to reference worker scripts in symlinked directories
+func TestSymlinkWorkerPaths(t *testing.T) {
+	cwd, _ := os.Getwd()
+	publicDir := filepath.Join(cwd, "..", "testdata", "symlinks", "public")
+
+	t.Run("NeighboringWorkerScript", func(t *testing.T) {
+		// Scenario: neighboring worker script
+		// Given frankenphp located in the test folder
+		// When I execute `frankenphp php-server --listen localhost:8080 -w index.php` from `public`
+		// Then I expect to see the worker script executed successfully
+		tester := caddytest.NewTester(t)
+		tester.InitServer(`
+			{
+				skip_install_trust
+				admin localhost:2999
+				http_port `+testPort+`
+
+				frankenphp {
+					worker `+publicDir+`/index.php 1
+				}
+			}
+
+			localhost:`+testPort+` {
+				route {
+					php {
+						root `+publicDir+`
+						resolve_root_symlink true
+					}
+				}
+			}
+			`, "caddyfile")
+
+		tester.AssertGetResponse("http://localhost:"+testPort+"/index.php", http.StatusOK, "Request: 0\n")
+	})
+
+	t.Run("NestedWorkerScript", func(t *testing.T) {
+		// Scenario: nested worker script
+		// Given frankenphp located in the test folder
+		// When I execute `frankenphp --listen localhost:8080 -w nested/index.php` from `public`
+		// Then I expect to see the worker script executed successfully
+		tester := caddytest.NewTester(t)
+		tester.InitServer(`
+			{
+				skip_install_trust
+				admin localhost:2999
+				http_port `+testPort+`
+
+				frankenphp {
+					worker `+publicDir+`/nested/index.php 1
+				}
+			}
+
+			localhost:`+testPort+` {
+				route {
+					php {
+						root `+publicDir+`
+						resolve_root_symlink true
+					}
+				}
+			}
+			`, "caddyfile")
+
+		tester.AssertGetResponse("http://localhost:"+testPort+"/nested/index.php", http.StatusOK, "Nested request: 0\n")
+	})
+
+	t.Run("OutsideSymlinkedFolder", func(t *testing.T) {
+		// Scenario: outside the symlinked folder
+		// Given frankenphp located in the root folder
+		// When I execute `frankenphp --listen localhost:8080 -w public/index.php` from the root folder
+		// Then I expect to see the worker script executed successfully
+		tester := caddytest.NewTester(t)
+		tester.InitServer(`
+			{
+				skip_install_trust
+				admin localhost:2999
+				http_port `+testPort+`
+
+				frankenphp {
+					worker {
+						name outside_worker
+						file `+publicDir+`/index.php
+						num 1
+					}
+				}
+			}
+
+			localhost:`+testPort+` {
+				route {
+					php {
+						root `+publicDir+`
+						resolve_root_symlink true
+					}
+				}
+			}
+			`, "caddyfile")
+
+		tester.AssertGetResponse("http://localhost:"+testPort+"/index.php", http.StatusOK, "Request: 0\n")
+	})
+
+	t.Run("SpecifiedRootDirectory", func(t *testing.T) {
+		// Scenario: specified root directory
+		// Given frankenphp located in the root folder
+		// When I execute `frankenphp --listen localhost:8080 -w public/index.php -r public` from the root folder
+		// Then I expect to see the worker script executed successfully
+		tester := caddytest.NewTester(t)
+		tester.InitServer(`
+			{
+				skip_install_trust
+				admin localhost:2999
+				http_port `+testPort+`
+
+				frankenphp {
+					worker {
+						name specified_root_worker
+						file `+publicDir+`/index.php
+						num 1
+					}
+				}
+			}
+
+			localhost:`+testPort+` {
+				route {
+					php {
+						root `+publicDir+`
+						resolve_root_symlink true
+					}
+				}
+			}
+			`, "caddyfile")
+
+		tester.AssertGetResponse("http://localhost:"+testPort+"/index.php", http.StatusOK, "Request: 0\n")
+	})
+}
+
+// TestSymlinkResolveRoot tests the resolve_root_symlink directive behavior
+func TestSymlinkResolveRoot(t *testing.T) {
+	cwd, _ := os.Getwd()
+	testDir := filepath.Join(cwd, "..", "testdata", "symlinks", "test")
+	publicDir := filepath.Join(cwd, "..", "testdata", "symlinks", "public")
+
+	t.Run("ResolveRootSymlink", func(t *testing.T) {
+		// Tests that resolve_root_symlink directive works correctly
+		tester := caddytest.NewTester(t)
+		tester.InitServer(`
+			{
+				skip_install_trust
+				admin localhost:2999
+				http_port `+testPort+`
+
+				frankenphp {
+					worker `+publicDir+`/document-root.php 1
+				}
+			}
+
+			localhost:`+testPort+` {
+				route {
+					php {
+						root `+publicDir+`
+						resolve_root_symlink true
+					}
+				}
+			}
+			`, "caddyfile")
+
+		// DOCUMENT_ROOT should be the resolved path (testDir)
+		tester.AssertGetResponse("http://localhost:"+testPort+"/document-root.php", http.StatusOK, "DOCUMENT_ROOT="+testDir+"\n")
+	})
+
+	t.Run("NoResolveRootSymlink", func(t *testing.T) {
+		// Tests that symlinks are preserved when resolve_root_symlink is false (non-worker mode)
+		tester := caddytest.NewTester(t)
+		tester.InitServer(`
+			{
+				skip_install_trust
+				admin localhost:2999
+				http_port `+testPort+`
+			}
+
+			localhost:`+testPort+` {
+				route {
+					php {
+						root `+publicDir+`
+						resolve_root_symlink false
+					}
+				}
+			}
+			`, "caddyfile")
+
+		// DOCUMENT_ROOT should be the symlink path (publicDir) when resolve_root_symlink is false
+		tester.AssertGetResponse("http://localhost:"+testPort+"/document-root.php", http.StatusOK, "DOCUMENT_ROOT="+publicDir+"\n")
+	})
+}
+
+// TestSymlinkWorkerBehavior tests worker behavior with symlinked directories
+func TestSymlinkWorkerBehavior(t *testing.T) {
+	cwd, _ := os.Getwd()
+	publicDir := filepath.Join(cwd, "..", "testdata", "symlinks", "public")
+
+	t.Run("WorkerScriptFailsWithoutWorkerMode", func(t *testing.T) {
+		// Tests that accessing a worker-only script without configuring it as a worker actually results in an error
+		tester := caddytest.NewTester(t)
+		tester.InitServer(`
+			{
+				skip_install_trust
+				admin localhost:2999
+				http_port `+testPort+`
+			}
+
+			localhost:`+testPort+` {
+				route {
+					php {
+						root `+publicDir+`
+					}
+				}
+			}
+			`, "caddyfile")
+
+		// Accessing the worker script without worker configuration MUST fail
+		// The script checks $_SERVER['FRANKENPHP_WORKER'] and dies if not set
+		tester.AssertGetResponse("http://localhost:"+testPort+"/index.php", http.StatusOK, "Error: This script must be run in worker mode (FRANKENPHP_WORKER not set to '1')\n")
+	})
+
+	t.Run("MultipleRequests", func(t *testing.T) {
+		// Tests that symlinked workers handle multiple requests correctly
+		tester := caddytest.NewTester(t)
+		tester.InitServer(`
+			{
+				skip_install_trust
+				admin localhost:2999
+				http_port `+testPort+`
+			}
+
+			localhost:`+testPort+` {
+				route {
+					php {
+						root `+publicDir+`
+						resolve_root_symlink true
+						worker index.php 1
+					}
+				}
+			}
+			`, "caddyfile")
+
+		// Make multiple requests - each should increment the counter
+		for i := 0; i < 5; i++ {
+			tester.AssertGetResponse("http://localhost:"+testPort+"/index.php", http.StatusOK, fmt.Sprintf("Request: %d\n", i))
+		}
+	})
 }

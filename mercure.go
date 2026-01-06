@@ -38,6 +38,7 @@ func go_mercure_publish(threadIndex C.uintptr_t, topics *C.struct__zval_struct, 
 			Type:  GoString(unsafe.Pointer(typ)),
 		},
 		Private: private,
+		Debug:   fc.logger.Enabled(ctx, slog.LevelDebug),
 	}
 
 	zvalType := C.zval_get_type(topics)
@@ -45,7 +46,7 @@ func go_mercure_publish(threadIndex C.uintptr_t, topics *C.struct__zval_struct, 
 	case C.IS_STRING:
 		u.Topics = []string{GoString(unsafe.Pointer(*(**C.zend_string)(unsafe.Pointer(&topics.value[0]))))}
 	case C.IS_ARRAY:
-		ts, err := GoPackedArray[string](unsafe.Pointer(topics))
+		ts, err := GoPackedArray[string](unsafe.Pointer(*(**C.zend_array)(unsafe.Pointer(&topics.value[0]))))
 		if err != nil {
 			if fc.logger.Enabled(ctx, slog.LevelError) {
 				fc.logger.LogAttrs(ctx, slog.LevelError, "invalid topics type", slog.Any("error", err))
@@ -71,10 +72,29 @@ func go_mercure_publish(threadIndex C.uintptr_t, topics *C.struct__zval_struct, 
 	return (*C.zend_string)(PHPString(u.ID, false)), 0
 }
 
+func (w *worker) configureMercure(o *workerOpt) {
+	if o.mercureHub == nil {
+		return
+	}
+
+	w.mercureHub = o.mercureHub
+}
+
 // WithMercureHub sets the mercure.Hub to use to publish updates
 func WithMercureHub(hub *mercure.Hub) RequestOption {
 	return func(o *frankenPHPContext) error {
 		o.mercureHub = hub
+
+		return nil
+	}
+}
+
+// WithWorkerMercureHub sets the mercure.Hub in the worker script and used to dispatch hot reloading-related mercure.Update.
+func WithWorkerMercureHub(hub *mercure.Hub) WorkerOption {
+	return func(w *workerOpt) error {
+		w.mercureHub = hub
+
+		w.requestOptions = append(w.requestOptions, WithMercureHub(hub))
 
 		return nil
 	}

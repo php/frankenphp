@@ -11,10 +11,10 @@ import (
 )
 
 var (
-	paramTypes     = []phpType{phpString, phpInt, phpFloat, phpBool, phpArray, phpObject, phpMixed}
+	paramTypes     = []phpType{phpString, phpInt, phpFloat, phpBool, phpArray, phpObject, phpMixed, phpCallable}
 	returnTypes    = []phpType{phpVoid, phpString, phpInt, phpFloat, phpBool, phpArray, phpObject, phpMixed, phpNull, phpTrue, phpFalse}
 	propTypes      = []phpType{phpString, phpInt, phpFloat, phpBool, phpArray, phpObject, phpMixed}
-	supportedTypes = []phpType{phpString, phpInt, phpFloat, phpBool, phpArray, phpMixed}
+	supportedTypes = []phpType{phpString, phpInt, phpFloat, phpBool, phpArray, phpMixed, phpCallable}
 
 	functionNameRegex  = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 	parameterNameRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
@@ -160,8 +160,10 @@ func (v *Validator) validateGoFunctionSignatureWithOptions(phpFunc phpFunction, 
 		effectiveGoParamCount = goParamCount - 1
 	}
 
-	if len(phpFunc.Params) != effectiveGoParamCount {
-		return fmt.Errorf("parameter count mismatch: PHP function has %d parameters but Go function has %d", len(phpFunc.Params), effectiveGoParamCount)
+	expectedGoParams := len(phpFunc.Params)
+
+	if expectedGoParams != effectiveGoParamCount {
+		return fmt.Errorf("parameter count mismatch: PHP function has %d parameters (expecting %d Go parameters) but Go function has %d", len(phpFunc.Params), expectedGoParams, effectiveGoParamCount)
 	}
 
 	if goFunc.Type.Params != nil && len(phpFunc.Params) > 0 {
@@ -203,13 +205,17 @@ func (v *Validator) phpTypeToGoType(t phpType, isNullable bool) string {
 		baseType = "float64"
 	case phpBool:
 		baseType = "bool"
-	case phpArray, phpMixed:
+	case phpArray:
+		baseType = "*C.zend_array"
+	case phpMixed:
+		baseType = "*C.zval"
+	case phpCallable:
 		baseType = "*C.zval"
 	default:
 		baseType = "any"
 	}
 
-	if isNullable && t != phpString && t != phpArray {
+	if isNullable && t != phpString && t != phpArray && t != phpCallable {
 		return "*" + baseType
 	}
 

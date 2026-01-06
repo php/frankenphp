@@ -61,6 +61,53 @@ func TestValidateFunction(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name: "valid function with array parameter",
+			function: phpFunction{
+				Name:       "arrayFunction",
+				ReturnType: "array",
+				Params: []phpParameter{
+					{Name: "items", PhpType: phpArray},
+					{Name: "filter", PhpType: phpString},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "valid function with nullable array parameter",
+			function: phpFunction{
+				Name:       "nullableArrayFunction",
+				ReturnType: "string",
+				Params: []phpParameter{
+					{Name: "items", PhpType: phpArray, IsNullable: true},
+					{Name: "name", PhpType: phpString},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "valid function with callable parameter",
+			function: phpFunction{
+				Name:       "callableFunction",
+				ReturnType: "array",
+				Params: []phpParameter{
+					{Name: "data", PhpType: phpArray},
+					{Name: "callback", PhpType: phpCallable},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "valid function with nullable callable parameter",
+			function: phpFunction{
+				Name:       "nullableCallableFunction",
+				ReturnType: "string",
+				Params: []phpParameter{
+					{Name: "callback", PhpType: phpCallable, IsNullable: true},
+				},
+			},
+			expectError: false,
+		},
+		{
 			name: "empty function name",
 			function: phpFunction{
 				Name:       "",
@@ -305,6 +352,23 @@ func TestValidateParameter(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name: "valid callable parameter",
+			param: phpParameter{
+				Name:    "callbackParam",
+				PhpType: phpCallable,
+			},
+			expectError: false,
+		},
+		{
+			name: "valid nullable callable parameter",
+			param: phpParameter{
+				Name:       "nullableCallbackParam",
+				PhpType:    "callable",
+				IsNullable: true,
+			},
+			expectError: false,
+		},
+		{
 			name: "empty parameter name",
 			param: phpParameter{
 				Name:    "",
@@ -485,6 +549,28 @@ func TestValidateTypes(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name: "valid callable parameter",
+			function: phpFunction{
+				Name:       "callableFunction",
+				ReturnType: "array",
+				Params: []phpParameter{
+					{Name: "callbackParam", PhpType: phpCallable},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "valid nullable callable parameter",
+			function: phpFunction{
+				Name:       "nullableCallableFunction",
+				ReturnType: "string",
+				Params: []phpParameter{
+					{Name: "callbackParam", PhpType: phpCallable, IsNullable: true},
+				},
+			},
+			expectError: false,
+		},
+		{
 			name: "invalid object parameter",
 			function: phpFunction{
 				Name:       "objectFunction",
@@ -600,7 +686,7 @@ func TestValidateGoFunctionSignature(t *testing.T) {
 }`,
 			},
 			expectError: true,
-			errorMsg:    "parameter count mismatch: PHP function has 2 parameters but Go function has 1",
+			errorMsg:    "parameter count mismatch: PHP function has 2 parameters (expecting 2 Go parameters) but Go function has 1",
 		},
 		{
 			name: "parameter type mismatch",
@@ -669,7 +755,7 @@ func TestValidateGoFunctionSignature(t *testing.T) {
 				Params: []phpParameter{
 					{Name: "items", PhpType: phpArray},
 				},
-				GoFunction: `func arrayFunc(items *C.zval) unsafe.Pointer {
+				GoFunction: `func arrayFunc(items *C.zend_array) unsafe.Pointer {
 	return nil
 }`,
 			},
@@ -684,7 +770,7 @@ func TestValidateGoFunctionSignature(t *testing.T) {
 					{Name: "items", PhpType: phpArray, IsNullable: true},
 					{Name: "name", PhpType: phpString},
 				},
-				GoFunction: `func nullableArrayFunc(items *C.zval, name *C.zend_string) unsafe.Pointer {
+				GoFunction: `func nullableArrayFunc(items *C.zend_array, name *C.zend_string) unsafe.Pointer {
 	return nil
 }`,
 			},
@@ -700,7 +786,51 @@ func TestValidateGoFunctionSignature(t *testing.T) {
 					{Name: "filter", PhpType: phpString},
 					{Name: "limit", PhpType: phpInt},
 				},
-				GoFunction: `func mixedFunc(data *C.zval, filter *C.zend_string, limit int64) unsafe.Pointer {
+				GoFunction: `func mixedFunc(data *C.zend_array, filter *C.zend_string, limit int64) unsafe.Pointer {
+	return nil
+}`,
+			},
+			expectError: false,
+		},
+		{
+			name: "valid callable parameter",
+			phpFunc: phpFunction{
+				Name:       "callableFunc",
+				ReturnType: "array",
+				Params: []phpParameter{
+					{Name: "callback", PhpType: phpCallable},
+				},
+				GoFunction: `func callableFunc(callback *C.zval) unsafe.Pointer {
+	return nil
+}`,
+			},
+			expectError: false,
+		},
+		{
+			name: "valid nullable callable parameter",
+			phpFunc: phpFunction{
+				Name:       "nullableCallableFunc",
+				ReturnType: "string",
+				Params: []phpParameter{
+					{Name: "callback", PhpType: phpCallable, IsNullable: true},
+				},
+				GoFunction: `func nullableCallableFunc(callback *C.zval) unsafe.Pointer {
+	return nil
+}`,
+			},
+			expectError: false,
+		},
+		{
+			name: "mixed callable and other parameters",
+			phpFunc: phpFunction{
+				Name:       "mixedCallableFunc",
+				ReturnType: "array",
+				Params: []phpParameter{
+					{Name: "data", PhpType: phpArray},
+					{Name: "callback", PhpType: phpCallable},
+					{Name: "options", PhpType: "int"},
+				},
+				GoFunction: `func mixedCallableFunc(data *C.zend_array, callback *C.zval, options int64) unsafe.Pointer {
 	return nil
 }`,
 			},
@@ -737,8 +867,10 @@ func TestPhpTypeToGoType(t *testing.T) {
 		{"float", true, "*float64"},
 		{"bool", false, "bool"},
 		{"bool", true, "*bool"},
-		{"array", false, "*C.zval"},
-		{"array", true, "*C.zval"},
+		{"array", false, "*C.zend_array"},
+		{"array", true, "*C.zend_array"},
+		{"callable", false, "*C.zval"},
+		{"callable", true, "*C.zval"},
 		{"unknown", false, "any"},
 	}
 

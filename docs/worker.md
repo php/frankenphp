@@ -35,7 +35,12 @@ The following command will trigger a restart if any file ending in `.php` in the
 frankenphp php-server --worker /path/to/your/worker/script.php --watch="/path/to/your/app/**/*.php"
 ```
 
+This feature is often used in combination with [hot reloading](hot-reload.md).
+
 ## Symfony Runtime
+
+> [!TIP]
+> The following section is only necessary prior to Symfony 7.4, where native support for FrankenPHP worker mode was introduced.
 
 The worker mode of FrankenPHP is supported by the [Symfony Runtime Component](https://symfony.com/doc/current/components/runtime.html).
 To start any Symfony application in a worker, install the FrankenPHP package of [PHP Runtime](https://github.com/php-runtime/runtime):
