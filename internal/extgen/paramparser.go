@@ -88,9 +88,7 @@ func (pp *ParameterParser) getDefaultValue(param phpParameter, fallback string) 
 
 func (pp *ParameterParser) generateParamParsing(params []phpParameter, requiredCount int) string {
 	if len(params) == 0 {
-		return `    if (zend_parse_parameters_none() == FAILURE) {
-        RETURN_THROWS();
-    }`
+		return `    ZEND_PARSE_PARAMETERS_NONE();`
 	}
 
 	var builder strings.Builder
