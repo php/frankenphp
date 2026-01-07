@@ -6,7 +6,7 @@ FrankenPHP позволяет встраивать исходный код и р
 
 Подробнее об этой функции [в презентации Кевина на SymfonyCon 2023](https://dunglas.dev/2023/12/php-and-symfony-apps-as-standalone-binaries/).
 
-Для встраивания Laravel-приложений ознакомьтесь с [документацией](laravel.md#laravel-приложения-как-автономные-бинарные-файлы).
+Для встраивания Laravel-приложений ознакомьтесь с [этой специальной записью в документации](laravel.md#laravel-apps-as-standalone-binaries).
 
 ## Подготовка приложения
 
@@ -19,19 +19,20 @@ FrankenPHP позволяет встраивать исходный код и р
 - Включить продакшн-режим приложения (если он есть).
 - Удалить ненужные файлы, такие как `.git` или тесты, чтобы уменьшить размер итогового бинарного файла.
 
-Для приложения на Symfony это может выглядеть так:
+Например, для приложения на Symfony вы можете использовать следующие команды:
 
 ```console
-# Экспорт проекта, чтобы избавиться от .git/ и других ненужных файлов
+# Экспорт проекта, чтобы избавиться от .git/ и т.д.
 mkdir $TMPDIR/my-prepared-app
 git archive HEAD | tar -x -C $TMPDIR/my-prepared-app
 cd $TMPDIR/my-prepared-app
 
-# Установить соответствующие переменные окружения
+# Установить правильные переменные окружения
 echo APP_ENV=prod > .env.local
 echo APP_DEBUG=0 >> .env.local
 
-# Удалить тесты и другие ненужные файлы
+# Удалить тесты и другие ненужные файлы, чтобы сэкономить место
+# В качестве альтернативы, добавьте эти файлы с атрибутом export-ignore в ваш файл .gitattributes
 rm -Rf tests/
 
 # Установить зависимости
@@ -43,7 +44,8 @@ composer dump-env prod
 
 ### Настройка конфигурации
 
-Чтобы настроить [конфигурацию](config.md), вы можете разместить файлы `Caddyfile` и `php.ini` в основной директории приложения (`$TMPDIR/my-prepared-app` в примере выше).
+Чтобы настроить [конфигурацию](config.md), вы можете поместить файл `Caddyfile`, а также файл `php.ini`
+в основную директорию приложения для встраивания (`$TMPDIR/my-prepared-app` в предыдущем примере).
 
 ## Создание бинарного файла для Linux
 
@@ -53,23 +55,23 @@ composer dump-env prod
 
    ```dockerfile
    FROM --platform=linux/amd64 dunglas/frankenphp:static-builder-gnu
-   # Если вы планируете запускать бинарный файл на системах с musl-libc, используйте static-builder-musl
+   # Если вы планируете запускать бинарный файл на системах с musl-libc, используйте static-builder-musl вместо него
 
-   # Скопировать приложение
+   # Скопировать ваше приложение
    WORKDIR /go/src/app/dist/app
    COPY . .
 
-   # Сборка статического бинарного файла
+   # Собрать статический бинарный файл
    WORKDIR /go/src/app/
    RUN EMBED=dist/app/ ./build-static.sh
    ```
 
    > [!CAUTION]
    >
-   > Некоторые `.dockerignore` файлы (например, [Symfony Docker `.dockerignore`](https://github.com/dunglas/symfony-docker/blob/main/.dockerignore))  
-   > игнорируют директорию `vendor/` и файлы `.env`. Перед сборкой убедитесь, что `.dockerignore` файл настроен корректно или удалён.
+   > Некоторые `.dockerignore` файлы (например, стандартные [Symfony Docker `.dockerignore`](https://github.com/dunglas/symfony-docker/blob/main/.dockerignore))
+   > будут игнорировать директорию `vendor/` и файлы `.env`. Убедитесь, что вы скорректировали или удалили файл `.dockerignore` перед сборкой.
 
-2. Соберите образ:
+2. Соберите:
 
    ```console
    docker build -t static-app -f static-build.Dockerfile .
@@ -81,7 +83,7 @@ composer dump-env prod
    docker cp $(docker create --name static-app-tmp static-app):/go/src/app/dist/frankenphp-linux-x86_64 my-app ; docker rm static-app-tmp
    ```
 
-Созданный бинарный файл сохранится в текущей директории под именем `my-app`.
+Итоговым бинарным файлом является файл с именем `my-app` в текущей директории.
 
 ## Создание бинарного файла для других ОС
 
@@ -93,11 +95,11 @@ cd frankenphp
 EMBED=/path/to/your/app ./build-static.sh
 ```
 
-Итоговый бинарный файл будет находиться в директории `dist/` под именем `frankenphp-<os>-<arch>`.
+Итоговым бинарным файлом является файл с именем `frankenphp-<os>-<arch>` в директории `dist/`.
 
 ## Использование бинарного файла
 
-Готово! Файл `my-app` (или `dist/frankenphp-<os>-<arch>` для других ОС) содержит ваше автономное приложение.
+Готово! Файл `my-app` (или `dist/frankenphp-<os>-<arch>` на других ОС) содержит ваше автономное приложение!
 
 Для запуска веб-приложения выполните:
 
@@ -105,19 +107,19 @@ EMBED=/path/to/your/app ./build-static.sh
 ./my-app php-server
 ```
 
-Если ваше приложение содержит [worker-скрипт](worker.md), запустите его следующим образом:
+Если ваше приложение содержит [worker-скрипт](worker.md), запустите воркер следующим образом:
 
 ```console
 ./my-app php-server --worker public/index.php
 ```
 
-Чтобы включить HTTPS (Let's Encrypt автоматически создаст сертификат), HTTP/2 и HTTP/3, укажите доменное имя:
+Чтобы включить HTTPS (сертификат Let's Encrypt создается автоматически), HTTP/2 и HTTP/3, укажите доменное имя:
 
 ```console
 ./my-app php-server --domain localhost
 ```
 
-Вы также можете запускать PHP-скрипты CLI, встроенные в бинарный файл:
+Вы также можете запускать PHP CLI-скрипты, встроенные в бинарный файл:
 
 ```console
 ./my-app php-cli bin/console
@@ -125,10 +127,10 @@ EMBED=/path/to/your/app ./build-static.sh
 
 ## PHP-расширения
 
-По умолчанию скрипт собирает расширения, указанные в `composer.json` вашего проекта.  
-Если файла `composer.json` нет, собираются стандартные расширения, как указано в [документации по статической сборке](static.md).
+По умолчанию скрипт собирает расширения, требуемые файлом `composer.json` вашего проекта, если таковой имеется.
+Если файла `composer.json` не существует, собираются стандартные расширения, как указано в [записи о статических сборках](static.md).
 
-Чтобы настроить список расширений, используйте переменную окружения `PHP_EXTENSIONS`.
+Чтобы настроить расширения, используйте переменную окружения `PHP_EXTENSIONS`.
 
 ## Настройка сборки
 
@@ -138,4 +140,5 @@ EMBED=/path/to/your/app ./build-static.sh
 
 На Linux созданный бинарный файл сжимается с помощью [UPX](https://upx.github.io).
 
-На Mac для уменьшения размера файла перед отправкой его можно сжать. Рекомендуется использовать `xz`.
+На Mac для уменьшения размера файла перед отправкой его можно сжать.
+Мы рекомендуем `xz`.

@@ -16,7 +16,7 @@ docker run -p 80:80 -p 443:443 -p 443:443/udp -v $PWD:/app dunglas/frankenphp
 
 或者，你可以从本地机器上使用 FrankenPHP 运行 Laravel 项目：
 
-1. [下载与你的系统相对应的二进制文件](https://github.com/php/frankenphp/releases)
+1. [下载与您的系统相对应的二进制文件](../#standalone-binary)
 2. 将以下配置添加到 Laravel 项目根目录中名为 `Caddyfile` 的文件中：
 
    ```caddyfile
@@ -30,7 +30,7 @@ docker run -p 80:80 -p 443:443 -p 443:443/udp -v $PWD:/app dunglas/frankenphp
    	root public/
    	# 启用压缩(可选)
    	encode zstd br gzip
-   	# 执行当前目录中的 PHP 文件并提供资源
+   	# 从 public/ 目录执行 PHP 文件并提供静态文件
    	php_server {
    	    try_files {path} index.php
        }
@@ -65,20 +65,22 @@ php artisan octane:frankenphp
 - `--port`: 服务器应可用的端口（默认值: `8000`）
 - `--admin-port`: 管理服务器应可用的端口（默认值: `2019`）
 - `--workers`: 应可用于处理请求的 worker 数（默认值: `auto`）
-- `--max-requests`: 在 worker 重启之前要处理的请求数（默认值: `500`）
+- `--max-requests`: 在服务器重新加载前处理的请求数量（默认值: `500`）
 - `--caddyfile`：FrankenPHP `Caddyfile` 文件的路径（默认： [Laravel Octane 中的存根 `Caddyfile`](https://github.com/laravel/octane/blob/2.x/src/Commands/stubs/Caddyfile)）
-- `--https`: 开启 HTTPS、HTTP/2 和 HTTP/3，自动生成和延长证书
+- `--https`: 开启 HTTPS、HTTP/2 和 HTTP/3，自动生成和续订证书
 - `--http-redirect`: 启用 HTTP 到 HTTPS 重定向（仅在使用 `--https` 时启用）
 - `--watch`: 修改应用程序时自动重新加载服务器
 - `--poll`: 在监视时使用文件系统轮询，以便通过网络监视文件
-- `--log-level`: 在指定日志级别或高于指定日志级别的日志消息
+- `--log-level`: 使用原生 Caddy 日志记录器，记录指定日志级别或更高级别的消息
 
 > [!TIP]
 > 要获取结构化的 JSON 日志（在使用日志分析解决方案时非常有用），请明确传递 `--log-level` 选项。
 
-你可以了解更多关于 [Laravel Octane 官方文档](https://laravel.com/docs/octane)。
+另请参阅 [如何在 Octane 中使用 Mercure](#mercure-support)。
 
-## Laravel 应用程序作为独立的可执行文件
+在 [Laravel Octane 官方文档](https://laravel.com/docs/octane) 中了解更多信息。
+
+## Laravel 应用程序作为独立二进制文件
 
 使用[FrankenPHP 的应用嵌入功能](embed.md)，可以将 Laravel 应用程序作为
 独立的二进制文件分发。
@@ -167,11 +169,39 @@ php artisan octane:frankenphp
 
 设置 `LARAVEL_STORAGE_PATH` 环境变量（例如，在 `.env` 文件中）或调用 `Illuminate\Foundation\Application::useStoragePath()` 方法以使用临时目录之外的目录。
 
+### Mercure 支持
+
+[Mercure](https://mercure.rocks) 是为您的 Laravel 应用程序添加实时功能的绝佳方式。
+FrankenPHP [开箱即用地支持 Mercure](mercure.md)。
+
+如果您未使用 [Octane](#laravel-octane)，请参阅 [Mercure 文档条目](mercure.md)。
+
+如果您正在使用 Octane，可以通过在您的 `config/octane.php` 文件中添加以下行来启用 Mercure 支持：
+
+```php
+// ...
+
+return [
+    // ...
+
+    'mercure' => [
+        'anonymous' => true,
+        'publisher_jwt' => '!ChangeThisMercureHubJWTSecretKey!',
+        'subscriber_jwt' => '!ChangeThisMercureHubJWTSecretKey!',
+    ],
+];
+```
+
+您可以在此数组中使用 [Mercure 支持的所有指令](https://mercure.rocks/docs/hub/config#directives)。
+
+要发布和订阅更新，我们推荐使用 [Laravel Mercure Broadcaster](https://github.com/mvanduijker/laravel-mercure-broadcaster) 库。
+或者，请参阅 [Mercure 文档](mercure.md) 以纯 PHP 和 JavaScript 实现。
+
 ### 使用独立二进制文件运行 Octane
 
 甚至可以将 Laravel Octane 应用打包为独立的二进制文件！
 
-为此，[正确安装 Octane](#laravel-octane) 并遵循 [前一部分](#laravel-应用程序作为独立的可执行文件) 中描述的步骤。
+为此，[正确安装 Octane](#laravel-octane) 并遵循 [独立二进制文件形式的 Laravel 应用程序](#laravel-apps-as-standalone-binaries) 中描述的步骤。
 
 然后，通过 Octane 在工作模式下启动 FrankenPHP，运行：
 

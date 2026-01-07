@@ -4,26 +4,28 @@
 
 已知以下扩展与 FrankenPHP 不兼容：
 
-| 名称                                                                                                        | 原因         | 替代方案                                                                                                             |
-| ----------------------------------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------- |
-| [imap](https://www.php.net/manual/en/imap.installation.php)                                                 | 不安全的线程 | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap) |
-| [newrelic](https://docs.newrelic.com/docs/apm/agents/php-agent/getting-started/introduction-new-relic-php/) | 不安全的线程 | -                                                                                                                    |
+| 名称                                                                                                        | 原因           | 替代方案                                                                                                             |
+| ----------------------------------------------------------------------------------------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------- |
+| [imap](https://www.php.net/manual/en/imap.installation.php)                                                 | 非线程安全     | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap) |
+| [newrelic](https://docs.newrelic.com/docs/apm/agents/php-agent/getting-started/introduction-new-relic-php/) | 非线程安全     | -                                                                                                                    |
 
 ## 有缺陷的 PHP 扩展
 
 以下扩展在与 FrankenPHP 一起使用时已知存在错误和意外行为：
 
-| 名称                                                          | 问题                                                                                                                                                                                                                                      |
-| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [ext-openssl](https://www.php.net/manual/en/book.openssl.php) | 在使用静态构建的 FrankenPHP（使用 musl libc 构建）时，在重负载下 OpenSSL 扩展可能会崩溃。一个解决方法是使用动态链接的构建（如 Docker 镜像中使用的版本）。此错误正在由 PHP 跟踪。[查看问题](https://github.com/php/php-src/issues/13648)。 |
+| 名称                                                          | 问题                                                                                                                                                                                                                   |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [ext-openssl](https://www.php.net/manual/en/book.openssl.php) | 在使用 musl libc 时，OpenSSL 扩展在重负载下可能会崩溃。在使用更流行的 GNU libc 时，不会出现此问题。此错误正在由 PHP 跟踪。[查看问题](https://github.com/php/php-src/issues/13648)。 |
 
 ## get_browser
 
-[get_browser()](https://www.php.net/manual/en/function.get-browser.php) 函数在一段时间后似乎表现不佳。解决方法是缓存（例如使用 [APCu](https://www.php.net/manual/zh/book.apcu.php)）每个 User-Agent，因为它们是不变的。
+[get_browser()](https://www.php.net/manual/en/function.get-browser.php) 函数在一段时间后似乎表现不佳。解决方法是缓存（例如使用 [APCu](https://www.php.net/manual/en/book.apcu.php)）每个 User Agent 的结果，因为它们是静态的。
 
-## 独立的二进制和基于 Alpine 的 Docker 镜像
+## 独立二进制和基于 Alpine 的 Docker 镜像
 
-独立的二进制文件和基于 Alpine 的 Docker 镜像 (`dunglas/frankenphp:*-alpine`) 使用的是 [musl libc](https://musl.libc.org/) 而不是 [glibc and friends](https://www.etalabs.net/compare_libcs.html)，为的是保持较小的二进制大小。这可能会导致一些兼容性问题。特别是，glob 标志 `GLOB_BRACE` [不可用](https://www.php.net/manual/en/function.glob.php)。
+独立二进制和基于 Alpine 的 Docker 镜像 (`dunglas/frankenphp:*-alpine`) 使用 [musl libc](https://musl.libc.org/) 而不是 [glibc and friends](https://www.etalabs.net/compare_libcs.html)，以保持较小的二进制大小。这可能会导致一些兼容性问题。特别是，glob 标志 `GLOB_BRACE` [不可用](https://www.php.net/manual/en/function.glob.php)。
+
+如果遇到问题，请优先使用 GNU 变体的静态二进制文件和基于 Debian 的 Docker 镜像。
 
 ## 在 Docker 中使用 `https://127.0.0.1`
 
@@ -32,10 +34,10 @@
 
 如果确实想使用 `127.0.0.1` 作为主机，可以通过将服务器名称设置为 `127.0.0.1` 来配置它以为其生成证书。
 
-如果你使用 Docker，因为 [Docker 网络](https://docs.docker.com/network/) 问题，只做这些是不够的。
+不幸的是，在使用 Docker 时，由于其[网络系统](https://docs.docker.com/network/)，这还不够。
 你将收到类似于以下内容的 TLS 错误 `curl: (35) LibreSSL/3.3.6: error:1404B438:SSL routines:ST_CONNECT:tlsv1 alert internal error`。
 
-如果你使用的是 Linux，解决方案是使用 [使用宿主机网络](https://docs.docker.com/network/network-tutorial-host/)：
+如果你使用的是 Linux，解决方案是使用[主机网络驱动](https://docs.docker.com/network/network-tutorial-host/)：
 
 ```console
 docker run \
@@ -45,9 +47,9 @@ docker run \
     dunglas/frankenphp
 ```
 
-Mac 和 Windows 不支持 Docker 使用宿主机网络。在这些平台上，你必须猜测容器的 IP 地址并将其包含在服务器名称中。
+主机网络驱动程序在 Mac 和 Windows 上不受支持。在这些平台上，你必须猜测容器的 IP 地址并将其包含在服务器名称中。
 
-运行 `docker network inspect bridge` 并查看 `Containers`，找到 `IPv4Address` 当前分配的最后一个 IP 地址，并增加 1。如果没有容器正在运行，则第一个分配的 IP 地址通常为 `172.17.0.2`。
+运行 `docker network inspect bridge` 并查看 `Containers` 键，以找到 `IPv4Address` 键下当前分配的最后一个 IP 地址，并将其增加一。如果没有容器正在运行，则第一个分配的 IP 地址通常为 `172.17.0.2`。
 
 然后将其包含在 `SERVER_NAME` 环境变量中：
 
@@ -108,9 +110,9 @@ export PHP_BINARY=/usr/local/bin/php
 composer install
 ```
 
-## 使用静态二进制文件排查 TLS/SSL 问题
+## 排查静态二进制文件的 TLS/SSL 问题
 
-在使用静态二进制文件时，您可能会遇到以下与TLS相关的错误，例如在使用STARTTLS发送电子邮件时：
+在使用静态二进制文件时，您可能会遇到以下与 TLS 相关的错误，例如在使用 STARTTLS 发送电子邮件时：
 
 ```text
 Unable to connect with STARTTLS: stream_socket_enable_crypto(): SSL operation failed with code 5. OpenSSL Error messages:
@@ -127,10 +129,10 @@ error:0A000086:SSL routines::certificate verify failed
 
 > [!WARNING]
 >
-> Web 和命令行界面可能有不同的设置。
-> 确保在适当的上下文中运行 `openssl_get_cert_locations()`。
+> Web 和 CLI 上下文可能有不同的设置。
+> 请务必在适当的上下文中运行 `openssl_get_cert_locations()`。
 
-[从Mozilla提取的CA证书可以在curl网站上下载](https://curl.se/docs/caextract.html)。
+[从 Mozilla 提取的 CA 证书可以在 cURL 网站上下载](https://curl.se/docs/caextract.html)。
 
 或者，许多发行版，包括 Debian、Ubuntu 和 Alpine，提供名为 `ca-certificates` 的软件包，其中包含这些证书。
 

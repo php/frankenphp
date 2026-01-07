@@ -16,7 +16,7 @@ docker run -p 80:80 -p 443:443 -p 443:443/udp -v $PWD:/app dunglas/frankenphp
 
 Вы также можете запустить ваши Laravel-проекты с FrankenPHP на локальной машине:
 
-1. [Скачайте бинарный файл для вашей системы](README.md#автономный-бинарный-файл)
+1. [Скачайте бинарный файл, соответствующий вашей системе](../#standalone-binary)
 2. Добавьте следующую конфигурацию в файл с именем `Caddyfile` в корневой директории вашего Laravel-проекта:
 
    ```caddyfile
@@ -30,8 +30,10 @@ docker run -p 80:80 -p 443:443 -p 443:443/udp -v $PWD:/app dunglas/frankenphp
    	root public/
    	# Включите сжатие (опционально)
    	encode zstd br gzip
-   	# Выполняйте PHP-файлы из директории public/ и обслуживайте статические файлы
-   	php_server
+   	# Выполняйте PHP-файлы и обслуживайте статические файлы из директории public/
+   	php_server {
+   		try_files {path} index.php
+   	}
    }
    ```
 
@@ -45,13 +47,13 @@ Octane можно установить с помощью менеджера па
 composer require laravel/octane
 ```
 
-После установки Octane выполните Artisan-команду `octane:install`, которая создаст конфигурационный файл Octane в вашем приложении:
+После установки Octane вы можете выполнить Artisan-команду `octane:install`, которая установит конфигурационный файл Octane в ваше приложение:
 
 ```console
 php artisan octane:install --server=frankenphp
 ```
 
-Сервер Octane можно запустить с помощью Artisan-команды `octane:frankenphp`:
+Сервер Octane можно запустить с помощью Artisan-команды `octane:frankenphp`.
 
 ```console
 php artisan octane:frankenphp
@@ -62,17 +64,19 @@ php artisan octane:frankenphp
 - `--host`: IP-адрес, к которому должен привязаться сервер (по умолчанию: `127.0.0.1`)
 - `--port`: Порт, на котором сервер будет доступен (по умолчанию: `8000`)
 - `--admin-port`: Порт, на котором будет доступен административный сервер (по умолчанию: `2019`)
-- `--workers`: Количество worker-скриптов для обработки запросов (по умолчанию: `auto`)
+- `--workers`: Количество воркеров, которые должны быть доступны для обработки запросов (по умолчанию: `auto`)
 - `--max-requests`: Количество запросов, обрабатываемых перед перезагрузкой сервера (по умолчанию: `500`)
 - `--caddyfile`: Путь к файлу `Caddyfile` FrankenPHP (по умолчанию: [stubbed `Caddyfile` в Laravel Octane](https://github.com/laravel/octane/blob/2.x/src/Commands/stubs/Caddyfile))
 - `--https`: Включить HTTPS, HTTP/2 и HTTP/3, а также автоматически генерировать и обновлять сертификаты
-- `--http-redirect`: Включить редирект с HTTP на HTTPS (включается только при передаче --https)
+- `--http-redirect`: Включить редирект с HTTP на HTTPS (включается только если указана опция `--https`)
 - `--watch`: Автоматически перезагружать сервер при изменении приложения
-- `--poll`: Использовать опрос файловой системы для отслеживания изменений в файлах через сеть
-- `--log-level`: Установить уровень логирования, используя встроенный логгер Caddy
+- `--poll`: Использовать опрос файловой системы при наблюдении, чтобы отслеживать файлы по сети
+- `--log-level`: Выводить сообщения журнала на указанном уровне или выше, используя нативный логгер Caddy
 
 > [!TIP]
 > Чтобы получить структурированные JSON-логи (полезно при использовании решений для анализа логов), явно укажите опцию `--log-level`.
+
+См. также [как использовать Mercure с Octane](#mercure-support).
 
 Подробнее о [Laravel Octane читайте в официальной документации](https://laravel.com/docs/octane).
 
@@ -86,7 +90,7 @@ php artisan octane:frankenphp
 
    ```dockerfile
    FROM --platform=linux/amd64 dunglas/frankenphp:static-builder-gnu
-   # Если вы планируете запускать бинарный файл на системах с musl-libc, используйте static-builder-musl
+   # Если вы собираетесь запускать бинарный файл на системах с musl-libc, используйте static-builder-musl вместо
 
    # Скопируйте ваше приложение
    WORKDIR /go/src/app/dist/app
@@ -161,9 +165,35 @@ php artisan octane:frankenphp
 
 Установите переменную окружения `LARAVEL_STORAGE_PATH` (например, в вашем `.env` файле) или вызовите метод `Illuminate\Foundation\Application::useStoragePath()`, чтобы использовать директорию за пределами временной директории.
 
-### Запуск Octane как автономный бинарный файл
+### Mercure Support
 
-Можно даже упаковать приложения Laravel Octane как автономный бинарный файл!
+[Mercure](https://mercure.rocks) — отличный способ добавить возможности реального времени в ваши Laravel-приложения. FrankenPHP включает [поддержку Mercure из коробки](mercure.md).
+
+Если вы не используете [Octane](#laravel-octane), см. [документацию Mercure](mercure.md).
+
+Если вы используете Octane, вы можете включить поддержку Mercure, добавив следующие строки в ваш файл `config/octane.php`:
+
+```php
+// ...
+
+return [
+    // ...
+
+    'mercure' => [
+        'anonymous' => true,
+        'publisher_jwt' => '!ChangeThisMercureHubJWTSecretKey!',
+        'subscriber_jwt' => '!ChangeThisMercureHubJWTSecretKey!',
+    ],
+];
+```
+
+Вы можете использовать [все директивы, поддерживаемые Mercure](https://mercure.rocks/docs/hub/config#directives), в этом массиве.
+
+Для публикации и подписки на обновления мы рекомендуем использовать библиотеку [Laravel Mercure Broadcaster](https://github.com/mvanduijker/laravel-mercure-broadcaster). В качестве альтернативы, см. [документацию Mercure](mercure.md), чтобы сделать это на чистом PHP и JavaScript.
+
+### Running Octane With Standalone Binaries
+
+Можно даже упаковать приложения Laravel Octane как автономные бинарные файлы!
 
 Для этого [установите Octane правильно](#laravel-octane) и следуйте шагам, описанным в [предыдущем разделе](#laravel-приложения-как-автономные-бинарные-файлы).
 
@@ -174,4 +204,5 @@ PATH="$PWD:$PATH" frankenphp php-cli artisan octane:frankenphp
 ```
 
 > [!CAUTION]
+>
 > Для работы команды автономный бинарник **обязательно** должен быть назван `frankenphp`, так как Octane требует наличия программы с именем `frankenphp` в PATH.

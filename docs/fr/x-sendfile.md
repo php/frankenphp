@@ -27,7 +27,7 @@ Tout d'abord, ajoutez la configuration suivante à votre `Caddyfile` pour active
 	root public/
 	# ...
 
-+	# Needed for Symfony, Laravel and other projects using the Symfony HttpFoundation component
++	# Nécessaire pour Symfony, Laravel et d'autres projets utilisant le composant Symfony HttpFoundation
 +	request_header X-Sendfile-Type x-accel-redirect
 +	request_header X-Accel-Mapping ../private-files=/private-files
 +
@@ -38,7 +38,7 @@ Tout d'abord, ajoutez la configuration suivante à votre `Caddyfile` pour active
 +			rewrite * {resp.header.X-Accel-Redirect}
 +			method * GET
 +
-+			# Remove the X-Accel-Redirect header set by PHP for increased security
++			# Supprime l'en-tête X-Accel-Redirect défini par PHP pour une sécurité accrue
 +			header -X-Accel-Redirect
 +
 +			file_server
@@ -53,7 +53,7 @@ Tout d'abord, ajoutez la configuration suivante à votre `Caddyfile` pour active
 Définissez le chemin relatif du fichier (à partir de `private-files/`) comme valeur de l'en-tête `X-Accel-Redirect` :
 
 ```php
-header('X-Accel-Redirect: file.txt') ;
+header('X-Accel-Redirect: file.txt');
 ```
 
 ## Projets utilisant le composant Symfony HttpFoundation (Symfony, Laravel, Drupal...)
@@ -68,4 +68,3 @@ BinaryFileResponse::trustXSendfileTypeHeader();
 $response = new BinaryFileResponse(__DIR__.'/../private-files/file.txt');
 
 // ...
-```

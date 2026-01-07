@@ -37,6 +37,7 @@ RUN apt-get update && \
 	# Dev tools \
 	git \
 	clang \
+    clang-format \
 	cmake \
 	llvm \
 	gdb \
@@ -56,6 +57,7 @@ RUN git clone --branch=PHP-8.5 https://github.com/php/php-src.git . && \
 	EXTENSION_DIR=/usr/lib/frankenphp/modules ./configure \
 		--enable-embed \
 		--enable-zts \
+		--with-openssl \
 		--disable-zend-signals \
 		--enable-zend-max-execution-timers \
 		--with-config-file-path=/etc/frankenphp/php.ini \

@@ -68,4 +68,3 @@ BinaryFileResponse::trustXSendfileTypeHeader();
 $response = new BinaryFileResponse(__DIR__.'/../private-files/file.txt');
 
 // ...
-```

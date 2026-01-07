@@ -25,8 +25,7 @@ docker run \
 frankenphp php-server --worker /path/to/your/worker/script.php
 ```
 
-PHPアプリが[バイナリに埋め込まれている](embed.md)場合は、アプリのルートディレクトリにカスタムの`Caddyfile`を追加することができます。
-これが自動的に使用されます。
+PHPアプリが[バイナリに埋め込まれている](embed.md)場合は、アプリのルートディレクトリにカスタムの`Caddyfile`を追加できます。これは自動的に使用されます。
 
 また、`--watch`オプションを使えば、[ファイルの変更に応じてワーカーを再起動](config.md#watching-for-file-changes)することも可能です。
 以下のコマンドは、`/path/to/your/app/`ディレクトリおよびそのサブディレクトリ内の`.php`で終わるファイルが変更された場合に再起動をトリガーします：
@@ -35,7 +34,12 @@ PHPアプリが[バイナリに埋め込まれている](embed.md)場合は、�
 frankenphp php-server --worker /path/to/your/worker/script.php --watch="/path/to/your/app/**/*.php"
 ```
 
+この機能は、[ホットリロード](hot-reload.md)と組み合わせてよく使用されます。
+
 ## Symfonyランタイム
+
+> [!TIP]
+> このセクションは、FrankenPHPワーカーモードのネイティブサポートが導入されたSymfony 7.4より前のバージョンでのみ必要です。
 
 FrankenPHPのワーカーモードは[Symfony Runtime Component](https://symfony.com/doc/current/components/runtime.html)によってサポートされています。
 ワーカーでSymfonyアプリケーションを開始するには、FrankenPHP用の[PHP Runtime](https://github.com/php-runtime/runtime)パッケージをインストールします：
@@ -67,7 +71,7 @@ docker run \
 <?php
 // public/index.php
 
-// クライアント接続が中断されたときのワーカースクリプト終了を防ぐ
+// クライアント接続が中断された際のワーカースクリプトの終了を防ぎます
 ignore_user_abort(true);
 
 // アプリを起動
@@ -76,21 +80,27 @@ require __DIR__.'/vendor/autoload.php';
 $myApp = new \App\Kernel();
 $myApp->boot();
 
-// ループの外側にハンドラーを配置してパフォーマンスを向上（処理量を減らす）
+// パフォーマンス向上のため、ループの外でハンドラーを定義（処理量を削減）
 $handler = static function () use ($myApp) {
-    // リクエストを受信した際に呼び出され、
-    // スーパーグローバルや php://input などがリセットされます。
-    echo $myApp->handle($_GET, $_POST, $_COOKIE, $_FILES, $_SERVER);
+    try {
+        // リクエストを受信すると呼び出され、
+        // スーパーグローバル、php://input などがリセットされます
+        echo $myApp->handle($_GET, $_POST, $_COOKIE, $_FILES, $_SERVER);
+    } catch (\Throwable $exception) {
+        // `set_exception_handler` はワーカースクリプトが終了するときにのみ呼び出されるため、
+        // 期待する動作と異なる場合があります。ここで例外をキャッチして処理します
+        (new \MyCustomExceptionHandler)->handleException($exception);
+    }
 };
 
 $maxRequests = (int)($_SERVER['MAX_REQUESTS'] ?? 0);
 for ($nbRequests = 0; !$maxRequests || $nbRequests < $maxRequests; ++$nbRequests) {
     $keepRunning = \frankenphp_handle_request($handler);
 
-    // HTTPレスポンスの送信後に何か処理を行います
+    // HTTPレスポンス送信後に何らかの処理を実行
     $myApp->terminate();
 
-    // ページ生成の途中でガベージコレクタが起動する可能性を減らすために、ここでガベージコレクタを明示的に呼び出す。
+    // ページ生成中にガベージコレクタがトリガーされる可能性を減らすため、ここでガベージコレクタを呼び出します
     gc_collect_cycles();
 
     if (!$keepRunning) break;
@@ -178,4 +188,3 @@ $handler = static function () use ($workerServer) {
 };
 
 // ...
-```

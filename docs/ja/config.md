@@ -1,44 +1,76 @@
 # 設定
 
-FrankenPHP、Caddy、そしてMercureやVulcainモジュールは、[Caddyでサポートされる形式](https://caddyserver.com/docs/getting-started#your-first-config)を使用して設定できます。
+FrankenPHP、Caddy、そして[Mercure](mercure.md)や[Vulcain](https://vulcain.rocks)モジュールは、[Caddyでサポートされる形式](https://caddyserver.com/docs/getting-started#your-first-config)を使用して設定できます。
 
-[Dockerイメージ](docker.md)では、`Caddyfile`は`/etc/frankenphp/Caddyfile`に配置されています。
-静的バイナリは、`frankenphp run`コマンドを実行したディレクトリ内の`Caddyfile`を参照します。
-また、`-c`または`--config`オプションでカスタムのパスを指定できます。
+最も一般的な形式は`Caddyfile`で、これはシンプルで人間が読みやすいテキスト形式です。
+デフォルトでは、FrankenPHPは現在のディレクトリで`Caddyfile`を探します。
+`-c`または`--config`オプションでカスタムパスを指定できます。
 
-PHP自体の設定は[`php.ini` ファイルを使用](https://www.php.net/manual/en/configuration.file.php)して行えます。
+PHPアプリケーションを配信するための最小限の`Caddyfile`を以下に示します：
 
-インストール方法に応じて、PHPインタープリターは上記いずれかの場所にある設定ファイルを参照します。
+```caddyfile
+# The hostname to respond to
+localhost
+
+# Optionaly, the directory to serve files from, otherwise defaults to the current directory
+#root public/
+php_server
+```
+
+より多くの機能を有効にし、便利な環境変数を提供する、より高度な`Caddyfile`は、[FrankenPHPリポジトリ](https://github.com/php/frankenphp/blob/main/caddy/frankenphp/Caddyfile)およびDockerイメージに含まれています。
+
+PHP自体は、[`php.ini`ファイルを使用](https://www.php.net/manual/en/configuration.file.php)して設定できます。
+
+インストール方法に応じて、FrankenPHPとPHPインタープリターは、以下に説明する場所で設定ファイルを探します。
 
 ## Docker
 
+FrankenPHP:
+
+- `/etc/frankenphp/Caddyfile`: メイン設定ファイル
+- `/etc/frankenphp/Caddyfile.d/*.caddyfile`: 自動的に読み込まれる追加の設定ファイル
+
+PHP:
+
 - `php.ini`: `/usr/local/etc/php/php.ini`（デフォルトでは`php.ini`は含まれていません）
 - 追加の設定ファイル: `/usr/local/etc/php/conf.d/*.ini`
-- PHP拡張モジュール: `/usr/local/lib/php/extensions/no-debug-zts-<YYYYMMDD>/`
+- PHP拡張: `/usr/local/lib/php/extensions/no-debug-zts-<YYYYMMDD>/`
 - PHPプロジェクトが提供する公式テンプレートをコピーすることを推奨します：
 
 ```dockerfile
 FROM dunglas/frankenphp
 
-# 本番環境：
+# Production:
 RUN cp $PHP_INI_DIR/php.ini-production $PHP_INI_DIR/php.ini
 
-# または開発環境：
+# Or development:
 RUN cp $PHP_INI_DIR/php.ini-development $PHP_INI_DIR/php.ini
 ```
 
 ## RPMおよびDebianパッケージ
 
-- `php.ini`: `/etc/frankenphp/php.ini`（本番環境向けのプリセットの`php.ini`ファイルがデフォルトで提供されます）
-- 追加の設定ファイル: `/etc/frankenphp/php.d/*.ini`
-- PHP拡張モジュール: `/usr/lib/frankenphp/modules/`
+FrankenPHP:
+
+- `/etc/frankenphp/Caddyfile`: メイン設定ファイル
+- `/etc/frankenphp/Caddyfile.d/*.caddyfile`: 自動的に読み込まれる追加の設定ファイル
+
+PHP:
+
+- `php.ini`: `/etc/php-zts/php.ini`（本番環境向けのプリセットの`php.ini`ファイルがデフォルトで提供されます）
+- 追加の設定ファイル: `/etc/php-zts/conf.d/*.ini`
 
 ## 静的バイナリ
 
-- `php.ini`: `frankenphp run`または`frankenphp php-server`を実行したディレクトリ内、なければ`/etc/frankenphp/php.ini`を参照
+FrankenPHP:
+
+- 現在の作業ディレクトリ: `Caddyfile`
+
+PHP:
+
+- `php.ini`: `frankenphp run`または`frankenphp php-server`が実行されたディレクトリ、次に`/etc/frankenphp/php.ini`
 - 追加の設定ファイル: `/etc/frankenphp/php.d/*.ini`
-- PHP拡張モジュール: ロードできません、バイナリ自体にバンドルする必要があります
-- [PHPソース](https://github.com/php/php-src/)で提供される`php.ini-production`または`php.ini-development`のいずれかをコピーしてください
+- PHP拡張: ロードできません、バイナリ自体にバンドルする必要があります
+- [PHPソース](https://github.com/php/php-src/)で提供される`php.ini-production`または`php.ini-development`のいずれかをコピーしてください。
 
 ## Caddyfileの設定
 
@@ -48,15 +80,14 @@ RUN cp $PHP_INI_DIR/php.ini-development $PHP_INI_DIR/php.ini
 
 ```caddyfile
 localhost {
-	# 圧縮を有効化（オプション）
+	# Enable compression (optional)
 	encode zstd br gzip
-	# 現在のディレクトリ内のPHPファイルを実行し、アセットを配信
+	# Execute PHP files in the current directory and serve assets
 	php_server
 }
 ```
 
-グローバルオプションを使用してFrankenPHPを明示的に設定することもできます：
-`frankenphp`の[グローバルオプション](https://caddyserver.com/docs/caddyfile/concepts#global-options)を使用してFrankenPHPを構成できます。
+FrankenPHPを明示的に設定するには、`frankenphp`の[グローバルオプション](https://caddyserver.com/docs/caddyfile/concepts#global-options)を使用します：
 
 ```caddyfile
 {
@@ -122,13 +153,13 @@ other.example.com {
 
 ```caddyfile
 route {
-	# ディレクトリへのリクエストに末尾スラッシュを追加
+	# Add trailing slash for directory requests
 	@canonicalPath {
 		file {path}/index.php
 		not path */
 	}
 	redir @canonicalPath {path}/ 308
-	# 要求されたファイルが存在しない場合は、indexファイルを試行
+	# If the requested file does not exist, try index files
 	@indexFiles file {
 		try_files {path} {path}/index.php index.php
 		split_path .php
@@ -152,7 +183,7 @@ php_server [<matcher>] {
 	file_server off # 組み込みのfile_serverディレクティブを無効にします。
 	worker { # このサーバー固有のワーカーを作成します。複数のワーカーに対して複数回指定できます。
 		file <path> # ワーカースクリプトへのパスを設定します。php_serverのルートからの相対パスとなります。
-		num <num> # 起動するPHPスレッド数を設定します。デフォルトは利用可能なスレッド数の 2 倍です。
+		num <num> # 起動するPHPスレッド数を設定します。デフォルトは利用可能なCPU数の 2 倍です。
 		name <name> # ログとメトリクスで使用されるワーカーの名前を設定します。デフォルト: ワーカーファイルの絶対パス。php_server ブロックで定義されている場合は、常にm#で始まります。
 		watch <path> # ファイルの変更を監視するパスを設定する。複数のパスに対して複数回指定することができる。
 		env <key> <value> # 追加の環境変数を指定された値に設定する。複数の環境変数を指定する場合は、複数回指定することができます。このワーカーの環境変数もphp_serverの親から継承されますが、 ここで上書きすることもできます。
@@ -181,8 +212,10 @@ PHPファイルに変更を加えても即座には反映されません。
 }
 ```
 
-`watch`ディレクトリが指定されていない場合、`./**/*.{php,yaml,yml,twig,env}`にフォールバックします。
-これは、FrankenPHPプロセスが開始されたディレクトリおよびそのサブディレクトリ内のすべての`.php`、`.yaml`、`.yml`、`.twig`、`.env`ファイルすべてを監視します。
+この機能は、[ホットリロード](hot-reload.md)と組み合わせてよく使用されます。
+
+`watch`ディレクトリが指定されていない場合、`./**/*.{env,php,twig,yaml,yml}`にフォールバックします。
+これは、FrankenPHPプロセスが開始されたディレクトリおよびそのサブディレクトリ内のすべての`.env`、`.php`、`.twig`、`.yaml`、`.yml`ファイルを監視します。
 代わりに、[シェルのファイル名パターン](https://pkg.go.dev/path/filepath#Match)を使用して
 1つ以上のディレクトリを指定することもできます：
 
@@ -230,34 +263,6 @@ PHPファイルに変更を加えても即座には反映されません。
 }
 ```
 
-### フルデュプレックス（HTTP/1）
-
-HTTP/1.xを使用する場合、全体のボディが読み取られる前にレスポンスを書き込めるようにするため、
-フルデュプレックスモードを有効にすることが望ましい場合があります（例：WebSocket、Server-Sent Eventsなど）。
-
-これは明示的に有効化する必要がある設定で、`Caddyfile`のグローバルオプションに追加する必要があります：
-
-```caddyfile
-{
-  servers {
-    enable_full_duplex
-  }
-}
-```
-
-> [!CAUTION]
->
-> このオプションを有効にすると、フルデュプレックスをサポートしない古いHTTP/1.xクライアントでデッドロックが発生する可能性があります。
-> これは`CADDY_GLOBAL_OPTIONS`環境設定を使用しても設定できます：
-
-```sh
-CADDY_GLOBAL_OPTIONS="servers {
-  enable_full_duplex
-}"
-```
-
-この設定の詳細については、[Caddyドキュメント](https://caddyserver.com/docs/caddyfile/options#enable-full-duplex)をご覧ください。
-
 ## 環境変数
 
 以下の環境変数を使用することで、`Caddyfile`を直接変更せずにCaddyディレクティブを注入できます：
@@ -284,7 +289,7 @@ FPM や CLI SAPI と同様に、環境変数はデフォルトで`$_SERVER`ス�
     frankenphp {
         php_ini memory_limit 256M
 
-        # または
+        # or
 
         php_ini {
             memory_limit 256M
@@ -293,6 +298,43 @@ FPM や CLI SAPI と同様に、環境変数はデフォルトで`$_SERVER`ス�
     }
 }
 ```
+
+### HTTPSの無効化
+
+デフォルトでは、FrankenPHPは`localhost`を含むすべてのホスト名に対してHTTPSを自動的に有効にします。
+HTTPSを無効にしたい場合（例えば開発環境で）、`SERVER_NAME`環境変数を`http://`または`:80`に設定できます：
+
+あるいは、[Caddyドキュメント](https://caddyserver.com/docs/automatic-https#activation)に記載されている他のすべての方法を使用することもできます。
+
+`localhost`ホスト名ではなく`127.0.0.1`IPアドレスでHTTPSを使用したい場合は、[既知の問題](known-issues.md#using-https127001-with-docker)セクションをご覧ください。
+
+### フルデュプレックス（HTTP/1）
+
+HTTP/1.xを使用する場合、全体のボディが読み取られる前にレスポンスを書き込めるようにするため、
+フルデュプレックスモードを有効にすることが望ましい場合があります（例：[Mercure](mercure.md)、WebSocket、Server-Sent Eventsなど）。
+
+これは明示的に有効化する必要がある設定で、`Caddyfile`のグローバルオプションに追加する必要があります：
+
+```caddyfile
+{
+  servers {
+    enable_full_duplex
+  }
+}
+```
+
+> [!CAUTION]
+>
+> このオプションを有効にすると、フルデュプレックスをサポートしない古いHTTP/1.xクライアントでデッドロックが発生する可能性があります。
+> これは`CADDY_GLOBAL_OPTIONS`環境設定を使用しても設定できます：
+
+```sh
+CADDY_GLOBAL_OPTIONS="servers {
+  enable_full_duplex
+}"
+```
+
+この設定の詳細については、[Caddyドキュメント](https://caddyserver.com/docs/caddyfile/options#enable-full-duplex)をご覧ください。
 
 ## デバッグモードの有効化
 

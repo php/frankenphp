@@ -1,8 +1,17 @@
 # Özel Docker İmajı Oluşturma
 
-[Resmi PHP imajları](https://hub.docker.com/_/php/) temel alınarak [FrankenPHP Docker imajları](https://hub.docker.com/r/dunglas/frankenphp) hazırlanmıştır. Popüler mimariler için Debian ve Alpine Linux varyantları sağlanmıştır. Debian dağıtımı tavsiye edilir.
+[FrankenPHP Docker imajları](https://hub.docker.com/r/dunglas/frankenphp), [resmi PHP imajları](https://hub.docker.com/_/php/) temel alınarak hazırlanmıştır.
+Popüler mimariler için Debian ve Alpine Linux varyantları sağlanmıştır.
+Debian varyantları tavsiye edilir.
 
-PHP 8.2, 8.3, 8.4 ve 8.5 için varyantlar sağlanmıştır. [Etiketlere göz atın](https://hub.docker.com/r/dunglas/frankenphp/tags).
+PHP 8.2, 8.3, 8.4 ve 8.5 için varyantlar sağlanmıştır.
+
+Etiketler şu deseni takip eder: `dunglas/frankenphp:<frankenphp-version>-php<php-version>-<os>`
+
+- `<frankenphp-version>` ve `<php-version>` sırasıyla FrankenPHP ve PHP'nin, ana (örn. `1`), ikincil (örn. `1.2`) ila yama sürümlerine (örn. `1.2.3`) kadar değişen sürüm numaralarıdır.
+- `<os>` ise `trixie` (Debian Trixie için), `bookworm` (Debian Bookworm için) veya `alpine` (Alpine'ın en son kararlı sürümü için) olabilir.
+
+[Etiketlere göz atın](https://hub.docker.com/r/dunglas/frankenphp/tags).
 
 ## İmajlar Nasıl Kullanılır
 
@@ -21,15 +30,19 @@ docker build -t my-php-app .
 docker run -it --rm --name my-running-app my-php-app
 ```
 
+## Yapılandırma Nasıl Ayarlanır
+
+Kolaylık sağlaması açısından, faydalı ortam değişkenleri içeren [varsayılan bir `Caddyfile`](https://github.com/php/frankenphp/blob/main/caddy/frankenphp/Caddyfile) imajda sağlanmıştır.
+
 ## Daha Fazla PHP Eklentisi Nasıl Kurulur
 
-[Docker-php-extension-installer`](https://github.com/mlocati/docker-php-extension-installer) betiği temel imajda sağlanmıştır.
-Ek PHP eklentileri eklemek ise gerçekten kolaydır:
+[`docker-php-extension-installer`](https://github.com/mlocati/docker-php-extension-installer) betiği temel imajda sağlanmıştır.
+Ek PHP eklentileri eklemek basittir:
 
 ```dockerfile
 FROM dunglas/frankenphp
 
-# buraya istenilen eklentileri ekleyin:
+# buraya ek eklentileri ekleyin:
 RUN install-php-extensions \
 	pdo_mysql \
 	gd \
@@ -47,10 +60,10 @@ FrankenPHP, Caddy'nin üzerine inşa edilmiştir ve tüm [Caddy modülleri](http
 ```dockerfile
 FROM dunglas/frankenphp:builder AS builder
 
-# xcaddy'yi derleyen imaja kopyalayın
+# xcaddy'yi oluşturucu imajına kopyalayın
 COPY --from=caddy:builder /usr/bin/xcaddy /usr/bin/xcaddy
 
-# FrankenPHP oluşturmak için CGO etkinleştirilmelidir
+# FrankenPHP'yi derlemek için CGO etkinleştirilmelidir
 RUN CGO_ENABLED=1 \
     XCADDY_SETCAP=1 \
     XCADDY_GO_BUILD_FLAGS="-ldflags='-w -s' -tags=nobadger,nomysql,nopgx" \
@@ -61,24 +74,24 @@ RUN CGO_ENABLED=1 \
         --with github.com/dunglas/frankenphp=./ \
         --with github.com/dunglas/frankenphp/caddy=./caddy/ \
         --with github.com/dunglas/caddy-cbrotli \
-        # Mercure ve Vulcain resmi yapıya dahil edilmiştir, ancak bunları kaldırmaktan çekinmeyin
+        # Mercure ve Vulcain resmi derlemeye dahil edilmiştir, ancak bunları kaldırmaktan çekinmeyin
         --with github.com/dunglas/mercure/caddy \
         --with github.com/dunglas/vulcain/caddy
         # Buraya ekstra Caddy modülleri ekleyin
 
 FROM dunglas/frankenphp AS runner
 
-# Resmi binary dosyayı özel modüllerinizi içeren binary dosyayla değiştirin
+# Resmi ikiliyi, özel modüllerinizi içeren ile değiştirin
 COPY --from=builder /usr/local/bin/frankenphp /usr/local/bin/frankenphp
 ```
 
 FrankenPHP tarafından sağlanan `builder` imajı `libphp`'nin derlenmiş bir sürümünü içerir.
-[Derleyici imajları](https://hub.docker.com/r/dunglas/frankenphp/tags?name=builder) hem Debian hem de Alpine için FrankenPHP ve PHP'nin tüm sürümleri için sağlanmıştır.
+[Builder imajları](https://hub.docker.com/r/dunglas/frankenphp/tags?name=builder) hem Debian hem de Alpine için FrankenPHP ve PHP'nin tüm sürümleri için sağlanmıştır.
 
 > [!TIP]
 >
 > Eğer Alpine Linux ve Symfony kullanıyorsanız,
-> [varsayılan yığın boyutunu artırmanız](compile.md#xcaddy-kullanımı) gerekebilir.
+> [varsayılan yığın boyutunu artırmanız](compile.md#using-xcaddy) gerekebilir.
 
 ## Varsayılan Olarak Worker Modunun Etkinleştirilmesi
 
@@ -92,9 +105,9 @@ FROM dunglas/frankenphp
 ENV FRANKENPHP_CONFIG="worker ./public/index.php"
 ```
 
-## Geliştirme Sürecinde Yığın (Volume) Kullanma
+## Geliştirme Sürecinde Birim (Volume) Kullanma
 
-FrankenPHP ile kolayca geliştirme yapmak için, uygulamanın kaynak kodunu içeren dizini ana bilgisayarınızdan Docker konteynerine bir yığın (volume) olarak bağlayın:
+FrankenPHP ile kolayca geliştirme yapmak için, uygulamanın kaynak kodunu içeren dizini ana bilgisayarınızdan Docker konteynerine bir birim (volume) olarak bağlayın:
 
 ```console
 docker run -v $PWD:/app/public -p 80:80 -p 443:443 -p 443:443/udp --tty my-php-app
@@ -127,7 +140,7 @@ services:
     # production ortamda aşağıdaki satırı yorum satırı yapın, geliştirme ortamında insan tarafından okunabilir güzel günlüklere sahip olmanızı sağlar
     tty: true
 
-# Caddy sertifikaları ve yapılandırması için gereken yığınlar (volumes)
+# Caddy sertifikaları ve yapılandırması için gereken birimler (volumes)
 volumes:
   caddy_data:
   caddy_config:
@@ -147,20 +160,45 @@ ARG USER=appuser
 RUN \
 	# Alpine tabanlı dağıtımlar için "adduser -D ${USER}" kullanın
 	useradd ${USER}; \
-	# 80 ve 443 numaralı bağlantı noktalarına bağlanmak için ek özellik ekleyin
+	# 80 ve 443 numaralı bağlantı noktalarına bağlanmak için ek yetenek ekleyin
 	setcap CAP_NET_BIND_SERVICE=+eip /usr/local/bin/frankenphp; \
-	# /data/caddy ve /config/caddy dosyalarına yazma erişimi verin
-	chown -R ${USER}:${USER} /data/caddy && chown -R ${USER}:${USER} /config/caddy;
+	# /config/caddy ve /data/caddy dizinlerine yazma erişimi verin
+	chown -R ${USER}:${USER} /config/caddy /data/caddy
 
 USER ${USER}
 ```
+
+### Yetenekler Olmadan Çalıştırma
+
+Root yetkisi olmadan çalıştırıldığında bile, FrankenPHP web sunucusunu ayrıcalıklı bağlantı noktalarına (80 ve 443) bağlamak için `CAP_NET_BIND_SERVICE` yeteneğine ihtiyaç duyar.
+
+FrankenPHP'yi ayrıcalıklı olmayan bir bağlantı noktasında (1024 ve üzeri) ifşa ederseniz, web sunucusunu root olmayan bir kullanıcı olarak ve herhangi bir yeteneğe ihtiyaç duymadan çalıştırmak mümkündür:
+
+```dockerfile
+FROM dunglas/frankenphp
+
+ARG USER=appuser
+
+RUN \
+	# Alpine tabanlı dağıtımlar için "adduser -D ${USER}" kullanın
+	useradd ${USER}; \
+	# Varsayılan yeteneği kaldırın
+	setcap -r /usr/local/bin/frankenphp; \
+	# /config/caddy ve /data/caddy dizinlerine yazma erişimi verin
+	chown -R ${USER}:${USER} /config/caddy /data/caddy
+
+USER ${USER}
+```
+
+Ardından, ayrıcalıklı olmayan bir bağlantı noktası kullanmak için `SERVER_NAME` ortam değişkenini ayarlayın.
+Örnek: `:8000`
 
 ## Güncellemeler
 
 Docker imajları oluşturulur:
 
 - Yeni bir sürüm etiketlendiğinde
-- Her gün UTC ile saat 4'te Resmi PHP imajlarının yeni sürümleri mevcutsa
+- Her gün UTC ile saat 4'te, resmi PHP imajlarının yeni sürümleri mevcutsa
 
 ## Geliştirme Sürümleri
 
@@ -168,4 +206,4 @@ Geliştirme sürümleri [`dunglas/frankenphp-dev`](https://hub.docker.com/reposi
 GitHub deposunun ana dalına her commit yapıldığında yeni bir derleme tetiklenir.
 
 `latest*` etiketleri `main` dalının başına işaret eder.
-`sha-<hash-du-commit-git>` biçimindeki etiketler de kullanılabilir.
+``sha-<git-commit-hash>`` biçimindeki etiketler de mevcuttur.

@@ -13,9 +13,9 @@
 
 以下の拡張モジュールはFrankenPHPとの組み合わせで既知のバグや予期しない動作が確認されています：
 
-| 名前                                                          | 問題                                                                                                                                                                                                                                                                                 |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [ext-openssl](https://www.php.net/manual/en/book.openssl.php) | FrankenPHPの静的ビルド（musl libcでビルド）を使用した場合、高負荷時にOpenSSL拡張がクラッシュすることがあります。回避策として動的リンクのビルド（Dockerイメージで使用されているもの）を使用してください。このバグは[PHP側で追跡中](https://github.com/php/php-src/issues/13648)です。 |
+| 名前                                                          | 問題                                                                                                                                                                                                                   |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [ext-openssl](https://www.php.net/manual/en/book.openssl.php) | musl libcを使用している場合、OpenSSL拡張モジュールは高負荷時にクラッシュすることがあります。この問題は、より普及しているGNU libcを使用する場合には発生しません。このバグは[PHPによって追跡されています](https://github.com/php/php-src/issues/13648)。 |
 
 ## get_browser
 
@@ -23,7 +23,9 @@
 
 ## スタンドアロンバイナリおよびAlpineベースのDockerイメージ
 
-スタンドアロンバイナリおよびAlpineベースのDockerイメージ（`dunglas/frankenphp:*-alpine`）は、バイナリサイズを小さく保つために[glibc and friends](https://www.etalabs.net/compare_libcs.html)ではなく[musl libc](https://musl.libc.org/)を使用しています。これによりいくつかの互換性問題が発生する可能性があります。特に、globフラグ`GLOB_BRACE`は [サポートされていません](https://www.php.net/manual/en/function.glob.php) 。
+スタンドアロンバイナリおよびAlpineベースのDockerイメージ（`dunglas/frankenphp:*-alpine`）は、バイナリサイズを小さく保つために[glibc and friends](https://www.etalabs.net/compare_libcs.html)ではなく[musl libc](https://musl.libc.org/)を使用しています。これによりいくつかの互換性問題が発生する可能性があります。特に、globフラグ`GLOB_BRACE`は [サポートされていません](https://www.php.net/manual/en/function.glob.php)。
+
+問題が発生した場合は、静的バイナリのGNUバリアントおよびDebianベースのDockerイメージを使用することをお勧めします。
 
 ## Dockerで`https://127.0.0.1`を使用する
 
@@ -78,7 +80,7 @@ docker run \
 
 ## `@php` を参照するComposerスクリプト
 
-[Composerスクリプト](https://getcomposer.org/doc/articles/scripts.md)では、いくつかのタスクでPHPバイナリを実行したい場合があります。例えば、[Laravelプロジェクト](laravel.md)で`@php artisan package:discover --ansi`を実行する場合です。しかし現在これは以下の2つの理由で[失敗します](https://github.com/dunglas/frankenphp/issues/483#issuecomment-1899890915)：
+[Composerスクリプト](https://getcomposer.org/doc/articles/scripts.md)では、いくつかのタスクでPHPバイナリを実行したい場合があります。例えば、[Laravelプロジェクト](laravel.md)で`@php artisan package:discover --ansi`を実行する場合です。しかし現在これは以下の2つの理由で[失敗します](https://github.com/php/frankenphp/issues/483#issuecomment-1899890915)：
 
 - ComposerはFrankenPHPバイナリを呼び出す方法を知りません
 - Composerはコマンドで`-d`フラグを使用してPHP設定を追加する場合があり、FrankenPHPはまだサポートしていません
@@ -130,7 +132,7 @@ CA証明書をどこにインストールすべきか確認し、その場所に
 > WebとCLIコンテキストでは設定が異なる場合があります。
 > 適切なコンテキストで`openssl_get_cert_locations()`を実行してください。
 
-[Mozillaから抽出されたCA証明書はcurlのサイトでダウンロードできます](https://curl.se/docs/caextract.html)。
+[Mozillaから抽出されたCA証明書はcURLのサイトでダウンロードできます](https://curl.se/docs/caextract.html)。
 
 または、Debian、Ubuntu、Alpineなどのディストリビューションでも、これらの証明書を含む`ca-certificates`というパッケージを提供しています。
 
@@ -140,4 +142,3 @@ CA証明書をどこにインストールすべきか確認し、その場所に
 # TLS 証明書の環境変数を設定
 export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
 export SSL_CERT_DIR=/etc/ssl/certs
-```

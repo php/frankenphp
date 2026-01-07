@@ -1,13 +1,14 @@
 # カスタムDockerイメージのビルド
 
-[FrankenPHPのDockerイメージ](https://hub.docker.com/r/dunglas/frankenphp)は、[公式PHPイメージ](https://hub.docker.com/_/php/)をベースにしています。主要なアーキテクチャに対してDebianとAlpine Linuxのバリアントを提供しており、Debianバリアントの使用を推奨しています。
+[FrankenPHPのDockerイメージ](https://hub.docker.com/r/dunglas/frankenphp)は、[公式PHPイメージ](https://hub.docker.com/_/php/)をベースにしています。
+主要なアーキテクチャに対してDebianとAlpine Linuxのバリアントを提供しており、Debianバリアントの使用を推奨しています。
 
 PHP 8.2、8.3、8.4、8.5向けのバリアントが提供されています。
 
 タグは次のパターンに従います：`dunglas/frankenphp:<frankenphp-version>-php<php-version>-<os>`
 
 - `<frankenphp-version>`および`<php-version>`は、それぞれFrankenPHPおよびPHPのバージョン番号で、メジャー（例：`1`）、マイナー（例：`1.2`）からパッチバージョン（例：`1.2.3`）まであります。
-- `<os>`は`bookworm`（Debian Bookworm用）または`alpine`（Alpine最新安定版用）のいずれかです。
+- `<os>`は`trixie`（Debian Trixie用）、`bookworm`（Debian Bookworm用）、または`alpine`（Alpine最新安定版用）のいずれかです。
 
 [タグを閲覧](https://hub.docker.com/r/dunglas/frankenphp/tags)。
 
@@ -27,6 +28,10 @@ COPY . /app/public
 docker build -t my-php-app .
 docker run -it --rm --name my-running-app my-php-app
 ```
+
+## 設定を微調整する方法
+
+利便性のため、有用な環境変数を含む[デフォルトの`Caddyfile`](https://github.com/php/frankenphp/blob/main/caddy/frankenphp/Caddyfile)がイメージに含まれています。
 
 ## PHP拡張モジュールの追加インストール方法
 
@@ -156,8 +161,8 @@ RUN \
 	useradd ${USER}; \
 	# ポート 80 や 443 にバインドするための追加ケーパビリティを追加
 	setcap CAP_NET_BIND_SERVICE=+eip /usr/local/bin/frankenphp; \
-	# /data/caddy および /config/caddy への書き込み権限を付与
-	chown -R ${USER}:${USER} /data/caddy && chown -R ${USER}:${USER} /config/caddy
+	# /config/caddy および /data/caddy への書き込み権限を付与
+	chown -R ${USER}:${USER} /config/caddy /data/caddy
 
 USER ${USER}
 ```
@@ -180,8 +185,8 @@ RUN \
 	useradd ${USER}; \
 	# デフォルトのケーパビリティを削除
 	setcap -r /usr/local/bin/frankenphp; \
-	# /data/caddy と /config/caddy への書き込み権限を付与
-	chown -R ${USER}:${USER} /data/caddy && chown -R ${USER}:${USER} /config/caddy
+	# /config/caddy と /data/caddy への書き込み権限を付与
+	chown -R ${USER}:${USER} /config/caddy /data/caddy
 
 USER ${USER}
 ```

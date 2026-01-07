@@ -6,20 +6,20 @@ Grâce à cette fonctionnalité, les applications PHP peuvent être distribuées
 
 Pour en savoir plus sur cette fonctionnalité, consultez [la présentation faite par Kévin à la SymfonyCon 2023](https://dunglas.dev/2023/12/php-and-symfony-apps-as-standalone-binaries/).
 
-Pour embarquer des applications Laravel, [lisez ce point spécifique de la documentation](laravel.md#les-applications-laravel-en-tant-que-binaires-autonomes).
+Pour embarquer des applications Laravel, [lisez ce point spécifique de la documentation](laravel.md#applications-laravel-en-tant-que-binaires-autonomes).
 
 ## Préparer votre application
 
 Avant de créer le binaire autonome, assurez-vous que votre application est prête à être intégrée.
 
-Vous devrez probablement :
+Par exemple, vous voudrez probablement :
 
 - Installer les dépendances de production de l'application
 - Dumper l'autoloader
 - Activer le mode production de votre application (si disponible)
 - Supprimer les fichiers inutiles tels que `.git` ou les tests pour réduire la taille de votre binaire final
 
-Par exemple, pour une application Symfony, lancez les commandes suivantes :
+Par exemple, pour une application Symfony, vous pouvez utiliser les commandes suivantes :
 
 ```console
 # Exporter le projet pour se débarrasser de .git/, etc.
@@ -53,16 +53,17 @@ dans le répertoire principal de l'application à intégrer
 
 La manière la plus simple de créer un binaire Linux est d'utiliser le builder basé sur Docker que nous fournissons.
 
-1. Créez un fichier nommé `static-build.Dockerfile` dans le répertoire de votre application préparée :
+1. Créez un fichier nommé `static-build.Dockerfile` dans le dépôt de votre application :
 
    ```dockerfile
    FROM --platform=linux/amd64 dunglas/frankenphp:static-builder-gnu
    # Si vous envisagez d'exécuter le binaire sur des systèmes musl-libc, utilisez plutôt static-builder-musl
 
-   # Copy your app
+   # Copiez votre application
    WORKDIR /go/src/app/dist/app
    COPY . .
 
+   # Construisez le binaire statique
    WORKDIR /go/src/app/
    RUN EMBED=dist/app/ ./build-static.sh
    ```
@@ -84,7 +85,7 @@ La manière la plus simple de créer un binaire Linux est d'utiliser le builder 
    docker cp $(docker create --name static-app-tmp static-app):/go/src/app/dist/frankenphp-linux-x86_64 my-app ; docker rm static-app-tmp
    ```
 
-Le binaire généré sera nommé `my-app` dans le répertoire courant.
+Le binaire résultant est le fichier nommé `my-app` dans le répertoire courant.
 
 ## Créer un binaire pour d'autres systèmes d'exploitation
 
@@ -96,7 +97,7 @@ cd frankenphp
 EMBED=/path/to/your/app ./build-static.sh
 ```
 
-Le binaire obtenu est le fichier nommé `frankenphp-<os>-<arch>` dans le répertoire `dist/`.
+Le binaire résultant est le fichier nommé `frankenphp-<os>-<arch>` dans le répertoire `dist/`.
 
 ## Utiliser le binaire
 
@@ -129,7 +130,7 @@ Vous pouvez également exécuter les scripts CLI PHP incorporés dans votre bina
 ## Extensions PHP
 
 Par défaut, le script construira les extensions requises par le fichier `composer.json` de votre projet, s'il y en a.
-Si le fichier `composer.json` n'existe pas, les extensions par défaut sont construites, comme documenté dans [Créer un binaire statique](static.md).
+Si le fichier `composer.json` n'existe pas, les extensions par défaut sont construites, comme documenté dans [la documentation sur la compilation statique](static.md).
 
 Pour personnaliser les extensions, utilisez la variable d'environnement `PHP_EXTENSIONS`.
 
@@ -145,7 +146,7 @@ PHP_EXTENSIONS=ctype,iconv,pdo_sqlite \
 
 ## Distribuer le binaire
 
-Sous Linux, le binaire est compressé par défaut à l'aide de [UPX](https://upx.github.io).
+Sous Linux, le binaire créé est compressé à l'aide de [UPX](https://upx.github.io).
 
 Sous Mac, pour réduire la taille du fichier avant de l'envoyer, vous pouvez le compresser.
 Nous recommandons `xz`.

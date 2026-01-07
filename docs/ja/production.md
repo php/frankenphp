@@ -2,9 +2,9 @@
 
 このチュートリアルでは、Docker Composeを使用して単一サーバーにPHPアプリケーションをデプロイする方法を学びます。
 
-Symfonyを使用している場合は、Symfony Dockerプロジェクトの「[本番環境へのデプロイ](https://github.com/dunglas/symfony-docker/blob/main/docs/production.md)」ドキュメントを参照してください。
+Symfonyを使用している場合は、Symfony Dockerプロジェクトの「[本番環境へのデプロイ](https://github.com/dunglas/symfony-docker/blob/main/docs/production.md)」ドキュメントエントリー（FrankenPHPを使用しています）を参照してください。
 
-API Platformを使用している場合は、[フレームワークのデプロイドキュメント](https://api-platform.com/docs/deployment/)を参照してください。
+API Platform（こちらもFrankenPHPを使用しています）を使用している場合は、[フレームワークのデプロイドキュメント](https://api-platform.com/docs/deployment/)を参照してください。
 
 ## アプリの準備
 

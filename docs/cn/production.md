@@ -30,8 +30,7 @@ COPY . /app/public
 #COPY . /app
 ```
 
-有关更多详细信息和选项，请参阅 [构建自定义 Docker 镜像](docker.md)。
-要了解如何自定义配置，请安装 PHP 扩展和 Caddy 模块。
+有关更多详细信息和选项，以及如何自定义配置、安装 PHP 扩展和 Caddy 模块，请参阅“[构建自定义 Docker 镜像](docker.md)”。
 
 如果你的项目使用 Composer，
 请务必将其包含在 Docker 镜像中并安装你的依赖。
@@ -51,7 +50,7 @@ services:
       - caddy_data:/data
       - caddy_config:/config
 
-# Caddy 证书和配置所需的挂载目录
+# Caddy 证书和配置所需的数据卷
 volumes:
   caddy_data:
   caddy_config:
@@ -60,11 +59,11 @@ volumes:
 > [!NOTE]
 >
 > 前面的示例适用于生产用途。
-> 在开发中，你可能希望使用挂载目录，不同的 PHP 配置和不同的 `SERVER_NAME` 环境变量值。
+> 在开发中，你可能希望使用一个数据卷，一个不同的 PHP 配置和不同的 `SERVER_NAME` 环境变量值。
 >
-> 见 [Symfony Docker](https://github.com/dunglas/symfony-docker) 项目
-> （使用 FrankenPHP）作为使用多阶段镜像的更高级示例，
-> Composer、额外的 PHP 扩展等。
+> 请查看 [Symfony Docker](https://github.com/dunglas/symfony-docker) 项目
+> （它也使用了 FrankenPHP），以获取使用多阶段镜像、
+> Composer、额外 PHP 扩展等更高级的示例。
 
 最后，如果你使用 Git，请提交这些文件并推送。
 
@@ -78,13 +77,13 @@ volumes:
 然后，单击“Choose an image”部分下的“Marketplace”选项卡，然后搜索名为“Docker”的应用程序。
 这将配置已安装最新版本的 Docker 和 Docker Compose 的 Ubuntu 服务器！
 
-出于测试目的，最便宜的就足够了。
+出于测试目的，最廉价的套餐就足够了。
 对于实际的生产用途，你可能需要在“general purpose”部分中选择一个计划来满足你的需求。
 
-![使用 Docker 在 DigitalOcean 上部署 FrankenPHP](../digitalocean-droplet.png)
+![使用 Docker 在 DigitalOcean 上部署 FrankenPHP](digitalocean-droplet.png)
 
 你可以保留其他设置的默认值，也可以根据需要进行调整。
-不要忘记添加你的 SSH 密钥或创建密码，然后点击“完成并创建”按钮。
+不要忘记添加你的 SSH 密钥或创建密码，然后点击“Finalize and create”按钮。
 
 然后，在 Droplet 预配时等待几秒钟。
 Droplet 准备就绪后，使用 SSH 进行连接：
@@ -106,7 +105,7 @@ your-domain-name.example.com.  IN  A     207.154.233.113
 
 DigitalOcean 域服务示例（“Networking” > “Domains”）：
 
-![在 DigitalOcean 上配置 DNS](../digitalocean-dns.png)
+![在 DigitalOcean 上配置 DNS](digitalocean-dns.png)
 
 > [!NOTE]
 >
@@ -131,7 +130,7 @@ docker compose up --wait
 ```
 
 你的服务器已启动并运行，并且已自动为你生成 HTTPS 证书。
-去 `https://your-domain-name.example.com` 享受吧！
+访问 `https://your-domain-name.example.com` 即可体验！
 
 > [!CAUTION]
 >

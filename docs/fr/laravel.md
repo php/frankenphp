@@ -2,7 +2,7 @@
 
 ## Docker
 
-Déployer une application web [Laravel](https://laravel.com) avec FrankenPHP est très facile. Il suffit de monter le projet dans le répertoire `/app` de l'image Docker officielle.
+Déployer une application web [Laravel](https://laravel.com) avec FrankenPHP est aussi simple que de monter le projet dans le répertoire `/app` de l'image Docker officielle.
 
 Exécutez cette commande depuis le répertoire principal de votre application Laravel :
 
@@ -16,7 +16,7 @@ Et profitez !
 
 Vous pouvez également exécuter vos projets Laravel avec FrankenPHP depuis votre machine locale :
 
-1. [Téléchargez le binaire correspondant à votre système](README.md#binaire-autonome)
+1. [Téléchargez le binaire correspondant à votre système](../#binaire-autonome)
 2. Ajoutez la configuration suivante dans un fichier nommé `Caddyfile` placé dans le répertoire racine de votre projet Laravel :
 
    ```caddyfile
@@ -66,7 +66,7 @@ La commande `octane:frankenphp` peut prendre les options suivantes :
 - `--admin-port` : Le port sur lequel le serveur administratif doit être disponible (par défaut : `2019`)
 - `--workers` : Le nombre de workers qui doivent être disponibles pour traiter les requêtes (par défaut : `auto`)
 - `--max-requests` : Le nombre de requêtes à traiter avant de recharger le serveur (par défaut : `500`)
-- `--caddyfile` : Le chemin vers le fichier `Caddyfile` de FrankenPHP
+- `--caddyfile` : Le chemin vers le fichier `Caddyfile` de FrankenPHP (par défaut : [fichier `Caddyfile` pré-configuré dans Laravel Octane](https://github.com/laravel/octane/blob/2.x/src/Commands/stubs/Caddyfile))
 - `--https` : Activer HTTPS, HTTP/2, et HTTP/3, et générer automatiquement et renouveler les certificats
 - `--http-redirect` : Activer la redirection HTTP vers HTTPS (uniquement activé si --https est passé)
 - `--watch` : Recharger automatiquement le serveur lorsque l'application est modifiée
@@ -74,9 +74,11 @@ La commande `octane:frankenphp` peut prendre les options suivantes :
 - `--log-level` : Enregistrer les messages au niveau de journalisation spécifié ou au-dessus, en utilisant le logger natif de Caddy
 
 > [!TIP]
-> Pour obtenir des logs structurés en JSON logs (utile quand vous utilisez des solutions d'analyse de logs), passez explicitement l'option `--log-level`.
+> Pour obtenir des logs JSON structurés (utile lorsque vous utilisez des solutions d'analyse de logs), passez explicitement l'option `--log-level`.
 
-En savoir plus sur Laravel Octane [dans sa documentation officielle](https://laravel.com/docs/octane).
+Voir aussi [comment utiliser Mercure avec Octane](#mercure-support).
+
+En savoir plus sur [Laravel Octane dans sa documentation officielle](https://laravel.com/docs/octane).
 
 ## Les Applications Laravel En Tant Que Binaires Autonomes
 
@@ -101,7 +103,7 @@ Suivez ces étapes pour empaqueter votre application Laravel en tant que binaire
 
    # Copiez le fichier .env
    RUN cp .env.example .env
-   # Modifier APP_ENV et APP_DEBUG pour qu'ils soient prêts pour la production
+   # Modifiez APP_ENV et APP_DEBUG pour qu'ils soient prêts pour la production
    RUN sed -i'' -e 's/^APP_ENV=.*/APP_ENV=production/' -e 's/^APP_DEBUG=.*/APP_DEBUG=false/' .env
 
    # Apportez d'autres modifications à votre fichier .env si nécessaire
@@ -109,7 +111,7 @@ Suivez ces étapes pour empaqueter votre application Laravel en tant que binaire
    # Installez les dépendances
    RUN composer install --ignore-platform-reqs --no-dev -a
 
-   # Construire le binaire statique
+   # Construisez le binaire statique
    WORKDIR /go/src/app/
    RUN EMBED=dist/app/ ./build-static.sh
    ```
@@ -119,19 +121,19 @@ Suivez ces étapes pour empaqueter votre application Laravel en tant que binaire
    > Certains fichiers `.dockerignore` ignoreront le répertoire `vendor/`
    > et les fichiers `.env`. Assurez-vous d'ajuster ou de supprimer le fichier `.dockerignore` avant la construction.
 
-2. Build:
+2. Construction :
 
    ```console
    docker build -t static-laravel-app -f static-build.Dockerfile .
    ```
 
-3. Extraire le binaire
+3. Extraction du binaire :
 
    ```console
    docker cp $(docker create --name static-laravel-app-tmp static-laravel-app):/go/src/app/dist/frankenphp-linux-x86_64 frankenphp ; docker rm static-laravel-app-tmp
    ```
 
-4. Remplir les caches :
+4. Population des caches :
 
    ```console
    frankenphp php-cli artisan optimize
@@ -143,7 +145,7 @@ Suivez ces étapes pour empaqueter votre application Laravel en tant que binaire
    frankenphp php-cli artisan migrate
    ```
 
-6. Générer la clé secrète de l'application :
+6. Génération de la clé secrète de l'application :
 
    ```console
    frankenphp php-cli artisan key:generate
@@ -167,6 +169,34 @@ Ceci n'est pas adapté aux applications embarquées, car chaque nouvelle version
 
 Définissez la variable d'environnement `LARAVEL_STORAGE_PATH` (par exemple, dans votre fichier `.env`) ou appelez la méthode `Illuminate\Foundation\Application::useStoragePath()` pour utiliser un répertoire en dehors du répertoire temporaire.
 
+### Mercure Support
+
+[Mercure](https://mercure.rocks) est un excellent moyen d'ajouter des capacités en temps réel à vos applications Laravel.
+FrankenPHP inclut le [support de Mercure nativement](mercure.md).
+
+Si vous n'utilisez pas [Octane](#laravel-octane), consultez l'[entrée de la documentation Mercure](mercure.md).
+
+Si vous utilisez Octane, vous pouvez activer le support de Mercure en ajoutant les lignes suivantes à votre fichier `config/octane.php` :
+
+```php
+// ...
+
+return [
+    // ...
+
+    'mercure' => [
+        'anonymous' => true,
+        'publisher_jwt' => '!ChangeThisMercureHubJWTSecretKey!',
+        'subscriber_jwt' => '!ChangeThisMercureHubJWTSecretKey!',
+    ],
+];
+```
+
+Vous pouvez utiliser [toutes les directives supportées par Mercure](https://mercure.rocks/docs/hub/config#directives) dans ce tableau.
+
+Pour publier et s'abonner aux mises à jour, nous recommandons d'utiliser la bibliothèque [Laravel Mercure Broadcaster](https://github.com/mvanduijker/laravel-mercure-broadcaster).
+Alternativement, consultez [la documentation Mercure](mercure.md) pour le faire en PHP pur et JavaScript.
+
 ### Exécuter Octane avec des binaires autonomes
 
 Il est même possible d'empaqueter les applications Laravel Octane en tant que binaires autonomes !
@@ -182,4 +212,4 @@ PATH="$PWD:$PATH" frankenphp php-cli artisan octane:frankenphp
 > [!CAUTION]
 >
 > Pour que la commande fonctionne, le binaire autonome **doit** être nommé `frankenphp`
-> car Octane a besoin d'un programme nommé `frankenphp` disponible dans le chemin
+> car Octane a besoin d'un programme nommé `frankenphp` disponible dans le chemin.
