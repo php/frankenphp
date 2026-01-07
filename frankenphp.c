@@ -1262,7 +1262,7 @@ int frankenphp_reset_opcache(void) {
 
 int frankenphp_get_current_memory_limit() { return PG(memory_limit); }
 
-static zend_module_entry *modules = NULL;
+static zend_module_entry **modules = NULL;
 static int modules_len = 0;
 static int (*original_php_register_internal_extensions_func)(void) = NULL;
 
@@ -1273,7 +1273,7 @@ PHPAPI int register_internal_extensions(void) {
   }
 
   for (int i = 0; i < modules_len; i++) {
-    if (zend_register_internal_module(&modules[i]) == NULL) {
+    if (zend_register_internal_module(modules[i]) == NULL) {
       return FAILURE;
     }
   }
@@ -1284,7 +1284,7 @@ PHPAPI int register_internal_extensions(void) {
   return SUCCESS;
 }
 
-void register_extensions(zend_module_entry *m, int len) {
+void register_extensions(zend_module_entry **m, int len) {
   modules = m;
   modules_len = len;
 
