@@ -1,0 +1,49 @@
+---
+name: Translate DOcs
+concurrency:
+  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  build:
+    name: Translate Docs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+      - name: run translation script
+        env:
+            GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          php ./docs/translate.php
+      - name: Run Linter
+        uses: super-linter/super-linter@v8
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LINTER_RULES_PATH: /
+          MARKDOWN_CONFIG_FILE: .markdown-lint.yaml
+          FIX_NATURAL_LANGUAGE: true
+          FIX_MARKDOWN: true
+      - name: Commit & push changes
+        run: |
+          BRANCH="translations/$(date +%s)"
+          git checkout -b "$BRANCH"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git add .
+          git commit -m "chore: auto-lint fixes"
+          git push --set-upstream origin "$BRANCH"
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v8
