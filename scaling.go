@@ -1,8 +1,5 @@
 package frankenphp
 
-//#include "frankenphp.h"
-//#include <sys/resource.h>
-import "C"
 import (
 	"errors"
 	"log/slog"
