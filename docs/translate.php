@@ -5,7 +5,7 @@
 # needs: php with openssl and gemini api key
 
 const MODEL = 'gemini-2.5-flash';
-const SLEEP_SECONDS_BETWEEN_REQUESTS = 5;
+const SLEEP_SECONDS_BETWEEN_REQUESTS = 10;
 const LANGUAGES = [
     'cn' => 'Chinese',
     'fr' => 'French',
