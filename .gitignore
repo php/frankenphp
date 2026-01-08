@@ -10,3 +10,8 @@ frankenphp.test
 caddy/frankenphp/Build
 package/etc/php.ini
 *.log
+
+frankenphp.pid
+install
+bin/frankenphp
+frankenphp/bin/frankenphp
