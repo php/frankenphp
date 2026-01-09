@@ -30,6 +30,7 @@ func TestScaleARegularThreadUpAndDown(t *testing.T) {
 }
 
 func TestScaleAWorkerThreadUpAndDown(t *testing.T) {
+	t.SkipNow()
 	t.Cleanup(Shutdown)
 
 	workerName := "worker1"

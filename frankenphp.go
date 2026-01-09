@@ -14,10 +14,10 @@ package frankenphp
 
 // #include <stdlib.h>
 // #include <stdint.h>
+// #include "frankenphp.h"
 // #include <php_variables.h>
 // #include <zend_llist.h>
 // #include <SAPI.h>
-// #include "frankenphp.h"
 import "C"
 import (
 	"bytes"
@@ -751,30 +751,6 @@ func mapToAttr(input map[string]any) []slog.Attr {
 //export go_is_context_done
 func go_is_context_done(threadIndex C.uintptr_t) C.bool {
 	return C.bool(phpThreads[threadIndex].frankenPHPContext().isDone)
-}
-
-// ExecuteScriptCLI executes the PHP script passed as parameter.
-// It returns the exit status code of the script.
-func ExecuteScriptCLI(script string, args []string) int {
-	// Ensure extensions are registered before CLI execution
-	registerExtensions()
-
-	cScript := C.CString(script)
-	defer C.free(unsafe.Pointer(cScript))
-
-	argc, argv := convertArgs(args)
-	defer freeArgs(argv)
-
-	return int(C.frankenphp_execute_script_cli(cScript, argc, (**C.char)(unsafe.Pointer(&argv[0])), false))
-}
-
-func ExecutePHPCode(phpCode string) int {
-	// Ensure extensions are registered before CLI execution
-	registerExtensions()
-
-	cCode := C.CString(phpCode)
-	defer C.free(unsafe.Pointer(cCode))
-	return int(C.frankenphp_execute_script_cli(cCode, 0, nil, true))
 }
 
 func convertArgs(args []string) (C.int, []*C.char) {

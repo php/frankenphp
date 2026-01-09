@@ -1,10 +1,48 @@
 #ifndef _FRANKENPHP_H
 #define _FRANKENPHP_H
 
-#include <Zend/zend_modules.h>
-#include <Zend/zend_types.h>
+#ifdef _WIN32
+    // Define this to prevent windows.h from including legacy winsock.h
+    #ifndef WIN32_LEAN_AND_MEAN
+    #define WIN32_LEAN_AND_MEAN
+    #endif
+
+    // Explicitly include Winsock2 BEFORE windows.h
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
+    #include <windows.h>
+    #include <winerror.h>
+
+    // Fix for missing IntSafe functions (LongLongAdd) when building with Clang
+    #ifdef __clang__
+        #ifndef INTSAFE_E_ARITHMETIC_OVERFLOW
+        #define INTSAFE_E_ARITHMETIC_OVERFLOW ((HRESULT)0x80070216L)
+        #endif
+
+        #ifndef LongLongAdd
+        static inline HRESULT LongLongAdd(LONGLONG llAugend, LONGLONG llAddend, LONGLONG* pllResult) {
+            if (__builtin_add_overflow(llAugend, llAddend, pllResult)) {
+                return INTSAFE_E_ARITHMETIC_OVERFLOW;
+            }
+            return S_OK;
+        }
+        #endif
+
+        #ifndef LongLongSub
+        static inline HRESULT LongLongSub(LONGLONG llMinuend, LONGLONG llSubtrahend, LONGLONG* pllResult) {
+            if (__builtin_sub_overflow(llMinuend, llSubtrahend, pllResult)) {
+                return INTSAFE_E_ARITHMETIC_OVERFLOW;
+            }
+            return S_OK;
+        }
+        #endif
+    #endif
+#endif
+
 #include <stdbool.h>
 #include <stdint.h>
+#include <Zend/zend_modules.h>
+#include <Zend/zend_types.h>
 
 #ifndef FRANKENPHP_VERSION
 #define FRANKENPHP_VERSION dev
@@ -47,8 +85,10 @@ bool frankenphp_shutdown_dummy_request(void);
 int frankenphp_execute_script(char *file_name);
 void frankenphp_update_local_thread_context(bool is_worker);
 
+#ifndef ZEND_WIN32
 int frankenphp_execute_script_cli(char *script, int argc, char **argv,
                                   bool eval);
+#endif
 
 void frankenphp_register_variables_from_request_info(
     zval *track_vars_array, zend_string *content_type,

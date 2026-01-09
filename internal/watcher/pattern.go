@@ -3,6 +3,7 @@
 package watcher
 
 import (
+	"log"
 	"log/slog"
 	"path/filepath"
 	"strings"
@@ -22,6 +23,7 @@ type pattern struct {
 }
 
 func (p *pattern) startSession() {
+	log.Printf("value %#v\n", p.value)
 	p.watcher = watcher.NewWatcher(p.value, p.handle)
 
 	if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
@@ -84,6 +86,8 @@ func (p *pattern) allowReload(event *watcher.Event) bool {
 }
 
 func (p *pattern) handle(event *watcher.Event) {
+	log.Printf("received: %#v", event)
+
 	// If the watcher prematurely sends the die@ event, retry watching
 	if event.PathType == watcher.PathTypeWatcher && strings.HasPrefix(event.PathName, "e/self/die@") && watcherIsActive.Load() {
 		p.retryWatching()

@@ -1,14 +1,18 @@
+#include "frankenphp.h"
 #include <SAPI.h>
 #include <Zend/zend_alloc.h>
 #include <Zend/zend_exceptions.h>
 #include <Zend/zend_interfaces.h>
-#include <Zend/zend_types.h>
 #include <errno.h>
 #include <ext/spl/spl_exceptions.h>
 #include <ext/standard/head.h>
 #include <inttypes.h>
 #include <php.h>
+#ifdef PHP_WIN32
+#include <config.w32.h>
+#else
 #include <php_config.h>
+#endif
 #include <php_ini.h>
 #include <php_main.h>
 #include <php_output.h>
@@ -19,7 +23,9 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#ifndef ZEND_WIN32
 #include <unistd.h>
+#endif
 #if defined(__linux__)
 #include <sys/prctl.h>
 #elif defined(__FreeBSD__) || defined(__OpenBSD__)
@@ -205,7 +211,7 @@ bool frankenphp_shutdown_dummy_request(void) {
   return true;
 }
 
-PHPAPI void get_full_env(zval *track_vars_array) {
+void get_full_env(zval *track_vars_array) {
   go_getfullenv(thread_index, track_vars_array);
 }
 
@@ -959,6 +965,7 @@ static void *php_thread(void *arg) {
 }
 
 static void *php_main(void *arg) {
+#ifndef ZEND_WIN32
   /*
    * SIGPIPE must be masked in non-Go threads:
    * https://pkg.go.dev/os/signal#hdr-Go_programs_that_use_cgo_or_SWIG
@@ -971,6 +978,7 @@ static void *php_main(void *arg) {
     perror("failed to block SIGPIPE");
     exit(EXIT_FAILURE);
   }
+#endif
 
   set_thread_name("php-main");
 
@@ -1188,6 +1196,7 @@ static void sapi_cli_register_variables(zval *track_vars_array) /* {{{ */
 }
 /* }}} */
 
+#ifndef ZEND_WIN32
 static void *execute_script_cli(void *arg) {
   void *exit_status;
   bool eval = (bool)arg;
@@ -1249,6 +1258,7 @@ int frankenphp_execute_script_cli(char *script, int argc, char **argv,
 
   return (intptr_t)exit_status;
 }
+#endif
 
 int frankenphp_reset_opcache(void) {
   zend_function *opcache_reset =
@@ -1266,7 +1276,7 @@ static zend_module_entry **modules = NULL;
 static int modules_len = 0;
 static int (*original_php_register_internal_extensions_func)(void) = NULL;
 
-PHPAPI int register_internal_extensions(void) {
+int register_internal_extensions(void) {
   if (original_php_register_internal_extensions_func != NULL &&
       original_php_register_internal_extensions_func() != SUCCESS) {
     return FAILURE;
