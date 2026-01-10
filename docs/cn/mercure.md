@@ -143,6 +143,6 @@ error_log("update $updateID published", 4);
 
 Mercure 也被以下框架原生支持：
 
--   [Laravel](laravel.md#mercure-support)
--   [Symfony](https://symfony.com/doc/current/mercure.html)
--   [API Platform](https://api-platform.com/docs/core/mercure/)
+- [Laravel](laravel.md#mercure-support)
+- [Symfony](https://symfony.com/doc/current/mercure.html)
+- [API Platform](https://api-platform.com/docs/core/mercure/)

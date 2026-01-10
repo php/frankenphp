@@ -18,9 +18,9 @@ function frankenphp_log(string $message, int $level = FRANKENPHP_LOG_LEVEL_INFO,
 
 ### パラメータ
 
--   **`message`**: ログメッセージ文字列。
--   **`level`**: ログの深刻度レベル。任意の整数値を指定できます。一般的なレベルには便利な定数が用意されています: `FRANKENPHP_LOG_LEVEL_DEBUG` (`-4`)、`FRANKENPHP_LOG_LEVEL_INFO` (`0`)、`FRANKENPHP_LOG_LEVEL_WARN` (`4`)、`FRANKENPHP_LOG_LEVEL_ERROR` (`8`)。デフォルトは `FRANKENPHP_LOG_LEVEL_INFO` です。
--   **`context`**: ログエントリに含める追加データの連想配列。
+- **`message`**: ログメッセージ文字列。
+- **`level`**: ログの深刻度レベル。任意の整数値を指定できます。一般的なレベルには便利な定数が用意されています: `FRANKENPHP_LOG_LEVEL_DEBUG` (`-4`)、`FRANKENPHP_LOG_LEVEL_INFO` (`0`)、`FRANKENPHP_LOG_LEVEL_WARN` (`4`)、`FRANKENPHP_LOG_LEVEL_ERROR` (`8`)。デフォルトは `FRANKENPHP_LOG_LEVEL_INFO` です。
+- **`context`**: ログエントリに含める追加データの連想配列。
 
 ### 例
 

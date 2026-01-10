@@ -1,10 +1,14 @@
 ---
-name: Translate DOcs
+name: Translate Docs
 concurrency:
   cancel-in-progress: true
   group: ${{ github.workflow }}-${{ github.ref }}
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/*'
 permissions:
   contents: write
   pull-requests: write
@@ -18,17 +22,27 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - id: md_files
+        run: |
+          # Check for changed .md files under docs/*.md
+          FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} -- 'docs/*.md')
+          FILES=$(echo "$FILES" | xargs -n1 basename | tr '\n' ' ')
+          [ -z "$FILES" ] && echo "found=false" >> $GITHUB_OUTPUT || echo "found=true" >> $GITHUB_OUTPUT
+          echo "files=$FILES" >> $GITHUB_OUTPUT
       - name: Set up PHP
+        if: steps.md_files.outputs.found == 'true'
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.5'
       - name: run translation script
+        if: steps.md_files.outputs.found == 'true'
         env:
-            GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          php ./docs/translate.php
+          php ./docs/translate.php ${{ steps.md_files.outputs.files }}
       - name: Run Linter
-        uses: super-linter/super-linter@v8
+        if: steps.md_files.outputs.found == 'true'
+        uses: super-linter/super-linter/slim@v8
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LINTER_RULES_PATH: /
@@ -36,6 +50,7 @@ jobs:
           FIX_NATURAL_LANGUAGE: true
           FIX_MARKDOWN: true
       - name: Commit & push changes
+        if: steps.md_files.outputs.found == 'true'
         run: |
           BRANCH="translations/$(date +%s)"
           git checkout -b "$BRANCH"
@@ -44,6 +59,6 @@ jobs:
           git add .
           git commit -m "chore: auto-lint fixes"
           git push --set-upstream origin "$BRANCH"
-          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v8

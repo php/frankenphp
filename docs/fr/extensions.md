@@ -77,8 +77,8 @@ func repeat_this(s *C.zend_string, count int64, reverse bool) unsafe.Pointer {
 
 Il y a deux choses importantes à noter ici :
 
--   Une directive `//export_php:function` définit la signature de la fonction en PHP. C'est ainsi que le générateur sait comment générer la fonction PHP avec les bons paramètres et le bon type de retour ;
--   La fonction doit retourner un `unsafe.Pointer`. FrankenPHP fournit une API pour vous aider avec le jonglage de types entre C et Go.
+- Une directive `//export_php:function` définit la signature de la fonction en PHP. C'est ainsi que le générateur sait comment générer la fonction PHP avec les bons paramètres et le bon type de retour ;
+- La fonction doit retourner un `unsafe.Pointer`. FrankenPHP fournit une API pour vous aider avec le jonglage de types entre C et Go.
 
 Alors que le premier point parle de lui-même, le second peut être plus difficile à appréhender. Plongeons plus profondément dans le jonglage de types dans la section suivante.
 
@@ -196,21 +196,21 @@ func process_data_packed(arr *C.zend_array) unsafe.Pointer {
 
 **Fonctionnalités clés de la conversion de tableaux :**
 
--   **Paires clé-valeur ordonnées** - Option pour conserver l'ordre du tableau associatif
--   **Optimisé pour plusieurs cas** - Option de ne pas conserver l'ordre pour de meilleures performances ou conversion directe vers un slice
--   **Détection automatique de liste** - Lors de la conversion vers PHP, détecte automatiquement si le tableau doit être une liste packed ou un hashmap
--   **Tableaux imbriqués** - Les tableaux peuvent être imbriqués et convertiront automatiquement tous les types supportés (`int64`,`float64`,`string`,`bool`,`nil`,`AssociativeArray`,`map[string]any`,`[]any`)
--   **Les objets ne sont pas supportés** - Actuellement, seuls les types scalaires et les tableaux peuvent être utilisés comme valeurs. Fournir un objet résultera en une valeur `null` dans le tableau PHP.
+- **Paires clé-valeur ordonnées** - Option pour conserver l'ordre du tableau associatif
+- **Optimisé pour plusieurs cas** - Option de ne pas conserver l'ordre pour de meilleures performances ou conversion directe vers un slice
+- **Détection automatique de liste** - Lors de la conversion vers PHP, détecte automatiquement si le tableau doit être une liste packed ou un hashmap
+- **Tableaux imbriqués** - Les tableaux peuvent être imbriqués et convertiront automatiquement tous les types supportés (`int64`,`float64`,`string`,`bool`,`nil`,`AssociativeArray`,`map[string]any`,`[]any`)
+- **Les objets ne sont pas supportés** - Actuellement, seuls les types scalaires et les tableaux peuvent être utilisés comme valeurs. Fournir un objet résultera en une valeur `null` dans le tableau PHP.
 
 ##### Méthodes disponibles : Packed et Associatif
 
--   `frankenphp.PHPAssociativeArray(arr frankenphp.AssociativeArray) unsafe.Pointer` - Convertir vers un tableau PHP ordonné avec des paires clé-valeur
--   `frankenphp.PHPMap(arr map[string]any) unsafe.Pointer` - Convertir une map vers un tableau PHP non ordonné avec des paires clé-valeur
--   `frankenphp.PHPPackedArray(slice []any) unsafe.Pointer` - Convertir un slice vers un tableau PHP packed avec uniquement des valeurs indexées
--   `frankenphp.GoAssociativeArray(arr unsafe.Pointer, ordered bool) frankenphp.AssociativeArray` - Convertir un tableau PHP vers un `AssociativeArray` Go ordonné (map avec ordre)
--   `frankenphp.GoMap(arr unsafe.Pointer) map[string]any` - Convertir un tableau PHP vers une map Go non ordonnée
--   `frankenphp.GoPackedArray(arr unsafe.Pointer) []any` - Convertir un tableau PHP vers un slice Go
--   `frankenphp.IsPacked(zval *C.zend_array) bool` - Vérifie si le tableau PHP est une liste ou un tableau associatif
+- `frankenphp.PHPAssociativeArray(arr frankenphp.AssociativeArray) unsafe.Pointer` - Convertir vers un tableau PHP ordonné avec des paires clé-valeur
+- `frankenphp.PHPMap(arr map[string]any) unsafe.Pointer` - Convertir une map vers un tableau PHP non ordonné avec des paires clé-valeur
+- `frankenphp.PHPPackedArray(slice []any) unsafe.Pointer` - Convertir un slice vers un tableau PHP packed avec uniquement des valeurs indexées
+- `frankenphp.GoAssociativeArray(arr unsafe.Pointer, ordered bool) frankenphp.AssociativeArray` - Convertir un tableau PHP vers un `AssociativeArray` Go ordonné (map avec ordre)
+- `frankenphp.GoMap(arr unsafe.Pointer) map[string]any` - Convertir un tableau PHP vers une map Go non ordonnée
+- `frankenphp.GoPackedArray(arr unsafe.Pointer) []any` - Convertir un tableau PHP vers un slice Go
+- `frankenphp.IsPacked(zval *C.zend_array) bool` - Vérifie si le tableau PHP est une liste ou un tableau associatif
 
 ### Travailler avec des Callables
 
@@ -266,11 +266,11 @@ type UserStruct struct {
 
 Les **classes opaques** sont des classes où la structure interne est cachée du code PHP. Cela signifie :
 
--   **Pas d'accès direct aux propriétés** : Vous ne pouvez pas lire ou écrire des propriétés directement depuis PHP (`$user->name` ne fonctionnera pas)
--   **Interface uniquement par méthodes** - Toutes les interactions doivent passer par les méthodes que vous définissez
--   **Meilleure encapsulation** - La structure de données interne est complètement contrôlée par le code Go
--   **Sécurité de type** - Aucun risque que le code PHP corrompe l'état interne avec de mauvais types
--   **API plus propre** - Force à concevoir une interface publique appropriée
+- **Pas d'accès direct aux propriétés** : Vous ne pouvez pas lire ou écrire des propriétés directement depuis PHP (`$user->name` ne fonctionnera pas)
+- **Interface uniquement par méthodes** - Toutes les interactions doivent passer par les méthodes que vous définissez
+- **Meilleure encapsulation** - La structure de données interne est complètement contrôlée par le code Go
+- **Sécurité de type** - Aucun risque que le code PHP corrompe l'état interne avec de mauvais types
+- **API plus propre** - Force à concevoir une interface publique appropriée
 
 Cette approche fournit une meilleure encapsulation et empêche le code PHP de corrompre accidentellement l'état interne de vos objets Go. Toutes les interactions avec l'objet doivent passer par les méthodes que vous définissez explicitement.
 
@@ -352,10 +352,10 @@ func (us *UserStruct) UpdateInfo(name *C.zend_string, age *int64, active *bool) 
 
 **Points clés sur les paramètres nullables :**
 
--   **Types primitifs nullables** (`?int`, `?float`, `?bool`) deviennent des pointeurs (`*int64`, `*float64`, `*bool`) en Go
--   **Chaînes nullables** (`?string`) restent comme `*C.zend_string` mais peuvent être `nil`
--   **Vérifiez `nil`** avant de déréférencer les valeurs de pointeur
--   **PHP `null` devient Go `nil`** - quand PHP passe `null`, votre fonction Go reçoit un pointeur `nil`
+- **Types primitifs nullables** (`?int`, `?float`, `?bool`) deviennent des pointeurs (`*int64`, `*float64`, `*bool`) en Go
+- **Chaînes nullables** (`?string`) restent comme `*C.zend_string` mais peuvent être `nil`
+- **Vérifiez `nil`** avant de déréférencer les valeurs de pointeur
+- **PHP `null` devient Go `nil`** - quand PHP passe `null`, votre fonction Go reçoit un pointeur `nil`
 
 > [!WARNING]
 > Actuellement, les méthodes de classe ont les limitations suivantes. **Les objets ne sont pas supportés** comme types de paramètres ou types de retour. **Les tableaux sont entièrement supportés** pour les paramètres et types de retour. Types supportés : `string`, `int`, `float`, `bool`, `array`, et `void` (pour le type de retour). **Les types de paramètres nullables sont entièrement supportés** pour tous les types scalaires (`?string`, `?int`, `?float`, `?bool`).
@@ -568,10 +568,10 @@ echo My\Extension\STATUS_ACTIVE; // 1
 
 #### Notes Importantes
 
--   Seule **une** directive d'espace de noms est autorisée par fichier. Si plusieurs directives d'espace de noms sont trouvées, le générateur retournera une erreur.
--   L'espace de noms s'applique à **tous** les symboles exportés dans le fichier : fonctions, classes, méthodes et constantes.
--   Les noms d'espaces de noms suivent les conventions des espaces de noms PHP en utilisant les barres obliques inverses (`\`) comme séparateurs.
--   Si aucun espace de noms n'est déclaré, les symboles sont exportés vers l'espace de noms global comme d'habitude.
+- Seule **une** directive d'espace de noms est autorisée par fichier. Si plusieurs directives d'espace de noms sont trouvées, le générateur retournera une erreur.
+- L'espace de noms s'applique à **tous** les symboles exportés dans le fichier : fonctions, classes, méthodes et constantes.
+- Les noms d'espaces de noms suivent les conventions des espaces de noms PHP en utilisant les barres obliques inverses (`\`) comme séparateurs.
+- Si aucun espace de noms n'est déclaré, les symboles sont exportés vers l'espace de noms global comme d'habitude.
 
 ### Générer l'Extension
 
@@ -699,9 +699,9 @@ extern zend_module_entry ext_module_entry;
 
 Ensuite, créez un fichier nommé `extension.c` qui effectuera les étapes suivantes :
 
--   Inclure les en-têtes PHP ;
--   Déclarer notre nouvelle fonction PHP native `go_print()` ;
--   Déclarer les métadonnées de l'extension.
+- Inclure les en-têtes PHP ;
+- Déclarer notre nouvelle fonction PHP native `go_print()` ;
+- Déclarer les métadonnées de l'extension.
 
 Commençons par inclure les en-têtes requis :
 

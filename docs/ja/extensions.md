@@ -77,8 +77,8 @@ func repeat_this(s *C.zend_string, count int64, reverse bool) unsafe.Pointer {
 
 ここで重要なポイントが2つあります：
 
--   ディレクティブコメント`//export_php:function`はPHPでの関数シグネチャを定義します。これにより、ジェネレーターは適切なパラメータと戻り値の型でPHP関数を生成する方法を知ることができます。
--   関数は`unsafe.Pointer`を返さなければなりません。FrankenPHPはCとGo間の型変換を支援するAPIを提供しています。
+- ディレクティブコメント`//export_php:function`はPHPでの関数シグネチャを定義します。これにより、ジェネレーターは適切なパラメータと戻り値の型でPHP関数を生成する方法を知ることができます。
+- 関数は`unsafe.Pointer`を返さなければなりません。FrankenPHPはCとGo間の型変換を支援するAPIを提供しています。
 
 前者は理解しやすいですが、後者は少し複雑かもしれません。次のセクションで型変換について詳しく説明します。
 
@@ -200,21 +200,21 @@ func process_data_packed(arr *C.zend_array) unsafe.Pointer {
 
 **配列変換の主な機能：**
 
--   **順序付けされたキーと値のペア** - 連想配列の順序を保持するオプション
--   **複数のケースに最適化** - パフォーマンス向上のために順序を破棄したり、直接スライスに変換したりするオプション
--   **自動リスト検出** - PHPに変換する際、配列がパックされたリストになるべきかハッシュマップになるべきかを自動的に検出
--   **ネストされた配列** - 配列はネストでき、すべてのサポートされる型（`int64`、`float64`、`string`、`bool`、`nil`、`AssociativeArray`、`map[string]any`、`[]any`）を自動的に変換します
--   **オブジェクトはサポートされていません** - 現在、スカラー型と配列のみが値として使用できます。オブジェクトを提供するとPHP配列内で`null`値になります。
+- **順序付けされたキーと値のペア** - 連想配列の順序を保持するオプション
+- **複数のケースに最適化** - パフォーマンス向上のために順序を破棄したり、直接スライスに変換したりするオプション
+- **自動リスト検出** - PHPに変換する際、配列がパックされたリストになるべきかハッシュマップになるべきかを自動的に検出
+- **ネストされた配列** - 配列はネストでき、すべてのサポートされる型（`int64`、`float64`、`string`、`bool`、`nil`、`AssociativeArray`、`map[string]any`、`[]any`）を自動的に変換します
+- **オブジェクトはサポートされていません** - 現在、スカラー型と配列のみが値として使用できます。オブジェクトを提供するとPHP配列内で`null`値になります。
 
 ##### 利用可能なメソッド: パックおよび連想
 
--   `frankenphp.PHPAssociativeArray(arr frankenphp.AssociativeArray) unsafe.Pointer` - キーと値のペアを持つ順序付きPHP配列に変換
--   `frankenphp.PHPMap(arr map[string]any) unsafe.Pointer` - マップをキーと値のペアを持つ順序なしPHP配列に変換
--   `frankenphp.PHPPackedArray(slice []any) unsafe.Pointer` - スライスをインデックス付き値のみのPHPパックされた配列に変換
--   `frankenphp.GoAssociativeArray(arr unsafe.Pointer, ordered bool) frankenphp.AssociativeArray` - PHP配列を順序付きGo `AssociativeArray` (順序付きマップ) に変換
--   `frankenphp.GoMap(arr unsafe.Pointer) map[string]any` - PHP配列を順序なしGoマップに変換
--   `frankenphp.GoPackedArray(arr unsafe.Pointer) []any` - PHP配列をGoスライスに変換
--   `frankenphp.IsPacked(zval *C.zend_array) bool` - PHP配列がパックされている（インデックスのみ）か連想配列（キーと値のペア）かを確認
+- `frankenphp.PHPAssociativeArray(arr frankenphp.AssociativeArray) unsafe.Pointer` - キーと値のペアを持つ順序付きPHP配列に変換
+- `frankenphp.PHPMap(arr map[string]any) unsafe.Pointer` - マップをキーと値のペアを持つ順序なしPHP配列に変換
+- `frankenphp.PHPPackedArray(slice []any) unsafe.Pointer` - スライスをインデックス付き値のみのPHPパックされた配列に変換
+- `frankenphp.GoAssociativeArray(arr unsafe.Pointer, ordered bool) frankenphp.AssociativeArray` - PHP配列を順序付きGo `AssociativeArray` (順序付きマップ) に変換
+- `frankenphp.GoMap(arr unsafe.Pointer) map[string]any` - PHP配列を順序なしGoマップに変換
+- `frankenphp.GoPackedArray(arr unsafe.Pointer) []any` - PHP配列をGoスライスに変換
+- `frankenphp.IsPacked(zval *C.zend_array) bool` - PHP配列がパックされている（インデックスのみ）か連想配列（キーと値のペア）かを確認
 
 ### Working with Callables
 
@@ -281,11 +281,11 @@ type UserStruct struct {
 
 **不透明クラス（opaque classes）**は、内部構造（プロパティ）がPHPコードから隠されているクラスです。これは以下を意味します：
 
--   **プロパティへの直接アクセス不可** ：PHPから直接プロパティを読み書きできません（`$user->name`は機能しません）
--   **メソッド経由のみで操作** - すべてのやりとりはGoで定義したメソッドを通じて行う必要があります
--   **より良いカプセル化** - 内部データ構造は完全にGoコードによって制御されます
--   **型安全性** - PHP側から誤った型で内部状態が破壊されるリスクがありません
--   **よりクリーンなAPI** - 適切な公開インターフェースを設計することを強制します
+- **プロパティへの直接アクセス不可** ：PHPから直接プロパティを読み書きできません（`$user->name`は機能しません）
+- **メソッド経由のみで操作** - すべてのやりとりはGoで定義したメソッドを通じて行う必要があります
+- **より良いカプセル化** - 内部データ構造は完全にGoコードによって制御されます
+- **型安全性** - PHP側から誤った型で内部状態が破壊されるリスクがありません
+- **よりクリーンなAPI** - 適切な公開インターフェースを設計することを強制します
 
 このアプローチは優れたカプセル化を実現し、PHPコードがGoオブジェクトの内部状態を意図せずに破壊してしまうことを防ぎます。オブジェクトとのすべてのやりとりは、明示的に定義したメソッドを通じて行う必要があります。
 
@@ -367,10 +367,10 @@ func (us *UserStruct) UpdateInfo(name *C.zend_string, age *int64, active *bool) 
 
 **Nullableパラメータの重要なポイント：**
 
--   **プリミティブ型のnullable** (`?int`, `?float`, `?bool`) はGoではそれぞれポインタ (`*int64`, `*float64`, `*bool`) になります
--   **nullable文字列** (`?string`) は `*C.zend_string` のままですが、`nil` になることがあります
--   ポインタ値を逆参照する前に **`nil`をチェック** してください
--   **PHPの`null`はGoの`nil`になります** - PHPが`null`を渡すと、Go関数は`nil`ポインタを受け取ります
+- **プリミティブ型のnullable** (`?int`, `?float`, `?bool`) はGoではそれぞれポインタ (`*int64`, `*float64`, `*bool`) になります
+- **nullable文字列** (`?string`) は `*C.zend_string` のままですが、`nil` になることがあります
+- ポインタ値を逆参照する前に **`nil`をチェック** してください
+- **PHPの`null`はGoの`nil`になります** - PHPが`null`を渡すと、Go関数は`nil`ポインタを受け取ります
 
 > [!WARNING]
 >
@@ -584,10 +584,10 @@ echo My\Extension\STATUS_ACTIVE; // 1
 
 #### Important Notes
 
--   1つのファイルにつき**1つ**の名前空間ディレクティブのみが許可されます。複数の名前空間ディレクティブが見つかった場合、ジェネレーターはエラーを返します。
--   名前空間はファイル内の**すべて**のエクスポートされたシンボル（関数、クラス、メソッド、定数）に適用されます。
--   名前空間名は、バックスラッシュ（`\`）を区切り文字とするPHPの名前空間の慣習に従います。
--   名前空間が宣言されていない場合、シンボルは通常通りグローバル名前空間にエクスポートされます。
+- 1つのファイルにつき**1つ**の名前空間ディレクティブのみが許可されます。複数の名前空間ディレクティブが見つかった場合、ジェネレーターはエラーを返します。
+- 名前空間はファイル内の**すべて**のエクスポートされたシンボル（関数、クラス、メソッド、定数）に適用されます。
+- 名前空間名は、バックスラッシュ（`\`）を区切り文字とするPHPの名前空間の慣習に従います。
+- 名前空間が宣言されていない場合、シンボルは通常通りグローバル名前空間にエクスポートされます。
 
 ### 拡張モジュールの生成
 
@@ -715,9 +715,9 @@ extern zend_module_entry ext_module_entry;
 
 次に、以下のステップを実行する`extension.c`という名前のファイルを作成します：
 
--   PHPヘッダーをインクルードする
--   新しいネイティブPHP関数`go_print()`を宣言する
--   拡張モジュールのメタデータを宣言する
+- PHPヘッダーをインクルードする
+- 新しいネイティブPHP関数`go_print()`を宣言する
+- 拡張モジュールのメタデータを宣言する
 
 まずは必要なヘッダーのインクルードから始めましょう：
 

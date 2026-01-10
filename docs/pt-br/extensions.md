@@ -114,13 +114,8 @@ func repeat_this(s *C.zend_string, count int64, reverse bool) unsafe.Pointer {
 
 Há duas coisas importantes a serem observadas aqui:
 
--   Um comentário de diretiva `//export_php:function` define a assinatura da
-    função no PHP.
-    É assim que o gerador sabe como gerar a função PHP com os parâmetros e o tipo
-    de retorno corretos;
--   A função deve retornar um `unsafe.Pointer`.
-    O FrankenPHP fornece uma API para ajudar você com o malabarismo de tipos entre
-    C e Go.
+- Um comentário de diretiva `//export_php:function` define a assinatura da função no PHP. É assim que o gerador sabe como gerar a função PHP com os parâmetros e o tipo de retorno corretos;
+- A função deve retornar um `unsafe.Pointer`. O FrankenPHP fornece uma API para ajudar você com o malabarismo de tipos entre C e Go.
 
 Embora o primeiro ponto fale por si, o segundo pode ser mais difícil de
 entender.
@@ -262,34 +257,34 @@ func process_data_packed(arr *C.zend_array) unsafe.Pointer {
 
 **Principais recursos da conversão de arrays:**
 
--   **Pares chave-valor ordenados** - Opção para manter a ordem do array
+- **Pares chave-valor ordenados** - Opção para manter a ordem do array
     associativo;
--   **Otimizado para múltiplos casos** - Opção para ignorar a ordem para melhor
+- **Otimizado para múltiplos casos** - Opção para ignorar a ordem para melhor
     desempenho ou converter diretamente para um slice;
--   **Detecção automática de listas** - Ao converter para PHP, detecta
+- **Detecção automática de listas** - Ao converter para PHP, detecta
     automaticamente se o array deve ser uma lista compactada ou um hashmap;
--   **Arrays aninhados** - Os arrays podem ser aninhados e converterão todos os
+- **Arrays aninhados** - Os arrays podem ser aninhados e converterão todos os
     tipos suportados automaticamente (`int64`, `float64`, `string`, `bool`, `nil`,
     `AssociativeArray`, `map[string]any`, `[]any`);
--   **Objetos não são suportados** - Atualmente, apenas tipos escalares e arrays
+- **Objetos não são suportados** - Atualmente, apenas tipos escalares e arrays
     podem ser usados como valores.
     Fornecer um objeto resultará em um valor `null` no array PHP.
 
 ##### Métodos disponíveis: empacotado e associativo
 
--   `frankenphp.PHPAssociativeArray(arr frankenphp.AssociativeArray) unsafe.Pointer`
+- `frankenphp.PHPAssociativeArray(arr frankenphp.AssociativeArray) unsafe.Pointer`
     \- Converte para um array PHP ordenado com pares chave-valor;
--   `frankenphp.PHPMap(arr map[string]any) unsafe.Pointer` - Converte um mapa em
+- `frankenphp.PHPMap(arr map[string]any) unsafe.Pointer` - Converte um mapa em
     um array PHP não ordenado com pares chave-valor;
--   `frankenphp.PHPPackedArray(slice []any) unsafe.Pointer` - Converte um slice
+- `frankenphp.PHPPackedArray(slice []any) unsafe.Pointer` - Converte um slice
     em um array PHP compactado apenas com valores indexados;
--   `frankenphp.GoAssociativeArray(arr unsafe.Pointer, ordered bool) frankenphp.AssociativeArray`
+- `frankenphp.GoAssociativeArray(arr unsafe.Pointer, ordered bool) frankenphp.AssociativeArray`
     \- Converte um array PHP em um `AssociativeArray` Go ordenado (mapa com ordem);
--   `frankenphp.GoMap(arr unsafe.Pointer) map[string]any` - Converte um array PHP
+- `frankenphp.GoMap(arr unsafe.Pointer) map[string]any` - Converte um array PHP
     em um mapa Go não ordenado;
--   `frankenphp.GoPackedArray(arr unsafe.Pointer) []any` - Converte um array PHP
+- `frankenphp.GoPackedArray(arr unsafe.Pointer) []any` - Converte um array PHP
     em um slice Go;
--   `frankenphp.IsPacked(zval *C.zend_array) bool` - Verifica se um array PHP é
+- `frankenphp.IsPacked(zval *C.zend_array) bool` - Verifica se um array PHP é
     compactado (apenas indexado) ou associativo (pares chave-valor).
 
 ### Trabalhando com Callables
@@ -369,15 +364,15 @@ type UserStruct struct {
 do código PHP.
 Isso significa:
 
--   **Sem acesso direto às propriedades**: Você não pode ler ou escrever
+- **Sem acesso direto às propriedades**: Você não pode ler ou escrever
     propriedades diretamente do PHP (`$user->name` não funcionará);
--   **Interface somente para métodos** - Todas as interações devem passar pelos
+- **Interface somente para métodos** - Todas as interações devem passar pelos
     métodos que você definir;
--   **Melhor encapsulamento** - A estrutura interna de dados é completamente
+- **Melhor encapsulamento** - A estrutura interna de dados é completamente
     controlada pelo código Go;
--   **Segurança de tipos** - Sem risco do código PHP corromper o estado interno
+- **Segurança de tipos** - Sem risco do código PHP corromper o estado interno
     com tipos incorretos;
--   **API mais limpa** - Força o design de uma interface pública adequada.
+- **API mais limpa** - Força o design de uma interface pública adequada.
 
 Essa abordagem fornece melhor encapsulamento e evita que o código PHP corrompa
 acidentalmente o estado interno dos seus objetos Go.
@@ -466,12 +461,12 @@ func (us *UserStruct) UpdateInfo(name *C.zend_string, age *int64, active *bool) 
 
 **Pontos-chave sobre parâmetros anuláveis:**
 
--   **Tipos primitivos anuláveis** (`?int`, `?float`, `?bool`) tornam-se ponteiros
+- **Tipos primitivos anuláveis** (`?int`, `?float`, `?bool`) tornam-se ponteiros
     (`*int64`, `*float64`, `*bool`) em Go;
--   **Strings anuláveis** (`?string`) permanecem como `*C.zend_string`, mas podem
+- **Strings anuláveis** (`?string`) permanecem como `*C.zend_string`, mas podem
     ser `nil`;
--   **Verifique `nil`** antes de dereferenciar valores de ponteiro;
--   **`null` do PHP torna-se `nil` do Go** - quando o PHP passa `null`, sua função
+- **Verifique `nil`** antes de dereferenciar valores de ponteiro;
+- **`null` do PHP torna-se `nil` do Go** - quando o PHP passa `null`, sua função
     em Go recebe um ponteiro `nil`.
 
 > [!WARNING]
@@ -715,14 +710,14 @@ echo My\Extension\STATUS_ACTIVE; // 1
 
 #### Notas importantes
 
--   Apenas **uma** diretiva de namespace é permitida por arquivo.
+- Apenas **uma** diretiva de namespace é permitida por arquivo.
     Se várias diretivas de namespace forem encontradas, o gerador retornará um
     erro;
--   O namespace se aplica a **todos** os símbolos exportados no arquivo: funções,
+- O namespace se aplica a **todos** os símbolos exportados no arquivo: funções,
     classes, métodos e constantes;
--   Os nomes de namespace seguem as convenções de namespace do PHP, usando barras
+- Os nomes de namespace seguem as convenções de namespace do PHP, usando barras
     invertidas (`\`) como separadores;
--   Se nenhum namespace for declarado, os símbolos serão exportados para o
+- Se nenhum namespace for declarado, os símbolos serão exportados para o
     namespace global como de costume.
 
 ### Gerando a extensão
@@ -893,9 +888,9 @@ extern zend_module_entry ext_module_entry;
 Em seguida, crie um arquivo chamado `extension.c` que executará as seguintes
 etapas:
 
--   Incluir cabeçalhos PHP;
--   Declarar nossa nova função nativa PHP `go_print()`;
--   Declarar os metadados da extensão.
+- Incluir cabeçalhos PHP;
+- Declarar nossa nova função nativa PHP `go_print()`;
+- Declarar os metadados da extensão.
 
 Vamos começar incluindo os cabeçalhos necessários:
 

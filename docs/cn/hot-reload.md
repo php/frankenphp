@@ -135,5 +135,5 @@ php_server {
 4.  **接收**：浏览器通过 JavaScript 库监听，接收 Mercure 事件。
 5.  **更新**：
 
-    -   如果检测到 **Idiomorph**，它会获取更新的内容并修改当前的 HTML 以匹配新状态，即时应用更改而不会丢失状态。
-    -   否则，将调用 `window.location.reload()` 以刷新页面。
+- 如果检测到 **Idiomorph**，它会获取更新的内容并修改当前的 HTML 以匹配新状态，即时应用更改而不会丢失状态。
+- 否则，将调用 `window.location.reload()` 以刷新页面。

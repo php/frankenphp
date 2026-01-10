@@ -77,8 +77,8 @@ func repeat_this(s *C.zend_string, count int64, reverse bool) unsafe.Pointer {
 
 这里有两个重要的事情要注意：
 
--   指令注释 `//export_php:function` 定义了 PHP 中的函数签名。这是生成器知道如何使用正确的参数和返回类型生成 PHP 函数的方式；
--   函数必须返回 `unsafe.Pointer`。FrankenPHP 提供了一个 API 来帮助你在 C 和 Go 之间进行类型转换。
+- 指令注释 `//export_php:function` 定义了 PHP 中的函数签名。这是生成器知道如何使用正确的参数和返回类型生成 PHP 函数的方式；
+- 函数必须返回 `unsafe.Pointer`。FrankenPHP 提供了一个 API 来帮助你在 C 和 Go 之间进行类型转换。
 
 虽然第一点不言自明，但第二点可能更难理解。让我们在下一节中深入了解类型转换。
 
@@ -197,21 +197,21 @@ func process_data_packed(arr *C.zend_array) unsafe.Pointer {
 
 **数组转换的关键特性：**
 
--   **有序键值对** - 可选择保留关联数组的顺序
--   **针对多种情况优化** - 可选择放弃顺序以获得更好的性能，或直接转换为切片
--   **自动列表检测** - 转换为 PHP 时，自动检测数组应该是打包列表还是哈希映射
--   **嵌套数组** - 数组可以嵌套，并将自动转换所有支持的类型（`int64`、`float64`、`string`、`bool`、`nil`、`AssociativeArray`、`map[string]any`、`[]any`）
--   **不支持对象** - 目前，只有标量类型和数组可以用作值。提供对象将导致 PHP 数组中的 `null` 值。
+- **有序键值对** - 可选择保留关联数组的顺序
+- **针对多种情况优化** - 可选择放弃顺序以获得更好的性能，或直接转换为切片
+- **自动列表检测** - 转换为 PHP 时，自动检测数组应该是打包列表还是哈希映射
+- **嵌套数组** - 数组可以嵌套，并将自动转换所有支持的类型（`int64`、`float64`、`string`、`bool`、`nil`、`AssociativeArray`、`map[string]any`、`[]any`）
+- **不支持对象** - 目前，只有标量类型和数组可以用作值。提供对象将导致 PHP 数组中的 `null` 值。
 
 ##### 可用方法：打包和关联
 
--   `frankenphp.PHPAssociativeArray(arr frankenphp.AssociativeArray) unsafe.Pointer` - 转换为带有键值对的有序 PHP 数组
--   `frankenphp.PHPMap(arr map[string]any) unsafe.Pointer` - 将 map 转换为带有键值对的无序 PHP 数组
--   `frankenphp.PHPPackedArray(slice []any) unsafe.Pointer` - 将 slice 转换为仅带有索引值的 PHP 打包数组
--   `frankenphp.GoAssociativeArray(arr unsafe.Pointer, ordered bool) frankenphp.AssociativeArray` - 将 PHP 数组转换为有序的 Go `AssociativeArray`（带有顺序的 map）
--   `frankenphp.GoMap(arr unsafe.Pointer) map[string]any` - 将 PHP 数组转换为无序的 Go map
--   `frankenphp.GoPackedArray(arr unsafe.Pointer) []any` - 将 PHP 数组转换为 Go slice
--   `frankenphp.IsPacked(zval *C.zend_array) bool` - 检查 PHP 数组是打包（仅索引）还是关联（键值对）
+- `frankenphp.PHPAssociativeArray(arr frankenphp.AssociativeArray) unsafe.Pointer` - 转换为带有键值对的有序 PHP 数组
+- `frankenphp.PHPMap(arr map[string]any) unsafe.Pointer` - 将 map 转换为带有键值对的无序 PHP 数组
+- `frankenphp.PHPPackedArray(slice []any) unsafe.Pointer` - 将 slice 转换为仅带有索引值的 PHP 打包数组
+- `frankenphp.GoAssociativeArray(arr unsafe.Pointer, ordered bool) frankenphp.AssociativeArray` - 将 PHP 数组转换为有序的 Go `AssociativeArray`（带有顺序的 map）
+- `frankenphp.GoMap(arr unsafe.Pointer) map[string]any` - 将 PHP 数组转换为无序的 Go map
+- `frankenphp.GoPackedArray(arr unsafe.Pointer) []any` - 将 PHP 数组转换为 Go slice
+- `frankenphp.IsPacked(zval *C.zend_array) bool` - 检查 PHP 数组是打包（仅索引）还是关联（键值对）
 
 ### 处理可调用对象
 
@@ -268,11 +268,11 @@ type UserStruct struct {
 
 **不透明类**是内部结构（属性）对 PHP 代码隐藏的类。这意味着：
 
--   **无直接属性访问**：你不能直接从 PHP 读取或写入属性（`$user->name` 不起作用）
--   **仅方法接口** - 所有交互必须通过你定义的方法进行
--   **更好的封装** - 内部数据结构完全由 Go 代码控制
--   **类型安全** - 没有 PHP 代码使用错误类型破坏内部状态的风险
--   **更清晰的 API** - 强制设计适当的公共接口
+- **无直接属性访问**：你不能直接从 PHP 读取或写入属性（`$user->name` 不起作用）
+- **仅方法接口** - 所有交互必须通过你定义的方法进行
+- **更好的封装** - 内部数据结构完全由 Go 代码控制
+- **类型安全** - 没有 PHP 代码使用错误类型破坏内部状态的风险
+- **更清晰的 API** - 强制设计适当的公共接口
 
 这种方法提供了更好的封装，并防止 PHP 代码意外破坏 Go 对象的内部状态。与对象的所有交互都必须通过你明确定义的方法进行。
 
@@ -355,10 +355,10 @@ func (us *UserStruct) UpdateInfo(name *C.zend_string, age *int64, active *bool) 
 
 **关于可空参数的要点：**
 
--   **可空原始类型**（`?int`、`?float`、`?bool`）在 Go 中变成指针（`*int64`、`*float64`、`*bool`）
--   **可空字符串**（`?string`）仍然是 `*C.zend_string`，但可以是 `nil`
--   **在解引用指针值之前检查 `nil`**
--   **PHP `null` 变成 Go `nil`** - 当 PHP 传递 `null` 时，你的 Go 函数接收 `nil` 指针
+- **可空原始类型**（`?int`、`?float`、`?bool`）在 Go 中变成指针（`*int64`、`*float64`、`*bool`）
+- **可空字符串**（`?string`）仍然是 `*C.zend_string`，但可以是 `nil`
+- **在解引用指针值之前检查 `nil`**
+- **PHP `null` 变成 Go `nil`** - 当 PHP 传递 `null` 时，你的 Go 函数接收 `nil` 指针
 
 > [!WARNING]
 >
@@ -572,10 +572,10 @@ echo My\Extension\STATUS_ACTIVE; // 1
 
 #### 重要说明
 
--   每个文件只允许**一个**命名空间指令。如果找到多个命名空间指令，生成器将返回错误。
--   命名空间适用于文件中的**所有**导出符号：函数、类、方法和常量。
--   命名空间名称遵循 PHP 命名空间约定，使用反斜杠（`\`）作为分隔符。
--   如果没有声明命名空间，符号将照常导出到全局命名空间。
+- 每个文件只允许**一个**命名空间指令。如果找到多个命名空间指令，生成器将返回错误。
+- 命名空间适用于文件中的**所有**导出符号：函数、类、方法和常量。
+- 命名空间名称遵循 PHP 命名空间约定，使用反斜杠（`\`）作为分隔符。
+- 如果没有声明命名空间，符号将照常导出到全局命名空间。
 
 ### 生成扩展
 
@@ -703,9 +703,9 @@ extern zend_module_entry ext_module_entry;
 
 接下来，创建一个名为 `extension.c` 的文件，该文件将执行以下步骤：
 
--   包含 PHP 头文件；
--   声明我们的新原生 PHP 函数 `go_print()`；
--   声明扩展元数据。
+- 包含 PHP 头文件；
+- 声明我们的新原生 PHP 函数 `go_print()`；
+- 声明扩展元数据。
 
 让我们首先包含所需的头文件：
 

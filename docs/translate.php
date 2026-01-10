@@ -92,7 +92,8 @@ function sanitizeMarkdown(string $markdown): string
     return trim($markdown) . "\n";
 }
 
-$fileToTranslate = $argv[1] ?? '';
+$fileToTranslate = $argv;
+array_shift($fileToTranslate);
 $apiKey = $_SERVER['GEMINI_API_KEY'] ?? $_ENV['GEMINI_API_KEY'] ?? '';
 if (!$apiKey) {
     echo 'Enter gemini api key ($GEMINI_API_KEY): ';
@@ -102,7 +103,7 @@ if (!$apiKey) {
 $files = array_filter(scandir(__DIR__), fn($filename) => str_ends_with($filename, '.md'));
 foreach ($files as $file) {
     $englishFile = file_get_contents(__DIR__ . "/$file");
-    if ($fileToTranslate && $fileToTranslate !== $file && "$fileToTranslate.md" !== $file) {
+    if ($fileToTranslate && !in_array($file, $fileToTranslate)) {
         continue;
     }
     foreach (LANGUAGES as $language => $languageName) {

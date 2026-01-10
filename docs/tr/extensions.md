@@ -198,21 +198,21 @@ func process_data_packed(arr *C.zend_array) unsafe.Pointer {
 
 **Dizi dönüşümünün temel özellikleri:**
 
--   **Sıralı anahtar-değer çiftleri** - İlişkisel dizinin sırasını koruma seçeneği
--   **Birden fazla durum için optimize edildi** - Daha iyi performans için sırayı bırakma veya doğrudan bir dilime dönüştürme seçeneği
--   **Otomatik liste tespiti** - PHP'ye dönüştürürken, dizinin sıkıştırılmış bir liste mi yoksa hash haritası mı olması gerektiğini otomatik olarak algılar
--   **İç İçe Diziler** - Diziler iç içe olabilir ve tüm desteklenen türleri otomatik olarak dönüştürür (`int64`,`float64`,`string`,`bool`,`nil`,`AssociativeArray`,`map[string]any`,`[]any`)
--   **Nesneler desteklenmiyor** - Şu anda yalnızca skaler türler ve diziler değer olarak kullanılabilir. Bir nesne sağlamak, PHP dizisinde `null` bir değerle sonuçlanacaktır.
+- **Sıralı anahtar-değer çiftleri** - İlişkisel dizinin sırasını koruma seçeneği
+- **Birden fazla durum için optimize edildi** - Daha iyi performans için sırayı bırakma veya doğrudan bir dilime dönüştürme seçeneği
+- **Otomatik liste tespiti** - PHP'ye dönüştürürken, dizinin sıkıştırılmış bir liste mi yoksa hash haritası mı olması gerektiğini otomatik olarak algılar
+- **İç İçe Diziler** - Diziler iç içe olabilir ve tüm desteklenen türleri otomatik olarak dönüştürür (`int64`,`float64`,`string`,`bool`,`nil`,`AssociativeArray`,`map[string]any`,`[]any`)
+- **Nesneler desteklenmiyor** - Şu anda yalnızca skaler türler ve diziler değer olarak kullanılabilir. Bir nesne sağlamak, PHP dizisinde `null` bir değerle sonuçlanacaktır.
 
 ##### Mevcut metodlar: Packed ve İlişkisel
 
--   `frankenphp.PHPAssociativeArray(arr frankenphp.AssociativeArray) unsafe.Pointer` - Anahtar-değer çiftleriyle sıralı bir PHP dizisine dönüştürür
--   `frankenphp.PHPMap(arr map[string]any) unsafe.Pointer` - Bir haritayı anahtar-değer çiftleriyle sırasız bir PHP dizisine dönüştürür
--   `frankenphp.PHPPackedArray(slice []any) unsafe.Pointer` - Bir dilimi yalnızca indekslenmiş değerlere sahip bir PHP packed dizisine dönüştürür
--   `frankenphp.GoAssociativeArray(arr unsafe.Pointer, ordered bool) frankenphp.AssociativeArray` - Bir PHP dizisini sıralı bir Go `AssociativeArray`'e (sıralı harita) dönüştürür
--   `frankenphp.GoMap(arr unsafe.Pointer) map[string]any` - Bir PHP dizisini sırasız bir Go haritasına dönüştürür
--   `frankenphp.GoPackedArray(arr unsafe.Pointer) []any` - Bir PHP dizisini bir Go dilimine dönüştürür
--   `frankenphp.IsPacked(zval *C.zend_array) bool` - Bir PHP dizisinin packed (yalnızca indekslenmiş) mi yoksa ilişkisel (anahtar-değer çiftleri) mi olduğunu kontrol eder
+- `frankenphp.PHPAssociativeArray(arr frankenphp.AssociativeArray) unsafe.Pointer` - Anahtar-değer çiftleriyle sıralı bir PHP dizisine dönüştürür
+- `frankenphp.PHPMap(arr map[string]any) unsafe.Pointer` - Bir haritayı anahtar-değer çiftleriyle sırasız bir PHP dizisine dönüştürür
+- `frankenphp.PHPPackedArray(slice []any) unsafe.Pointer` - Bir dilimi yalnızca indekslenmiş değerlere sahip bir PHP packed dizisine dönüştürür
+- `frankenphp.GoAssociativeArray(arr unsafe.Pointer, ordered bool) frankenphp.AssociativeArray` - Bir PHP dizisini sıralı bir Go `AssociativeArray`'e (sıralı harita) dönüştürür
+- `frankenphp.GoMap(arr unsafe.Pointer) map[string]any` - Bir PHP dizisini sırasız bir Go haritasına dönüştürür
+- `frankenphp.GoPackedArray(arr unsafe.Pointer) []any` - Bir PHP dizisini bir Go dilimine dönüştürür
+- `frankenphp.IsPacked(zval *C.zend_array) bool` - Bir PHP dizisinin packed (yalnızca indekslenmiş) mi yoksa ilişkisel (anahtar-değer çiftleri) mi olduğunu kontrol eder
 
 ### Çağrılabilirler (Callables) ile Çalışma
 
@@ -268,11 +268,11 @@ type UserStruct struct {
 
 **Saydam olmayan sınıflar**, dahili yapının (özelliklerin) PHP kodundan gizlendiği sınıflardır. Bu şu anlama gelir:
 
--   **Doğrudan özellik erişimi yok**: PHP'den özellikleri doğrudan okuyamaz veya yazamazsınız (`$user->name` çalışmaz)
--   **Yalnızca metot arayüzü** - Tüm etkileşimler, tanımladığınız metotlar aracılığıyla gerçekleşmelidir
--   **Daha iyi kapsülleme** - Dahili veri yapısı tamamen Go kodu tarafından kontrol edilir
--   **Tür güvenliği** - PHP kodunun yanlış türlerle dahili durumu bozma riski yok
--   **Daha temiz API** - Uygun bir genel arayüz tasarlamaya zorlar
+- **Doğrudan özellik erişimi yok**: PHP'den özellikleri doğrudan okuyamaz veya yazamazsınız (`$user->name` çalışmaz)
+- **Yalnızca metot arayüzü** - Tüm etkileşimler, tanımladığınız metotlar aracılığıyla gerçekleşmelidir
+- **Daha iyi kapsülleme** - Dahili veri yapısı tamamen Go kodu tarafından kontrol edilir
+- **Tür güvenliği** - PHP kodunun yanlış türlerle dahili durumu bozma riski yok
+- **Daha temiz API** - Uygun bir genel arayüz tasarlamaya zorlar
 
 Bu yaklaşım, daha iyi kapsülleme sağlar ve PHP kodunun Go nesnelerinizin dahili durumunu yanlışlıkla bozmasını önler. Nesneyle olan tüm etkileşimler, açıkça tanımladığınız metotlar aracılığıyla gerçekleşmelidir.
 
@@ -354,10 +354,10 @@ func (us *UserStruct) UpdateInfo(name *C.zend_string, age *int64, active *bool) 
 
 **Boş geçilebilir parametreler hakkında önemli noktalar:**
 
--   **Boş geçilebilir ilkel türler** (`?int`, `?float`, `?bool`) Go'da işaretçilere (`*int64`, `*float64`, `*bool`) dönüşür
--   **Boş geçilebilir dizeler** (`?string`) `*C.zend_string` olarak kalır ancak `nil` olabilir
--   İşaretçi değerlerini referans almadan önce `nil` kontrolü yapın
--   **PHP `null` Go `nil` olur** - PHP `null` geçirdiğinde, Go fonksiyonunuz bir `nil` işaretçi alır
+- **Boş geçilebilir ilkel türler** (`?int`, `?float`, `?bool`) Go'da işaretçilere (`*int64`, `*float64`, `*bool`) dönüşür
+- **Boş geçilebilir dizeler** (`?string`) `*C.zend_string` olarak kalır ancak `nil` olabilir
+- İşaretçi değerlerini referans almadan önce `nil` kontrolü yapın
+- **PHP `null` Go `nil` olur** - PHP `null` geçirdiğinde, Go fonksiyonunuz bir `nil` işaretçi alır
 
 > [!WARNING]
 >
@@ -571,10 +571,10 @@ echo My\Extension\STATUS_ACTIVE; // 1
 
 #### Önemli Notlar
 
--   Dosya başına yalnızca **bir** ad alanı yönergesine izin verilir. Birden fazla ad alanı yönergesi bulunursa, üretici bir hata döndürür.
--   Ad alanı, dosyada dışa aktarılan **tüm** semboller için geçerlidir: fonksiyonlar, sınıflar, metotlar ve sabitler.
--   Ad alanı adları, ayırıcı olarak ters eğik çizgi (`\`) kullanarak PHP ad alanı kurallarına uyar.
--   Hiçbir ad alanı bildirilmezse, semboller her zamanki gibi genel ad alanına dışa aktarılır.
+- Dosya başına yalnızca **bir** ad alanı yönergesine izin verilir. Birden fazla ad alanı yönergesi bulunursa, üretici bir hata döndürür.
+- Ad alanı, dosyada dışa aktarılan **tüm** semboller için geçerlidir: fonksiyonlar, sınıflar, metotlar ve sabitler.
+- Ad alanı adları, ayırıcı olarak ters eğik çizgi (`\`) kullanarak PHP ad alanı kurallarına uyar.
+- Hiçbir ad alanı bildirilmezse, semboller her zamanki gibi genel ad alanına dışa aktarılır.
 
 ### Eklentiyi Oluşturma
 
@@ -702,9 +702,9 @@ extern zend_module_entry ext_module_entry;
 
 Ardından, aşağıdaki adımları gerçekleştirecek `extension.c` adında bir dosya oluşturun:
 
--   PHP başlıklarını dahil etme;
--   Yeni yerel PHP fonksiyonumuz `go_print()`'i bildirme;
--   Eklenti meta verilerini bildirme.
+- PHP başlıklarını dahil etme;
+- Yeni yerel PHP fonksiyonumuz `go_print()`'i bildirme;
+- Eklenti meta verilerini bildirme.
 
 Gerekli başlıkları dahil ederek başlayalım:
 
