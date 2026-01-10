@@ -22,12 +22,12 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      # Check for changed .md files under docs/*.md
       - id: md_files
         run: |
-          # Check for changed .md files under docs/*.md
           FILES=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" -- 'docs/*.md')
           FILES=$(echo "$FILES" | xargs -n1 basename | tr '\n' ' ')
-          [ -z "$FILES" ] && echo "found=false" >> $GITHUB_OUTPUT || echo "found=true" >> "$GITHUB_OUTPUT"
+          [ -z "$FILES" ] && echo "found=false" >> "$GITHUB_OUTPUT" || echo "found=true" >> "$GITHUB_OUTPUT"
           echo "files=$FILES" >> "$GITHUB_OUTPUT"
       - name: Set up PHP
         if: steps.md_files.outputs.found == 'true'
@@ -39,8 +39,7 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          IFS=' ' read -r -a FILES <<< "${{ steps.md_files.outputs.files }}"
-          php ./docs/translate.php "${FILES[@]}"
+          php ./docs/translate.php "${{ steps.md_files.outputs.files }}"
       - name: Run Linter
         if: steps.md_files.outputs.found == 'true'
         uses: super-linter/super-linter/slim@v8
