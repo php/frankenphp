@@ -57,7 +57,7 @@ jobs:
           echo archive="$(jq -r '.[] .source[] | select(.filename |endswith(".xz")) | "https://www.php.net/distributions/" + .filename' version.json)" >> "$GITHUB_OUTPUT"
       - name: Cache PHP
         id: cache-php
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: php/target
           key: php-sanitizers-${{ matrix.sanitizer }}-${{ runner.arch }}-${{ steps.determine-php-version.outputs.version }}
