@@ -54,12 +54,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          commit-message: Update translations
+          title: "docs: update translations"
+          commit-message: "docs: update translations"
           committer: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
           author: ${{ github.actor }} <${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com>
           branch: translations/${{ github.run_id }}
           delete-branch: true
-          title: '[Translations] Update non-english docs'
           body: |
             Translation updates for: ${{ steps.md_files.outputs.files }}.
           labels: |
