@@ -323,6 +323,44 @@ func TestAnAssociatedEventTriggersTheWatcher(t *testing.T) {
 	assert.Equal(t, e, (<-w.events).event)
 }
 
+func TestGlobalWatcherIsExcludedEvent(t *testing.T) {
+	pg := &PatternGroup{Patterns: []string{"/app/**/*.php", "!/app/vendor/**"}}
+
+	include := &pattern{patternGroup: pg, value: "/app/**/*.php"}
+	exclude := &pattern{patternGroup: pg, value: "!/app/vendor/**"}
+
+	require.NoError(t, include.parse())
+	require.NoError(t, exclude.parse())
+
+	gw := &globalWatcher{
+		groups:   []*PatternGroup{pg},
+		watchers: []*pattern{include, exclude},
+		excludes: map[*PatternGroup][]*pattern{pg: {exclude}},
+	}
+
+	inVendor := &watcher.Event{PathName: "/app/vendor/pkg/file.php"}
+	assert.True(t, include.matchesEvent(inVendor))
+	assert.True(t, gw.isExcludedEvent(pg, inVendor))
+
+	notInVendor := &watcher.Event{PathName: "/app/src/file.php"}
+	assert.True(t, include.matchesEvent(notInVendor))
+	assert.False(t, gw.isExcludedEvent(pg, notInVendor))
+}
+
+func TestExcludeMatchesAssociatedPath(t *testing.T) {
+	pg := &PatternGroup{Patterns: []string{"/app/**/*.php", "!/app/vendor/**"}}
+
+	exclude := &pattern{patternGroup: pg, value: "!/app/vendor/**"}
+	require.NoError(t, exclude.parse())
+
+	gw := &globalWatcher{
+		excludes: map[*PatternGroup][]*pattern{pg: {exclude}},
+	}
+
+	e := &watcher.Event{PathName: "/tmp/temporary", AssociatedPathName: "/app/vendor/x/file.php"}
+	assert.True(t, gw.isExcludedEvent(pg, e))
+}
+
 func relativeDir(t *testing.T, relativePath string) string {
 	dir, err := filepath.Abs("./" + relativePath)
 	assert.NoError(t, err)
