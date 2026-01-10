@@ -79,6 +79,9 @@ func initPHPThreads(numThreads int, numMaxThreads int, phpIni map[string]string)
 }
 
 func drainPHPThreads() {
+	if mainThread == nil {
+		return // mainThread was never initialized
+	}
 	doneWG := sync.WaitGroup{}
 	doneWG.Add(len(phpThreads))
 	mainThread.state.Set(state.ShuttingDown)
