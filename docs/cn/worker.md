@@ -35,12 +35,7 @@ frankenphp php-server --worker /path/to/your/worker/script.php
 frankenphp php-server --worker /path/to/your/worker/script.php --watch="/path/to/your/app/**/*.php"
 ```
 
-此功能通常与[热重载](hot-reload.md)结合使用。
-
 ## Symfony Runtime
-
-> [!TIP]
-> 以下部分仅在 Symfony 7.4 之前是必需的，Symfony 7.4 引入了对 FrankenPHP worker 模式的原生支持。
 
 FrankenPHP 的 worker 模式由 [Symfony Runtime Component](https://symfony.com/doc/current/components/runtime.html) 支持。
 要在 worker 中启动任何 Symfony 应用程序，请安装 [PHP Runtime](https://github.com/php-runtime/runtime) 的 FrankenPHP 包：
@@ -83,15 +78,9 @@ $myApp->boot();
 
 // 在循环外的处理器以获得更好的性能（减少工作量）
 $handler = static function () use ($myApp) {
-    try {
-        // 当收到请求时调用，
-        // 超全局变量、php://input 等都会被重置
-        echo $myApp->handle($_GET, $_POST, $_COOKIE, $_FILES, $_SERVER);
-    } catch (\Throwable $exception) {
-        // `set_exception_handler` 仅在 worker 脚本结束时调用，
-        // 这可能不是你期望的，因此在此处捕获并处理异常
-        (new \MyCustomExceptionHandler)->handleException($exception);
-    }
+    // 当收到请求时调用，
+    // 超全局变量、php://input 等都会被重置
+    echo $myApp->handle($_GET, $_POST, $_COOKIE, $_FILES, $_SERVER);
 };
 
 $maxRequests = (int)($_SERVER['MAX_REQUESTS'] ?? 0);
@@ -155,7 +144,7 @@ curl -X POST http://localhost:2019/frankenphp/workers/restart
 但是，如果 worker 脚本在短时间内继续以非零退出代码失败
 （例如，脚本中有拼写错误），FrankenPHP 将崩溃并出现错误：`too many consecutive failures`。
 
-可以在你的 [Caddyfile](config.md#caddyfile-config) 中使用 `max_consecutive_failures` 选项配置连续失败的次数：
+可以在你的 [Caddyfile](config.md#caddyfile-配置) 中使用 `max_consecutive_failures` 选项配置连续失败的次数：
 
 ```caddyfile
 frankenphp {
@@ -187,3 +176,4 @@ $handler = static function () use ($workerServer) {
 };
 
 // ...
+```

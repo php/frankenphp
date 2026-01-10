@@ -1,7 +1,7 @@
 # Early Hints
 
 FrankenPHP [103 Early Hints durum kodunu](https://developer.chrome.com/blog/early-hints/) yerel olarak destekler.
-Early Hints kullanmak web sayfalarınızın yüklenme süresini %30 oranında azaltabilir.
+Early Hints kullanmak web sayfalarınızın yüklenme süresini %30 oranında artırabilir.
 
 ```php
 <?php

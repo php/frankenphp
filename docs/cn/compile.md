@@ -1,13 +1,13 @@
 # 从源代码编译
 
-本文档解释了如何创建一个 FrankenPHP 二进制文件，它将 PHP 加载为一个动态库。
+本文档解释了如何创建一个 FrankenPHP 构建，它将 PHP 加载为一个动态库。
 这是推荐的方法。
 
-或者，也可以创建 [完全静态和半静态构建](static.md)。
+或者，你也可以 [编译静态版本](static.md)。
 
 ## 安装 PHP
 
-FrankenPHP 兼容 PHP 8.2 及更高版本。
+FrankenPHP 支持 PHP 8.2 及更高版本。
 
 ### 使用 Homebrew (Linux 和 Mac)
 
@@ -55,7 +55,7 @@ brew install libiconv bison brotli re2c pkg-config watcher
 echo 'export PATH="/opt/homebrew/opt/bison/bin:$PATH"' >> ~/.zshrc
 ```
 
-然后运行 configure 脚本：
+然后运行 `./configure` 脚本：
 
 ```console
 ./configure \
@@ -80,10 +80,9 @@ sudo make install
 或者，可以通过向 Go 编译器传递构建标签来禁用这些功能。
 
 | 功能                  | 依赖项                                                                | 用于禁用的构建标签 |
-| :-------------------- | :-------------------------------------------------------------------- | :----------------- |
+| --------------------- | --------------------------------------------------------------------- | ------------------ |
 | Brotli 压缩           | [Brotli](https://github.com/google/brotli)                            | nobrotli           |
 | 文件更改时重启 worker | [Watcher C](https://github.com/e-dant/watcher/tree/release/watcher-c) | nowatcher          |
-| [Mercure](mercure.md) | [Mercure Go 库](https://pkg.go.dev/github.com/dunglas/mercure)（自动安装，AGPL 许可） | nomercure          |
 
 ## 编译 Go 应用
 
@@ -103,12 +102,8 @@ xcaddy build \
     --output frankenphp \
     --with github.com/dunglas/frankenphp/caddy \
     --with github.com/dunglas/mercure/caddy \
-    --with github.com/dunglas/vulcain/caddy \
-    --with github.com/dunglas/caddy-cbrotli
+    --with github.com/dunglas/vulcain/caddy
     # 在这里添加额外的 Caddy 模块和 FrankenPHP 扩展
-    # （可选）如果你想从 FrankenPHP 源代码编译：
-    # --with github.com/dunglas/frankenphp=$(pwd) \
-    # --with github.com/dunglas/frankenphp/caddy=$(pwd)/caddy
 ```
 
 > [!TIP]
@@ -129,3 +124,4 @@ xcaddy build \
 curl -L https://github.com/php/frankenphp/archive/refs/heads/main.tar.gz | tar xz
 cd frankenphp-main/caddy/frankenphp
 CGO_CFLAGS=$(php-config --includes) CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)" go build -tags=nobadger,nomysql,nopgx
+```

@@ -2,14 +2,14 @@
 
 [Docker-образы FrankenPHP](https://hub.docker.com/r/dunglas/frankenphp) основаны на [официальных PHP-образах](https://hub.docker.com/_/php/). Доступны варианты для Debian и Alpine Linux для популярных архитектур. Рекомендуется использовать Debian-варианты.
 
-Доступны варианты для PHP 8.2, 8.3, 8.4 и 8.5.
+Доступны версии для PHP 8.2, 8.3, 8.4 и 8.5.
 
 Теги следуют следующему шаблону: `dunglas/frankenphp:<frankenphp-version>-php<php-version>-<os>`.
 
-- `<frankenphp-version>` и `<php-version>` — номера версий FrankenPHP и PHP соответственно, от мажорных (например, `1`), минорных (например, `1.2`) до патч-версий (например, `1.2.3`).
+- `<frankenphp-version>` и `<php-version>` — версии FrankenPHP и PHP соответственно: от основных (например, `1`) до минорных (например, `1.2`) и патч-версий (например, `1.2.3`).
 - `<os>` может быть `trixie` (для Debian Trixie), `bookworm` (для Debian Bookworm) или `alpine` (для последней стабильной версии Alpine).
 
-[Просмотреть теги](https://hub.docker.com/r/dunglas/frankenphp/tags).
+[Просмотреть доступные теги](https://hub.docker.com/r/dunglas/frankenphp/tags).
 
 ## Как использовать образы
 
@@ -28,13 +28,9 @@ docker build -t my-php-app .
 docker run -it --rm --name my-running-app my-php-app
 ```
 
-## Как настроить конфигурацию
-
-Для удобства в образ включен [Caddyfile по умолчанию](https://github.com/php/frankenphp/blob/main/caddy/frankenphp/Caddyfile), содержащий полезные переменные окружения.
-
 ## Как установить дополнительные PHP-расширения
 
-Скрипт [`docker-php-extension-installer`](https://github.com/mlocati/docker-php-extension-installer) предоставляется в базовом образе. Установка дополнительных PHP-расширений осуществляется просто:
+Скрипт [`docker-php-extension-installer`](https://github.com/mlocati/docker-php-extension-installer) включён в базовый образ. Установка дополнительных PHP-расширений осуществляется просто:
 
 ```dockerfile
 FROM dunglas/frankenphp
@@ -82,14 +78,14 @@ FROM dunglas/frankenphp AS runner
 COPY --from=builder /usr/local/bin/frankenphp /usr/local/bin/frankenphp
 ```
 
-Образ `builder`, предоставляемый FrankenPHP, содержит скомпилированную версию `libphp`.
+Образ `builder`, предоставляемый FrankenPHP, содержит скомпилированную версию `libphp`.  
 [Образы builder](https://hub.docker.com/r/dunglas/frankenphp/tags?name=builder) доступны для всех версий FrankenPHP и PHP, как для Debian, так и для Alpine.
 
 > [!TIP]
 >
 > Если вы используете Alpine Linux и Symfony, возможно, потребуется [увеличить размер стека](compile.md#использование-xcaddy).
 
-## Активация Worker-режима по умолчанию
+## Активировать worker режим по умолчанию
 
 Установите переменную окружения `FRANKENPHP_CONFIG`, чтобы запускать FrankenPHP с Worker-скриптом:
 
@@ -123,7 +119,7 @@ services:
     image: dunglas/frankenphp
     # раскомментируйте следующую строку, если хотите использовать собственный Dockerfile
     #build: .
-    # раскомментируйте следующую строку, если вы запускаете это в производственной среде
+    # раскомментируйте следующую строку, если вы запускаете это в продакшн среде
     # restart: always
     ports:
       - "80:80" # HTTP
@@ -133,7 +129,7 @@ services:
       - ./:/app/public
       - caddy_data:/data
       - caddy_config:/config
-    # закомментируйте следующую строку в производственной среде, она позволяет получать удобочитаемые логи в режиме разработки
+    # закомментируйте следующую строку в продакшн среде, она позволяет получать удобочитаемые логи в режиме разработки
     tty: true
 
 # Томы, необходимые для сертификатов и конфигурации Caddy
@@ -142,11 +138,11 @@ volumes:
   caddy_config:
 ```
 
-## Запуск от имени пользователя без прав root
+## Запуск под обычным пользователем
 
-FrankenPHP может работать от имени пользователя без прав root в Docker.
+FrankenPHP поддерживает запуск под обычным пользователем в Docker.
 
-Вот пример `Dockerfile` для этого:
+Пример `Dockerfile` для этого:
 
 ```dockerfile
 FROM dunglas/frankenphp
@@ -156,19 +152,19 @@ ARG USER=appuser
 RUN \
 	# Для дистрибутивов на основе Alpine используйте "adduser -D ${USER}"
 	useradd ${USER}; \
-	# Добавьте дополнительную возможность привязываться к портам 80 и 443
+	# Добавьте возможность привязываться к портам 80 и 443
 	setcap CAP_NET_BIND_SERVICE=+eip /usr/local/bin/frankenphp; \
-	# Дайте права на запись для /config/caddy и /data/caddy
-	chown -R ${USER}:${USER} /config/caddy /data/caddy
+	# Дайте права на запись для /data/caddy и /config/caddy
+	chown -R ${USER}:${USER} /data/caddy && chown -R ${USER}:${USER} /config/caddy
 
 USER ${USER}
 ```
 
-### Запуск без дополнительных возможностей
+### Запуск без дополнительных прав
 
-Даже при запуске без прав root, FrankenPHP требуется возможность `CAP_NET_BIND_SERVICE` для привязки веб-сервера к привилегированным портам (80 и 443).
+Даже при запуске без root-прав, FrankenPHP требуется возможность `CAP_NET_BIND_SERVICE` для привязки веб-сервера к зарезервированным портам (80 и 443).
 
-Если вы открываете доступ к FrankenPHP на непривилегированном порту (1024 и выше), можно запустить веб-сервер от имени пользователя без прав root, и без необходимости предоставления дополнительных возможностей:
+Если вы открываете доступ к FrankenPHP на непривилегированном порту (1024 и выше), можно запустить веб-сервер от имени обычного пользователя без необходимости предоставления дополнительных возможностей:
 
 ```dockerfile
 FROM dunglas/frankenphp
@@ -180,26 +176,26 @@ RUN \
 	useradd ${USER}; \
 	# Удалите стандартные возможности
 	setcap -r /usr/local/bin/frankenphp; \
-	# Дайте права на запись для /config/caddy и /data/caddy
-	chown -R ${USER}:${USER} /config/caddy /data/caddy
+	# Дайте права на запись для /data/caddy и /config/caddy
+	chown -R ${USER}:${USER} /data/caddy && chown -R ${USER}:${USER} /config/caddy
 
 USER ${USER}
 ```
 
-Затем установите переменную окружения `SERVER_NAME`, чтобы использовать непривилегированный порт.
+Затем установите переменную окружения `SERVER_NAME`, чтобы использовать непривилегированный порт.  
 Пример: `:8000`.
 
 ## Обновления
 
-Docker-образы собираются:
+Docker-образы обновляются:
 
 - при выпуске новой версии;
 - ежедневно в 4 утра UTC, если доступны новые версии официальных PHP-образов.
 
 ## Версии для разработки
 
-Версии для разработки доступны в Docker-репозитории [`dunglas/frankenphp-dev`](https://hub.docker.com/repository/docker/dunglas/frankenphp-dev).
-Новая сборка запускается каждый раз, когда коммит отправляется в основную ветку GitHub-репозитория.
+Версии для разработки доступны в Docker-репозитории [`dunglas/frankenphp-dev`](https://hub.docker.com/repository/docker/dunglas/frankenphp-dev).  
+Сборка запускается автоматически при каждом коммите в основную ветку GitHub-репозитория
 
-Теги с префиксом `latest*` указывают на актуальное состояние ветки `main`.
+Теги с префиксом `latest*` указывают на актуальное состояние ветки `main`.  
 Также доступны теги в формате `sha-<git-commit-hash>`.

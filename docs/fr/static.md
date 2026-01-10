@@ -1,16 +1,15 @@
 # Créer un binaire statique
 
-Au lieu d'utiliser une installation locale de la bibliothèque PHP,
-il est possible de créer un build statique ou principalement statique de FrankenPHP grâce à l'excellent projet [static-php-cli](https://github.com/crazywhalecc/static-php-cli) (malgré son nom, ce projet prend en charge tous les SAPIs, pas seulement CLI).
+Au lieu d'utiliser une installation locale de la bibliothèque PHP, il est possible de créer un build statique de FrankenPHP grâce à l'excellent projet [static-php-cli](https://github.com/crazywhalecc/static-php-cli) (malgré son nom, ce projet prend en charge tous les SAPIs, pas seulement CLI).
 
 Avec cette méthode, un binaire portable unique contiendra l'interpréteur PHP, le serveur web Caddy et FrankenPHP !
 
 Les exécutables natifs entièrement statiques ne nécessitent aucune dépendance et peuvent même être exécutés sur une [image Docker `scratch`](https://docs.docker.com/build/building/base-images/#create-a-minimal-base-image-using-scratch).
-Cependant, ils ne peuvent pas charger les extensions dynamiques de PHP (comme Xdebug) et ont quelques limitations parce qu'ils utilisent la libc musl.
+Cependant, ils ne peuvent pas charger les extensions dynamiques de PHP (comme Xdebug) et ont quelques limitations parce qu'ils utilisent la librairie musl.
 
-Les binaires principalement statiques ne nécessitent que la `glibc` et peuvent charger des extensions dynamiques.
+La plupart des binaires statiques ne nécessitent que la `glibc` et peuvent charger des extensions dynamiques.
 
-Lorsque c'est possible, nous recommandons d'utiliser des constructions principalement statiques basées sur glibc.
+Lorsque c'est possible, nous recommandons d'utiliser des binaires statiques basés sur la glibc.
 
 FrankenPHP permet également [d'embarquer l'application PHP dans le binaire statique](embed.md).
 
@@ -62,7 +61,7 @@ docker buildx bake --load --set static-builder-musl.args.PHP_EXTENSIONS=opcache,
 # ...
 ```
 
-Pour ajouter des bibliothèques permettant des fonctionnalités supplémentaires aux extensions que vous avez activées, vous pouvez passer l'argument Docker `PHP_EXTENSION_LIBS` :
+Pour ajouter des bibliothèques permettant des fonctionnalités supplémentaires aux extensions que vous avez activées, vous pouvez utiliser l'argument Docker `PHP_EXTENSION_LIBS` :
 
 ```console
 docker buildx bake \
@@ -111,7 +110,7 @@ cd frankenphp
 ./build-static.sh
 ```
 
-Note : ce script fonctionne également sur Linux (et probablement sur d'autres Unix) et est utilisé en interne par les images Docker que nous fournissons.
+Note : ce script fonctionne également sur Linux (et probablement sur d'autres Unix) et est utilisé en interne par le builder statique basé sur Docker que nous fournissons.
 
 ## Personnalisation de la construction
 
@@ -124,9 +123,9 @@ Les variables d'environnement suivantes peuvent être transmises à `docker buil
 - `XCADDY_ARGS` : arguments à passer à [xcaddy](https://github.com/caddyserver/xcaddy), par exemple pour ajouter des modules Caddy supplémentaires
 - `EMBED` : chemin de l'application PHP à intégrer dans le binaire
 - `CLEAN` : lorsque défini, `libphp` et toutes ses dépendances sont construites à partir de zéro (pas de cache)
-- `NO_COMPRESS` : ne pas compresser le binaire résultant avec UPX
-- `DEBUG_SYMBOLS` : lorsque défini, les symboles de débogage ne seront pas supprimés et seront ajoutés au binaire
-- `MIMALLOC` : (expérimental, Linux seulement) remplace l'allocateur mallocng de musl par [mimalloc](https://github.com/microsoft/mimalloc) pour des performances améliorées. Nous recommandons d'utiliser cette option uniquement pour les constructions ciblant musl ; pour glibc, il est préférable de la désactiver et d'utiliser [`LD_PRELOAD`](https://microsoft.github.io/mimalloc/overrides.html) lors de l'exécution de votre binaire.
+- `DEBUG_SYMBOLS` : lorsque défini, les symboles de débogage ne seront pas supprimés et seront ajoutés dans le binaire
+- `NO_COMPRESS`: ne pas compresser le binaire avec UPX
+- `MIMALLOC`: (expérimental, Linux seulement) remplace l'allocateur mallocng de musl par [mimalloc](https://github.com/microsoft/mimalloc) pour des performances améliorées
 - `RELEASE` : (uniquement pour les mainteneurs) lorsque défini, le binaire résultant sera uploadé sur GitHub
 
 ## Extensions

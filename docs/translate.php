@@ -15,7 +15,7 @@ const LANGUAGES = [
     'tr' => 'Turkish',
 ];
 
-function makeGeminiRequest(string $systemPrompt, string $userPrompt, string $model, string $apiKey): string
+function makeGeminiRequest(string $systemPrompt, string $userPrompt, string $model, string $apiKey, int $reties = 2): string
 {
     $url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent";
     $body = json_encode([
@@ -38,6 +38,11 @@ function makeGeminiRequest(string $systemPrompt, string $userPrompt, string $mod
     if (!$response || !$generatedDocs) {
         print_r(error_get_last());
         print_r($response);
+        if ($reties > 0) {
+            echo "Retrying... ($reties retries left)\n";
+            sleep(SLEEP_SECONDS_BETWEEN_REQUESTS);
+            return makeGeminiRequest($systemPrompt, $userPrompt, $model, $apiKey, $reties - 1);
+        }
         exit(1);
     }
 

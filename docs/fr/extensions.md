@@ -10,8 +10,8 @@ Grâce aux modules Caddy, vous pouvez écrire des extensions PHP en Go et les in
 
 FrankenPHP offre deux façons de créer des extensions PHP en Go :
 
-1.  **Utilisation du Générateur d'Extensions** - L'approche recommandée qui génère tout le code standard nécessaire pour la plupart des cas d'usage, vous permettant de vous concentrer sur l'écriture de votre code Go
-2.  **Implémentation Manuelle** - Contrôle total sur la structure de l'extension pour les cas d'usage avancés
+1. **Utilisation du Générateur d'Extensions** - L'approche recommandée qui génère tout le code standard nécessaire pour la plupart des cas d'usage, vous permettant de vous concentrer sur l'écriture de votre code Go
+2. **Implémentation Manuelle** - Contrôle total sur la structure de l'extension pour les cas d'usage avancés
 
 Nous commencerons par l'approche du générateur, car c'est le moyen le plus facile de commencer, puis nous montrerons l'implémentation manuelle pour ceux qui ont besoin d'un contrôle complet.
 
@@ -26,14 +26,14 @@ Gardez à l'esprit que cet outil n'est **pas un générateur d'extensions comple
 
 ### Prérequis
 
-Comme indiqué également dans la section d'implémentation manuelle ci-dessous, vous devez [obtenir les sources PHP](https://www.php.net/downloads.php) et créer un nouveau module Go.
+Comme aussi couvert dans la section d'implémentation manuelle ci-dessous, vous devez [obtenir les sources PHP](https://www.php.net/downloads.php) et créer un nouveau module Go.
 
 #### Créer un Nouveau Module et Obtenir les Sources PHP
 
 La première étape pour écrire une extension PHP en Go est de créer un nouveau module Go. Vous pouvez utiliser la commande suivante pour cela :
 
 ```console
-go mod init example.com/example
+go mod init github.com/my-account/my-module
 ```
 
 La seconde étape est [l'obtention des sources PHP](https://www.php.net/downloads.php) pour les étapes suivantes. Une fois que vous les avez, décompressez-les dans le répertoire de votre choix, mais pas à l'intérieur de votre module Go :
@@ -53,9 +53,9 @@ package example
 import "C"
 import (
     "strings"
-	"unsafe"
+    "unsafe"
 
-	"github.com/dunglas/frankenphp"
+    "github.com/dunglas/frankenphp"
 )
 
 //export_php:function repeat_this(string $str, int $count, bool $reverse): string
@@ -87,19 +87,18 @@ Alors que le premier point parle de lui-même, le second peut être plus diffici
 Bien que certains types de variables aient la même représentation mémoire entre C/PHP et Go, certains types nécessitent plus de logique pour être directement utilisés. C'est peut-être la partie la plus difficile quand il s'agit d'écrire des extensions car cela nécessite de comprendre les fonctionnements internes du moteur Zend et comment les variables sont stockées dans le moteur de PHP. Ce tableau résume ce que vous devez savoir :
 
 | Type PHP           | Type Go                       | Conversion directe | Assistant C vers Go               | Assistant Go vers C                | Support des Méthodes de Classe |
-| :----------------- | :---------------------------- | :----------------- | :-------------------------------- | :--------------------------------- | :----------------------------- |
+| ------------------ | ----------------------------- | ------------------ | --------------------------------- | ---------------------------------- | ------------------------------ |
 | `int`              | `int64`                       | ✅                 | -                                 | -                                  | ✅                             |
 | `?int`             | `*int64`                      | ✅                 | -                                 | -                                  | ✅                             |
 | `float`            | `float64`                     | ✅                 | -                                 | -                                  | ✅                             |
 | `?float`           | `*float64`                    | ✅                 | -                                 | -                                  | ✅                             |
 | `bool`             | `bool`                        | ✅                 | -                                 | -                                  | ✅                             |
 | `?bool`            | `*bool`                       | ✅                 | -                                 | -                                  | ✅                             |
-| `string`/`?string` | `*C.zend_string`              | ❌                 | `frankenphp.GoString()`           | `frankenphp.PHPString()`           | ✅                             |
+| `string`/`?string` | `*C.zend_string`              | ❌                 | frankenphp.GoString()             | frankenphp.PHPString()             | ✅                             |
 | `array`            | `frankenphp.AssociativeArray` | ❌                 | `frankenphp.GoAssociativeArray()` | `frankenphp.PHPAssociativeArray()` | ✅                             |
 | `array`            | `map[string]any`              | ❌                 | `frankenphp.GoMap()`              | `frankenphp.PHPMap()`              | ✅                             |
 | `array`            | `[]any`                       | ❌                 | `frankenphp.GoPackedArray()`      | `frankenphp.PHPPackedArray()`      | ✅                             |
 | `mixed`            | `any`                         | ❌                 | `GoValue()`                       | `PHPValue()`                       | ❌                             |
-| `callable`         | `*C.zval`                     | ❌                 | -                                 | `frankenphp.CallPHPCallable()`     | ❌                             |
 | `object`           | `struct`                      | ❌                 | _Pas encore implémenté_           | _Pas encore implémenté_            | ❌                             |
 
 > [!NOTE]
@@ -113,7 +112,7 @@ Si vous vous référez à l'extrait de code de la section précédente, vous pou
 
 FrankenPHP fournit un support natif pour les tableaux PHP à travers `frankenphp.AssociativeArray` ou une conversion directe vers une map ou un slice.
 
-`AssociativeArray` représente une [table de hachage](https://fr.wikipedia.org/wiki/Table_de_hachage) composée d'un champ `Map: map[string]any` et d'un champ optionnel `Order: []string` (contrairement aux "tableaux associatifs" PHP, les maps Go ne sont pas ordonnées).
+`AssociativeArray` représente une [hash map](https://fr.wikipedia.org/wiki/Table_de_hachage) composée d'un champ `Map: map[string]any` et d'un champ optionnel `Order: []string` (contrairement aux "tableaux associatifs" PHP, les maps Go ne sont pas ordonnées).
 
 Si l'ordre ou l'association ne sont pas nécessaires, il est également possible de convertir directement vers un slice `[]any` ou une map non ordonnée `map[string]any`.
 
@@ -131,66 +130,66 @@ import (
 )
 
 // export_php:function process_data_ordered(array $input): array
-func process_data_ordered_map(arr *C.zend_array) unsafe.Pointer {
-	// Convertir le tableau associatif PHP vers Go en conservant l'ordre
-	associativeArray, err := frankenphp.GoAssociativeArray[any](unsafe.Pointer(arr))
+func process_data_ordered_map(arr *C.zval) unsafe.Pointer {
+    // Convertir le tableau associatif PHP vers Go en conservant l'ordre
+    associativeArray, err := frankenphp.GoAssociativeArray[any](unsafe.Pointer(arr))
     if err != nil {
         // gérer l'erreur
     }
 
-	// parcourir les entrées dans l'ordre
-	for _, key := range associativeArray.Order {
-		// value, _ = associativeArray.Map[key] // 'value' is not declared
-		// faire quelque chose avec key et value
-	}
+    // parcourir les entrées dans l'ordre
+    for _, key := range associativeArray.Order {
+        value, _ = associativeArray.Map[key]
+        // faire quelque chose avec key et value
+    }
 
-	// retourner un tableau ordonné
-	// si 'Order' n'est pas vide, seules les paires clé-valeur dans 'Order' seront respectées
-	return frankenphp.PHPAssociativeArray[string](frankenphp.AssociativeArray[string]{
-		Map: map[string]string{
-			"key1": "value1",
-			"key2": "value2",
-		},
-		Order: []string{"key1", "key2"},
-	})
+    // retourner un tableau ordonné
+    // si 'Order' n'est pas vide, seules les paires clé-valeur dans 'Order' seront respectées
+    return frankenphp.PHPAssociativeArray[string](frankenphp.AssociativeArray[string]{
+        Map: map[string]string{
+            "key1": "value1",
+            "key2": "value2",
+        },
+        Order: []string{"key1", "key2"},
+    })
 }
 
 // export_php:function process_data_unordered(array $input): array
-func process_data_unordered_map(arr *C.zend_array) unsafe.Pointer {
-	// Convertir le tableau associatif PHP vers une map Go sans conserver l'ordre
-	// ignorer l'ordre sera plus performant
-	goMap, err := frankenphp.GoMap[any](unsafe.Pointer(arr))
+func process_data_unordered_map(arr *C.zval) unsafe.Pointer {
+    // Convertir le tableau associatif PHP vers une map Go sans conserver l'ordre
+    // ignorer l'ordre sera plus performant
+    goMap, err := frankenphp.GoMap[any](unsafe.Pointer(arr))
     if err != nil {
         // gérer l'erreur
     }
 
-	// parcourir les entrées sans ordre spécifique
-	for key, value := range goMap {
-		// faire quelque chose avec key et value
-	}
+    // parcourir les entrées sans ordre spécifique
+    for key, value := range goMap {
+        // faire quelque chose avec key et value
+    }
 
-	// retourner un tableau non ordonné
-	return frankenphp.PHPMap(map[string]string {
-		"key1": "value1",
-		"key2": "value2",
-	})
+    // retourner un tableau non ordonné
+    return frankenphp.PHPMap(map[string]string {
+        "key1": "value1",
+        "key2": "value2",
+    })
 }
 
 // export_php:function process_data_packed(array $input): array
-func process_data_packed(arr *C.zend_array) unsafe.Pointer {
-	// Convertir le tableau packed PHP vers Go
-	goSlice, err := frankenphp.GoPackedArray(unsafe.Pointer(arr))
+func process_data_packed(arr *C.zval) unsafe.Pointer {
+    // Convertir le tableau packed PHP vers Go
+    goSlice, err := frankenphp.GoPackedArray(unsafe.Pointer(arr))
     if err != nil {
         // gérer l'erreur
     }
 
-	// parcourir le slice dans l'ordre
-	for index, value := range goSlice {
-		// faire quelque chose avec index et value
-	}
+    // parcourir le slice dans l'ordre
+    for index, value := range goSlice {
+        // faire quelque chose avec index et value
+    }
 
-	// retourner un tableau packed
-	return frankenphp.PHPPackedArray([]string{"value1", "value2", "value3"})
+    // retourner un tableau packed
+    return frankenphp.PHPPackedArray([]string{"value1", "value2", "value3"})
 }
 ```
 
@@ -199,7 +198,7 @@ func process_data_packed(arr *C.zend_array) unsafe.Pointer {
 - **Paires clé-valeur ordonnées** - Option pour conserver l'ordre du tableau associatif
 - **Optimisé pour plusieurs cas** - Option de ne pas conserver l'ordre pour de meilleures performances ou conversion directe vers un slice
 - **Détection automatique de liste** - Lors de la conversion vers PHP, détecte automatiquement si le tableau doit être une liste packed ou un hashmap
-- **Tableaux imbriqués** - Les tableaux peuvent être imbriqués et convertiront automatiquement tous les types supportés (`int64`,`float64`,`string`,`bool`,`nil`,`AssociativeArray`,`map[string]any`,`[]any`)
+- **Tableaux imbriqués** - Les tableaux peuvent être imbriqués et convertiront automatiquement tous les types supportés (`int64`, `float64`, `string`, `bool`, `nil`, `AssociativeArray`, `map[string]any`, `[]any`)
 - **Les objets ne sont pas supportés** - Actuellement, seuls les types scalaires et les tableaux peuvent être utilisés comme valeurs. Fournir un objet résultera en une valeur `null` dans le tableau PHP.
 
 ##### Méthodes disponibles : Packed et Associatif
@@ -214,7 +213,7 @@ func process_data_packed(arr *C.zend_array) unsafe.Pointer {
 
 ### Travailler avec des Callables
 
-FrankenPHP propose un moyen de travailler avec les _callables_ PHP grâce au helper `frankenphp.CallPHPCallable`. Cela permet d'appeler des fonctions ou des méthodes PHP depuis du code Go.
+FrankenPHP propose un moyen de travailler avec les _callables_ PHP grâce au helper `frankenphp.CallPHPCallable()`. Cela permet d'appeler des fonctions ou des méthodes PHP depuis du code Go.
 
 Pour illustrer cela, créons notre propre fonction `array_map()` qui prend un _callable_ et un tableau, applique le _callable_ à chaque élément du tableau, et retourne un nouveau tableau avec les résultats :
 
@@ -264,7 +263,7 @@ type UserStruct struct {
 
 #### Que sont les Classes Opaques ?
 
-Les **classes opaques** sont des classes où la structure interne est cachée du code PHP. Cela signifie :
+Les **classes opaques** sont des classes avec lesquelles la structure interne (comprendre : les propriétés) est cachée du code PHP. Cela signifie :
 
 - **Pas d'accès direct aux propriétés** : Vous ne pouvez pas lire ou écrire des propriétés directement depuis PHP (`$user->name` ne fonctionnera pas)
 - **Interface uniquement par méthodes** - Toutes les interactions doivent passer par les méthodes que vous définissez
@@ -326,9 +325,9 @@ package example
 // #include <Zend/zend_types.h>
 import "C"
 import (
-	"unsafe"
+    "unsafe"
 
-	"github.com/dunglas/frankenphp"
+    "github.com/dunglas/frankenphp"
 )
 
 //export_php:method User::updateInfo(?string $name, ?int $age, ?bool $active): void
@@ -460,10 +459,10 @@ package example
 // #include <Zend/zend_types.h>
 import "C"
 import (
-	"strings"
-	"unsafe"
+    "strings"
+    "unsafe"
 
-	"github.com/dunglas/frankenphp"
+    "github.com/dunglas/frankenphp"
 )
 
 //export_php:const
@@ -480,43 +479,43 @@ const MODE_UPPERCASE = 2
 
 //export_php:function repeat_this(string $str, int $count, int $mode): string
 func repeat_this(s *C.zend_string, count int64, mode int) unsafe.Pointer {
-	str := frankenphp.GoString(unsafe.Pointer(s))
+    str := frankenphp.GoString(unsafe.Pointer(s))
 
-	result := strings.Repeat(str, int(count))
-	if mode == STR_REVERSE {
-		// inverser la chaîne
-	}
+    result := strings.Repeat(str, int(count))
+    if mode == STR_REVERSE {
+        // inverser la chaîne
+    }
 
-	if mode == STR_NORMAL {
-		// no-op, juste pour montrer la constante
-	}
+    if mode == STR_NORMAL {
+        // no-op, juste pour montrer la constante
+    }
 
-	return frankenphp.PHPString(result, false)
+    return frankenphp.PHPString(result, false)
 }
 
 //export_php:class StringProcessor
 type StringProcessorStruct struct {
-	// champs internes
+    // champs internes
 }
 
 //export_php:method StringProcessor::process(string $input, int $mode): string
 func (sp *StringProcessorStruct) Process(input *C.zend_string, mode int64) unsafe.Pointer {
-	str := frankenphp.GoString(unsafe.Pointer(input))
+    str := frankenphp.GoString(unsafe.Pointer(input))
 
-	switch mode {
-	case MODE_LOWERCASE:
-		str = strings.ToLower(str)
-	case MODE_UPPERCASE:
-		str = strings.ToUpper(str)
-	}
+    switch mode {
+    case MODE_LOWERCASE:
+        str = strings.ToLower(str)
+    case MODE_UPPERCASE:
+        str = strings.ToUpper(str)
+    }
 
-	return frankenphp.PHPString(str, false)
+    return frankenphp.PHPString(str, false)
 }
 ```
 
 ### Utilisation des Espaces de Noms
 
-Le générateur prend en charge l'organisation des fonctions, classes et constantes de votre extension PHP sous un espace de noms en utilisant la directive `//export_php:namespace`. Cela aide à éviter les conflits de noms et fournit une meilleure organisation pour l'API de votre extension.
+Le générateur prend en charge l'organisation des fonctions, classes et constantes de votre extension PHP sous un espace de noms (namespace) en utilisant la directive `//export_php:namespace`. Cela aide à éviter les conflits de noms et fournit une meilleure organisation pour l'API de votre extension.
 
 #### Déclarer un Espace de Noms
 
@@ -622,7 +621,7 @@ Une fois que vous avez intégré votre extension dans FrankenPHP comme indiqué 
 
 ## Implémentation Manuelle
 
-Si vous voulez comprendre comment les extensions fonctionnent ou avez besoin d'un contrôle total sur votre extension, vous pouvez les écrire manuellement. Cette approche vous donne un contrôle complet mais nécessite plus de code standard.
+Si vous voulez comprendre comment les extensions fonctionnent ou avez besoin d'un contrôle total sur votre extension, vous pouvez les écrire manuellement. Cette approche vous donne un contrôle complet mais nécessite plus de code intermédiaire.
 
 ### Fonction de Base
 
@@ -638,21 +637,21 @@ package example
 // #include "extension.h"
 import "C"
 import (
-	"log/slog"
-	"unsafe"
+    "log/slog"
+    "unsafe"
 
-	"github.com/dunglas/frankenphp"
+    "github.com/dunglas/frankenphp"
 )
 
 func init() {
-	frankenphp.RegisterExtension(unsafe.Pointer(&C.ext_module_entry))
+    frankenphp.RegisterExtension(unsafe.Pointer(&C.ext_module_entry))
 }
 
 //export go_print_something
 func go_print_something() {
-	go func() {
-		slog.Info("Hello from a goroutine!")
-	}()
+    go func() {
+        slog.Info("Hello from a goroutine!")
+    }()
 }
 ```
 

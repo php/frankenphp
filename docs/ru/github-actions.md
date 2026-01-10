@@ -1,6 +1,6 @@
 # Использование GitHub Actions
 
-Этот репозиторий собирает и публикует Docker-образ в [Docker Hub](https://hub.docker.com/r/dunglas/frankenphp) при каждом одобренном pull request или в вашем собственном форке после настройки.
+Этот репозиторий автоматически собирает и публикует Docker-образы в [Docker Hub](https://hub.docker.com/r/dunglas/frankenphp) для каждого одобренного pull request или вашего собственного форка после настройки.
 
 ## Настройка GitHub Actions
 
@@ -11,7 +11,7 @@
 - `REGISTRY_PASSWORD`: Пароль для входа в реестр (например, токен доступа).
 - `IMAGE_NAME`: Имя образа (например, `dunglas/frankenphp`).
 
-## Сборка и отправка образа
+## Сборка и загрузка образа
 
 1. Создайте Pull Request или выполните push в ваш форк.
 2. GitHub Actions соберёт образ и выполнит тесты.

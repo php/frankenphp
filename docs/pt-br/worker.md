@@ -32,7 +32,7 @@ adicionar um `Caddyfile` personalizado no diretório raiz da aplicação.
 Ele será usado automaticamente.
 
 Também é possível
-[reiniciar o worker em caso de alterações em arquivos](config.md#watching-for-file-changes)
+[reiniciar o worker em caso de alterações em arquivos](config.md#monitorando-alteracoes-em-arquivos)
 com a opção `--watch`.
 O comando a seguir acionará uma reinicialização se qualquer arquivo terminado em
 `.php` no diretório `/caminho/para/sua/aplicacao/` ou subdiretórios for
@@ -42,12 +42,7 @@ modificado:
 frankenphp php-server --worker /caminho/para/seu/worker/script.php --watch="/caminho/para/sua/aplicacao/**/*.php"
 ```
 
-Esse recurso é frequentemente usado em combinação com [hot reloading](hot-reload.md).
-
 ## Symfony Runtime
-
-> [!TIP]
-> A seção a seguir é necessária apenas antes do Symfony 7.4, onde o suporte nativo para o modo worker do FrankenPHP foi introduzido.
 
 O modo worker do FrankenPHP é suportado pelo
 [Componente Symfony Runtime](https://symfony.com/doc/current/components/runtime.html).
@@ -83,7 +78,8 @@ uma biblioteca de terceiros:
 <?php
 // public/index.php
 
-// Impede que o script do worker seja encerrado quando uma conexão do cliente é interrompida
+// Impede o encerramento do worker script quando uma conexão do cliente for
+// interrompida
 ignore_user_abort(true);
 
 // Inicializa a aplicação
@@ -94,15 +90,9 @@ $myApp->boot();
 
 // Manipulador fora do loop para melhor desempenho (fazendo menos trabalho)
 $handler = static function () use ($myApp) {
-    try {
-        // Chamado quando uma requisição é recebida,
-        // superglobals, php://input e similares são redefinidos
-        echo $myApp->handle($_GET, $_POST, $_COOKIE, $_FILES, $_SERVER);
-    } catch (\Throwable $exception) {
-        // `set_exception_handler` é chamado apenas quando o script do worker termina,
-        // o que pode não ser o que você espera, então capture e trate as exceções aqui
-        (new \MyCustomExceptionHandler)->handleException($exception);
-    }
+    // Chamado quando uma requisição é recebida,
+    // superglobals, php://input e similares são redefinidos
+    echo $myApp->handle($_GET, $_POST, $_COOKIE, $_FILES, $_SERVER);
 };
 
 $maxRequests = (int)($_SERVER['MAX_REQUESTS'] ?? 0);
@@ -159,11 +149,12 @@ requisições a serem processadas, definindo uma variável de ambiente chamada
 ### Reiniciar os workers manualmente
 
 Embora seja possível reiniciar os workers
-[em alterações de arquivo](config.md#watching-for-file-changes), também
+[em alterações de arquivo](config.md#monitorando-alteracoes-em-arquivos), também
 é possível reiniciar todos os workers graciosamente por meio da
 [API de administração do Caddy](https://caddyserver.com/docs/api).
 Se o administrador estiver habilitado no seu
-[Caddyfile](config.md#caddyfile-config), você pode acessar o endpoint de reinicialização com uma simples requisição POST como esta:
+[Caddyfile](config.md#configuracao-do-caddyfile), você pode executar ping no
+endpoint de reinicialização com uma simples requisição POST como esta:
 
 ```console
 curl -X POST http://localhost:2019/frankenphp/workers/restart
@@ -220,3 +211,4 @@ $handler = static function () use ($workerServer) {
 };
 
 // ...
+```

@@ -2,7 +2,7 @@
 
 ## Docker
 
-FrankenPHPを使用して[Laravel](https://laravel.com)のWebアプリケーションを提供するのは簡単で、公式Dockerイメージの`/app`ディレクトリにプロジェクトをマウントするだけです。
+FrankenPHPを使用して[Laravel](https://laravel.com)のWebアプリケーションを配信するのは簡単で、公式Dockerイメージの`/app`ディレクトリにプロジェクトをマウントするだけです。
 
 Laravelアプリのメインディレクトリからこのコマンドを実行してください：
 
@@ -75,8 +75,6 @@ php artisan octane:frankenphp
 
 > [!TIP]
 > 構造化されたJSONログ（ログ分析ソリューションを使用する際に便利）を取得するには、明示的に`--log-level`オプションを指定してください。
-
-[OctaneでMercureを使用する方法](#mercure-support)も参照してください。
 
 詳しくは[Laravel Octaneの公式ドキュメント](https://laravel.com/docs/octane)をご覧ください。
 
@@ -166,41 +164,13 @@ LaravelアプリをLinux用のスタンドアロンバイナリとしてパッ�
 Laravelはアップロードされたファイルやキャッシュ、ログなどをデフォルトでアプリケーションの`storage/`ディレクトリに保存します。
 しかし、これは埋め込みアプリケーションには適していません。なぜなら、アプリの新しいバージョンごとに異なる一時ディレクトリに展開されるためです。
 
-`LARAVEL_STORAGE_PATH`環境変数を設定（例：`.env`ファイル内）するか、 `Illuminate\Foundation\Application::useStoragePath()`メソッドを呼び出して、一時ディレクトリの外にある任意のディレクトリを使用してください。
-
-### Mercureサポート
-
-[Mercure](https://mercure.rocks)は、Laravelアプリにリアルタイム機能を追加する優れた方法です。
-FrankenPHPは、[Mercureのサポートをすぐに利用できる](mercure.md)ように組み込んでいます。
-
-[Octane](#laravel-octane)を使用していない場合は、[Mercureのドキュメント](mercure.md)を参照してください。
-
-Octaneを使用している場合は、`config/octane.php`ファイルに以下の行を追加することでMercureサポートを有効にできます：
-
-```php
-// ...
-
-return [
-    // ...
-
-    'mercure' => [
-        'anonymous' => true,
-        'publisher_jwt' => '!ChangeThisMercureHubJWTSecretKey!',
-        'subscriber_jwt' => '!ChangeThisMercureHubJWTSecretKey!',
-    ],
-];
-```
-
-この配列では、[Mercureがサポートするすべてのディレクティブ](https://mercure.rocks/docs/hub/config#directives)を使用できます。
-
-更新の公開と購読には、[Laravel Mercure Broadcaster](https://github.com/mvanduijker/laravel-mercure-broadcaster)ライブラリの使用をお勧めします。
-または、純粋なPHPとJavaScriptで実装する方法については、[Mercureのドキュメント](mercure.md)を参照してください。
+この問題を回避するには、`LARAVEL_STORAGE_PATH`環境変数を設定（例：`.env`ファイル内）するか、 `Illuminate\Foundation\Application::useStoragePath()`メソッドを呼び出して、一時ディレクトリの外にある任意のディレクトリを使用してください。
 
 ### スタンドアロンバイナリでOctaneを実行する
 
 Laravel Octaneアプリもスタンドアロンバイナリとしてパッケージ化することが可能です！
 
-そのためには、[Octaneを正しくインストール](#laravel-octane)し、[前のセクション](#laravel-apps-as-standalone-binaries)で説明した手順に従ってください。
+そのためには、[Octaneを正しくインストール](#laravel-octane)し、[前のセクション](#laravelアプリのスタンドアロンバイナリ化)で説明した手順に従ってください。
 
 次に、Octaneを通じてワーカーモードでFrankenPHPを起動するには、以下を実行してください：
 

@@ -67,7 +67,7 @@ Docker que fornecemos.
 
    ```dockerfile
    FROM --platform=linux/amd64 dunglas/frankenphp:static-builder-gnu
-   # Se você pretende executar o binário em sistemas musl-libc, use static-builder-musl
+   # Se você pretende executar o binário em sistemas musl-libc, use o static-builder-musl
 
    # Copia sua aplicação
    WORKDIR /go/src/app/dist/app
@@ -89,16 +89,16 @@ Docker que fornecemos.
 2. Construa:
 
    ```console
-   docker build -t static-app -f static-build.Dockerfile .
+   docker build -t aplicacao-estatica -f static-build.Dockerfile .
    ```
 
 3. Extraia o binário:
 
    ```console
-   docker cp $(docker create --name static-app-tmp static-app):/go/src/app/dist/frankenphp-linux-x86_64 my-app ; docker rm static-app-tmp
+   docker cp $(docker create --name aplicacao-estatica-tmp aplicacao-estatica):/go/src/app/dist/frankenphp-linux-x86_64 minha-aplicacao ; docker rm aplicacao-estatica-tmp
    ```
 
-O binário resultante é o arquivo chamado `my-app` no diretório atual.
+O binário resultante é o arquivo `minha-aplicacao` no diretório atual.
 
 ## Criando um binário para outros sistemas operacionais
 
@@ -115,33 +115,33 @@ O binário resultante é o arquivo `frankenphp-<os>-<arch>` no diretório `dist/
 
 ## Usando o binário
 
-É isso! O arquivo `my-app` (ou `dist/frankenphp-<os>-<arch>` em outros
+É isso! O arquivo `minha-aplicacao` (ou `dist/frankenphp-<os>-<arch>` em outros
 sistemas operacionais) contém sua aplicação independente!
 
 Para iniciar a aplicação web, execute:
 
 ```console
-./my-app php-server
+./minha-aplicacao php-server
 ```
 
 Se a sua aplicação contiver um [worker script](worker.md), inicie o worker com
 algo como:
 
 ```console
-./my-app php-server --worker public/index.php
+./minha-aplicacao php-server --worker public/index.php
 ```
 
 Para habilitar HTTPS (um certificado Let's Encrypt é criado automaticamente),
 HTTP/2 e HTTP/3, especifique o nome de domínio a ser usado:
 
 ```console
-./my-app php-server --domain localhost
+./minha-aplicacao php-server --domain localhost
 ```
 
 Você também pode executar os scripts PHP CLI incorporados ao seu binário:
 
 ```console
-./my-app php-cli bin/console
+./minha-aplicacao php-cli bin/console
 ```
 
 ## Extensões PHP

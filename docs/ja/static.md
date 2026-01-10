@@ -1,7 +1,7 @@
 # 静的ビルドの作成
 
 PHPライブラリのローカルインストールを使用する代わりに、
-素晴らしい[static-php-cli プロジェクト](https://github.com/crazywhalecc/static-php-cli)を利用して、FrankenPHPの静的またはほぼ静的なビルドを作成することが可能です（プロジェクト名に「CLI」とありますが、CLIだけでなく全てのSAPIをサポートしています）。
+[static-php-cli プロジェクト](https://github.com/crazywhalecc/static-php-cli)を利用して、FrankenPHPの静的またはほぼ静的なビルドを作成することが可能です（プロジェクト名に「CLI」とありますが、CLIだけでなく全てのSAPIをサポートしています）。
 
 この方法を使えば、PHPインタープリター、Caddy Webサーバー、FrankenPHPをすべて含んだ単一でポータブルなバイナリを作成できます！
 
@@ -73,7 +73,7 @@ docker buildx bake \
 
 ### 追加のCaddyモジュール
 
-Caddyの追加モジュールを追加したり、[xcaddy](https://github.com/caddyserver/xcaddy)に他の引数を渡したりするには、`XCADDY_ARGS`というDocker ARGを使用します：
+Caddyの拡張モジュールを追加したい場合は、`XCADDY_ARGS`というDocker引数を使用して、[xcaddy](https://github.com/caddyserver/xcaddy)に渡す引数を以下のように指定できます：
 
 ```console
 docker buildx bake \
@@ -87,7 +87,7 @@ docker buildx bake \
 > [!TIP]
 >
 > cbrotli、Mercure、Vulcainモジュールは、`XCADDY_ARGS`が空または設定されていない場合はデフォルトで含まれます。
-> `XCADDY_ARGS`の値をカスタマイズする場合、含めたいのであれば明示的にそれらを含める必要があります。
+> `XCADDY_ARGS`の値をカスタマイズする場合、デフォルトのモジュールは含まれなくなるため、必要なものは明示的に記述してください。
 
 [ビルドのカスタマイズ](#ビルドのカスタマイズ)も参照してください
 
@@ -121,7 +121,7 @@ cd frankenphp
 - `PHP_VERSION`: 使用するPHPのバージョン
 - `PHP_EXTENSIONS`: ビルドするPHP拡張（[サポートされる拡張のリスト](https://static-php.dev/en/guide/extensions.html)）
 - `PHP_EXTENSION_LIBS`: 拡張モジュールに追加機能を持たせるためにビルドする追加ライブラリ
-- `XCADDY_ARGS`: Caddyの追加モジュールを追加したり、[xcaddy](https://github.com/caddyserver/xcaddy)に他の引数を渡したりするための引数
+- `XCADDY_ARGS`: 追加のCaddyモジュールを導入するなど[xcaddy](https://github.com/caddyserver/xcaddy)に渡す引数
 - `EMBED`: バイナリに埋め込むPHPアプリケーションのパス
 - `CLEAN`: 指定するとlibphpおよびそのすべての依存関係がスクラッチからビルドされます（キャッシュなし）
 - `NO_COMPRESS`: UPXを使用して結果のバイナリを圧縮しない

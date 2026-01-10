@@ -1,9 +1,9 @@
 # Compiler depuis les sources
 
-Ce document explique comment créer un binaire FrankenPHP qui chargera PHP en tant que bibliothèque dynamique.
+Ce document explique comment créer un build FrankenPHP qui chargera PHP en tant que bibliothèque dynamique.
 C'est la méthode recommandée.
 
-Alternativement, des [versions entièrement ou partiellement statiques](static.md) peuvent également être créées.
+Alternativement, il est aussi possible de [créer des builds statiques](static.md).
 
 ## Installer PHP
 
@@ -33,10 +33,11 @@ tar xf php-*
 cd php-*/
 ```
 
-Ensuite, exécutez le script `configure` avec les options nécessaires pour votre plateforme.
-Les `flags` `./configure` suivants sont obligatoires, mais vous pouvez en ajouter d'autres, par exemple, pour compiler des extensions ou des fonctionnalités supplémentaires.
+Ensuite, configurez PHP pour votre système d'exploitation.
 
-#### Linux
+Les options de configuration suivantes sont nécessaires pour la compilation, mais vous pouvez également inclure d'autres options selon vos besoins, par exemple pour ajouter des extensions et fonctionnalités supplémentaires.
+
+### Linux
 
 ```console
 ./configure \
@@ -46,7 +47,7 @@ Les `flags` `./configure` suivants sont obligatoires, mais vous pouvez en ajoute
     --enable-zend-max-execution-timers
 ```
 
-#### Mac
+### Mac
 
 Utilisez le gestionnaire de paquets [Homebrew](https://brew.sh/) pour installer les dépendances obligatoires et optionnelles :
 
@@ -62,10 +63,11 @@ Puis exécutez le script de configuration :
     --enable-embed \
     --enable-zts \
     --disable-zend-signals \
+    --disable-opcache-jit \
     --with-iconv=/opt/homebrew/opt/libiconv/
 ```
 
-#### Compiler PHP
+### Compilez PHP
 
 Finalement, compilez et installez PHP :
 
@@ -74,20 +76,17 @@ make -j"$(getconf _NPROCESSORS_ONLN)"
 sudo make install
 ```
 
-## Installer les dépendances optionnelles
+## Installez les dépendances optionnelles
 
-Certaines fonctionnalités de FrankenPHP dépendent de dépendances système optionnelles qui doivent être installées.
+Certaines fonctionnalités de FrankenPHP nécessitent des dépendances optionnelles qui doivent être installées.
 Ces fonctionnalités peuvent également être désactivées en passant des tags de compilation au compilateur Go.
 
-| Fonctionnalité                 | Dépendance                                                                                                   | Tag de compilation pour la désactiver |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------ | ------------------------------------- |
-| Compression Brotli             | [Brotli](https://github.com/google/brotli)                                                                   | nobrotli                              |
-| Redémarrage des workers en cas de changement de fichier | [Watcher C](https://github.com/e-dant/watcher/tree/release/watcher-c)                                        | nowatcher                             |
-| [Mercure](mercure.md)          | [Bibliothèque Mercure Go](https://pkg.go.dev/github.com/dunglas/mercure) (installée automatiquement, licence AGPL) | nomercure                             |
+| Fonctionnalité                                          | Dépendance                                                            | Tag de compilation pour la désactiver |
+| ------------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------- |
+| Compression Brotli                                      | [Brotli](https://github.com/google/brotli)                            | nobrotli                              |
+| Redémarrage des workers en cas de changement de fichier | [Watcher C](https://github.com/e-dant/watcher/tree/release/watcher-c) | nowatcher                             |
 
 ## Compiler l'application Go
-
-Vous pouvez maintenant construire le binaire final.
 
 ### Utiliser xcaddy
 
@@ -102,13 +101,10 @@ CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)" \
 xcaddy build \
     --output frankenphp \
     --with github.com/dunglas/frankenphp/caddy \
+    --with github.com/dunglas/caddy-cbrotli \
     --with github.com/dunglas/mercure/caddy \
-    --with github.com/dunglas/vulcain/caddy \
-    --with github.com/dunglas/caddy-cbrotli
+    --with github.com/dunglas/vulcain/caddy
     # Ajoutez les modules Caddy supplémentaires et les extensions FrankenPHP ici
-    # Facultativement, si vous souhaitez compiler à partir de vos sources frankenphp :
-    # --with github.com/dunglas/frankenphp=$(pwd) \
-    # --with github.com/dunglas/frankenphp/caddy=$(pwd)/caddy
 ```
 
 > [!TIP]
@@ -129,3 +125,4 @@ Il est également possible de compiler FrankenPHP sans `xcaddy` en utilisant dir
 curl -L https://github.com/php/frankenphp/archive/refs/heads/main.tar.gz | tar xz
 cd frankenphp-main/caddy/frankenphp
 CGO_CFLAGS=$(php-config --includes) CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)" go build -tags=nobadger,nomysql,nopgx
+```

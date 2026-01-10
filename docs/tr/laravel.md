@@ -17,7 +17,7 @@ Ve tadını çıkarın!
 Alternatif olarak, Laravel projelerinizi FrankenPHP ile yerel makinenizden çalıştırabilirsiniz:
 
 1. [Sisteminize karşılık gelen ikili dosyayı indirin](../#standalone-binary)
-2. Aşağıdaki yapılandırmayı Laravel projenizin kök dizenindeki `Caddyfile` adlı bir dosyaya ekleyin:
+2. Aşağıdaki yapılandırmayı Laravel projenizin kök dizinindeki `Caddyfile` adlı bir dosyaya ekleyin:
 
    ```caddyfile
    {
@@ -66,25 +66,24 @@ php artisan octane:frankenphp
 - `--admin-port`: Yönetici sunucusunun erişilebilir olması gereken port (varsayılan: `2019`)
 - `--workers`: İstekleri işlemek için hazır olması gereken worker sayısı (varsayılan: `auto`)
 - `--max-requests`: Sunucu yeniden yüklenmeden önce işlenecek istek sayısı (varsayılan: `500`)
-- `--caddyfile`: FrankenPHP `Caddyfile` dosyasının yolu (varsayılan: [Laravel Octane'deki taslak `Caddyfile`](https://github.com/laravel/octane/blob/2.x/src/Commands/stubs/Caddyfile))
+- `--caddyfile`: FrankenPHP `Caddyfile` dosyasının yolu (varsayılan: [Laravel Octane içinde bulunan şablon `Caddyfile`](https://github.com/laravel/octane/blob/2.x/src/Commands/stubs/Caddyfile))
 - `--https`: HTTPS, HTTP/2 ve HTTP/3'ü etkinleştirin ve sertifikaları otomatik olarak oluşturup yenileyin
 - `--http-redirect`: HTTP'den HTTPS'ye yeniden yönlendirmeyi etkinleştir (yalnızca --https ile birlikte geçilirse etkinleşir)
 - `--watch`: Uygulama değiştirildiğinde sunucuyu otomatik olarak yeniden yükle
 - `--poll`: Dosyaları bir ağ üzerinden izlemek için izleme sırasında dosya sistemi yoklamasını kullanın
-- `--log-level`: Yerel Caddy günlükleyicisini kullanarak belirtilen günlük seviyesinde veya üzerinde mesajları kaydedin
+- `--log-level`: Yerel Caddy günlüğünü kullanarak belirtilen günlük seviyesinde veya üzerinde mesajları kaydedin
 
 > [!TIP]
 > Yapılandırılmış JSON günlükleri elde etmek için (log analitik çözümleri kullanırken faydalıdır), `--log-level` seçeneğini açıkça geçin.
 
-Ayrıca [Octane ile Mercure nasıl kullanılır](#mercure-support) bölümüne bakın.
-
 [Laravel Octane hakkında daha fazla bilgiyi resmi belgelerde bulabilirsiniz](https://laravel.com/docs/octane).
 
-## Laravel Uygulamalarını Bağımsız İkili Dosyalar Olarak Dağıtma
+## Laravel Uygulamalarını Bağımsız Çalıştırılabilir Dosyalar Olarak Dağıtma
 
-[FrankenPHP'nin uygulama gömme özelliğini](embed.md) kullanarak, Laravel uygulamalarını bağımsız ikili dosyalar olarak dağıtmak mümkündür.
+[FrankenPHP'nin uygulama gömme özelliğini](embed.md) kullanarak, Laravel
+uygulamalarını bağımsız çalıştırılabilir dosyalar olarak dağıtmak mümkündür.
 
-Linux için Laravel uygulamanızı bağımsız bir ikili olarak paketlemek için şu adımları izleyin:
+Linux için Laravel uygulamanızı bağımsız bir çalıştırılabilir olarak paketlemek için şu adımları izleyin:
 
 1. Uygulamanızın deposunda `static-build.Dockerfile` adında bir dosya oluşturun:
 
@@ -157,7 +156,8 @@ Linux için Laravel uygulamanızı bağımsız bir ikili olarak paketlemek için
 
 Uygulamanız artık hazır!
 
-Mevcut seçenekler hakkında daha fazla bilgi edinin ve diğer işletim sistemleri için nasıl ikili derleneceğini [uygulama gömme](embed.md) belgelerinde öğrenin.
+Mevcut seçenekler hakkında daha fazla bilgi edinin ve diğer işletim sistemleri için nasıl ikili derleneceğini [uygulama gömme](embed.md)
+belgelerinde öğrenin.
 
 ### Depolama Yolunu Değiştirme
 
@@ -166,37 +166,11 @@ Gömülü uygulamalar için bu uygun değildir, çünkü her yeni sürüm farkl�
 
 Geçici dizin dışında bir dizin kullanmak için `LARAVEL_STORAGE_PATH` ortam değişkenini ayarlayın (örneğin, `.env` dosyanızda) veya `Illuminate\Foundation\Application::useStoragePath()` metodunu çağırın.
 
-### Mercure Desteği
+### Bağımsız Çalıştırılabilir Dosyalarla Octane'i Çalıştırma
 
-[Mercure](https://mercure.rocks), Laravel uygulamalarınıza gerçek zamanlı yetenekler eklemenin harika bir yoludur. FrankenPHP, [Mercure desteğini kutudan çıktığı gibi](mercure.md) sunar.
+Laravel Octane uygulamalarını bağımsız çalıştırılabilir dosyalar olarak paketlemek bile mümkündür!
 
-[Octane](#laravel-octane) kullanmıyorsanız, [Mercure belgelendirme girdisine](mercure.md) bakın.
-
-Octane kullanıyorsanız, `config/octane.php` dosyanıza aşağıdaki satırları ekleyerek Mercure desteğini etkinleştirebilirsiniz:
-
-```php
-// ...
-
-return [
-    // ...
-
-    'mercure' => [
-        'anonymous' => true,
-        'publisher_jwt' => '!ChangeThisMercureHubJWTSecretKey!',
-        'subscriber_jwt' => '!ChangeThisMercureHubJWTSecretKey!',
-    ],
-];
-```
-
-Bu dizide [Mercure tarafından desteklenen tüm yönergeleri](https://mercure.rocks/docs/hub/config#directives) kullanabilirsiniz.
-
-Güncellemeleri yayınlamak ve abone olmak için, [Laravel Mercure Broadcaster](https://github.com/mvanduijker/laravel-mercure-broadcaster) kütüphanesini kullanmanızı öneririz. Alternatif olarak, saf PHP ve JavaScript ile yapmak için [Mercure belgelerine](mercure.md) bakın.
-
-### Bağımsız İkili Dosyalarla Octane'i Çalıştırma
-
-Laravel Octane uygulamalarını bağımsız ikili dosyalar olarak paketlemek bile mümkündür!
-
-Bunu yapmak için, [Octane'i doğru şekilde kurun](#laravel-octane) ve [önceki bölümde](#laravel-uygulamalarını-bağımsız-ikili-dosyalar-olarak-dağıtma) açıklanan adımları izleyin.
+Bunu yapmak için, [Octane'i doğru şekilde kurun](#laravel-octane) ve [önceki bölümde](#laravel-uygulamalarını-bağımsız-çalıştırılabilir-dosyalar-olarak-dağıtma) açıklanan adımları izleyin.
 
 Ardından, Octane üzerinden FrankenPHP'yi worker modunda başlatmak için şunu çalıştırın:
 

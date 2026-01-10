@@ -1,23 +1,21 @@
-# Bağımsız Çalıştırılabilir PHP Uygulamaları
+# Binary Dosyası Olarak PHP Uygulamaları
 
-FrankenPHP, PHP uygulamalarının kaynak kodunu ve varlıklarını statik, bağımsız çalıştırılabilir bir dosyaya yerleştirme yeteneğine sahiptir.
+FrankenPHP, PHP uygulamalarının kaynak kodunu ve varlıklarını statik, kendi kendine yeten bir binary dosyaya yerleştirme yeteneğine sahiptir.
 
-Bu özellik sayesinde PHP uygulamaları, uygulamanın kendisini, PHP yorumlayıcısını ve üretim düzeyinde bir web sunucusu olan Caddy'yi içeren bağımsız çalıştırılabilir dosyalar olarak dağıtılabilir.
+Bu özellik sayesinde PHP uygulamaları, uygulamanın kendisini, PHP yorumlayıcısını ve üretim düzeyinde bir web sunucusu olan Caddy'yi içeren bağımsız bir binary dosyalar olarak çıktısı alınabilir ve dağıtılabilir.
 
 Bu özellik hakkında daha fazla bilgi almak için [Kévin tarafından SymfonyCon 2023'te yapılan sunuma](https://dunglas.dev/2023/12/php-and-symfony-apps-as-standalone-binaries/) göz atabilirsiniz.
 
-Laravel uygulamalarını gömmek için [bu özel dokümantasyon girdisini okuyun](laravel.md#laravel-apps-as-standalone-binaries).
+## Preparing Your App
 
-## Uygulamanızı Hazırlama
-
-Bağımsız çalıştırılabilir dosyayı oluşturmadan önce uygulamanızın gömülmeye hazır olduğundan emin olun.
+Bağımsız binary dosyayı oluşturmadan önce uygulamanızın gömülmeye hazır olduğundan emin olun.
 
 Örneğin muhtemelen şunları yapmak istersiniz:
 
 - Uygulamanın üretim bağımlılıklarını yükleyin
-- Otomatik yükleyiciyi oluşturun
+- Otomatik yükleyiciyi boşaltın
 - Uygulamanızın üretim modunu etkinleştirin (varsa)
-- Nihai çalıştırılabilir dosyanızın boyutunu azaltmak için `.git` veya testler gibi gereksiz dosyaları ayıklayın
+- Nihai binary dosyanızın boyutunu küçültmek için `.git` veya testler gibi gerekli olmayan dosyaları çıkarın
 
 Örneğin, bir Symfony uygulaması için aşağıdaki komutları kullanabilirsiniz:
 
@@ -31,8 +29,7 @@ cd $TMPDIR/my-prepared-app
 echo APP_ENV=prod > .env.local
 echo APP_DEBUG=0 >> .env.local
 
-# Testleri ve diğer gereksiz dosyaları yer kazanmak için kaldırın
-# Alternatif olarak, bu dosyaları .gitattributes dosyanızdaki export-ignore niteliğiyle ekleyin
+# Testleri kaldırın
 rm -Rf tests/
 
 # Bağımlılıkları yükleyin
@@ -42,13 +39,9 @@ composer install --ignore-platform-reqs --no-dev -a
 composer dump-env prod
 ```
 
-### Yapılandırmayı Özelleştirme
+## Linux Binary'si Oluşturma
 
-[Yapılandırmayı](config.md) özelleştirmek için, gömülecek uygulamanın ana dizinine (önceki örnekte `$TMPDIR/my-prepared-app`) bir `Caddyfile` ve bir `php.ini` dosyası yerleştirebilirsiniz.
-
-## Linux Çalıştırılabilir Dosyası Oluşturma
-
-Bir Linux çalıştırılabilir dosyası oluşturmanın en kolay yolu, sağladığımız Docker tabanlı derleyiciyi kullanmaktır.
+Bir Linux binary çıktısı almanın en kolay yolu, sağladığımız Docker tabanlı derleyiciyi kullanmaktır.
 
 1. Hazırladığınız uygulamanın deposunda `static-build.Dockerfile` adlı bir dosya oluşturun:
 
@@ -60,9 +53,10 @@ Bir Linux çalıştırılabilir dosyası oluşturmanın en kolay yolu, sağladı
    WORKDIR /go/src/app/dist/app
    COPY . .
 
-   # Statik çalıştırılabilir dosyayı oluşturun
+   # Statik binary dosyasını oluşturun, yalnızca istediğiniz PHP eklentilerini seçtiğinizden emin olun
    WORKDIR /go/src/app/
-   RUN EMBED=dist/app/ ./build-static.sh
+   RUN EMBED=dist/app/ \
+       ./build-static.sh
    ```
 
    > [!CAUTION]
@@ -76,27 +70,28 @@ Bir Linux çalıştırılabilir dosyası oluşturmanın en kolay yolu, sağladı
    docker build -t static-app -f static-build.Dockerfile .
    ```
 
-3. Çalıştırılabilir dosyayı çıkarın:
+3. Binary dosyasını çıkarın:
 
    ```console
    docker cp $(docker create --name static-app-tmp static-app):/go/src/app/dist/frankenphp-linux-x86_64 my-app ; docker rm static-app-tmp
    ```
 
-Elde edilen çalıştırılabilir dosya, geçerli dizindeki `my-app` adlı dosyadır.
+Elde edilen binary dosyası, geçerli dizindeki `my-app` adlı dosyadır.
 
-## Diğer İşletim Sistemleri için Çalıştırılabilir Dosya Oluşturma
+## Diğer İşletim Sistemleri için Binary Çıktısı Alma
 
-Docker kullanmak istemiyorsanız veya bir macOS çalıştırılabilir dosyası oluşturmak istiyorsanız, sağladığımız kabuk betiğini kullanın:
+Docker kullanmak istemiyorsanız veya bir macOS binary dosyası oluşturmak istiyorsanız, sağladığımız kabuk betiğini kullanın:
 
 ```console
 git clone https://github.com/php/frankenphp
 cd frankenphp
-EMBED=/path/to/your/app ./build-static.sh
+EMBED=/path/to/your/app \
+    ./build-static.sh
 ```
 
-Elde edilen çalıştırılabilir dosya `dist/` dizinindeki `frankenphp-<os>-<arch>` adlı dosyadır.
+Elde edilen binary dosyası `dist/` dizinindeki `frankenphp-<os>-<arch>` adlı dosyadır.
 
-## Çalıştırılabilir Dosyayı Kullanma
+## Binary Dosyasını Kullanma
 
 İşte bu kadar! `my-app` dosyası (veya diğer işletim sistemlerinde `dist/frankenphp-<os>-<arch>`) bağımsız uygulamanızı içerir!
 
@@ -118,23 +113,17 @@ HTTPS (Let's Encrypt sertifikası otomatik olarak oluşturulur), HTTP/2 ve HTTP/
 ./my-app php-server --domain localhost
 ```
 
-Ayrıca çalıştırılabilir dosyanıza gömülü PHP CLI betiklerini de çalıştırabilirsiniz:
+Ayrıca binary dosyanıza gömülü PHP CLI betiklerini de çalıştırabilirsiniz:
 
 ```console
 ./my-app php-cli bin/console
 ```
 
-## PHP Uzantıları
-
-Varsayılan olarak, betik projenizin `composer.json` dosyası tarafından (varsa) gerekli olan uzantıları derleyecektir. Eğer `composer.json` dosyası yoksa, [statik derlemeler girdisinde](static.md) belgelendiği gibi varsayılan uzantılar derlenir.
-
-Uzantıları özelleştirmek için `PHP_EXTENSIONS` ortam değişkenini kullanın.
-
 ## Yapıyı Özelleştirme
 
-Çalıştırılabilir dosyanın nasıl özelleştirileceğini (uzantılar, PHP sürümü...) görmek için [statik derleme dokümantasyonunu okuyun](static.md).
+Binary dosyasının nasıl özelleştirileceğini (uzantılar, PHP sürümü...) görmek için [Statik derleme dokümanını okuyun](static.md).
 
-## Çalıştırılabilir Dosyanın Dağıtılması
+## Binary Dosyasının Dağıtılması
 
 Linux'ta, oluşturulan ikili dosya [UPX](https://upx.github.io) kullanılarak sıkıştırılır.
 

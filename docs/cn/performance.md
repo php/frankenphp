@@ -41,9 +41,11 @@
 
 另外，[一些错误只在使用 musl 时发生](https://github.com/php/php-src/issues?q=sort%3Aupdated-desc+is%3Aissue+is%3Aopen+label%3ABug+musl)。
 
-在生产环境中，我们建议使用链接到 glibc，并以适当优化级别编译的 FrankenPHP。
+在生产环境中，我们建议使用链接到 glibc 的 FrankenPHP。
 
-这可以通过使用 Debian Docker 镜像、使用我们的维护者提供的 [.deb](https://debs.henderkes.com) 或 [.rpm](https://rpms.henderkes.com) 包，或通过[从源代码编译 FrankenPHP](compile.md) 来实现。
+这可以通过使用 Debian Docker 镜像（默认）、从我们的 [Releases](https://github.com/php/frankenphp/releases) 下载 -gnu 后缀二进制文件，或通过[从源代码编译 FrankenPHP](compile.md) 来实现。
+
+或者，我们提供使用 [mimalloc 分配器](https://github.com/microsoft/mimalloc) 编译的静态 musl 二进制文件，这缓解了线程场景中的问题。
 
 ## Go 运行时配置
 
@@ -153,32 +155,3 @@ FrankenPHP 使用官方 PHP 解释器。
 
 有关更多详细信息，请阅读[专门的 Symfony 文档条目](https://symfony.com/doc/current/performance.html)
 （即使你不使用 Symfony，大多数提示也很有用）。
-
-## 分割线程池
-
-应用程序通常会与缓慢的外部服务交互，例如在高负载下容易变得不可靠或持续需要 10 秒以上才能响应的 API。
-在这种情况下，将线程池拆分以拥有专用的“慢速”池可能会很有益。这可以防止慢速端点耗尽所有服务器资源/线程，并限制指向慢速端点的请求并发性，类似于连接池。
-
-```caddyfile
-{
-    frankenphp {
-        max_threads 100 # 所有 worker 共享最多 100 个线程
-    }
-}
-
-example.com {
-    php_server {
-        root /app/public # 你的应用程序的根目录
-        worker index.php {
-            match /slow-endpoint/* # 所有路径为 /slow-endpoint/* 的请求都由这个线程池处理
-            num 10 # 匹配 /slow-endpoint/* 的请求至少有 10 个线程
-        }
-        worker index.php {
-            match * # 所有其他请求单独处理
-            num 20 # 其他请求至少有 20 个线程，即使慢速端点开始挂起
-        }
-    }
-}
-```
-
-通常，也建议通过使用消息队列等相关机制，异步处理非常慢的端点。

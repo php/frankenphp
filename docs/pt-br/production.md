@@ -1,8 +1,9 @@
 # Implantando em produção
 
-Neste tutorial, aprenderemos como implantar uma aplicação PHP em um único servidor usando o Docker Compose.
+Neste tutorial, aprenderemos como implantar uma aplicação PHP em um único
+servidor usando o Docker Compose.
 
-Se você estiver usando o Symfony, prefira ler a documentação
+Se você estiver usando o Symfony, leia a documentação
 [Implantar em produção](https://github.com/dunglas/symfony-docker/blob/main/docs/production.md)
 do projeto Docker do Symfony (que usa FrankenPHP).
 
@@ -16,7 +17,7 @@ Primeiro, crie um `Dockerfile` no diretório raiz do seu projeto PHP:
 ```dockerfile
 FROM dunglas/frankenphp
 
-# Certifique-se de substituir "your-domain-name.example.com" pelo seu nome de
+# Certifique-se de substituir "seu-nome-de-dominio.example.com" pelo seu nome de
 # domínio
 ENV SERVER_NAME=seu-nome-de-dominio.example.com
 # Se quiser desabilitar o HTTPS, use este valor:
@@ -69,7 +70,7 @@ volumes:
 > Em desenvolvimento, você pode querer usar um volume, uma configuração PHP
 > diferente e um valor diferente para a variável de ambiente `SERVER_NAME`.
 >
-> Confira o projeto [Symfony Docker](https://github.com/dunglas/symfony-docker)
+> Consulte o projeto [Symfony Docker](https://github.com/dunglas/symfony-docker)
 > (que usa FrankenPHP) para um exemplo mais avançado usando imagens
 > multiestágio, Composer, extensões PHP extras, etc.
 
@@ -119,7 +120,7 @@ Em seguida, crie um registro DNS do tipo `A` para o seu nome de domínio,
 apontando para o endereço IP do seu servidor:
 
 ```dns
-seu-nome-de-dominio.example.com.  IN  A     207.154.233.113
+seu-nome-de-dominio.example.com.  IN  A  <ip-do-seu-servidor>
 ```
 
 Exemplo com o serviço DigitalOcean Domains ("Networking" > "Domains"):
@@ -143,10 +144,10 @@ Chaves de implantação também são [suportadas pelo GitLab](https://docs.gitla
 Exemplo com Git:
 
 ```console
-git clone git@github.com:<username>/<project-name>.git
+git clone git@github.com:<usuario>/<nome-do-projeto>.git
 ```
 
-Acesse o diretório que contém seu projeto (`<project-name>`) e inicie a
+Acesse o diretório que contém seu projeto (`<nome-do-projeto>`) e inicie a
 aplicação em modo de produção:
 
 ```console

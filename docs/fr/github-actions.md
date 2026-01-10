@@ -27,5 +27,5 @@ Dans les paramètres du dépôt, sous "secrets", ajoutez les secrets suivants :
 
 1. Créez un nouveau tag dans le dépôt.
 2. GitHub Actions va construire l'image et exécuter tous les tests.
-3. Si la construction est réussie, l'image sera poussée vers le registre en utilisant le nom du tag comme tag (par exemple, `v1.2.3` et `v1.2` seront créés).
+3. Si la compilation est réussie, l'image sera poussée vers le registre en utilisant le nom du tag comme tag (par exemple, `v1.2.3` et `v1.2` seront créés).
 4. Le tag `latest` sera également mis à jour.

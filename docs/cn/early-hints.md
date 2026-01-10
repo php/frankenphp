@@ -9,7 +9,7 @@ FrankenPHP 原生支持 [103 Early Hints 状态码](https://developer.chrome.com
 header('Link: </style.css>; rel=preload; as=style');
 headers_send(103);
 
-// 你的慢速算法和 SQL 查询 🤪
+// 慢速算法和 SQL 查询
 
 echo <<<'HTML'
 <!DOCTYPE html>

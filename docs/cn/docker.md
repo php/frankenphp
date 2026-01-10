@@ -7,7 +7,7 @@
 标签遵循此模式：`dunglas/frankenphp:<frankenphp-version>-php<php-version>-<os>`
 
 - `<frankenphp-version>` 和 `<php-version>` 分别是 FrankenPHP 和 PHP 的版本号，范围从主版本（例如 `1`）、次版本（例如 `1.2`）到补丁版本（例如 `1.2.3`）。
-- `<os>` 可以是 `trixie`（用于 Debian Trixie）、`bookworm`（用于 Debian Bookworm），也可以是 `alpine`（用于 Alpine 的最新稳定版本）。
+- `<os>` 要么是 `bookworm`（用于 Debian Bookworm）要么是 `alpine`（用于 Alpine 的最新稳定版本）。
 
 [浏览标签](https://hub.docker.com/r/dunglas/frankenphp/tags)。
 
@@ -27,10 +27,6 @@ COPY . /app/public
 docker build -t my-php-app .
 docker run -it --rm --name my-running-app my-php-app
 ```
-
-## 如何调整配置
-
-为方便起见，镜像中提供了一个包含有用环境变量的[默认 Caddyfile](https://github.com/php/frankenphp/blob/main/caddy/frankenphp/Caddyfile)。
 
 ## 如何安装更多 PHP 扩展
 
@@ -84,13 +80,14 @@ COPY --from=builder /usr/local/bin/frankenphp /usr/local/bin/frankenphp
 ```
 
 FrankenPHP 提供的 `builder` 镜像包含 `libphp` 的编译版本。
-[用于构建的镜像](https://hub.docker.com/r/dunglas/frankenphp/tags?name=builder) 适用于所有版本的 FrankenPHP 和 PHP，包括 Debian 和 Alpine。
+[用于构建的镜像](https://hub.docker.com/r/dunglas/frankenphp/tags?name=builder) 适用于所有版本的 FrankenPHP 和 PHP，包括 Alpine 和 Debian。
 
 > [!TIP]
 >
-> 如果你正在使用 Alpine Linux 和 Symfony，你可能需要 [增加默认堆栈大小](compile.md#using-xcaddy)。
+> 如果你的系统基于 musl libc（Alpine Linux 上默认使用）并搭配 Symfony 使用，
+> 你可能需要 [增加默认堆栈大小](compile.md#using-xcaddy)。
 
-## 默认启用 Worker 模式
+## 默认启用 worker 模式
 
 设置 `FRANKENPHP_CONFIG` 环境变量以使用 worker 脚本启动 FrankenPHP：
 
@@ -102,9 +99,9 @@ FROM dunglas/frankenphp
 ENV FRANKENPHP_CONFIG="worker ./public/index.php"
 ```
 
-## 开发时使用卷
+## 开发挂载宿主机目录
 
-要使用 FrankenPHP 轻松开发，请将包含应用程序源代码的主机目录作为卷挂载到 Docker 容器中：
+要使用 FrankenPHP 轻松开发，请从包含应用程序源代码的主机挂载目录作为 Docker 容器中的 volume：
 
 ```console
 docker run -v $PWD:/app/public -p 80:80 -p 443:443 -p 443:443/udp --tty my-php-app
@@ -134,16 +131,16 @@ services:
       - ./:/app/public
       - caddy_data:/data
       - caddy_config:/config
-    # 在生产环境中注释以下行，它允许在开发中输出清晰可读的日志
+    # 在生产环境中注释以下行，它允许在 dev 中使用清晰可读日志
     tty: true
 
-# Caddy 证书和配置所需的卷
+# Caddy 证书和配置所需的挂载目录
 volumes:
   caddy_data:
   caddy_config:
 ```
 
-## 以非 Root 用户身份运行
+## 以非 root 用户身份运行
 
 FrankenPHP 可以在 Docker 中以非 root 用户身份运行。
 
@@ -157,21 +154,21 @@ ARG USER=appuser
 RUN \
 	# 在基于 alpine 的发行版使用 "adduser -D ${USER}"
 	useradd ${USER}; \
-	# 添加绑定到 80 和 443 端口的额外能力
+	# 需要开放80和443端口的权限
 	setcap CAP_NET_BIND_SERVICE=+eip /usr/local/bin/frankenphp; \
-	# 授予 /config/caddy 和 /data/caddy 写入权限
+	# 需要 /config/caddy 和 /data/caddy 目录的写入权限
 	chown -R ${USER}:${USER} /config/caddy /data/caddy
 
 USER ${USER}
 ```
 
-### 无能力运行
+### 无权限运行
 
-即使在无根运行时，FrankenPHP 也需要 `CAP_NET_BIND_SERVICE` 能力来将
+即使在无根运行时，FrankenPHP 也需要 `CAP_NET_BIND_SERVICE` 权限来将
 Web 服务器绑定到特权端口（80 和 443）。
 
 如果你在非特权端口（1024 及以上）上公开 FrankenPHP，则可以以非 root 用户身份运行
-Web 服务器，并且不需要任何能力：
+Web 服务器，并且不需要任何权限：
 
 ```dockerfile
 FROM dunglas/frankenphp
@@ -181,7 +178,7 @@ ARG USER=appuser
 RUN \
 	# 在基于 alpine 的发行版使用 "adduser -D ${USER}"
 	useradd ${USER}; \
-	# 移除默认能力
+	# 移除默认权限
 	setcap -r /usr/local/bin/frankenphp; \
 	# 给予 /config/caddy 和 /data/caddy 写入权限
 	chown -R ${USER}:${USER} /config/caddy /data/caddy
@@ -194,15 +191,14 @@ USER ${USER}
 
 ## 更新
 
-Docker 镜像会在以下情况下构建：
+Docker 镜像会按照以下条件更新：
 
-- 发布新的版本时
-- 每日 UTC 时间 4 点，如果官方 PHP 镜像有新版本可用时
+- 发布新的版本后
+- 每日 4:00（UTC 时间）检查新的 PHP 镜像
 
 ## 开发版本
 
-开发版本可在 [`dunglas/frankenphp-dev`](https://hub.docker.com/repository/docker/dunglas/frankenphp-dev) Docker 仓库中提供。
-每次有新的提交推送到 GitHub 仓库的主分支时，都会触发一次新的构建。
+可在此 [`dunglas/frankenphp-dev`](https://hub.docker.com/repository/docker/dunglas/frankenphp-dev) 仓库获取开发版本。
+每次在 GitHub 仓库的主分支有新的 commit 都会触发一次新的 build。
 
-`latest*` 标签指向 `main` 分支的头部。
-同时，`sha-<git-commit-hash>` 形式的标签也可用。
+`latest*` tag 指向最新的 `main` 分支，且同样支持 `sha-<git-commit-hash>` 的 tag。

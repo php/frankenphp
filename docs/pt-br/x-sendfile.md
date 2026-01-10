@@ -20,7 +20,7 @@ Esse recurso é conhecido como **`X-Sendfile`** para Apache e
 
 Nos exemplos a seguir, assumimos que o diretório raiz do projeto é o diretório
 `public/` e que queremos usar PHP para servir arquivos armazenados fora do
-diretório `public/`, de um diretório chamado `private-files/`.
+diretório `public/`, de um diretório chamado `arquivos-privados/`.
 
 ## Configuração
 
@@ -31,18 +31,20 @@ este recurso:
 	root public/
 	# ...
 
-+	# Necessário para Symfony, Laravel e outros projetos que usam o componente Symfony HttpFoundation
++	# Necessário para Symfony, Laravel e outros projetos que usam o componente
++	# Symfony HttpFoundation
 +	request_header X-Sendfile-Type x-accel-redirect
-+	request_header X-Accel-Mapping ../private-files=/private-files
++	request_header X-Accel-Mapping ../arquivos-privados=/arquivos-privados
 +
 +	intercept {
 +		@accel header X-Accel-Redirect *
 +		handle_response @accel {
-+			root private-files/
++			root arquivos-privados/
 +			rewrite * {resp.header.X-Accel-Redirect}
 +			method * GET
 +
-+			# Remove o cabeçalho X-Accel-Redirect definido pelo PHP para maior segurança
++			# Remove o cabeçalho X-Accel-Redirect definido pelo PHP para maior
++			# segurança
 +			header -X-Accel-Redirect
 +
 +			file_server
@@ -54,11 +56,11 @@ este recurso:
 
 ## PHP simples
 
-Defina o caminho relativo do arquivo (do diretório `private-files/`) como o valor do
+Defina o caminho relativo do arquivo (de `arquivos-privados/`) como o valor do
 cabeçalho `X-Accel-Redirect`:
 
 ```php
-header('X-Accel-Redirect: file.txt');
+header('X-Accel-Redirect: arquivo.txt');
 ```
 
 ## Projetos que utilizam o componente Symfony HttpFoundation (Symfony, Laravel, Drupal...)
@@ -72,6 +74,7 @@ Ele determinará automaticamente o valor correto para o cabeçalho
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 BinaryFileResponse::trustXSendfileTypeHeader();
-$response = new BinaryFileResponse(__DIR__.'/../private-files/file.txt');
+$response = new BinaryFileResponse(__DIR__.'/../arquivos-privados/arquivo.txt');
 
 // ...
+```

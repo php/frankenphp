@@ -1,75 +1,42 @@
-# Konfigürasyon
+﻿# Konfigürasyon
 
-FrankenPHP, Caddy'nin yanı sıra [Mercure](mercure.md) ve [Vulcain](https://vulcain.rocks) modülleri [Caddy tarafından desteklenen formatlar](https://caddyserver.com/docs/getting-started#your-first-config) kullanılarak yapılandırılabilir.
+FrankenPHP, Caddy'nin yanı sıra Mercure ve Vulcain modülleri [Caddy tarafından desteklenen formatlar](https://caddyserver.com/docs/getting-started#your-first-config) kullanılarak yapılandırılabilir.
 
-En yaygın format, basit, insan tarafından okunabilir bir metin formatı olan `Caddyfile`'dır.
-Varsayılan olarak, FrankenPHP mevcut dizinde bir `Caddyfile` arar.
-Özel bir yolu `-c` veya `--config` seçeneğiyle belirtebilirsiniz.
+Docker imajlarında] (docker.md), `Caddyfile` `/etc/frankenphp/Caddyfile` adresinde bulunur.
+Statik ikili, başlatıldığı dizinde `Caddyfile` dosyasını arayacaktır.
 
-Bir PHP uygulamasını sunmak için en az düzeyde bir `Caddyfile` aşağıda gösterilmiştir:
+PHP'nin kendisi [bir `php.ini` dosyası kullanılarak yapılandırılabilir](https://www.php.net/manual/tr/configuration.file.php).
 
-```caddyfile
-# Yanıt verilecek ana bilgisayar adı
-localhost
+PHP yorumlayıcısı aşağıdaki konumlarda arama yapacaktır:
 
-# İsteğe bağlı olarak, dosyaların sunulacağı dizin, aksi takdirde mevcut dizine varsayılan olarak ayarlanır
-#root public/
-php_server
-```
+Docker:
 
-Daha fazla özellik sağlayan ve kullanışlı ortam değişkenleri sunan daha gelişmiş bir `Caddyfile`, [FrankenPHP deposunda](https://github.com/php/frankenphp/blob/main/caddy/frankenphp/Caddyfile) ve Docker imajlarıyla birlikte sağlanır.
-
-PHP'nin kendisi [bir `php.ini` dosyası kullanılarak yapılandırılabilir](https://www.php.net/manual/en/configuration.file.php).
-
-Kurulum yönteminize bağlı olarak, FrankenPHP ve PHP yorumlayıcısı, yapılandırma dosyalarını aşağıda açıklanan konumlarda arayacaktır.
-
-## Docker
-
-FrankenPHP:
-
-- `/etc/frankenphp/Caddyfile`: ana yapılandırma dosyası
-- `/etc/frankenphp/Caddyfile.d/*.caddyfile`: otomatik olarak yüklenen ek yapılandırma dosyaları
-
-PHP:
-
-- `php.ini`: `/usr/local/etc/php/php.ini` (varsayılan olarak bir `php.ini` sağlanmaz)
+- php.ini: `/usr/local/etc/php/php.ini` Varsayılan olarak php.ini sağlanmaz.
 - ek yapılandırma dosyaları: `/usr/local/etc/php/conf.d/*.ini`
-- PHP uzantıları: `/usr/local/lib/php/extensions/no-debug-zts-<YYYYMMDD>/`
+- php uzantıları: `/usr/local/lib/php/extensions/no-debug-zts-<YYYYMMDD>/`
 - PHP projesi tarafından sağlanan resmi bir şablonu kopyalamalısınız:
 
 ```dockerfile
 FROM dunglas/frankenphp
 
-# Üretim:
-RUN cp $PHP_INI_DIR/php.ini-production $PHP_INI_DIR/php.ini
-
-# Veya geliştirme:
+# Developement:
 RUN cp $PHP_INI_DIR/php.ini-development $PHP_INI_DIR/php.ini
+
+# Veya production:
+RUN cp $PHP_INI_DIR/php.ini-production $PHP_INI_DIR/php.ini
 ```
 
-## RPM ve Debian Paketleri
+FrankenPHP kurulumu (.rpm veya .deb):
 
-FrankenPHP:
-
-- `/etc/frankenphp/Caddyfile`: ana yapılandırma dosyası
-- `/etc/frankenphp/Caddyfile.d/*.caddyfile`: otomatik olarak yüklenen ek yapılandırma dosyaları
-
-PHP:
-
-- `php.ini`: `/etc/php-zts/php.ini` (varsayılan olarak üretim ön ayarlarına sahip bir `php.ini` dosyası sağlanır)
-- ek yapılandırma dosyaları: `/etc/php-zts/conf.d/*.ini`
-
-## Statik İkili
-
-FrankenPHP:
-
-- Mevcut çalışma dizininde: `Caddyfile`
-
-PHP:
-
-- `php.ini`: `frankenphp run` veya `frankenphp php-server` komutunun çalıştırıldığı dizin, ardından `/etc/frankenphp/php.ini`
+- php.ini: `/etc/frankenphp/php.ini` Varsayılan olarak üretim ön ayarlarına sahip bir php.ini dosyası sağlanır.
 - ek yapılandırma dosyaları: `/etc/frankenphp/php.d/*.ini`
-- PHP uzantıları: yüklenemez, bunları ikili dosyanın içine paketleyin
+- php uzantıları: `/usr/lib/frankenphp/modules/`
+
+Statik ikili:
+
+- php.ini: `frankenphp run` veya `frankenphp php-server` komutunun çalıştırıldığı dizin, ardından `/etc/frankenphp/php.ini`
+- ek yapılandırma dosyaları: `/etc/frankenphp/php.d/*.ini`
+- php uzantıları: yüklenemez
 - [PHP kaynak kodu](https://github.com/php/php-src/) ile birlikte verilen `php.ini-production` veya `php.ini-development` dosyalarından birini kopyalayın.
 
 ## Caddyfile Konfigürasyonu
@@ -87,22 +54,17 @@ localhost {
 }
 ```
 
-FrankenPHP'yi [global seçenek](https://caddyserver.com/docs/caddyfile/concepts#global-options) `frankenphp` kullanarak açıkça yapılandırabilirsiniz:
+FrankenPHP'yi global seçenek kullanarak açıkça yapılandırabilirsiniz:
+`frankenphp` [global seçenek](https://caddyserver.com/docs/caddyfile/concepts#global-options) FrankenPHP'yi yapılandırmak için kullanılabilir.
 
 ```caddyfile
 {
 	frankenphp {
-		num_threads <num_threads> # Başlatılacak PHP iş parçacığı sayısını ayarlar. Varsayılan: Mevcut CPU sayısının 2 katı.
-		max_threads <num_threads> # Çalışma zamanında başlatılabilecek ek PHP iş parçacığı sayısını sınırlar. Varsayılan: num_threads. 'auto' olarak ayarlanabilir.
-		max_wait_time <duration> # Bir isteğin, boş bir PHP iş parçacığı bekleyebileceği maksimum süreyi ayarlar. Varsayılan: devre dışı.
-		php_ini <key> <value> # Bir php.ini yönergesini ayarlar. Birden fazla yönerge ayarlamak için birkaç kez kullanılabilir.
+		num_threads <num_threads> # Başlatılacak PHP iş parçacığı sayısını ayarlar. Varsayılan: Mevcut CPU çekirdek sayısının 2 katı.
 		worker {
 			file <path> # Çalışan komut dosyasının yolunu ayarlar.
-			num <num> # Başlatılacak PHP iş parçacığı sayısını ayarlar, varsayılan olarak mevcut CPU sayısının 2 katıdır.
+			num <num> # Başlatılacak PHP iş parçacığı sayısını ayarlar, varsayılan değer mevcut CPU çekirdek sayısının 2 katıdır.
 			env <key> <value> # Ek bir ortam değişkenini verilen değere ayarlar. Birden fazla ortam değişkeni için birden fazla kez belirtilebilir.
-			watch <path> # Dosya değişikliklerini izlemek için yolu ayarlar. Birden fazla yol için birden fazla kez belirtilebilir.
-			name <name> # İşçinin adını ayarlar, loglarda ve metriklerde kullanılır. Varsayılan: işçi dosyasının mutlak yolu
-			max_consecutive_failures <num> # İşçinin sağlıksız kabul edilmeden önce izin verilen maksimum ardışık hata sayısını ayarlar, -1 işçinin her zaman yeniden başlayacağı anlamına gelir. Varsayılan: 6.
 		}
 	}
 }
@@ -126,7 +88,7 @@ Aynı sunucuda birden fazla uygulamaya hizmet veriyorsanız birden fazla işçi 
 
 ```caddyfile
 app.example.com {
-    root /path/to/app/public
+	root /path/to/app/public
 	php_server {
 		root /path/to/app/public # daha iyi önbelleğe almayı sağlar
 		worker index.php <num>
@@ -134,7 +96,7 @@ app.example.com {
 }
 
 other.example.com {
-    root /path/to/other/public
+	root /path/to/other/public
 	php_server {
 		root /path/to/other/public
 		worker index.php <num>
@@ -145,20 +107,19 @@ other.example.com {
 ```
 
 Genellikle ihtiyacınız olan şey `php_server` yönergesini kullanmaktır,
-ancak tam kontrole ihtiyacınız varsa, daha düşük seviyeli `php` yönergesini kullanabilirsiniz.
-`php` yönergesi, önce bir PHP dosyası olup olmadığını kontrol etmek yerine tüm girdiyi PHP'ye iletir. Daha fazla bilgiyi [performans sayfasında](performance.md#try_files) okuyun.
+ancak tam kontrole ihtiyacınız varsa, daha düşük seviyeli `php` yönergesini kullanabilirsiniz:
 
-`php_server` yönergesini kullanmak bu yapılandırma ile aynıdır:
+php_server` yönergesini kullanmak bu yapılandırmay ile aynıdır:
 
 ```caddyfile
 route {
-	# Dizin istekleri için sondaki eğik çizgiyi ekle
+	# Dizin istekleri için sondaki eğik çizgiyi, diğer adıyla taksim işaretini ekleyin
 	@canonicalPath {
 		file {path}/index.php
 		not path */
 	}
 	redir @canonicalPath {path}/ 308
-	# İstenen dosya mevcut değilse, dizin dosyalarını dene
+	# İstenen dosya mevcut değilse, dizin dosyalarını deneyin
 	@indexFiles file {
 		try_files {path} {path}/index.php index.php
 		split_path .php
@@ -171,90 +132,23 @@ route {
 }
 ```
 
-`php_server` ve `php` yönergeleri aşağıdaki seçeneklere sahiptir:
+php_server`ve`php` yönergeleri aşağıdaki seçeneklere sahiptir:
 
 ```caddyfile
 php_server [<matcher>] {
-	root <directory> # Sitenin kök klasörünü ayarlar. Varsayılan: `root` yönergesi.
+	root <directory> # Sitenin kök klasörünü ayarlar. Öntanımlı: `root` yönergesi.
 	split_path <delim...> # URI'yi iki parçaya bölmek için alt dizgeleri ayarlar. İlk eşleşen alt dizge "yol bilgisini" yoldan ayırmak için kullanılır. İlk parça eşleşen alt dizeyle sonlandırılır ve gerçek kaynak (CGI betiği) adı olarak kabul edilir. İkinci parça betiğin kullanması için PATH_INFO olarak ayarlanacaktır. Varsayılan: `.php`
 	resolve_root_symlink false # Varsa, sembolik bir bağlantıyı değerlendirerek `root` dizininin gerçek değerine çözümlenmesini devre dışı bırakır (varsayılan olarak etkindir).
 	env <key> <value> # Ek bir ortam değişkenini verilen değere ayarlar. Birden fazla ortam değişkeni için birden fazla kez belirtilebilir.
 	file_server off # Yerleşik file_server yönergesini devre dışı bırakır.
 	worker { # Bu sunucuya özgü bir worker oluşturur. Birden fazla worker için birden fazla kez belirtilebilir.
 		file <path> # Worker betiğinin yolunu ayarlar, php_server köküne göre göreceli olabilir
-		num <num> # Başlatılacak PHP iş parçacığı sayısını ayarlar, varsayılan olarak mevcut CPU sayısının 2 katıdır
+		num <num> # Başlatılacak PHP iş parçacığı sayısını ayarlar, varsayılan değer mevcut CPU çekirdek sayısının 2 katıdır
 		name <name> # Worker için günlüklerde ve metriklerde kullanılan bir ad ayarlar. Varsayılan: worker dosyasının mutlak yolu. Bir php_server bloğunda tanımlandığında her zaman m# ile başlar.
 		watch <path> # Dosya değişikliklerini izlemek için yolu ayarlar. Birden fazla yol için birden fazla kez belirtilebilir.
 		env <key> <value> # Ek bir ortam değişkenini verilen değere ayarlar. Birden fazla ortam değişkeni için birden fazla kez belirtilebilir. Bu worker için ortam değişkenleri ayrıca php_server üst öğesinden devralınır, ancak burada geçersiz kılınabilir.
-		match <path> # İşçiyi bir yol desenine eşleştirir. try_files'ı geçersiz kılar ve yalnızca php_server yönergesinde kullanılabilir.
 	}
 	worker <other_file> <num> # Global frankenphp bloğundaki gibi kısa formu da kullanabilirsiniz.
-}
-```
-
-### Dosya Değişikliklerini İzleme
-
-İşçiler uygulamanızı yalnızca bir kez başlattığı ve bellekte tuttuğu için, PHP dosyalarınızdaki herhangi bir değişiklik hemen yansımaz.
-
-Bunun yerine işçiler, `watch` yönergesi aracılığıyla dosya değişikliklerinde yeniden başlatılabilir.
-Bu, geliştirme ortamları için kullanışlıdır.
-
-```caddyfile
-{
-	frankenphp {
-		worker {
-			file  /path/to/app/public/worker.php
-			watch
-		}
-	}
-}
-```
-
-Bu özellik genellikle [hot reload](hot-reload.md) ile birlikte kullanılır.
-
-`watch` dizini belirtilmezse, FrankenPHP sürecinin başlatıldığı dizindeki ve alt dizinlerindeki tüm `.env`, `.php`, `.twig`, `.yaml` ve `.yml` dosyalarını izleyen `./**/*.{env,php,twig,yaml,yml}` değerine geri döner. Bunun yerine, bir [kabuk dosya adı deseni](https://pkg.go.dev/path/filepath#Match) aracılığıyla bir veya daha fazla dizin de belirtebilirsiniz:
-
-```caddyfile
-{
-	frankenphp {
-		worker {
-			file  /path/to/app/public/worker.php
-			watch /path/to/app # /path/to/app altındaki tüm dizinlerdeki tüm dosyaları izler
-			watch /path/to/app/*.php # /path/to/app içindeki .php ile biten dosyaları izler
-			watch /path/to/app/**/*.php # /path/to/app ve alt dizinlerdeki PHP dosyalarını izler
-			watch /path/to/app/**/*.{php,twig} # /path/to/app ve alt dizinlerdeki PHP ve Twig dosyalarını izler
-		}
-	}
-}
-```
-
-- `**` deseni, özyinelemeli izlemeyi ifade eder
-- Dizinler göreceli de olabilir (FrankenPHP sürecinin başlatıldığı yere göre)
-- Birden fazla işçi tanımladıysanız, bir dosya değiştiğinde hepsi yeniden başlatılacaktır
-- Çalışma zamanında oluşturulan dosyaları (loglar gibi) izlemeye dikkat edin, çünkü bunlar istenmeyen işçi yeniden başlatmalarına neden olabilir.
-
-Dosya izleyici [e-dant/watcher](https://github.com/e-dant/watcher) üzerine kuruludur.
-
-## İşçiyi Bir Yola Eşleştirme
-
-Geleneksel PHP uygulamalarında, betikler her zaman public dizinine yerleştirilir.
-Bu, diğer PHP betikleri gibi ele alınan işçi betikleri için de geçerlidir.
-İşçi betiğini public dizininin dışına yerleştirmek isterseniz, bunu `match` yönergesi aracılığıyla yapabilirsiniz.
-
-`match` yönergesi, yalnızca `php_server` ve `php` içinde kullanılabilen, `try_files`'a optimize edilmiş bir alternatiftir.
-Aşağıdaki örnek, mevcutsa her zaman public dizinindeki bir dosyayı sunacak
-ve aksi takdirde isteği yol desenine uyan işçiye iletecektir.
-
-```caddyfile
-{
-	frankenphp {
-		php_server {
-			worker {
-				file /path/to/worker.php # dosya public yolunun dışında olabilir
-				match /api/* # /api/ ile başlayan tüm istekler bu işçi tarafından ele alınacaktır
-			}
-		}
-	}
 }
 ```
 
@@ -262,73 +156,19 @@ ve aksi takdirde isteği yol desenine uyan işçiye iletecektir.
 
 Aşağıdaki ortam değişkenleri `Caddyfile` içinde değişiklik yapmadan Caddy yönergelerini entegre etmek için kullanılabilir:
 
-- `SERVER_NAME`: [dinlenecek adresleri](https://caddyserver.com/docs/caddyfile/concepts#addresses) değiştirir, sağlanan ana bilgisayar adları oluşturulan TLS sertifikası için de kullanılacaktır
-- `SERVER_ROOT`: sitenin kök dizinini değiştirir, varsayılan olarak `public/`
-- `CADDY_GLOBAL_OPTIONS`: [global seçenekleri](https://caddyserver.com/docs/caddyfile/options) entegre eder
-- `FRANKENPHP_CONFIG`: `frankenphp` yönergesi altına yapılandırma entegre eder
+- `SERVER_NAME`: değiştirin [dinlenecek adresleri](https://caddyserver.com/docs/caddyfile/concepts#addresses), sağlanan ana bilgisayar adları oluşturulan TLS sertifikası için de kullanılacaktır
+- `CADDY_GLOBAL_OPTIONS`: entegre edin [global seçenekler](https://caddyserver.com/docs/caddyfile/options)
+- `FRANKENPHP_CONFIG`: `frankenphp` yönergesi altına yapılandırma entegre edin
 
 FPM ve CLI SAPI'lerinde olduğu gibi, ortam değişkenleri varsayılan olarak `$_SERVER` süper globalinde gösterilir.
 
-[`variables_order` PHP yönergesinin](https://www.php.net/manual/en/ini.core.php#ini.variables-order) `S` değeri, `E`'nin bu yönergedeki diğer yerleşiminden bağımsız olarak her zaman `ES` ile eşdeğerdir.
+[`variables_order`'a ait PHP yönergesinin](https://www.php.net/manual/en/ini.core.php#ini.variables-order) `S` değeri bu yönergede `E`'nin başka bir yere yerleştirilmesinden bağımsız olarak her zaman `ES` ile eş değerdir.
 
 ## PHP konfigürasyonu
 
-Ek olarak [PHP yapılandırma dosyalarını](https://www.php.net/manual/en/configuration.file.php#configuration.file.scan) yüklemek için,
+Ek olarak [PHP yapılandırma dosyalarını](https://www.php.net/manual/en/configuration.file.php#configuration.file.scan) yüklemek için
 `PHP_INI_SCAN_DIR` ortam değişkeni kullanılabilir.
 Ayarlandığında, PHP verilen dizinlerde bulunan `.ini` uzantılı tüm dosyaları yükleyecektir.
-
-PHP yapılandırmasını `Caddyfile` içindeki `php_ini` yönergesini kullanarak da değiştirebilirsiniz:
-
-```caddyfile
-{
-    frankenphp {
-        php_ini memory_limit 256M
-
-        # veya
-
-        php_ini {
-            memory_limit 256M
-            max_execution_time 15
-        }
-    }
-}
-```
-
-### HTTPS'i Devre Dışı Bırakma
-
-Varsayılan olarak, FrankenPHP `localhost` dahil tüm ana bilgisayar adları için otomatik olarak HTTPS'i etkinleştirir.
-HTTPS'i devre dışı bırakmak isterseniz (örneğin bir geliştirme ortamında), `SERVER_NAME` ortam değişkenini `http://` veya `:80` olarak ayarlayabilirsiniz:
-
-Alternatif olarak, [Caddy belgelerinde](https://caddyserver.com/docs/automatic-https#activation) açıklanan diğer tüm yöntemleri kullanabilirsiniz.
-
-`localhost` ana bilgisayar adı yerine `127.0.0.1` IP adresiyle HTTPS kullanmak isterseniz, lütfen [bilinen sorunlar](known-issues.md#using-https127001-with-docker) bölümünü okuyun.
-
-### Tam Çift Yönlü (HTTP/1)
-
-HTTP/1.x kullanırken, yanıtın tamamı okunmadan önce bir yanıt yazılmasına izin vermek için tam çift yönlü modu etkinleştirmek istenebilir. (örneğin: [Mercure](mercure.md), WebSocket, Server-Sent Events vb.)
-
-Bu, `Caddyfile`'daki global seçeneklere eklenmesi gereken isteğe bağlı bir yapılandırmadır:
-
-```caddyfile
-{
-  servers {
-    enable_full_duplex
-  }
-}
-```
-
-> [!UYARI]
->
-> Bu seçeneği etkinleştirmek, tam çift yönlü desteği olmayan eski HTTP/1.x istemcilerinin kilitlenmesine neden olabilir.
-> Bu ayrıca `CADDY_GLOBAL_OPTIONS` ortam yapılandırması kullanılarak da yapılandırılabilir:
-
-```sh
-CADDY_GLOBAL_OPTIONS="servers {
-  enable_full_duplex
-}"
-```
-
-Bu ayar hakkında daha fazla bilgiyi [Caddy belgelerinde](https://caddyserver.com/docs/caddyfile/options#enable-full-duplex) bulabilirsiniz.
 
 ## Hata Ayıklama Modunu Etkinleştirin
 

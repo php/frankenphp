@@ -25,10 +25,10 @@ jobs:
       - id: md_files
         run: |
           # Check for changed .md files under docs/*.md
-          FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} -- 'docs/*.md')
+          FILES=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" -- 'docs/*.md')
           FILES=$(echo "$FILES" | xargs -n1 basename | tr '\n' ' ')
-          [ -z "$FILES" ] && echo "found=false" >> $GITHUB_OUTPUT || echo "found=true" >> $GITHUB_OUTPUT
-          echo "files=$FILES" >> $GITHUB_OUTPUT
+          [ -z "$FILES" ] && echo "found=false" >> $GITHUB_OUTPUT || echo "found=true" >> "$GITHUB_OUTPUT"
+          echo "files=$FILES" >> "$GITHUB_OUTPUT"
       - name: Set up PHP
         if: steps.md_files.outputs.found == 'true'
         uses: shivammathur/setup-php@v2
@@ -39,7 +39,8 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          php ./docs/translate.php ${{ steps.md_files.outputs.files }}
+          IFS=' ' read -r -a FILES <<< "${{ steps.md_files.outputs.files }}"
+          php ./docs/translate.php "${FILES[@]}"
       - name: Run Linter
         if: steps.md_files.outputs.found == 'true'
         uses: super-linter/super-linter/slim@v8
@@ -49,16 +50,21 @@ jobs:
           MARKDOWN_CONFIG_FILE: .markdown-lint.yaml
           FIX_NATURAL_LANGUAGE: true
           FIX_MARKDOWN: true
-      - name: Commit & push changes
-        if: steps.md_files.outputs.found == 'true'
-        run: |
-          BRANCH="translations/$(date +%s)"
-          git checkout -b "$BRANCH"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global user.name "github-actions[bot]"
-          git add .
-          git commit -m "chore: auto-lint fixes"
-          git push --set-upstream origin "$BRANCH"
-          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
       - name: Create Pull Request
+        if: steps.md_files.outputs.found == 'true'
         uses: peter-evans/create-pull-request@v8
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          commit-message: Update translations
+          committer: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          author: ${{ github.actor }} <${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com>
+          branch: translations/${{ github.run_id }}
+          delete-branch: true
+          title: '[Translations] Update non-english docs'
+          body: |
+            Translation updates for: ${{ steps.md_files.outputs.files }}.
+          labels: |
+            translations
+            bot-generated
+          draft: false

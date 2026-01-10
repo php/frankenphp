@@ -14,8 +14,8 @@ ser executados na
 No entanto, eles não podem carregar extensões PHP dinâmicas (como o Xdebug) e
 têm algumas limitações por usarem a `libc` `musl`.
 
-Binários principalmente estáticos requerem apenas `glibc` e podem carregar
-extensões dinâmicas.
+A maioria dos binários estáticos requer apenas `glibc` e pode carregar extensões
+dinâmicas.
 
 Sempre que possível, recomendamos o uso de compilações principalmente estáticas
 baseadas na `glibc`.
@@ -202,7 +202,7 @@ docker rm static-builder-gnu
 docker rmi gnu-ext
 ```
 
-Isso terá criado `frankenphp` e `xdebug-zts.so` no diretório atual.
+Isso criará `frankenphp` e `xdebug-zts.so` no diretório atual.
 Se você mover `xdebug-zts.so` para o diretório de extensões, adicione
 `zend_extension=xdebug-zts.so` ao seu `php.ini` e execute o FrankenPHP, ele
 carregará o Xdebug.

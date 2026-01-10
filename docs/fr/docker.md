@@ -1,14 +1,13 @@
 # Création d'une image Docker personnalisée
 
-Les images Docker de [FrankenPHP](https://hub.docker.com/r/dunglas/frankenphp) sont basées sur les [images PHP officielles](https://hub.docker.com/_/php/).
-Des variantes Debian et Alpine Linux sont fournies pour les architectures populaires. Les variantes Debian sont recommandées.
+Les images Docker de [FrankenPHP](https://hub.docker.com/r/dunglas/frankenphp) sont basées sur les [images PHP officielles](https://hub.docker.com/_/php/). Des variantes Debian et Alpine Linux sont fournies pour les architectures populaires. Les variantes Debian sont recommandées.
 
-Des variantes pour PHP 8.2, 8.3, 8.4 et 8.5 sont disponibles.
+Des variantes pour PHP 8.2, 8.3, 8.4 et 8.5 sont disponibles. [Parcourir les tags](https://hub.docker.com/r/dunglas/frankenphp/tags).
 
-Les tags suivent ce modèle : `dunglas/frankenphp:<frankenphp-version>-php<php-version>-<os>`
+Les tags suivent le pattern suivant: `dunglas/frankenphp:<frankenphp-version>-php<php-version>-<os>`
 
-- `<frankenphp-version>` et `<php-version>` sont respectivement les numéros de version de FrankenPHP et PHP, allant de majeur (e.g. `1`), mineur (e.g. `1.2`) à des versions correctives (e.g. `1.2.3`).
-- `<os>` est soit `trixie` (pour Debian Trixie), `bookworm` (pour Debian Bookworm), ou `alpine` (pour la dernière version stable d'Alpine).
+- `<frankenphp-version>` et `<php-version>` sont repsectivement les numéros de version de FrankenPHP et PHP, allant de majeur (e.g. `1`), mineur (e.g. `1.2`) à des versions correctives (e.g. `1.2.3`).
+- `<os>` est soit `trixie` (pour Debian Trixie), `bookworm` (pour Debian Bookworm) ou `alpine` (pour la dernière version stable d'Alpine).
 
 [Parcourir les tags](https://hub.docker.com/r/dunglas/frankenphp/tags).
 
@@ -29,15 +28,10 @@ docker build -t my-php-app .
 docker run -it --rm --name my-running-app my-php-app
 ```
 
-## Comment ajuster la configuration
-
-Pour des raisons de commodité, [un `Caddyfile` par défaut](https://github.com/php/frankenphp/blob/main/caddy/frankenphp/Caddyfile) contenant
-des variables d'environnement utiles est fourni dans l'image.
-
 ## Comment installer plus d'extensions PHP
 
 Le script [`docker-php-extension-installer`](https://github.com/mlocati/docker-php-extension-installer) est fourni dans l'image de base.
-L'ajout d'extensions PHP supplémentaires est simple :
+Il est facile d'ajouter des extensions PHP supplémentaires :
 
 ```dockerfile
 FROM dunglas/frankenphp
@@ -60,7 +54,7 @@ La manière la plus simple d'installer des modules Caddy personnalisés est d'ut
 ```dockerfile
 FROM dunglas/frankenphp:builder AS builder
 
-# Copier xcaddy dans l'image builder
+# Copier xcaddy dans l'image du constructeur
 COPY --from=caddy:builder /usr/bin/xcaddy /usr/bin/xcaddy
 
 # CGO doit être activé pour construire FrankenPHP
@@ -81,12 +75,12 @@ RUN CGO_ENABLED=1 \
 
 FROM dunglas/frankenphp AS runner
 
-# Remplacer le binaire officiel par celui qui contient vos modules personnalisés
+# Remplacer le binaire officiel par celui contenant vos modules personnalisés
 COPY --from=builder /usr/local/bin/frankenphp /usr/local/bin/frankenphp
 ```
 
-L'image `builder` fournie par FrankenPHP contient une version compilée de `libphp`.
-[Les images `builder`](https://hub.docker.com/r/dunglas/frankenphp/tags?name=builder) sont fournies pour toutes les versions de FrankenPHP et PHP, à la fois pour Debian et Alpine.
+L'image builder fournie par FrankenPHP contient une version compilée de `libphp`.
+[Les images builder](https://hub.docker.com/r/dunglas/frankenphp/tags?name=builder) sont fournies pour toutes les versions de FrankenPHP et PHP, à la fois pour Debian et Alpine.
 
 > [!TIP]
 >
@@ -115,7 +109,7 @@ docker run -v $PWD:/app/public -p 80:80 -p 443:443 -p 443:443/udp --tty my-php-a
 
 > [!TIP]
 >
-> L'option `--tty` permet d'avoir des logs lisibles par l'homme au lieu de logs JSON.
+> L'option --tty permet d'avoir des logs lisibles par un humain au lieu de logs JSON.
 
 Avec Docker Compose :
 
@@ -137,7 +131,7 @@ services:
       - ./:/app/public
       - caddy_data:/data
       - caddy_config:/config
-    # commentez la ligne suivante en production, elle permet d'avoir des logs lisibles par l'homme en dev
+    # commentez la ligne suivante en production, elle permet d'avoir de beaux logs lisibles en dev
     tty: true
 
 # Volumes nécessaires pour les certificats et la configuration de Caddy
@@ -162,19 +156,18 @@ RUN \
 	useradd ${USER}; \
 	# Ajouter la capacité supplémentaire de se lier aux ports 80 et 443
 	setcap CAP_NET_BIND_SERVICE=+eip /usr/local/bin/frankenphp; \
-	# Donner l'accès en écriture à /config/caddy et /data/caddy
-	chown -R ${USER}:${USER} /config/caddy /data/caddy
+	# Donner l'accès en écriture à /data/caddy et /config/caddy
+	chown -R ${USER}:${USER} /data/caddy && chown -R ${USER}:${USER} /config/caddy
 
 USER ${USER}
 ```
 
 ### Exécution sans capacité
 
-Même lorsqu'il s'exécute sans les privilèges root, FrankenPHP a besoin de la capacité `CAP_NET_BIND_SERVICE`
-pour lier le serveur web aux ports privilégiés (80 et 443).
+Même lorsqu'il s'exécute en tant qu'utilisateur autre que root, FrankenPHP a besoin de la capacité `CAP_NET_BIND_SERVICE`
+pour que son serveur utilise les ports privilégiés (80 et 443).
 
-Si vous exposez FrankenPHP sur un port non privilégié (1024 et au-delà), il est possible
-d'exécuter le serveur web en tant qu'utilisateur non-root, et sans avoir besoin d'aucune capacité :
+Si vous exposez FrankenPHP sur un port non privilégié (à partir de 1024), il est possible de faire fonctionner le serveur web avec un utilisateur qui n'est pas root, et sans avoir besoin d'aucune capacité.
 
 ```dockerfile
 FROM dunglas/frankenphp
@@ -182,18 +175,18 @@ FROM dunglas/frankenphp
 ARG USER=appuser
 
 RUN \
-	# Utilisez "adduser -D ${USER}" pour les distributions basées sur Alpine
+	# Utiliser "adduser -D ${USER}" pour les distros basées sur Alpine
 	useradd ${USER}; \
-	# Supprimer la capacité par défaut
+	# Supprimer la capacité par défaut \
 	setcap -r /usr/local/bin/frankenphp; \
-	# Donner un accès en écriture à /config/caddy et /data/caddy
-	chown -R ${USER}:${USER} /config/caddy /data/caddy
+	# Donner un accès en écriture à /data/caddy et /config/caddy \
+	chown -R ${USER}:${USER} /data/caddy && chown -R ${USER}:${USER} /config/caddy
 
 USER ${USER}
 ```
 
 Ensuite, définissez la variable d'environnement `SERVER_NAME` pour utiliser un port non privilégié.
-Exemple : `:8000`
+Exemple `:8000`
 
 ## Mises à jour
 
@@ -204,8 +197,7 @@ Les images Docker sont construites :
 
 ## Versions de développement
 
-Les versions de développement sont disponibles dans le dépôt Docker [`dunglas/frankenphp-dev`](https://hub.docker.com/repository/docker/dunglas/frankenphp-dev).
-Un nouveau build est déclenché chaque fois qu'un commit est poussé sur la branche principale du dépôt GitHub.
+Les versions de développement sont disponibles dans le dépôt Docker [`dunglas/frankenphp-dev`](https://hub.docker.com/repository/docker/dunglas/frankenphp-dev). Un nouveau build est déclenché chaque fois qu'un commit est poussé sur la branche principale du dépôt GitHub.
 
 Les tags `latest*` pointent vers la tête de la branche `main`.
-Les tags sous la forme `sha-<hash-de-commit-git>` sont également disponibles.
+Les tags sous la forme `sha-<hash-du-commit-git>` sont également disponibles.

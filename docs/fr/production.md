@@ -2,7 +2,7 @@
 
 Dans ce tutoriel, nous apprendrons comment déployer une application PHP sur un serveur unique en utilisant Docker Compose.
 
-Si vous utilisez Symfony, préférez lire l'entrée de documentation "[Déployer en production](https://github.com/dunglas/symfony-docker/blob/main/docs/production.md)" du projet Symfony Docker (qui utilise FrankenPHP).
+Si vous utilisez Symfony, lisez plutôt la page de documentation "[Déployer en production](https://github.com/dunglas/symfony-docker/blob/main/docs/production.md)" du projet Symfony Docker (qui utilise FrankenPHP).
 
 Si vous utilisez API Platform (qui utilise également FrankenPHP), référez-vous à [la documentation de déploiement du framework](https://api-platform.com/docs/deployment/).
 
@@ -65,7 +65,7 @@ volumes:
 > (qui utilise FrankenPHP) pour un exemple plus avancé utilisant des images multi-étapes,
 > Composer, des extensions PHP supplémentaires, etc.
 
-Enfin, si vous utilisez Git, commitez ces fichiers et poussez-les.
+Pour finir, si vous utilisez Git, commitez ces fichiers et poussez-les.
 
 ## Préparer un serveur
 
@@ -73,14 +73,14 @@ Pour déployer votre application en production, vous avez besoin d'un serveur.
 Dans ce tutoriel, nous utiliserons une machine virtuelle fournie par DigitalOcean, mais n'importe quel serveur Linux peut fonctionner.
 Si vous avez déjà un serveur Linux avec Docker installé, vous pouvez passer directement à [la section suivante](#configurer-un-nom-de-domaine).
 
-Sinon, utilisez [ce lien affilié](https://m.do.co/c/5d8aabe3ab80) pour obtenir 200 $ de crédit gratuit, créez un compte, puis cliquez sur "Create a Droplet".
-Ensuite, cliquez sur l'onglet "Marketplace" sous la section "Choose an image" et recherchez l'application nommée "Docker".
+Sinon, utilisez [ce lien affilié](https://m.do.co/c/5d8aabe3ab80) pour obtenir 200$ de crédit gratuit, créez un compte, puis cliquez sur "Créer un Droplet".
+Ensuite, cliquez sur l'onglet "Marketplace" sous la section "Choisir une image" et recherchez l'application nommée "Docker".
 Cela provisionnera un serveur Ubuntu avec les dernières versions de Docker et Docker Compose déjà installées !
 
 Pour des fins de test, les plans les moins chers seront suffisants.
-Pour une utilisation en production réelle, vous voudrez probablement choisir un plan dans la section "general purpose" pour répondre à vos besoins.
+Pour une utilisation en production réelle, vous voudrez probablement choisir un plan dans la section "General Usage" pour répondre à vos besoins.
 
-![Déployer FrankenPHP sur DigitalOcean avec Docker](digitalocean-droplet.png)
+![Déployer FrankenPHP sur DigitalOcean avec Docker](../digitalocean-droplet.png)
 
 Vous pouvez conserver les paramètres par défaut pour les autres paramètres, ou les ajuster selon vos besoins.
 N'oubliez pas d'ajouter votre clé SSH ou de créer un mot de passe puis appuyez sur le bouton "Finalize and create".
@@ -105,7 +105,7 @@ your-domain-name.example.com.  IN  A     207.154.233.113
 
 Exemple avec le service DigitalOcean Domains ("Networking" > "Domains") :
 
-![Configurer les DNS sur DigitalOcean](digitalocean-dns.png)
+![Configurer les DNS sur DigitalOcean](../digitalocean-dns.png)
 
 > [!NOTE]
 >
@@ -114,7 +114,7 @@ Exemple avec le service DigitalOcean Domains ("Networking" > "Domains") :
 ## Déploiement
 
 Copiez votre projet sur le serveur en utilisant `git clone`, `scp`, ou tout autre outil qui pourrait répondre à votre besoin.
-Si vous utilisez GitHub, vous voudrez peut-être utiliser [une clé de déploiement](https://docs.github.com/en/free-pro-team@latest/developers/overview/managing-deploy-keys#deploy-keys).
+Si vous utilisez GitHub, vous voudrez peut-être utiliser [une clef de déploiement](https://docs.github.com/en/free-pro-team@latest/developers/overview/managing-deploy-keys#deploy-keys).
 Les clés de déploiement sont également [prises en charge par GitLab](https://docs.gitlab.com/ee/user/project/deploy_keys/).
 
 Exemple avec Git :
@@ -126,11 +126,11 @@ git clone git@github.com:<username>/<project-name>.git
 Accédez au répertoire contenant votre projet (`<project-name>`), et démarrez l'application en mode production :
 
 ```console
-docker compose up --wait
+docker compose up -d --wait
 ```
 
 Votre serveur est opérationnel, et un certificat HTTPS a été automatiquement généré pour vous.
-Rendez-vous sur `https://your-domain-name.example.com` et profitez-en !
+Rendez-vous sur `https://your-domain-name.example.com` !
 
 > [!CAUTION]
 >
