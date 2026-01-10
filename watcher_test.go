@@ -24,9 +24,7 @@ const minTimesToPollForChanges = 3
 const maxTimesToPollForChanges = 60
 
 func TestWorkersShouldReloadOnMatchingPattern(t *testing.T) {
-	sep := string(os.PathSeparator)
-	watch := []string{"." + sep + "testdata" + sep + "**" + sep + "*.txt"}
-	t.Log(watch[0])
+	watch := []string{"./testdata/**/*.txt"}
 
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
 		requestBodyHasReset := pollForWorkerReset(t, handler, maxTimesToPollForChanges)
@@ -35,7 +33,7 @@ func TestWorkersShouldReloadOnMatchingPattern(t *testing.T) {
 }
 
 func TestWorkersShouldNotReloadOnExcludingPattern(t *testing.T) {
-	watch := []string{filepath.Join(".", "testdata", "**", "*.txt")}
+	watch := []string{"./testdata/**/*.php"}
 
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
 		requestBodyHasReset := pollForWorkerReset(t, handler, minTimesToPollForChanges)
