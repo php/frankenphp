@@ -4,10 +4,12 @@ package frankenphp_test
 
 import (
 	"errors"
+	"log"
 	"os"
 	"os/exec"
 	"testing"
 
+	"github.com/dunglas/frankenphp"
 	"github.com/stretchr/testify/assert"
 )
 
