@@ -92,7 +92,6 @@ func TestTransitionAThreadBetween2DifferentWorkers(t *testing.T) {
 // try all possible handler transitions
 // takes around 200ms and is supposed to force race conditions
 func TestTransitionThreadsWhileDoingRequests(t *testing.T) {
-	t.SkipNow()
 	t.Cleanup(Shutdown)
 
 	var (
@@ -102,9 +101,9 @@ func TestTransitionThreadsWhileDoingRequests(t *testing.T) {
 
 	numThreads := 10
 	numRequestsPerThread := 100
-	worker1Path := testDataPath + "/transition-worker-1.php"
+	worker1Path := filepath.Join(testDataPath, "transition-worker-1.php")
 	worker1Name := "worker-1"
-	worker2Path := testDataPath + "/transition-worker-2.php"
+	worker2Path := filepath.Join(testDataPath, "transition-worker-2.php")
 	worker2Name := "worker-2"
 
 	assert.NoError(t, Init(
