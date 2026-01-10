@@ -20,14 +20,13 @@ import (
 // represents the main PHP thread
 // the thread needs to keep running as long as all other threads are running
 type phpMainThread struct {
-	state           *state.ThreadState
-	done            chan struct{}
-	numThreads      int
-	maxThreads      int
-	phpIni          map[string]string
-	commonHeaders   map[string]*C.zend_string
-	knownServerKeys map[string]*C.zend_string
-	sandboxedEnv    map[string]*C.zend_string
+	state         *state.ThreadState
+	done          chan struct{}
+	numThreads    int
+	maxThreads    int
+	phpIni        map[string]string
+	commonHeaders map[string]*C.zend_string
+	sandboxedEnv  map[string]*C.zend_string
 }
 
 var (
@@ -115,11 +114,7 @@ func (mainThread *phpMainThread) start() error {
 		mainThread.commonHeaders[key] = C.frankenphp_init_persistent_string(C.CString(phpKey), C.size_t(len(phpKey)))
 	}
 
-	// cache $_SERVER keys as zend_strings (SERVER_PROTOCOL, SERVER_SOFTWARE, etc.)
-	mainThread.knownServerKeys = make(map[string]*C.zend_string, len(knownServerKeys))
-	for _, phpKey := range knownServerKeys {
-		mainThread.knownServerKeys[phpKey] = C.frankenphp_init_persistent_string(toUnsafeChar(phpKey), C.size_t(len(phpKey)))
-	}
+	initKnownServerKeys()
 
 	return nil
 }

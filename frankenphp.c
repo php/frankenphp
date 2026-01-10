@@ -458,6 +458,9 @@ PHP_FUNCTION(frankenphp_handle_request) {
 
   if (zend_call_function(&fci, &fcc) == SUCCESS && Z_TYPE(retval) != IS_UNDEF) {
     callback_ret = &retval;
+    if (Z_TYPE(retval) == IS_NULL) {
+	  callback_ret = NULL;
+	}
   }
 
   /*
