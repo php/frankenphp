@@ -31,12 +31,12 @@ jobs:
         if: steps.md_files.outputs.found == 'true'
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.5'
+          php-version: "8.5"
       - name: run translation script
         if: steps.md_files.outputs.found == 'true'
         env:
-          GEMINI_API_KEY: '${{ secrets.GEMINI_API_KEY }}'
-          MD_FILES: '${{ steps.md_files.outputs.files }}'
+          GEMINI_API_KEY: "${{ secrets.GEMINI_API_KEY }}"
+          MD_FILES: "${{ steps.md_files.outputs.files }}"
         run: |
           php ./docs/translate.php "$MD_FILES"
       - name: Run Linter
