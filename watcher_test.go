@@ -24,7 +24,7 @@ const minTimesToPollForChanges = 3
 const maxTimesToPollForChanges = 60
 
 func TestWorkersShouldReloadOnMatchingPattern(t *testing.T) {
-	watch := []string{"./testdata/**/*.txt"}
+	watch := []string{filepath.Join("testdata", "**", "*.txt")}
 
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
 		requestBodyHasReset := pollForWorkerReset(t, handler, maxTimesToPollForChanges)
@@ -33,7 +33,7 @@ func TestWorkersShouldReloadOnMatchingPattern(t *testing.T) {
 }
 
 func TestWorkersShouldNotReloadOnExcludingPattern(t *testing.T) {
-	watch := []string{"./testdata/**/*.php"}
+	watch := []string{filepath.Join("testdata", "**", "*.php")}
 
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
 		requestBodyHasReset := pollForWorkerReset(t, handler, minTimesToPollForChanges)
@@ -50,7 +50,9 @@ func pollForWorkerReset(t *testing.T, handler func(http.ResponseWriter, *http.Re
 
 	// now we spam file updates and check if the request counter resets
 	for range limit {
-		updateTestFile("./testdata/files/test.txt", "updated", t)
+		dir, _ := filepath.Abs("./testdata")
+		updateTestFile(t, filepath.Join(dir, "files", "test.txt"), "updated")
+		t.Log(filepath.Join(dir, "files", "test.txt"))
 		time.Sleep(pollingTime * time.Millisecond)
 		body, _ := testGet("http://example.com/worker-with-counter.php", handler, t)
 		if body == "requests:1" {
@@ -61,15 +63,10 @@ func pollForWorkerReset(t *testing.T, handler func(http.ResponseWriter, *http.Re
 	return false
 }
 
-func updateTestFile(fileName string, content string, t *testing.T) {
+func updateTestFile(t *testing.T, fileName, content string) {
 	absFileName, err := filepath.Abs(fileName)
 	require.NoError(t, err)
 
-	dirName := filepath.Dir(absFileName)
-	if _, err = os.Stat(dirName); os.IsNotExist(err) {
-		err = os.MkdirAll(dirName, 0700)
-	}
-	require.NoError(t, err)
-
+	require.NoError(t, os.MkdirAll(filepath.Dir(absFileName), 0700))
 	require.NoError(t, os.WriteFile(absFileName, []byte(content), 0644))
 }

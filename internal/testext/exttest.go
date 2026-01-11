@@ -1,13 +1,15 @@
 package testext
 
 // #cgo darwin pkg-config: libxml-2.0
-// #cgo CFLAGS: -Wall -Werror
-// #cgo CFLAGS: -I/usr/local/include -I/usr/local/include/php -I/usr/local/include/php/main -I/usr/local/include/php/TSRM -I/usr/local/include/php/Zend -I/usr/local/include/php/ext -I/usr/local/include/php/ext/date/lib
+// #cgo unix CFLAGS: -Wall -Werror
+// #cgo unix CFLAGS: -I/usr/local/include -I/usr/local/include/php -I/usr/local/include/php/main -I/usr/local/include/php/TSRM -I/usr/local/include/php/Zend -I/usr/local/include/php/ext -I/usr/local/include/php/ext/date/lib
 // #cgo linux CFLAGS: -D_GNU_SOURCE
 // #cgo darwin CFLAGS: -I/opt/homebrew/include
-// #cgo LDFLAGS: -L/usr/local/lib -L/usr/lib -lphp -lm -lutil
+// #cgo unix LDFLAGS: -L/usr/local/lib -L/usr/lib -lphp -lm -lutil
 // #cgo linux LDFLAGS: -ldl -lresolv
 // #cgo darwin LDFLAGS: -Wl,-rpath,/usr/local/lib -L/opt/homebrew/lib -L/opt/homebrew/opt/libiconv/lib -liconv -ldl
+// #cgo windows CFLAGS: -IC:\vcpkg\installed\x64-windows\include  -D_WINDOWS -DWINDOWS=1 -DZEND_WIN32=1 -DPHP_WIN32=1 -DWIN32 -D_MBCS -D_USE_MATH_DEFINES -DNDebug -DNDEBUG -DZEND_DEBUG=0 -DZTS=1 -DFD_SETSIZE=256
+// #cgo windows LDFLAGS: -LC:\vcpkg\installed\x64-windows\lib
 // #include "extension.h"
 import "C"
 import (

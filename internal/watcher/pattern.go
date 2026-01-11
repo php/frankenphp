@@ -5,6 +5,7 @@ package watcher
 import (
 	"log/slog"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/dunglas/frankenphp/internal/fastabs"
@@ -43,6 +44,11 @@ func (p *pattern) parse() (err error) {
 	splitPattern := strings.Split(absPattern, string(filepath.Separator))
 	patternWithoutDir := ""
 	for i, part := range splitPattern {
+		// add a \ after the drive letter on Windows to force filepath.Join to work as expected
+		if i == 0 && runtime.GOOS == "windows" {
+			splitPattern[0] = splitPattern[0] + "\\"
+		}
+
 		isFilename := i == len(splitPattern)-1 && strings.Contains(part, ".")
 		isGlobCharacter := strings.ContainsAny(part, "[*?{")
 
@@ -60,8 +66,12 @@ func (p *pattern) parse() (err error) {
 		p.parsedValues[i] = strings.Trim(pp, string(filepath.Separator))
 	}
 
-	// remove the trailing separator and add leading separator
-	p.value = string(filepath.Separator) + strings.Trim(p.value, string(filepath.Separator))
+	//  remove the trailing separator and add leading separator (except on Windows)
+	if runtime.GOOS == "windows" {
+		p.value = strings.Trim(p.value, string(filepath.Separator))
+	} else {
+		p.value = string(filepath.Separator) + strings.Trim(p.value, string(filepath.Separator))
+	}
 
 	// try to canonicalize the path
 	canonicalPattern, err := filepath.EvalSymlinks(p.value)
