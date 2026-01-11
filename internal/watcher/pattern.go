@@ -44,8 +44,9 @@ func (p *pattern) parse() (err error) {
 	splitPattern := strings.Split(absPattern, string(filepath.Separator))
 	patternWithoutDir := ""
 	for i, part := range splitPattern {
+		// add a \ after the drive letter on Windows to force filepath.Join to work as expected
 		if i == 0 && runtime.GOOS == "windows" {
-			splitPattern[i] = splitPattern[0] + "\\"
+			splitPattern[0] = splitPattern[0] + "\\"
 		}
 
 		isFilename := i == len(splitPattern)-1 && strings.Contains(part, ".")

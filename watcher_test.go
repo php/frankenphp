@@ -63,15 +63,10 @@ func pollForWorkerReset(t *testing.T, handler func(http.ResponseWriter, *http.Re
 	return false
 }
 
-func updateTestFile(t *testing.T, fileName string, content string) {
+func updateTestFile(t *testing.T, fileName, content string) {
 	absFileName, err := filepath.Abs(fileName)
 	require.NoError(t, err)
 
-	dirName := filepath.Dir(absFileName)
-	if _, err = os.Stat(dirName); os.IsNotExist(err) {
-		err = os.MkdirAll(dirName, 0700)
-	}
-	require.NoError(t, err)
-
+	require.NoError(t, os.MkdirAll(filepath.Dir(absFileName), 0700))
 	require.NoError(t, os.WriteFile(absFileName, []byte(content), 0644))
 }
