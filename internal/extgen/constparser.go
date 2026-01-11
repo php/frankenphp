@@ -34,6 +34,10 @@ func (cp *ConstantParser) parse(filename string) (constants []phpConstant, err e
 	expectClassConstDecl := false
 	currentClassName := ""
 	currentConstantValue := 0
+	inConstBlock := false
+	exportAllInBlock := false
+	lastConstValue := ""
+	lastConstWasIota := false
 
 	for scanner.Scan() {
 		lineNumber++
@@ -55,7 +59,26 @@ func (cp *ConstantParser) parse(filename string) (constants []phpConstant, err e
 			continue
 		}
 
-		if (expectConstDecl || expectClassConstDecl) && strings.HasPrefix(line, "const ") {
+		if strings.HasPrefix(line, "const (") {
+			inConstBlock = true
+			if expectConstDecl || expectClassConstDecl {
+				exportAllInBlock = true
+			}
+			continue
+		}
+
+		if inConstBlock && line == ")" {
+			inConstBlock = false
+			exportAllInBlock = false
+			expectConstDecl = false
+			expectClassConstDecl = false
+			currentClassName = ""
+			lastConstValue = ""
+			lastConstWasIota = false
+			continue
+		}
+
+		if (expectConstDecl || expectClassConstDecl) && strings.HasPrefix(line, "const ") && !inConstBlock {
 			matches := constDeclRegex.FindStringSubmatch(line)
 			if len(matches) == 3 {
 				name := matches[1]
@@ -72,10 +95,11 @@ func (cp *ConstantParser) parse(filename string) (constants []phpConstant, err e
 				constant.PhpType = determineConstantType(value)
 
 				if constant.IsIota {
-					// affect a default value because user didn't give one
 					constant.Value = fmt.Sprintf("%d", currentConstantValue)
 					constant.PhpType = phpInt
 					currentConstantValue++
+					lastConstWasIota = true
+					lastConstValue = constant.Value
 				}
 
 				constants = append(constants, constant)
@@ -84,7 +108,65 @@ func (cp *ConstantParser) parse(filename string) (constants []phpConstant, err e
 			}
 			expectConstDecl = false
 			expectClassConstDecl = false
-		} else if (expectConstDecl || expectClassConstDecl) && !strings.HasPrefix(line, "//") && line != "" {
+		} else if inConstBlock && (expectConstDecl || expectClassConstDecl || exportAllInBlock) {
+			constBlockDeclRegex := regexp.MustCompile(`^(\w+)\s*=\s*(.+)$`)
+			if matches := constBlockDeclRegex.FindStringSubmatch(line); len(matches) == 3 {
+				name := matches[1]
+				value := strings.TrimSpace(matches[2])
+
+				constant := phpConstant{
+					Name:       name,
+					Value:      value,
+					IsIota:     value == "iota",
+					lineNumber: lineNumber,
+					ClassName:  currentClassName,
+				}
+
+				constant.PhpType = determineConstantType(value)
+
+				if constant.IsIota {
+					constant.Value = fmt.Sprintf("%d", currentConstantValue)
+					constant.PhpType = phpInt
+					currentConstantValue++
+					lastConstWasIota = true
+					lastConstValue = constant.Value
+				} else {
+					lastConstWasIota = false
+					lastConstValue = value
+				}
+
+				constants = append(constants, constant)
+				expectConstDecl = false
+				expectClassConstDecl = false
+			} else {
+				constNameRegex := regexp.MustCompile(`^(\w+)$`)
+				if matches := constNameRegex.FindStringSubmatch(line); len(matches) == 2 {
+					name := matches[1]
+
+					constant := phpConstant{
+						Name:       name,
+						Value:      "",
+						IsIota:     lastConstWasIota,
+						lineNumber: lineNumber,
+						ClassName:  currentClassName,
+					}
+
+					if lastConstWasIota {
+						constant.Value = fmt.Sprintf("%d", currentConstantValue)
+						constant.PhpType = phpInt
+						currentConstantValue++
+						lastConstValue = constant.Value
+					} else {
+						constant.Value = lastConstValue
+						constant.PhpType = determineConstantType(lastConstValue)
+					}
+
+					constants = append(constants, constant)
+					expectConstDecl = false
+					expectClassConstDecl = false
+				}
+			}
+		} else if (expectConstDecl || expectClassConstDecl) && !strings.HasPrefix(line, "//") && line != "" && !inConstBlock {
 			// we expected a const declaration but found something else, reset
 			expectConstDecl = false
 			expectClassConstDecl = false
