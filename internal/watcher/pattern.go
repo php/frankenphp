@@ -3,9 +3,9 @@
 package watcher
 
 import (
-	"log"
 	"log/slog"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/dunglas/frankenphp/internal/fastabs"
@@ -23,7 +23,6 @@ type pattern struct {
 }
 
 func (p *pattern) startSession() {
-	log.Printf("value %#v\n", p.value)
 	p.watcher = watcher.NewWatcher(p.value, p.handle)
 
 	if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
@@ -45,6 +44,10 @@ func (p *pattern) parse() (err error) {
 	splitPattern := strings.Split(absPattern, string(filepath.Separator))
 	patternWithoutDir := ""
 	for i, part := range splitPattern {
+		if i == 0 && runtime.GOOS == "windows" {
+			splitPattern[i] = splitPattern[0] + "\\"
+		}
+
 		isFilename := i == len(splitPattern)-1 && strings.Contains(part, ".")
 		isGlobCharacter := strings.ContainsAny(part, "[*?{")
 
@@ -62,8 +65,12 @@ func (p *pattern) parse() (err error) {
 		p.parsedValues[i] = strings.Trim(pp, string(filepath.Separator))
 	}
 
-	// remove the trailing separator and add leading separator
-	p.value = string(filepath.Separator) + strings.Trim(p.value, string(filepath.Separator))
+	//  remove the trailing separator and add leading separator (except on Windows)
+	if runtime.GOOS == "windows" {
+		p.value = strings.Trim(p.value, string(filepath.Separator))
+	} else {
+		p.value = string(filepath.Separator) + strings.Trim(p.value, string(filepath.Separator))
+	}
 
 	// try to canonicalize the path
 	canonicalPattern, err := filepath.EvalSymlinks(p.value)
@@ -86,8 +93,6 @@ func (p *pattern) allowReload(event *watcher.Event) bool {
 }
 
 func (p *pattern) handle(event *watcher.Event) {
-	log.Printf("received: %#v", event)
-
 	// If the watcher prematurely sends the die@ event, retry watching
 	if event.PathType == watcher.PathTypeWatcher && strings.HasPrefix(event.PathName, "e/self/die@") && watcherIsActive.Load() {
 		p.retryWatching()
