@@ -5,12 +5,13 @@ package watcher
 import (
 	"log/slog"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/dunglas/frankenphp/internal/fastabs"
 	"github.com/e-dant/watcher/watcher-go"
 )
+
+const sep = string(filepath.Separator)
 
 type pattern struct {
 	patternGroup *PatternGroup
@@ -40,15 +41,13 @@ func (p *pattern) parse() (err error) {
 
 	p.value = absPattern
 
+	volumeName := filepath.VolumeName(absPattern)
+	absPattern = strings.TrimPrefix(absPattern, volumeName)
+
 	// then we split the pattern to determine where the directory ends and the pattern starts
-	splitPattern := strings.Split(absPattern, string(filepath.Separator))
+	splitPattern := strings.Split(absPattern, sep)
 	patternWithoutDir := ""
 	for i, part := range splitPattern {
-		// add a \ after the drive letter on Windows to force filepath.Join to work as expected
-		if i == 0 && runtime.GOOS == "windows" {
-			splitPattern[0] = splitPattern[0] + "\\"
-		}
-
 		isFilename := i == len(splitPattern)-1 && strings.Contains(part, ".")
 		isGlobCharacter := strings.ContainsAny(part, "[*?{")
 
@@ -63,14 +62,14 @@ func (p *pattern) parse() (err error) {
 	// now we split the pattern according to the recursive '**' syntax
 	p.parsedValues = strings.Split(patternWithoutDir, "**")
 	for i, pp := range p.parsedValues {
-		p.parsedValues[i] = strings.Trim(pp, string(filepath.Separator))
+		p.parsedValues[i] = strings.Trim(pp, sep)
 	}
 
 	//  remove the trailing separator and add leading separator (except on Windows)
-	if runtime.GOOS == "windows" {
-		p.value = strings.Trim(p.value, string(filepath.Separator))
+	if volumeName == "" {
+		p.value = sep + strings.Trim(p.value, sep)
 	} else {
-		p.value = string(filepath.Separator) + strings.Trim(p.value, string(filepath.Separator))
+		p.value = volumeName + sep + strings.Trim(p.value, sep)
 	}
 
 	// try to canonicalize the path
@@ -133,7 +132,7 @@ func (p *pattern) isValidPattern(fileName string) bool {
 	}
 
 	// remove the directory path and separator from the filename
-	fileNameWithoutDir := strings.TrimPrefix(strings.TrimPrefix(fileName, p.value), string(filepath.Separator))
+	fileNameWithoutDir := strings.TrimPrefix(strings.TrimPrefix(fileName, p.value), sep)
 
 	// if the pattern has size 1 we can match it directly against the filename
 	if len(p.parsedValues) == 1 {
@@ -144,12 +143,12 @@ func (p *pattern) isValidPattern(fileName string) bool {
 }
 
 func (p *pattern) matchPatterns(fileName string) bool {
-	partsToMatch := strings.Split(fileName, string(filepath.Separator))
+	partsToMatch := strings.Split(fileName, sep)
 	cursor := 0
 
 	// if there are multiple parsedValues due to '**' we need to match them individually
 	for i, pattern := range p.parsedValues {
-		patternSize := strings.Count(pattern, string(filepath.Separator)) + 1
+		patternSize := strings.Count(pattern, sep) + 1
 
 		// if we are at the last pattern we will start matching from the end of the filename
 		if i == len(p.parsedValues)-1 {
@@ -167,7 +166,7 @@ func (p *pattern) matchPatterns(fileName string) bool {
 			}
 
 			cursor = j
-			subPattern := strings.Join(partsToMatch[j:j+patternSize], string(filepath.Separator))
+			subPattern := strings.Join(partsToMatch[j:j+patternSize], sep)
 
 			if matchCurlyBracePattern(pattern, subPattern) {
 				cursor = j + patternSize - 1
