@@ -17,11 +17,97 @@ typedef struct go_string {
   char *data;
 } go_string;
 
-typedef struct ht_key_value_pair {
-  zend_string *key;
-  char *val;
-  size_t val_len;
-} ht_key_value_pair;
+typedef struct frankenphp_server_vars {
+  zend_string *remote_addr_key;
+  char *remote_addr_val;
+  size_t remote_addr_len;
+
+  zend_string *remote_host_key;
+  char *remote_host_val;
+  size_t remote_host_len;
+
+  zend_string *remote_port_key;
+  char *remote_port_val;
+  size_t remote_port_len;
+
+  zend_string *document_root_key;
+  char *document_root_val;
+  size_t document_root_len;
+
+  zend_string *path_info_key;
+  char *path_info_val;
+  size_t path_info_len;
+
+  zend_string *php_self_key;
+  char *php_self_val;
+  size_t php_self_len;
+
+  zend_string *document_uri_key;
+  char *document_uri_val;
+  size_t document_uri_len;
+
+  zend_string *script_filename_key;
+  char *script_filename_val;
+  size_t script_filename_len;
+
+  zend_string *script_name_key;
+  char *script_name_val;
+  size_t script_name_len;
+
+  zend_string *https_key;
+  char *https_val;
+  size_t https_len;
+
+  zend_string *ssl_protocol_key;
+  char *ssl_protocol_val;
+  size_t ssl_protocol_len;
+
+  zend_string *request_scheme_key;
+  char *request_scheme_val;
+  size_t request_scheme_len;
+
+  zend_string *server_name_key;
+  char *server_name_val;
+  size_t server_name_len;
+
+  zend_string *server_port_key;
+  char *server_port_val;
+  size_t server_port_len;
+
+  zend_string *content_length_key;
+  char *content_length_val;
+  size_t content_length_len;
+
+  zend_string *gateway_interface_key;
+  zend_string *gateway_interface_str;
+
+  zend_string *server_protocol_key;
+  char *server_protocol_val;
+  size_t server_protocol_len;
+
+  zend_string *server_software_key;
+  zend_string *server_software_str;
+
+  zend_string *http_host_key;
+  char *http_host_val;
+  size_t http_host_len;
+
+  zend_string *auth_type_key;
+  char *auth_type_val;
+  size_t auth_type_len;
+
+  zend_string *remote_ident_key;
+  char *remote_ident_val;
+  size_t remote_ident_len;
+
+  zend_string *request_uri_key;
+  char *request_uri_val;
+  size_t request_uri_len;
+
+  zend_string *ssl_cipher_key;
+  char *ssl_cipher_val;
+  size_t ssl_cipher_len;
+} frankenphp_server_vars;
 
 typedef struct frankenphp_version {
   unsigned char major_version;
@@ -62,19 +148,8 @@ int frankenphp_get_current_memory_limit();
 
 void frankenphp_register_single(zend_string *z_key, char *value, size_t val_len,
                                 zval *track_vars_array);
-void frankenphp_register_bulk(
-    zval *track_vars_array, ht_key_value_pair remote_addr,
-    ht_key_value_pair remote_host, ht_key_value_pair remote_port,
-    ht_key_value_pair document_root, ht_key_value_pair path_info,
-    ht_key_value_pair php_self, ht_key_value_pair document_uri,
-    ht_key_value_pair script_filename, ht_key_value_pair script_name,
-    ht_key_value_pair https, ht_key_value_pair ssl_protocol,
-    ht_key_value_pair request_scheme, ht_key_value_pair server_name,
-    ht_key_value_pair server_port, ht_key_value_pair content_length,
-    ht_key_value_pair gateway_interface, ht_key_value_pair server_protocol,
-    ht_key_value_pair server_software, ht_key_value_pair http_host,
-    ht_key_value_pair auth_type, ht_key_value_pair remote_ident,
-    ht_key_value_pair request_uri, ht_key_value_pair ssl_cipher);
+void frankenphp_register_bulk(zval *track_vars_array,
+                              frankenphp_server_vars vars);
 
 void register_extensions(zend_module_entry **m, int len);
 

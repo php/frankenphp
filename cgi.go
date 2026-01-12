@@ -32,37 +32,6 @@ var tlsProtocolStrings = map[uint16]string{
 	tls.VersionTLS13: "TLSv1.3",
 }
 
-var (
-	contentLengthKey  *C.zend_string
-	documentRoot      *C.zend_string
-	documentURI       *C.zend_string
-	gatewayIface      *C.zend_string
-	httpHost          *C.zend_string
-	httpsKey          *C.zend_string
-	pathInfo          *C.zend_string
-	phpSelf           *C.zend_string
-	remoteAddr        *C.zend_string
-	remoteHost        *C.zend_string
-	remotePort        *C.zend_string
-	requestScheme     *C.zend_string
-	scriptFilename    *C.zend_string
-	scriptName        *C.zend_string
-	serverName        *C.zend_string
-	serverPortKey     *C.zend_string
-	serverProtocolKey *C.zend_string
-	serverSoftware    *C.zend_string
-	sslProtocolKey    *C.zend_string
-	sslCipherKey      *C.zend_string
-	authType          *C.zend_string
-	remoteIdent       *C.zend_string
-	contentTypeKey    *C.zend_string
-	pathTranslated    *C.zend_string
-	queryString       *C.zend_string
-	remoteUser        *C.zend_string
-	requestMethodKey  *C.zend_string
-	requestURIKey     *C.zend_string
-)
-
 // computeKnownVariables returns a set of CGI environment variables for the request.
 //
 // TODO: handle this case https://github.com/caddyserver/caddy/issues/3718
@@ -136,57 +105,112 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		requestURI = request.URL.RequestURI()
 	}
 
-	C.frankenphp_register_bulk(
-		trackVarsArray,
-		packCgiVariable(remoteAddr, ip),
-		packCgiVariable(remoteHost, ip),
-		packCgiVariable(remotePort, port),
-		packCgiVariable(documentRoot, fc.documentRoot),
-		packCgiVariable(pathInfo, fc.pathInfo),
-		packCgiVariable(phpSelf, request.URL.Path),
-		packCgiVariable(documentURI, fc.docURI),
-		packCgiVariable(scriptFilename, fc.scriptFilename),
-		packCgiVariable(scriptName, fc.scriptName),
-		packCgiVariable(httpsKey, https),
-		packCgiVariable(sslProtocolKey, sslProtocol),
-		packCgiVariable(requestScheme, rs),
-		packCgiVariable(serverName, reqHost),
-		packCgiVariable(serverPortKey, serverPort),
-		// Variables defined in CGI 1.1 spec
-		// Some variables are unused but cleared explicitly to prevent
-		// the parent environment from interfering.
-		// These values can not be overridden
-		packCgiVariable(contentLengthKey, contentLength),
-		packCgiVariable(gatewayIface, "CGI/1.1"),
-		packCgiVariable(serverProtocolKey, request.Proto),
-		packCgiVariable(serverSoftware, "FrankenPHP"),
-		packCgiVariable(httpHost, request.Host),
-		// These values are always empty but must be defined:
-		packCgiVariable(authType, ""),
-		packCgiVariable(remoteIdent, ""),
-		// Request uri of the original request
-		packCgiVariable(requestURIKey, requestURI),
-		packCgiVariable(sslCipherKey, sslCipher),
-	)
+	C.frankenphp_register_bulk(trackVarsArray, C.frankenphp_server_vars{
+		remote_addr_key: zStrRemoteAddr,
+		remote_addr_val: toUnsafeChar(ip),
+		remote_addr_len: C.size_t(len(ip)),
+
+		remote_host_key: zStrRemoteHost,
+		remote_host_val: toUnsafeChar(ip),
+		remote_host_len: C.size_t(len(ip)),
+
+		remote_port_key: zStrRemotePort,
+		remote_port_val: toUnsafeChar(port),
+		remote_port_len: C.size_t(len(port)),
+
+		document_root_key: zStrDocumentRoot,
+		document_root_val: toUnsafeChar(fc.documentRoot),
+		document_root_len: C.size_t(len(fc.documentRoot)),
+
+		path_info_key: zStrPathInfo,
+		path_info_val: toUnsafeChar(fc.pathInfo),
+		path_info_len: C.size_t(len(fc.pathInfo)),
+
+		php_self_key: zStrPhpSelf,
+		php_self_val: toUnsafeChar(request.URL.Path),
+		php_self_len: C.size_t(len(request.URL.Path)),
+
+		document_uri_key: zStrDocumentURI,
+		document_uri_val: toUnsafeChar(fc.docURI),
+		document_uri_len: C.size_t(len(fc.docURI)),
+
+		script_filename_key: zStrScriptFilename,
+		script_filename_val: toUnsafeChar(fc.scriptFilename),
+		script_filename_len: C.size_t(len(fc.scriptFilename)),
+
+		script_name_key: zStrScriptName,
+		script_name_val: toUnsafeChar(fc.scriptName),
+		script_name_len: C.size_t(len(fc.scriptName)),
+
+		https_key: zStrHttps,
+		https_val: toUnsafeChar(https),
+		https_len: C.size_t(len(https)),
+
+		ssl_protocol_key: zStrSslProtocol,
+		ssl_protocol_val: toUnsafeChar(sslProtocol),
+		ssl_protocol_len: C.size_t(len(sslProtocol)),
+
+		request_scheme_key: zStrRequestScheme,
+		request_scheme_val: toUnsafeChar(rs),
+		request_scheme_len: C.size_t(len(rs)),
+
+		server_name_key: zStrServerName,
+		server_name_val: toUnsafeChar(reqHost),
+		server_name_len: C.size_t(len(reqHost)),
+
+		server_port_key: zStrServerPort,
+		server_port_val: toUnsafeChar(serverPort),
+		server_port_len: C.size_t(len(serverPort)),
+
+		content_length_key: zStrContentLength,
+		content_length_val: toUnsafeChar(contentLength),
+		content_length_len: C.size_t(len(contentLength)),
+
+		gateway_interface_key: zStrGatewayIface,
+		gateway_interface_str: zStrCgi1,
+
+		server_protocol_key: zStrServerProtocol,
+		server_protocol_val: toUnsafeChar(request.Proto),
+		server_protocol_len: C.size_t(len(request.Proto)),
+
+		server_software_key: zStrServerSoftware,
+		server_software_str: zStrFrankenPHP,
+
+		http_host_key: zStrHttpHost,
+		http_host_val: toUnsafeChar(request.Host),
+		http_host_len: C.size_t(len(request.Host)),
+
+		auth_type_key: zStrAuthType,
+		auth_type_val: toUnsafeChar(""),
+		auth_type_len: C.size_t(0),
+
+		remote_ident_key: zStrRemoteIdent,
+		remote_ident_val: toUnsafeChar(""),
+		remote_ident_len: C.size_t(0),
+
+		request_uri_key: zStrRequestURI,
+		request_uri_val: toUnsafeChar(requestURI),
+		request_uri_len: C.size_t(len(requestURI)),
+
+		ssl_cipher_key: zStrSslCipher,
+		ssl_cipher_val: toUnsafeChar(sslCipher),
+		ssl_cipher_len: C.size_t(len(sslCipher)),
+	})
 
 	// These values are already present in the SG(request_info), so we'll register them from there
 	C.frankenphp_register_variables_from_request_info(
 		trackVarsArray,
-		contentTypeKey,
-		pathTranslated,
-		queryString,
-		remoteUser,
-		requestMethodKey,
+		zStrContentType,
+		zStrPathTranslated,
+		zStrQueryString,
+		zStrRemoteUser,
+		zStrRequestMethod,
 	)
-}
-
-func packCgiVariable(key *C.zend_string, value string) C.ht_key_value_pair {
-	return C.ht_key_value_pair{key, toUnsafeChar(value), C.size_t(len(value))}
 }
 
 func addHeadersToServer(ctx context.Context, request *http.Request, trackVarsArray *C.zval) {
 	for field, val := range request.Header {
-		if k := mainThread.commonHeaders[field]; k != nil {
+		if k := commonHeaders[field]; k != nil {
 			v := strings.Join(val, ", ")
 			C.frankenphp_register_single(k, toUnsafeChar(v), C.size_t(len(v)), trackVarsArray)
 			continue
@@ -344,38 +368,4 @@ const separator = string(filepath.Separator)
 func toUnsafeChar(s string) *C.char {
 	sData := unsafe.StringData(s)
 	return (*C.char)(unsafe.Pointer(sData))
-}
-func initKnownServerKeys() {
-	contentLengthKey = internedZendString("CONTENT_LENGTH")
-	documentRoot = internedZendString("DOCUMENT_ROOT")
-	documentURI = internedZendString("DOCUMENT_URI")
-	gatewayIface = internedZendString("GATEWAY_INTERFACE")
-	httpHost = internedZendString("HTTP_HOST")
-	httpsKey = internedZendString("HTTPS")
-	pathInfo = internedZendString("PATH_INFO")
-	phpSelf = internedZendString("PHP_SELF")
-	remoteAddr = internedZendString("REMOTE_ADDR")
-	remoteHost = internedZendString("REMOTE_HOST")
-	remotePort = internedZendString("REMOTE_PORT")
-	requestScheme = internedZendString("REQUEST_SCHEME")
-	scriptFilename = internedZendString("SCRIPT_FILENAME")
-	scriptName = internedZendString("SCRIPT_NAME")
-	serverName = internedZendString("SERVER_NAME")
-	serverPortKey = internedZendString("SERVER_PORT")
-	serverProtocolKey = internedZendString("SERVER_PROTOCOL")
-	serverSoftware = internedZendString("SERVER_SOFTWARE")
-	sslProtocolKey = internedZendString("SSL_PROTOCOL")
-	sslCipherKey = internedZendString("SSL_CIPHER")
-	authType = internedZendString("AUTH_TYPE")
-	remoteIdent = internedZendString("REMOTE_IDENT")
-	contentTypeKey = internedZendString("CONTENT_TYPE")
-	pathTranslated = internedZendString("PATH_TRANSLATED")
-	queryString = internedZendString("QUERY_STRING")
-	remoteUser = internedZendString("REMOTE_USER")
-	requestMethodKey = internedZendString("REQUEST_METHOD")
-	requestURIKey = internedZendString("REQUEST_URI")
-}
-
-func internedZendString(s string) *C.zend_string {
-	return C.frankenphp_init_persistent_string(toUnsafeChar(s), C.size_t(len(s)))
 }
