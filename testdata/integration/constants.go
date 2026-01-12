@@ -21,13 +21,18 @@ const TEST_ENABLED = true
 const TEST_PI = 3.14159
 
 // export_php:const
-const STATUS_PENDING = iota
+const (
+	STATUS_PENDING = iota
+	STATUS_PROCESSING
+	STATUS_COMPLETED
+)
 
-// export_php:const
-const STATUS_PROCESSING = iota
-
-// export_php:const
-const STATUS_COMPLETED = iota
+const (
+	// export_php:const
+	ONE = 1
+	// export_php:const
+	TWO = 2
+)
 
 // export_php:class Config
 type ConfigStruct struct {
