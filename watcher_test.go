@@ -24,8 +24,7 @@ const minTimesToPollForChanges = 3
 const maxTimesToPollForChanges = 60
 
 func TestWorkersShouldReloadOnMatchingPattern(t *testing.T) {
-	//watch := []string{filepath.Join("testdata", "**", "*.txt")}
-	watch := []string{"testdata/**/*.txt"}
+	watch := []string{"./testdata/**/*.txt"}
 
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
 		requestBodyHasReset := pollForWorkerReset(t, handler, maxTimesToPollForChanges)
@@ -34,7 +33,7 @@ func TestWorkersShouldReloadOnMatchingPattern(t *testing.T) {
 }
 
 func TestWorkersShouldNotReloadOnExcludingPattern(t *testing.T) {
-	watch := []string{"testdata/**/*.php"}
+	watch := []string{"./testdata/**/*.php"}
 
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
 		requestBodyHasReset := pollForWorkerReset(t, handler, minTimesToPollForChanges)
@@ -51,8 +50,7 @@ func pollForWorkerReset(t *testing.T, handler func(http.ResponseWriter, *http.Re
 
 	// now we spam file updates and check if the request counter resets
 	for range limit {
-		dir, _ := filepath.Abs("./testdata")
-		updateTestFile(t, filepath.Join(dir, "files", "test.txt"), "updated")
+		updateTestFile(t, filepath.Join(".", "testdata", "files", "test.txt"), "updated")
 		time.Sleep(pollingTime * time.Millisecond)
 		body, _ := testGet("http://example.com/worker-with-counter.php", handler, t)
 		if body == "requests:1" {

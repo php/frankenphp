@@ -1,7 +1,3 @@
-// TODO: ignored on Windows for now (even if it should work with a custom PHP build),
-// because static builds of the embed SAPI aren't available yet and php.exe is ship with
-// the standard PHP distribution.
-
 package frankenphp
 
 // #include "frankenphp.h"

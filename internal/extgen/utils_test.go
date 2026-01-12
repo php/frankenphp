@@ -3,7 +3,6 @@ package extgen
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -69,7 +68,7 @@ func TestWriteFile(t *testing.T) {
 			assert.NoError(t, err, "Failed to stat file")
 
 			expectedMode := os.FileMode(0644)
-			if runtime.GOOS == "windows" {
+			if filepath.Separator == '\\' {
 				expectedMode = os.FileMode(0666)
 			}
 
