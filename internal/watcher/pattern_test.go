@@ -331,7 +331,7 @@ func TestInvalidCurlyBracePatterns(t *testing.T) {
 		{"/path/{dir1,dir2}/**/*.php", "/path/dir1/subpath/file.txt"},
 		{"/path/{dir1,dir2}/{a,b}{a,b}.php", "/path/dir1/ac.php"},
 		{"/path/{}/{a,b}{a,b}.php", "/path/dir1/ac.php"},
-		{"/path/}file{/{a,b}{a,b}.php", "/path/dir1/aa.php"},
+		{"/path/}dir{/{a,b}{a,b}.php", "/path/dir1/aa.php"},
 	}
 
 	for _, d := range data {

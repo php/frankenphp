@@ -2,7 +2,6 @@ package extgen
 
 import (
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -538,7 +537,7 @@ func TestStubGenerator_FileStructure(t *testing.T) {
 	assert.NoError(t, err, "buildContent() failed")
 
 	sep := "\n"
-	if runtime.GOOS == "windows" {
+	if filepath.Separator == '\\' {
 		sep = "\r\n"
 	}
 

@@ -52,7 +52,6 @@ func pollForWorkerReset(t *testing.T, handler func(http.ResponseWriter, *http.Re
 	for range limit {
 		dir, _ := filepath.Abs("./testdata")
 		updateTestFile(t, filepath.Join(dir, "files", "test.txt"), "updated")
-		t.Log(filepath.Join(dir, "files", "test.txt"))
 		time.Sleep(pollingTime * time.Millisecond)
 		body, _ := testGet("http://example.com/worker-with-counter.php", handler, t)
 		if body == "requests:1" {

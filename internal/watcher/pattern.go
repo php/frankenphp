@@ -126,7 +126,7 @@ func (p *pattern) isValidPattern(fileName string) bool {
 		return false
 	}
 
-	// first we remove the file from the file name
+	// first we remove the dir from the file name
 	if !strings.HasPrefix(fileName, p.value) {
 		return false
 	}
