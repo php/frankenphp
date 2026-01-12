@@ -20,8 +20,8 @@ func normalizePath(t *testing.T, path string) string {
 	}
 
 	path = filepath.FromSlash(path)
-	if strings.HasPrefix(path, "/") {
-		return "C:\\"+path[1:]
+	if strings.HasPrefix(path, "\\") {
+		path = "C:\\" + path[1:]
 	}
 
 	return path
@@ -86,7 +86,7 @@ func TestValidRecursiveDirectories(t *testing.T) {
 
 	data := []struct {
 		pattern string
-		dir     string
+		file    string
 	}{
 		{"/path", "/path/file.php"},
 		{"/path", "/path/subpath/file.php"},
@@ -104,7 +104,7 @@ func TestValidRecursiveDirectories(t *testing.T) {
 		t.Run(d.pattern, func(t *testing.T) {
 			t.Parallel()
 
-			assertPatternMatch(t, d.pattern, d.dir)
+			assertPatternMatch(t, d.pattern, d.file)
 		})
 	}
 }
@@ -292,7 +292,7 @@ func TestValidCurlyBracePatterns(t *testing.T) {
 
 	data := []struct {
 		pattern string
-		dir     string
+		file    string
 	}{
 		{"/path/*.{php}", "/path/file.php"},
 		{"/path/*.{php,twig}", "/path/file.php"},
@@ -312,7 +312,7 @@ func TestValidCurlyBracePatterns(t *testing.T) {
 		t.Run(d.pattern, func(t *testing.T) {
 			t.Parallel()
 
-			assertPatternMatch(t, d.pattern, d.dir)
+			assertPatternMatch(t, d.pattern, d.file)
 		})
 	}
 }
@@ -331,7 +331,7 @@ func TestInvalidCurlyBracePatterns(t *testing.T) {
 		{"/path/{dir1,dir2}/**/*.php", "/path/dir1/subpath/file.txt"},
 		{"/path/{dir1,dir2}/{a,b}{a,b}.php", "/path/dir1/ac.php"},
 		{"/path/{}/{a,b}{a,b}.php", "/path/dir1/ac.php"},
-		{"/path/}dir{/{a,b}{a,b}.php", "/path/dir1/aa.php"},
+		{"/path/}file{/{a,b}{a,b}.php", "/path/dir1/aa.php"},
 	}
 
 	for _, d := range data {
@@ -346,10 +346,10 @@ func TestInvalidCurlyBracePatterns(t *testing.T) {
 func TestAnAssociatedEventTriggersTheWatcher(t *testing.T) {
 	t.Parallel()
 
-	w := newPattern(t,"/**/*.php")
+	w := newPattern(t, "/**/*.php")
 	w.events = make(chan eventHolder)
 
-	e := &watcher.Event{PathName: "/path/temporary_file", AssociatedPathName: "/path/file.php"}
+	e := &watcher.Event{PathName: normalizePath(t, "/path/temporary_file"), AssociatedPathName: normalizePath(t, "/path/file.php")}
 	go w.handle(e)
 
 	assert.Equal(t, e, (<-w.events).event)
@@ -367,15 +367,15 @@ func relativeDir(t *testing.T, relativePath string) string {
 func hasDir(t *testing.T, p string, dir string) {
 	t.Helper()
 
-	w := newPattern(t,  p)
+	w := newPattern(t, p)
 
-	assert.Equal(t, normalizePath(t, dir), normalizePath(t, w.value))
+	assert.Equal(t, normalizePath(t, dir), w.value)
 }
 
 func assertPatternMatch(t *testing.T, p, fileName string) {
 	t.Helper()
 
-	w := newPattern(t,  p)
+	w := newPattern(t, p)
 
 	assert.True(t, w.allowReload(&watcher.Event{PathName: normalizePath(t, fileName)}))
 }
@@ -383,7 +383,7 @@ func assertPatternMatch(t *testing.T, p, fileName string) {
 func assertPatternNotMatch(t *testing.T, p, fileName string) {
 	t.Helper()
 
-	w := newPattern(t,  p)
+	w := newPattern(t, p)
 
 	assert.False(t, w.allowReload(&watcher.Event{PathName: normalizePath(t, fileName)}))
 }

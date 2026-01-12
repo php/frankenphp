@@ -41,11 +41,11 @@ func (p *pattern) parse() (err error) {
 
 	p.value = absPattern
 
-	volumeName := filepath.VolumeName(absPattern)
-	absPattern = strings.TrimPrefix(absPattern, volumeName)
+	volumeName := filepath.VolumeName(p.value)
+	p.value = strings.TrimPrefix(p.value, volumeName)
 
 	// then we split the pattern to determine where the directory ends and the pattern starts
-	splitPattern := strings.Split(absPattern, sep)
+	splitPattern := strings.Split(p.value, sep)
 	patternWithoutDir := ""
 	for i, part := range splitPattern {
 		isFilename := i == len(splitPattern)-1 && strings.Contains(part, ".")
@@ -126,7 +126,7 @@ func (p *pattern) isValidPattern(fileName string) bool {
 		return false
 	}
 
-	// first we remove the dir from the file name
+	// first we remove the file from the file name
 	if !strings.HasPrefix(fileName, p.value) {
 		return false
 	}
