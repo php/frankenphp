@@ -1,5 +1,3 @@
-//go:build !windows
-
 package frankenphp_test
 
 import (

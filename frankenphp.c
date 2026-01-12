@@ -1196,7 +1196,6 @@ static void sapi_cli_register_variables(zval *track_vars_array) /* {{{ */
 }
 /* }}} */
 
-#ifndef ZEND_WIN32
 static void *execute_script_cli(void *arg) {
   void *exit_status;
   bool eval = (bool)arg;
@@ -1258,7 +1257,6 @@ int frankenphp_execute_script_cli(char *script, int argc, char **argv,
 
   return (intptr_t)exit_status;
 }
-#endif
 
 int frankenphp_reset_opcache(void) {
   zend_function *opcache_reset =

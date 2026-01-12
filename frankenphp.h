@@ -87,10 +87,8 @@ bool frankenphp_shutdown_dummy_request(void);
 int frankenphp_execute_script(char *file_name);
 void frankenphp_update_local_thread_context(bool is_worker);
 
-#ifndef ZEND_WIN32
 int frankenphp_execute_script_cli(char *script, int argc, char **argv,
                                   bool eval);
-#endif
 
 void frankenphp_register_variables_from_request_info(
     zval *track_vars_array, zend_string *content_type,
