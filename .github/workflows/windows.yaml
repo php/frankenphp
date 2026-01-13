@@ -1,0 +1,184 @@
+name: Build Windows release
+
+concurrency:
+  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "docker-bake.hcl"
+      - ".github/workflows/static.yaml"
+      - "**cgo.go"
+      - "**Dockerfile"
+      - "**.c"
+      - "**.h"
+      - "**.sh"
+      - "**.stub.php"
+  push:
+    branches:
+      - main
+    tags:
+      - v*.*.*
+  workflow_dispatch:
+    inputs:
+      #checkov:skip=CKV_GHA_7
+      version:
+        description: "FrankenPHP version"
+        required: false
+        type: string
+  schedule:
+    - cron: "0 8 * * *"
+
+permissions:
+  contents: read
+
+env:
+  GOTOOLCHAIN: local
+  PHP_DOWNLOAD_BASE: "https://windows.php.net/downloads/releases"
+  CC: clang
+  CXX: clang++
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: powershell
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+        with:
+          path: frankenphp
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.0-rc.1"
+          cache-dependency-path: |
+            go.sum 
+            caddy/go.sum
+          cache: false
+          check-latest: true
+
+      - name: Update Vcpkg
+        run: |
+          cd "$env:VCPKG_INSTALLATION_ROOT"
+          git pull
+          .\bootstrap-vcpkg.bat
+
+      - name: Cache Vcpkg Packages
+        uses: actions/cache@v5
+        with:
+          path: |
+            ${{ env.VCPKG_INSTALLATION_ROOT }}\installed
+            ${{ env.VCPKG_INSTALLATION_ROOT }}\downloads
+          key: ${{ runner.os }}-vcpkg-libs-${{ hashFiles('vcpkg/ports/**') }}
+          restore-keys: |
+            ${{ runner.os }}-vcpkg-libs-
+          lookup-only: true
+
+      - name: Install Vcpkg Libraries
+        run: '& "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install pthreads brotli --triplet x64-windows'
+
+      - name: Download Watcher
+        run: |
+          $latestTag = gh release list --repo e-dant/watcher --limit 1 --exclude-drafts --exclude-pre-releases --json tagName --jq '.[0].tagName'
+          Write-Host "Latest Watcher version: $latestTag"
+
+          gh release download $latestTag --repo e-dant/watcher --pattern "*x86_64-pc-windows-msvc.tar" --dir "$env:TEMP"
+
+          tar -xf "$env:TEMP\watcher-x86_64-pc-windows-msvc.tar" -C "$env:GITHUB_WORKSPACE"
+          Rename-Item -Path "$env:GITHUB_WORKSPACE\x86_64-pc-windows-msvc" -NewName "watcher"
+
+          # See https://github.com/e-dant/watcher/issues/108
+          New-Item -Path .\watcher\wtr -ItemType Directory
+          Move-Item -Path .\watcher-c.h -Destination .\watcher\wtr\watcher-c.h
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download PHP
+        run: |
+          $webContent = Invoke-WebRequest -Uri $env:PHP_DOWNLOAD_BASE -UseBasicParsing
+          $links = $webContent.Links.Href | Where-Object { $_ -match "php-(\d+\.\d+\.\d+)-Win32-vs17-x64\.zip" }
+
+          if (-not $links) { throw "Could not find PHP zip files at $env:PHP_DOWNLOAD_BASE" }
+
+          $latestFile = $links | Sort-Object { [version]($_ -replace 'php-', '' -replace '-Win32-vs17-x64.zip', '') } | Select-Object -Last 1
+
+          $version = $latestFile -replace 'php-', '' -replace '-Win32-vs17-x64.zip', ''
+          Write-Host "Detected latest PHP version: $version"
+
+          "PHP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+          $phpZip = "php-$version-Win32-vs17-x64.zip"
+          $develZip = "php-devel-pack-$version-Win32-vs17-x64.zip"
+
+          Invoke-WebRequest -Uri "$env:PHP_DOWNLOAD_BASE/$phpZip" -OutFile "$env:TEMP\php.zip"
+          Expand-Archive -Path "$env:TEMP\php.zip" -DestinationPath "$env:GITHUB_WORKSPACE\php-bin"
+
+          Invoke-WebRequest -Uri "$env:PHP_DOWNLOAD_BASE/$develZip" -OutFile "$env:TEMP\php-devel.zip"
+          Expand-Archive -Path "$env:TEMP\php-devel.zip" -DestinationPath "$env:GITHUB_WORKSPACE\php-devel"
+
+      - name: Prepare env
+        run: |
+          $vcpkgRoot = "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows"
+          $watcherRoot = "$env:GITHUB_WORKSPACE\watcher"
+          $phpBin = "$env:GITHUB_WORKSPACE\php-bin"
+          $phpDevel = "$env:GITHUB_WORKSPACE\php-devel\php-$env:PHP_VERSION-devel-vs17-x64"
+
+          echo "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\Llvm\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          echo "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          echo "$env:VCPKG_INSTALLATION_ROOT\watcher" | Out-File -FilePath $env:GITHUB_PATH -Append
+          echo "$env:GITHUB_WORKSPACE\php-bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+          echo "CGO_CFLAGS=-I$vcpkgRoot\include -I$watcherRoot -I$phpDevel\include -I$phpDevel\include\main -I$phpDevel\include\TSRM -I$phpDevel\include\Zend -I$phpDevel\include\ext" | Out-File -FilePath $env:GITHUB_ENV -Append
+          echo "CGO_LDFLAGS=-L$vcpkgRoot\lib -lbrotlienc -L$watcherRoot -llibwatcher-c -L$phpBin -L$phpDevel\lib -lphp8ts -lphp8embed" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Build FrankenPHP
+        run: go build -ldflags '-extldflags="-fuse-ld=lld"' -tags nobadger,nomysql,nopgx
+        working-directory: ${{ env.GITHUB_WORKSPACE }}/frankenphp
+
+      - name: Create Zip Archive
+        run: |
+          Move-Item frankenphp\caddy\frankenphp\frankenphp.exe php-bin
+          Move-Item watcher\libwatcher-c.dll php-bin
+          Move-Item "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin\brotlienc.dll" php-bin
+          Move-Item "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin\brotlicommon.dll" php-bin
+          Move-Item "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin\pthreadVC3.dll" php-bin
+
+          $version = $env:PHP_VERSION
+          $zipName = "frankenphp-php-$version-Win32-vs17-x64.zip"
+
+          # TODO: create a single folder inside the zip
+          Compress-Archive -Path "php-bin\*" -DestinationPath "$zipName"
+
+          echo "ASSET_NAME=$zipName" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Upload Artifact
+        if: github.event_name != 'release'
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ env.ASSET_NAME }}
+          path: ${{ env.GITHUB_WORKSPACE }}\${{ env.ASSET_PATH }}
+
+      - name: Upload Release Asset
+        if: github.event_name == 'release'
+        run: gh release upload $env:GITHUB_EVENT_RELEASE_TAG_NAME "$env:ASSET_PATH" --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_EVENT_RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
+
+      - name: Run Tests
+        run: |
+          "opcache.enable=0`r`nopcache.enable_cli=0" | Out-File php.ini
+          $env:PHPRC = Get-Location
+
+          go test -ldflags '-extldflags="-fuse-ld=lld"' ./...
+          cd caddy
+          go test -ldflags '-extldflags="-fuse-ld=lld"' -tags nobadger,nomysql,nopgx ./...
+        working-directory: ${{ env.GITHUB_WORKSPACE }}/frankenphp
