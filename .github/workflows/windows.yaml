@@ -60,16 +60,10 @@ jobs:
         with:
           go-version: "1.26.0-rc.1"
           cache-dependency-path: |
-            go.sum 
-            caddy/go.sum
+            frankenphp/go.sum 
+            frankenphp/caddy/go.sum
           cache: false
           check-latest: true
-
-      - name: Update Vcpkg
-        run: |
-          cd "$env:VCPKG_INSTALLATION_ROOT"
-          git pull
-          .\bootstrap-vcpkg.bat
 
       - name: Cache Vcpkg Packages
         uses: actions/cache@v5
@@ -83,16 +77,17 @@ jobs:
           lookup-only: true
 
       - name: Install Vcpkg Libraries
-        run: '& "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install pthreads brotli --triplet x64-windows'
+        working-directory: frankenphp
+        run: '& "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install'
 
       - name: Download Watcher
         run: |
           $latestTag = gh release list --repo e-dant/watcher --limit 1 --exclude-drafts --exclude-pre-releases --json tagName --jq '.[0].tagName'
           Write-Host "Latest Watcher version: $latestTag"
 
-          gh release download $latestTag --repo e-dant/watcher --pattern "*x86_64-pc-windows-msvc.tar" --dir "$env:TEMP"
+          gh release download $latestTag --repo e-dant/watcher --pattern "*x86_64-pc-windows-msvc.tar" --dir "$env:TEMP" -O watcher.tar
 
-          tar -xf "$env:TEMP\watcher-x86_64-pc-windows-msvc.tar" -C "$env:GITHUB_WORKSPACE"
+          tar -xf "$env:TEMP\watcher.tar" -C "$env:GITHUB_WORKSPACE"
           Rename-Item -Path "$env:GITHUB_WORKSPACE\x86_64-pc-windows-msvc" -NewName "watcher"
 
           # See https://github.com/e-dant/watcher/issues/108
