@@ -135,7 +135,7 @@ jobs:
 
       - name: Build FrankenPHP
         run: go build -ldflags '-extldflags="-fuse-ld=lld"' -tags nobadger,nomysql,nopgx
-        working-directory: ${{ env.GITHUB_WORKSPACE }}\frankenphp
+        working-directory: frankenphp
 
       - name: Create Zip Archive
         run: |
