@@ -77,7 +77,7 @@ jobs:
 
       - name: Install Vcpkg Libraries
         working-directory: frankenphp
-        run: 'vcpkg install'
+        run: "vcpkg install"
 
       - name: Download Watcher
         run: |
