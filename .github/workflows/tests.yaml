@@ -19,7 +19,6 @@ permissions:
 env:
   GOTOOLCHAIN: local
   GOEXPERIMENT: cgocheck2
-  GOFLAGS: "-tags=nobadger,nomysql,nopgx"
 jobs:
   tests-linux:
     name: Tests (Linux, PHP ${{ matrix.php-versions }})
@@ -36,6 +35,7 @@ jobs:
     env:
       GOMAXPROCS: 10
       LIBRARY_PATH: ${{ github.workspace }}/watcher/target/lib
+      GOFLAGS: "-tags=nobadger,nomysql,nopgx"
     steps:
       - uses: actions/checkout@v6
         with:
@@ -101,6 +101,8 @@ jobs:
       fail-fast: false
       matrix:
         php-versions: ["8.3", "8.4", "8.5"]
+    env:
+      XCADDY_GO_BUILD_FLAGS: "-tags=nobadger,nomysql,nopgx"
     steps:
       - uses: actions/checkout@v6
         with:
@@ -142,6 +144,7 @@ jobs:
     runs-on: macos-latest
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
+      GOFLAGS: "-tags=nowatcher,nobadger,nomysql,nopgx"
     steps:
       - uses: actions/checkout@v6
         with:
