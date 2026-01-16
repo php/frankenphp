@@ -100,22 +100,22 @@ jobs:
         run: |
           $webContent = Invoke-WebRequest -Uri $env:PHP_DOWNLOAD_BASE -UseBasicParsing
           $links = $webContent.Links.Href | Where-Object { $_ -match "php-\d+\.\d+\.\d+-Win32-vs17-x64\.zip$" }
-          
+
           if (-not $links) { throw "Could not find PHP zip files at $env:PHP_DOWNLOAD_BASE" }
-          
+
           $latestFile = $links | Sort-Object { if ($_ -match '(\d+\.\d+\.\d+)') { [version]$matches[1] } } | Select-Object -Last 1
-          
+
           $version = if ($latestFile -match '(\d+\.\d+\.\d+)') { $matches[1] }
           Write-Host "Detected latest PHP version: $version"
-          
+
           "PHP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
-          
+
           $phpZip = "php-$version-Win32-vs17-x64.zip"
           $develZip = "php-devel-pack-$version-Win32-vs17-x64.zip"
-          
+
           Invoke-WebRequest -Uri "$env:PHP_DOWNLOAD_BASE/$phpZip" -OutFile "$env:TEMP\php.zip"
           Expand-Archive -Path "$env:TEMP\php.zip" -DestinationPath "$env:GITHUB_WORKSPACE\php-bin"
-          
+
           Invoke-WebRequest -Uri "$env:PHP_DOWNLOAD_BASE/$develZip" -OutFile "$env:TEMP\php-devel.zip"
           Expand-Archive -Path "$env:TEMP\php-devel.zip" -DestinationPath "$env:GITHUB_WORKSPACE\php-devel"
 
