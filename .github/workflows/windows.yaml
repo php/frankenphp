@@ -69,7 +69,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: |
-            ${{ env.VCPKG_INSTALLATION_ROOT }}\installed
+            frankenphp\vcpkg_installed
             ${{ env.VCPKG_INSTALLATION_ROOT }}\downloads
           key: ${{ runner.os }}-vcpkg-libs-${{ hashFiles('frankenphp/vcpkg.json') }}
           restore-keys: |
@@ -77,7 +77,7 @@ jobs:
 
       - name: Install Vcpkg Libraries
         working-directory: frankenphp
-        run: '& "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install'
+        run: 'vcpkg install'
 
       - name: Download Watcher
         run: |
@@ -120,13 +120,13 @@ jobs:
 
       - name: Prepare env
         run: |
-          $vcpkgRoot = "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows"
+          $vcpkgRoot = "$env:GITHUB_WORKSPACE\frankenphp\vcpkg_installed\x64-windows"
           $watcherRoot = "$env:GITHUB_WORKSPACE\watcher"
           $phpBin = "$env:GITHUB_WORKSPACE\php-bin"
           $phpDevel = "$env:GITHUB_WORKSPACE\php-devel\php-$env:PHP_VERSION-devel-vs17-x64"
 
           echo "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\Llvm\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
-          echo "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          echo "$vcpkgRoot\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
           echo "$env:GITHUB_WORKSPACE\watcher" | Out-File -FilePath $env:GITHUB_PATH -Append
           echo "$env:GITHUB_WORKSPACE\php-bin" | Out-File -FilePath $env:GITHUB_PATH -Append
 
@@ -141,9 +141,9 @@ jobs:
         run: |
           Move-Item frankenphp\caddy\frankenphp\frankenphp.exe php-bin
           Move-Item watcher\libwatcher-c.dll php-bin
-          Move-Item "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin\brotlienc.dll" php-bin
-          Move-Item "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin\brotlicommon.dll" php-bin
-          Move-Item "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin\pthreadVC3.dll" php-bin
+          Move-Item "frankenphp\vcpkg_installed\x64-windows\bin\brotlienc.dll" php-bin
+          Move-Item "frankenphp\vcpkg_installed\x64-windows\bin\brotlicommon.dll" php-bin
+          Move-Item "frankenphp\vcpkg_installed\x64-windows\bin\pthreadVC3.dll" php-bin
 
           $version = $env:PHP_VERSION
           $zipName = "frankenphp-php-$version-Win32-vs17-x64.zip"
