@@ -176,3 +176,6 @@ jobs:
           cd caddy
           go test -ldflags '-extldflags="-fuse-ld=lld"' -tags nobadger,nomysql,nopgx ./...
         working-directory: ${{ env.GITHUB_WORKSPACE }}\frankenphp
+
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
