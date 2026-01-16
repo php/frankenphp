@@ -10,6 +10,7 @@ on:
       - main
     paths:
       - "docker-bake.hcl"
+      - "vcpkg.json"
       - ".github/workflows/static.yaml"
       - "**cgo.go"
       - "**Dockerfile"
@@ -37,6 +38,7 @@ permissions:
 
 env:
   GOTOOLCHAIN: local
+  GOFLAGS: "-ldflags '-extldflags=-fuse-ld=lld' -tags nobadger,nomysql,nopgx"
   PHP_DOWNLOAD_BASE: "https://windows.php.net/downloads/releases"
   CC: clang
   CXX: clang++
@@ -65,23 +67,24 @@ jobs:
             $frankenphpVersion = $env:GITHUB_SHA
           }
 
-          echo "FRANKENPHP_VERSION=$frankenphpVersion" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "FRANKENPHP_VERSION=$frankenphpVersion" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v6 # zizmor: ignore[cache-poisoning]
         with:
           go-version: "1.26.0-rc.1"
           cache-dependency-path: |
             frankenphp/go.sum
             frankenphp/caddy/go.sum
-          cache: false
+          cache: github.event_name != 'release'
           check-latest: true
 
       - name: Install xcaddy
         run: go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
 
       - name: Cache Vcpkg Packages
-        uses: actions/cache@v5
+        if: github.event_name != 'release'
+        uses: actions/cache@v5 # zizmor: ignore[cache-poisoning]
         with:
           path: |
             frankenphp\vcpkg_installed
@@ -126,9 +129,13 @@ jobs:
 
           $phpZip = "php-$version-Win32-vs17-x64.zip"
           $develZip = "php-devel-pack-$version-Win32-vs17-x64.zip"
+          
+          $dirName = "frankenphp-$env:FRANKENPHP_VERSION-php-$version-Win32-vs17-x64"
+
+          echo "DIR_NAME=$dirName" | Out-File -FilePath $env:GITHUB_ENV -Append
 
           Invoke-WebRequest -Uri "$env:PHP_DOWNLOAD_BASE/$phpZip" -OutFile "$env:TEMP\php.zip"
-          Expand-Archive -Path "$env:TEMP\php.zip" -DestinationPath "$env:GITHUB_WORKSPACE\php-bin"
+          Expand-Archive -Path "$env:TEMP\php.zip" -DestinationPath "$env:GITHUB_WORKSPACE\$dirName"
 
           Invoke-WebRequest -Uri "$env:PHP_DOWNLOAD_BASE/$develZip" -OutFile "$env:TEMP\php-devel.zip"
           Expand-Archive -Path "$env:TEMP\php-devel.zip" -DestinationPath "$env:GITHUB_WORKSPACE\php-devel"
@@ -137,13 +144,13 @@ jobs:
         run: |
           $vcpkgRoot = "$env:GITHUB_WORKSPACE\frankenphp\vcpkg_installed\x64-windows"
           $watcherRoot = "$env:GITHUB_WORKSPACE\watcher"
-          $phpBin = "$env:GITHUB_WORKSPACE\php-bin"
+          $phpBin = "$env:GITHUB_WORKSPACE\$env:DIR_NAME"
           $phpDevel = "$env:GITHUB_WORKSPACE\php-devel\php-$env:PHP_VERSION-devel-vs17-x64"
 
           echo "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\Llvm\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
           echo "$vcpkgRoot\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
-          echo "$env:GITHUB_WORKSPACE\watcher" | Out-File -FilePath $env:GITHUB_PATH -Append
-          echo "$env:GITHUB_WORKSPACE\php-bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          echo "$watcherRoot" | Out-File -FilePath $env:GITHUB_PATH -Append
+          echo "$phpBin" | Out-File -FilePath $env:GITHUB_PATH -Append
 
           echo "CGO_CFLAGS=-I$vcpkgRoot\include -I$watcherRoot -I$phpDevel\include -I$phpDevel\include\main -I$phpDevel\include\TSRM -I$phpDevel\include\Zend -I$phpDevel\include\ext" | Out-File -FilePath $env:GITHUB_ENV -Append
           echo "CGO_LDFLAGS=-L$vcpkgRoot\lib -lbrotlienc -L$watcherRoot -llibwatcher-c -L$phpBin -L$phpDevel\lib -lphp8ts -lphp8embed" | Out-File -FilePath $env:GITHUB_ENV -Append
@@ -169,29 +176,27 @@ jobs:
 
       - name: Create Zip Archive
         run: |
-          Move-Item frankenphp\caddy\frankenphp\frankenphp.exe php-bin
-          Move-Item watcher\libwatcher-c.dll php-bin
-          Move-Item "frankenphp\vcpkg_installed\x64-windows\bin\brotlienc.dll" php-bin
-          Move-Item "frankenphp\vcpkg_installed\x64-windows\bin\brotlidec.dll" php-bin
-          Move-Item "frankenphp\vcpkg_installed\x64-windows\bin\brotlicommon.dll" php-bin
-          Move-Item "frankenphp\vcpkg_installed\x64-windows\bin\pthreadVC3.dll" php-bin
+          Copy-Item frankenphp\caddy\frankenphp\frankenphp.exe $env:DIR_NAME
+          Copy-Item watcher\libwatcher-c.dll $env:DIR_NAME
+          Copy-Item frankenphp\vcpkg_installed\x64-windows\bin\brotlienc.dll $env:DIR_NAME
+          Copy-Item frankenphp\vcpkg_installed\x64-windows\bin\brotlidec.dll $env:DIR_NAME
+          Copy-Item frankenphp\vcpkg_installed\x64-windows\bin\brotlicommon.dll $env:DIR_NAME
+          Copy-Item frankenphp\vcpkg_installed\x64-windows\bin\pthreadVC3.dll $env:DIR_NAME
 
-          $phpVersion = $env:PHP_VERSION
-          $frankenphpVersion = $env:FRANKENPHP_VERSION
-          $zipName = "frankenphp-$frankenphpVersion-php-$phpVersion-Win32-vs17-x64.zip"
-
-          echo "ASSET_NAME=$zipName" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Compress-Archive -Path $env:DIR_NAME -DestinationPath "$env:DIR_NAME.zip"
 
       - name: Upload Artifact
         if: github.event_name != 'release'
         uses: actions/upload-artifact@v6
         with:
-          name: ${{ env.ASSET_NAME }}
-          path: php-bin\*
+          name: ${{ env.DIR_NAME }}.zip
+          path: ${{ env.DIR_NAME }}.zip
+          compression-level: 0
+          if-no-files-found: error
 
       - name: Upload Release Asset
         if: github.event_name == 'release'
-        run: gh release upload $env:GITHUB_EVENT_RELEASE_TAG_NAME "$env:ASSET_NAME" --clobber
+        run: gh release upload $env:GITHUB_EVENT_RELEASE_TAG_NAME "$env:DIR_NAME.zip" --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_EVENT_RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
@@ -201,7 +206,7 @@ jobs:
           "opcache.enable=0`r`nopcache.enable_cli=0" | Out-File php.ini
           $env:PHPRC = Get-Location
 
-          go test -ldflags '-extldflags="-fuse-ld=lld"' ./...
+          go test ./...
           cd caddy
-          go test -ldflags '-extldflags="-fuse-ld=lld"' -tags nobadger,nomysql,nopgx ./...
+          go test ./...
         working-directory: ${{ github.workspace }}\frankenphp
