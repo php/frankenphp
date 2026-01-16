@@ -19,6 +19,7 @@ permissions:
 env:
   GOTOOLCHAIN: local
   GOEXPERIMENT: cgocheck2
+  GOFLAGS: "-tags=nobadger,nomysql,nopgx"
 jobs:
   tests-linux:
     name: Tests (Linux, PHP ${{ matrix.php-versions }})
@@ -69,7 +70,7 @@ jobs:
         run: ./frankenphp.test -test.v
       - name: Run Caddy module tests
         working-directory: caddy/
-        run: go test -tags nobadger,nomysql,nopgx -race -v ./...
+        run: go test -race -v ./...
       - name: Run Fuzzing Tests
         working-directory: caddy/
         run: go test -fuzz FuzzRequest -fuzztime 20s
@@ -172,4 +173,4 @@ jobs:
         run: go test -tags nowatcher -race -v ./...
       - name: Run Caddy module tests
         working-directory: caddy/
-        run: go test -tags nowatcher,nobadger,nomysql,nopgx -race -v ./...
+        run: go test -race -v ./...
