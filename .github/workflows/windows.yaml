@@ -151,7 +151,7 @@ jobs:
       - name: Build FrankenPHP
         run: |
           $customVersion = "FrankenPHP v$env:FRANKENPHP_VERSION PHP $env:PHP_VERSION Caddy"
-          $ldflags = "-linkmode=external -extldflags=-fuse-ld=lld -X 'github.com/caddyserver/caddy/v2.CustomVersion=\`"$customVersion\`"'"
+          $ldflags = "-linkmode=external -extldflags=-fuse-ld=lld -X 'github.com/caddyserver/caddy/v2.CustomVersion=$customVersion'"
 
           $env:CGO_ENABLED = "1"
           $env:XCADDY_GO_BUILD_FLAGS = "-ldflags=`"$ldflags`" -tags=nobadger,nomysql,nopgx"
@@ -197,7 +197,7 @@ jobs:
           go test -ldflags '-extldflags="-fuse-ld=lld"' ./...
           cd caddy
           go test -ldflags '-extldflags="-fuse-ld=lld"' -tags nobadger,nomysql,nopgx ./...
-        working-directory: ${{ env.GITHUB_WORKSPACE }}\frankenphp
+        working-directory: ${{ github.workspace }}\frankenphp
 
       - name: tmate
         uses: mxschmitt/action-tmate@v3
