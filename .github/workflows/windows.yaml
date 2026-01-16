@@ -158,7 +158,13 @@ jobs:
 
           echo $env:XCADDY_GO_BUILD_FLAGS
 
-          xcaddy build --with github.com/dunglas/frankenphp/caddy=../ --with github.com/dunglas/frankenphp=../../ --output frankenphp.exe
+          xcaddy build `
+            --with github.com/dunglas/frankenphp/caddy=../ `
+            --with github.com/dunglas/frankenphp=../../ `
+            --with github.com/dunglas/mercure/caddy `
+            --with github.com/dunglas/vulcain/caddy `
+            --with github.com/dunglas/caddy-cbrotli `
+            --output frankenphp.exe
         working-directory: frankenphp\caddy\frankenphp
 
       - name: Create Zip Archive
