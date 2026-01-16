@@ -172,6 +172,7 @@ jobs:
           Move-Item frankenphp\caddy\frankenphp\frankenphp.exe php-bin
           Move-Item watcher\libwatcher-c.dll php-bin
           Move-Item "frankenphp\vcpkg_installed\x64-windows\bin\brotlienc.dll" php-bin
+          Move-Item "frankenphp\vcpkg_installed\x64-windows\bin\brotlidec.dll" php-bin
           Move-Item "frankenphp\vcpkg_installed\x64-windows\bin\brotlicommon.dll" php-bin
           Move-Item "frankenphp\vcpkg_installed\x64-windows\bin\pthreadVC3.dll" php-bin
 
