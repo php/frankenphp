@@ -76,7 +76,7 @@ jobs:
           cache-dependency-path: |
             frankenphp/go.sum
             frankenphp/caddy/go.sum
-          cache: github.event_name != 'release'
+          cache: ${{ github.event_name != 'release' }}
           check-latest: true
 
       - name: Install xcaddy
@@ -129,7 +129,7 @@ jobs:
 
           $phpZip = "php-$version-Win32-vs17-x64.zip"
           $develZip = "php-devel-pack-$version-Win32-vs17-x64.zip"
-          
+
           $dirName = "frankenphp-$env:FRANKENPHP_VERSION-php-$version-Win32-vs17-x64"
 
           echo "DIR_NAME=$dirName" | Out-File -FilePath $env:GITHUB_ENV -Append
