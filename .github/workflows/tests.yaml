@@ -121,8 +121,6 @@ jobs:
           debug: true
       - name: Install PHP development libraries
         run: sudo apt-get update && sudo apt-get install -y libkrb5-dev libsodium-dev libargon2-dev
-      - name: Install xcaddy
-        run: go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
       - name: Download PHP sources
         run: |
           PHP_VERSION=$(php -r "echo PHP_VERSION;")
