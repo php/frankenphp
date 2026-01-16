@@ -55,15 +55,30 @@ jobs:
           path: frankenphp
           persist-credentials: false
 
+      - name: Set FRANKENPHP_VERSION
+        run: |
+          if ($env:GITHUB_REF_TYPE -eq "tag") {
+            $frankenphpVersion = $env:GITHUB_REF_NAME.Substring(1)
+          } elseif ($env:GITHUB_EVENT_NAME -eq "schedule") {
+            $frankenphpVersion = $env:GITHUB_REF
+          } else {
+            $frankenphpVersion = $env:GITHUB_SHA
+          }
+
+          echo "FRANKENPHP_VERSION=$frankenphpVersion" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
           go-version: "1.26.0-rc.1"
           cache-dependency-path: |
-            frankenphp/go.sum 
+            frankenphp/go.sum
             frankenphp/caddy/go.sum
           cache: false
           check-latest: true
+
+      - name: Install xcaddy
+        run: go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
 
       - name: Cache Vcpkg Packages
         uses: actions/cache@v5
@@ -134,7 +149,16 @@ jobs:
           echo "CGO_LDFLAGS=-L$vcpkgRoot\lib -lbrotlienc -L$watcherRoot -llibwatcher-c -L$phpBin -L$phpDevel\lib -lphp8ts -lphp8embed" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Build FrankenPHP
-        run: go build -ldflags '-extldflags="-fuse-ld=lld"' -tags nobadger,nomysql,nopgx
+        run: |
+          $customVersion = "FrankenPHP v$env:FRANKENPHP_VERSION PHP $env:PHP_VERSION Caddy"
+          $ldflags = "-linkmode=external -extldflags=-fuse-ld=lld -X 'github.com/caddyserver/caddy/v2.CustomVersion=\`"$customVersion\`"'"
+
+          $env:CGO_ENABLED = "1"
+          $env:XCADDY_GO_BUILD_FLAGS = "-ldflags=`"$ldflags`" -tags=nobadger,nomysql,nopgx"
+
+          echo $env:XCADDY_GO_BUILD_FLAGS
+
+          xcaddy build --with github.com/dunglas/frankenphp/caddy=../ --with github.com/dunglas/frankenphp=../../ --output frankenphp.exe
         working-directory: frankenphp\caddy\frankenphp
 
       - name: Create Zip Archive
@@ -145,11 +169,9 @@ jobs:
           Move-Item "frankenphp\vcpkg_installed\x64-windows\bin\brotlicommon.dll" php-bin
           Move-Item "frankenphp\vcpkg_installed\x64-windows\bin\pthreadVC3.dll" php-bin
 
-          $version = $env:PHP_VERSION
-          $zipName = "frankenphp-php-$version-Win32-vs17-x64.zip"
-
-          # TODO: create a single folder inside the zip
-          Compress-Archive -Path "php-bin\*" -DestinationPath "$zipName"
+          $phpVersion = $env:PHP_VERSION
+          $frankenphpVersion = $env:FRANKENPHP_VERSION
+          $zipName = "frankenphp-$frankenphpVersion-php-$phpVersion-Win32-vs17-x64.zip"
 
           echo "ASSET_NAME=$zipName" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
@@ -158,8 +180,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: ${{ env.ASSET_NAME }}
-          path: ${{ env.GITHUB_WORKSPACE }}\${{ env.ASSET_NAME }}
-          compression-level: 0
+          path: php-bin\*
 
       - name: Upload Release Asset
         if: github.event_name == 'release'
@@ -177,3 +198,7 @@ jobs:
           cd caddy
           go test -ldflags '-extldflags="-fuse-ld=lld"' -tags nobadger,nomysql,nopgx ./...
         working-directory: ${{ env.GITHUB_WORKSPACE }}\frankenphp
+
+      - name: tmate
+        uses: mxschmitt/action-tmate@v3
+        if: failure()
