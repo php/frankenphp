@@ -192,6 +192,7 @@ jobs:
         with:
           name: frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }}
           path: frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }}
+          compression-level: 0
       - name: Upload assets
         if: fromJson(needs.prepare.outputs.push) && (needs.prepare.outputs.ref || github.ref_type == 'tag')
         run: gh release upload "${REF}" frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }} --repo dunglas/frankenphp --clobber
@@ -489,6 +490,7 @@ jobs:
         with:
           name: frankenphp-mac-${{ matrix.platform }}
           path: dist/frankenphp-mac-${{ matrix.platform }}
+          compression-level: 0
       - name: Run sanity checks
         run: |
           "${BINARY}" version
