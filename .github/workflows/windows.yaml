@@ -198,7 +198,3 @@ jobs:
           cd caddy
           go test -ldflags '-extldflags="-fuse-ld=lld"' -tags nobadger,nomysql,nopgx ./...
         working-directory: ${{ github.workspace }}\frankenphp
-
-      - name: tmate
-        uses: mxschmitt/action-tmate@v3
-        if: failure()
