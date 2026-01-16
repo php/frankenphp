@@ -150,7 +150,7 @@ jobs:
 
       - name: Build FrankenPHP
         run: |
-          $customVersion = "FrankenPHP v$env:FRANKENPHP_VERSION PHP $env:PHP_VERSION Caddy"
+          $customVersion = "FrankenPHP $env:FRANKENPHP_VERSION PHP $env:PHP_VERSION Caddy"
           $ldflags = "-linkmode=external -extldflags=-fuse-ld=lld -X 'github.com/caddyserver/caddy/v2.CustomVersion=$customVersion'"
 
           $env:CGO_ENABLED = "1"
