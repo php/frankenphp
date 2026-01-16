@@ -1,6 +1,3 @@
 {
-  "dependencies": [
-    "brotli",
-    "pthreads"
-  ]
+  "dependencies": ["brotli", "pthreads"]
 }
