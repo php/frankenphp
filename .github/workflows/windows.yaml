@@ -158,11 +158,12 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: ${{ env.ASSET_NAME }}
-          path: ${{ env.GITHUB_WORKSPACE }}\${{ env.ASSET_PATH }}
+          path: ${{ env.GITHUB_WORKSPACE }}\${{ env.ASSET_NAME }}
+          compression-level: 0
 
       - name: Upload Release Asset
         if: github.event_name == 'release'
-        run: gh release upload $env:GITHUB_EVENT_RELEASE_TAG_NAME "$env:ASSET_PATH" --clobber
+        run: gh release upload $env:GITHUB_EVENT_RELEASE_TAG_NAME "$env:ASSET_NAME" --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_EVENT_RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
