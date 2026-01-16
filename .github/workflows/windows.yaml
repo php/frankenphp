@@ -79,20 +79,6 @@ jobs:
           cache: ${{ github.event_name != 'release' }}
           check-latest: true
 
-      - name: Install xcaddy
-        run: go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
-
-      - name: Cache Vcpkg Packages
-        if: github.event_name != 'release'
-        uses: actions/cache@v5 # zizmor: ignore[cache-poisoning]
-        with:
-          path: |
-            frankenphp\vcpkg_installed
-            ${{ env.VCPKG_INSTALLATION_ROOT }}\downloads
-          key: ${{ runner.os }}-vcpkg-libs-${{ hashFiles('frankenphp/vcpkg.json') }}
-          restore-keys: |
-            ${{ runner.os }}-vcpkg-libs-
-
       - name: Install Vcpkg Libraries
         working-directory: frankenphp
         run: "vcpkg install"
@@ -158,20 +144,7 @@ jobs:
       - name: Build FrankenPHP
         run: |
           $customVersion = "FrankenPHP $env:FRANKENPHP_VERSION PHP $env:PHP_VERSION Caddy"
-          $ldflags = "-linkmode=external -extldflags=-fuse-ld=lld -X 'github.com/caddyserver/caddy/v2.CustomVersion=$customVersion'"
-
-          $env:CGO_ENABLED = "1"
-          $env:XCADDY_GO_BUILD_FLAGS = "-ldflags=`"$ldflags`" -tags=nobadger,nomysql,nopgx"
-
-          echo $env:XCADDY_GO_BUILD_FLAGS
-
-          xcaddy build `
-            --with github.com/dunglas/frankenphp/caddy=../ `
-            --with github.com/dunglas/frankenphp=../../ `
-            --with github.com/dunglas/mercure/caddy `
-            --with github.com/dunglas/vulcain/caddy `
-            --with github.com/dunglas/caddy-cbrotli `
-            --output frankenphp.exe
+          go build "-X 'github.com/caddyserver/caddy/v2.CustomVersion=$customVersion'"
         working-directory: frankenphp\caddy\frankenphp
 
       - name: Create Zip Archive
