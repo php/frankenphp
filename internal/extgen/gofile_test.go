@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -1238,26 +1237,6 @@ func TestGoFileGenerator_phpTypeToGoType(t *testing.T) {
 	})
 }
 
-func testGoFileInternalFunctions(t *testing.T, content string) {
-	internalIndicators := []string{
-		"func internalHelper",
-		"func anotherHelper",
-	}
-
-	foundInternal := false
-	for _, indicator := range internalIndicators {
-		if strings.Contains(content, indicator) {
-			foundInternal = true
-
-			break
-		}
-	}
-
-	if !foundInternal {
-		t.Log("No internal functions found (this may be expected)")
-	}
-}
-
 func testGeneratedFileBasicStructure(t *testing.T, content, expectedPackage, baseName string) {
 	requiredElements := []string{
 		"package " + expectedPackage,
@@ -1290,15 +1269,6 @@ func testGeneratedFileWrappers(t *testing.T, content string, functions []phpFunc
 			assert.Contains(t, content, funcName+"(", "Generated wrapper should call original function: %s", funcName)
 		}
 	}
-}
-
-// compareFileContents compares two files byte-by-byte
-func compareFileContents(t *testing.T, file1, file2 string) bool {
-	content1, err := os.ReadFile(file1)
-	require.NoError(t, err)
-	content2, err := os.ReadFile(file2)
-	require.NoError(t, err)
-	return bytes.Equal(content1, content2)
 }
 
 // computeFileHash returns SHA256 hash of file
