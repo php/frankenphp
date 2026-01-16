@@ -90,8 +90,8 @@ jobs:
           Rename-Item -Path "$env:GITHUB_WORKSPACE\x86_64-pc-windows-msvc" -NewName "watcher"
 
           # See https://github.com/e-dant/watcher/issues/108
-          New-Item -Path .\watcher\wtr -ItemType Directory
-          Move-Item -Path .\watcher-c.h -Destination .\watcher\wtr\watcher-c.h
+          New-Item -Path .\watcher\wtr -ItemType Directory -Force
+          Move-Item -Path .\watcher\watcher-c.h -Destination .\watcher\wtr\watcher-c.h
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
