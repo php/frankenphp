@@ -69,8 +69,8 @@ jobs:
         uses: actions/cache@v5
         with:
           path: |
-            ${{ env.VCPKG_ROOT }}\installed
-            ${{ env.VCPKG_ROOT }}\downloads
+            ${{ env.VCPKG_INSTALLED_ROOT }}\installed
+            ${{ env.VCPKG_INSTALLED_ROOT }}\downloads
           key: ${{ runner.os }}-vcpkg-libs-${{ hashFiles('vcpkg/ports/**') }}
           restore-keys: |
             ${{ runner.os }}-vcpkg-libs-
@@ -78,7 +78,7 @@ jobs:
 
       - name: Install Vcpkg Libraries
         working-directory: frankenphp
-        run: '& "$env:VCPKG_ROOT\vcpkg.exe" install'
+        run: '& "$env:VCPKG_INSTALLED_ROOT\vcpkg.exe" install'
 
       - name: Download Watcher
         run: |
@@ -121,14 +121,14 @@ jobs:
 
       - name: Prepare env
         run: |
-          $vcpkgRoot = "$env:VCPKG_ROOT\installed\x64-windows"
+          $vcpkgRoot = "$env:VCPKG_INSTALLED_ROOT\installed\x64-windows"
           $watcherRoot = "$env:GITHUB_WORKSPACE\watcher"
           $phpBin = "$env:GITHUB_WORKSPACE\php-bin"
           $phpDevel = "$env:GITHUB_WORKSPACE\php-devel\php-$env:PHP_VERSION-devel-vs17-x64"
 
           echo "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\Llvm\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
-          echo "$env:VCPKG_ROOT\installed\x64-windows\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
-          echo "$env:VCPKG_ROOT\watcher" | Out-File -FilePath $env:GITHUB_PATH -Append
+          echo "$env:VCPKG_INSTALLED_ROOT\installed\x64-windows\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          echo "$env:VCPKG_INSTALLED_ROOT\watcher" | Out-File -FilePath $env:GITHUB_PATH -Append
           echo "$env:GITHUB_WORKSPACE\php-bin" | Out-File -FilePath $env:GITHUB_PATH -Append
 
           echo "CGO_CFLAGS=-I$vcpkgRoot\include -I$watcherRoot -I$phpDevel\include -I$phpDevel\include\main -I$phpDevel\include\TSRM -I$phpDevel\include\Zend -I$phpDevel\include\ext" | Out-File -FilePath $env:GITHUB_ENV -Append
@@ -142,9 +142,9 @@ jobs:
         run: |
           Move-Item frankenphp\caddy\frankenphp\frankenphp.exe php-bin
           Move-Item watcher\libwatcher-c.dll php-bin
-          Move-Item "$env:VCPKG_ROOT\installed\x64-windows\bin\brotlienc.dll" php-bin
-          Move-Item "$env:VCPKG_ROOT\installed\x64-windows\bin\brotlicommon.dll" php-bin
-          Move-Item "$env:VCPKG_ROOT\installed\x64-windows\bin\pthreadVC3.dll" php-bin
+          Move-Item "$env:VCPKG_INSTALLED_ROOT\installed\x64-windows\bin\brotlienc.dll" php-bin
+          Move-Item "$env:VCPKG_INSTALLED_ROOT\installed\x64-windows\bin\brotlicommon.dll" php-bin
+          Move-Item "$env:VCPKG_INSTALLED_ROOT\installed\x64-windows\bin\pthreadVC3.dll" php-bin
 
           $version = $env:PHP_VERSION
           $zipName = "frankenphp-php-$version-Win32-vs17-x64.zip"
