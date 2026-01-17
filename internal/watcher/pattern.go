@@ -17,6 +17,7 @@ type pattern struct {
 	parsedValues []string
 	events       chan eventHolder
 	failureCount int
+	isExclude    bool
 
 	watcher *watcher.Watcher
 }
@@ -31,8 +32,17 @@ func (p *pattern) startSession() {
 
 // this method prepares the pattern struct (aka /path/*pattern)
 func (p *pattern) parse() (err error) {
-	// first we clean the value
-	absPattern, err := fastabs.FastAbs(p.value)
+	// detect exclusion before resolving to absolute
+	raw := strings.TrimSpace(p.value)
+	if strings.HasPrefix(raw, "!") {
+		p.isExclude = true
+		raw = strings.TrimSpace(strings.TrimPrefix(raw, "!"))
+	} else {
+		p.isExclude = false
+	}
+
+	// then we clean the value
+	absPattern, err := fastabs.FastAbs(raw)
 	if err != nil {
 		return err
 	}
@@ -72,7 +82,7 @@ func (p *pattern) parse() (err error) {
 	return nil
 }
 
-func (p *pattern) allowReload(event *watcher.Event) bool {
+func (p *pattern) matchesEvent(event *watcher.Event) bool {
 	if !isValidEventType(event.EffectType) || !isValidPathType(event) {
 		return false
 	}
@@ -81,6 +91,15 @@ func (p *pattern) allowReload(event *watcher.Event) bool {
 	// so we need to also check Event.AssociatedPathName
 	// see https://github.com/php/frankenphp/issues/1375
 	return p.isValidPattern(event.PathName) || p.isValidPattern(event.AssociatedPathName)
+}
+
+func (p *pattern) allowReload(event *watcher.Event) bool {
+	// Excludes never trigger reload by themselves, but they still match events for filtering.
+	if p.isExclude {
+		return false
+	}
+
+	return p.matchesEvent(event)
 }
 
 func (p *pattern) handle(event *watcher.Event) {
