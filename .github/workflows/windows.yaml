@@ -51,6 +51,11 @@ jobs:
         shell: powershell
 
     steps:
+      - name: Configure Git
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+
       - name: Checkout Code
         uses: actions/checkout@v6
         with:
@@ -183,7 +188,3 @@ jobs:
           cd caddy
           go test ./...
         working-directory: ${{ github.workspace }}\frankenphp
-
-      - name: setup tmate
-        uses: mxschmitt/action-tmate@v3
-        if: ${{ failure() }}
