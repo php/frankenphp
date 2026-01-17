@@ -50,7 +50,7 @@ func pollForWorkerReset(t *testing.T, handler func(http.ResponseWriter, *http.Re
 
 	// now we spam file updates and check if the request counter resets
 	for range limit {
-		updateTestFile("./testdata/files/test.txt", "updated", t)
+		updateTestFile(t, filepath.Join(".", "testdata", "files", "test.txt"), "updated")
 		time.Sleep(pollingTime * time.Millisecond)
 		body, _ := testGet("http://example.com/worker-with-counter.php", handler, t)
 		if body == "requests:1" {
@@ -61,15 +61,10 @@ func pollForWorkerReset(t *testing.T, handler func(http.ResponseWriter, *http.Re
 	return false
 }
 
-func updateTestFile(fileName string, content string, t *testing.T) {
+func updateTestFile(t *testing.T, fileName, content string) {
 	absFileName, err := filepath.Abs(fileName)
 	require.NoError(t, err)
 
-	dirName := filepath.Dir(absFileName)
-	if _, err = os.Stat(dirName); os.IsNotExist(err) {
-		err = os.MkdirAll(dirName, 0700)
-	}
-	require.NoError(t, err)
-
+	require.NoError(t, os.MkdirAll(filepath.Dir(absFileName), 0700))
 	require.NoError(t, os.WriteFile(absFileName, []byte(content), 0644))
 }

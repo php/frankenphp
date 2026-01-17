@@ -3,6 +3,7 @@
 package frankenphp
 
 // #include <stdint.h>
+// #include "frankenphp.h"
 // #include <php.h>
 import "C"
 import (

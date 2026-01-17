@@ -68,6 +68,10 @@ func TestWriteFile(t *testing.T) {
 			assert.NoError(t, err, "Failed to stat file")
 
 			expectedMode := os.FileMode(0644)
+			if filepath.Separator == '\\' {
+				expectedMode = os.FileMode(0666)
+			}
+
 			assert.Equal(t, expectedMode, info.Mode().Perm(), "writeFile() wrong permissions")
 		})
 	}
