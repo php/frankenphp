@@ -144,7 +144,8 @@ jobs:
       - name: Build FrankenPHP
         run: |
           $customVersion = "FrankenPHP $env:FRANKENPHP_VERSION PHP $env:PHP_VERSION Caddy"
-          go build "-X 'github.com/caddyserver/caddy/v2.CustomVersion=$customVersion'"
+          $env:GOFLAGS += " -X 'github.com/caddyserver/caddy/v2.CustomVersion=$customVersion'"
+          go build
         working-directory: frankenphp\caddy\frankenphp
 
       - name: Create Zip Archive
