@@ -152,7 +152,7 @@ jobs:
           go build -ldflags="-extldflags=-fuse-ld=lld -X 'github.com/caddyserver/caddy/v2.CustomVersion=$customVersion'"
         working-directory: frankenphp\caddy\frankenphp
 
-      - name: Create Zip Archive
+      - name: Create Directory
         run: |
           Copy-Item frankenphp\caddy\frankenphp\frankenphp.exe $env:DIR_NAME
           Copy-Item watcher\libwatcher-c.dll $env:DIR_NAME
@@ -161,16 +161,17 @@ jobs:
           Copy-Item frankenphp\vcpkg_installed\x64-windows\bin\brotlicommon.dll $env:DIR_NAME
           Copy-Item frankenphp\vcpkg_installed\x64-windows\bin\pthreadVC3.dll $env:DIR_NAME
 
-          Compress-Archive -Path $env:DIR_NAME -DestinationPath "$env:DIR_NAME.zip"
-
       - name: Upload Artifact
         if: github.event_name != 'release'
         uses: actions/upload-artifact@v6
         with:
-          name: ${{ env.DIR_NAME }}.zip
-          path: ${{ env.DIR_NAME }}.zip
-          compression-level: 0
+          name: ${{ env.DIR_NAME }}
+          path: ${{ env.DIR_NAME }}
           if-no-files-found: error
+
+      - name: Zip Release Artifact
+        if: github.event_name == 'release'
+        run: Compress-Archive -Path "$env:DIR_NAME\*" -DestinationPath "$env:DIR_NAME.zip"
 
       - name: Upload Release Asset
         if: github.event_name == 'release'
