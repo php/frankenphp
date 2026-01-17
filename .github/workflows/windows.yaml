@@ -38,7 +38,7 @@ permissions:
 
 env:
   GOTOOLCHAIN: local
-  GOFLAGS: "-extldflags=-fuse-ld=lld -tags=nobadger,nomysql,nopgx "
+  GOFLAGS: "-ldflags=-extldflags=-fuse-ld=lld -tags=nobadger,nomysql,nopgx"
   PHP_DOWNLOAD_BASE: "https://windows.php.net/downloads/releases"
   CC: clang
   CXX: clang++
