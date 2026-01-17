@@ -38,7 +38,7 @@ permissions:
 
 env:
   GOTOOLCHAIN: local
-  GOFLAGS: "-tags=nobadger,nomysql,nopgx"
+  GOFLAGS: "-extldflags=-fuse-ld=lld -tags=nobadger,nomysql,nopgx "
   PHP_DOWNLOAD_BASE: "https://windows.php.net/downloads/releases"
   CC: clang
   CXX: clang++
@@ -137,16 +137,14 @@ jobs:
           echo "$vcpkgRoot\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
           echo "$watcherRoot" | Out-File -FilePath $env:GITHUB_PATH -Append
           echo "$phpBin" | Out-File -FilePath $env:GITHUB_PATH -Append
-            
-          $customVersion = "FrankenPHP $env:FRANKENPHP_VERSION PHP $env:PHP_VERSION Caddy"
-          $ldflags = "-extldflags=-fuse-ld=lld -X 'github.com/caddyserver/caddy/v2.CustomVersion=$customVersion'"
-          echo "GOFLAGS=$env:GOFLAGS -ldflags=`"$ldflags`"" | Out-File -FilePath $env:GITHUB_ENV -Append
 
           echo "CGO_CFLAGS=-DFRANKENPHP_VERSION=$env:FRANKENPHP_VERSION -I$vcpkgRoot\include -I$watcherRoot -I$phpDevel\include -I$phpDevel\include\main -I$phpDevel\include\TSRM -I$phpDevel\include\Zend -I$phpDevel\include\ext" | Out-File -FilePath $env:GITHUB_ENV -Append
           echo "CGO_LDFLAGS=-L$vcpkgRoot\lib -lbrotlienc -L$watcherRoot -llibwatcher-c -L$phpBin -L$phpDevel\lib -lphp8ts -lphp8embed" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Build FrankenPHP
-        run: go build
+        run: |
+          $customVersion = "FrankenPHP $env:FRANKENPHP_VERSION PHP $env:PHP_VERSION Caddy"
+          go build -ldflags="-extldflags=-fuse-ld=lld -X 'github.com/caddyserver/caddy/v2.CustomVersion=$customVersion'"
         working-directory: frankenphp\caddy\frankenphp
 
       - name: Create Zip Archive
