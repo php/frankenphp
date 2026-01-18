@@ -62,13 +62,20 @@ if command -v setcap >/dev/null 2>&1; then
 	setcap cap_net_bind_service=+ep /usr/bin/frankenphp || true
 fi
 
+port_in_use() {
+	port_hex=$(printf '%04X' $1)
+	grep -q ":${port_hex} " /proc/net/tcp /proc/net/tcp6 2>/dev/null
+}
+
 if [ "$1" = "configure" ] && [ -z "$2" ] && [ -x /usr/bin/frankenphp ]; then
-	HOME=/var/lib/frankenphp /usr/bin/frankenphp run --config /dev/null &
-	FRANKENPHP_PID=$!
-	sleep 2
-	HOME=/var/lib/frankenphp /usr/bin/frankenphp trust || true
-	kill "$FRANKENPHP_PID" || true
-	wait "$FRANKENPHP_PID" 2>/dev/null || true
+	if ! port_in_use 2019; then
+		HOME=/var/lib/frankenphp /usr/bin/frankenphp run --config /dev/null &
+		FRANKENPHP_PID=$!
+		sleep 2
+		HOME=/var/lib/frankenphp /usr/bin/frankenphp trust || true
+		kill "$FRANKENPHP_PID" || true
+		wait "$FRANKENPHP_PID" 2>/dev/null || true
+	fi
 fi
 
 if [ -x /usr/bin/frankenphp ]; then
