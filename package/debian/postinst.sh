@@ -62,11 +62,13 @@ if command -v setcap >/dev/null 2>&1; then
 	setcap cap_net_bind_service=+ep /usr/bin/frankenphp || true
 fi
 
+# check if 0.0.0.0:2019 or 127.0.0.1:2019 are in use
 port_in_use() {
-	port_hex=$(printf '%04X' $1)
-	grep -q ":${port_hex} " /proc/net/tcp /proc/net/tcp6 2>/dev/null
+	port_hex=$(printf '%04X' $1);
+	grep -qE "(00000000|0100007F):${port_hex}" /proc/net/tcp 2>/dev/null;
 }
 
+# trust frankenphp certificates if the admin api can start
 if [ "$1" = "configure" ] && [ -z "$2" ] && [ -x /usr/bin/frankenphp ]; then
 	if ! port_in_use 2019; then
 		HOME=/var/lib/frankenphp /usr/bin/frankenphp run --config /dev/null &
