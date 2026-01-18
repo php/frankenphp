@@ -382,6 +382,29 @@ func Shutdown() {
 	resetGlobals()
 }
 
+// Stats returns FrankenPHP-specific execution stats from the given context.
+func StatusFromContext(ctx context.Context) (Stats, bool) {
+	fc, ok := fromContext(ctx)
+	if !ok {
+		return Stats{}, false
+	}
+	if fc.worker != nil {
+		return Stats{
+			CpuUsage:       fc.cpuUsage,
+			MemoryUsage:    fc.memoryUsage,
+			Script:         fc.worker.fileName,
+			ScriptFilename: fc.worker.fileName,
+		}, true
+	} else {
+		return Stats{
+			CpuUsage:       fc.cpuUsage,
+			MemoryUsage:    fc.memoryUsage,
+			Script:         fc.scriptName,
+			ScriptFilename: fc.scriptFilename,
+		}, true
+	}
+}
+
 // ServeHTTP executes a PHP script according to the given context.
 func ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) error {
 	h := responseWriter.Header()
