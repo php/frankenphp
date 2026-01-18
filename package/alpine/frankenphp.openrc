@@ -1,0 +1,28 @@
+#!/sbin/openrc-run
+
+name="FrankenPHP"
+description="Modern PHP app server"
+
+command="/usr/bin/frankenphp"
+command_args="run --environ --config /etc/frankenphp/Caddyfile"
+command_user="frankenphp:frankenphp"
+command_background="yes"
+pidfile="/run/frankenphp/frankenphp.pid"
+start_stop_daemon_args="--chdir /var/lib/frankenphp"
+
+depend() {
+    need net
+    after firewall
+}
+
+start_pre() {
+    checkpath --directory --owner frankenphp:frankenphp --mode 0755 /run/frankenphp
+
+    $command validate --config /etc/frankenphp/Caddyfile
+}
+
+reload() {
+    ebegin "Reloading $name configuration"
+    $command reload --config /etc/frankenphp/Caddyfile --force
+    eend $?
+}
