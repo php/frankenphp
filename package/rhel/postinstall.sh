@@ -34,7 +34,7 @@ fi
 
 # check if 0.0.0.0:2019 or 127.0.0.1:2019 are in use
 port_in_use() {
-	port_hex=$(printf '%04X' $1);
+	port_hex=$(printf '%04X' "$1");
 	grep -qE "(00000000|0100007F):${port_hex}" /proc/net/tcp 2>/dev/null;
 }
 
