@@ -1,7 +1,5 @@
 package frankenphp
 
-// #include "frankenphp.h"
-import "C"
 import (
 	"fmt"
 	"os"
