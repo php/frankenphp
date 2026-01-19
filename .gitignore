@@ -16,3 +16,5 @@ install
 bin/frankenphp
 frankenphp/bin/frankenphp
 testserver
+coverage.out
+
