@@ -8,7 +8,7 @@ retract v1.0.0-rc.1 // Human error
 
 require (
 	github.com/caddyserver/caddy/v2 v2.10.2
-	github.com/caddyserver/certmagic v0.25.0
+	github.com/caddyserver/certmagic v0.25.1
 	github.com/dunglas/caddy-cbrotli v1.0.1
 	github.com/dunglas/frankenphp v1.11.1
 	github.com/dunglas/mercure v0.21.4
@@ -43,7 +43,7 @@ require (
 	github.com/aryann/difflib v0.0.0-20210328193216-ff5ff6dc229b // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bits-and-blooms/bitset v1.24.4 // indirect
-	github.com/caddyserver/zerossl v0.1.3 // indirect
+	github.com/caddyserver/zerossl v0.1.4 // indirect
 	github.com/ccoveille/go-safecast/v2 v2.0.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
