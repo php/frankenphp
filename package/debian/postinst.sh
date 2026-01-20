@@ -1,6 +1,16 @@
 #!/bin/sh
 set -e
 
+# trust frankenphp certificates before starting the systemd service
+if [ "$1" = "configure" ] && [ -z "$2" ] && [ -x /usr/bin/frankenphp ]; then
+	HOME=/var/lib/frankenphp /usr/bin/frankenphp run --config /dev/null &
+	FRANKENPHP_PID=$!
+	sleep 2
+	HOME=/var/lib/frankenphp /usr/bin/frankenphp trust || true
+	kill "$FRANKENPHP_PID" || true
+	wait "$FRANKENPHP_PID" 2>/dev/null || true
+fi
+
 if [ "$1" = "configure" ]; then
 	# Add user and group
 	if ! getent group frankenphp >/dev/null; then
@@ -23,13 +33,13 @@ if [ "$1" = "configure" ]; then
 	# user and group will still exist but with no home dir
 	if [ ! -d /var/lib/frankenphp ]; then
 		mkdir -p /var/lib/frankenphp
-		chown frankenphp:frankenphp /var/lib/frankenphp
+		chown -R frankenphp:frankenphp /var/lib/frankenphp
 	fi
 
 	# Add log directory with correct permissions
 	if [ ! -d /var/log/frankenphp ]; then
 		mkdir -p /var/log/frankenphp
-		chown frankenphp:frankenphp /var/log/frankenphp
+		chown -R frankenphp:frankenphp /var/log/frankenphp
 	fi
 fi
 
@@ -60,24 +70,6 @@ fi
 
 if command -v setcap >/dev/null 2>&1; then
 	setcap cap_net_bind_service=+ep /usr/bin/frankenphp || true
-fi
-
-# check if 0.0.0.0:2019 or 127.0.0.1:2019 are in use
-port_in_use() {
-	port_hex=$(printf '%04X' "$1")
-	grep -qE "(00000000|0100007F):${port_hex}" /proc/net/tcp 2>/dev/null
-}
-
-# trust frankenphp certificates if the admin api can start
-if [ "$1" = "configure" ] && [ -z "$2" ] && [ -x /usr/bin/frankenphp ]; then
-	if ! port_in_use 2019; then
-		HOME=/var/lib/frankenphp /usr/bin/frankenphp run --config /dev/null &
-		FRANKENPHP_PID=$!
-		sleep 2
-		HOME=/var/lib/frankenphp /usr/bin/frankenphp trust || true
-		kill "$FRANKENPHP_PID" || true
-		wait "$FRANKENPHP_PID" 2>/dev/null || true
-	fi
 fi
 
 if [ -x /usr/bin/frankenphp ]; then
