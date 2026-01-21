@@ -1,7 +1,7 @@
 #!/sbin/openrc-run
 
 name="FrankenPHP"
-description="Modern PHP app server"
+description="The modern PHP app server"
 
 command="/usr/bin/frankenphp"
 command_args="run --environ --config /etc/frankenphp/Caddyfile"
