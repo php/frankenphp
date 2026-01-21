@@ -73,5 +73,6 @@ if command -v setcap >/dev/null 2>&1; then
 fi
 
 if [ -x /usr/bin/frankenphp ]; then
+	mkdir -p /etc/bash_completion.d/
 	/usr/bin/frankenphp completion bash | sed 's/caddy/frankenphp/g' >/etc/bash_completion.d/frankenphp
 fi
