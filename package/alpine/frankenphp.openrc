@@ -7,6 +7,7 @@ command="/usr/bin/frankenphp"
 command_args="run --environ --config /etc/frankenphp/Caddyfile"
 command_user="frankenphp:frankenphp"
 command_background="yes"
+capabilities="^cap_net_bind_service"
 pidfile="/run/frankenphp/frankenphp.pid"
 start_stop_daemon_args="--chdir /var/lib/frankenphp"
 

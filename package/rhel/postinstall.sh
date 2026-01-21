@@ -47,6 +47,8 @@ if [ "$1" -eq 1 ] && [ -x /usr/bin/frankenphp ]; then
 		HOME=/var/lib/frankenphp /usr/bin/frankenphp trust || :
 		kill "$FRANKENPHP_PID" || :
 		wait "$FRANKENPHP_PID" 2>/dev/null || :
+
+		chown -R frankenphp:frankenphp /var/lib/frankenphp
 	fi
 fi
 

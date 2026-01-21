@@ -30,6 +30,8 @@ if [ -x /usr/bin/frankenphp ]; then
 		sleep 2
 		HOME=/var/lib/frankenphp /usr/bin/frankenphp trust || true
 		kill -TERM $FRANKENPHP_PID 2>/dev/null || true
+
+		chown -R frankenphp:frankenphp /var/lib/frankenphp
 	fi
 fi
 
