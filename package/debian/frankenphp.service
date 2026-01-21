@@ -1,5 +1,5 @@
 [Unit]
-Description=FrankenPHP
+Description=FrankenPHP - The Modern PHP App Server
 Documentation=https://frankenphp.dev/docs/
 After=network.target network-online.target
 Requires=network-online.target
