@@ -1,6 +1,8 @@
 [Unit]
-Description=FrankenPHP server
-After=network.target
+Description=FrankenPHP
+Documentation=https://frankenphp.dev/docs/
+After=network.target network-online.target
+Requires=network-online.target
 
 [Service]
 Type=notify
