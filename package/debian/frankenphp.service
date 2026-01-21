@@ -8,6 +8,7 @@ Requires=network-online.target
 Type=notify
 User=frankenphp
 Group=frankenphp
+WorkingDirectory=/var/lib/frankenphp
 ExecStart=/usr/bin/frankenphp run --environ --config /etc/frankenphp/Caddyfile
 ExecReload=/usr/bin/frankenphp reload --config /etc/frankenphp/Caddyfile --force
 TimeoutStopSec=5s

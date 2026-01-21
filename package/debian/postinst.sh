@@ -9,6 +9,8 @@ if [ "$1" = "configure" ] && [ -z "$2" ] && [ -x /usr/bin/frankenphp ]; then
 	HOME=/var/lib/frankenphp /usr/bin/frankenphp trust || true
 	kill "$FRANKENPHP_PID" || true
 	wait "$FRANKENPHP_PID" 2>/dev/null || true
+
+	chown -R frankenphp:frankenphp /var/lib/frankenphp
 fi
 
 if [ "$1" = "configure" ]; then
