@@ -27,7 +27,7 @@ if [ "$1" = "configure" ]; then
 		HOME=/var/lib/frankenphp /usr/bin/frankenphp trust || true
 		kill "$FRANKENPHP_PID" || true
 		wait "$FRANKENPHP_PID" 2>/dev/null || true
-	
+
 		chown -R frankenphp:frankenphp /var/lib/frankenphp
 	fi
 
