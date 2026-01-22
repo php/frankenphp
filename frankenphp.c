@@ -126,13 +126,18 @@ static void frankenphp_reset_super_globals() {
     if (auto_global->name == _env) {
       /* skip $_ENV */
     } else if (auto_global->name == _server) {
-      /* always reimport $_SERVER  */
+      /* always reimport $_SERVER */
       auto_global->armed = auto_global->auto_global_callback(auto_global->name);
     } else if (auto_global->jit) {
-      /* globals with jit are: $_SERVER, $_ENV, $_REQUEST, $GLOBALS,
-       * jit will only trigger on script parsing and therefore behaves
-       * differently in worker mode. We will skip all jit globals
-       */
+      /* JIT globals ($_REQUEST, $GLOBALS) need special handling:
+       * - If in symbol_table: re-initialize with current request data
+       * - If not: re-arm for potential future use during include */
+      if (zend_hash_exists(&EG(symbol_table), auto_global->name)) {
+        auto_global->armed =
+            auto_global->auto_global_callback(auto_global->name);
+      } else {
+        auto_global->armed = true;
+      }
     } else if (auto_global->auto_global_callback) {
       /* $_GET, $_POST, $_COOKIE, $_FILES are reimported here */
       auto_global->armed = auto_global->auto_global_callback(auto_global->name);
