@@ -1,18 +1,6 @@
 #!/bin/sh
 set -e
 
-# trust frankenphp certificates before starting the systemd service
-if [ "$1" = "configure" ] && [ -z "$2" ] && [ -x /usr/bin/frankenphp ]; then
-	HOME=/var/lib/frankenphp /usr/bin/frankenphp run --config /dev/null &
-	FRANKENPHP_PID=$!
-	sleep 2
-	HOME=/var/lib/frankenphp /usr/bin/frankenphp trust || true
-	kill "$FRANKENPHP_PID" || true
-	wait "$FRANKENPHP_PID" 2>/dev/null || true
-
-	chown -R frankenphp:frankenphp /var/lib/frankenphp
-fi
-
 if [ "$1" = "configure" ]; then
 	# Add user and group
 	if ! getent group frankenphp >/dev/null; then
@@ -29,6 +17,18 @@ if [ "$1" = "configure" ]; then
 	fi
 	if getent group www-data >/dev/null; then
 		usermod -aG www-data frankenphp
+	fi
+
+	# trust frankenphp certificates before starting the systemd service
+	if [ -z "$2" ] && [ -x /usr/bin/frankenphp ]; then
+		HOME=/var/lib/frankenphp /usr/bin/frankenphp run --config /dev/null &
+		FRANKENPHP_PID=$!
+		sleep 2
+		HOME=/var/lib/frankenphp /usr/bin/frankenphp trust || true
+		kill "$FRANKENPHP_PID" || true
+		wait "$FRANKENPHP_PID" 2>/dev/null || true
+	
+		chown -R frankenphp:frankenphp /var/lib/frankenphp
 	fi
 
 	# Handle cases where package was installed and then purged;
@@ -75,6 +75,6 @@ if command -v setcap >/dev/null 2>&1; then
 fi
 
 if [ -x /usr/bin/frankenphp ]; then
-	mkdir -p /etc/bash_completion.d/
-	/usr/bin/frankenphp completion bash | sed 's/caddy/frankenphp/g' >/etc/bash_completion.d/frankenphp
+	mkdir -p /usr/share/bash-completion/completions/
+	/usr/bin/frankenphp completion bash | sed 's/caddy/frankenphp/g' >/usr/share/bash-completion/completions/frankenphp
 fi
