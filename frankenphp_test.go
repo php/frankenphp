@@ -341,7 +341,7 @@ func TestRequestSuperGlobalConditional_worker(t *testing.T) {
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
 		if i%2 == 0 {
 			// Even requests: don't use $_REQUEST
-			body, _:= testGet(fmt.Sprintf("http://example.com/request-superglobal-conditional.php?val=%d", i), handler, t)
+			body, _ := testGet(fmt.Sprintf("http://example.com/request-superglobal-conditional.php?val=%d", i), handler, t)
 			assert.Contains(t, body, "SKIPPED")
 			assert.Contains(t, body, fmt.Sprintf("'val' => '%d'", i))
 		} else {
@@ -1135,7 +1135,7 @@ func TestSessionHandlerReset_worker(t *testing.T) {
 		resp1, err := http.Get(ts.URL + "/session-handler.php?action=set_handler_and_start&value=test1")
 		assert.NoError(t, err)
 		body1, _ := io.ReadAll(resp1.Body)
-		resp1.Body.Close()
+		_ = resp1.Body.Close()
 
 		body1Str := string(body1)
 		assert.Contains(t, body1Str, "HANDLER_SET_AND_STARTED")
@@ -1147,7 +1147,7 @@ func TestSessionHandlerReset_worker(t *testing.T) {
 		resp2, err := http.Get(ts.URL + "/session-handler.php?action=start_without_handler")
 		assert.NoError(t, err)
 		body2, _ := io.ReadAll(resp2.Body)
-		resp2.Body.Close()
+		_ = resp2.Body.Close()
 
 		body2Str := string(body2)
 
@@ -1179,7 +1179,7 @@ func TestIniLeakBetweenRequests_worker(t *testing.T) {
 		resp1, err := http.Get(ts.URL + "/ini-leak.php?action=change_ini")
 		assert.NoError(t, err)
 		body1, _ := io.ReadAll(resp1.Body)
-		resp1.Body.Close()
+		_ = resp1.Body.Close()
 
 		assert.Contains(t, string(body1), "INI_CHANGED")
 
@@ -1187,7 +1187,7 @@ func TestIniLeakBetweenRequests_worker(t *testing.T) {
 		resp2, err := http.Get(ts.URL + "/ini-leak.php?action=check_ini")
 		assert.NoError(t, err)
 		body2, _ := io.ReadAll(resp2.Body)
-		resp2.Body.Close()
+		_ = resp2.Body.Close()
 
 		body2Str := string(body2)
 		t.Logf("Response: %s", body2Str)
@@ -1212,7 +1212,7 @@ func TestSessionHandlerPreLoopPreserved_worker(t *testing.T) {
 		resp1, err := http.Get(ts.URL + "/worker-with-session-handler.php?action=check")
 		assert.NoError(t, err)
 		body1, _ := io.ReadAll(resp1.Body)
-		resp1.Body.Close()
+		_ = resp1.Body.Close()
 
 		body1Str := string(body1)
 		t.Logf("Request 1 response: %s", body1Str)
@@ -1225,7 +1225,7 @@ func TestSessionHandlerPreLoopPreserved_worker(t *testing.T) {
 		resp2, err := http.Get(ts.URL + "/worker-with-session-handler.php?action=use_session")
 		assert.NoError(t, err)
 		body2, _ := io.ReadAll(resp2.Body)
-		resp2.Body.Close()
+		_ = resp2.Body.Close()
 
 		body2Str := string(body2)
 		t.Logf("Request 2 response: %s", body2Str)
@@ -1240,7 +1240,7 @@ func TestSessionHandlerPreLoopPreserved_worker(t *testing.T) {
 		resp3, err := http.Get(ts.URL + "/worker-with-session-handler.php?action=check")
 		assert.NoError(t, err)
 		body3, _ := io.ReadAll(resp3.Body)
-		resp3.Body.Close()
+		_ = resp3.Body.Close()
 
 		body3Str := string(body3)
 		t.Logf("Request 3 response: %s", body3Str)
@@ -1261,7 +1261,7 @@ func TestIniPreLoopPreserved_worker(t *testing.T) {
 		resp1, err := http.Get(ts.URL + "/worker-with-ini.php?action=check")
 		assert.NoError(t, err)
 		body1, _ := io.ReadAll(resp1.Body)
-		resp1.Body.Close()
+		_ = resp1.Body.Close()
 
 		body1Str := string(body1)
 		t.Logf("Request 1 response: %s", body1Str)
@@ -1276,7 +1276,7 @@ func TestIniPreLoopPreserved_worker(t *testing.T) {
 		resp2, err := http.Get(ts.URL + "/worker-with-ini.php?action=change_ini")
 		assert.NoError(t, err)
 		body2, _ := io.ReadAll(resp2.Body)
-		resp2.Body.Close()
+		_ = resp2.Body.Close()
 
 		body2Str := string(body2)
 		t.Logf("Request 2 response: %s", body2Str)
@@ -1288,7 +1288,7 @@ func TestIniPreLoopPreserved_worker(t *testing.T) {
 		resp3, err := http.Get(ts.URL + "/worker-with-ini.php?action=check")
 		assert.NoError(t, err)
 		body3, _ := io.ReadAll(resp3.Body)
-		resp3.Body.Close()
+		_ = resp3.Body.Close()
 
 		body3Str := string(body3)
 		t.Logf("Request 3 response: %s", body3Str)
