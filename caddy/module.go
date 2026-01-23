@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -494,7 +495,13 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 	if indexFile != "off" {
 		dirRedir := false
 		dirIndex := "{http.request.uri.path}/" + indexFile
+		// On Windows, first_exist_fallback doesn't work correctly because
+		// glob is skipped and patterns are returned as-is without checking existence.
+		// Use first_exist instead to ensure all files are checked.
 		tryPolicy := "first_exist_fallback"
+		if runtime.GOOS == "windows" {
+			tryPolicy = "first_exist"
+		}
 
 		// if tryFiles wasn't overridden, use a reasonable default
 		if len(tryFiles) == 0 {
