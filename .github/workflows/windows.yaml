@@ -51,6 +51,11 @@ jobs:
         shell: powershell
 
     steps:
+      - name: Configure Git
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+
       - name: Checkout Code
         uses: actions/checkout@v6
         with:
@@ -138,16 +143,16 @@ jobs:
           echo "$watcherRoot" | Out-File -FilePath $env:GITHUB_PATH -Append
           echo "$phpBin" | Out-File -FilePath $env:GITHUB_PATH -Append
 
-          echo "CGO_CFLAGS=-I$vcpkgRoot\include -I$watcherRoot -I$phpDevel\include -I$phpDevel\include\main -I$phpDevel\include\TSRM -I$phpDevel\include\Zend -I$phpDevel\include\ext" | Out-File -FilePath $env:GITHUB_ENV -Append
+          echo "CGO_CFLAGS=-DFRANKENPHP_VERSION=$env:FRANKENPHP_VERSION -I$vcpkgRoot\include -I$watcherRoot -I$phpDevel\include -I$phpDevel\include\main -I$phpDevel\include\TSRM -I$phpDevel\include\Zend -I$phpDevel\include\ext" | Out-File -FilePath $env:GITHUB_ENV -Append
           echo "CGO_LDFLAGS=-L$vcpkgRoot\lib -lbrotlienc -L$watcherRoot -llibwatcher-c -L$phpBin -L$phpDevel\lib -lphp8ts -lphp8embed" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Build FrankenPHP
         run: |
           $customVersion = "FrankenPHP $env:FRANKENPHP_VERSION PHP $env:PHP_VERSION Caddy"
-          go build "-X 'github.com/caddyserver/caddy/v2.CustomVersion=$customVersion'"
+          go build -ldflags="-extldflags=-fuse-ld=lld -X 'github.com/caddyserver/caddy/v2.CustomVersion=$customVersion'"
         working-directory: frankenphp\caddy\frankenphp
 
-      - name: Create Zip Archive
+      - name: Create Directory
         run: |
           Copy-Item frankenphp\caddy\frankenphp\frankenphp.exe $env:DIR_NAME
           Copy-Item watcher\libwatcher-c.dll $env:DIR_NAME
@@ -156,16 +161,17 @@ jobs:
           Copy-Item frankenphp\vcpkg_installed\x64-windows\bin\brotlicommon.dll $env:DIR_NAME
           Copy-Item frankenphp\vcpkg_installed\x64-windows\bin\pthreadVC3.dll $env:DIR_NAME
 
-          Compress-Archive -Path $env:DIR_NAME -DestinationPath "$env:DIR_NAME.zip"
-
       - name: Upload Artifact
         if: github.event_name != 'release'
         uses: actions/upload-artifact@v6
         with:
-          name: ${{ env.DIR_NAME }}.zip
-          path: ${{ env.DIR_NAME }}.zip
-          compression-level: 0
+          name: ${{ env.DIR_NAME }}
+          path: ${{ env.DIR_NAME }}
           if-no-files-found: error
+
+      - name: Zip Release Artifact
+        if: github.event_name == 'release'
+        run: Compress-Archive -Path "$env:DIR_NAME\*" -DestinationPath "$env:DIR_NAME.zip"
 
       - name: Upload Release Asset
         if: github.event_name == 'release'
