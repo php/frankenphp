@@ -33,6 +33,7 @@ If your Docker version is lower than 23.0, the build will fail due to dockerigno
 ## Running the test suite
 
 ```console
+export CGO_CFLAGS=$(php-config --includes) CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)"
 go test -tags watcher -race -v ./...
 ```
 
