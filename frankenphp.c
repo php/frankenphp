@@ -682,7 +682,7 @@ static inline void frankenphp_register_trusted_var(zend_string *z_key,
   if (value == NULL) {
     zval empty;
     ZVAL_EMPTY_STRING(&empty);
-    zend_hash_update_ind(ht, z_key, &empty);
+    zend_hash_update(ht, z_key, &empty);
     return;
   }
   size_t new_val_len = val_len;
@@ -692,7 +692,7 @@ static inline void frankenphp_register_trusted_var(zend_string *z_key,
                                new_val_len, &new_val_len)) {
     zval z_value;
     ZVAL_STRINGL_FAST(&z_value, value, new_val_len);
-    zend_hash_update_ind(ht, z_key, &z_value);
+    zend_hash_update(ht, z_key, &z_value);
   }
 }
 
@@ -706,6 +706,7 @@ void frankenphp_register_single(zend_string *z_key, char *value, size_t val_len,
 void frankenphp_register_bulk(zval *track_vars_array,
                               frankenphp_server_vars vars) {
   HashTable *ht = Z_ARRVAL_P(track_vars_array);
+  zend_hash_extend(ht, vars.total_num_vars, 0);
   frankenphp_register_trusted_var(vars.remote_addr_key, vars.remote_addr_val,
                                   vars.remote_addr_len, ht);
   frankenphp_register_trusted_var(vars.remote_host_key, vars.remote_host_val,
@@ -754,11 +755,12 @@ void frankenphp_register_bulk(zval *track_vars_array,
   frankenphp_register_trusted_var(vars.request_uri_key, vars.request_uri_val,
                                   vars.request_uri_len, ht);
 
+  // update interned strings
   zval zv;
   ZVAL_STR(&zv, vars.gateway_interface_str);
-  zend_hash_update_ind(ht, vars.gateway_interface_key, &zv);
+  zend_hash_update(ht, vars.gateway_interface_key, &zv);
   ZVAL_STR(&zv, vars.server_software_str);
-  zend_hash_update_ind(ht, vars.server_software_key, &zv);
+  zend_hash_update(ht, vars.server_software_key, &zv);
 }
 
 /** Create an immutable zend_string that lasts for the whole process **/

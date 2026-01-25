@@ -18,6 +18,8 @@ typedef struct go_string {
 } go_string;
 
 typedef struct frankenphp_server_vars {
+  size_t total_num_vars;
+
   zend_string *remote_addr_key;
   char *remote_addr_val;
   size_t remote_addr_len;

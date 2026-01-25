@@ -106,6 +106,10 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 	}
 
 	C.frankenphp_register_bulk(trackVarsArray, C.frankenphp_server_vars{
+		// approximate total length to avoid array re-hashing:
+		// 28 CGI vars + headers + environment
+		total_num_vars: C.size_t(28 + len(fc.env) + len(request.Header) + len(mainThread.sandboxedEnv)),
+
 		remote_addr_key: zStrRemoteAddr,
 		remote_addr_val: toUnsafeChar(ip),
 		remote_addr_len: C.size_t(len(ip)),
