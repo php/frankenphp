@@ -269,3 +269,11 @@ WORKDIR /app
 # for better resliliency you can also use supervisor as entrypoint here
 ENTRYPOINT ["/usr/local/bin/frankenphp", "run", "-c", "/etc/caddy/Caddyfile"]
 ```
+
+## Development Versions
+
+Development versions are available in the [`dunglas/frankenphp-dev`](https://hub.docker.com/repository/docker/dunglas/frankenphp-dev) Docker repository.
+A new build is triggered every time a commit is pushed to the main branch of the GitHub repository.
+
+The `latest*` tags point to the head of the `main` branch.
+Tags of the form `sha-<git-commit-hash>` are also available.
