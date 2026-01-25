@@ -199,14 +199,14 @@ The Docker images are built:
 ## Hardening Images
 
 To further reduce the attack surface and size of your FrankenPHP Docker images, it's also possible to build them on top of a
-[distroless](https://github.com/GoogleContainerTools/distroless) or
-[docker hardened](https://www.docker.com/products/hardened-images) image.
+[Google distroless](https://github.com/GoogleContainerTools/distroless) or
+[Docker hardened](https://www.docker.com/products/hardened-images) image.
 
 > [!WARNING]
-> These base images do not include a shell or package manager, which makes debugging more difficult.
+> These minimal base images do not include a shell or package manager, which makes debugging more difficult.
 > They are therefore recommended only for production if security is a high priority.
 
-When adding additional PHP extensions, you will need an intermediate build stage to compile and install them:
+When adding additional PHP extensions, you will need an intermediate build stage:
 
 ```dockerfile
 FROM dunglas/frankenphp AS builder
