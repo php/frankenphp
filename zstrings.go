@@ -50,7 +50,7 @@ func initZendStrings() {
 	// cache common request headers as zend_strings (HTTP_ACCEPT, HTTP_USER_AGENT, etc.)
 	commonHeaders = make(map[string]*C.zend_string, len(phpheaders.CommonRequestHeaders))
 	for key, phpKey := range phpheaders.CommonRequestHeaders {
-		commonHeaders[key] = C.frankenphp_init_persistent_string(C.CString(phpKey), C.size_t(len(phpKey)))
+		commonHeaders[key] = internedZendString(phpKey)
 	}
 
 	// cache known $_SERVER KEYs as zend_strings
