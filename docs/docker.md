@@ -266,7 +266,6 @@ USER nonroot
 WORKDIR /app
 
 # entrypoint to run frankenphp with the provided Caddyfile
-# for better resliliency you can also use supervisor as entrypoint here
 ENTRYPOINT ["/usr/local/bin/frankenphp", "run", "-c", "/etc/caddy/Caddyfile"]
 ```
 
