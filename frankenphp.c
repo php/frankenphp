@@ -85,7 +85,11 @@ static void frankenphp_update_request_context() {
   /* status It is not reset by zend engine, set it to 200. */
   SG(sapi_headers).http_response_code = 200;
 
-  go_update_request_info(thread_index, &SG(request_info));
+  char *authorization_header =
+      go_update_request_info(thread_index, &SG(request_info));
+
+  /* let PHP handle basic auth */
+  php_handle_auth_data(authorization_header);
 }
 
 static void frankenphp_free_request_context() {
@@ -95,8 +99,6 @@ static void frankenphp_free_request_context() {
   }
 
   /* freed via thread.Unpin() */
-  SG(request_info).auth_password = NULL;
-  SG(request_info).auth_user = NULL;
   SG(request_info).request_method = NULL;
   SG(request_info).query_string = NULL;
   SG(request_info).content_type = NULL;
@@ -187,9 +189,9 @@ static void frankenphp_worker_request_shutdown() {
   zend_end_try();
 
   /* SAPI related shutdown (free stuff) */
-  frankenphp_free_request_context();
   zend_try { sapi_deactivate(); }
   zend_end_try();
+  frankenphp_free_request_context();
 
   zend_set_memory_limit(PG(memory_limit));
 }
@@ -609,8 +611,8 @@ static zend_module_entry frankenphp_module = {
     STANDARD_MODULE_PROPERTIES};
 
 static void frankenphp_request_shutdown() {
-  frankenphp_free_request_context();
   php_request_shutdown((void *)0);
+  frankenphp_free_request_context();
 }
 
 static int frankenphp_startup(sapi_module_struct *sapi_module) {
@@ -1055,8 +1057,7 @@ static int frankenphp_request_startup() {
     return SUCCESS;
   }
 
-  frankenphp_free_request_context();
-  php_request_shutdown((void *)0);
+  frankenphp_request_shutdown();
 
   return FAILURE;
 }
