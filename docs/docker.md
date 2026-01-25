@@ -196,51 +196,76 @@ The Docker images are built:
 - when a new release is tagged
 - daily at 4 am UTC, if new versions of the official PHP images are available
 
-## Build a distroless Image
+## Hardening Images
 
-It's possible to build a distroless image (read more about it [here](https://github.com/GoogleContainerTools/distroless)) by using an intermediate build stage to copy the necessary files from the official FrankenPHP image to a distroless base image.
+To further reduce the attack surface and size of your FrankenPHP Docker images, it's also possible to build them on top of a
+[distroless](https://github.com/GoogleContainerTools/distroless) or
+[docker hardened](https://www.docker.com/products/hardened-images) image.
+
+> [!WARNING]
+> These base images do not include a shell or package manager, which makes debugging more difficult.
+> They are therefore recommended only for production if security is a high priority.
+
+When adding additional PHP extensions, you will need an intermediate build stage to compile and install them:
 
 ```dockerfile
-FROM dunglas/frankenphp:php8.3-bookworm AS builder
+FROM dunglas/frankenphp AS builder
 
-# Do everything you need here, like installing PHP extensions and copying your config files
+# Add additional PHP extensions here
+RUN install-php-extensions pdo_mysql pdo_pgsql #...
 
-FROM gcr.io/distroless/base-debian12:nonroot AS distroless
+# Copy shared libs of frankenphp and all installed extensions to temporary location
+# You can also do this step manually by analyzing ldd output of frankenphp binary and each extension .so file
+RUN apt-get update && apt-get install -y libtree && \
+    EXT_DIR="$(php -r 'echo ini_get("extension_dir");')" && \
+    FRANKENPHP_BIN="$(which frankenphp)"; \
+    LIBS_TMP_DIR="/tmp/libs"; \
+    mkdir -p "$LIBS_TMP_DIR"; \
+    for target in "$FRANKENPHP_BIN" $(find "$EXT_DIR" -maxdepth 2 -type f -name "*.so"); do \
+        libtree -pv "$target" | sed 's/.*── \(.*\) \[.*/\1/' | grep -v "^$target" | while IFS= read -r lib; do \
+            [ -z "$lib" ] && continue; \
+            base=$(basename "$lib"); \
+            destfile="$LIBS_TMP_DIR/$base"; \
+            if [ ! -f "$destfile" ]; then \
+                cp "$lib" "$destfile"; \
+            fi; \
+        done; \
+    done
+
+
+# Distroless debian base image, make sure this is the same debian version as the base image
+FROM gcr.io/distroless/base-debian13
+# Docker hardened image alternative
+# FROM dhi.io/debian:13
+
+# Location of your app and Caddyfile to be copied into the container
+ARG PATH_TO_APP="."
+ARG PATH_TO_CADDYFILE="./Caddyfile"
+
+# Copy your app into /app
+# For further hardening make sure only writable paths are owned by the nonroot user
+COPY --chown=nonroot:nonroot "$PATH_TO_APP" /app
+COPY "$PATH_TO_CADDYFILE" /etc/caddy/Caddyfile
+
+# Copy frankenphp and necessary libs
+COPY --from=builder /usr/local/bin/frankenphp /usr/local/bin/frankenphp
+COPY --from=builder --chown=nonroot:nonroot /usr/local/lib/php/extensions /usr/local/lib/php/extensions
+COPY --from=builder /tmp/libs /usr/lib
+
+# Copy php.ini configuration files
+COPY --from=builder /usr/local/etc/php/conf.d /usr/local/etc/php/conf.d
+COPY --from=builder /usr/local/etc/php/php.ini-production /usr/local/etc/php/php.ini
+
+# Create necessary caddy dirs
+# These dirs also need to be writable in case of a read-only root filesystem
+COPY --from=builder --chown=nonroot:nonroot /data/caddy /data/caddy
+COPY --from=builder --chown=nonroot:nonroot /config/caddy /config/caddy
+
+USER nonroot
 
 WORKDIR /app
 
-# Get FrankenPHP and PHP  binary from builder image
-COPY --from=builder /usr/local/bin/frankenphp /usr/local/bin/frankenphp
-COPY --from=builder /usr/local/bin/php /usr/local/bin/php
-
-# Copy PHP extensions and configuration from builder image
-COPY --from=builder /usr/local/lib/php /usr/local/lib/php
-COPY --from=builder /usr/local/lib/libphp.so /lib/libphp.so
-COPY --from=builder /usr/local/lib/libwatcher-c.* /lib/
-COPY --from=builder /usr/local/etc/php /usr/local/etc/php
-COPY --from=builder /usr/lib/ /usr/lib/
-COPY --from=builder /lib/ /lib/
-
-USER nonroot:nonroot
-
-# Copy application files and Caddyfile
-COPY --from=builder --chown=nonroot:nonroot /app /app
-COPY --from=builder --chown=nonroot:nonroot /etc/caddy/Caddyfile /etc/caddy/Caddyfile
-
-EXPOSE 80 443
-
-ENTRYPOINT [ "frankenphp", "run", "--config", "/etc/caddy/Caddyfile" ]
+# entrypoint to run frankenphp with the provided Caddyfile
+# for better resliliency you can also use supervisor as entrypoint here
+ENTRYPOINT ["/usr/local/bin/frankenphp", "run", "-c", "/etc/caddy/Caddyfile"]
 ```
-
-> [!WARNING]
-> Since there is no shell in a distroless image, you won't be able to launch a script in the entrypoint. If you need to do so, consider using :
-> - an init container in Kubernetes
-> - `gcr.io/distroless/base-debian12:debug-nonroot` as base image which includes a shell to run scripts
-
-## Development Versions
-
-Development versions are available in the [`dunglas/frankenphp-dev`](https://hub.docker.com/repository/docker/dunglas/frankenphp-dev) Docker repository.
-A new build is triggered every time a commit is pushed to the main branch of the GitHub repository.
-
-The `latest*` tags point to the head of the `main` branch.
-Tags of the form `sha-<git-commit-hash>` are also available.
