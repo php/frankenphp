@@ -29,8 +29,9 @@ body:
         - Docker (Debian Trixie)
         - Docker (Debian Bookworm)
         - Docker (Alpine)
-        - Official static build
-        - Standalone binary
+        - deb packages
+        - rpm packages
+        - Static binary
         - Custom (tell us more in the description)
       default: 0
     validations:

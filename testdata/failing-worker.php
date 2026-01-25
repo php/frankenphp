@@ -1,18 +1,7 @@
 <?php
 
-$fail = random_int(1, 100) < 10;
-$wait = random_int(1000 * 100, 1000 * 500); // wait 100ms - 500ms
-
-usleep($wait);
-if ($fail) {
-    exit(1);
+if (rand(1, 100) <= 50) {
+    throw new Exception('this exception is expected to fail the worker');
 }
 
-while (frankenphp_handle_request(function () {
-    echo "ok";
-})) {
-    $fail = random_int(1, 100) < 10;
-    if ($fail) {
-        exit(1);
-    }
-}
+// frankenphp_handle_request() has not been reached (also a failure)

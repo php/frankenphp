@@ -16,30 +16,63 @@ Découvrez plus de détails sur ce serveur d’application dans le replay de cet
 
 ## Pour Commencer
 
-### Binaire autonome
+Sur Windows, utilisez [WSL](https://learn.microsoft.com/windows/wsl/) pour exécuter FrankenPHP.
 
-Si vous préférez ne pas utiliser Docker, nous fournissons des binaires autonomes de FrankenPHP pour Linux et macOS
-contenant [PHP 8.4](https://www.php.net/releases/8.4/fr.php) et la plupart des extensions PHP populaires.
+### Script d'installation
 
-Sous Windows, utilisez [WSL](https://learn.microsoft.com/windows/wsl/) pour exécuter FrankenPHP.
-
-[Téléchargez FrankenPHP](https://github.com/php/frankenphp/releases) ou copiez cette ligne dans votre terminal pour installer automatiquement la version appropriée à votre plateforme :
+Vous pouvez copier cette ligne dans votre terminal pour installer automatiquement
+une version adaptée à votre plateforme :
 
 ```console
 curl https://frankenphp.dev/install.sh | sh
-mv frankenphp /usr/local/bin/
 ```
 
-Pour servir le contenu du répertoire courant, exécutez :
+### Binaire autonome
+
+Nous fournissons des binaires statiques de FrankenPHP pour le développement, pour Linux et macOS,
+contenant [PHP 8.4](https://www.php.net/releases/8.4/fr.php) et la plupart des extensions PHP populaires.
+
+[Télécharger FrankenPHP](https://github.com/php/frankenphp/releases)
+
+**Installation d'extensions :** Les extensions les plus courantes sont incluses. Il n'est pas possible d'en installer davantage.
+
+### Paquets rpm
+
+Nos mainteneurs proposent des paquets rpm pour tous les systèmes utilisant `dnf`. Pour installer, exécutez :
 
 ```console
-frankenphp php-server
+sudo dnf install https://rpm.henderkes.com/static-php-1-0.noarch.rpm
+sudo dnf module enable php-zts:static-8.4 # 8.2-8.5 disponibles
+sudo dnf install frankenphp
 ```
 
-Vous pouvez également exécuter des scripts en ligne de commande avec :
+**Installation d'extensions :** `sudo dnf install php-zts-<extension>`
+
+Pour les extensions non disponibles par défaut, utilisez [PIE](https://github.com/php/pie) :
 
 ```console
-frankenphp php-cli /path/to/your/script.php
+sudo dnf install pie-zts
+sudo pie-zts install asgrim/example-pie-extension
+```
+
+### Paquets deb
+
+Nos mainteneurs proposent des paquets deb pour tous les systèmes utilisant `apt`. Pour installer, exécutez :
+
+```console
+sudo curl -fsSL https://key.henderkes.com/static-php.gpg -o /usr/share/keyrings/static-php.gpg && \
+echo "deb [signed-by=/usr/share/keyrings/static-php.gpg] https://deb.henderkes.com/ stable main" | sudo tee /etc/apt/sources.list.d/static-php.list && \
+sudo apt update
+sudo apt install frankenphp
+```
+
+**Installation d'extensions :** `sudo apt install php-zts-<extension>`
+
+Pour les extensions non disponibles par défaut, utilisez [PIE](https://github.com/php/pie) :
+
+```console
+sudo apt install pie-zts
+sudo pie-zts install asgrim/example-pie-extension
 ```
 
 ### Docker
@@ -69,10 +102,26 @@ Pour l'installer :
 brew install dunglas/frankenphp/frankenphp
 ```
 
+**Installation d'extensions :** Utilisez [PIE](https://github.com/php/pie).
+
+### Utilisation
+
 Pour servir le contenu du répertoire courant, exécutez :
 
 ```console
 frankenphp php-server
+```
+
+Vous pouvez également exécuter des scripts en ligne de commande avec :
+
+```console
+frankenphp php-cli /path/to/your/script.php
+```
+
+Pour les paquets deb et rpm, vous pouvez aussi démarrer le service systemd :
+
+```console
+sudo systemctl start frankenphp
 ```
 
 ## Documentation

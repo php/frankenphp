@@ -1,12 +1,12 @@
 package extgen
 
 import (
-	"github.com/stretchr/testify/require"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCFileGenerator_Generate(t *testing.T) {
@@ -313,7 +313,7 @@ func TestCFileSpecialCharacters(t *testing.T) {
 			content, err := cGen.buildContent()
 			require.NoError(t, err)
 
-			expectedInclude := "#include \"" + tt.expected + ".h\""
+			expectedInclude := `#include "` + tt.expected + `.h"`
 			assert.Contains(t, content, expectedInclude, "Content should contain include: %s", expectedInclude)
 		})
 	}
@@ -424,8 +424,8 @@ func TestCFileConstants(t *testing.T) {
 				},
 			},
 			contains: []string{
-				"REGISTER_LONG_CONSTANT(\"GLOBAL_INT\", 42, CONST_CS | CONST_PERSISTENT);",
-				"REGISTER_STRING_CONSTANT(\"GLOBAL_STRING\", \"test\", CONST_CS | CONST_PERSISTENT);",
+				`REGISTER_LONG_CONSTANT("GLOBAL_INT", 42, CONST_CS | CONST_PERSISTENT);`,
+				`REGISTER_STRING_CONSTANT("GLOBAL_STRING", "test", CONST_CS | CONST_PERSISTENT);`,
 			},
 		},
 	}
@@ -458,4 +458,75 @@ func TestCFileTemplateErrorHandling(t *testing.T) {
 
 	_, err := cGen.getTemplateContent()
 	assert.NoError(t, err, "getTemplateContent() should not fail with valid template")
+}
+
+func TestEscapeCString(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "simple namespace with single backslash",
+			input:    `Go\Extension`,
+			expected: `Go\\Extension`,
+		},
+		{
+			name:     "namespace with multiple backslashes",
+			input:    `My\Deep\Namespace`,
+			expected: `My\\Deep\\Namespace`,
+		},
+		{
+			name:     "complex nested namespace",
+			input:    `TestIntegration\Extension\Module`,
+			expected: `TestIntegration\\Extension\\Module`,
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "single backslash",
+			input:    `\`,
+			expected: `\\`,
+		},
+		{
+			name:     "multiple consecutive backslashes",
+			input:    `\\\`,
+			expected: `\\\\\\`,
+		},
+		{
+			name:     "string without backslashes",
+			input:    "TestNamespace",
+			expected: "TestNamespace",
+		},
+		{
+			name:     "leading backslash",
+			input:    `\Leading`,
+			expected: `\\Leading`,
+		},
+		{
+			name:     "trailing backslash",
+			input:    `Trailing\`,
+			expected: `Trailing\\`,
+		},
+		{
+			name:     "mixed alphanumeric with backslashes",
+			input:    `Path123\To456\File789`,
+			expected: `Path123\\To456\\File789`,
+		},
+		{
+			name:     "unicode characters with backslashes",
+			input:    `Namespace\Über\Test`,
+			expected: `Namespace\\Über\\Test`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := escapeCString(tt.input)
+			assert.Equal(t, tt.expected, result, "escapeCString(%q) should return %q, got %q", tt.input, tt.expected, result)
+		})
+	}
 }

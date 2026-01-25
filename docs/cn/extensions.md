@@ -146,11 +146,11 @@ func process_data(arr *C.zval) unsafe.Pointer {
 
 **可用方法：**
 
-- `SetInt(key int64, value interface{})` - 使用整数键设置值
-- `SetString(key string, value interface{})` - 使用字符串键设置值
-- `Append(value interface{})` - 使用下一个可用整数键添加值
+- `SetInt(key int64, value any)` - 使用整数键设置值
+- `SetString(key string, value any)` - 使用字符串键设置值
+- `Append(value any)` - 使用下一个可用整数键添加值
 - `Len() uint32` - 获取元素数量
-- `At(index uint32) (PHPKey, interface{})` - 获取索引处的键值对
+- `At(index uint32) (PHPKey, any)` - 获取索引处的键值对
 - `frankenphp.PHPArray(arr *frankenphp.Array) unsafe.Pointer` - 转换为 PHP 数组
 
 ### 声明原生 PHP 类
@@ -270,7 +270,7 @@ $user->updateInfo(null, 25, null);          // Name 和 active 为 null
 
 ### 声明常量
 
-生成器支持使用两个指令将 Go 常量导出到 PHP：`//export_php:const` 用于全局常量，`//export_php:classconstant` 用于类常量。这允许你在 Go 和 PHP 代码之间共享配置值、状态代码和其他常量。
+生成器支持使用两个指令将 Go 常量导出到 PHP：`//export_php:const` 用于全局常量，`//export_php:classconst` 用于类常量。这允许你在 Go 和 PHP 代码之间共享配置值、状态代码和其他常量。
 
 #### 全局常量
 
@@ -292,25 +292,25 @@ const STATUS_ERROR = iota
 
 #### 类常量
 
-使用 `//export_php:classconstant ClassName` 指令创建属于特定 PHP 类的常量：
+使用 `//export_php:classconst ClassName` 指令创建属于特定 PHP 类的常量：
 
 ```go
-//export_php:classconstant User
+//export_php:classconst User
 const STATUS_ACTIVE = 1
 
-//export_php:classconstant User
+//export_php:classconst User
 const STATUS_INACTIVE = 0
 
-//export_php:classconstant User
+//export_php:classconst User
 const ROLE_ADMIN = "admin"
 
-//export_php:classconstant Order
+//export_php:classconst Order
 const STATE_PENDING = iota
 
-//export_php:classconstant Order
+//export_php:classconst Order
 const STATE_PROCESSING = iota
 
-//export_php:classconstant Order
+//export_php:classconst Order
 const STATE_COMPLETED = iota
 ```
 
@@ -346,10 +346,10 @@ const STR_REVERSE = iota
 //export_php:const
 const STR_NORMAL = iota
 
-//export_php:classconstant StringProcessor
+//export_php:classconst StringProcessor
 const MODE_LOWERCASE = 1
 
-//export_php:classconstant StringProcessor
+//export_php:classconst StringProcessor
 const MODE_UPPERCASE = 2
 
 //export_php:function repeat_this(string $str, int $count, int $mode): string

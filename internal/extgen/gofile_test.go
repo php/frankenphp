@@ -1,13 +1,13 @@
 package extgen
 
 import (
-	"github.com/stretchr/testify/require"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGoFileGenerator_Generate(t *testing.T) {
@@ -109,7 +109,7 @@ func test() {
 			contains: []string{
 				"package simple",
 				`#include "simple.h"`,
-				"import \"C\"",
+				`import "C"`,
 				"func init()",
 				"frankenphp.RegisterExtension(",
 				"//export test",
@@ -143,11 +143,11 @@ func process(data *go_string) *go_value {
 			},
 			contains: []string{
 				"package complex",
-				`import "fmt"`,
-				`import "strings"`,
-				`import "encoding/json"`,
+				`"fmt"`,
+				`"strings"`,
+				`"encoding/json"`,
 				"//export process",
-				`import "C"`,
+				`"C"`,
 			},
 		},
 		{
@@ -193,7 +193,7 @@ func internalFunc2(data string) {
 			require.NoError(t, err)
 
 			for _, expected := range tt.contains {
-				assert.Contains(t, content, expected, "Generated Go content should contain '%s'", expected)
+				assert.Contains(t, content, expected, "Generated Go content should contain %q", expected)
 			}
 		})
 	}
@@ -305,9 +305,9 @@ func test() {}`
 	require.NoError(t, err)
 
 	expectedImports := []string{
-		`import "fmt"`,
-		`import "strings"`,
-		`import "github.com/other/package"`,
+		`"fmt"`,
+		`"strings"`,
+		`"github.com/other/package"`,
 	}
 
 	for _, imp := range expectedImports {
@@ -315,10 +315,10 @@ func test() {}`
 	}
 
 	forbiddenImports := []string{
-		`import "C"`,
+		`"C"`,
 	}
 
-	cImportCount := strings.Count(content, `import "C"`)
+	cImportCount := strings.Count(content, `"C"`)
 	assert.Equal(t, 1, cImportCount, "Expected exactly 1 occurrence of 'import \"C\"'")
 
 	for _, imp := range forbiddenImports[1:] {
@@ -340,7 +340,7 @@ import (
 func processData(input *go_string, options *go_nullable) *go_value {
 	data := CStringToGoString(input)
 	processed := internalProcess(data)
-	return types.Array([]interface{}{processed})
+	return types.Array([]any{processed})
 }
 
 //export_php: validateInput(data string): bool
@@ -358,7 +358,7 @@ func validateFormat(input string) bool {
 	return !strings.Contains(input, "invalid")
 }
 
-func jsonHelper(data interface{}) ([]byte, error) {
+func jsonHelper(data any) ([]byte, error) {
 	return json.Marshal(data)
 }
 
@@ -375,7 +375,7 @@ func debugPrint(msg string) {
 			GoFunction: `func processData(input *go_string, options *go_nullable) *go_value {
 	data := CStringToGoString(input)
 	processed := internalProcess(data)
-	return Array([]interface{}{processed})
+	return Array([]any{processed})
 }`,
 		},
 		{
@@ -403,7 +403,7 @@ func debugPrint(msg string) {
 	internalFuncs := []string{
 		"func internalProcess(data string) string",
 		"func validateFormat(input string) bool",
-		"func jsonHelper(data interface{}) ([]byte, error)",
+		"func jsonHelper(data any) ([]byte, error)",
 		"func debugPrint(msg string)",
 	}
 
@@ -510,7 +510,7 @@ import "fmt"
 
 //export_php:class ArrayClass
 type ArrayStruct struct {
-	data []interface{}
+	data []any
 }
 
 //export_php:method ArrayClass::processArray(array $items): array
@@ -675,10 +675,8 @@ func createTempSourceFile(t *testing.T, content string) string {
 func testGoFileBasicStructure(t *testing.T, content, baseName string) {
 	requiredElements := []string{
 		"package " + SanitizePackageName(baseName),
-		"/*",
-		"#include <stdlib.h>",
-		`#include "` + baseName + `.h"`,
-		"*/",
+		"// #include <stdlib.h>",
+		`// #include "` + baseName + `.h"`,
 		`import "C"`,
 		"func init() {",
 		"frankenphp.RegisterExtension(",
@@ -691,7 +689,7 @@ func testGoFileBasicStructure(t *testing.T, content, baseName string) {
 }
 
 func testGoFileImports(t *testing.T, content string) {
-	cImportCount := strings.Count(content, `import "C"`)
+	cImportCount := strings.Count(content, `"C"`)
 	assert.Equal(t, 1, cImportCount, "Expected exactly 1 C import")
 }
 
@@ -703,6 +701,125 @@ func testGoFileExportedFunctions(t *testing.T, content string, functions []phpFu
 		funcStart := "func " + fn.Name + "("
 		assert.Contains(t, content, funcStart, "Go file should contain function definition: %s", funcStart)
 	}
+}
+
+func TestGoFileGenerator_MethodWrapperWithCallableParams(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	sourceContent := `package main
+
+import "C"
+
+//export_php:class CallableClass
+type CallableStruct struct{}
+
+//export_php:method CallableClass::processCallback(callable $callback): string
+func (cs *CallableStruct) ProcessCallback(callback *C.zval) string {
+	return "processed"
+}
+
+//export_php:method CallableClass::processOptionalCallback(?callable $callback): string
+func (cs *CallableStruct) ProcessOptionalCallback(callback *C.zval) string {
+	return "processed_optional"
+}`
+
+	sourceFile := filepath.Join(tmpDir, "test.go")
+	require.NoError(t, os.WriteFile(sourceFile, []byte(sourceContent), 0644))
+
+	methods := []phpClassMethod{
+		{
+			Name:       "ProcessCallback",
+			PhpName:    "processCallback",
+			ClassName:  "CallableClass",
+			Signature:  "processCallback(callable $callback): string",
+			ReturnType: phpString,
+			Params: []phpParameter{
+				{Name: "callback", PhpType: phpCallable, IsNullable: false},
+			},
+			GoFunction: `func (cs *CallableStruct) ProcessCallback(callback *C.zval) string {
+	return "processed"
+}`,
+		},
+		{
+			Name:       "ProcessOptionalCallback",
+			PhpName:    "processOptionalCallback",
+			ClassName:  "CallableClass",
+			Signature:  "processOptionalCallback(?callable $callback): string",
+			ReturnType: phpString,
+			Params: []phpParameter{
+				{Name: "callback", PhpType: phpCallable, IsNullable: true},
+			},
+			GoFunction: `func (cs *CallableStruct) ProcessOptionalCallback(callback *C.zval) string {
+	return "processed_optional"
+}`,
+		},
+	}
+
+	classes := []phpClass{
+		{
+			Name:     "CallableClass",
+			GoStruct: "CallableStruct",
+			Methods:  methods,
+		},
+	}
+
+	generator := &Generator{
+		BaseName:   "callable_test",
+		SourceFile: sourceFile,
+		Classes:    classes,
+		BuildDir:   tmpDir,
+	}
+
+	goGen := GoFileGenerator{generator}
+	content, err := goGen.buildContent()
+	require.NoError(t, err)
+
+	expectedCallableWrapperSignature := "func ProcessCallback_wrapper(handle C.uintptr_t, callback *C.zval) unsafe.Pointer"
+	assert.Contains(t, content, expectedCallableWrapperSignature, "Generated content should contain callable wrapper signature: %s", expectedCallableWrapperSignature)
+
+	expectedOptionalCallableWrapperSignature := "func ProcessOptionalCallback_wrapper(handle C.uintptr_t, callback *C.zval) unsafe.Pointer"
+	assert.Contains(t, content, expectedOptionalCallableWrapperSignature, "Generated content should contain optional callable wrapper signature: %s", expectedOptionalCallableWrapperSignature)
+
+	expectedCallableCall := "structObj.ProcessCallback(callback)"
+	assert.Contains(t, content, expectedCallableCall, "Generated content should contain callable method call: %s", expectedCallableCall)
+
+	expectedOptionalCallableCall := "structObj.ProcessOptionalCallback(callback)"
+	assert.Contains(t, content, expectedOptionalCallableCall, "Generated content should contain optional callable method call: %s", expectedOptionalCallableCall)
+
+	assert.Contains(t, content, "//export ProcessCallback_wrapper", "Generated content should contain ProcessCallback export directive")
+	assert.Contains(t, content, "//export ProcessOptionalCallback_wrapper", "Generated content should contain ProcessOptionalCallback export directive")
+}
+
+func TestGoFileGenerator_phpTypeToGoType(t *testing.T) {
+	generator := &Generator{}
+	goGen := GoFileGenerator{generator}
+
+	tests := []struct {
+		phpType  phpType
+		expected string
+	}{
+		{phpString, "string"},
+		{phpInt, "int64"},
+		{phpFloat, "float64"},
+		{phpBool, "bool"},
+		{phpArray, "*frankenphp.Array"},
+		{phpMixed, "any"},
+		{phpVoid, ""},
+		{phpCallable, "*C.zval"},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.phpType), func(t *testing.T) {
+			result := goGen.phpTypeToGoType(tt.phpType)
+			assert.Equal(t, tt.expected, result, "phpTypeToGoType(%s) should return %s", tt.phpType, tt.expected)
+		})
+	}
+
+	t.Run("unknown_type", func(t *testing.T) {
+		unknownType := phpType("unknown")
+		result := goGen.phpTypeToGoType(unknownType)
+		assert.Equal(t, "any", result, "phpTypeToGoType should fallback to interface{} for unknown types")
+	})
 }
 
 func testGoFileInternalFunctions(t *testing.T, content string) {

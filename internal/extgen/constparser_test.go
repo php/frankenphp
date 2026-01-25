@@ -1,12 +1,12 @@
 package extgen
 
 import (
-	"github.com/stretchr/testify/require"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestConstantParser(t *testing.T) {
@@ -221,7 +221,7 @@ func TestConstantParserIotaSequence(t *testing.T) {
 //export_php:const
 const FirstIota = iota
 
-//export_php:const  
+//export_php:const
 const SecondIota = iota
 
 //export_php:const
@@ -244,13 +244,186 @@ const ThirdIota = iota`
 	}
 }
 
+func TestConstantParserConstBlock(t *testing.T) {
+	input := `package main
+
+const (
+	// export_php:const
+	STATUS_PENDING = iota
+
+	// export_php:const
+	STATUS_PROCESSING
+
+	// export_php:const
+	STATUS_COMPLETED
+)`
+
+	tmpDir := t.TempDir()
+	fileName := filepath.Join(tmpDir, "test.go")
+	require.NoError(t, os.WriteFile(fileName, []byte(input), 0644))
+
+	parser := &ConstantParser{}
+	constants, err := parser.parse(fileName)
+	assert.NoError(t, err, "parse() error")
+
+	assert.Len(t, constants, 3, "Expected 3 constants")
+
+	expectedNames := []string{"STATUS_PENDING", "STATUS_PROCESSING", "STATUS_COMPLETED"}
+	expectedValues := []string{"0", "1", "2"}
+
+	for i, c := range constants {
+		assert.Equal(t, expectedNames[i], c.Name, "Expected constant %d name to be '%s'", i, expectedNames[i])
+		assert.True(t, c.IsIota, "Expected constant %d to be iota", i)
+		assert.Equal(t, expectedValues[i], c.Value, "Expected constant %d value to be '%s'", i, expectedValues[i])
+		assert.Equal(t, phpInt, c.PhpType, "Expected constant %d to be phpInt type", i)
+	}
+}
+
+func TestConstantParserConstBlockWithBlockLevelDirective(t *testing.T) {
+	input := `package main
+
+// export_php:const
+const (
+	STATUS_PENDING = iota
+	STATUS_PROCESSING
+	STATUS_COMPLETED
+)`
+
+	tmpDir := t.TempDir()
+	fileName := filepath.Join(tmpDir, "test.go")
+	require.NoError(t, os.WriteFile(fileName, []byte(input), 0644))
+
+	parser := &ConstantParser{}
+	constants, err := parser.parse(fileName)
+	assert.NoError(t, err, "parse() error")
+
+	assert.Len(t, constants, 3, "Expected 3 constants")
+
+	expectedNames := []string{"STATUS_PENDING", "STATUS_PROCESSING", "STATUS_COMPLETED"}
+	expectedValues := []string{"0", "1", "2"}
+
+	for i, c := range constants {
+		assert.Equal(t, expectedNames[i], c.Name, "Expected constant %d name to be '%s'", i, expectedNames[i])
+		assert.True(t, c.IsIota, "Expected constant %d to be iota", i)
+		assert.Equal(t, expectedValues[i], c.Value, "Expected constant %d value to be '%s'", i, expectedValues[i])
+		assert.Equal(t, phpInt, c.PhpType, "Expected constant %d to be phpInt type", i)
+	}
+}
+
+func TestConstantParserMixedConstBlockAndIndividual(t *testing.T) {
+	input := `package main
+
+// export_php:const
+const INDIVIDUAL = 42
+
+const (
+	// export_php:const
+	BLOCK_ONE = iota
+
+	// export_php:const
+	BLOCK_TWO
+)
+
+// export_php:const
+const ANOTHER_INDIVIDUAL = "test"`
+
+	tmpDir := t.TempDir()
+	fileName := filepath.Join(tmpDir, "test.go")
+	require.NoError(t, os.WriteFile(fileName, []byte(input), 0644))
+
+	parser := &ConstantParser{}
+	constants, err := parser.parse(fileName)
+	assert.NoError(t, err, "parse() error")
+
+	assert.Len(t, constants, 4, "Expected 4 constants")
+
+	assert.Equal(t, "INDIVIDUAL", constants[0].Name)
+	assert.Equal(t, "42", constants[0].Value)
+	assert.Equal(t, phpInt, constants[0].PhpType)
+
+	assert.Equal(t, "BLOCK_ONE", constants[1].Name)
+	assert.Equal(t, "0", constants[1].Value)
+	assert.True(t, constants[1].IsIota)
+
+	assert.Equal(t, "BLOCK_TWO", constants[2].Name)
+	assert.Equal(t, "1", constants[2].Value)
+	assert.True(t, constants[2].IsIota)
+
+	assert.Equal(t, "ANOTHER_INDIVIDUAL", constants[3].Name)
+	assert.Equal(t, `"test"`, constants[3].Value)
+	assert.Equal(t, phpString, constants[3].PhpType)
+}
+
+func TestConstantParserClassConstBlock(t *testing.T) {
+	input := `package main
+
+// export_php:classconst Config
+const (
+	MODE_DEBUG = 1
+	MODE_PRODUCTION = 2
+	MODE_TEST = 3
+)`
+
+	tmpDir := t.TempDir()
+	fileName := filepath.Join(tmpDir, "test.go")
+	require.NoError(t, os.WriteFile(fileName, []byte(input), 0644))
+
+	parser := &ConstantParser{}
+	constants, err := parser.parse(fileName)
+	assert.NoError(t, err, "parse() error")
+
+	assert.Len(t, constants, 3, "Expected 3 class constants")
+
+	expectedNames := []string{"MODE_DEBUG", "MODE_PRODUCTION", "MODE_TEST"}
+	expectedValues := []string{"1", "2", "3"}
+
+	for i, c := range constants {
+		assert.Equal(t, expectedNames[i], c.Name, "Expected constant %d name to be '%s'", i, expectedNames[i])
+		assert.Equal(t, "Config", c.ClassName, "Expected constant %d to belong to Config class", i)
+		assert.Equal(t, expectedValues[i], c.Value, "Expected constant %d value to be '%s'", i, expectedValues[i])
+		assert.Equal(t, phpInt, c.PhpType, "Expected constant %d to be phpInt type", i)
+	}
+}
+
+func TestConstantParserClassConstBlockWithIota(t *testing.T) {
+	input := `package main
+
+// export_php:classconst Status
+const (
+	STATUS_PENDING = iota
+	STATUS_ACTIVE
+	STATUS_COMPLETED
+)`
+
+	tmpDir := t.TempDir()
+	fileName := filepath.Join(tmpDir, "test.go")
+	require.NoError(t, os.WriteFile(fileName, []byte(input), 0644))
+
+	parser := &ConstantParser{}
+	constants, err := parser.parse(fileName)
+	assert.NoError(t, err, "parse() error")
+
+	assert.Len(t, constants, 3, "Expected 3 class constants")
+
+	expectedNames := []string{"STATUS_PENDING", "STATUS_ACTIVE", "STATUS_COMPLETED"}
+	expectedValues := []string{"0", "1", "2"}
+
+	for i, c := range constants {
+		assert.Equal(t, expectedNames[i], c.Name, "Expected constant %d name to be '%s'", i, expectedNames[i])
+		assert.Equal(t, "Status", c.ClassName, "Expected constant %d to belong to Status class", i)
+		assert.True(t, c.IsIota, "Expected constant %d to be iota", i)
+		assert.Equal(t, expectedValues[i], c.Value, "Expected constant %d value to be '%s'", i, expectedValues[i])
+		assert.Equal(t, phpInt, c.PhpType, "Expected constant %d to be phpInt type", i)
+	}
+}
+
 func TestConstantParserTypeDetection(t *testing.T) {
 	tests := []struct {
 		name         string
 		value        string
 		expectedType phpType
 	}{
-		{"string with double quotes", "\"hello world\"", phpString},
+		{"string with double quotes", `"hello world"`, phpString},
 		{"string with backticks", "`hello world`", phpString},
 		{"boolean true", "true", phpBool},
 		{"boolean false", "false", phpBool},
@@ -443,13 +616,13 @@ func TestConstantParserDeclRegex(t *testing.T) {
 		name        string
 		value       string
 	}{
-		{"const MyConst = \"value\"", true, "MyConst", "\"value\""},
+		{`const MyConst = "value"`, true, "MyConst", `"value"`},
 		{"const IntConst = 42", true, "IntConst", "42"},
 		{"const BoolConst = true", true, "BoolConst", "true"},
 		{"const IotaConst = iota", true, "IotaConst", "iota"},
 		{"const ComplexValue = someFunction()", true, "ComplexValue", "someFunction()"},
-		{"const SpacedName = \"with spaces\"", true, "SpacedName", "\"with spaces\""},
-		{"var notAConst = \"value\"", false, "", ""},
+		{`const SpacedName = "with spaces"`, true, "SpacedName", `"with spaces"`},
+		{`var notAConst = "value"`, false, "", ""},
 		{"const", false, "", ""},
 		{"const =", false, "", ""},
 	}
@@ -518,10 +691,10 @@ func TestPHPConstantCValue(t *testing.T) {
 			name: "string constant",
 			constant: phpConstant{
 				Name:    "StringConst",
-				Value:   "\"hello\"",
+				Value:   `"hello"`,
 				PhpType: phpString,
 			},
-			expected: "\"hello\"", // strings should remain unchanged
+			expected: `"hello"`, // strings should remain unchanged
 		},
 		{
 			name: "boolean constant",

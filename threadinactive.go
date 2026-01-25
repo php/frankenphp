@@ -1,5 +1,11 @@
 package frankenphp
 
+import (
+	"context"
+
+	"github.com/dunglas/frankenphp/internal/state"
+)
+
 // representation of a thread with no work assigned to it
 // implements the threadHandler interface
 // each inactive thread weighs around ~350KB
@@ -15,30 +21,38 @@ func convertToInactiveThread(thread *phpThread) {
 func (handler *inactiveThread) beforeScriptExecution() string {
 	thread := handler.thread
 
-	switch thread.state.get() {
-	case stateTransitionRequested:
+	switch thread.state.Get() {
+	case state.TransitionRequested:
 		return thread.transitionToNewHandler()
-	case stateBooting, stateTransitionComplete:
-		thread.state.set(stateInactive)
+
+	case state.Booting, state.TransitionComplete:
+		thread.state.Set(state.Inactive)
 
 		// wait for external signal to start or shut down
-		thread.state.markAsWaiting(true)
-		thread.state.waitFor(stateTransitionRequested, stateShuttingDown)
-		thread.state.markAsWaiting(false)
+		thread.state.MarkAsWaiting(true)
+		thread.state.WaitFor(state.TransitionRequested, state.ShuttingDown)
+		thread.state.MarkAsWaiting(false)
+
 		return handler.beforeScriptExecution()
-	case stateShuttingDown:
+
+	case state.ShuttingDown:
 		// signal to stop
 		return ""
 	}
-	panic("unexpected state: " + thread.state.name())
+
+	panic("unexpected state: " + thread.state.Name())
 }
 
 func (handler *inactiveThread) afterScriptExecution(int) {
 	panic("inactive threads should not execute scripts")
 }
 
-func (handler *inactiveThread) getRequestContext() *frankenPHPContext {
+func (handler *inactiveThread) frankenPHPContext() *frankenPHPContext {
 	return nil
+}
+
+func (handler *inactiveThread) context() context.Context {
+	return globalCtx
 }
 
 func (handler *inactiveThread) name() string {

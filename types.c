@@ -16,6 +16,8 @@ Bucket *get_ht_bucket_data(HashTable *ht, uint32_t index) {
 
 void *__emalloc__(size_t size) { return emalloc(size); }
 
+void __efree__(void *ptr) { efree(ptr); }
+
 void __zend_hash_init__(HashTable *ht, uint32_t nSize, dtor_func_t pDestructor,
                         bool persistent) {
   zend_hash_init(ht, nSize, NULL, pDestructor, persistent);
@@ -31,6 +33,16 @@ void __zval_double__(zval *zv, double val) { ZVAL_DOUBLE(zv, val); }
 
 void __zval_string__(zval *zv, zend_string *str) { ZVAL_STR(zv, str); }
 
+void __zval_empty_string__(zval *zv) { ZVAL_EMPTY_STRING(zv); }
+
 void __zval_arr__(zval *zv, zend_array *arr) { ZVAL_ARR(zv, arr); }
 
 zend_array *__zend_new_array__(uint32_t size) { return zend_new_array(size); }
+
+int __zend_is_callable__(zval *cb) { return zend_is_callable(cb, 0, NULL); }
+
+int __call_user_function__(zval *function_name, zval *retval,
+                           uint32_t param_count, zval params[]) {
+  return call_user_function(CG(function_table), NULL, function_name, retval,
+                            param_count, params);
+}

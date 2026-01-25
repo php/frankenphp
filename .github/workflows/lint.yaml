@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -40,8 +40,12 @@ jobs:
           VALIDATE_TERRAGRUNT: false
           VALIDATE_DOCKERFILE_HADOLINT: false
           VALIDATE_TRIVY: false
-          # Prettier and StandardJS are incompatible
+          # Prettier, Biome and StandardJS are incompatible
           VALIDATE_JAVASCRIPT_PRETTIER: false
           VALIDATE_TYPESCRIPT_PRETTIER: false
+          VALIDATE_BIOME_FORMAT: false
+          VALIDATE_BIOME_LINT: false
           # Conflicts with MARKDOWN
           VALIDATE_MARKDOWN_PRETTIER: false
+          # To re-enable when https://github.com/super-linter/super-linter/issues/7244 will be closed
+          VALIDATE_EDITORCONFIG: false

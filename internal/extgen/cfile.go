@@ -58,6 +58,7 @@ func (cg *cFileGenerator) buildContent() (string, error) {
 func (cg *cFileGenerator) getTemplateContent() (string, error) {
 	funcMap := sprig.FuncMap()
 	funcMap["namespacedClassName"] = NamespacedName
+	funcMap["cString"] = escapeCString
 
 	tmpl := template.Must(template.New("cfile").Funcs(funcMap).Parse(cFileContent))
 
@@ -73,4 +74,9 @@ func (cg *cFileGenerator) getTemplateContent() (string, error) {
 	}
 
 	return buf.String(), nil
+}
+
+// escapeCString escapes backslashes for C string literals
+func escapeCString(s string) string {
+	return strings.ReplaceAll(s, `\`, `\\`)
 }

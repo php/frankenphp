@@ -63,5 +63,9 @@ if command -v setcap >/dev/null 2>&1; then
 fi
 
 if [ -x /usr/bin/frankenphp ]; then
+	HOME=/var/lib/frankenphp /usr/bin/frankenphp run --config /dev/null &
+	FRANKENPHP_PID=$!
 	HOME=/var/lib/frankenphp /usr/bin/frankenphp trust || true
+	kill "$FRANKENPHP_PID" || true
+	wait "$FRANKENPHP_PID" 2>/dev/null || true
 fi

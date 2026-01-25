@@ -24,22 +24,64 @@ conjunto de slides:
 
 ## Começando
 
-### Binário independente
-
-Fornecemos binários estáticos do FrankenPHP para Linux e macOS contendo o
-[PHP 8.4](https://www.php.net/releases/8.4/pt_BR.php) e as extensões PHP mais
-populares.
-
 No Windows, use [WSL](https://learn.microsoft.com/pt-br/windows/wsl/) para
 executar o FrankenPHP.
 
-[Baixe o FrankenPHP](https://github.com/php/frankenphp/releases) ou copie esta
-linha no seu terminal para instalar automaticamente a versão apropriada para sua
-plataforma:
+### Script de instalação
+
+Você pode copiar esta linha no seu terminal para instalar automaticamente a
+versão apropriada para sua plataforma:
 
 ```console
 curl https://frankenphp.dev/install.sh | sh
-mv frankenphp /usr/local/bin/
+```
+
+### Binário independente
+
+Fornecemos binários estáticos do FrankenPHP para desenvolvimento em Linux e macOS contendo o
+[PHP 8.4](https://www.php.net/releases/8.4/pt_BR.php) e as extensões PHP mais populares.
+
+[Baixe o FrankenPHP](https://github.com/php/frankenphp/releases)
+
+**Instalação de extensões:** As extensões mais comuns já estão incluídas. Não é possível instalar mais extensões.
+
+### Pacotes rpm
+
+Nossos mantenedores oferecem pacotes rpm para todos os sistemas que usam `dnf`. Para instalar, execute:
+
+```console
+sudo dnf install https://rpm.henderkes.com/static-php-1-0.noarch.rpm
+sudo dnf module enable php-zts:static-8.4 # 8.2-8.5 disponíveis
+sudo dnf install frankenphp
+```
+
+**Instalação de extensões:** `sudo dnf install php-zts-<extension>`
+
+Para extensões não disponíveis por padrão, use o [PIE](https://github.com/php/pie):
+
+```console
+sudo dnf install pie-zts
+sudo pie-zts install asgrim/example-pie-extension
+```
+
+### Pacotes deb
+
+Nossos mantenedores oferecem pacotes deb para todos os sistemas que usam `apt`. Para instalar, execute:
+
+```console
+sudo curl -fsSL https://key.henderkes.com/static-php.gpg -o /usr/share/keyrings/static-php.gpg && \
+echo "deb [signed-by=/usr/share/keyrings/static-php.gpg] https://deb.henderkes.com/ stable main" | sudo tee /etc/apt/sources.list.d/static-php.list && \
+sudo apt update
+sudo apt install frankenphp
+```
+
+**Instalação de extensões:** `sudo apt install php-zts-<extension>`
+
+Para extensões não disponíveis por padrão, use o [PIE](https://github.com/php/pie):
+
+```console
+sudo apt install pie-zts
+sudo pie-zts install asgrim/example-pie-extension
 ```
 
 Para servir o conteúdo do diretório atual, execute:
@@ -85,10 +127,26 @@ Para instalá-lo:
 brew install dunglas/frankenphp/frankenphp
 ```
 
+**Instalação de extensões:** Use o [PIE](https://github.com/php/pie).
+
+### Uso
+
 Para servir o conteúdo do diretório atual, execute:
 
 ```console
 frankenphp php-server
+```
+
+Você também pode executar scripts de linha de comando com:
+
+```console
+frankenphp php-cli /caminho/para/seu/script.php
+```
+
+Para os pacotes deb e rpm, você também pode iniciar o serviço systemd:
+
+```console
+sudo systemctl start frankenphp
 ```
 
 ## Documentação

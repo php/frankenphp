@@ -50,7 +50,7 @@ RUN apt-get update && \
 	apt-get clean
 
 WORKDIR /usr/local/src/php
-RUN git clone --branch=PHP-8.4 https://github.com/php/php-src.git . && \
+RUN git clone --branch=PHP-8.5 https://github.com/php/php-src.git . && \
 	# --enable-embed is only necessary to generate libphp.so, we don't use this SAPI directly
 	./buildconf --force && \
 	EXTENSION_DIR=/usr/lib/frankenphp/modules ./configure \
