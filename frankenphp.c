@@ -456,6 +456,9 @@ PHP_FUNCTION(frankenphp_handle_request) {
   fci.params = result.r1;
   fci.param_count = result.r1 == NULL ? 0 : 1;
 
+  // Reset memory peak usage at the start of the request
+  zend_memory_reset_peak_usage();
+
   if (zend_call_function(&fci, &fcc) == SUCCESS && Z_TYPE(retval) != IS_UNDEF) {
     callback_ret = &retval;
   }
@@ -609,6 +612,8 @@ static zend_module_entry frankenphp_module = {
     STANDARD_MODULE_PROPERTIES};
 
 static void frankenphp_request_shutdown() {
+  go_frankenphp_set_memory_peak_usage(thread_index, zend_memory_peak_usage(1));
+
   frankenphp_free_request_context();
   php_request_shutdown((void *)0);
 }

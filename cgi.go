@@ -311,6 +311,8 @@ func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) 
 	info.request_uri = thread.pinCString(request.URL.RequestURI())
 
 	info.proto_num = C.int(request.ProtoMajor*1000 + request.ProtoMinor)
+
+	C.clock_gettime(C.CLOCK_THREAD_CPUTIME_ID, &thread.cpuRequestStartTime)
 }
 
 // SanitizedPathJoin performs filepath.Join(root, reqPath) that

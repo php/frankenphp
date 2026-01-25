@@ -38,6 +38,16 @@ type frankenPHPContext struct {
 
 	done      chan any
 	startedAt time.Time
+
+	memoryUsage uint64
+	cpuUsage    time.Duration
+}
+
+type Stats struct {
+	MemoryUsage    uint64
+	CpuUsage       time.Duration
+	Script         string
+	ScriptFilename string
 }
 
 type contextHolder struct {
