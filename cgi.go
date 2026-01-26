@@ -18,9 +18,12 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 	"unsafe"
 
 	"github.com/dunglas/frankenphp/internal/phpheaders"
+	"golang.org/x/text/language"
+	"golang.org/x/text/search"
 )
 
 // Protocol versions, in Apache mod_ssl format: https://httpd.apache.org/docs/current/mod/mod_ssl.html
@@ -252,24 +255,64 @@ func splitCgiPath(fc *frankenPHPContext) {
 	fc.worker = getWorkerByPath(fc.scriptFilename)
 }
 
-// splitPos returns the index where path should
-// be split based on SplitPath.
+var splitSearchNonASCII = search.New(language.Und, search.IgnoreCase)
+
+// splitPos returns the index where path should be split based on splitPath.
 // example: if splitPath is [".php"]
 // "/path/to/script.php/some/path": ("/path/to/script.php", "/some/path")
-//
-// Adapted from https://github.com/caddyserver/caddy/blob/master/modules/caddyhttp/reverseproxy/fastcgi/fastcgi.go
-// Copyright 2015 Matthew Holt and The Caddy Authors
 func splitPos(path string, splitPath []string) int {
 	if len(splitPath) == 0 {
 		return 0
 	}
 
-	lowerPath := strings.ToLower(path)
+	pathLen := len(path)
+
+	// We are sure that split strings are all ASCII-only and lower-case because of validation and normalization in WithRequestSplitPath
 	for _, split := range splitPath {
-		if idx := strings.Index(lowerPath, strings.ToLower(split)); idx > -1 {
-			return idx + len(split)
+		splitLen := len(split)
+
+		for i := 0; i < pathLen; i++ {
+			if path[i] >= utf8.RuneSelf {
+				if _, end := splitSearchNonASCII.IndexString(path, split); end > -1 {
+					return end
+				}
+
+				break
+			}
+
+			if i+splitLen > pathLen {
+				continue
+			}
+
+			match := true
+			for j := 0; j < splitLen; j++ {
+				c := path[i+j]
+
+				if c >= utf8.RuneSelf {
+					if _, end := splitSearchNonASCII.IndexString(path, split); end > -1 {
+						return end
+					}
+
+					break
+				}
+
+				if 'A' <= c && c <= 'Z' {
+					c += 'a' - 'A'
+				}
+
+				if c != split[j] {
+					match = false
+
+					break
+				}
+			}
+
+			if match {
+				return i + splitLen
+			}
 		}
 	}
+
 	return -1
 }
 

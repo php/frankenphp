@@ -51,7 +51,7 @@ type FrankenPHPModule struct {
 	preparedEnv                 frankenphp.PreparedEnv
 	preparedEnvNeedsReplacement bool
 	logger                      *slog.Logger
-	mercureHubRequestOption     *frankenphp.RequestOption
+	requestOptions              []frankenphp.RequestOption
 }
 
 // CaddyModule returns the Caddy module information.
@@ -118,6 +118,7 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 	if len(f.SplitPath) == 0 {
 		f.SplitPath = []string{".php"}
 	}
+	f.requestOptions = append(f.requestOptions, frankenphp.WithRequestSplitPath(f.SplitPath))
 
 	if f.ResolveRootSymlink == nil {
 		rrs := true
@@ -148,6 +149,8 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 				f.Workers[i].FileName = resolvedPath
 			}
 		}
+
+		f.requestOptions = append(f.requestOptions, frankenphp.WithRequestResolvedDocumentRoot(f.resolvedDocumentRoot))
 	}
 
 	if f.preparedEnv == nil {
@@ -160,6 +163,10 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 				break
 			}
 		}
+	}
+
+	if !f.preparedEnvNeedsReplacement {
+		f.requestOptions = append(f.requestOptions, frankenphp.WithRequestPreparedEnv(f.preparedEnv))
 	}
 
 	if err := f.configureHotReload(fapp); err != nil {
@@ -180,31 +187,26 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 	origReq := ctx.Value(caddyhttp.OriginalRequestCtxKey).(http.Request)
 	repl := ctx.Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
 
-	var (
-		documentRootOption frankenphp.RequestOption
-		documentRoot       string
-	)
-
-	if f.resolvedDocumentRoot == "" {
+	documentRoot := f.resolvedDocumentRoot
+	if documentRoot == "" {
 		documentRoot = repl.ReplaceKnown(f.Root, "")
 		if documentRoot == "" && frankenphp.EmbeddedAppPath != "" {
 			documentRoot = frankenphp.EmbeddedAppPath
 		}
+
 		// If we do not have a resolved document root, then we cannot resolve the symlink of our cwd because it may
 		// resolve to a different directory than the one we are currently in.
 		// This is especially important if there are workers running.
-		documentRootOption = frankenphp.WithRequestDocumentRoot(documentRoot, false)
-	} else {
-		documentRoot = f.resolvedDocumentRoot
-		documentRootOption = frankenphp.WithRequestResolvedDocumentRoot(documentRoot)
+		f.requestOptions = append(f.requestOptions, frankenphp.WithRequestDocumentRoot(documentRoot, false))
 	}
 
-	env := f.preparedEnv
 	if f.preparedEnvNeedsReplacement {
-		env = make(frankenphp.PreparedEnv, len(f.Env))
+		env := make(frankenphp.PreparedEnv, len(f.Env))
 		for k, v := range f.preparedEnv {
 			env[k] = repl.ReplaceKnown(v, "")
 		}
+
+		f.requestOptions = append(f.requestOptions, frankenphp.WithRequestPreparedEnv(env))
 	}
 
 	workerName := ""
@@ -215,31 +217,14 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 		}
 	}
 
-	var (
-		err error
-		fr  *http.Request
+	fr, err := frankenphp.NewRequestWithContext(
+		r,
+		append(
+			f.requestOptions,
+			frankenphp.WithOriginalRequest(&origReq),
+			frankenphp.WithWorkerName(workerName),
+		)...,
 	)
-
-	if f.mercureHubRequestOption == nil {
-		fr, err = frankenphp.NewRequestWithContext(
-			r,
-			documentRootOption,
-			frankenphp.WithRequestSplitPath(f.SplitPath),
-			frankenphp.WithRequestPreparedEnv(env),
-			frankenphp.WithOriginalRequest(&origReq),
-			frankenphp.WithWorkerName(workerName),
-		)
-	} else {
-		fr, err = frankenphp.NewRequestWithContext(
-			r,
-			documentRootOption,
-			frankenphp.WithRequestSplitPath(f.SplitPath),
-			frankenphp.WithRequestPreparedEnv(env),
-			frankenphp.WithOriginalRequest(&origReq),
-			frankenphp.WithWorkerName(workerName),
-			*f.mercureHubRequestOption,
-		)
-	}
 
 	if err != nil {
 		return caddyhttp.Error(http.StatusInternalServerError, err)
