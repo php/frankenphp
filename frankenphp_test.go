@@ -341,21 +341,16 @@ func TestRequestSuperGlobalConditional_worker(t *testing.T) {
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
 		if i%2 == 0 {
 			// Even requests: don't use $_REQUEST
-			req := httptest.NewRequest("GET", fmt.Sprintf("http://example.com/request-superglobal-conditional.php?val=%d", i), nil)
-			body, _ := testRequest(req, handler, t)
+			body, _:= testGet(fmt.Sprintf("http://example.com/request-superglobal-conditional.php?val=%d", i), handler, t)
 			assert.Contains(t, body, "SKIPPED")
 			assert.Contains(t, body, fmt.Sprintf("'val' => '%d'", i))
 		} else {
 			// Odd requests: use $_REQUEST
-			req := httptest.NewRequest("GET", fmt.Sprintf("http://example.com/request-superglobal-conditional.php?use_request=1&val=%d", i), nil)
-			body, _ := testRequest(req, handler, t)
+			body, _ := testGet(fmt.Sprintf("http://example.com/request-superglobal-conditional.php?use_request=1&val=%d", i), handler, t)
 			assert.Contains(t, body, "REQUEST:")
-			// $_REQUEST should have ONLY current request's data (2 keys: use_request and val)
-			assert.Contains(t, body, "REQUEST_COUNT:2")
-			// Verify current request data is present
-			assert.Contains(t, body, fmt.Sprintf("'val' => '%d'", i))
+			assert.Contains(t, body, "REQUEST_COUNT:2", "$_REQUEST should have ONLY current request's data (2 keys: use_request and val)")
+			assert.Contains(t, body, fmt.Sprintf("'val' => '%d'", i), "request data is not present")
 			assert.Contains(t, body, "'use_request' => '1'")
-			// Critical: verify $_REQUEST has the CURRENT request's val, not stale data
 			assert.Contains(t, body, "VAL_CHECK:MATCH", "BUG: $_REQUEST contains stale data from previous request! Body: "+body)
 		}
 	}, &testOptions{workerScript: "request-superglobal-conditional.php", phpIni: phpIni})
