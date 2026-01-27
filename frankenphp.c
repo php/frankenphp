@@ -130,14 +130,14 @@ static void frankenphp_reset_super_globals() {
       auto_global->armed = auto_global->auto_global_callback(auto_global->name);
     } else if (auto_global->jit) {
       /* JIT globals ($_REQUEST, $GLOBALS) need special handling:
+       * - $GLOBALS will always be handled by the application, we skip it
+       * For $_REQUEST:
        * - If in symbol_table: re-initialize with current request data
-       * - If not: re-arm for potential future use during include */
-      if (zend_hash_exists(&EG(symbol_table), auto_global->name)) {
-        auto_global->armed =
-            auto_global->auto_global_callback(auto_global->name);
-      } else {
-        auto_global->armed = true;
-      }
+       * - If not: do nothing, it may be armed by jit later */
+      if (auto_global->name == ZSTR_KNOWN(ZEND_STR_AUTOGLOBAL_REQUEST) && zend_hash_exists(&EG(symbol_table), auto_global->name)) {
+          auto_global->armed =
+              auto_global->auto_global_callback(auto_global->name);
+        }
     } else if (auto_global->auto_global_callback) {
       /* $_GET, $_POST, $_COOKIE, $_FILES are reimported here */
       auto_global->armed = auto_global->auto_global_callback(auto_global->name);
