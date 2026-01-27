@@ -309,7 +309,7 @@ func testPostSuperGlobals(t *testing.T, opts *testOptions) {
 func TestRequestSuperGlobal_module(t *testing.T) { testRequestSuperGlobal(t, nil) }
 func TestRequestSuperGlobal_worker(t *testing.T) {
 	phpIni := make(map[string]string)
-	phpIni["opcache.jit"] = "tracing"
+	phpIni["auto_globals_jit"] = "1"
 	testRequestSuperGlobal(t, &testOptions{workerScript: "request-superglobal.php", phpIni: phpIni})
 }
 func testRequestSuperGlobal(t *testing.T, opts *testOptions) {
@@ -337,7 +337,7 @@ func TestRequestSuperGlobalConditional_worker(t *testing.T) {
 	// - Request 3 (i=3): includes file from cache, $_REQUEST should have val=3
 	// If the bug exists, $_REQUEST would still have val=1 from request 1.
 	phpIni := make(map[string]string)
-	phpIni["opcache.jit"] = "tracing"
+	phpIni["auto_globals_jit"] = "1"
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
 		if i%2 == 0 {
 			// Even requests: don't use $_REQUEST
