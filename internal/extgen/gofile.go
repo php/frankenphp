@@ -4,8 +4,9 @@ import (
 	"bytes"
 	_ "embed"
 	"fmt"
-	"os"
+	"go/format"
 	"path/filepath"
+	"strings"
 	"text/template"
 
 	"github.com/Masterminds/sprig/v3"
@@ -21,7 +22,7 @@ type GoFileGenerator struct {
 type goTemplateData struct {
 	PackageName       string
 	BaseName          string
-	Imports           []string
+	SanitizedBaseName string
 	Constants         []phpConstant
 	Variables         []string
 	InternalFunctions []string
@@ -30,16 +31,7 @@ type goTemplateData struct {
 }
 
 func (gg *GoFileGenerator) generate() error {
-	filename := filepath.Join(gg.generator.BuildDir, gg.generator.BaseName+".go")
-
-	if _, err := os.Stat(filename); err == nil {
-		backupFilename := filename + ".bak"
-		if err := os.Rename(filename, backupFilename); err != nil {
-			return fmt.Errorf("backing up existing Go file: %w", err)
-		}
-
-		gg.generator.SourceFile = backupFilename
-	}
+	filename := filepath.Join(gg.generator.BuildDir, gg.generator.BaseName+"_generated.go")
 
 	content, err := gg.buildContent()
 	if err != nil {
@@ -51,38 +43,18 @@ func (gg *GoFileGenerator) generate() error {
 
 func (gg *GoFileGenerator) buildContent() (string, error) {
 	sourceAnalyzer := SourceAnalyzer{}
-	imports, variables, internalFunctions, err := sourceAnalyzer.analyze(gg.generator.SourceFile)
+	packageName, variables, internalFunctions, err := sourceAnalyzer.analyze(gg.generator.SourceFile)
 	if err != nil {
 		return "", fmt.Errorf("analyzing source file: %w", err)
-	}
-
-	filteredImports := make([]string, 0, len(imports))
-	for _, imp := range imports {
-		if imp != `"C"` && imp != `"unsafe"` && imp != `"github.com/dunglas/frankenphp"` && imp != `"runtime/cgo"` {
-			filteredImports = append(filteredImports, imp)
-		}
 	}
 
 	classes := make([]phpClass, len(gg.generator.Classes))
 	copy(classes, gg.generator.Classes)
 
-	if len(classes) > 0 {
-		hasCgo := false
-		for _, imp := range imports {
-			if imp == `"runtime/cgo"` {
-				hasCgo = true
-				break
-			}
-		}
-		if !hasCgo {
-			filteredImports = append(filteredImports, `"runtime/cgo"`)
-		}
-	}
-
 	templateContent, err := gg.getTemplateContent(goTemplateData{
-		PackageName:       SanitizePackageName(gg.generator.BaseName),
+		PackageName:       packageName,
 		BaseName:          gg.generator.BaseName,
-		Imports:           filteredImports,
+		SanitizedBaseName: SanitizePackageName(gg.generator.BaseName),
 		Constants:         gg.generator.Constants,
 		Variables:         variables,
 		InternalFunctions: internalFunctions,
@@ -94,7 +66,12 @@ func (gg *GoFileGenerator) buildContent() (string, error) {
 		return "", fmt.Errorf("executing template: %w", err)
 	}
 
-	return templateContent, nil
+	fc, err := format.Source([]byte(templateContent))
+	if err != nil {
+		return "", fmt.Errorf("formatting source: %w", err)
+	}
+
+	return string(fc), nil
 }
 
 func (gg *GoFileGenerator) getTemplateContent(data goTemplateData) (string, error) {
@@ -106,6 +83,10 @@ func (gg *GoFileGenerator) getTemplateContent(data goTemplateData) (string, erro
 	funcMap["isVoid"] = func(t phpType) bool {
 		return t == phpVoid
 	}
+	funcMap["extractGoFunctionName"] = extractGoFunctionName
+	funcMap["extractGoFunctionSignatureParams"] = extractGoFunctionSignatureParams
+	funcMap["extractGoFunctionSignatureReturn"] = extractGoFunctionSignatureReturn
+	funcMap["extractGoFunctionCallParams"] = extractGoFunctionCallParams
 
 	tmpl := template.Must(template.New("gofile").Funcs(funcMap).Parse(goFileContent))
 
@@ -128,7 +109,7 @@ type GoParameter struct {
 	Type string
 }
 
-var phpToGoTypeMap= map[phpType]string{
+var phpToGoTypeMap = map[phpType]string{
 	phpString:   "string",
 	phpInt:      "int64",
 	phpFloat:    "float64",
@@ -145,4 +126,120 @@ func (gg *GoFileGenerator) phpTypeToGoType(phpT phpType) string {
 	}
 
 	return "any"
+}
+
+// extractGoFunctionName extracts the Go function name from a Go function signature string.
+func extractGoFunctionName(goFunction string) string {
+	idx := strings.Index(goFunction, "func ")
+	if idx == -1 {
+		return ""
+	}
+
+	start := idx + len("func ")
+
+	end := start
+	for end < len(goFunction) && goFunction[end] != '(' {
+		end++
+	}
+
+	if end >= len(goFunction) {
+		return ""
+	}
+
+	return strings.TrimSpace(goFunction[start:end])
+}
+
+// extractGoFunctionSignatureParams extracts the parameters from a Go function signature.
+func extractGoFunctionSignatureParams(goFunction string) string {
+	start := strings.IndexByte(goFunction, '(')
+	if start == -1 {
+		return ""
+	}
+	start++
+
+	depth := 1
+	end := start
+	for end < len(goFunction) && depth > 0 {
+		switch goFunction[end] {
+		case '(':
+			depth++
+		case ')':
+			depth--
+		}
+		if depth > 0 {
+			end++
+		}
+	}
+
+	if end >= len(goFunction) {
+		return ""
+	}
+
+	return strings.TrimSpace(goFunction[start:end])
+}
+
+// extractGoFunctionSignatureReturn extracts the return type from a Go function signature.
+func extractGoFunctionSignatureReturn(goFunction string) string {
+	start := strings.IndexByte(goFunction, '(')
+	if start == -1 {
+		return ""
+	}
+
+	depth := 1
+	pos := start + 1
+	for pos < len(goFunction) && depth > 0 {
+		switch goFunction[pos] {
+		case '(':
+			depth++
+		case ')':
+			depth--
+		}
+		pos++
+	}
+
+	if pos >= len(goFunction) {
+		return ""
+	}
+
+	end := strings.IndexByte(goFunction[pos:], '{')
+	if end == -1 {
+		return ""
+	}
+	end += pos
+
+	returnType := strings.TrimSpace(goFunction[pos:end])
+	return returnType
+}
+
+// extractGoFunctionCallParams extracts just the parameter names for calling a function.
+func extractGoFunctionCallParams(goFunction string) string {
+	params := extractGoFunctionSignatureParams(goFunction)
+	if params == "" {
+		return ""
+	}
+
+	var names []string
+	parts := strings.Split(params, ",")
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if len(part) == 0 {
+			continue
+		}
+
+		words := strings.Fields(part)
+		if len(words) > 0 {
+			names = append(names, words[0])
+		}
+	}
+
+	var result strings.Builder
+	for i, name := range names {
+		if i > 0 {
+			result.WriteString(", ")
+		}
+
+		result.WriteString(name)
+	}
+
+	return result.String()
 }
