@@ -134,10 +134,11 @@ static void frankenphp_reset_super_globals() {
        * For $_REQUEST:
        * - If in symbol_table: re-initialize with current request data
        * - If not: do nothing, it may be armed by jit later */
-      if (auto_global->name == ZSTR_KNOWN(ZEND_STR_AUTOGLOBAL_REQUEST) && zend_hash_exists(&EG(symbol_table), auto_global->name)) {
-          auto_global->armed =
-              auto_global->auto_global_callback(auto_global->name);
-        }
+      if (auto_global->name == ZSTR_KNOWN(ZEND_STR_AUTOGLOBAL_REQUEST) &&
+          zend_hash_exists(&EG(symbol_table), auto_global->name)) {
+        auto_global->armed =
+            auto_global->auto_global_callback(auto_global->name);
+      }
     } else if (auto_global->auto_global_callback) {
       /* $_GET, $_POST, $_COOKIE, $_FILES are reimported here */
       auto_global->armed = auto_global->auto_global_callback(auto_global->name);
