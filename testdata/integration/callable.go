@@ -32,7 +32,8 @@ func my_filter(arr *C.zend_array, callback *C.zval) unsafe.Pointer {
 	}
 
 	if callback == nil {
-		return unsafe.Pointer(arr)
+		//return unsafe.Pointer(arr) // returning the original array requires GC_ADDREF
+		return frankenphp.PHPPackedArray[any](goArray)
 	}
 
 	result := make([]any, 0)
@@ -57,7 +58,7 @@ func (p *Processor) Transform(input *C.zend_string, callback *C.zval) unsafe.Poi
 
 	resultStr, ok := callResult.(string)
 	if !ok {
-		return unsafe.Pointer(input)
+		return frankenphp.PHPString(goInput, false)
 	}
 
 	return frankenphp.PHPString(resultStr, false)
