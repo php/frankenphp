@@ -12,7 +12,7 @@ A minimal `Caddyfile` to serve a PHP application is shown below:
 # The hostname to respond to
 localhost
 
-# Optionaly, the directory to serve files from, otherwise defaults to the current directory
+# Optionally, the directory to serve files from, otherwise defaults to the current directory
 #root public/
 php_server
 ```
