@@ -21,6 +21,25 @@ import (
 
 var testPort = "9080"
 
+// skipIfSymlinkNotValid skips the test if the given path is not a valid symlink
+func skipIfSymlinkNotValid(t *testing.T, path string) {
+	t.Helper()
+
+	info, err := os.Lstat(path)
+	if err != nil {
+		t.Skipf("symlink test skipped: cannot stat %s: %v", path, err)
+	}
+
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Skipf("symlink test skipped: %s is not a symlink (git may not support symlinks on this platform)", path)
+	}
+}
+
+// escapeMetricLabel escapes backslashes in label values for Prometheus text format
+func escapeMetricLabel(s string) string {
+	return strings.ReplaceAll(s, "\\", "\\\\")
+}
+
 func TestPHP(t *testing.T) {
 	var wg sync.WaitGroup
 	tester := caddytest.NewTester(t)
@@ -548,6 +567,7 @@ func TestWorkerMetrics(t *testing.T) {
 	`, "caddyfile")
 
 	workerName, _ := fastabs.FastAbs("../testdata/index.php")
+	workerName = escapeMetricLabel(workerName)
 
 	// Make some requests
 	for i := range 10 {
@@ -731,6 +751,7 @@ func TestAutoWorkerConfig(t *testing.T) {
 	`, "caddyfile")
 
 	workerName, _ := fastabs.FastAbs("../testdata/index.php")
+	workerName = escapeMetricLabel(workerName)
 
 	// Make some requests
 	for i := range 10 {
@@ -804,6 +825,7 @@ func TestAllDefinedServerVars(t *testing.T) {
 	expectedBody = strings.ReplaceAll(expectedBody, "{documentRoot}", documentRoot)
 	expectedBody = strings.ReplaceAll(expectedBody, "\r\n", "\n")
 	expectedBody = strings.ReplaceAll(expectedBody, "{testPort}", testPort)
+	expectedBody = strings.ReplaceAll(expectedBody, documentRoot+"/", documentRoot+string(filepath.Separator))
 	tester := caddytest.NewTester(t)
 	tester.InitServer(`
 		{
@@ -1505,6 +1527,7 @@ func TestLog(t *testing.T) {
 func TestSymlinkWorkerPaths(t *testing.T) {
 	cwd, _ := os.Getwd()
 	publicDir := filepath.Join(cwd, "..", "testdata", "symlinks", "public")
+	skipIfSymlinkNotValid(t, publicDir)
 
 	t.Run("NeighboringWorkerScript", func(t *testing.T) {
 		// Scenario: neighboring worker script
@@ -1640,6 +1663,7 @@ func TestSymlinkResolveRoot(t *testing.T) {
 	cwd, _ := os.Getwd()
 	testDir := filepath.Join(cwd, "..", "testdata", "symlinks", "test")
 	publicDir := filepath.Join(cwd, "..", "testdata", "symlinks", "public")
+	skipIfSymlinkNotValid(t, publicDir)
 
 	t.Run("ResolveRootSymlink", func(t *testing.T) {
 		// Tests that resolve_root_symlink directive works correctly
@@ -1698,6 +1722,7 @@ func TestSymlinkResolveRoot(t *testing.T) {
 func TestSymlinkWorkerBehavior(t *testing.T) {
 	cwd, _ := os.Getwd()
 	publicDir := filepath.Join(cwd, "..", "testdata", "symlinks", "public")
+	skipIfSymlinkNotValid(t, publicDir)
 
 	t.Run("WorkerScriptFailsWithoutWorkerMode", func(t *testing.T) {
 		// Tests that accessing a worker-only script without configuring it as a worker actually results in an error

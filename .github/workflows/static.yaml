@@ -448,12 +448,12 @@ jobs:
           ref: ${{ needs.prepare.outputs.ref }}
           persist-credentials: false
       - uses: actions/setup-go@v6
-        with:
+        with: # zizmor: ignore[cache-poisoning]
           go-version: "1.25"
           cache-dependency-path: |
             go.sum
             caddy/go.sum
-          cache: false
+          cache: ${{ github.event_name != 'release' }}
       - name: Set FRANKENPHP_VERSION
         run: |
           if [ "${GITHUB_REF_TYPE}" == "tag" ]; then

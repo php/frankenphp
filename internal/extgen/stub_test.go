@@ -2,6 +2,7 @@ package extgen
 
 import (
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -536,7 +537,12 @@ func TestStubGenerator_FileStructure(t *testing.T) {
 	content, err := stubGen.buildContent()
 	assert.NoError(t, err, "buildContent() failed")
 
-	lines := strings.Split(content, "\n")
+	sep := "\n"
+	if runtime.GOOS == "windows" {
+		sep = "\r\n"
+	}
+
+	lines := strings.Split(content, sep)
 
 	assert.GreaterOrEqual(t, len(lines), 3, "Stub file should have multiple lines")
 	assert.Equal(t, "<?php", strings.TrimSpace(lines[0]), "First line should be <?php opening tag")
@@ -550,7 +556,7 @@ func TestStubGenerator_FileStructure(t *testing.T) {
 	}
 
 	assert.True(t, foundGenerateDirective, "Should contain @generate-class-entries directive")
-	assert.Contains(t, strings.Join(lines, "\n"), "\n\n", "Should have proper spacing between sections")
+	assert.Contains(t, strings.Join(lines, sep), sep+sep, "Should have proper spacing between sections")
 }
 
 func testStubBasicStructure(t *testing.T, content string) {

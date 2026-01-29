@@ -11,5 +11,5 @@ return function () {
         $_SESSION['count'] = 0;
     }
 
-    echo 'Count: '.$_SESSION['count'].PHP_EOL;
+    echo 'Count: '.$_SESSION['count']."\n";
 };
