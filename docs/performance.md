@@ -7,7 +7,7 @@ However, it is possible to substantially improve performance using an appropriat
 
 By default, FrankenPHP starts 2 times more threads and workers (in worker mode) than the available numbers of CPU.
 
-The appropriate values depend heavily on how your application is written, what it does and your hardware.
+The appropriate values depend heavily on how your application is written, what it does, and your hardware.
 We strongly recommend changing these values. For best system stability, it is recommended to have `num_threads` x `memory_limit` < `available_memory`.
 
 To find the right values, it's best to run load tests simulating real traffic.
@@ -43,7 +43,7 @@ Also, [some bugs only happen when using musl](https://github.com/php/php-src/iss
 
 In production environments, we recommend using FrankenPHP linked against glibc, compiled with an appropriate optimization level.
 
-This can be achieved by using the Debian Docker images, using our maintainers [.deb](https://debs.henderkes.com) or [.rpm](https://rpms.henderkes.com) packages, or by [compiling FrankenPHP from sources](compile.md).
+This can be achieved by using the Debian Docker images, using [our maintainers .deb, .rpm, or .apk packages](https://pkgs.henderkes.com), or by [compiling FrankenPHP from sources](compile.md).
 
 ## Go Runtime Configuration
 
@@ -146,7 +146,7 @@ All usual PHP-related performance optimizations apply with FrankenPHP.
 
 In particular:
 
-- check that [OPcache](https://www.php.net/manual/en/book.opcache.php) is installed, enabled and properly configured
+- check that [OPcache](https://www.php.net/manual/en/book.opcache.php) is installed, enabled, and properly configured
 - enable [Composer autoloader optimizations](https://getcomposer.org/doc/articles/autoloader-optimization.md)
 - ensure that the `realpath` cache is big enough for the needs of your application
 - use [preloading](https://www.php.net/manual/en/opcache.preloading.php)
