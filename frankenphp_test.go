@@ -306,6 +306,56 @@ func testPostSuperGlobals(t *testing.T, opts *testOptions) {
 	}, opts)
 }
 
+func TestRequestSuperGlobal_module(t *testing.T) { testRequestSuperGlobal(t, nil) }
+func TestRequestSuperGlobal_worker(t *testing.T) {
+	phpIni := make(map[string]string)
+	phpIni["auto_globals_jit"] = "1"
+	testRequestSuperGlobal(t, &testOptions{workerScript: "request-superglobal.php", phpIni: phpIni})
+}
+func testRequestSuperGlobal(t *testing.T, opts *testOptions) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		// Test with both GET and POST parameters
+		// $_REQUEST should contain merged data from both
+		formData := url.Values{"post_key": {fmt.Sprintf("post_value_%d", i)}}
+		req := httptest.NewRequest("POST", fmt.Sprintf("http://example.com/request-superglobal.php?get_key=get_value_%d", i), strings.NewReader(formData.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		body, _ := testRequest(req, handler, t)
+
+		// Verify $_REQUEST contains both GET and POST data for the current request
+		assert.Contains(t, body, fmt.Sprintf("'get_key' => 'get_value_%d'", i))
+		assert.Contains(t, body, fmt.Sprintf("'post_key' => 'post_value_%d'", i))
+	}, opts)
+}
+
+func TestRequestSuperGlobalConditional_worker(t *testing.T) {
+	// This test verifies that $_REQUEST works correctly when accessed conditionally
+	// in worker mode. The first request does NOT access $_REQUEST, but subsequent
+	// requests do. This tests the "re-arm" mechanism for JIT auto globals.
+	//
+	// The bug scenario:
+	// - Request 1 (i=1): includes file, $_REQUEST initialized with val=1
+	// - Request 3 (i=3): includes file from cache, $_REQUEST should have val=3
+	// If the bug exists, $_REQUEST would still have val=1 from request 1.
+	phpIni := make(map[string]string)
+	phpIni["auto_globals_jit"] = "1"
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		if i%2 == 0 {
+			// Even requests: don't use $_REQUEST
+			body, _:= testGet(fmt.Sprintf("http://example.com/request-superglobal-conditional.php?val=%d", i), handler, t)
+			assert.Contains(t, body, "SKIPPED")
+			assert.Contains(t, body, fmt.Sprintf("'val' => '%d'", i))
+		} else {
+			// Odd requests: use $_REQUEST
+			body, _ := testGet(fmt.Sprintf("http://example.com/request-superglobal-conditional.php?use_request=1&val=%d", i), handler, t)
+			assert.Contains(t, body, "REQUEST:")
+			assert.Contains(t, body, "REQUEST_COUNT:2", "$_REQUEST should have ONLY current request's data (2 keys: use_request and val)")
+			assert.Contains(t, body, fmt.Sprintf("'val' => '%d'", i), "request data is not present")
+			assert.Contains(t, body, "'use_request' => '1'")
+			assert.Contains(t, body, "VAL_CHECK:MATCH", "BUG: $_REQUEST contains stale data from previous request! Body: "+body)
+		}
+	}, &testOptions{workerScript: "request-superglobal-conditional.php", phpIni: phpIni})
+}
+
 func TestCookies_module(t *testing.T) { testCookies(t, nil) }
 func TestCookies_worker(t *testing.T) { testCookies(t, &testOptions{workerScript: "cookies.php"}) }
 func testCookies(t *testing.T, opts *testOptions) {
