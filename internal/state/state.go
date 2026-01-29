@@ -10,7 +10,7 @@ import (
 type State string
 
 const (
-	// livecycle States of a thread
+	// lifecycle States of a thread
 	Reserved      State = "reserved"
 	Booting       State = "booting"
 	BootRequested State = "boot requested"
