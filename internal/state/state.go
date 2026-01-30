@@ -24,6 +24,8 @@ const (
 	// States necessary for restarting workers
 	Restarting State = "restarting"
 	Yielding   State = "yielding"
+	OpcacheResetting State = "opcache resetting"
+	OpcacheResettingDone State = "opcache reset done"
 
 	// States necessary for transitioning between different handlers
 	TransitionRequested  State = "transition requested"
