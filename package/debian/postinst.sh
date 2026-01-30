@@ -73,8 +73,3 @@ fi
 if command -v setcap >/dev/null 2>&1; then
 	setcap cap_net_bind_service=+ep /usr/bin/frankenphp || true
 fi
-
-if [ -x /usr/bin/frankenphp ]; then
-	mkdir -p /usr/share/bash-completion/completions/
-	/usr/bin/frankenphp completion bash | sed 's/caddy/frankenphp/g' >/usr/share/bash-completion/completions/frankenphp
-fi

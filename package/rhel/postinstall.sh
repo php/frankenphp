@@ -51,8 +51,3 @@ if [ "$1" -eq 1 ] && [ -x /usr/bin/frankenphp ]; then
 		chown -R frankenphp:frankenphp /var/lib/frankenphp
 	fi
 fi
-
-if [ -x /usr/bin/frankenphp ]; then
-	mkdir -p /usr/share/bash-completion/completions/
-	/usr/bin/frankenphp completion bash | sed 's/caddy/frankenphp/g' >/usr/share/bash-completion/completions/frankenphp
-fi
