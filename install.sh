@@ -3,9 +3,6 @@
 set -e
 
 SUDO=""
-if [ "$(id -u)" -ne 0 ]; then
-	SUDO="sudo"
-fi
 
 if [ -z "${BIN_DIR}" ]; then
 	BIN_DIR=$(pwd)
@@ -34,7 +31,8 @@ Linux*)
 	if [ "${ARCH}" = "aarch64" ] || [ "${ARCH}" = "x86_64" ]; then
 		if command -v dnf >/dev/null 2>&1; then
 			echo "📦 Detected dnf. Installing FrankenPHP from RPM repository..."
-			if [ -n "${SUDO}" ]; then
+			if [ "$(id -u)" -ne 0 ]; then
+				SUDO="sudo"
 				echo "❗ Enter your password to grant sudo powers for package installation"
 				${SUDO} -v || true
 			fi
@@ -50,21 +48,17 @@ Linux*)
 			exit 0
 		fi
 
-		if command -v apt >/dev/null 2>&1 || command -v apt-get >/dev/null 2>&1; then
-			echo "📦 Detected apt. Installing FrankenPHP from DEB repository..."
-			if [ -n "${SUDO}" ]; then
+		if command -v apt-get >/dev/null 2>&1; then
+			echo "📦 Detected apt-get. Installing FrankenPHP from DEB repository..."
+			if [ "$(id -u)" -ne 0 ]; then
+				SUDO="sudo"
 				echo "❗ Enter your password to grant sudo powers for package installation"
 				${SUDO} -v || true
 			fi
 			${SUDO} sh -c 'curl -fsSL https://pkg.henderkes.com/api/packages/85/debian/repository.key -o /etc/apt/keyrings/static-php85.asc'
 			${SUDO} sh -c 'echo "deb [signed-by=/etc/apt/keyrings/static-php85.asc] https://pkg.henderkes.com/api/packages/85/debian php-zts main" | sudo tee -a /etc/apt/sources.list.d/static-php85.list'
-			if command -v apt >/dev/null 2>&1; then
-				${SUDO} apt update
-				${SUDO} apt -y install frankenphp
-			else
-				${SUDO} apt-get update
-				${SUDO} apt-get -y install frankenphp
-			fi
+			${SUDO} apt-get update
+			${SUDO} apt-get -y install frankenphp
 			echo
 			echo "🥳 FrankenPHP installed to ${italic}/usr/bin/frankenphp${normal} successfully."
 			echo "❗ The systemd service uses the Caddyfile in ${italic}/etc/frankenphp/Caddyfile${normal}"
@@ -76,7 +70,8 @@ Linux*)
 
 		if command -v apk >/dev/null 2>&1; then
 			echo "📦 Detected apk. Installing FrankenPHP from APK repository..."
-			if [ -n "${SUDO}" ]; then
+			if [ "$(id -u)" -ne 0 ]; then
+				SUDO="sudo"
 				echo "❗ Enter your password to grant sudo powers for package installation"
 				${SUDO} -v || true
 			fi
