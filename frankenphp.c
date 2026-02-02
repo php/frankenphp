@@ -309,10 +309,7 @@ static void frankenphp_snapshot_session_handlers(void) {
     return; /* No user handlers to snapshot */
   }
 
-  worker_session_handlers_snapshot = malloc(sizeof(session_user_handlers));
-  if (worker_session_handlers_snapshot == NULL) {
-    return; /* Memory allocation failed */
-  }
+  worker_session_handlers_snapshot = emalloc(sizeof(session_user_handlers));
 
   /* Copy each handler zval with incremented reference count */
 #define SNAPSHOT_HANDLER(h)                                                    \
@@ -367,7 +364,7 @@ static void frankenphp_cleanup_worker_state(void) {
 
 #undef FREE_HANDLER
 
-    free(worker_session_handlers_snapshot);
+    efree(worker_session_handlers_snapshot);
     worker_session_handlers_snapshot = NULL;
   }
 }
