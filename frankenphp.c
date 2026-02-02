@@ -98,6 +98,17 @@ typedef struct {
 #define PS_MOD_USER_NAMES(handler) PS(mod_user_names).name.handler
 #endif
 
+#define FOR_EACH_SESSION_HANDLER(op)                                           \
+  op(ps_open);                                                                 \
+  op(ps_close);                                                                \
+  op(ps_read);                                                                 \
+  op(ps_write);                                                                \
+  op(ps_destroy);                                                              \
+  op(ps_gc);                                                                   \
+  op(ps_create_sid);                                                           \
+  op(ps_validate_sid);                                                         \
+  op(ps_update_timestamp)
+
 __thread session_user_handlers *worker_session_handlers_snapshot = NULL;
 
 void frankenphp_update_local_thread_context(bool is_worker) {
@@ -201,7 +212,7 @@ static void frankenphp_release_temporary_streams() {
 }
 
 /* Destructor for INI snapshot hash table entries */
-static void ini_snapshot_dtor(zval *zv) {
+static void frankenphp_ini_snapshot_dtor(zval *zv) {
   zend_string_release((zend_string *)Z_PTR_P(zv));
 }
 
@@ -212,12 +223,16 @@ static void frankenphp_snapshot_ini(void) {
     return; /* Already snapshotted */
   }
 
-  ALLOC_HASHTABLE(worker_ini_snapshot);
-  zend_hash_init(worker_ini_snapshot, 8, NULL, ini_snapshot_dtor, 0);
-
   if (EG(modified_ini_directives) == NULL) {
-    return; /* No modifications to snapshot */
+    /* Allocate empty table to mark as snapshotted */
+    ALLOC_HASHTABLE(worker_ini_snapshot);
+    zend_hash_init(worker_ini_snapshot, 0, NULL, frankenphp_ini_snapshot_dtor, 0);
+    return;
   }
+
+  uint32_t num_modified = zend_hash_num_elements(EG(modified_ini_directives));
+  ALLOC_HASHTABLE(worker_ini_snapshot);
+  zend_hash_init(worker_ini_snapshot, num_modified, NULL, frankenphp_ini_snapshot_dtor, 0);
 
   zend_ini_entry *ini_entry;
   ZEND_HASH_FOREACH_PTR(EG(modified_ini_directives), ini_entry) {
@@ -244,9 +259,10 @@ static void frankenphp_restore_ini(void) {
   /* Collect entries to restore to default in a separate array.
    * We cannot call zend_restore_ini_entry() during iteration because
    * it calls zend_hash_del() on EG(modified_ini_directives). */
-  zend_string **entries_to_restore = NULL;
+  uint32_t max_entries = zend_hash_num_elements(EG(modified_ini_directives));
+  zend_string **entries_to_restore =
+      max_entries ? emalloc(max_entries * sizeof(zend_string *)) : NULL;
   size_t restore_count = 0;
-  size_t restore_capacity = 0;
 
   ZEND_HASH_FOREACH_STR_KEY_PTR(EG(modified_ini_directives), entry_name,
                                 ini_entry) {
@@ -254,11 +270,6 @@ static void frankenphp_restore_ini(void) {
 
     if (snapshot_value == NULL) {
       /* Entry was not in snapshot: collect for restore to startup default */
-      if (restore_count >= restore_capacity) {
-        restore_capacity = restore_capacity ? restore_capacity * 2 : 8;
-        entries_to_restore = erealloc(entries_to_restore,
-                                      restore_capacity * sizeof(zend_string *));
-      }
       entries_to_restore[restore_count++] = zend_string_copy(entry_name);
     } else if (!zend_string_equals(ini_entry->value, snapshot_value)) {
       /* Entry was in snapshot but value changed: restore to snapshot value.
@@ -304,23 +315,14 @@ static void frankenphp_snapshot_session_handlers(void) {
   }
 
   /* Copy each handler zval with incremented reference count */
-#define SNAPSHOT_HANDLER(handler)                                              \
-  if (!Z_ISUNDEF(PS_MOD_USER_NAMES(handler))) {                                \
-    ZVAL_COPY(&worker_session_handlers_snapshot->handler,                      \
-              &PS_MOD_USER_NAMES(handler));                                    \
+#define SNAPSHOT_HANDLER(h)                                                    \
+  if (!Z_ISUNDEF(PS_MOD_USER_NAMES(h))) {                                      \
+    ZVAL_COPY(&worker_session_handlers_snapshot->h, &PS_MOD_USER_NAMES(h));    \
   } else {                                                                     \
-    ZVAL_UNDEF(&worker_session_handlers_snapshot->handler);                    \
+    ZVAL_UNDEF(&worker_session_handlers_snapshot->h);                          \
   }
 
-  SNAPSHOT_HANDLER(ps_open);
-  SNAPSHOT_HANDLER(ps_close);
-  SNAPSHOT_HANDLER(ps_read);
-  SNAPSHOT_HANDLER(ps_write);
-  SNAPSHOT_HANDLER(ps_destroy);
-  SNAPSHOT_HANDLER(ps_gc);
-  SNAPSHOT_HANDLER(ps_create_sid);
-  SNAPSHOT_HANDLER(ps_validate_sid);
-  SNAPSHOT_HANDLER(ps_update_timestamp);
+  FOR_EACH_SESSION_HANDLER(SNAPSHOT_HANDLER);
 
 #undef SNAPSHOT_HANDLER
 }
@@ -331,25 +333,16 @@ static void frankenphp_restore_session_handlers(void) {
     return;
   }
 
-  /* Restore each handler zval */
-#define RESTORE_HANDLER(handler)                                               \
-  if (!Z_ISUNDEF(worker_session_handlers_snapshot->handler)) {                 \
-    if (!Z_ISUNDEF(PS_MOD_USER_NAMES(handler))) {                              \
-      zval_ptr_dtor(&PS_MOD_USER_NAMES(handler));                              \
-    }                                                                          \
-    ZVAL_COPY(&PS_MOD_USER_NAMES(handler),                                     \
-              &worker_session_handlers_snapshot->handler);                     \
+  /* Restore each handler zval.
+   * Session RSHUTDOWN already freed the handlers via zval_ptr_dtor and set
+   * them to UNDEF, so we don't need to destroy them again. We simply copy
+   * from the snapshot (which holds its own reference). */
+#define RESTORE_HANDLER(h)                                                     \
+  if (!Z_ISUNDEF(worker_session_handlers_snapshot->h)) {                       \
+    ZVAL_COPY(&PS_MOD_USER_NAMES(h), &worker_session_handlers_snapshot->h);    \
   }
 
-  RESTORE_HANDLER(ps_open);
-  RESTORE_HANDLER(ps_close);
-  RESTORE_HANDLER(ps_read);
-  RESTORE_HANDLER(ps_write);
-  RESTORE_HANDLER(ps_destroy);
-  RESTORE_HANDLER(ps_gc);
-  RESTORE_HANDLER(ps_create_sid);
-  RESTORE_HANDLER(ps_validate_sid);
-  RESTORE_HANDLER(ps_update_timestamp);
+  FOR_EACH_SESSION_HANDLER(RESTORE_HANDLER);
 
 #undef RESTORE_HANDLER
 }
@@ -365,20 +358,12 @@ static void frankenphp_cleanup_worker_state(void) {
 
   /* Free session handlers snapshot */
   if (worker_session_handlers_snapshot != NULL) {
-#define FREE_HANDLER(handler)                                                  \
-  if (!Z_ISUNDEF(worker_session_handlers_snapshot->handler)) {                 \
-    zval_ptr_dtor(&worker_session_handlers_snapshot->handler);                 \
+#define FREE_HANDLER(h)                                                        \
+  if (!Z_ISUNDEF(worker_session_handlers_snapshot->h)) {                       \
+    zval_ptr_dtor(&worker_session_handlers_snapshot->h);                       \
   }
 
-    FREE_HANDLER(ps_open);
-    FREE_HANDLER(ps_close);
-    FREE_HANDLER(ps_read);
-    FREE_HANDLER(ps_write);
-    FREE_HANDLER(ps_destroy);
-    FREE_HANDLER(ps_gc);
-    FREE_HANDLER(ps_create_sid);
-    FREE_HANDLER(ps_validate_sid);
-    FREE_HANDLER(ps_update_timestamp);
+    FOR_EACH_SESSION_HANDLER(FREE_HANDLER);
 
 #undef FREE_HANDLER
 
