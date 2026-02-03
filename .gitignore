@@ -10,3 +10,4 @@ frankenphp.test
 caddy/frankenphp/Build
 package/etc/php.ini
 *.log
+compile_flags.txt
