@@ -8,4 +8,19 @@ The PHP thread pool operates with a fixed number of threads initialized at start
 Queued connections will wait indefinitely until a PHP thread is available to serve them. To avoid this, you can use the max_wait_time [configuration](config.md#caddyfile-config) in FrankenPHP's global configuration to limit the duration a request can wait for a free PHP thread before being rejected.
 Additionally, you can set a reasonable [write timeout in Caddy](https://caddyserver.com/docs/caddyfile/options#timeouts).
 
+Here is how to do it using environment variables:
+
+```sh
+FRANKENPHP_CONFIG="max_wait_time 2m"
+
+CADDY_GLOBAL_OPTIONS="servers {
+  timeouts {
+    read_body 30s
+    read_header 5s
+    write 30s
+    idle 30s
+  }
+}"
+```
+
 Each Caddy instance will only spin up one FrankenPHP thread pool, which will be shared across all `php_server` blocks.
