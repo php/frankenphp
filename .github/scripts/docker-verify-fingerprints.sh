@@ -53,7 +53,7 @@ for os in "${OS_LIST[@]}"; do
   done
 done
 
-BASE_IMAGES=($(printf '%s\n' "${BASE_IMAGES[@]}" | sort -u))
+mapfile -t BASE_IMAGES < <(printf '%s\n' "${BASE_IMAGES[@]}" | sort -u)
 
 BASE_IMAGE_DIGESTS=()
 for image in "${BASE_IMAGES[@]}"; do
