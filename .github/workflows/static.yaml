@@ -150,9 +150,9 @@ jobs:
             ${{ (github.event_name == 'pull_request' || matrix.platform == 'linux/arm64') && 'static-builder-musl.args.NO_COMPRESS=1' || '' }}
             *.tags=
             *.platform=${{ matrix.platform }}
-            *.cache-from=type=gha,scope=${{ needs.prepare.outputs.ref || github.ref }}-static-builder-musl${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }}
-            *.cache-from=type=gha,scope=refs/heads/main-static-builder-musl${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }}
-            *.cache-to=type=gha,scope=${{ needs.prepare.outputs.ref || github.ref }}-static-builder-musl${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }},ignore-error=true
+            ${{ fromJson(needs.prepare.outputs.push) && '' || format('*.cache-from=type=gha,scope={0}-static-builder-musl{1}{2}', needs.prepare.outputs.ref || github.ref, matrix.debug && '-debug' || '', matrix.mimalloc && '-mimalloc' || '') }}
+            ${{ fromJson(needs.prepare.outputs.push) && '' || format('*.cache-from=type=gha,scope=refs/heads/main-static-builder-musl{0}{1}', matrix.debug && '-debug' || '', matrix.mimalloc && '-mimalloc' || '') }}
+            ${{ fromJson(needs.prepare.outputs.push) && '' || format('*.cache-to=type=gha,scope={0}-static-builder-musl{1}{2},ignore-error=true', needs.prepare.outputs.ref || github.ref, matrix.debug && '-debug' || '', matrix.mimalloc && '-mimalloc' || '') }}
             ${{ (fromJson(needs.prepare.outputs.push) && !matrix.debug && !matrix.mimalloc) && format('*.output=type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME) || '' }}
         env:
           SHA: ${{ github.sha }}
@@ -301,9 +301,9 @@ jobs:
             ${{ (github.event_name == 'pull_request' || matrix.platform == 'linux/arm64') && 'static-builder-gnu.args.NO_COMPRESS=1' || '' }}
             *.tags=
             *.platform=${{ matrix.platform }}
-            *.cache-from=type=gha,scope=${{ needs.prepare.outputs.ref || github.ref }}-static-builder-gnu
-            *.cache-from=type=gha,scope=refs/heads/main-static-builder-gnu
-            *.cache-to=type=gha,scope=${{ needs.prepare.outputs.ref || github.ref }}-static-builder-gnu,ignore-error=true
+            ${{ fromJson(needs.prepare.outputs.push) && '' || format('*.cache-from=type=gha,scope={0}-static-builder-gnu', needs.prepare.outputs.ref || github.ref) }}
+            ${{ fromJson(needs.prepare.outputs.push) && '' || '*.cache-from=type=gha,scope=refs/heads/main-static-builder-gnu' }}
+            ${{ fromJson(needs.prepare.outputs.push) && '' || format('*.cache-to=type=gha,scope={0}-static-builder-gnu,ignore-error=true', needs.prepare.outputs.ref || github.ref) }}
             ${{ fromJson(needs.prepare.outputs.push) && format('*.output=type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME) || '' }}
         env:
           SHA: ${{ github.sha }}
