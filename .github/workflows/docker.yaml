@@ -146,12 +146,12 @@ jobs:
             ${{ (github.event_name == 'pull_request') && '*.args.NO_COMPRESS=1' || '' }}
             *.tags=
             *.platform=${{ matrix.platform }}
-            builder-${{ matrix.variant }}.cache-from=type=gha,scope=builder-${{ matrix.variant }}-${{ needs.prepare.outputs.ref || github.ref }}-${{ matrix.platform }}
-            builder-${{ matrix.variant }}.cache-from=type=gha,scope=refs/heads/main-builder-${{ matrix.variant }}-${{ matrix.platform }}
-            builder-${{ matrix.variant }}.cache-to=type=gha,scope=builder-${{ matrix.variant }}-${{ needs.prepare.outputs.ref || github.ref }}-${{ matrix.platform }},ignore-error=true
-            runner-${{ matrix.variant }}.cache-from=type=gha,scope=runner-${{ matrix.variant }}-${{ needs.prepare.outputs.ref || github.ref }}-${{ matrix.platform }}
-            runner-${{ matrix.variant }}.cache-from=type=gha,scope=refs/heads/main-runner-${{ matrix.variant }}-${{ matrix.platform }}
-            runner-${{ matrix.variant }}.cache-to=type=gha,scope=runner-${{ matrix.variant }}-${{ needs.prepare.outputs.ref || github.ref }}-${{ matrix.platform }},ignore-error=true
+            ${{ fromJson(needs.prepare.outputs.push) && '' || format('builder-{0}.cache-from=type=gha,scope=builder-{0}-{1}-{2}', matrix.variant, needs.prepare.outputs.ref || github.ref, matrix.platform) }}
+            ${{ fromJson(needs.prepare.outputs.push) && '' || format('builder-{0}.cache-from=type=gha,scope=refs/heads/main-builder-{0}-{1}', matrix.variant, matrix.platform) }}
+            ${{ fromJson(needs.prepare.outputs.push) && '' || format('builder-{0}.cache-to=type=gha,scope=builder-{0}-{1}-{2},ignore-error=true', matrix.variant, needs.prepare.outputs.ref || github.ref, matrix.platform) }}
+            ${{ fromJson(needs.prepare.outputs.push) && '' || format('runner-{0}.cache-from=type=gha,scope=runner-{0}-{1}-{2}', matrix.variant, needs.prepare.outputs.ref || github.ref, matrix.platform) }}
+            ${{ fromJson(needs.prepare.outputs.push) && '' || format('runner-{0}.cache-from=type=gha,scope=refs/heads/main-runner-{0}-{1}', matrix.variant, matrix.platform) }}
+            ${{ fromJson(needs.prepare.outputs.push) && '' || format('runner-{0}.cache-to=type=gha,scope=runner-{0}-{1}-{2},ignore-error=true', matrix.variant, needs.prepare.outputs.ref || github.ref, matrix.platform) }}
             ${{ fromJson(needs.prepare.outputs.push) && format('*.output=type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME) || '' }}
         env:
           SHA: ${{ github.sha }}
