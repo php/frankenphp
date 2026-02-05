@@ -31,16 +31,16 @@ done < <(
 import re
 
 with open("docker-bake.hcl", "r", encoding="utf-8") as f:
-    data = f.read()
+	data = f.read()
 
 # Find the first "os = [ ... ]" block and extract quoted values
 m = re.search(r'os\s*=\s*\[(.*?)\]', data, re.S)
 if not m:
-    raise SystemExit(1)
+	raise SystemExit(1)
 
 vals = re.findall(r'"([^"]+)"', m.group(1))
 for v in vals:
-    print(v)
+	print(v)
 PY
 )
 

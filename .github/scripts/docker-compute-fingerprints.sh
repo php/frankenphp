@@ -40,10 +40,10 @@ BASE_IMAGES=()
 while IFS= read -r image; do
 	BASE_IMAGES+=("${image}")
 done < <(jq -r '
-  .target[]?.contexts? | to_entries[]?
-  | select(.value | startswith("docker-image://"))
-  | .value
-  | sub("^docker-image://"; "")
+	.target[]?.contexts? | to_entries[]?
+	| select(.value | startswith("docker-image://"))
+	| .value
+	| sub("^docker-image://"; "")
 ' <<<"${METADATA}" | sort -u)
 
 BASE_IMAGE_DIGESTS=()
