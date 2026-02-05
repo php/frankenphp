@@ -226,13 +226,15 @@ static void frankenphp_snapshot_ini(void) {
   if (EG(modified_ini_directives) == NULL) {
     /* Allocate empty table to mark as snapshotted */
     ALLOC_HASHTABLE(worker_ini_snapshot);
-    zend_hash_init(worker_ini_snapshot, 0, NULL, frankenphp_ini_snapshot_dtor, 0);
+    zend_hash_init(worker_ini_snapshot, 0, NULL, frankenphp_ini_snapshot_dtor,
+                   0);
     return;
   }
 
   uint32_t num_modified = zend_hash_num_elements(EG(modified_ini_directives));
   ALLOC_HASHTABLE(worker_ini_snapshot);
-  zend_hash_init(worker_ini_snapshot, num_modified, NULL, frankenphp_ini_snapshot_dtor, 0);
+  zend_hash_init(worker_ini_snapshot, num_modified, NULL,
+                 frankenphp_ini_snapshot_dtor, 0);
 
   zend_ini_entry *ini_entry;
   ZEND_HASH_FOREACH_PTR(EG(modified_ini_directives), ini_entry) {

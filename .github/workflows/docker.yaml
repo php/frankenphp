@@ -62,7 +62,7 @@ jobs:
         id: check
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./scripts/ci/compute-fingerprint.sh
+        run: ./.github/scripts/docker-compute-fingerprints.sh
       - name: Create variants matrix
         if: ${{ !fromJson(steps.check.outputs.skip) }}
         id: matrix
