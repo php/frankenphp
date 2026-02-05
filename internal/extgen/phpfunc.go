@@ -37,24 +37,25 @@ func (pfg *PHPFuncGenerator) generate(fn phpFunction) string {
 
 func (pfg *PHPFuncGenerator) generateGoCall(fn phpFunction) string {
 	callParams := pfg.paramParser.generateGoCallParams(fn.Params)
+	goFuncName := "go_" + fn.Name
 
 	if fn.ReturnType == phpVoid {
-		return fmt.Sprintf("    %s(%s);", fn.Name, callParams)
+		return fmt.Sprintf("    %s(%s);", goFuncName, callParams)
 	}
 
 	if fn.ReturnType == phpString {
-		return fmt.Sprintf("    zend_string *result = %s(%s);", fn.Name, callParams)
+		return fmt.Sprintf("    zend_string *result = %s(%s);", goFuncName, callParams)
 	}
 
 	if fn.ReturnType == phpArray {
-		return fmt.Sprintf("    zend_array *result = %s(%s);", fn.Name, callParams)
+		return fmt.Sprintf("    zend_array *result = %s(%s);", goFuncName, callParams)
 	}
 
 	if fn.ReturnType == phpMixed {
-		return fmt.Sprintf("    zval *result = %s(%s);", fn.Name, callParams)
+		return fmt.Sprintf("    zval *result = %s(%s);", goFuncName, callParams)
 	}
 
-	return fmt.Sprintf("    %s result = %s(%s);", pfg.getCReturnType(fn.ReturnType), fn.Name, callParams)
+	return fmt.Sprintf("    %s result = %s(%s);", pfg.getCReturnType(fn.ReturnType), goFuncName, callParams)
 }
 
 func (pfg *PHPFuncGenerator) getCReturnType(returnType phpType) string {
