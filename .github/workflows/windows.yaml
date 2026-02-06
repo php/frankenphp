@@ -176,7 +176,7 @@ jobs:
           } | ConvertTo-Json -Depth 10
           [System.IO.File]::WriteAllText("versioninfo.json", $json)
 
-          goversioninfo -icon ..\..\..\frankenphp.ico versioninfo.json -o resource.syso
+          goversioninfo -icon ..\..\frankenphp.ico versioninfo.json -o resource.syso
 
       - name: Build FrankenPHP
         run: |
