@@ -306,6 +306,56 @@ func testPostSuperGlobals(t *testing.T, opts *testOptions) {
 	}, opts)
 }
 
+func TestRequestSuperGlobal_module(t *testing.T) { testRequestSuperGlobal(t, nil) }
+func TestRequestSuperGlobal_worker(t *testing.T) {
+	phpIni := make(map[string]string)
+	phpIni["auto_globals_jit"] = "1"
+	testRequestSuperGlobal(t, &testOptions{workerScript: "request-superglobal.php", phpIni: phpIni})
+}
+func testRequestSuperGlobal(t *testing.T, opts *testOptions) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		// Test with both GET and POST parameters
+		// $_REQUEST should contain merged data from both
+		formData := url.Values{"post_key": {fmt.Sprintf("post_value_%d", i)}}
+		req := httptest.NewRequest("POST", fmt.Sprintf("http://example.com/request-superglobal.php?get_key=get_value_%d", i), strings.NewReader(formData.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		body, _ := testRequest(req, handler, t)
+
+		// Verify $_REQUEST contains both GET and POST data for the current request
+		assert.Contains(t, body, fmt.Sprintf("'get_key' => 'get_value_%d'", i))
+		assert.Contains(t, body, fmt.Sprintf("'post_key' => 'post_value_%d'", i))
+	}, opts)
+}
+
+func TestRequestSuperGlobalConditional_worker(t *testing.T) {
+	// This test verifies that $_REQUEST works correctly when accessed conditionally
+	// in worker mode. The first request does NOT access $_REQUEST, but subsequent
+	// requests do. This tests the "re-arm" mechanism for JIT auto globals.
+	//
+	// The bug scenario:
+	// - Request 1 (i=1): includes file, $_REQUEST initialized with val=1
+	// - Request 3 (i=3): includes file from cache, $_REQUEST should have val=3
+	// If the bug exists, $_REQUEST would still have val=1 from request 1.
+	phpIni := make(map[string]string)
+	phpIni["auto_globals_jit"] = "1"
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		if i%2 == 0 {
+			// Even requests: don't use $_REQUEST
+			body, _ := testGet(fmt.Sprintf("http://example.com/request-superglobal-conditional.php?val=%d", i), handler, t)
+			assert.Contains(t, body, "SKIPPED")
+			assert.Contains(t, body, fmt.Sprintf("'val' => '%d'", i))
+		} else {
+			// Odd requests: use $_REQUEST
+			body, _ := testGet(fmt.Sprintf("http://example.com/request-superglobal-conditional.php?use_request=1&val=%d", i), handler, t)
+			assert.Contains(t, body, "REQUEST:")
+			assert.Contains(t, body, "REQUEST_COUNT:2", "$_REQUEST should have ONLY current request's data (2 keys: use_request and val)")
+			assert.Contains(t, body, fmt.Sprintf("'val' => '%d'", i), "request data is not present")
+			assert.Contains(t, body, "'use_request' => '1'")
+			assert.Contains(t, body, "VAL_CHECK:MATCH", "BUG: $_REQUEST contains stale data from previous request! Body: "+body)
+		}
+	}, &testOptions{workerScript: "request-superglobal-conditional.php", phpIni: phpIni})
+}
+
 func TestCookies_module(t *testing.T) { testCookies(t, nil) }
 func TestCookies_worker(t *testing.T) { testCookies(t, &testOptions{workerScript: "cookies.php"}) }
 func testCookies(t *testing.T, opts *testOptions) {
@@ -1033,5 +1083,183 @@ func FuzzRequest(f *testing.F) {
 			assert.Contains(t, body, fmt.Sprintf("[CONTENT_TYPE] => %s", fuzzedString))
 			assert.Contains(t, body, fmt.Sprintf("[HTTP_FUZZED] => %s", fuzzedString))
 		}, &testOptions{workerScript: "request-headers.php"})
+	})
+}
+
+func TestSessionHandlerReset_worker(t *testing.T) {
+	runTest(t, func(_ func(http.ResponseWriter, *http.Request), ts *httptest.Server, i int) {
+		// Request 1: Set a custom session handler and start session
+		resp1, err := http.Get(ts.URL + "/session-handler.php?action=set_handler_and_start&value=test1")
+		assert.NoError(t, err)
+		body1, _ := io.ReadAll(resp1.Body)
+		_ = resp1.Body.Close()
+
+		body1Str := string(body1)
+		assert.Contains(t, body1Str, "HANDLER_SET_AND_STARTED")
+		assert.Contains(t, body1Str, "session.save_handler=user")
+
+		// Request 2: Start session without setting a custom handler
+		// After the fix: session.save_handler should be reset to "files"
+		// and session_start() should work normally
+		resp2, err := http.Get(ts.URL + "/session-handler.php?action=start_without_handler")
+		assert.NoError(t, err)
+		body2, _ := io.ReadAll(resp2.Body)
+		_ = resp2.Body.Close()
+
+		body2Str := string(body2)
+
+		// session.save_handler should be reset to "files" (default)
+		assert.Contains(t, body2Str, "save_handler_before=files",
+			"session.save_handler INI should be reset to 'files' between requests.\nResponse: %s", body2Str)
+
+		// session_start() should succeed
+		assert.Contains(t, body2Str, "SESSION_START_RESULT=true",
+			"session_start() should succeed after INI reset.\nResponse: %s", body2Str)
+
+		// No errors or exceptions should occur
+		assert.NotContains(t, body2Str, "ERROR:",
+			"No errors expected.\nResponse: %s", body2Str)
+		assert.NotContains(t, body2Str, "EXCEPTION:",
+			"No exceptions expected.\nResponse: %s", body2Str)
+
+	}, &testOptions{
+		workerScript:       "session-handler.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		realServer:         true,
+	})
+}
+
+func TestIniLeakBetweenRequests_worker(t *testing.T) {
+	runTest(t, func(_ func(http.ResponseWriter, *http.Request), ts *httptest.Server, i int) {
+		// Request 1: Change INI values
+		resp1, err := http.Get(ts.URL + "/ini-leak.php?action=change_ini")
+		assert.NoError(t, err)
+		body1, _ := io.ReadAll(resp1.Body)
+		_ = resp1.Body.Close()
+
+		assert.Contains(t, string(body1), "INI_CHANGED")
+
+		// Request 2: Check if INI values leaked from request 1
+		resp2, err := http.Get(ts.URL + "/ini-leak.php?action=check_ini")
+		assert.NoError(t, err)
+		body2, _ := io.ReadAll(resp2.Body)
+		_ = resp2.Body.Close()
+
+		body2Str := string(body2)
+		t.Logf("Response: %s", body2Str)
+
+		// If INI values leak, this test will fail
+		assert.Contains(t, body2Str, "NO_LEAKS",
+			"INI values should not leak between requests.\nResponse: %s", body2Str)
+		assert.NotContains(t, body2Str, "LEAKS_DETECTED",
+			"INI leaks detected.\nResponse: %s", body2Str)
+
+	}, &testOptions{
+		workerScript:       "ini-leak.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		realServer:         true,
+	})
+}
+
+func TestSessionHandlerPreLoopPreserved_worker(t *testing.T) {
+	runTest(t, func(_ func(http.ResponseWriter, *http.Request), ts *httptest.Server, i int) {
+		// Request 1: Check that the pre-loop session handler is preserved
+		resp1, err := http.Get(ts.URL + "/worker-with-session-handler.php?action=check")
+		assert.NoError(t, err)
+		body1, _ := io.ReadAll(resp1.Body)
+		_ = resp1.Body.Close()
+
+		body1Str := string(body1)
+		t.Logf("Request 1 response: %s", body1Str)
+		assert.Contains(t, body1Str, "HANDLER_PRESERVED",
+			"Session handler set before loop should be preserved")
+		assert.Contains(t, body1Str, "save_handler=user",
+			"session.save_handler should remain 'user'")
+
+		// Request 2: Use the session - should work with pre-loop handler
+		resp2, err := http.Get(ts.URL + "/worker-with-session-handler.php?action=use_session")
+		assert.NoError(t, err)
+		body2, _ := io.ReadAll(resp2.Body)
+		_ = resp2.Body.Close()
+
+		body2Str := string(body2)
+		t.Logf("Request 2 response: %s", body2Str)
+		assert.Contains(t, body2Str, "SESSION_OK",
+			"Session should work with pre-loop handler.\nResponse: %s", body2Str)
+		assert.NotContains(t, body2Str, "ERROR:",
+			"No errors expected.\nResponse: %s", body2Str)
+		assert.NotContains(t, body2Str, "EXCEPTION:",
+			"No exceptions expected.\nResponse: %s", body2Str)
+
+		// Request 3: Check handler is still preserved after using session
+		resp3, err := http.Get(ts.URL + "/worker-with-session-handler.php?action=check")
+		assert.NoError(t, err)
+		body3, _ := io.ReadAll(resp3.Body)
+		_ = resp3.Body.Close()
+
+		body3Str := string(body3)
+		t.Logf("Request 3 response: %s", body3Str)
+		assert.Contains(t, body3Str, "HANDLER_PRESERVED",
+			"Session handler should still be preserved after use")
+
+	}, &testOptions{
+		workerScript:       "worker-with-session-handler.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		realServer:         true,
+	})
+}
+
+func TestIniPreLoopPreserved_worker(t *testing.T) {
+	runTest(t, func(_ func(http.ResponseWriter, *http.Request), ts *httptest.Server, i int) {
+		// Request 1: Check that pre-loop INI values are present
+		resp1, err := http.Get(ts.URL + "/worker-with-ini.php?action=check")
+		assert.NoError(t, err)
+		body1, _ := io.ReadAll(resp1.Body)
+		_ = resp1.Body.Close()
+
+		body1Str := string(body1)
+		t.Logf("Request 1 response: %s", body1Str)
+		assert.Contains(t, body1Str, "precision=8",
+			"Pre-loop precision should be 8")
+		assert.Contains(t, body1Str, "display_errors=0",
+			"Pre-loop display_errors should be 0")
+		assert.Contains(t, body1Str, "PRELOOP_INI_PRESERVED",
+			"Pre-loop INI values should be preserved")
+
+		// Request 2: Change INI values during request
+		resp2, err := http.Get(ts.URL + "/worker-with-ini.php?action=change_ini")
+		assert.NoError(t, err)
+		body2, _ := io.ReadAll(resp2.Body)
+		_ = resp2.Body.Close()
+
+		body2Str := string(body2)
+		t.Logf("Request 2 response: %s", body2Str)
+		assert.Contains(t, body2Str, "INI_CHANGED")
+		assert.Contains(t, body2Str, "precision=5",
+			"INI should be changed during request")
+
+		// Request 3: Check that pre-loop INI values are restored
+		resp3, err := http.Get(ts.URL + "/worker-with-ini.php?action=check")
+		assert.NoError(t, err)
+		body3, _ := io.ReadAll(resp3.Body)
+		_ = resp3.Body.Close()
+
+		body3Str := string(body3)
+		t.Logf("Request 3 response: %s", body3Str)
+		assert.Contains(t, body3Str, "precision=8",
+			"Pre-loop precision should be restored to 8.\nResponse: %s", body3Str)
+		assert.Contains(t, body3Str, "display_errors=0",
+			"Pre-loop display_errors should be restored to 0.\nResponse: %s", body3Str)
+		assert.Contains(t, body3Str, "PRELOOP_INI_PRESERVED",
+			"Pre-loop INI values should be restored after request changes.\nResponse: %s", body3Str)
+
+	}, &testOptions{
+		workerScript:       "worker-with-ini.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		realServer:         true,
 	})
 }
