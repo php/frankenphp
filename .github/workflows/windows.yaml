@@ -174,8 +174,7 @@ jobs:
               Translation = @{ LangID = 9; CharsetID = 1200 }
             }
           } | ConvertTo-Json -Depth 10
-          $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-          [System.IO.File]::WriteAllText("versioninfo.json", $json, $Utf8NoBom)
+          [System.IO.File]::WriteAllText("versioninfo.json", $json, [System.Text.Encoding]::Default)
 
           goversioninfo -64 -icon ..\..\frankenphp.ico versioninfo.json -o resource.syso
 
