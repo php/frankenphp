@@ -231,14 +231,14 @@ static void frankenphp_snapshot_ini(void) {
 
   if (EG(modified_ini_directives) == NULL) {
     /* Allocate empty table to mark as snapshotted */
-    ALLOC_HASHTABLE(worker_ini_snapshot);
+    worker_ini_snapshot = malloc(sizeof(HashTable));
     zend_hash_init(worker_ini_snapshot, 0, NULL, frankenphp_ini_snapshot_dtor,
                    0);
     return;
   }
 
   uint32_t num_modified = zend_hash_num_elements(EG(modified_ini_directives));
-  ALLOC_HASHTABLE(worker_ini_snapshot);
+  worker_ini_snapshot = malloc(sizeof(HashTable));
   zend_hash_init(worker_ini_snapshot, num_modified, NULL,
                  frankenphp_ini_snapshot_dtor, 0);
 
@@ -269,7 +269,7 @@ static void frankenphp_restore_ini(void) {
    * it calls zend_hash_del() on EG(modified_ini_directives). */
   uint32_t max_entries = zend_hash_num_elements(EG(modified_ini_directives));
   zend_string **entries_to_restore =
-      max_entries ? emalloc(max_entries * sizeof(zend_string *)) : NULL;
+      max_entries ? malloc(max_entries * sizeof(zend_string *)) : NULL;
   size_t restore_count = 0;
 
   ZEND_HASH_FOREACH_STR_KEY_PTR(EG(modified_ini_directives), entry_name,
@@ -295,7 +295,7 @@ static void frankenphp_restore_ini(void) {
     zend_string_release(entries_to_restore[i]);
   }
   if (entries_to_restore) {
-    efree(entries_to_restore);
+    free(entries_to_restore);
   }
 }
 
@@ -317,7 +317,7 @@ static void frankenphp_snapshot_session_handlers(void) {
     return; /* No user handlers to snapshot */
   }
 
-  worker_session_handlers_snapshot = emalloc(sizeof(session_user_handlers));
+  worker_session_handlers_snapshot = malloc(sizeof(session_user_handlers));
 
   /* Copy each handler zval with incremented reference count */
 #define SNAPSHOT_HANDLER(h)                                                    \
@@ -357,7 +357,7 @@ static void frankenphp_cleanup_worker_state(void) {
   /* Free INI snapshot */
   if (worker_ini_snapshot != NULL) {
     zend_hash_destroy(worker_ini_snapshot);
-    FREE_HASHTABLE(worker_ini_snapshot);
+    free(worker_ini_snapshot);
     worker_ini_snapshot = NULL;
   }
 
@@ -372,7 +372,7 @@ static void frankenphp_cleanup_worker_state(void) {
 
 #undef FREE_HANDLER
 
-    efree(worker_session_handlers_snapshot);
+    free(worker_session_handlers_snapshot);
     worker_session_handlers_snapshot = NULL;
   }
 }

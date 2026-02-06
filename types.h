@@ -2,6 +2,7 @@
 #define TYPES_H
 
 #include "frankenphp.h"
+#include <stdlib.h>
 #include <Zend/zend.h>
 #include <Zend/zend_API.h>
 #include <Zend/zend_alloc.h>
