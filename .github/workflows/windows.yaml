@@ -146,6 +146,44 @@ jobs:
           echo "CGO_CFLAGS=-DFRANKENPHP_VERSION=$env:FRANKENPHP_VERSION -I$vcpkgRoot\include -I$watcherRoot -I$phpDevel\include -I$phpDevel\include\main -I$phpDevel\include\TSRM -I$phpDevel\include\Zend -I$phpDevel\include\ext" | Out-File -FilePath $env:GITHUB_ENV -Append
           echo "CGO_LDFLAGS=-L$vcpkgRoot\lib -lbrotlienc -L$watcherRoot -llibwatcher-c -L$phpBin -L$phpDevel\lib -lphp8ts -lphp8embed" | Out-File -FilePath $env:GITHUB_ENV -Append
 
+      - name: Embed Windows icon and metadata
+        working-directory: frankenphp\caddy\frankenphp
+        run: |
+          go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
+
+          $maj = 0; $min = 0; $pat = 0; $bld = 0
+          if ($env:FRANKENPHP_VERSION -match '^(?<M>\d+)\.(?<m>\d+)\.(?<p>\d+)$') {
+            $maj = [int]$Matches['M']
+            $min = [int]$Matches['m']
+            $pat = [int]$Matches['p']
+          }
+
+          # Create versioninfo.json next to the main package so resource.syso is linked automatically
+          @"
+          {
+            "FixedFileInfo": {
+              "FileVersion": { "Major": $maj, "Minor": $min, "Patch": $pat, "Build": $bld },
+              "ProductVersion": { "Major": $maj, "Minor": $min, "Patch": $pat, "Build": $bld }
+            },
+            "StringFileInfo": {
+              "CompanyName": "FrankenPHP",
+              "FileDescription": "The Modern PHP Webserver",
+              "FileVersion": "$env:FRANKENPHP_VERSION",
+              "InternalName": "frankenphp",
+              "OriginalFilename": "frankenphp.exe",
+              "LegalCopyright": "Kévin Dunglas",
+              "ProductName": "FrankenPHP",
+              "ProductVersion": "$env:FRANKENPHP_VERSION",
+              "Comments": "https://frankenphp.dev/"
+            },
+            "VarFileInfo": {
+              "Translation": { "LangID": 1033, "CharsetID": 1200 }
+            }
+          }
+          "@ | Out-File -Encoding utf8 versioninfo.json
+
+          goversioninfo -icon ..\..\..\frankenphp.ico -versioninfo versioninfo.json -o resource.syso
+
       - name: Build FrankenPHP
         run: |
           $customVersion = "FrankenPHP $env:FRANKENPHP_VERSION PHP $env:PHP_VERSION Caddy"
