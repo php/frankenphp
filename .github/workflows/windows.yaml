@@ -147,8 +147,8 @@ jobs:
         run: |
           go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
 
-          $major = 0; $minor = 0; $patch = 0; $bld = 0
-          if ($env:FRANKENPHP_VERSION -match '^(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)$') {
+          $major = 0; $minor = 0; $patch = 0; $build = 0
+          $env:FRANKENPHP_VERSION -match '^(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)$') {
             $major = [int]$Matches['major']
             $minor = [int]$Matches['minor']
             $patch = [int]$Matches['patch']
@@ -156,8 +156,8 @@ jobs:
 
           $json = @{
             FixedFileInfo = @{
-              FileVersion = @{ Major = $major; Minor = $minor; Patch = $patch; Build = $bld }
-              ProductVersion = @{ Major = $major; Minor = $minor; Patch = $patch; Build = $bld }
+              FileVersion = @{ Major = $major; Minor = $minor; Patch = $patch; Build = $build }
+              ProductVersion = @{ Major = $major; Minor = $minor; Patch = $patch; Build = $build }
             }
             StringFileInfo = @{
               CompanyName = "FrankenPHP"
@@ -165,7 +165,7 @@ jobs:
               FileVersion = $env:FRANKENPHP_VERSION
               InternalName = "frankenphp"
               OriginalFilename = "frankenphp.exe"
-              LegalCopyright = "Kévin Dunglas"
+              LegalCopyright = "K\u00e9vin Dunglas"
               ProductName = "FrankenPHP"
               ProductVersion = $env:FRANKENPHP_VERSION
               Comments = "https://frankenphp.dev/"
