@@ -154,29 +154,27 @@ jobs:
             $pat = [int]$Matches['p']
           }
 
-          # Create versioninfo.json next to the main package so resource.syso is linked automatically
-          @"
-          {
-            "FixedFileInfo": {
-              "FileVersion": { "Major": $maj, "Minor": $min, "Patch": $pat, "Build": $bld },
-              "ProductVersion": { "Major": $maj, "Minor": $min, "Patch": $pat, "Build": $bld }
-            },
-            "StringFileInfo": {
-              "CompanyName": "FrankenPHP",
-              "FileDescription": "The Modern PHP Webserver",
-              "FileVersion": "$env:FRANKENPHP_VERSION",
-              "InternalName": "frankenphp",
-              "OriginalFilename": "frankenphp.exe",
-              "LegalCopyright": "Kévin Dunglas",
-              "ProductName": "FrankenPHP",
-              "ProductVersion": "$env:FRANKENPHP_VERSION",
-              "Comments": "https://frankenphp.dev/"
-            },
-            "VarFileInfo": {
-              "Translation": { "LangID": 1033, "CharsetID": 1200 }
+          $json = @{
+            FixedFileInfo = @{
+              FileVersion = @{ Major = $maj; Minor = $min; Patch = $pat; Build = $bld }
+              ProductVersion = @{ Major = $maj; Minor = $min; Patch = $pat; Build = $bld }
             }
-          }
-          "@ | Out-File -Encoding utf8 versioninfo.json
+            StringFileInfo = @{
+              CompanyName = "FrankenPHP"
+              FileDescription = "The Modern PHP Webserver"
+              FileVersion = $env:FRANKENPHP_VERSION
+              InternalName = "frankenphp"
+              OriginalFilename = "frankenphp.exe"
+              LegalCopyright = "Kévin Dunglas"
+              ProductName = "FrankenPHP"
+              ProductVersion = $env:FRANKENPHP_VERSION
+              Comments = "https://frankenphp.dev/"
+            }
+            VarFileInfo = @{
+              Translation = @{ LangID = 1033; CharsetID = 1200 }
+            }
+          } | ConvertTo-Json -Depth 10
+          [System.IO.File]::WriteAllText("versioninfo.json", $json)
 
           goversioninfo -icon ..\..\..\frankenphp.ico versioninfo.json -o resource.syso
 
