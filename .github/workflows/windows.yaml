@@ -39,7 +39,7 @@ permissions:
 env:
   GOTOOLCHAIN: local
   GOFLAGS: "-ldflags=-extldflags=-fuse-ld=lld -tags=nobadger,nomysql,nopgx"
-  PHP_DOWNLOAD_BASE: "https://windows.php.net/downloads/releases"
+  PHP_DOWNLOAD_BASE: "https://downloads.php.net/~windows/releases/"
   CC: clang
   CXX: clang++
 
@@ -176,7 +176,7 @@ jobs:
           } | ConvertTo-Json -Depth 10
           [System.IO.File]::WriteAllText("versioninfo.json", $json)
 
-          goversioninfo -icon ..\..\frankenphp.ico versioninfo.json -o resource.syso
+          goversioninfo -64 -icon ..\..\frankenphp.ico versioninfo.json -o resource.syso
 
       - name: Build FrankenPHP
         run: |
