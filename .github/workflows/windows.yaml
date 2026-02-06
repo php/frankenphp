@@ -178,7 +178,7 @@ jobs:
           }
           "@ | Out-File -Encoding utf8 versioninfo.json
 
-          goversioninfo -icon ..\..\..\frankenphp.ico -versioninfo versioninfo.json -o resource.syso
+          goversioninfo -icon ..\..\..\frankenphp.ico versioninfo.json -o resource.syso
 
       - name: Build FrankenPHP
         run: |
