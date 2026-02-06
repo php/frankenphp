@@ -148,7 +148,7 @@ jobs:
           go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
 
           $major = 0; $minor = 0; $patch = 0; $build = 0
-          $env:FRANKENPHP_VERSION -match '^(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)$') {
+          if ($env:FRANKENPHP_VERSION -match '^(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)$') {
             $major = [int]$Matches['major']
             $minor = [int]$Matches['minor']
             $patch = [int]$Matches['patch']
