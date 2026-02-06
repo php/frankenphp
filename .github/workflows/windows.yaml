@@ -147,17 +147,17 @@ jobs:
         run: |
           go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
 
-          $maj = 0; $min = 0; $pat = 0; $bld = 0
-          if ($env:FRANKENPHP_VERSION -match '^(?<M>\d+)\.(?<m>\d+)\.(?<p>\d+)$') {
-            $maj = [int]$Matches['M']
-            $min = [int]$Matches['m']
-            $pat = [int]$Matches['p']
+          $major = 0; $minor = 0; $patch = 0; $bld = 0
+          if ($env:FRANKENPHP_VERSION -match '^(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)$') {
+            $major = [int]$Matches['major']
+            $minor = [int]$Matches['minor']
+            $patch = [int]$Matches['patch']
           }
 
           $json = @{
             FixedFileInfo = @{
-              FileVersion = @{ Major = $maj; Minor = $min; Patch = $pat; Build = $bld }
-              ProductVersion = @{ Major = $maj; Minor = $min; Patch = $pat; Build = $bld }
+              FileVersion = @{ Major = $major; Minor = $minor; Patch = $patch; Build = $bld }
+              ProductVersion = @{ Major = $major; Minor = $minor; Patch = $patch; Build = $bld }
             }
             StringFileInfo = @{
               CompanyName = "FrankenPHP"
@@ -171,10 +171,11 @@ jobs:
               Comments = "https://frankenphp.dev/"
             }
             VarFileInfo = @{
-              Translation = @{ LangID = 1033; CharsetID = 1200 }
+              Translation = @{ LangID = 9; CharsetID = 1200 }
             }
           } | ConvertTo-Json -Depth 10
-          [System.IO.File]::WriteAllText("versioninfo.json", $json)
+          $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+          [System.IO.File]::WriteAllText("versioninfo.json", $json, $Utf8NoBom)
 
           goversioninfo -64 -icon ..\..\frankenphp.ico versioninfo.json -o resource.syso
 
