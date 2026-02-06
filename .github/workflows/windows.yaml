@@ -165,7 +165,7 @@ jobs:
               FileVersion = $env:FRANKENPHP_VERSION
               InternalName = "frankenphp"
               OriginalFilename = "frankenphp.exe"
-              LegalCopyright = "K\u00e9vin Dunglas"
+              LegalCopyright = "(c) 2022 Kévin Dunglas, MIT License"
               ProductName = "FrankenPHP"
               ProductVersion = $env:FRANKENPHP_VERSION
               Comments = "https://frankenphp.dev/"
@@ -174,8 +174,7 @@ jobs:
               Translation = @{ LangID = 9; CharsetID = 1200 }
             }
           } | ConvertTo-Json -Depth 10
-          $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-          [System.IO.File]::WriteAllText("versioninfo.json", $json, $Utf8NoBom)
+          $json | Out-File -FilePath "versioninfo.json" -Encoding unicode
 
           goversioninfo -64 -icon ..\..\frankenphp.ico versioninfo.json -o resource.syso
 
