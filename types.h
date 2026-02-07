@@ -2,11 +2,11 @@
 #define TYPES_H
 
 #include "frankenphp.h"
-#include <stdlib.h>
 #include <Zend/zend.h>
 #include <Zend/zend_API.h>
 #include <Zend/zend_alloc.h>
 #include <Zend/zend_hash.h>
+#include <stdlib.h>
 
 zval *get_ht_packed_data(HashTable *, uint32_t index);
 Bucket *get_ht_bucket_data(HashTable *, uint32_t index);

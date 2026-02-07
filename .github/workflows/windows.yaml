@@ -161,7 +161,7 @@ jobs:
             }
             StringFileInfo = @{
               CompanyName = "FrankenPHP"
-              FileDescription = "The Modern PHP Webserver"
+              FileDescription = "The modern PHP app server"
               FileVersion = $env:FRANKENPHP_VERSION
               InternalName = "frankenphp"
               OriginalFilename = "frankenphp.exe"
