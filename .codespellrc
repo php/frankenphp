@@ -1,0 +1,3 @@
+[codespell]
+check-hidden =
+skip = .git,docs/*/*,docs,*/go.mod,*/go.sum,./internal/phpheaders/phpheaders.go

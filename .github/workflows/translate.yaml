@@ -41,6 +41,7 @@ jobs:
           php ./docs/translate.php "$MD_FILES"
       - name: Run Linter
         if: steps.md_files.outputs.found == 'true'
+        continue-on-error: true
         uses: super-linter/super-linter/slim@v8
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

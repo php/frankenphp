@@ -33,7 +33,7 @@ Si votre version de Docker est inférieure à 23.0, la construction échouera à
 ## Exécution de la suite de tests
 
 ```console
-go test -tags watcher -race -v ./...
+go test -race -v ./...
 ```
 
 ## Module Caddy
@@ -42,7 +42,7 @@ Construire Caddy avec le module FrankenPHP :
 
 ```console
 cd caddy/frankenphp/
-go build -tags watcher,brotli,nobadger,nomysql,nopgx
+go build -tags nobadger,nomysql,nopgx
 cd ../../
 ```
 
@@ -176,7 +176,7 @@ docker buildx bake -f docker-bake.hcl --pull --no-cache --push
 8. Dans le conteneur, vous pouvez utiliser GDB et similaires :
 
    ```console
-   go test -tags watcher -c -ldflags=-w
+   go test -c -ldflags=-w
    gdb --args frankenphp.test -test.run ^MyTest$
    ```
 
