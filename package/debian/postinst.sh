@@ -19,17 +19,29 @@ if [ "$1" = "configure" ]; then
 		usermod -aG www-data frankenphp
 	fi
 
+	# trust frankenphp certificates before starting the systemd service
+	if [ -z "$2" ] && [ -x /usr/bin/frankenphp ]; then
+		HOME=/var/lib/frankenphp /usr/bin/frankenphp run --config /dev/null &
+		FRANKENPHP_PID=$!
+		sleep 2
+		HOME=/var/lib/frankenphp /usr/bin/frankenphp trust || true
+		kill "$FRANKENPHP_PID" || true
+		wait "$FRANKENPHP_PID" 2>/dev/null || true
+
+		chown -R frankenphp:frankenphp /var/lib/frankenphp
+	fi
+
 	# Handle cases where package was installed and then purged;
 	# user and group will still exist but with no home dir
 	if [ ! -d /var/lib/frankenphp ]; then
 		mkdir -p /var/lib/frankenphp
-		chown frankenphp:frankenphp /var/lib/frankenphp
+		chown -R frankenphp:frankenphp /var/lib/frankenphp
 	fi
 
 	# Add log directory with correct permissions
 	if [ ! -d /var/log/frankenphp ]; then
 		mkdir -p /var/log/frankenphp
-		chown frankenphp:frankenphp /var/log/frankenphp
+		chown -R frankenphp:frankenphp /var/log/frankenphp
 	fi
 fi
 
@@ -60,12 +72,4 @@ fi
 
 if command -v setcap >/dev/null 2>&1; then
 	setcap cap_net_bind_service=+ep /usr/bin/frankenphp || true
-fi
-
-if [ -x /usr/bin/frankenphp ]; then
-	HOME=/var/lib/frankenphp /usr/bin/frankenphp run --config /dev/null &
-	FRANKENPHP_PID=$!
-	HOME=/var/lib/frankenphp /usr/bin/frankenphp trust || true
-	kill "$FRANKENPHP_PID" || true
-	wait "$FRANKENPHP_PID" 2>/dev/null || true
 fi

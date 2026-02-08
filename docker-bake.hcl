@@ -14,6 +14,10 @@ variable "GO_VERSION" {
     default = "1.25"
 }
 
+variable "BASE_FINGERPRINT" {
+    default = ""
+}
+
 variable "SPC_OPT_BUILD_ARGS" {
     default = ""
 }
@@ -120,6 +124,7 @@ target "default" {
         "org.opencontainers.image.created" = "${timestamp()}"
         "org.opencontainers.image.version" = VERSION
         "org.opencontainers.image.revision" = SHA
+        "dev.frankenphp.base.fingerprint" = BASE_FINGERPRINT
     }
     args = {
         FRANKENPHP_VERSION = VERSION
@@ -146,6 +151,7 @@ target "static-builder-musl" {
         "org.opencontainers.image.created" = "${timestamp()}"
         "org.opencontainers.image.version" = VERSION
         "org.opencontainers.image.revision" = SHA
+        "dev.frankenphp.base.fingerprint" = BASE_FINGERPRINT
     }
     args = {
         FRANKENPHP_VERSION = VERSION
@@ -171,6 +177,7 @@ target "static-builder-gnu" {
         "org.opencontainers.image.created" = "${timestamp()}"
         "org.opencontainers.image.version" = VERSION
         "org.opencontainers.image.revision" = SHA
+        "dev.frankenphp.base.fingerprint" = BASE_FINGERPRINT
     }
     args = {
         FRANKENPHP_VERSION = VERSION

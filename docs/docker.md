@@ -203,6 +203,79 @@ The Docker images are built:
 - when a new release is tagged
 - daily at 4 am UTC, if new versions of the official PHP images are available
 
+## Hardening Images
+
+To further reduce the attack surface and size of your FrankenPHP Docker images, it's also possible to build them on top of a
+[Google distroless](https://github.com/GoogleContainerTools/distroless) or
+[Docker hardened](https://www.docker.com/products/hardened-images) image.
+
+> [!WARNING]
+> These minimal base images do not include a shell or package manager, which makes debugging more difficult.
+> They are therefore recommended only for production if security is a high priority.
+
+When adding additional PHP extensions, you will need an intermediate build stage:
+
+```dockerfile
+FROM dunglas/frankenphp AS builder
+
+# Add additional PHP extensions here
+RUN install-php-extensions pdo_mysql pdo_pgsql #...
+
+# Copy shared libs of frankenphp and all installed extensions to temporary location
+# You can also do this step manually by analyzing ldd output of frankenphp binary and each extension .so file
+RUN apt-get update && apt-get install -y libtree && \
+    EXT_DIR="$(php -r 'echo ini_get("extension_dir");')" && \
+    FRANKENPHP_BIN="$(which frankenphp)"; \
+    LIBS_TMP_DIR="/tmp/libs"; \
+    mkdir -p "$LIBS_TMP_DIR"; \
+    for target in "$FRANKENPHP_BIN" $(find "$EXT_DIR" -maxdepth 2 -type f -name "*.so"); do \
+        libtree -pv "$target" | sed 's/.*── \(.*\) \[.*/\1/' | grep -v "^$target" | while IFS= read -r lib; do \
+            [ -z "$lib" ] && continue; \
+            base=$(basename "$lib"); \
+            destfile="$LIBS_TMP_DIR/$base"; \
+            if [ ! -f "$destfile" ]; then \
+                cp "$lib" "$destfile"; \
+            fi; \
+        done; \
+    done
+
+
+# Distroless debian base image, make sure this is the same debian version as the base image
+FROM gcr.io/distroless/base-debian13
+# Docker hardened image alternative
+# FROM dhi.io/debian:13
+
+# Location of your app and Caddyfile to be copied into the container
+ARG PATH_TO_APP="."
+ARG PATH_TO_CADDYFILE="./Caddyfile"
+
+# Copy your app into /app
+# For further hardening make sure only writable paths are owned by the nonroot user
+COPY --chown=nonroot:nonroot "$PATH_TO_APP" /app
+COPY "$PATH_TO_CADDYFILE" /etc/caddy/Caddyfile
+
+# Copy frankenphp and necessary libs
+COPY --from=builder /usr/local/bin/frankenphp /usr/local/bin/frankenphp
+COPY --from=builder --chown=nonroot:nonroot /usr/local/lib/php/extensions /usr/local/lib/php/extensions
+COPY --from=builder /tmp/libs /usr/lib
+
+# Copy php.ini configuration files
+COPY --from=builder /usr/local/etc/php/conf.d /usr/local/etc/php/conf.d
+COPY --from=builder /usr/local/etc/php/php.ini-production /usr/local/etc/php/php.ini
+
+# Create necessary caddy dirs
+# These dirs also need to be writable in case of a read-only root filesystem
+COPY --from=builder --chown=nonroot:nonroot /data/caddy /data/caddy
+COPY --from=builder --chown=nonroot:nonroot /config/caddy /config/caddy
+
+USER nonroot
+
+WORKDIR /app
+
+# entrypoint to run frankenphp with the provided Caddyfile
+ENTRYPOINT ["/usr/local/bin/frankenphp", "run", "-c", "/etc/caddy/Caddyfile"]
+```
+
 ## Development Versions
 
 Development versions are available in the [`dunglas/frankenphp-dev`](https://hub.docker.com/repository/docker/dunglas/frankenphp-dev) Docker repository.
