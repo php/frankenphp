@@ -20,7 +20,7 @@ func (ag *arginfoGenerator) generate() error {
 	}
 
 	if _, err := os.Stat(genStubPath); err != nil {
-		return fmt.Errorf(`the PHP "gen_stub.php" file couldn't be found under %q, you can set the "GEN_STUB_SCRIPT" environement variable to set a custom location`, genStubPath)
+		return fmt.Errorf(`the PHP "gen_stub.php" file couldn't be found under %q, you can set the "GEN_STUB_SCRIPT" environment variable to set a custom location`, genStubPath)
 	}
 
 	stubFile := ag.generator.BaseName + ".stub.php"

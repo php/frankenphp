@@ -138,6 +138,15 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 			}
 
 			f.resolvedDocumentRoot = root
+
+			// Also resolve symlinks in worker file paths when resolve_root_symlink is true
+			for i, wc := range f.Workers {
+				if !filepath.IsAbs(wc.FileName) {
+					continue
+				}
+				resolvedPath, _ := filepath.EvalSymlinks(wc.FileName)
+				f.Workers[i].FileName = resolvedPath
+			}
 		}
 	}
 
@@ -181,7 +190,10 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 		if documentRoot == "" && frankenphp.EmbeddedAppPath != "" {
 			documentRoot = frankenphp.EmbeddedAppPath
 		}
-		documentRootOption = frankenphp.WithRequestDocumentRoot(documentRoot, *f.ResolveRootSymlink)
+		// If we do not have a resolved document root, then we cannot resolve the symlink of our cwd because it may
+		// resolve to a different directory than the one we are currently in.
+		// This is especially important if there are workers running.
+		documentRootOption = frankenphp.WithRequestDocumentRoot(documentRoot, false)
 	} else {
 		documentRoot = f.resolvedDocumentRoot
 		documentRootOption = frankenphp.WithRequestResolvedDocumentRoot(documentRoot)

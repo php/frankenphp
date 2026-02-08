@@ -11,13 +11,14 @@ package testext
 // #include "extension.h"
 import "C"
 import (
-	"github.com/dunglas/frankenphp"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"io"
 	"net/http/httptest"
 	"testing"
 	"unsafe"
+
+	"github.com/dunglas/frankenphp"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func testRegisterExtension(t *testing.T) {

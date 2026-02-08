@@ -60,8 +60,9 @@ sudo pie-zts install asgrim/example-pie-extension
 Our maintainers offer deb packages for all systems using `apt`. To install, run:
 
 ```console
-sudo curl -fsSL https://key.henderkes.com/static-php.gpg -o /usr/share/keyrings/static-php.gpg && \
-echo "deb [signed-by=/usr/share/keyrings/static-php.gpg] https://deb.henderkes.com/ stable main" | sudo tee /etc/apt/sources.list.d/static-php.list && \
+VERSION=85 # 82-85 available
+sudo curl https://pkg.henderkes.com/api/packages/${VERSION}/debian/repository.key -o /etc/apt/keyrings/static-php${VERSION}.asc
+echo "deb [signed-by=/etc/apt/keyrings/static-php${VERSION}.asc] https://pkg.henderkes.com/api/packages/${VERSION}/debian php-zts main" | sudo tee -a /etc/apt/sources.list.d/static-php${VERSION}.list
 sudo apt update
 sudo apt install frankenphp
 ```
@@ -72,6 +73,28 @@ For extensions not available by default, use [PIE](https://github.com/php/pie):
 
 ```console
 sudo apt install pie-zts
+sudo pie-zts install asgrim/example-pie-extension
+```
+
+### apk Packages
+
+Our maintainers offer apk packages for all systems using `apk`. To install, run:
+
+```console
+VERSION=85 # 82-85 available
+echo "https://pkg.henderkes.com/api/packages/${VERSION}/alpine/main/php-zts" | sudo tee -a /etc/apk/repositories
+KEYFILE=$(curl -sJOw '%{filename_effective}' https://pkg.henderkes.com/api/packages/${VERSION}/alpine/key)
+sudo mv ${KEYFILE} /etc/apk/keys/ && 
+sudo apk update && 
+sudo apk add frankenphp
+```
+
+**Installing extensions:** `sudo apk add php-zts-<extension>`
+
+For extensions not available by default, use [PIE](https://github.com/php/pie):
+
+```console
+sudo apk add pie-zts
 sudo pie-zts install asgrim/example-pie-extension
 ```
 
@@ -128,6 +151,8 @@ Go to `https://localhost`, and enjoy!
 - [Worker mode](https://frankenphp.dev/docs/worker/)
 - [Early Hints support (103 HTTP status code)](https://frankenphp.dev/docs/early-hints/)
 - [Real-time](https://frankenphp.dev/docs/mercure/)
+- [Logging](https://frankenphp.dev/docs/logging/)
+- [Hot reloading](https://frankenphp.dev/docs/hot-reload/)
 - [Efficiently Serving Large Static Files](https://frankenphp.dev/docs/x-sendfile/)
 - [Configuration](https://frankenphp.dev/docs/config/)
 - [Writing PHP Extensions in Go](https://frankenphp.dev/docs/extensions/)
@@ -138,6 +163,7 @@ Go to `https://localhost`, and enjoy!
 - [Create static binaries](https://frankenphp.dev/docs/static/)
 - [Compile from sources](https://frankenphp.dev/docs/compile/)
 - [Monitoring FrankenPHP](https://frankenphp.dev/docs/metrics/)
+- [WordPress integration](https://frankenphp.dev/docs/wordpress/)
 - [Laravel integration](https://frankenphp.dev/docs/laravel/)
 - [Known issues](https://frankenphp.dev/docs/known-issues/)
 - [Demo app (Symfony) and benchmarks](https://github.com/dunglas/frankenphp-demo)

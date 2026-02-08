@@ -76,6 +76,6 @@ void frankenphp_register_bulk(
     ht_key_value_pair auth_type, ht_key_value_pair remote_ident,
     ht_key_value_pair request_uri, ht_key_value_pair ssl_cipher);
 
-void register_extensions(zend_module_entry *m, int len);
+void register_extensions(zend_module_entry **m, int len);
 
 #endif

@@ -150,7 +150,7 @@ fi
 # Extensions to build
 if [ -z "${PHP_EXTENSIONS}" ]; then
 	# enable EMBED mode, first check if project has dumped extensions
-	if [ -n "${EMBED}" ] && [ -f "${EMBED}/composer.json" ] && [ -f "${EMBED}/composer.lock" ] && [ -f "${EMBED}/vendor/installed.json" ]; then
+	if [ -n "${EMBED}" ] && [ -f "${EMBED}/composer.json" ] && [ -f "${EMBED}/composer.lock" ] && [ -f "${EMBED}/vendor/composer/installed.json" ]; then
 		cd "${EMBED}"
 		# read the extensions using spc dump-extensions
 		PHP_EXTENSIONS=$(${spcCommand} dump-extensions "${EMBED}" --format=text --no-dev --no-ext-output="${defaultExtensions}")
@@ -178,7 +178,11 @@ fi
 
 # Embed PHP app, if any
 if [ -n "${EMBED}" ] && [ -d "${EMBED}" ]; then
-	SPC_OPT_BUILD_ARGS="${SPC_OPT_BUILD_ARGS} --with-frankenphp-app=${EMBED}"
+	if [[ "${EMBED}" != /* ]]; then
+		EMBED="${CURRENT_DIR}/${EMBED}"
+	fi
+	# shellcheck disable=SC2089
+	SPC_OPT_BUILD_ARGS="${SPC_OPT_BUILD_ARGS} --with-frankenphp-app='${EMBED}'"
 fi
 
 SPC_OPT_INSTALL_ARGS="go-xcaddy"
@@ -194,7 +198,9 @@ else
 	SPC_CMD_VAR_PHP_MAKE_EXTRA_CFLAGS="${SPC_CMD_VAR_PHP_MAKE_EXTRA_CFLAGS} -fPIE -fstack-protector-strong -O2 -w -s"
 fi
 export SPC_CMD_VAR_PHP_MAKE_EXTRA_CFLAGS
-export SPC_CMD_VAR_FRANKENPHP_XCADDY_MODULES="--with github.com/dunglas/mercure/caddy --with github.com/dunglas/vulcain/caddy --with github.com/dunglas/caddy-cbrotli"
+if [ -z "$SPC_CMD_VAR_FRANKENPHP_XCADDY_MODULES" ]; then
+	export SPC_CMD_VAR_FRANKENPHP_XCADDY_MODULES="--with github.com/dunglas/mercure/caddy --with github.com/dunglas/vulcain/caddy --with github.com/dunglas/caddy-cbrotli"
+fi
 
 # Build FrankenPHP
 ${spcCommand} doctor --auto-fix
@@ -204,7 +210,7 @@ done
 # shellcheck disable=SC2086
 ${spcCommand} download --with-php="${PHP_VERSION}" --for-extensions="${PHP_EXTENSIONS}" --for-libs="${PHP_EXTENSION_LIBS}" ${SPC_OPT_DOWNLOAD_ARGS}
 export FRANKENPHP_SOURCE_PATH="${CURRENT_DIR}"
-# shellcheck disable=SC2086
+# shellcheck disable=SC2086,SC2090
 ${spcCommand} build --enable-zts --build-embed --build-frankenphp ${SPC_OPT_BUILD_ARGS} "${PHP_EXTENSIONS}" --with-libs="${PHP_EXTENSION_LIBS}"
 
 if [ -n "$CI" ]; then
