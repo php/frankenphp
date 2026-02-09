@@ -28,13 +28,15 @@ type frankenPHPContext struct {
 	pathInfo       string
 	scriptName     string
 	scriptFilename string
+	requestURI     string
 
 	// Whether the request is already closed by us
 	isDone bool
 
-	responseWriter    http.ResponseWriter
-	handlerParameters any
-	handlerReturn     any
+	responseWriter     http.ResponseWriter
+	responseController *http.ResponseController
+	handlerParameters  any
+	handlerReturn      any
 
 	done      chan any
 	startedAt time.Time

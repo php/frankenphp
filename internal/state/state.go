@@ -4,40 +4,71 @@ import "C"
 import (
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
-type State string
+type State int
 
 const (
 	// lifecycle States of a thread
-	Reserved      State = "reserved"
-	Booting       State = "booting"
-	BootRequested State = "boot requested"
-	ShuttingDown  State = "shutting down"
-	Done          State = "done"
+	Reserved      State = iota
+	Booting
+	BootRequested
+	ShuttingDown
+	Done
 
 	// these States are 'stable' and safe to transition from at any time
-	Inactive State = "inactive"
-	Ready    State = "ready"
+	Inactive
+	Ready
 
 	// States necessary for restarting workers
-	Restarting State = "restarting"
-	Yielding   State = "yielding"
+	Restarting
+	Yielding
 
 	// States necessary for transitioning between different handlers
-	TransitionRequested  State = "transition requested"
-	TransitionInProgress State = "transition in progress"
-	TransitionComplete   State = "transition complete"
+	TransitionRequested
+	TransitionInProgress
+	TransitionComplete
 )
+
+func (s State) String() string {
+	switch s {
+	case Reserved:
+		return "reserved"
+	case Booting:
+		return "booting"
+	case BootRequested:
+		return "boot requested"
+	case ShuttingDown:
+		return "shutting down"
+	case Done:
+		return "done"
+	case Inactive:
+		return "inactive"
+	case Ready:
+		return "ready"
+	case Restarting:
+		return "restarting"
+	case Yielding:
+		return "yielding"
+	case TransitionRequested:
+		return "transition requested"
+	case TransitionInProgress:
+		return "transition in progress"
+	case TransitionComplete:
+		return "transition complete"
+	default:
+		return "unknown"
+	}
+}
 
 type ThreadState struct {
 	currentState State
 	mu           sync.RWMutex
 	subscribers  []stateSubscriber
-	// how long threads have been waiting in stable states
-	waitingSince time.Time
-	isWaiting    bool
+	// how long threads have been waiting in stable states (unix ms, 0 = not waiting)
+	waitingSince atomic.Int64
 }
 
 type stateSubscriber struct {
@@ -74,7 +105,7 @@ func (ts *ThreadState) CompareAndSwap(compareTo State, swapTo State) bool {
 }
 
 func (ts *ThreadState) Name() string {
-	return string(ts.Get())
+	return ts.Get().String()
 }
 
 func (ts *ThreadState) Get() State {
@@ -97,20 +128,17 @@ func (ts *ThreadState) notifySubscribers(nextState State) {
 		return
 	}
 
-	var newSubscribers []stateSubscriber
-
-	// notify subscribers to the state change
+	n := 0
 	for _, sub := range ts.subscribers {
 		if !slices.Contains(sub.states, nextState) {
-			newSubscribers = append(newSubscribers, sub)
-
+			ts.subscribers[n] = sub
+			n++
 			continue
 		}
-
 		close(sub.ch)
 	}
 
-	ts.subscribers = newSubscribers
+	ts.subscribers = ts.subscribers[:n]
 }
 
 // block until the thread reaches a certain state
@@ -156,39 +184,27 @@ func (ts *ThreadState) RequestSafeStateChange(nextState State) bool {
 
 // MarkAsWaiting hints that the thread reached a stable state and is waiting for requests or shutdown
 func (ts *ThreadState) MarkAsWaiting(isWaiting bool) {
-	ts.mu.Lock()
 	if isWaiting {
-		ts.isWaiting = true
-		ts.waitingSince = time.Now()
+		ts.waitingSince.Store(time.Now().UnixMilli())
 	} else {
-		ts.isWaiting = false
+		ts.waitingSince.Store(0)
 	}
-	ts.mu.Unlock()
 }
 
 // IsInWaitingState returns true if a thread is waiting for a request or shutdown
 func (ts *ThreadState) IsInWaitingState() bool {
-	ts.mu.RLock()
-	isWaiting := ts.isWaiting
-	ts.mu.RUnlock()
-
-	return isWaiting
+	return ts.waitingSince.Load() != 0
 }
 
 // WaitTime returns the time since the thread is waiting in a stable state in ms
 func (ts *ThreadState) WaitTime() int64 {
-	ts.mu.RLock()
-	waitTime := int64(0)
-	if ts.isWaiting {
-		waitTime = time.Now().UnixMilli() - ts.waitingSince.UnixMilli()
+	since := ts.waitingSince.Load()
+	if since == 0 {
+		return 0
 	}
-	ts.mu.RUnlock()
-
-	return waitTime
+	return time.Now().UnixMilli() - since
 }
 
 func (ts *ThreadState) SetWaitTime(t time.Time) {
-	ts.mu.Lock()
-	ts.waitingSince = t
-	ts.mu.Unlock()
+	ts.waitingSince.Store(t.UnixMilli())
 }

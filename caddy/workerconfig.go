@@ -2,6 +2,7 @@ package caddy
 
 import (
 	"net/http"
+	"path"
 	"path/filepath"
 	"strconv"
 
@@ -43,6 +44,8 @@ type workerConfig struct {
 
 	options        []frankenphp.WorkerOption
 	requestOptions []frankenphp.RequestOption
+	absFileName    string
+	matchRelPath   string // pre-computed relative URL path for fast matching
 }
 
 func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
@@ -171,15 +174,22 @@ func (wc *workerConfig) inheritEnv(env map[string]string) {
 }
 
 func (wc *workerConfig) matchesPath(r *http.Request, documentRoot string) bool {
-
 	// try to match against a pattern if one is assigned
 	if len(wc.MatchPath) != 0 {
 		return (caddyhttp.MatchPath)(wc.MatchPath).Match(r)
 	}
 
-	// if there is no pattern, try to match against the actual path (in the public directory)
-	fullScriptPath, _ := fastabs.FastAbs(documentRoot + "/" + r.URL.Path)
-	absFileName, _ := fastabs.FastAbs(wc.FileName)
+	// fast path: compare the request URL path against the pre-computed relative path
+	if wc.matchRelPath != "" {
+		if r.URL.Path == wc.matchRelPath {
+			return true
+		}
 
-	return fullScriptPath == absFileName
+		return path.Clean(r.URL.Path) == wc.matchRelPath
+	}
+
+	// fallback when documentRoot is dynamic (contains placeholders)
+	fullPath, _ := fastabs.FastAbs(filepath.Join(documentRoot, r.URL.Path))
+
+	return fullPath == wc.absFileName
 }

@@ -19,7 +19,7 @@ type phpThread struct {
 	threadIndex  int
 	requestChan  chan contextHolder
 	drainChan    chan struct{}
-	handlerMu    sync.Mutex
+	handlerMu    sync.RWMutex
 	handler      threadHandler
 	state        *state.ThreadState
 	sandboxedEnv map[string]*C.zend_string
@@ -120,9 +120,9 @@ func (thread *phpThread) context() context.Context {
 }
 
 func (thread *phpThread) name() string {
-	thread.handlerMu.Lock()
+	thread.handlerMu.RLock()
 	name := thread.handler.name()
-	thread.handlerMu.Unlock()
+	thread.handlerMu.RUnlock()
 	return name
 }
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
 
@@ -249,7 +250,7 @@ func TestAddModuleWorkerViaAdminApi(t *testing.T) {
 	initialDebugState := getDebugState(t, tester)
 	initialWorkerCount := 0
 	for _, thread := range initialDebugState.ThreadDebugStates {
-		if thread.Name != "" && thread.Name != "ready" {
+		if strings.HasPrefix(thread.Name, "Worker PHP Thread") {
 			initialWorkerCount++
 		}
 	}
@@ -286,7 +287,7 @@ func TestAddModuleWorkerViaAdminApi(t *testing.T) {
 	workerFound := false
 	filename, _ := fastabs.FastAbs("../testdata/worker-with-counter.php")
 	for _, thread := range updatedDebugState.ThreadDebugStates {
-		if thread.Name != "" && thread.Name != "ready" {
+		if strings.HasPrefix(thread.Name, "Worker PHP Thread") {
 			updatedWorkerCount++
 			if thread.Name == "Worker PHP Thread - "+filename {
 				workerFound = true

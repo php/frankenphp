@@ -158,7 +158,7 @@ func WithRequestLogger(logger *slog.Logger) RequestOption {
 func WithWorkerName(name string) RequestOption {
 	return func(o *frankenPHPContext) error {
 		if name != "" {
-			o.worker = getWorkerByName(name)
+			o.worker = workersByName[name]
 		}
 
 		return nil

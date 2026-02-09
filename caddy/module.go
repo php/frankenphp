@@ -130,6 +130,11 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		f.ResolveRootSymlink = &rrs
 	}
 
+	// Always pre-compute absolute file names for fallback matching
+	for i := range f.Workers {
+		f.Workers[i].absFileName, _ = fastabs.FastAbs(f.Workers[i].FileName)
+	}
+
 	if !needReplacement(f.Root) {
 		root, err := fastabs.FastAbs(f.Root)
 		if err != nil {
@@ -145,13 +150,21 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 
 			f.resolvedDocumentRoot = root
 
-			// Also resolve symlinks in worker file paths when resolve_root_symlink is true
+			// Resolve symlinks in worker file paths
 			for i, wc := range f.Workers {
-				if !filepath.IsAbs(wc.FileName) {
-					continue
+				if filepath.IsAbs(wc.FileName) {
+					resolvedPath, _ := filepath.EvalSymlinks(wc.FileName)
+					f.Workers[i].FileName = resolvedPath
+					f.Workers[i].absFileName = resolvedPath
 				}
-				resolvedPath, _ := filepath.EvalSymlinks(wc.FileName)
-				f.Workers[i].FileName = resolvedPath
+			}
+		}
+
+		// Pre-compute relative match paths for all workers (requires resolved document root)
+		docRootWithSep := f.resolvedDocumentRoot + string(filepath.Separator)
+		for i := range f.Workers {
+			if strings.HasPrefix(f.Workers[i].absFileName, docRootWithSep) {
+				f.Workers[i].matchRelPath = filepath.ToSlash(f.Workers[i].absFileName[len(f.resolvedDocumentRoot):])
 			}
 		}
 
