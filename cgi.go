@@ -145,7 +145,7 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		packCgiVariable(keys["REMOTE_PORT"], port),
 		packCgiVariable(keys["DOCUMENT_ROOT"], fc.documentRoot),
 		packCgiVariable(keys["PATH_INFO"], fc.pathInfo),
-		packCgiVariable(keys["PHP_SELF"], request.URL.Path),
+		packCgiVariable(keys["PHP_SELF"], ensureLeadingSlash(request.URL.Path)),
 		packCgiVariable(keys["DOCUMENT_URI"], fc.docURI),
 		packCgiVariable(keys["SCRIPT_FILENAME"], fc.scriptFilename),
 		packCgiVariable(keys["SCRIPT_NAME"], fc.scriptName),
@@ -340,7 +340,16 @@ func sanitizedPathJoin(root, reqPath string) string {
 
 const separator = string(filepath.Separator)
 
+func ensureLeadingSlash(path string) string {
+	if path == "" || path[0] == '/' {
+		return path
+	}
+
+	return "/" + path
+}
+
 func toUnsafeChar(s string) *C.char {
 	sData := unsafe.StringData(s)
+
 	return (*C.char)(unsafe.Pointer(sData))
 }
