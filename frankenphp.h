@@ -1,6 +1,46 @@
 #ifndef _FRANKENPHP_H
 #define _FRANKENPHP_H
 
+#ifdef _WIN32
+// Define this to prevent windows.h from including legacy winsock.h
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+
+// Explicitly include Winsock2 BEFORE windows.h
+#include <windows.h>
+#include <winerror.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+
+// Fix for missing IntSafe functions (LongLongAdd) when building with Clang
+#ifdef __clang__
+#ifndef INTSAFE_E_ARITHMETIC_OVERFLOW
+#define INTSAFE_E_ARITHMETIC_OVERFLOW ((HRESULT)0x80070216L)
+#endif
+
+#ifndef LongLongAdd
+static inline HRESULT LongLongAdd(LONGLONG llAugend, LONGLONG llAddend,
+                                  LONGLONG *pllResult) {
+  if (__builtin_add_overflow(llAugend, llAddend, pllResult)) {
+    return INTSAFE_E_ARITHMETIC_OVERFLOW;
+  }
+  return S_OK;
+}
+#endif
+
+#ifndef LongLongSub
+static inline HRESULT LongLongSub(LONGLONG llMinuend, LONGLONG llSubtrahend,
+                                  LONGLONG *pllResult) {
+  if (__builtin_sub_overflow(llMinuend, llSubtrahend, pllResult)) {
+    return INTSAFE_E_ARITHMETIC_OVERFLOW;
+  }
+  return S_OK;
+}
+#endif
+#endif
+#endif
+
 #include <Zend/zend_modules.h>
 #include <Zend/zend_types.h>
 #include <stdbool.h>

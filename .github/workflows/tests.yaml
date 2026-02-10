@@ -35,6 +35,7 @@ jobs:
     env:
       GOMAXPROCS: 10
       LIBRARY_PATH: ${{ github.workspace }}/watcher/target/lib
+      GOFLAGS: "-tags=nobadger,nomysql,nopgx"
     steps:
       - uses: actions/checkout@v6
         with:
@@ -69,7 +70,7 @@ jobs:
         run: ./frankenphp.test -test.v
       - name: Run Caddy module tests
         working-directory: caddy/
-        run: go test -tags nobadger,nomysql,nopgx -race -v ./...
+        run: go test -race -v ./...
       - name: Run Fuzzing Tests
         working-directory: caddy/
         run: go test -fuzz FuzzRequest -fuzztime 20s
@@ -100,6 +101,8 @@ jobs:
       fail-fast: false
       matrix:
         php-versions: ["8.3", "8.4", "8.5"]
+    env:
+      XCADDY_GO_BUILD_FLAGS: "-tags=nobadger,nomysql,nopgx"
     steps:
       - uses: actions/checkout@v6
         with:
@@ -141,6 +144,7 @@ jobs:
     runs-on: macos-latest
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
+      GOFLAGS: "-tags=nowatcher,nobadger,nomysql,nopgx"
     steps:
       - uses: actions/checkout@v6
         with:
@@ -172,4 +176,4 @@ jobs:
         run: go test -tags nowatcher -race -v ./...
       - name: Run Caddy module tests
         working-directory: caddy/
-        run: go test -tags nowatcher,nobadger,nomysql,nopgx -race -v ./...
+        run: go test -race -v ./...

@@ -1,6 +1,7 @@
 package frankenphp
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -33,7 +34,7 @@ func TestScaleAWorkerThreadUpAndDown(t *testing.T) {
 	t.Cleanup(Shutdown)
 
 	workerName := "worker1"
-	workerPath := testDataPath + "/transition-worker-1.php"
+	workerPath := filepath.Join(testDataPath, "transition-worker-1.php")
 	assert.NoError(t, Init(
 		WithNumThreads(2),
 		WithMaxThreads(3),

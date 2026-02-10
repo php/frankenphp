@@ -1,15 +1,19 @@
+#include "frankenphp.h"
 #include <SAPI.h>
 #include <Zend/zend_alloc.h>
 #include <Zend/zend_exceptions.h>
 #include <Zend/zend_interfaces.h>
-#include <Zend/zend_types.h>
 #include <errno.h>
 #include <ext/session/php_session.h>
 #include <ext/spl/spl_exceptions.h>
 #include <ext/standard/head.h>
 #include <inttypes.h>
 #include <php.h>
+#ifdef PHP_WIN32
+#include <config.w32.h>
+#else
 #include <php_config.h>
+#endif
 #include <php_ini.h>
 #include <php_main.h>
 #include <php_output.h>
@@ -20,7 +24,9 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#ifndef ZEND_WIN32
 #include <unistd.h>
+#endif
 #if defined(__linux__)
 #include <sys/prctl.h>
 #elif defined(__FreeBSD__) || defined(__OpenBSD__)
@@ -225,14 +231,14 @@ static void frankenphp_snapshot_ini(void) {
 
   if (EG(modified_ini_directives) == NULL) {
     /* Allocate empty table to mark as snapshotted */
-    ALLOC_HASHTABLE(worker_ini_snapshot);
+    worker_ini_snapshot = malloc(sizeof(HashTable));
     zend_hash_init(worker_ini_snapshot, 0, NULL, frankenphp_ini_snapshot_dtor,
                    0);
     return;
   }
 
   uint32_t num_modified = zend_hash_num_elements(EG(modified_ini_directives));
-  ALLOC_HASHTABLE(worker_ini_snapshot);
+  worker_ini_snapshot = malloc(sizeof(HashTable));
   zend_hash_init(worker_ini_snapshot, num_modified, NULL,
                  frankenphp_ini_snapshot_dtor, 0);
 
@@ -263,7 +269,7 @@ static void frankenphp_restore_ini(void) {
    * it calls zend_hash_del() on EG(modified_ini_directives). */
   uint32_t max_entries = zend_hash_num_elements(EG(modified_ini_directives));
   zend_string **entries_to_restore =
-      max_entries ? emalloc(max_entries * sizeof(zend_string *)) : NULL;
+      max_entries ? malloc(max_entries * sizeof(zend_string *)) : NULL;
   size_t restore_count = 0;
 
   ZEND_HASH_FOREACH_STR_KEY_PTR(EG(modified_ini_directives), entry_name,
@@ -289,7 +295,7 @@ static void frankenphp_restore_ini(void) {
     zend_string_release(entries_to_restore[i]);
   }
   if (entries_to_restore) {
-    efree(entries_to_restore);
+    free(entries_to_restore);
   }
 }
 
@@ -311,7 +317,7 @@ static void frankenphp_snapshot_session_handlers(void) {
     return; /* No user handlers to snapshot */
   }
 
-  worker_session_handlers_snapshot = emalloc(sizeof(session_user_handlers));
+  worker_session_handlers_snapshot = malloc(sizeof(session_user_handlers));
 
   /* Copy each handler zval with incremented reference count */
 #define SNAPSHOT_HANDLER(h)                                                    \
@@ -351,7 +357,7 @@ static void frankenphp_cleanup_worker_state(void) {
   /* Free INI snapshot */
   if (worker_ini_snapshot != NULL) {
     zend_hash_destroy(worker_ini_snapshot);
-    FREE_HASHTABLE(worker_ini_snapshot);
+    free(worker_ini_snapshot);
     worker_ini_snapshot = NULL;
   }
 
@@ -366,7 +372,7 @@ static void frankenphp_cleanup_worker_state(void) {
 
 #undef FREE_HANDLER
 
-    efree(worker_session_handlers_snapshot);
+    free(worker_session_handlers_snapshot);
     worker_session_handlers_snapshot = NULL;
   }
 }
@@ -416,7 +422,7 @@ bool frankenphp_shutdown_dummy_request(void) {
   return true;
 }
 
-PHPAPI void get_full_env(zval *track_vars_array) {
+void get_full_env(zval *track_vars_array) {
   go_getfullenv(thread_index, track_vars_array);
 }
 
@@ -1185,6 +1191,7 @@ static void *php_thread(void *arg) {
 }
 
 static void *php_main(void *arg) {
+#ifndef ZEND_WIN32
   /*
    * SIGPIPE must be masked in non-Go threads:
    * https://pkg.go.dev/os/signal#hdr-Go_programs_that_use_cgo_or_SWIG
@@ -1197,6 +1204,7 @@ static void *php_main(void *arg) {
     perror("failed to block SIGPIPE");
     exit(EXIT_FAILURE);
   }
+#endif
 
   set_thread_name("php-main");
 
@@ -1491,7 +1499,7 @@ static zend_module_entry **modules = NULL;
 static int modules_len = 0;
 static int (*original_php_register_internal_extensions_func)(void) = NULL;
 
-PHPAPI int register_internal_extensions(void) {
+int register_internal_extensions(void) {
   if (original_php_register_internal_extensions_func != NULL &&
       original_php_register_internal_extensions_func() != SUCCESS) {
     return FAILURE;

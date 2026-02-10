@@ -8,8 +8,8 @@ package frankenphp
 // #cgo noescape frankenphp_register_variables_from_request_info
 // #cgo noescape frankenphp_register_variable_safe
 // #cgo noescape frankenphp_register_single
-// #include <php_variables.h>
 // #include "frankenphp.h"
+// #include <php_variables.h>
 import "C"
 import (
 	"context"

@@ -5,7 +5,7 @@ import (
 )
 
 // ProbeCPUs fallback that always determines that the CPU limits are not reached
-func ProbeCPUs(probeTime time.Duration, maxCPUUsage float64, abort chan struct{}) bool {
+func ProbeCPUs(probeTime time.Duration, _ float64, abort chan struct{}) bool {
 	select {
 	case <-abort:
 		return false

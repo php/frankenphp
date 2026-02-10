@@ -4,6 +4,7 @@ package watcher
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/e-dant/watcher/watcher-go"
@@ -11,16 +12,42 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func normalizePath(t *testing.T, path string) string {
+	t.Helper()
+
+	if filepath.Separator == '/' {
+		return path
+	}
+
+	path = filepath.FromSlash(path)
+	if strings.HasPrefix(path, "\\") {
+		path = "C:\\" + path[1:]
+	}
+
+	return path
+}
+
+func newPattern(t *testing.T, value string) pattern {
+	t.Helper()
+
+	p := pattern{value: normalizePath(t, value)}
+	require.NoError(t, p.parse())
+
+	return p
+}
+
 func TestDisallowOnEventTypeBiggerThan3(t *testing.T) {
-	w := pattern{value: "/some/path"}
-	require.NoError(t, w.parse())
+	t.Parallel()
+
+	w := newPattern(t, "/some/path")
 
 	assert.False(t, w.allowReload(&watcher.Event{PathName: "/some/path/watch-me.php", EffectType: watcher.EffectTypeOwner}))
 }
 
 func TestDisallowOnPathTypeBiggerThan2(t *testing.T) {
-	w := pattern{value: "/some/path"}
-	require.NoError(t, w.parse())
+	t.Parallel()
+
+	w := newPattern(t, "/some/path")
 
 	assert.False(t, w.allowReload(&watcher.Event{PathName: "/some/path/watch-me.php", PathType: watcher.PathTypeSymLink}))
 }
@@ -59,7 +86,7 @@ func TestValidRecursiveDirectories(t *testing.T) {
 
 	data := []struct {
 		pattern string
-		dir     string
+		file    string
 	}{
 		{"/path", "/path/file.php"},
 		{"/path", "/path/subpath/file.php"},
@@ -77,7 +104,7 @@ func TestValidRecursiveDirectories(t *testing.T) {
 		t.Run(d.pattern, func(t *testing.T) {
 			t.Parallel()
 
-			shouldMatch(t, d.pattern, d.dir)
+			assertPatternMatch(t, d.pattern, d.file)
 		})
 	}
 }
@@ -98,7 +125,7 @@ func TestInvalidRecursiveDirectories(t *testing.T) {
 		t.Run(d.pattern, func(t *testing.T) {
 			t.Parallel()
 
-			shouldNotMatch(t, d.pattern, d.dir)
+			assertPatternNotMatch(t, d.pattern, d.dir)
 		})
 	}
 }
@@ -122,7 +149,7 @@ func TestValidNonRecursiveFilePatterns(t *testing.T) {
 		t.Run(d.pattern, func(t *testing.T) {
 			t.Parallel()
 
-			shouldMatch(t, d.pattern, d.dir)
+			assertPatternMatch(t, d.pattern, d.dir)
 		})
 	}
 }
@@ -145,7 +172,7 @@ func TestInValidNonRecursiveFilePatterns(t *testing.T) {
 		t.Run(d.pattern, func(t *testing.T) {
 			t.Parallel()
 
-			shouldNotMatch(t, d.pattern, d.dir)
+			assertPatternNotMatch(t, d.pattern, d.dir)
 		})
 	}
 }
@@ -170,7 +197,7 @@ func TestValidRecursiveFilePatterns(t *testing.T) {
 		t.Run(d.pattern, func(t *testing.T) {
 			t.Parallel()
 
-			shouldMatch(t, d.pattern, d.dir)
+			assertPatternMatch(t, d.pattern, d.dir)
 		})
 	}
 }
@@ -198,7 +225,7 @@ func TestInvalidRecursiveFilePatterns(t *testing.T) {
 		t.Run(d.pattern, func(t *testing.T) {
 			t.Parallel()
 
-			shouldNotMatch(t, d.pattern, d.dir)
+			assertPatternNotMatch(t, d.pattern, d.dir)
 		})
 	}
 }
@@ -225,13 +252,14 @@ func TestValidDirectoryPatterns(t *testing.T) {
 		t.Run(d.pattern, func(t *testing.T) {
 			t.Parallel()
 
-			shouldMatch(t, d.pattern, d.dir)
+			assertPatternMatch(t, d.pattern, d.dir)
 		})
 	}
 }
 
 func TestInvalidDirectoryPatterns(t *testing.T) {
 	t.Parallel()
+
 	data := []struct {
 		pattern string
 		dir     string
@@ -254,15 +282,17 @@ func TestInvalidDirectoryPatterns(t *testing.T) {
 		t.Run(d.pattern, func(t *testing.T) {
 			t.Parallel()
 
-			shouldNotMatch(t, d.pattern, d.dir)
+			assertPatternNotMatch(t, d.pattern, d.dir)
 		})
 	}
 }
 
 func TestValidCurlyBracePatterns(t *testing.T) {
+	t.Parallel()
+
 	data := []struct {
 		pattern string
-		dir     string
+		file    string
 	}{
 		{"/path/*.{php}", "/path/file.php"},
 		{"/path/*.{php,twig}", "/path/file.php"},
@@ -282,12 +312,14 @@ func TestValidCurlyBracePatterns(t *testing.T) {
 		t.Run(d.pattern, func(t *testing.T) {
 			t.Parallel()
 
-			shouldMatch(t, d.pattern, d.dir)
+			assertPatternMatch(t, d.pattern, d.file)
 		})
 	}
 }
 
 func TestInvalidCurlyBracePatterns(t *testing.T) {
+	t.Parallel()
+
 	data := []struct {
 		pattern string
 		dir     string
@@ -306,52 +338,52 @@ func TestInvalidCurlyBracePatterns(t *testing.T) {
 		t.Run(d.pattern, func(t *testing.T) {
 			t.Parallel()
 
-			shouldNotMatch(t, d.pattern, d.dir)
+			assertPatternNotMatch(t, d.pattern, d.dir)
 		})
 	}
-
 }
 
 func TestAnAssociatedEventTriggersTheWatcher(t *testing.T) {
-	w := pattern{value: "/**/*.php"}
-	require.NoError(t, w.parse())
+	t.Parallel()
+
+	w := newPattern(t, "/**/*.php")
 	w.events = make(chan eventHolder)
 
-	e := &watcher.Event{PathName: "/path/temporary_file", AssociatedPathName: "/path/file.php"}
+	e := &watcher.Event{PathName: normalizePath(t, "/path/temporary_file"), AssociatedPathName: normalizePath(t, "/path/file.php")}
 	go w.handle(e)
 
 	assert.Equal(t, e, (<-w.events).event)
 }
 
 func relativeDir(t *testing.T, relativePath string) string {
+	t.Helper()
+
 	dir, err := filepath.Abs("./" + relativePath)
 	assert.NoError(t, err)
+
 	return dir
 }
 
 func hasDir(t *testing.T, p string, dir string) {
 	t.Helper()
 
-	w := pattern{value: p}
-	require.NoError(t, w.parse())
+	w := newPattern(t, p)
 
-	assert.Equal(t, dir, w.value)
+	assert.Equal(t, normalizePath(t, dir), w.value)
 }
 
-func shouldMatch(t *testing.T, p string, fileName string) {
+func assertPatternMatch(t *testing.T, p, fileName string) {
 	t.Helper()
 
-	w := pattern{value: p}
-	require.NoError(t, w.parse())
+	w := newPattern(t, p)
 
-	assert.True(t, w.allowReload(&watcher.Event{PathName: fileName}))
+	assert.True(t, w.allowReload(&watcher.Event{PathName: normalizePath(t, fileName)}))
 }
 
-func shouldNotMatch(t *testing.T, p string, fileName string) {
+func assertPatternNotMatch(t *testing.T, p, fileName string) {
 	t.Helper()
 
-	w := pattern{value: p}
-	require.NoError(t, w.parse())
+	w := newPattern(t, p)
 
-	assert.False(t, w.allowReload(&watcher.Event{PathName: fileName}))
+	assert.False(t, w.allowReload(&watcher.Event{PathName: normalizePath(t, fileName)}))
 }
