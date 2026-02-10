@@ -13,6 +13,14 @@ return function() {
         echo "Failed to set MY_VAR.\n";
     }
 
+    // verify putenv does not affect $_SERVER
+    $result = $_SERVER[$var] ?? null;
+    if ($result !== null) {
+        echo "MY_VAR is in \$_SERVER (not expected)\n";
+    } else {
+        echo "MY_VAR not found in \$_SERVER.\n";
+    }
+
     // Unsetting the environment variable
     $result = putenv($var);
     if ($result) {
@@ -46,6 +54,14 @@ return function() {
         echo "Unset NON_EXISTING_VAR successfully.\n";
     } else {
         echo "Failed to unset NON_EXISTING_VAR.\n";
+    }
+
+    // Inserting an invalid variable should fail (null byte in key)
+    putenv("INVALID\x0_VAR=value");
+    if (getenv("INVALID\x0_VAR")) {
+        echo "Invalid value was inserted (unexpected).\n";
+    } else {
+        echo "Invalid value was not inserted.\n";
     }
 
     getenv();
