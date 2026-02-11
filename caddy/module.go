@@ -108,8 +108,7 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		} else {
 			f.Root = filepath.Join(frankenphp.EmbeddedAppPath, defaultDocumentRoot)
 
-			var rrs bool
-			f.ResolveRootSymlink = &rrs
+			f.ResolveRootSymlink = new(false)
 		}
 	} else if frankenphp.EmbeddedAppPath != "" && filepath.IsLocal(f.Root) {
 		f.Root = filepath.Join(frankenphp.EmbeddedAppPath, f.Root)
@@ -126,8 +125,7 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 	}
 
 	if f.ResolveRootSymlink == nil {
-		rrs := true
-		f.ResolveRootSymlink = &rrs
+		f.ResolveRootSymlink = new(true)
 	}
 
 	// Always pre-compute absolute file names for fallback matching
@@ -202,7 +200,6 @@ func needReplacement(s string) bool {
 // ServeHTTP implements caddyhttp.MiddlewareHandler.
 func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ caddyhttp.Handler) error {
 	ctx := r.Context()
-	origReq := ctx.Value(caddyhttp.OriginalRequestCtxKey).(http.Request)
 	repl := ctx.Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
 
 	documentRoot := f.resolvedDocumentRoot
@@ -243,7 +240,7 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 		r,
 		append(
 			opts,
-			frankenphp.WithOriginalRequest(&origReq),
+			frankenphp.WithOriginalRequest(new(ctx.Value(caddyhttp.OriginalRequestCtxKey).(http.Request))),
 			frankenphp.WithWorkerName(workerName),
 		)...,
 	)
@@ -480,8 +477,7 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 		if phpsrv.Root == "" {
 			phpsrv.Root = filepath.Join(frankenphp.EmbeddedAppPath, defaultDocumentRoot)
 			fsrv.Root = phpsrv.Root
-			rrs := false
-			phpsrv.ResolveRootSymlink = &rrs
+			phpsrv.ResolveRootSymlink = new(false)
 		} else if filepath.IsLocal(fsrv.Root) {
 			phpsrv.Root = filepath.Join(frankenphp.EmbeddedAppPath, phpsrv.Root)
 			fsrv.Root = phpsrv.Root
