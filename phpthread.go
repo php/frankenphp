@@ -66,9 +66,11 @@ func (thread *phpThread) boot() {
 // shutdown the underlying PHP thread
 func (thread *phpThread) shutdown() {
 	if !thread.state.RequestSafeStateChange(state.ShuttingDown) {
-		// already shutting down or done
+		// already shutting down or done, wait for the C thread to finish
+		thread.state.WaitFor(state.Done, state.Reserved)
 		return
 	}
+
 	close(thread.drainChan)
 	thread.state.WaitFor(state.Done)
 	thread.drainChan = make(chan struct{})
