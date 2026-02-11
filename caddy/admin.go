@@ -3,12 +3,14 @@ package caddy
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
+
 	"github.com/caddyserver/caddy/v2"
 	"github.com/dunglas/frankenphp"
-	"net/http"
 )
 
-type FrankenPHPAdmin struct{}
+type FrankenPHPAdmin struct {
+}
 
 // if the id starts with "admin.api" the module will register AdminRoutes via module.Routes()
 func (FrankenPHPAdmin) CaddyModule() caddy.ModuleInfo {

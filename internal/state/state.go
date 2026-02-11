@@ -141,13 +141,15 @@ func (ts *ThreadState) notifySubscribers(nextState State) {
 	ts.subscribers = ts.subscribers[:n]
 }
 
-// block until the thread reaches a certain state
+// WaitFor blocks until the thread reaches a certain state
 func (ts *ThreadState) WaitFor(states ...State) {
 	ts.mu.Lock()
 	if slices.Contains(states, ts.currentState) {
 		ts.mu.Unlock()
+
 		return
 	}
+
 	sub := stateSubscriber{
 		states: states,
 		ch:     make(chan struct{}),
@@ -157,7 +159,7 @@ func (ts *ThreadState) WaitFor(states ...State) {
 	<-sub.ch
 }
 
-// safely request a state change from a different goroutine
+// RequestSafeStateChange safely requests a state change from a different goroutine
 func (ts *ThreadState) RequestSafeStateChange(nextState State) bool {
 	ts.mu.Lock()
 	switch ts.currentState {
