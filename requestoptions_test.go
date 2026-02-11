@@ -8,6 +8,8 @@ import (
 )
 
 func TestWithRequestSplitPath(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		splitPath     []string
@@ -52,9 +54,10 @@ func TestWithRequestSplitPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			ctx := &frankenPHPContext{}
-			opt := WithRequestSplitPath(tt.splitPath)
-			err := opt(ctx)
+			opt, err := WithRequestSplitPath(tt.splitPath)
 
 			if tt.wantErr != nil {
 				require.ErrorIs(t, err, tt.wantErr)
@@ -63,6 +66,7 @@ func TestWithRequestSplitPath(t *testing.T) {
 			}
 
 			require.NoError(t, err)
+			require.NoError(t, opt(ctx))
 			assert.Equal(t, tt.wantSplitPath, ctx.splitPath)
 		})
 	}
