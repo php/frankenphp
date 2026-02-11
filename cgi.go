@@ -67,18 +67,18 @@ var knownServerKeys = []string{
 	"REQUEST_URI",
 }
 
-// nullTerminatedHTTPMethods caches null-terminated versions of common HTTP methods
+// cStringHTTPMethods caches C string versions of common HTTP methods
 // to avoid allocations in pinCString on every request.
-var nullTerminatedHTTPMethods = map[string]string{
-	"GET":     "GET\x00",
-	"HEAD":    "HEAD\x00",
-	"POST":    "POST\x00",
-	"PUT":     "PUT\x00",
-	"DELETE":  "DELETE\x00",
-	"CONNECT": "CONNECT\x00",
-	"OPTIONS": "OPTIONS\x00",
-	"TRACE":   "TRACE\x00",
-	"PATCH":   "PATCH\x00",
+var cStringHTTPMethods = map[string]*C.char{
+	"GET":     C.CString("GET"),
+	"HEAD":    C.CString("HEAD"),
+	"POST":    C.CString("POST"),
+	"PUT":     C.CString("PUT"),
+	"DELETE":  C.CString("DELETE"),
+	"CONNECT": C.CString("CONNECT"),
+	"OPTIONS": C.CString("OPTIONS"),
+	"TRACE":   C.CString("TRACE"),
+	"PATCH":   C.CString("PATCH"),
 }
 
 // computeKnownVariables returns a set of CGI environment variables for the request.
@@ -344,8 +344,8 @@ func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) 
 		return nil
 	}
 
-	if m, ok := nullTerminatedHTTPMethods[request.Method]; ok {
-		info.request_method = thread.pinString(m)
+	if m, ok := cStringHTTPMethods[request.Method]; ok {
+		info.request_method = m
 	} else {
 		info.request_method = thread.pinCString(request.Method)
 	}
@@ -360,7 +360,6 @@ func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) 
 		info.path_translated = thread.pinCString(sanitizedPathJoin(fc.documentRoot, fc.pathInfo)) // See: http://www.oreilly.com/openbook/cgi/ch02_04.html
 	}
 
-	fc.requestURI = request.URL.RequestURI()
 	info.request_uri = thread.pinCString(fc.requestURI)
 
 	info.proto_num = C.int(request.ProtoMajor*1000 + request.ProtoMinor)

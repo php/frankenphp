@@ -95,6 +95,8 @@ func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Reques
 		splitCgiPath(fc)
 	}
 
+	fc.requestURI = r.URL.RequestURI()
+
 	c := context.WithValue(r.Context(), contextKey, fc)
 
 	return r.WithContext(c), nil

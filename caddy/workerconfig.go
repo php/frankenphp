@@ -181,11 +181,17 @@ func (wc *workerConfig) matchesPath(r *http.Request, documentRoot string) bool {
 
 	// fast path: compare the request URL path against the pre-computed relative path
 	if wc.matchRelPath != "" {
-		if r.URL.Path == wc.matchRelPath {
+		reqPath := r.URL.Path
+		if reqPath == wc.matchRelPath {
 			return true
 		}
 
-		return path.Clean(r.URL.Path) == wc.matchRelPath
+		// ensure leading slash for relative paths (see #2166)
+		if reqPath == "" || reqPath[0] != '/' {
+			reqPath = "/" + reqPath
+		}
+
+		return path.Clean(reqPath) == wc.matchRelPath
 	}
 
 	// fallback when documentRoot is dynamic (contains placeholders)
