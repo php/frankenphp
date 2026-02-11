@@ -82,34 +82,34 @@ func WithRequestResolvedDocumentRoot(documentRoot string) RequestOption {
 // Future enhancements should be careful to avoid CVE-2019-11043,
 // which can be mitigated with use of a try_files-like behavior
 // that 404s if the FastCGI path info is not found.
-func WithRequestSplitPath(splitPath []string) RequestOption {
-	return func(o *frankenPHPContext) error {
-		var b strings.Builder
+func WithRequestSplitPath(splitPath []string) (RequestOption, error) {
+	var b strings.Builder
 
-		for i, split := range splitPath {
-			b.Grow(len(split))
+	for i, split := range splitPath {
+		b.Grow(len(split))
 
-			for j := 0; j < len(split); j++ {
-				c := split[j]
-				if c >= utf8.RuneSelf {
-					return ErrInvalidSplitPath
-				}
-
-				if 'A' <= c && c <= 'Z' {
-					b.WriteByte(c + 'a' - 'A')
-				} else {
-					b.WriteByte(c)
-				}
+		for j := 0; j < len(split); j++ {
+			c := split[j]
+			if c >= utf8.RuneSelf {
+				return nil, ErrInvalidSplitPath
 			}
 
-			splitPath[i] = b.String()
-			b.Reset()
+			if 'A' <= c && c <= 'Z' {
+				b.WriteByte(c + 'a' - 'A')
+			} else {
+				b.WriteByte(c)
+			}
 		}
 
+		splitPath[i] = b.String()
+		b.Reset()
+	}
+
+	return func(o *frankenPHPContext) error {
 		o.splitPath = splitPath
 
 		return nil
-	}
+	}, nil
 }
 
 type PreparedEnv = map[string]string

@@ -118,7 +118,12 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 	if len(f.SplitPath) == 0 {
 		f.SplitPath = []string{".php"}
 	}
-	f.requestOptions = append(f.requestOptions, frankenphp.WithRequestSplitPath(f.SplitPath))
+
+	if opt, err := frankenphp.WithRequestSplitPath(f.SplitPath); err == nil {
+		f.requestOptions = append(f.requestOptions, opt)
+	} else {
+		f.requestOptions = append(f.requestOptions, opt)
+	}
 
 	if f.ResolveRootSymlink == nil {
 		rrs := true
@@ -188,6 +193,10 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 	repl := ctx.Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
 
 	documentRoot := f.resolvedDocumentRoot
+
+	opts := make([]frankenphp.RequestOption, 0, len(f.requestOptions)+4)
+	opts = append(opts, f.requestOptions...)
+
 	if documentRoot == "" {
 		documentRoot = repl.ReplaceKnown(f.Root, "")
 		if documentRoot == "" && frankenphp.EmbeddedAppPath != "" {
@@ -197,7 +206,7 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 		// If we do not have a resolved document root, then we cannot resolve the symlink of our cwd because it may
 		// resolve to a different directory than the one we are currently in.
 		// This is especially important if there are workers running.
-		f.requestOptions = append(f.requestOptions, frankenphp.WithRequestDocumentRoot(documentRoot, false))
+		opts = append(opts, frankenphp.WithRequestDocumentRoot(documentRoot, false))
 	}
 
 	if f.preparedEnvNeedsReplacement {
@@ -206,7 +215,7 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 			env[k] = repl.ReplaceKnown(v, "")
 		}
 
-		f.requestOptions = append(f.requestOptions, frankenphp.WithRequestPreparedEnv(env))
+		opts = append(opts, frankenphp.WithRequestPreparedEnv(env))
 	}
 
 	workerName := ""
@@ -220,7 +229,7 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 	fr, err := frankenphp.NewRequestWithContext(
 		r,
 		append(
-			f.requestOptions,
+			opts,
 			frankenphp.WithOriginalRequest(&origReq),
 			frankenphp.WithWorkerName(workerName),
 		)...,
