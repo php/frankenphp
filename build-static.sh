@@ -72,7 +72,7 @@ if [ -z "${PHP_VERSION}" ]; then
 		fi
 	}
 
-	PHP_VERSION="$(get_latest_php_version "8.4")"
+	PHP_VERSION="$(get_latest_php_version "8.5")"
 	export PHP_VERSION
 fi
 # default extension set
