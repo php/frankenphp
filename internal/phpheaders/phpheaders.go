@@ -1,6 +1,5 @@
 package phpheaders
 
-import "C"
 import (
 	"context"
 	"strings"

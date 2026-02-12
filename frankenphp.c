@@ -20,7 +20,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #if defined(__linux__)
 #include <sys/prctl.h>
 #elif defined(__FreeBSD__) || defined(__OpenBSD__)
@@ -423,7 +422,7 @@ bool frankenphp_shutdown_dummy_request(void) {
   return true;
 }
 
-PHPAPI void get_full_env(zval *track_vars_array) {
+void get_full_env(zval *track_vars_array) {
   go_getfullenv(thread_index, track_vars_array);
 }
 
@@ -1498,7 +1497,7 @@ static zend_module_entry **modules = NULL;
 static int modules_len = 0;
 static int (*original_php_register_internal_extensions_func)(void) = NULL;
 
-PHPAPI int register_internal_extensions(void) {
+int register_internal_extensions(void) {
   if (original_php_register_internal_extensions_func != NULL &&
       original_php_register_internal_extensions_func() != SUCCESS) {
     return FAILURE;
