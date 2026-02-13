@@ -279,3 +279,69 @@ docker run -v $PWD:/app/public \
     -p 80:80 -p 443:443 -p 443:443/udp \
     dunglas/frankenphp
 ```
+
+## Autocomplétion Shell
+
+FrankenPHP fournit un support d'autocomplétion intégré pour Bash, Zsh, Fish et PowerShell. Cela permet l'autocomplétion de toutes les commandes (y compris les commandes personnalisées comme `php-server`, `php-cli` et `extension-init`) ainsi que leurs options.
+
+### Bash
+
+Pour charger l'autocomplétion dans votre session shell actuelle :
+
+```console
+source <(frankenphp completion bash)
+```
+
+Pour charger l'autocomplétion à chaque nouvelle session, exécutez :
+
+**Linux :**
+
+```console
+frankenphp completion bash > /etc/bash_completion.d/frankenphp
+```
+
+**macOS :**
+
+```console
+frankenphp completion bash > $(brew --prefix)/etc/bash_completion.d/frankenphp
+```
+
+### Zsh
+
+Si l'autocomplétion shell n'est pas déjà activée dans votre environnement, vous devrez l'activer. Vous pouvez exécuter la commande suivante une fois :
+
+```console
+echo "autoload -U compinit; compinit" >> ~/.zshrc
+```
+
+Pour charger l'autocomplétion à chaque session, exécutez une fois :
+
+```console
+frankenphp completion zsh > "${fpath[1]}/_frankenphp"
+```
+
+Vous devrez démarrer un nouveau shell pour que cette configuration prenne effet.
+
+### Fish
+
+Pour charger l'autocomplétion dans votre session shell actuelle :
+
+```console
+frankenphp completion fish | source
+```
+
+Pour charger l'autocomplétion à chaque nouvelle session, exécutez une fois :
+
+```console
+frankenphp completion fish > ~/.config/fish/completions/frankenphp.fish
+```
+
+### PowerShell
+
+Pour charger l'autocomplétion dans votre session shell actuelle :
+
+```powershell
+frankenphp completion powershell | Out-String | Invoke-Expression
+```
+
+Pour charger l'autocomplétion à chaque nouvelle session, ajoutez la sortie de la commande ci-dessus à votre profil PowerShell.
