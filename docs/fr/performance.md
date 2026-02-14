@@ -19,7 +19,7 @@ Pour changer le nombre de workers, utilisez l'option `num` de la section `worker
 ### `max_threads`
 
 Bien qu'il soit toujours préférable de savoir exactement à quoi ressemblera votre trafic, les applications réelles
-ont tendance à être plus imprévisibles. La [configuration](config.md#caddyfile-config) `max_threads` permet à FrankenPHP de créer automatiquement des threads supplémentaires au moment de l'exécution, jusqu'à la limite spécifiée.
+ont tendance à être plus imprévisibles. La [configuration](#configuration-du-caddyfile) `max_threads` permet à FrankenPHP de créer automatiquement des threads supplémentaires au moment de l'exécution, jusqu'à la limite spécifiée.
 `max_threads` peut vous aider à déterminer le nombre de threads dont vous avez besoin pour gérer votre trafic et peut rendre le serveur plus résistant aux pics de latence.
 Si elle est fixée à `auto`, la limite sera estimée en fonction de la valeur de `memory_limit` dans votre `php.ini`. Si ce n'est pas possible,
 `auto` prendra par défaut 2x `num_threads`. Gardez à l'esprit que `auto` peut fortement sous-estimer le nombre de threads nécessaires.
@@ -43,7 +43,7 @@ En outre, [certains bogues ne se produisent que lors de l'utilisation de musl](h
 
 Dans les environnements de production, nous recommandons d'utiliser FrankenPHP lié à glibc, compilé avec un niveau d'optimisation approprié.
 
-Cela peut être réalisé en utilisant les images Docker Debian, en utilisant [nos paquets .deb, .rpm ou .apk maintenus](https://pkgs.henderkes.com), ou en [compilant FrankenPHP à partir des sources](compile.md).
+Cela peut être réalisé en utilisant les images Docker Debian, en utilisant [les paquets .deb, .rpm ou .apk proposés par l'un de nos mainteneurs](https://pkgs.henderkes.com), ou en [compilant FrankenPHP à partir des sources](compile.md).
 
 Pour des conteneurs plus légers ou plus sécurisés, vous pourriez envisager [une image Debian renforcée](docker.md#hardening-images) plutôt qu'Alpine.
 
@@ -104,7 +104,7 @@ route {
 
 Une approche alternative avec 0 opérations inutiles sur le système de fichiers serait d'utiliser la directive `php`
 et de diviser les fichiers de PHP par chemin. Cette approche fonctionne bien si votre application entière est servie par un seul fichier d'entrée.
-Un exemple de [configuration](config.md#caddyfile-config) qui sert des fichiers statiques derrière un dossier `/assets` pourrait ressembler à ceci :
+Un exemple de [configuration](#configuration-du-caddyfile) qui sert des fichiers statiques derrière un dossier `/assets` pourrait ressembler à ceci :
 
 ```caddyfile
 route {

@@ -29,7 +29,7 @@ diretiva `frankenphp`.
 
 Embora seja sempre melhor saber exatamente como será o seu tráfego, aplicações
 reais tendem a ser mais imprevisíveis.
-A [configuração](config.md#caddyfile-config) `max_threads` permite que
+A [configuração](config.md#configuracao-do-caddyfile) `max_threads` permite que
 o FrankenPHP crie threads adicionais automaticamente em tempo de execução até o
 limite especificado.
 `max_threads` pode ajudar você a descobrir quantas threads são necessárias para

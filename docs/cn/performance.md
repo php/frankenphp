@@ -160,10 +160,10 @@ FrankenPHP 使用官方 PHP 解释器。
 
 特别是：
 
-- 检查 [OPcache](https://www.php.net/manual/en/book.opcache.php) 是否已安装、启用并正确配置
+- 检查 [OPcache](https://www.php.net/manual/zh/book.opcache.php) 是否已安装、启用并正确配置
 - 启用 [Composer 自动加载器优化](https://getcomposer.org/doc/articles/autoloader-optimization.md)
 - 确保 `realpath` 缓存对于你的应用程序需求足够大
-- 使用[预加载](https://www.php.net/manual/en/opcache.preloading.php)
+- 使用[预加载](https://www.php.net/manual/zh/opcache.preloading.php)
 
 有关更多详细信息，请阅读[专门的 Symfony 文档条目](https://symfony.com/doc/current/performance.html)
 （即使你不使用 Symfony，大多数提示也很有用）。
