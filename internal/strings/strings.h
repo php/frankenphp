@@ -48,43 +48,44 @@ zend_string *frankenphp_init_persistent_string(const char *string, size_t len) {
   return z_string;
 }
 
-#define F_INTERN_STR(str) frankenphp_init_persistent_string(str, sizeof(str) - 1)
+#define FRANKENPHP_INTERN_STR(str)                                             \
+  frankenphp_init_persistent_string(str, sizeof(str) - 1)
 
 static frankenphp_interned_strings_t frankenphp_init_interned_strings() {
   return (frankenphp_interned_strings_t){
-      .remote_addr = F_INTERN_STR("REMOTE_ADDR"),
-      .remote_host = F_INTERN_STR("REMOTE_HOST"),
-      .remote_port = F_INTERN_STR("REMOTE_PORT"),
-      .document_root = F_INTERN_STR("DOCUMENT_ROOT"),
-      .path_info = F_INTERN_STR("PATH_INFO"),
-      .php_self = F_INTERN_STR("PHP_SELF"),
-      .document_uri = F_INTERN_STR("DOCUMENT_URI"),
-      .script_filename = F_INTERN_STR("SCRIPT_FILENAME"),
-      .script_name = F_INTERN_STR("SCRIPT_NAME"),
-      .https = F_INTERN_STR("HTTPS"),
-      .ssl_protocol = F_INTERN_STR("SSL_PROTOCOL"),
-      .request_scheme = F_INTERN_STR("REQUEST_SCHEME"),
-      .server_name = F_INTERN_STR("SERVER_NAME"),
-      .server_port = F_INTERN_STR("SERVER_PORT"),
-      .content_length = F_INTERN_STR("CONTENT_LENGTH"),
-      .server_protocol = F_INTERN_STR("SERVER_PROTOCOL"),
-      .http_host = F_INTERN_STR("HTTP_HOST"),
-      .request_uri = F_INTERN_STR("REQUEST_URI"),
-      .ssl_cipher = F_INTERN_STR("SSL_CIPHER"),
-      .server_software = F_INTERN_STR("SERVER_SOFTWARE"),
-      .server_software_str = F_INTERN_STR("FrankenPHP"),
-      .gateway_interface = F_INTERN_STR("GATEWAY_INTERFACE"),
-      .gateway_interface_str = F_INTERN_STR("CGI/1.1"),
-      .auth_type = F_INTERN_STR("AUTH_TYPE"),
-      .remote_ident = F_INTERN_STR("REMOTE_IDENT"),
-      .content_type = F_INTERN_STR("CONTENT_TYPE"),
-      .path_translated = F_INTERN_STR("PATH_TRANSLATED"),
-      .query_string = F_INTERN_STR("QUERY_STRING"),
-      .remote_user = F_INTERN_STR("REMOTE_USER"),
-      .request_method = F_INTERN_STR("REQUEST_METHOD"),
+      .remote_addr = FRANKENPHP_INTERN_STR("REMOTE_ADDR"),
+      .remote_host = FRANKENPHP_INTERN_STR("REMOTE_HOST"),
+      .remote_port = FRANKENPHP_INTERN_STR("REMOTE_PORT"),
+      .document_root = FRANKENPHP_INTERN_STR("DOCUMENT_ROOT"),
+      .path_info = FRANKENPHP_INTERN_STR("PATH_INFO"),
+      .php_self = FRANKENPHP_INTERN_STR("PHP_SELF"),
+      .document_uri = FRANKENPHP_INTERN_STR("DOCUMENT_URI"),
+      .script_filename = FRANKENPHP_INTERN_STR("SCRIPT_FILENAME"),
+      .script_name = FRANKENPHP_INTERN_STR("SCRIPT_NAME"),
+      .https = FRANKENPHP_INTERN_STR("HTTPS"),
+      .ssl_protocol = FRANKENPHP_INTERN_STR("SSL_PROTOCOL"),
+      .request_scheme = FRANKENPHP_INTERN_STR("REQUEST_SCHEME"),
+      .server_name = FRANKENPHP_INTERN_STR("SERVER_NAME"),
+      .server_port = FRANKENPHP_INTERN_STR("SERVER_PORT"),
+      .content_length = FRANKENPHP_INTERN_STR("CONTENT_LENGTH"),
+      .server_protocol = FRANKENPHP_INTERN_STR("SERVER_PROTOCOL"),
+      .http_host = FRANKENPHP_INTERN_STR("HTTP_HOST"),
+      .request_uri = FRANKENPHP_INTERN_STR("REQUEST_URI"),
+      .ssl_cipher = FRANKENPHP_INTERN_STR("SSL_CIPHER"),
+      .server_software = FRANKENPHP_INTERN_STR("SERVER_SOFTWARE"),
+      .server_software_str = FRANKENPHP_INTERN_STR("FrankenPHP"),
+      .gateway_interface = FRANKENPHP_INTERN_STR("GATEWAY_INTERFACE"),
+      .gateway_interface_str = FRANKENPHP_INTERN_STR("CGI/1.1"),
+      .auth_type = FRANKENPHP_INTERN_STR("AUTH_TYPE"),
+      .remote_ident = FRANKENPHP_INTERN_STR("REMOTE_IDENT"),
+      .content_type = FRANKENPHP_INTERN_STR("CONTENT_TYPE"),
+      .path_translated = FRANKENPHP_INTERN_STR("PATH_TRANSLATED"),
+      .query_string = FRANKENPHP_INTERN_STR("QUERY_STRING"),
+      .remote_user = FRANKENPHP_INTERN_STR("REMOTE_USER"),
+      .request_method = FRANKENPHP_INTERN_STR("REQUEST_METHOD"),
   };
 }
 
-#undef F_INTERN_STR
+#undef FRANKENPHP_INTERN_STR
 
 #endif

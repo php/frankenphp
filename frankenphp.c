@@ -946,31 +946,31 @@ void frankenphp_register_bulk(zval *track_vars_array,
   zend_hash_extend(ht, vars.total_num_vars, 0);
 
   // update values with variable strings
-#define F_REG_VAR(name)                                                        \
+#define FRANKENPHP_REGISTER_VAR(name)                                          \
   frankenphp_register_trusted_var(interned_strings.name, vars.name,            \
                                   vars.name##_len, ht)
 
-  F_REG_VAR(remote_addr);
-  F_REG_VAR(remote_host);
-  F_REG_VAR(remote_port);
-  F_REG_VAR(document_root);
-  F_REG_VAR(path_info);
-  F_REG_VAR(php_self);
-  F_REG_VAR(document_uri);
-  F_REG_VAR(script_filename);
-  F_REG_VAR(script_name);
-  F_REG_VAR(https);
-  F_REG_VAR(ssl_protocol);
-  F_REG_VAR(ssl_cipher);
-  F_REG_VAR(request_scheme);
-  F_REG_VAR(server_name);
-  F_REG_VAR(server_port);
-  F_REG_VAR(content_length);
-  F_REG_VAR(server_protocol);
-  F_REG_VAR(http_host);
-  F_REG_VAR(request_uri);
+  FRANKENPHP_REGISTER_VAR(remote_addr);
+  FRANKENPHP_REGISTER_VAR(remote_host);
+  FRANKENPHP_REGISTER_VAR(remote_port);
+  FRANKENPHP_REGISTER_VAR(document_root);
+  FRANKENPHP_REGISTER_VAR(path_info);
+  FRANKENPHP_REGISTER_VAR(php_self);
+  FRANKENPHP_REGISTER_VAR(document_uri);
+  FRANKENPHP_REGISTER_VAR(script_filename);
+  FRANKENPHP_REGISTER_VAR(script_name);
+  FRANKENPHP_REGISTER_VAR(https);
+  FRANKENPHP_REGISTER_VAR(ssl_protocol);
+  FRANKENPHP_REGISTER_VAR(ssl_cipher);
+  FRANKENPHP_REGISTER_VAR(request_scheme);
+  FRANKENPHP_REGISTER_VAR(server_name);
+  FRANKENPHP_REGISTER_VAR(server_port);
+  FRANKENPHP_REGISTER_VAR(content_length);
+  FRANKENPHP_REGISTER_VAR(server_protocol);
+  FRANKENPHP_REGISTER_VAR(http_host);
+  FRANKENPHP_REGISTER_VAR(request_uri);
 
-#undef F_REG_VAR
+#undef FRANKENPHP_REGISTER_VAR
 
   // update values with unchanging strings
   zval zv;
