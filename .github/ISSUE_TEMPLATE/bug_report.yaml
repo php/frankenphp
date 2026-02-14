@@ -7,7 +7,7 @@ body:
     attributes:
       value: |
         Thanks for taking the time to fill out this bug report!
-        
+
         Before submitting, please ensure that your issue:
 
         * Is not [a known issue](https://frankenphp.dev/docs/known-issues/).
@@ -31,6 +31,7 @@ body:
         - Docker (Debian Trixie)
         - Docker (Debian Bookworm)
         - Docker (Alpine)
+        - apk packages
         - deb packages
         - RPM packages
         - Static binary
