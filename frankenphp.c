@@ -944,49 +944,33 @@ void frankenphp_register_bulk(zval *track_vars_array,
                               frankenphp_server_vars vars) {
   HashTable *ht = Z_ARRVAL_P(track_vars_array);
   zend_hash_extend(ht, vars.total_num_vars, 0);
-  frankenphp_register_trusted_var(interned_strings.remote_addr,
-                                  vars.remote_addr, vars.remote_addr_len, ht);
-  frankenphp_register_trusted_var(interned_strings.remote_host,
-                                  vars.remote_host, vars.remote_host_len, ht);
-  frankenphp_register_trusted_var(interned_strings.remote_port,
-                                  vars.remote_port, vars.remote_port_len, ht);
-  frankenphp_register_trusted_var(interned_strings.document_root,
-                                  vars.document_root, vars.document_root_len,
-                                  ht);
-  frankenphp_register_trusted_var(interned_strings.path_info, vars.path_info,
-                                  vars.path_info_len, ht);
-  frankenphp_register_trusted_var(interned_strings.php_self, vars.php_self,
-                                  vars.php_self_len, ht);
-  frankenphp_register_trusted_var(interned_strings.document_uri,
-                                  vars.document_uri, vars.document_uri_len, ht);
-  frankenphp_register_trusted_var(interned_strings.script_filename,
-                                  vars.script_filename,
-                                  vars.script_filename_len, ht);
-  frankenphp_register_trusted_var(interned_strings.script_name,
-                                  vars.script_name, vars.script_name_len, ht);
-  frankenphp_register_trusted_var(interned_strings.https, vars.https,
-                                  vars.https_len, ht);
-  frankenphp_register_trusted_var(interned_strings.ssl_protocol,
-                                  vars.ssl_protocol, vars.ssl_protocol_len, ht);
-  frankenphp_register_trusted_var(interned_strings.ssl_cipher, vars.ssl_cipher,
-                                  vars.ssl_cipher_len, ht);
-  frankenphp_register_trusted_var(interned_strings.request_scheme,
-                                  vars.request_scheme, vars.request_scheme_len,
-                                  ht);
-  frankenphp_register_trusted_var(interned_strings.server_name,
-                                  vars.server_name, vars.server_name_len, ht);
-  frankenphp_register_trusted_var(interned_strings.server_port,
-                                  vars.server_port, vars.server_port_len, ht);
-  frankenphp_register_trusted_var(interned_strings.content_length,
-                                  vars.content_length, vars.content_length_len,
-                                  ht);
-  frankenphp_register_trusted_var(interned_strings.server_protocol,
-                                  vars.server_protocol,
-                                  vars.server_protocol_len, ht);
-  frankenphp_register_trusted_var(interned_strings.http_host, vars.http_host,
-                                  vars.http_host_len, ht);
-  frankenphp_register_trusted_var(interned_strings.request_uri,
-                                  vars.request_uri, vars.request_uri_len, ht);
+
+  // update values with variable strings
+#define REG_VAR(name)                                                          \
+  frankenphp_register_trusted_var(interned_strings.name, vars.name,            \
+                                  vars.name##_len, ht)
+
+  REG_VAR(remote_addr);
+  REG_VAR(remote_host);
+  REG_VAR(remote_port);
+  REG_VAR(document_root);
+  REG_VAR(path_info);
+  REG_VAR(php_self);
+  REG_VAR(document_uri);
+  REG_VAR(script_filename);
+  REG_VAR(script_name);
+  REG_VAR(https);
+  REG_VAR(ssl_protocol);
+  REG_VAR(ssl_cipher);
+  REG_VAR(request_scheme);
+  REG_VAR(server_name);
+  REG_VAR(server_port);
+  REG_VAR(content_length);
+  REG_VAR(server_protocol);
+  REG_VAR(http_host);
+  REG_VAR(request_uri);
+
+#undef REG_VAR
 
   // update values with unchanging strings
   zval zv;
