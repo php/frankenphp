@@ -80,27 +80,13 @@ typedef struct frankenphp_server_vars {
   char *content_length_val;
   size_t content_length_len;
 
-  zend_string *gateway_interface_key;
-  zend_string *gateway_interface_str;
-
   zend_string *server_protocol_key;
   char *server_protocol_val;
   size_t server_protocol_len;
 
-  zend_string *server_software_key;
-  zend_string *server_software_str;
-
   zend_string *http_host_key;
   char *http_host_val;
   size_t http_host_len;
-
-  zend_string *auth_type_key;
-  char *auth_type_val;
-  size_t auth_type_len;
-
-  zend_string *remote_ident_key;
-  char *remote_ident_val;
-  size_t remote_ident_len;
 
   zend_string *request_uri_key;
   char *request_uri_val;
@@ -109,6 +95,15 @@ typedef struct frankenphp_server_vars {
   zend_string *ssl_cipher_key;
   char *ssl_cipher_val;
   size_t ssl_cipher_len;
+
+  zend_string *server_software_key;
+  zend_string *server_software_str;
+
+  zend_string *gateway_interface_key;
+  zend_string *gateway_interface_str;
+
+  zend_string *auth_type_key;
+  zend_string *remote_ident_key;
 } frankenphp_server_vars;
 
 typedef struct frankenphp_version {

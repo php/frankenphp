@@ -981,19 +981,20 @@ void frankenphp_register_bulk(zval *track_vars_array,
                                   vars.server_protocol_len, ht);
   frankenphp_register_trusted_var(vars.http_host_key, vars.http_host_val,
                                   vars.http_host_len, ht);
-  frankenphp_register_trusted_var(vars.auth_type_key, vars.auth_type_val,
-                                  vars.auth_type_len, ht);
-  frankenphp_register_trusted_var(vars.remote_ident_key, vars.remote_ident_val,
-                                  vars.remote_ident_len, ht);
   frankenphp_register_trusted_var(vars.request_uri_key, vars.request_uri_val,
                                   vars.request_uri_len, ht);
 
-  // update interned strings
+  // update values with unchanging strings
   zval zv;
   ZVAL_STR(&zv, vars.gateway_interface_str);
   zend_hash_update(ht, vars.gateway_interface_key, &zv);
   ZVAL_STR(&zv, vars.server_software_str);
   zend_hash_update(ht, vars.server_software_key, &zv);
+
+  // update values with empty strings
+  ZVAL_EMPTY_STRING(&zv);
+  zend_hash_update(ht, vars.auth_type_key, &zv);
+  zend_hash_update(ht, vars.remote_ident_key, &zv);
 }
 
 /** Create an immutable zend_string that lasts for the whole process **/

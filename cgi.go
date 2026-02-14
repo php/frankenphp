@@ -190,27 +190,13 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		content_length_val: toUnsafeChar(contentLength),
 		content_length_len: C.size_t(len(contentLength)),
 
-		gateway_interface_key: zStrGatewayIface,
-		gateway_interface_str: zStrCgi1,
-
 		server_protocol_key: zStrServerProtocol,
 		server_protocol_val: toUnsafeChar(request.Proto),
 		server_protocol_len: C.size_t(len(request.Proto)),
 
-		server_software_key: zStrServerSoftware,
-		server_software_str: zStrFrankenPHP,
-
 		http_host_key: zStrHttpHost,
 		http_host_val: toUnsafeChar(request.Host),
 		http_host_len: C.size_t(len(request.Host)),
-
-		auth_type_key: zStrAuthType,
-		auth_type_val: toUnsafeChar(""),
-		auth_type_len: C.size_t(0),
-
-		remote_ident_key: zStrRemoteIdent,
-		remote_ident_val: toUnsafeChar(""),
-		remote_ident_len: C.size_t(0),
 
 		request_uri_key: zStrRequestURI,
 		request_uri_val: toUnsafeChar(requestURI),
@@ -219,6 +205,17 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		ssl_cipher_key: zStrSslCipher,
 		ssl_cipher_val: toUnsafeChar(sslCipher),
 		ssl_cipher_len: C.size_t(len(sslCipher)),
+
+        // unchanging
+        server_software_key: zStrServerSoftware,
+        server_software_str: zStrFrankenPHP,
+
+        gateway_interface_key: zStrGatewayIface,
+        gateway_interface_str: zStrCgi1,
+
+        // always empty, but must be present
+        auth_type_key: zStrAuthType,
+        remote_ident_key: zStrRemoteIdent,
 	})
 
 	// These values are already present in the SG(request_info), so we'll register them from there
