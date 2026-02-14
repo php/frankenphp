@@ -155,6 +155,13 @@ static void frankenphp_reset_super_globals() {
     zval *files = &PG(http_globals)[TRACK_VARS_FILES];
     zval_ptr_dtor_nogc(files);
     memset(files, 0, sizeof(*files));
+
+    /* $_SESSION must be explicitly deleted from the symbol table.
+     * Unlike other superglobals, $_SESSION is stored in EG(symbol_table)
+     * with a reference to PS(http_session_vars). The session RSHUTDOWN
+     * only decrements the refcount but doesn't remove it from the symbol
+     * table, causing data to leak between requests. */
+    zend_hash_str_del(&EG(symbol_table), "_SESSION", sizeof("_SESSION") - 1);
   }
   zend_end_try();
 

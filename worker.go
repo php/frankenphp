@@ -37,6 +37,8 @@ type worker struct {
 
 var (
 	workers          []*worker
+	workersByName    map[string]*worker
+	workersByPath    map[string]*worker
 	watcherIsEnabled bool
 	startupFailChan  chan error
 )
@@ -52,6 +54,8 @@ func initWorkers(opt []workerOpt) error {
 	)
 
 	workers = make([]*worker, 0, len(opt))
+	workersByName = make(map[string]*worker, len(opt))
+	workersByPath = make(map[string]*worker, len(opt))
 
 	for _, o := range opt {
 		w, err := newWorker(o)
@@ -61,6 +65,10 @@ func initWorkers(opt []workerOpt) error {
 
 		totalThreadsToStart += w.num
 		workers = append(workers, w)
+		workersByName[w.name] = w
+		if w.allowPathMatching {
+			workersByPath[w.fileName] = w
+		}
 	}
 
 	startupFailChan = make(chan error, totalThreadsToStart)
@@ -90,25 +98,6 @@ func initWorkers(opt []workerOpt) error {
 	return nil
 }
 
-func getWorkerByName(name string) *worker {
-	for _, w := range workers {
-		if w.name == name {
-			return w
-		}
-	}
-
-	return nil
-}
-
-func getWorkerByPath(path string) *worker {
-	for _, w := range workers {
-		if w.fileName == path && w.allowPathMatching {
-			return w
-		}
-	}
-
-	return nil
-}
 
 func newWorker(o workerOpt) (*worker, error) {
 	// Order is important!
@@ -118,6 +107,7 @@ func newWorker(o workerOpt) (*worker, error) {
 	if err != nil {
 		return nil, fmt.Errorf("worker filename is invalid %q: %w", o.fileName, err)
 	}
+
 	absFileName, err = fastabs.FastAbs(absFileName)
 	if err != nil {
 		return nil, fmt.Errorf("worker filename is invalid %q: %w", o.fileName, err)
@@ -135,10 +125,10 @@ func newWorker(o workerOpt) (*worker, error) {
 	// they can only be matched by their name, not by their path
 	allowPathMatching := !strings.HasPrefix(o.name, "m#")
 
-	if w := getWorkerByPath(absFileName); w != nil && allowPathMatching {
+	if w := workersByPath[absFileName]; w != nil && allowPathMatching {
 		return w, fmt.Errorf("two workers cannot have the same filename: %q", absFileName)
 	}
-	if w := getWorkerByName(o.name); w != nil {
+	if w := workersByName[o.name]; w != nil {
 		return w, fmt.Errorf("two workers cannot have the same name: %q", o.name)
 	}
 

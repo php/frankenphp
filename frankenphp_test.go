@@ -27,6 +27,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/dunglas/frankenphp"
 	"github.com/dunglas/frankenphp/internal/fastabs"
@@ -1301,6 +1302,114 @@ func TestIniPreLoopPreserved_worker(t *testing.T) {
 
 	}, &testOptions{
 		workerScript:       "worker-with-ini.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		realServer:         true,
+	})
+}
+
+func TestSessionNoLeakBetweenRequests_worker(t *testing.T) {
+	runTest(t, func(_ func(http.ResponseWriter, *http.Request), ts *httptest.Server, i int) {
+		// Client A: Set a secret value in session
+		clientA := &http.Client{}
+		resp1, err := clientA.Get(ts.URL + "/session-leak.php?action=set&value=secret_A&client_id=clientA")
+		assert.NoError(t, err)
+		body1, _ := io.ReadAll(resp1.Body)
+		_ = resp1.Body.Close()
+
+		body1Str := string(body1)
+		t.Logf("Client A set session: %s", body1Str)
+		assert.Contains(t, body1Str, "SESSION_SET")
+		assert.Contains(t, body1Str, "secret=secret_A")
+
+		// Client B: Check that session is empty (no cookie, should not see Client A's data)
+		clientB := &http.Client{}
+		resp2, err := clientB.Get(ts.URL + "/session-leak.php?action=check_empty")
+		assert.NoError(t, err)
+		body2, _ := io.ReadAll(resp2.Body)
+		_ = resp2.Body.Close()
+
+		body2Str := string(body2)
+		t.Logf("Client B check empty: %s", body2Str)
+		assert.Contains(t, body2Str, "SESSION_CHECK")
+		assert.Contains(t, body2Str, "SESSION_EMPTY=true",
+			"Client B should have empty session, not see Client A's data.\nResponse: %s", body2Str)
+		assert.NotContains(t, body2Str, "secret_A",
+			"Client A's secret should not leak to Client B.\nResponse: %s", body2Str)
+
+		// Client C: Read session without cookie (should also be empty)
+		clientC := &http.Client{}
+		resp3, err := clientC.Get(ts.URL + "/session-leak.php?action=get")
+		assert.NoError(t, err)
+		body3, _ := io.ReadAll(resp3.Body)
+		_ = resp3.Body.Close()
+
+		body3Str := string(body3)
+		t.Logf("Client C get session: %s", body3Str)
+		assert.Contains(t, body3Str, "SESSION_READ")
+		assert.Contains(t, body3Str, "secret=NOT_FOUND",
+			"Client C should not find any secret.\nResponse: %s", body3Str)
+		assert.Contains(t, body3Str, "client_id=NOT_FOUND",
+			"Client C should not find any client_id.\nResponse: %s", body3Str)
+
+	}, &testOptions{
+		workerScript:       "session-leak.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		realServer:         true,
+	})
+}
+
+func TestSessionNoLeakAfterExit_worker(t *testing.T) {
+	runTest(t, func(_ func(http.ResponseWriter, *http.Request), ts *httptest.Server, i int) {
+		// Client A: Set a secret value in session and call exit(1)
+		clientA := &http.Client{}
+		resp1, err := clientA.Get(ts.URL + "/session-leak.php?action=set_and_exit&value=exit_secret&client_id=exitClient")
+		assert.NoError(t, err)
+		body1, _ := io.ReadAll(resp1.Body)
+		_ = resp1.Body.Close()
+
+		body1Str := string(body1)
+		t.Logf("Client A set and exit: %s", body1Str)
+		// The response may be incomplete due to exit(1)
+		assert.Contains(t, body1Str, "BEFORE_EXIT")
+
+		// Client B: Check that session is empty (should not see Client A's data)
+		// Retry until the worker has restarted after exit(1)
+		clientB := &http.Client{}
+		var body2Str string
+		assert.Eventually(t, func() bool {
+			resp2, err := clientB.Get(ts.URL + "/session-leak.php?action=check_empty")
+			if err != nil {
+				return false
+			}
+			body2, _ := io.ReadAll(resp2.Body)
+			_ = resp2.Body.Close()
+			body2Str = string(body2)
+			return strings.Contains(body2Str, "SESSION_CHECK")
+		}, 2*time.Second, 10*time.Millisecond, "Worker did not restart in time after exit(1)")
+
+		t.Logf("Client B check empty after exit: %s", body2Str)
+		assert.Contains(t, body2Str, "SESSION_EMPTY=true",
+			"Client B should have empty session after Client A's exit(1).\nResponse: %s", body2Str)
+		assert.NotContains(t, body2Str, "exit_secret",
+			"Client A's secret should not leak to Client B after exit(1).\nResponse: %s", body2Str)
+
+		// Client C: Try to read session (should also be empty)
+		clientC := &http.Client{}
+		resp3, err := clientC.Get(ts.URL + "/session-leak.php?action=get")
+		assert.NoError(t, err)
+		body3, _ := io.ReadAll(resp3.Body)
+		_ = resp3.Body.Close()
+
+		body3Str := string(body3)
+		t.Logf("Client C get session after exit: %s", body3Str)
+		assert.Contains(t, body3Str, "SESSION_READ")
+		assert.Contains(t, body3Str, "secret=NOT_FOUND",
+			"Client C should not find any secret after exit(1).\nResponse: %s", body3Str)
+
+	}, &testOptions{
+		workerScript:       "session-leak.php",
 		nbWorkers:          1,
 		nbParallelRequests: 1,
 		realServer:         true,
