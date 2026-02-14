@@ -1,11 +1,9 @@
 package frankenphp
 
 // #cgo nocallback frankenphp_register_bulk
-// #cgo nocallback frankenphp_register_variables_from_request_info
 // #cgo nocallback frankenphp_register_variable_safe
 // #cgo nocallback frankenphp_register_single
 // #cgo noescape frankenphp_register_bulk
-// #cgo noescape frankenphp_register_variables_from_request_info
 // #cgo noescape frankenphp_register_variable_safe
 // #cgo noescape frankenphp_register_single
 // #include <php_variables.h>
@@ -35,38 +33,6 @@ var tlsProtocolStrings = map[uint16]string{
 	tls.VersionTLS13: "TLSv1.3",
 }
 
-// Known $_SERVER keys
-var knownServerKeys = []string{
-	"CONTENT_LENGTH",
-	"DOCUMENT_ROOT",
-	"DOCUMENT_URI",
-	"GATEWAY_INTERFACE",
-	"HTTP_HOST",
-	"HTTPS",
-	"PATH_INFO",
-	"PHP_SELF",
-	"REMOTE_ADDR",
-	"REMOTE_HOST",
-	"REMOTE_PORT",
-	"REQUEST_SCHEME",
-	"SCRIPT_FILENAME",
-	"SCRIPT_NAME",
-	"SERVER_NAME",
-	"SERVER_PORT",
-	"SERVER_PROTOCOL",
-	"SERVER_SOFTWARE",
-	"SSL_PROTOCOL",
-	"SSL_CIPHER",
-	"AUTH_TYPE",
-	"REMOTE_IDENT",
-	"CONTENT_TYPE",
-	"PATH_TRANSLATED",
-	"QUERY_STRING",
-	"REMOTE_USER",
-	"REQUEST_METHOD",
-	"REQUEST_URI",
-}
-
 // cStringHTTPMethods caches C string versions of common HTTP methods
 // to avoid allocations in pinCString on every request.
 var cStringHTTPMethods = map[string]*C.char{
@@ -87,7 +53,6 @@ var cStringHTTPMethods = map[string]*C.char{
 // Inspired by https://github.com/caddyserver/caddy/blob/master/modules/caddyhttp/reverseproxy/fastcgi/fastcgi.go
 func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 	request := fc.request
-	keys := mainThread.knownServerKeys
 	// Separate remote IP and port; more lenient than net.SplitHostPort
 	var ip, port string
 	if idx := strings.LastIndex(request.RemoteAddr, ":"); idx > -1 {
@@ -156,57 +121,57 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		requestURI = fc.requestURI
 	}
 
-	C.frankenphp_register_bulk(
-		trackVarsArray,
-		packCgiVariable(keys["REMOTE_ADDR"], ip),
-		packCgiVariable(keys["REMOTE_HOST"], ip),
-		packCgiVariable(keys["REMOTE_PORT"], port),
-		packCgiVariable(keys["DOCUMENT_ROOT"], fc.documentRoot),
-		packCgiVariable(keys["PATH_INFO"], fc.pathInfo),
-		packCgiVariable(keys["PHP_SELF"], ensureLeadingSlash(request.URL.Path)),
-		packCgiVariable(keys["DOCUMENT_URI"], fc.docURI),
-		packCgiVariable(keys["SCRIPT_FILENAME"], fc.scriptFilename),
-		packCgiVariable(keys["SCRIPT_NAME"], fc.scriptName),
-		packCgiVariable(keys["HTTPS"], https),
-		packCgiVariable(keys["SSL_PROTOCOL"], sslProtocol),
-		packCgiVariable(keys["REQUEST_SCHEME"], rs),
-		packCgiVariable(keys["SERVER_NAME"], reqHost),
-		packCgiVariable(keys["SERVER_PORT"], serverPort),
-		// Variables defined in CGI 1.1 spec
-		// Some variables are unused but cleared explicitly to prevent
-		// the parent environment from interfering.
-		// These values can not be overridden
-		packCgiVariable(keys["CONTENT_LENGTH"], contentLength),
-		packCgiVariable(keys["GATEWAY_INTERFACE"], "CGI/1.1"),
-		packCgiVariable(keys["SERVER_PROTOCOL"], request.Proto),
-		packCgiVariable(keys["SERVER_SOFTWARE"], "FrankenPHP"),
-		packCgiVariable(keys["HTTP_HOST"], request.Host),
-		// These values are always empty but must be defined:
-		packCgiVariable(keys["AUTH_TYPE"], ""),
-		packCgiVariable(keys["REMOTE_IDENT"], ""),
-		// Request uri of the original request
-		packCgiVariable(keys["REQUEST_URI"], requestURI),
-		packCgiVariable(keys["SSL_CIPHER"], sslCipher),
-	)
+	requestPath := ensureLeadingSlash(request.URL.Path)
 
-	// These values are already present in the SG(request_info), so we'll register them from there
-	C.frankenphp_register_variables_from_request_info(
-		trackVarsArray,
-		keys["CONTENT_TYPE"],
-		keys["PATH_TRANSLATED"],
-		keys["QUERY_STRING"],
-		keys["REMOTE_USER"],
-		keys["REQUEST_METHOD"],
-	)
-}
+	C.frankenphp_register_bulk(trackVarsArray, C.frankenphp_server_vars{
+		// approximate total length to avoid array re-hashing:
+		// 28 CGI vars + headers + environment
+		total_num_vars: C.size_t(28 + len(fc.env) + len(request.Header) + len(mainThread.sandboxedEnv)),
 
-func packCgiVariable(key *C.zend_string, value string) C.ht_key_value_pair {
-	return C.ht_key_value_pair{key, toUnsafeChar(value), C.size_t(len(value))}
+		remote_addr:         toUnsafeChar(ip),
+		remote_addr_len:     C.size_t(len(ip)),
+		remote_host:         toUnsafeChar(ip),
+		remote_host_len:     C.size_t(len(ip)),
+		remote_port:         toUnsafeChar(port),
+		remote_port_len:     C.size_t(len(port)),
+		document_root:       toUnsafeChar(fc.documentRoot),
+		document_root_len:   C.size_t(len(fc.documentRoot)),
+		path_info:           toUnsafeChar(fc.pathInfo),
+		path_info_len:       C.size_t(len(fc.pathInfo)),
+		php_self:            toUnsafeChar(requestPath),
+		php_self_len:        C.size_t(len(requestPath)),
+		document_uri:        toUnsafeChar(fc.docURI),
+		document_uri_len:    C.size_t(len(fc.docURI)),
+		script_filename:     toUnsafeChar(fc.scriptFilename),
+		script_filename_len: C.size_t(len(fc.scriptFilename)),
+		script_name:         toUnsafeChar(fc.scriptName),
+		script_name_len:     C.size_t(len(fc.scriptName)),
+		https:               toUnsafeChar(https),
+		https_len:           C.size_t(len(https)),
+		ssl_protocol:        toUnsafeChar(sslProtocol),
+		ssl_protocol_len:    C.size_t(len(sslProtocol)),
+		request_scheme:      toUnsafeChar(rs),
+		request_scheme_len:  C.size_t(len(rs)),
+		server_name:         toUnsafeChar(reqHost),
+		server_name_len:     C.size_t(len(reqHost)),
+		server_port:         toUnsafeChar(serverPort),
+		server_port_len:     C.size_t(len(serverPort)),
+		content_length:      toUnsafeChar(contentLength),
+		content_length_len:  C.size_t(len(contentLength)),
+		server_protocol:     toUnsafeChar(request.Proto),
+		server_protocol_len: C.size_t(len(request.Proto)),
+		http_host:           toUnsafeChar(request.Host),
+		http_host_len:       C.size_t(len(request.Host)),
+		request_uri:         toUnsafeChar(requestURI),
+		request_uri_len:     C.size_t(len(requestURI)),
+		ssl_cipher:          toUnsafeChar(sslCipher),
+		ssl_cipher_len:      C.size_t(len(sslCipher)),
+	})
 }
 
 func addHeadersToServer(ctx context.Context, request *http.Request, trackVarsArray *C.zval) {
 	for field, val := range request.Header {
-		if k := mainThread.commonHeaders[field]; k != nil {
+		if k := commonHeaders[field]; k != nil {
 			v := strings.Join(val, ", ")
 			C.frankenphp_register_single(k, toUnsafeChar(v), C.size_t(len(v)), trackVarsArray)
 			continue

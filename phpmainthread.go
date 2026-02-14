@@ -1,9 +1,7 @@
 package frankenphp
 
 // #cgo nocallback frankenphp_new_main_thread
-// #cgo nocallback frankenphp_init_persistent_string
 // #cgo noescape frankenphp_new_main_thread
-// #cgo noescape frankenphp_init_persistent_string
 // #include <php_variables.h>
 // #include "frankenphp.h"
 import "C"
@@ -20,19 +18,18 @@ import (
 // represents the main PHP thread
 // the thread needs to keep running as long as all other threads are running
 type phpMainThread struct {
-	state           *state.ThreadState
-	done            chan struct{}
-	numThreads      int
-	maxThreads      int
-	phpIni          map[string]string
-	commonHeaders   map[string]*C.zend_string
-	knownServerKeys map[string]*C.zend_string
-	sandboxedEnv    map[string]*C.zend_string
+	state        *state.ThreadState
+	done         chan struct{}
+	numThreads   int
+	maxThreads   int
+	phpIni       map[string]string
+	sandboxedEnv map[string]*C.zend_string
 }
 
 var (
-	phpThreads []*phpThread
-	mainThread *phpMainThread
+	phpThreads    []*phpThread
+	mainThread    *phpMainThread
+	commonHeaders map[string]*C.zend_string
 )
 
 // initPHPThreads starts the main PHP thread,
@@ -113,15 +110,11 @@ func (mainThread *phpMainThread) start() error {
 	mainThread.state.WaitFor(state.Ready)
 
 	// cache common request headers as zend_strings (HTTP_ACCEPT, HTTP_USER_AGENT, etc.)
-	mainThread.commonHeaders = make(map[string]*C.zend_string, len(phpheaders.CommonRequestHeaders))
-	for key, phpKey := range phpheaders.CommonRequestHeaders {
-		mainThread.commonHeaders[key] = C.frankenphp_init_persistent_string(C.CString(phpKey), C.size_t(len(phpKey)))
-	}
-
-	// cache $_SERVER keys as zend_strings (SERVER_PROTOCOL, SERVER_SOFTWARE, etc.)
-	mainThread.knownServerKeys = make(map[string]*C.zend_string, len(knownServerKeys))
-	for _, phpKey := range knownServerKeys {
-		mainThread.knownServerKeys[phpKey] = C.frankenphp_init_persistent_string(toUnsafeChar(phpKey), C.size_t(len(phpKey)))
+	if commonHeaders == nil {
+		commonHeaders = make(map[string]*C.zend_string, len(phpheaders.CommonRequestHeaders))
+		for key, phpKey := range phpheaders.CommonRequestHeaders {
+			commonHeaders[key] = C.frankenphp_init_persistent_string(C.CString(phpKey), C.size_t(len(phpKey)))
+		}
 	}
 
 	return nil

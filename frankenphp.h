@@ -17,11 +17,47 @@ typedef struct go_string {
   char *data;
 } go_string;
 
-typedef struct ht_key_value_pair {
-  zend_string *key;
-  char *val;
-  size_t val_len;
-} ht_key_value_pair;
+typedef struct frankenphp_server_vars {
+  size_t total_num_vars;
+  char *remote_addr;
+  size_t remote_addr_len;
+  char *remote_host;
+  size_t remote_host_len;
+  char *remote_port;
+  size_t remote_port_len;
+  char *document_root;
+  size_t document_root_len;
+  char *path_info;
+  size_t path_info_len;
+  char *php_self;
+  size_t php_self_len;
+  char *document_uri;
+  size_t document_uri_len;
+  char *script_filename;
+  size_t script_filename_len;
+  char *script_name;
+  size_t script_name_len;
+  char *https;
+  size_t https_len;
+  char *ssl_protocol;
+  size_t ssl_protocol_len;
+  char *request_scheme;
+  size_t request_scheme_len;
+  char *server_name;
+  size_t server_name_len;
+  char *server_port;
+  size_t server_port_len;
+  char *content_length;
+  size_t content_length_len;
+  char *server_protocol;
+  size_t server_protocol_len;
+  char *http_host;
+  size_t http_host_len;
+  char *request_uri;
+  size_t request_uri_len;
+  char *ssl_cipher;
+  size_t ssl_cipher_len;
+} frankenphp_server_vars;
 
 typedef struct frankenphp_version {
   unsigned char major_version;
@@ -49,11 +85,6 @@ void frankenphp_update_local_thread_context(bool is_worker);
 
 int frankenphp_execute_script_cli(char *script, int argc, char **argv,
                                   bool eval);
-
-void frankenphp_register_variables_from_request_info(
-    zval *track_vars_array, zend_string *content_type,
-    zend_string *path_translated, zend_string *query_string,
-    zend_string *auth_user, zend_string *request_method);
 void frankenphp_register_variable_safe(char *key, char *var, size_t val_len,
                                        zval *track_vars_array);
 zend_string *frankenphp_init_persistent_string(const char *string, size_t len);
@@ -62,19 +93,8 @@ int frankenphp_get_current_memory_limit();
 
 void frankenphp_register_single(zend_string *z_key, char *value, size_t val_len,
                                 zval *track_vars_array);
-void frankenphp_register_bulk(
-    zval *track_vars_array, ht_key_value_pair remote_addr,
-    ht_key_value_pair remote_host, ht_key_value_pair remote_port,
-    ht_key_value_pair document_root, ht_key_value_pair path_info,
-    ht_key_value_pair php_self, ht_key_value_pair document_uri,
-    ht_key_value_pair script_filename, ht_key_value_pair script_name,
-    ht_key_value_pair https, ht_key_value_pair ssl_protocol,
-    ht_key_value_pair request_scheme, ht_key_value_pair server_name,
-    ht_key_value_pair server_port, ht_key_value_pair content_length,
-    ht_key_value_pair gateway_interface, ht_key_value_pair server_protocol,
-    ht_key_value_pair server_software, ht_key_value_pair http_host,
-    ht_key_value_pair auth_type, ht_key_value_pair remote_ident,
-    ht_key_value_pair request_uri, ht_key_value_pair ssl_cipher);
+void frankenphp_register_bulk(zval *track_vars_array,
+                              frankenphp_server_vars vars);
 
 void register_extensions(zend_module_entry **m, int len);
 
