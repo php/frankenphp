@@ -128,62 +128,44 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		// 28 CGI vars + headers + environment
 		total_num_vars: C.size_t(28 + len(fc.env) + len(request.Header) + len(mainThread.sandboxedEnv)),
 
-		remote_addr_val: toUnsafeChar(ip),
-		remote_addr_len: C.size_t(len(ip)),
-
-		remote_host_val: toUnsafeChar(ip),
-		remote_host_len: C.size_t(len(ip)),
-
-		remote_port_val: toUnsafeChar(port),
-		remote_port_len: C.size_t(len(port)),
-
-		document_root_val: toUnsafeChar(fc.documentRoot),
-		document_root_len: C.size_t(len(fc.documentRoot)),
-
-		path_info_val: toUnsafeChar(fc.pathInfo),
-		path_info_len: C.size_t(len(fc.pathInfo)),
-
-		php_self_val: toUnsafeChar(requestPath),
-		php_self_len: C.size_t(len(requestPath)),
-
-		document_uri_val: toUnsafeChar(fc.docURI),
-		document_uri_len: C.size_t(len(fc.docURI)),
-
-		script_filename_val: toUnsafeChar(fc.scriptFilename),
+		remote_addr:         toUnsafeChar(ip),
+		remote_addr_len:     C.size_t(len(ip)),
+		remote_host:         toUnsafeChar(ip),
+		remote_host_len:     C.size_t(len(ip)),
+		remote_port:         toUnsafeChar(port),
+		remote_port_len:     C.size_t(len(port)),
+		document_root:       toUnsafeChar(fc.documentRoot),
+		document_root_len:   C.size_t(len(fc.documentRoot)),
+		path_info:           toUnsafeChar(fc.pathInfo),
+		path_info_len:       C.size_t(len(fc.pathInfo)),
+		php_self:            toUnsafeChar(requestPath),
+		php_self_len:        C.size_t(len(requestPath)),
+		document_uri:        toUnsafeChar(fc.docURI),
+		document_uri_len:    C.size_t(len(fc.docURI)),
+		script_filename:     toUnsafeChar(fc.scriptFilename),
 		script_filename_len: C.size_t(len(fc.scriptFilename)),
-
-		script_name_val: toUnsafeChar(fc.scriptName),
-		script_name_len: C.size_t(len(fc.scriptName)),
-
-		https_val: toUnsafeChar(https),
-		https_len: C.size_t(len(https)),
-
-		ssl_protocol_val: toUnsafeChar(sslProtocol),
-		ssl_protocol_len: C.size_t(len(sslProtocol)),
-
-		request_scheme_val: toUnsafeChar(rs),
-		request_scheme_len: C.size_t(len(rs)),
-
-		server_name_val: toUnsafeChar(reqHost),
-		server_name_len: C.size_t(len(reqHost)),
-
-		server_port_val: toUnsafeChar(serverPort),
-		server_port_len: C.size_t(len(serverPort)),
-
-		content_length_val: toUnsafeChar(contentLength),
-		content_length_len: C.size_t(len(contentLength)),
-
-		server_protocol_val: toUnsafeChar(request.Proto),
+		script_name:         toUnsafeChar(fc.scriptName),
+		script_name_len:     C.size_t(len(fc.scriptName)),
+		https:               toUnsafeChar(https),
+		https_len:           C.size_t(len(https)),
+		ssl_protocol:        toUnsafeChar(sslProtocol),
+		ssl_protocol_len:    C.size_t(len(sslProtocol)),
+		request_scheme:      toUnsafeChar(rs),
+		request_scheme_len:  C.size_t(len(rs)),
+		server_name:         toUnsafeChar(reqHost),
+		server_name_len:     C.size_t(len(reqHost)),
+		server_port:         toUnsafeChar(serverPort),
+		server_port_len:     C.size_t(len(serverPort)),
+		content_length:      toUnsafeChar(contentLength),
+		content_length_len:  C.size_t(len(contentLength)),
+		server_protocol:     toUnsafeChar(request.Proto),
 		server_protocol_len: C.size_t(len(request.Proto)),
-
-		http_host_val: toUnsafeChar(request.Host),
-		http_host_len: C.size_t(len(request.Host)),
-
-		request_uri_val: toUnsafeChar(requestURI),
-		request_uri_len: C.size_t(len(requestURI)),
-
-		ssl_cipher_val: toUnsafeChar(sslCipher),
-		ssl_cipher_len: C.size_t(len(sslCipher)),
+		http_host:           toUnsafeChar(request.Host),
+		http_host_len:       C.size_t(len(request.Host)),
+		request_uri:         toUnsafeChar(requestURI),
+		request_uri_len:     C.size_t(len(requestURI)),
+		ssl_cipher:          toUnsafeChar(sslCipher),
+		ssl_cipher_len:      C.size_t(len(sslCipher)),
 	})
 }
 

@@ -19,62 +19,43 @@ typedef struct go_string {
 
 typedef struct frankenphp_server_vars {
   size_t total_num_vars;
-
-  char *remote_addr_val;
+  char *remote_addr;
   size_t remote_addr_len;
-
-  char *remote_host_val;
+  char *remote_host;
   size_t remote_host_len;
-
-  char *remote_port_val;
+  char *remote_port;
   size_t remote_port_len;
-
-  char *document_root_val;
+  char *document_root;
   size_t document_root_len;
-
-  char *path_info_val;
+  char *path_info;
   size_t path_info_len;
-
-  char *php_self_val;
+  char *php_self;
   size_t php_self_len;
-
-  char *document_uri_val;
+  char *document_uri;
   size_t document_uri_len;
-
-  char *script_filename_val;
+  char *script_filename;
   size_t script_filename_len;
-
-  char *script_name_val;
+  char *script_name;
   size_t script_name_len;
-
-  char *https_val;
+  char *https;
   size_t https_len;
-
-  char *ssl_protocol_val;
+  char *ssl_protocol;
   size_t ssl_protocol_len;
-
-  char *request_scheme_val;
+  char *request_scheme;
   size_t request_scheme_len;
-
-  char *server_name_val;
+  char *server_name;
   size_t server_name_len;
-
-  char *server_port_val;
+  char *server_port;
   size_t server_port_len;
-
-  char *content_length_val;
+  char *content_length;
   size_t content_length_len;
-
-  char *server_protocol_val;
+  char *server_protocol;
   size_t server_protocol_len;
-
-  char *http_host_val;
+  char *http_host;
   size_t http_host_len;
-
-  char *request_uri_val;
+  char *request_uri;
   size_t request_uri_len;
-
-  char *ssl_cipher_val;
+  char *ssl_cipher;
   size_t ssl_cipher_len;
 } frankenphp_server_vars;
 
