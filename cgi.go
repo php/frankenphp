@@ -1,11 +1,9 @@
 package frankenphp
 
 // #cgo nocallback frankenphp_register_bulk
-// #cgo nocallback frankenphp_register_variables_from_request_info
 // #cgo nocallback frankenphp_register_variable_safe
 // #cgo nocallback frankenphp_register_single
 // #cgo noescape frankenphp_register_bulk
-// #cgo noescape frankenphp_register_variables_from_request_info
 // #cgo noescape frankenphp_register_variable_safe
 // #cgo noescape frankenphp_register_single
 // #include <php_variables.h>
@@ -130,103 +128,63 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		// 28 CGI vars + headers + environment
 		total_num_vars: C.size_t(28 + len(fc.env) + len(request.Header) + len(mainThread.sandboxedEnv)),
 
-		remote_addr_key: zStrRemoteAddr,
 		remote_addr_val: toUnsafeChar(ip),
 		remote_addr_len: C.size_t(len(ip)),
 
-		remote_host_key: zStrRemoteHost,
 		remote_host_val: toUnsafeChar(ip),
 		remote_host_len: C.size_t(len(ip)),
 
-		remote_port_key: zStrRemotePort,
 		remote_port_val: toUnsafeChar(port),
 		remote_port_len: C.size_t(len(port)),
 
-		document_root_key: zStrDocumentRoot,
 		document_root_val: toUnsafeChar(fc.documentRoot),
 		document_root_len: C.size_t(len(fc.documentRoot)),
 
-		path_info_key: zStrPathInfo,
 		path_info_val: toUnsafeChar(fc.pathInfo),
 		path_info_len: C.size_t(len(fc.pathInfo)),
 
-		php_self_key: zStrPhpSelf,
 		php_self_val: toUnsafeChar(requestPath),
 		php_self_len: C.size_t(len(requestPath)),
 
-		document_uri_key: zStrDocumentURI,
 		document_uri_val: toUnsafeChar(fc.docURI),
 		document_uri_len: C.size_t(len(fc.docURI)),
 
-		script_filename_key: zStrScriptFilename,
 		script_filename_val: toUnsafeChar(fc.scriptFilename),
 		script_filename_len: C.size_t(len(fc.scriptFilename)),
 
-		script_name_key: zStrScriptName,
 		script_name_val: toUnsafeChar(fc.scriptName),
 		script_name_len: C.size_t(len(fc.scriptName)),
 
-		https_key: zStrHttps,
 		https_val: toUnsafeChar(https),
 		https_len: C.size_t(len(https)),
 
-		ssl_protocol_key: zStrSslProtocol,
 		ssl_protocol_val: toUnsafeChar(sslProtocol),
 		ssl_protocol_len: C.size_t(len(sslProtocol)),
 
-		request_scheme_key: zStrRequestScheme,
 		request_scheme_val: toUnsafeChar(rs),
 		request_scheme_len: C.size_t(len(rs)),
 
-		server_name_key: zStrServerName,
 		server_name_val: toUnsafeChar(reqHost),
 		server_name_len: C.size_t(len(reqHost)),
 
-		server_port_key: zStrServerPort,
 		server_port_val: toUnsafeChar(serverPort),
 		server_port_len: C.size_t(len(serverPort)),
 
-		content_length_key: zStrContentLength,
 		content_length_val: toUnsafeChar(contentLength),
 		content_length_len: C.size_t(len(contentLength)),
 
-		server_protocol_key: zStrServerProtocol,
 		server_protocol_val: toUnsafeChar(request.Proto),
 		server_protocol_len: C.size_t(len(request.Proto)),
 
-		http_host_key: zStrHttpHost,
 		http_host_val: toUnsafeChar(request.Host),
 		http_host_len: C.size_t(len(request.Host)),
 
-		request_uri_key: zStrRequestURI,
 		request_uri_val: toUnsafeChar(requestURI),
 		request_uri_len: C.size_t(len(requestURI)),
 
-		ssl_cipher_key: zStrSslCipher,
 		ssl_cipher_val: toUnsafeChar(sslCipher),
 		ssl_cipher_len: C.size_t(len(sslCipher)),
-
-        // unchanging
-        server_software_key: zStrServerSoftware,
-        server_software_str: zStrFrankenPHP,
-
-        gateway_interface_key: zStrGatewayIface,
-        gateway_interface_str: zStrCgi1,
-
-        // always empty, but must be present
-        auth_type_key: zStrAuthType,
-        remote_ident_key: zStrRemoteIdent,
 	})
-
-	// These values are already present in the SG(request_info), so we'll register them from there
-	C.frankenphp_register_variables_from_request_info(
-		trackVarsArray,
-		zStrContentType,
-		zStrPathTranslated,
-		zStrQueryString,
-		zStrRemoteUser,
-		zStrRequestMethod,
-	)
 }
 
 func addHeadersToServer(ctx context.Context, request *http.Request, trackVarsArray *C.zval) {
