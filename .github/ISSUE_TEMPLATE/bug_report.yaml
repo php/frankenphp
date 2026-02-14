@@ -7,16 +7,18 @@ body:
     attributes:
       value: |
         Thanks for taking the time to fill out this bug report!
-        Before submitting a bug, please double-check that your problem [is not
-        a known issue](https://frankenphp.dev/docs/known-issues/)
-        (especially if you use XDebug or Tideways), and that is has not
-        [already been reported](https://github.com/php/frankenphp/issues).
+
+        Before submitting, please ensure that your issue:
+
+        * Is not [a known issue](https://frankenphp.dev/docs/known-issues/).
+        * Has not [already been reported](https://github.com/php/frankenphp/issues).
+        * Is not caused by a dependency (like Caddy or PHP itself). If the issue is with a dependency, please report it to the upstream project directly.
   - type: textarea
     id: what-happened
     attributes:
       label: What happened?
       description: |
-        Tell us what you do, what you get and what you expected.
+        Tell us what you do, what you get, and what you expected.
         Provide us with some step-by-step instructions to reproduce the issue.
     validations:
       required: true
@@ -29,8 +31,9 @@ body:
         - Docker (Debian Trixie)
         - Docker (Debian Bookworm)
         - Docker (Alpine)
+        - apk packages
         - deb packages
-        - rpm packages
+        - RPM packages
         - Static binary
         - Custom (tell us more in the description)
       default: 0
@@ -55,6 +58,8 @@ body:
       options:
         - GNU/Linux
         - macOS
+        - Windows
+        - FreeBSD
         - Other (tell us more in the description)
       default: 0
     validations:
