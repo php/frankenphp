@@ -22,7 +22,7 @@ const SYSTEM_PROMPT = <<<PROMPT
     - You must not change the structure of the document (headings, code blocks, etc.).
     - You must not translate code, only comments inside the code.
     - You must not translate link urls, only links texts.
-    - Vou may translate anchors to translation pages (config.md#translated-anchor), keep existing anchors as they are.
+    - You may translate anchors to translation pages (config.md#translated-anchor), keep existing anchors as they are.
     - You must not add or remove any content, only translate what is present.
     - You must ensure that the translation is accurate and faithful to the original meaning.
     - You must write in a natural and fluent style, appropriate for technical documentation.
