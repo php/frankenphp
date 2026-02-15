@@ -5,26 +5,26 @@ Cependant, il est possible d'améliorer considérablement les performances en ut
 
 ## Nombre de threads et de workers
 
-Par défaut, FrankenPHP démarre deux fois plus de threads et de workers (en mode worker) que le nombre de CPU disponibles.
+Par défaut, FrankenPHP démarre deux fois plus de threads et de workers (en mode worker) que le nombre de cœurs de CPU disponibles.
 
 Les valeurs appropriées dépendent fortement de la manière dont votre application est écrite, de ce qu'elle fait et de votre matériel.
-Nous recommandons vivement de modifier ces valeurs.
+Nous recommandons vivement de modifier ces valeurs. Pour une stabilité optimale du système, il est recommandé d'avoir `num_threads` x `memory_limit` < `available_memory`.
 
-Pour trouver les bonnes valeurs, il est souhaitable d'effectuer des tests de charge simulant le trafic réel.
+Pour trouver les bonnes valeurs, il est préférable d'effectuer des tests de charge simulant le trafic réel.
 [k6](https://k6.io) et [Gatling](https://gatling.io) sont de bons outils pour cela.
 
 Pour configurer le nombre de threads, utilisez l'option `num_threads` des directives `php_server` et `php`.
-Pour changer le nombre de travailleurs, utilisez l'option `num` de la section `worker` de la directive `frankenphp`.
+Pour changer le nombre de workers, utilisez l'option `num` de la section `worker` de la directive `frankenphp`.
 
 ### `max_threads`
 
 Bien qu'il soit toujours préférable de savoir exactement à quoi ressemblera votre trafic, les applications réelles
-ont tendance à être plus imprévisibles. Le paramètre `max_threads` permet à FrankenPHP de créer automatiquement des threads supplémentaires au moment de l'exécution, jusqu'à la limite spécifiée.
+ont tendance à être plus imprévisibles. La [configuration](config.md#configuration-du-caddyfile) `max_threads` permet à FrankenPHP de créer automatiquement des threads supplémentaires au moment de l'exécution, jusqu'à la limite spécifiée.
 `max_threads` peut vous aider à déterminer le nombre de threads dont vous avez besoin pour gérer votre trafic et peut rendre le serveur plus résistant aux pics de latence.
 Si elle est fixée à `auto`, la limite sera estimée en fonction de la valeur de `memory_limit` dans votre `php.ini`. Si ce n'est pas possible,
 `auto` prendra par défaut 2x `num_threads`. Gardez à l'esprit que `auto` peut fortement sous-estimer le nombre de threads nécessaires.
 `max_threads` est similaire à [pm.max_children](https://www.php.net/manual/en/install.fpm.configuration.php#pm.max-children) de PHP FPM. La principale différence est que FrankenPHP utilise des threads au lieu de
-processus et les délègue automatiquement à différents scripts de travail et au `mode classique` selon les besoins.
+processus et les délègue automatiquement à différents scripts worker et au 'mode classique' selon les besoins.
 
 ## Mode worker
 
@@ -34,18 +34,18 @@ vous devez créer un script worker et vous assurer que l'application n'a pas de 
 
 ## Ne pas utiliser musl
 
-Les binaires statiques que nous fournissons, ainsi que la variante Alpine Linux des images Docker officielles, utilisent [la bibliothèque musl](https://musl.libc.org).
+La variante Alpine Linux des images Docker officielles et les binaires par défaut que nous fournissons utilisent [la bibliothèque musl](https://musl.libc.org).
 
-PHP est connu pour être [significativement plus lent](https://gitlab.alpinelinux.org/alpine/aports/-/issues/14381) lorsqu'il utilise cette bibliothèque C alternative au lieu de la bibliothèque GNU traditionnelle,
-surtout lorsqu'il est compilé en mode ZTS (_thread-safe_), ce qui est nécessaire pour FrankenPHP.
+PHP est connu pour être [plus lent](https://gitlab.alpinelinux.org/alpine/aports/-/issues/14381) lorsqu'il utilise cette bibliothèque C alternative au lieu de la bibliothèque GNU traditionnelle,
+surtout lorsqu'il est compilé en mode ZTS (_thread-safe_), ce qui est nécessaire pour FrankenPHP. La différence peut être significative dans un environnement fortement multithreadé.
 
 En outre, [certains bogues ne se produisent que lors de l'utilisation de musl](https://github.com/php/php-src/issues?q=sort%3Aupdated-desc+is%3Aissue+is%3Aopen+label%3ABug+musl).
 
-Dans les environnements de production, nous recommandons fortement d'utiliser la glibc.
+Dans les environnements de production, nous recommandons d'utiliser FrankenPHP lié à glibc, compilé avec un niveau d'optimisation approprié.
 
-Cela peut être réalisé en utilisant les images Docker Debian (par défaut) et [en compilant FrankenPHP à partir des sources](compile.md).
+Cela peut être réalisé en utilisant les images Docker Debian, en utilisant [les paquets .deb, .rpm ou .apk proposés par l'un de nos mainteneurs](https://pkgs.henderkes.com), ou en [compilant FrankenPHP à partir des sources](compile.md).
 
-Alternativement, nous fournissons des binaires statiques compilés avec [l'allocateur mimalloc](https://github.com/microsoft/mimalloc), ce qui rend FrankenPHP+musl plus rapide (mais toujours plus lent que FrankenPHP+glibc).
+Pour des conteneurs plus légers ou plus sécurisés, vous pourriez envisager [une image Debian renforcée](docker.md#hardening-images) plutôt qu'Alpine.
 
 ## Configuration du runtime Go
 
@@ -84,11 +84,23 @@ vous pouvez les désactiver en définissant explicitement `try_files` comme ceci
 ```caddyfile
 php_server {
     try_files {path} index.php
-    root /root/to/your/app #  l'ajout explicite de la racine ici permet une meilleure mise en cache
+    root /root/to/your/app # l'ajout explicite de la racine ici permet une meilleure mise en cache
 }
 ```
 
 Cela permet de réduire considérablement le nombre d'opérations inutiles sur les fichiers.
+Un équivalent worker de la configuration précédente serait :
+
+```caddyfile
+route {
+    php_server { # utilisez "php" au lieu de "php_server" si vous n'avez pas du tout besoin du serveur de fichiers
+        root /root/to/your/app
+        worker /path/to/worker.php {
+            match * # envoie toutes les requêtes directement au worker
+        }
+    }
+}
+```
 
 Une approche alternative avec 0 opérations inutiles sur le système de fichiers serait d'utiliser la directive `php`
 et de diviser les fichiers de PHP par chemin. Cette approche fonctionne bien si votre application entière est servie par un seul fichier d'entrée.
@@ -105,10 +117,10 @@ route {
         root /root/to/your/app
     }
 
-    #  tout ce qui n'est pas dans /assets est géré par votre index ou votre fichier PHP worker
+    # tout ce qui n'est pas dans /assets est géré par votre fichier PHP d'index ou worker
     rewrite index.php
     php {
-        root /root/to/your/app #  l'ajout explicite de la racine ici permet une meilleure mise en cache
+        root /root/to/your/app # l'ajout explicite de la racine ici permet une meilleure mise en cache
     }
 }
 ```
@@ -155,3 +167,32 @@ En particulier :
 
 Pour plus de détails, lisez [l'entrée de la documentation dédiée de Symfony](https://symfony.com/doc/current/performance.html)
 (la plupart des conseils sont utiles même si vous n'utilisez pas Symfony).
+
+## Division du pool de threads
+
+Il est courant que les applications interagissent avec des services externes lents, comme une
+API qui a tendance à être peu fiable sous forte charge ou qui met constamment plus de 10 secondes à répondre.
+Dans de tels cas, il peut être bénéfique de diviser le pool de threads pour avoir des pools "lents" dédiés.
+Cela empêche les points d'accès lents de consommer toutes les ressources/threads du serveur et
+limite la concurrence des requêtes se dirigeant vers le point d'accès lent, à l'instar d'un
+pool de connexions.
+
+```caddyfile
+example.com {
+    php_server {
+        root /app/public # la racine de votre application
+        worker index.php {
+            match /slow-endpoint/* # toutes les requêtes avec le chemin /slow-endpoint/* sont gérées par ce pool de threads
+            num 1 # minimum 1 thread pour les requêtes correspondant à /slow-endpoint/*
+            max_threads 20 # autorise jusqu'à 20 threads pour les requêtes correspondant à /slow-endpoint/*, si nécessaire
+        }
+        worker index.php {
+            match * # toutes les autres requêtes sont gérées séparément
+            num 1 # minimum 1 thread pour les autres requêtes, même si les points d'accès lents commencent à bloquer
+            max_threads 20 # autorise jusqu'à 20 threads pour les autres requêtes, si nécessaire
+        }
+    }
+}
+```
+
+De manière générale, il est également conseillé de gérer les points d'accès très lents de manière asynchrone, en utilisant des mécanismes pertinents tels que les files d'attente de messages.
