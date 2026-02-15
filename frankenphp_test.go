@@ -1207,47 +1207,31 @@ func TestIniLeakBetweenRequests_worker(t *testing.T) {
 	})
 }
 
-func TestSessionHandlerPreLoopPreserved_worker(t *testing.T) {
-	runTest(t, func(_ func(http.ResponseWriter, *http.Request), ts *httptest.Server, i int) {
-		// Request 1: Check that the pre-loop session handler is preserved
-		resp1, err := http.Get(ts.URL + "/worker-with-session-handler.php?action=check")
-		assert.NoError(t, err)
-		body1, _ := io.ReadAll(resp1.Body)
-		_ = resp1.Body.Close()
+func TestSessionHandler_worker(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), ts *httptest.Server, i int) {
+		url := ts.URL + "/worker-with-session-handler.php"
+		body, _ := testGet(url+"?action=check", handler, t)
+		assert.Contains(t, body, "no session value", "request without session cookie, should not see session value")
 
-		body1Str := string(body1)
-		t.Logf("Request 1 response: %s", body1Str)
-		assert.Contains(t, body1Str, "HANDLER_PRESERVED",
-			"Session handler set before loop should be preserved")
-		assert.Contains(t, body1Str, "save_handler=user",
-			"session.save_handler should remain 'user'")
+		body, responseWithSessionCookie := testGet(url+"?action=read_session", handler, t)
+        assert.Contains(t, body, "no session value")
+        assert.Len(t, responseWithSessionCookie.Header["Set-Cookie"], 1, "Expected exactly one Set-Cookie header")
 
-		// Request 2: Use the session - should work with pre-loop handler
-		resp2, err := http.Get(ts.URL + "/worker-with-session-handler.php?action=use_session")
-		assert.NoError(t, err)
-		body2, _ := io.ReadAll(resp2.Body)
-		_ = resp2.Body.Close()
+		requestWithSessionCookie := httptest.NewRequest("GET", url+"?action=put_session", nil)
+		requestWithSessionCookie.Header["Cookie"] = []string{responseWithSessionCookie.Header["Set-Cookie"][0]}
+        body, _ = testRequest(requestWithSessionCookie, handler, t)
+        assert.Contains(t, body, "session value set", "make request with session cookie, should see session value set in previous request")
 
-		body2Str := string(body2)
-		t.Logf("Request 2 response: %s", body2Str)
-		assert.Contains(t, body2Str, "SESSION_OK",
-			"Session should work with pre-loop handler.\nResponse: %s", body2Str)
-		assert.NotContains(t, body2Str, "ERROR:",
-			"No errors expected.\nResponse: %s", body2Str)
-		assert.NotContains(t, body2Str, "EXCEPTION:",
-			"No exceptions expected.\nResponse: %s", body2Str)
+        body, _ = testGet( url+"?action=read_session", handler, t)
+        assert.Contains(t, body, "no session value", "make request without session cookie, should not see previous session value")
 
-		// Request 3: Check handler is still preserved after using session
-		resp3, err := http.Get(ts.URL + "/worker-with-session-handler.php?action=check")
-		assert.NoError(t, err)
-		body3, _ := io.ReadAll(resp3.Body)
-		_ = resp3.Body.Close()
+        body, _ = testGet( url+"?action=check", handler, t)
+        assert.Contains(t, body, "no session value", "make request without starting a session")
 
-		body3Str := string(body3)
-		t.Logf("Request 3 response: %s", body3Str)
-		assert.Contains(t, body3Str, "HANDLER_PRESERVED",
-			"Session handler should still be preserved after use")
-
+        requestWithSessionCookie = httptest.NewRequest("GET", url+"?action=read_session", nil)
+        requestWithSessionCookie.Header["Cookie"] = []string{responseWithSessionCookie.Header["Set-Cookie"][0]}
+        body, _ = testRequest( requestWithSessionCookie, handler, t)
+        assert.Contains(t, body, "session value exists", "make final request with session cookie, should see previous value")
 	}, &testOptions{
 		workerScript:       "worker-with-session-handler.php",
 		nbWorkers:          1,
