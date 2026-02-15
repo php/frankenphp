@@ -933,12 +933,6 @@ static inline void frankenphp_register_trusted_var(zend_string *z_key,
   }
 }
 
-void frankenphp_register_single(zend_string *z_key, char *value, size_t val_len,
-                                zval *track_vars_array) {
-  HashTable *ht = Z_ARRVAL_P(track_vars_array);
-  frankenphp_register_trusted_var(z_key, value, val_len, ht);
-}
-
 /* Register known $_SERVER variables in bulk to avoid cgo overhead */
 void frankenphp_register_bulk(zval *track_vars_array,
                               frankenphp_server_vars vars) {
@@ -1008,6 +1002,14 @@ frankenphp_register_variables_from_request_info(zval *track_vars_array) {
   FRANKENPHP_REGISTER_FROM_INFO(request_method, request_method, false);
 
 #undef FRANKENPHP_REGISTER_FROM_INFO
+}
+
+/* Only hard-coded keys may be registered this way */
+void frankenphp_register_variable_unsafe(zend_string *z_key, char *value,
+                                         size_t val_len,
+                                         zval *track_vars_array) {
+  frankenphp_register_trusted_var(z_key, value, val_len,
+                                  Z_ARRVAL_P(track_vars_array));
 }
 
 /* variables with user-defined keys must be registered safely

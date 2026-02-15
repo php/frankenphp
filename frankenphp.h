@@ -85,16 +85,18 @@ void frankenphp_update_local_thread_context(bool is_worker);
 
 int frankenphp_execute_script_cli(char *script, int argc, char **argv,
                                   bool eval);
+
+void frankenphp_register_variable_unsafe(zend_string *z_key, char *value,
+                                         size_t val_len,
+                                         zval *track_vars_array);
 void frankenphp_register_variable_safe(char *key, char *var, size_t val_len,
                                        zval *track_vars_array);
+void frankenphp_register_bulk(zval *track_vars_array,
+                              frankenphp_server_vars vars);
+
 zend_string *frankenphp_init_persistent_string(const char *string, size_t len);
 int frankenphp_reset_opcache(void);
 int frankenphp_get_current_memory_limit();
-
-void frankenphp_register_single(zend_string *z_key, char *value, size_t val_len,
-                                zval *track_vars_array);
-void frankenphp_register_bulk(zval *track_vars_array,
-                              frankenphp_server_vars vars);
 
 void register_extensions(zend_module_entry **m, int len);
 
