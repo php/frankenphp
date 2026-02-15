@@ -919,7 +919,7 @@ static inline void frankenphp_register_trusted_var(zend_string *z_key,
   if (value == NULL) {
     zval empty;
     ZVAL_EMPTY_STRING(&empty);
-    zend_hash_update(ht, z_key, &empty);
+    zend_hash_update_ind(ht, z_key, &empty);
     return;
   }
   size_t new_val_len = val_len;
@@ -929,7 +929,7 @@ static inline void frankenphp_register_trusted_var(zend_string *z_key,
                                new_val_len, &new_val_len)) {
     zval z_value;
     ZVAL_STRINGL_FAST(&z_value, value, new_val_len);
-    zend_hash_update(ht, z_key, &z_value);
+    zend_hash_update_ind(ht, z_key, &z_value);
   }
 }
 
