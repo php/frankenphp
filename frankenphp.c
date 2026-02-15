@@ -71,6 +71,8 @@ frankenphp_config frankenphp_get_config() {
 }
 
 bool should_filter_var = 0;
+bool original_user_abort_setting = 0;
+
 __thread uintptr_t thread_index;
 __thread bool is_worker_thread = false;
 __thread zval *os_environment = NULL;
@@ -113,6 +115,9 @@ __thread session_user_handlers *worker_session_handlers_snapshot = NULL;
 
 void frankenphp_update_local_thread_context(bool is_worker) {
   is_worker_thread = is_worker;
+
+  /* workers should keep running if the user aborts the connection */
+  PG(ignore_user_abort) = is_worker ? 1 : original_user_abort_setting;
 }
 
 static void frankenphp_update_request_context() {
@@ -1241,6 +1246,7 @@ static void *php_main(void *arg) {
   char *default_filter;
   cfg_get_string("filter.default", &default_filter);
   should_filter_var = default_filter != NULL;
+  original_user_abort_setting = PG(ignore_user_abort);
 
   go_frankenphp_main_thread_is_ready();
 
