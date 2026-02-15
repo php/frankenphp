@@ -119,6 +119,9 @@ static void frankenphp_reset_super_globals() {
     zval *files = &PG(http_globals)[TRACK_VARS_FILES];
     zval_ptr_dtor_nogc(files);
     memset(files, 0, sizeof(*files));
+
+    /* $_SESSION must be explicitly deleted from the symbol table. */
+    zend_hash_str_del(&EG(symbol_table), "_SESSION", sizeof("_SESSION") - 1);
   }
   zend_end_try();
 
@@ -301,9 +304,6 @@ bool frankenphp_shutdown_dummy_request(void) {
     return false;
   }
 
-  /* Snapshot INI and session handlers BEFORE shutdown.
-   * The framework has set these up before the worker loop, and we want
-   * to preserve them. Session RSHUTDOWN will free the handlers. */
   frankenphp_snapshot_ini();
 
   frankenphp_worker_request_shutdown();
