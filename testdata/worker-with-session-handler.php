@@ -22,6 +22,7 @@ class PreLoopSessionHandler implements SessionHandlerInterface
 
     public function write(string $id, string $data): bool
     {
+        echo "WRITING SESSION: id=$id, data=$data\n";
         self::$data[$id] = $data;
         return true;
     }
@@ -40,59 +41,29 @@ class PreLoopSessionHandler implements SessionHandlerInterface
 
 // Set the session handler BEFORE the worker loop
 $handler = new PreLoopSessionHandler();
-session_set_save_handler($handler, true);
-
-$requestCount = 0;
 
 do {
-    $ok = frankenphp_handle_request(function () use (&$requestCount): void {
-        $requestCount++;
-        $output = [];
-        $output[] = "request=$requestCount";
-
+    $ok = frankenphp_handle_request(function () use ($handler): void {
         $action = $_GET['action'] ?? 'check';
 
         switch ($action) {
-            case 'use_session':
-                // Try to use the session - should work with pre-loop handler
-                $error = null;
-                set_error_handler(function ($errno, $errstr) use (&$error) {
-                    $error = $errstr;
-                    return true;
-                });
-
-                try {
-                    session_id('test-preloop-' . $requestCount);
-                    $result = session_start();
-                    if ($result) {
-                        $_SESSION['test'] = 'value-' . $requestCount;
-                        session_write_close();
-                        $output[] = "SESSION_OK";
-                    } else {
-                        $output[] = "SESSION_START_FAILED";
-                    }
-                } catch (Throwable $e) {
-                    $output[] = "EXCEPTION:" . $e->getMessage();
-                }
-
-                restore_error_handler();
-
-                if ($error) {
-                    $output[] = "ERROR:" . $error;
-                }
+            case 'put_session':
+                session_set_save_handler($handler, true);
+                session_start();
+                $_SESSION['test'] = 'session value exists';
+                echo 'session value set';
+                break;
+            case 'read_session':
+                session_set_save_handler($handler, true);
+                session_start();
+                echo 'session id:' . session_id();
+                echo $_SESSION['test'] ?? 'no session value';
                 break;
 
             case 'check':
             default:
-                $saveHandler = ini_get('session.save_handler');
-                $output[] = "save_handler=$saveHandler";
-                if ($saveHandler === 'user') {
-                    $output[] = "HANDLER_PRESERVED";
-                } else {
-                    $output[] = "HANDLER_LOST";
-                }
+                echo $_SESSION['test'] ?? 'no session value';
+                break;
         }
-
-        echo implode("\n", $output);
     });
 } while ($ok);
