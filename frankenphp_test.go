@@ -700,11 +700,11 @@ func TestFailingWorker(t *testing.T) {
 	assert.Error(t, err, "should return an immediate error if workers fail on startup")
 }
 
-func TestEnv(t *testing.T) {
-	testEnv(t, &testOptions{nbParallelRequests: 1})
+func TestEnv_module(t *testing.T) {
+	testEnv(t, &testOptions{nbParallelRequests: 1, phpIni: map[string]string{"variables_order": "EGPCS"}})
 }
-func TestEnvWorker(t *testing.T) {
-	testEnv(t, &testOptions{nbParallelRequests: 1, workerScript: "env/test-env.php"})
+func TestEnv_worker(t *testing.T) {
+	testEnv(t, &testOptions{nbParallelRequests: 1, workerScript: "env/test-env.php", phpIni: map[string]string{"variables_order": "EGPCS"}})
 }
 
 // testEnv cannot be run in parallel due to https://github.com/golang/go/issues/63567

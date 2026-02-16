@@ -13,13 +13,13 @@ return function() {
         echo "Failed to set MY_VAR.\n";
     }
 
-    // verify putenv does not affect $_SERVER
+    // putenv should not affect $_ENV
+    $result = $_ENV[$var] ?? null;
+    echo $result === null ? "MY_VAR not found in \$_ENV.\n" : "MY_VAR is in \$_ENV (not expected)\n";
+
+    // putenv should not affect $_SERVER
     $result = $_SERVER[$var] ?? null;
-    if ($result !== null) {
-        echo "MY_VAR is in \$_SERVER (not expected)\n";
-    } else {
-        echo "MY_VAR not found in \$_SERVER.\n";
-    }
+    echo $result === null ? "MY_VAR not found in \$_SERVER.\n" : "MY_VAR is in \$_SERVER (not expected)\n";
 
     // Unsetting the environment variable
     $result = putenv($var);
