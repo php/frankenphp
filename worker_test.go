@@ -168,9 +168,9 @@ func TestKeepRunningOnConnectionAbort(t *testing.T) {
 		cancel()
 		body1, _ := testRequest(req, handler, t)
 
-		assert.Equal(t, body1, "requests:1", "should have handled exactly one request")
+		assert.Equal(t, "requests:1", body1, "should have handled exactly one request")
 		body2, _ := testGet("http://example.com/worker-with-counter.php", handler, t)
 
-		assert.Equal(t, body2, "requests:2", "should not have stopped execution after the first request was aborted")
+		assert.Equal(t, "requests:2", body2, "should not have stopped execution after the first request was aborted")
 	}, &testOptions{workerScript: "worker-with-counter.php", nbWorkers: 1, nbParallelRequests: 1})
 }
