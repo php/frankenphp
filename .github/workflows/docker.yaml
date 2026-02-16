@@ -191,8 +191,10 @@ jobs:
       - name: Run tests
         if: ${{ !fromJson(needs.prepare.outputs.push) }}
         run: |
+          # TODO: remove "containerimage.config.digest" fallback once all runners use buildx v0.18+
+          # which replaced it with "containerimage.digest" and "containerimage.descriptor"
           docker run --platform="${PLATFORM}" --rm \
-            "$(jq -r ".\"builder-${VARIANT}\".\"containerimage.config.digest\"" <<< "${METADATA}")" \
+            "$(jq -r ".\"builder-${VARIANT}\" | .\"containerimage.config.digest\" // .\"containerimage.digest\"" <<< "${METADATA}")" \
             sh -c "./go.sh test ${RACE} -v $(./go.sh list ./... | grep -v github.com/dunglas/frankenphp/internal/testext | grep -v github.com/dunglas/frankenphp/internal/extgen | tr '\n' ' ') && cd caddy && ../go.sh test ${RACE} -v ./..."
         env:
           METADATA: ${{ steps.build.outputs.metadata }}
