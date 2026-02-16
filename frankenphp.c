@@ -4,8 +4,11 @@
 #include <Zend/zend_interfaces.h>
 #include <Zend/zend_types.h>
 #include <errno.h>
-#include <ext/session/php_session.h>
 #include <ext/spl/spl_exceptions.h>
+
+#ifdef HAVE_PHP_SESSION
+#include <ext/session/php_session.h>
+#endif
 #include <ext/standard/head.h>
 #include <inttypes.h>
 #include <php.h>
@@ -41,7 +44,7 @@ ZEND_TSRMLS_CACHE_DEFINE()
  *
  * @see https://github.com/DataDog/dd-trace-php/pull/3169 for an example
  */
-static const char *MODULES_TO_RELOAD[] = {"filter", "session", NULL};
+static const char *MODULES_TO_RELOAD[] = {"filter", NULL};
 
 frankenphp_version frankenphp_get_version() {
   return (frankenphp_version){
@@ -75,41 +78,6 @@ __thread uintptr_t thread_index;
 __thread bool is_worker_thread = false;
 __thread zval *os_environment = NULL;
 __thread HashTable *worker_ini_snapshot = NULL;
-
-/* Session user handler names (same structure as PS(mod_user_names)).
- * In PHP 8.2, mod_user_names is a union with .name.ps_* access.
- * In PHP 8.3+, mod_user_names is a direct struct with .ps_* access. */
-typedef struct {
-  zval ps_open;
-  zval ps_close;
-  zval ps_read;
-  zval ps_write;
-  zval ps_destroy;
-  zval ps_gc;
-  zval ps_create_sid;
-  zval ps_validate_sid;
-  zval ps_update_timestamp;
-} session_user_handlers;
-
-/* Macro to access PS(mod_user_names) handlers across PHP versions */
-#if PHP_VERSION_ID >= 80300
-#define PS_MOD_USER_NAMES(handler) PS(mod_user_names).handler
-#else
-#define PS_MOD_USER_NAMES(handler) PS(mod_user_names).name.handler
-#endif
-
-#define FOR_EACH_SESSION_HANDLER(op)                                           \
-  op(ps_open);                                                                 \
-  op(ps_close);                                                                \
-  op(ps_read);                                                                 \
-  op(ps_write);                                                                \
-  op(ps_destroy);                                                              \
-  op(ps_gc);                                                                   \
-  op(ps_create_sid);                                                           \
-  op(ps_validate_sid);                                                         \
-  op(ps_update_timestamp)
-
-__thread session_user_handlers *worker_session_handlers_snapshot = NULL;
 
 void frankenphp_update_local_thread_context(bool is_worker) {
   is_worker_thread = is_worker;
@@ -300,58 +268,50 @@ static void frankenphp_restore_ini(void) {
   }
 }
 
-/* Save session user handlers set before the worker loop.
- * This allows frameworks to define custom session handlers that persist. */
-static void frankenphp_snapshot_session_handlers(void) {
-  if (worker_session_handlers_snapshot != NULL) {
-    return; /* Already snapshotted */
+#ifdef HAVE_PHP_SESSION
+/* Reset session state between worker requests, preserving user handlers.
+ * Based on php_rshutdown_session_globals() + php_rinit_session_globals(). */
+static void frankenphp_reset_session_state(void) {
+  if (PS(session_status) == php_session_active) {
+    php_session_flush(1);
   }
 
-  /* Check if session module is loaded */
-  if (zend_hash_str_find_ptr(&module_registry, "session",
-                             sizeof("session") - 1) == NULL) {
-    return; /* Session module not available */
+  if (!Z_ISUNDEF(PS(http_session_vars))) {
+    zval_ptr_dtor(&PS(http_session_vars));
+    ZVAL_UNDEF(&PS(http_session_vars));
   }
 
-  /* Check if user session handlers are defined */
-  if (Z_ISUNDEF(PS_MOD_USER_NAMES(ps_open))) {
-    return; /* No user handlers to snapshot */
+  if (PS(mod_data) || PS(mod_user_implemented)) {
+    zend_try { PS(mod)->s_close(&PS(mod_data)); }
+    zend_end_try();
   }
 
-  worker_session_handlers_snapshot = emalloc(sizeof(session_user_handlers));
-
-  /* Copy each handler zval with incremented reference count */
-#define SNAPSHOT_HANDLER(h)                                                    \
-  if (!Z_ISUNDEF(PS_MOD_USER_NAMES(h))) {                                      \
-    ZVAL_COPY(&worker_session_handlers_snapshot->h, &PS_MOD_USER_NAMES(h));    \
-  } else {                                                                     \
-    ZVAL_UNDEF(&worker_session_handlers_snapshot->h);                          \
+  if (PS(id)) {
+    zend_string_release_ex(PS(id), 0);
+    PS(id) = NULL;
   }
 
-  FOR_EACH_SESSION_HANDLER(SNAPSHOT_HANDLER);
+  if (PS(session_vars)) {
+    zend_string_release_ex(PS(session_vars), 0);
+    PS(session_vars) = NULL;
+  }
 
-#undef SNAPSHOT_HANDLER
+  /* PS(mod_user_class_name) and PS(mod_user_names) are preserved */
+
+  if (PS(session_started_filename)) {
+    zend_string_release(PS(session_started_filename));
+    PS(session_started_filename) = NULL;
+    PS(session_started_lineno) = 0;
+  }
+
+  PS(session_status) = php_session_none;
+  PS(in_save_handler) = 0;
+  PS(set_handler) = 0;
+  PS(mod_data) = NULL;
+  PS(mod_user_is_open) = 0;
+  PS(define_sid) = 1;
 }
-
-/* Restore session user handlers from snapshot after RSHUTDOWN freed them. */
-static void frankenphp_restore_session_handlers(void) {
-  if (worker_session_handlers_snapshot == NULL) {
-    return;
-  }
-
-  /* Restore each handler zval.
-   * Session RSHUTDOWN already freed the handlers via zval_ptr_dtor and set
-   * them to UNDEF, so we don't need to destroy them again. We simply copy
-   * from the snapshot (which holds its own reference). */
-#define RESTORE_HANDLER(h)                                                     \
-  if (!Z_ISUNDEF(worker_session_handlers_snapshot->h)) {                       \
-    ZVAL_COPY(&PS_MOD_USER_NAMES(h), &worker_session_handlers_snapshot->h);    \
-  }
-
-  FOR_EACH_SESSION_HANDLER(RESTORE_HANDLER);
-
-#undef RESTORE_HANDLER
-}
+#endif
 
 /* Free worker state when the worker script terminates. */
 static void frankenphp_cleanup_worker_state(void) {
@@ -360,21 +320,6 @@ static void frankenphp_cleanup_worker_state(void) {
     zend_hash_destroy(worker_ini_snapshot);
     FREE_HASHTABLE(worker_ini_snapshot);
     worker_ini_snapshot = NULL;
-  }
-
-  /* Free session handlers snapshot */
-  if (worker_session_handlers_snapshot != NULL) {
-#define FREE_HANDLER(h)                                                        \
-  if (!Z_ISUNDEF(worker_session_handlers_snapshot->h)) {                       \
-    zval_ptr_dtor(&worker_session_handlers_snapshot->h);                       \
-  }
-
-    FOR_EACH_SESSION_HANDLER(FREE_HANDLER);
-
-#undef FREE_HANDLER
-
-    efree(worker_session_handlers_snapshot);
-    worker_session_handlers_snapshot = NULL;
   }
 }
 
@@ -392,6 +337,10 @@ static void frankenphp_worker_request_shutdown() {
       module->request_shutdown_func(module->type, module->module_number);
     }
   }
+
+#ifdef HAVE_PHP_SESSION
+  frankenphp_reset_session_state();
+#endif
 
   /* Shutdown output layer (send the set HTTP headers, cleanup output handlers,
    * etc.) */
@@ -412,11 +361,10 @@ bool frankenphp_shutdown_dummy_request(void) {
     return false;
   }
 
-  /* Snapshot INI and session handlers BEFORE shutdown.
-   * The framework has set these up before the worker loop, and we want
-   * to preserve them. Session RSHUTDOWN will free the handlers. */
+  /* Snapshot INI values BEFORE shutdown.
+   * The framework may have set custom INI values before the worker loop,
+   * and we want to preserve them across requests. */
   frankenphp_snapshot_ini();
-  frankenphp_snapshot_session_handlers();
 
   frankenphp_worker_request_shutdown();
 
@@ -488,12 +436,6 @@ static int frankenphp_worker_request_startup() {
         module->request_startup_func(module->type, module->module_number);
       }
     }
-
-    /* Restore session handlers AFTER session RINIT.
-     * Session RSHUTDOWN frees mod_user_names callbacks, so we must restore
-     * them before user code runs. This must happen after RINIT because
-     * session RINIT may reset some state. */
-    frankenphp_restore_session_handlers();
   }
   zend_catch { retval = FAILURE; }
   zend_end_try();
