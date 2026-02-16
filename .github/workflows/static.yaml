@@ -179,7 +179,9 @@ jobs:
       - name: Copy binary
         run: |
           # shellcheck disable=SC2034
-          digest=$(jq -r '."static-builder-musl"."${{ (fromJson(needs.prepare.outputs.push) && !matrix.debug && !matrix.mimalloc) && 'containerimage.digest' || 'containerimage.config.digest' }}"' <<< "${METADATA}")
+          # TODO: remove "containerimage.config.digest" fallback once all runners use buildx v0.18+
+          # which replaced it with "containerimage.digest" and "containerimage.descriptor"
+          digest=$(jq -r '."static-builder-musl" | ${{ (fromJson(needs.prepare.outputs.push) && !matrix.debug && !matrix.mimalloc) && '."containerimage.digest"' || '(."containerimage.config.digest" // ."containerimage.digest")' }}' <<< "${METADATA}")
           docker create --platform="${PLATFORM}" --name static-builder-musl "${{ (fromJson(needs.prepare.outputs.push) && !matrix.debug && !matrix.mimalloc) && '${IMAGE_NAME}@${digest}' || '${digest}' }}"
           docker cp "static-builder-musl:/go/src/app/dist/${BINARY}" "${BINARY}${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }}"
         env:
@@ -330,7 +332,9 @@ jobs:
       - name: Copy all frankenphp* files
         run: |
           # shellcheck disable=SC2034
-          digest=$(jq -r '."static-builder-gnu"."${{ fromJson(needs.prepare.outputs.push) && 'containerimage.digest' || 'containerimage.config.digest' }}"' <<< "${METADATA}")
+          # TODO: remove "containerimage.config.digest" fallback once all runners use buildx v0.18+
+          # which replaced it with "containerimage.digest" and "containerimage.descriptor"
+          digest=$(jq -r '."static-builder-gnu" | ${{ fromJson(needs.prepare.outputs.push) && '."containerimage.digest"' || '(."containerimage.config.digest" // ."containerimage.digest")' }}' <<< "${METADATA}")
           container_id=$(docker create --platform="${PLATFORM}" "${{ fromJson(needs.prepare.outputs.push) && '${IMAGE_NAME}@${digest}' || '${digest}' }}")
           mkdir -p gh-output
           cd gh-output
