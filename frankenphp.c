@@ -1252,7 +1252,7 @@ static void *php_main(void *arg) {
 
   /* take a snapshot of the environment for sandboxing */
   if (main_thread_env == NULL) {
-    main_thread_env = malloc(sizeof(HashTable));
+    main_thread_env = pmalloc(sizeof(HashTable), 1);
     zend_hash_init(main_thread_env, 8, NULL, NULL, 1);
     go_init_os_env(main_thread_env);
   }
