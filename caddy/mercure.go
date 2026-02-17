@@ -22,8 +22,7 @@ func (f *FrankenPHPModule) assignMercureHub(ctx caddy.Context) {
 		return
 	}
 
-	opt := frankenphp.WithMercureHub(f.mercureHub)
-	f.mercureHubRequestOption = &opt
+	f.requestOptions = append(f.requestOptions, frankenphp.WithMercureHub(f.mercureHub))
 
 	for i, wc := range f.Workers {
 		wc.mercureHub = f.mercureHub

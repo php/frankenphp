@@ -19,7 +19,7 @@ func init() {
 	}
 
 	canonicalWD, err := filepath.EvalSymlinks(wd)
-	if err != nil {
+	if err == nil {
 		wd = canonicalWD
 	}
 }

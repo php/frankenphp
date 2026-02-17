@@ -18,9 +18,12 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 	"unsafe"
 
 	"github.com/dunglas/frankenphp/internal/phpheaders"
+	"golang.org/x/text/language"
+	"golang.org/x/text/search"
 )
 
 // Protocol versions, in Apache mod_ssl format: https://httpd.apache.org/docs/current/mod/mod_ssl.html
@@ -64,6 +67,20 @@ var knownServerKeys = []string{
 	"REQUEST_URI",
 }
 
+// cStringHTTPMethods caches C string versions of common HTTP methods
+// to avoid allocations in pinCString on every request.
+var cStringHTTPMethods = map[string]*C.char{
+	"GET":     C.CString("GET"),
+	"HEAD":    C.CString("HEAD"),
+	"POST":    C.CString("POST"),
+	"PUT":     C.CString("PUT"),
+	"DELETE":  C.CString("DELETE"),
+	"CONNECT": C.CString("CONNECT"),
+	"OPTIONS": C.CString("OPTIONS"),
+	"TRACE":   C.CString("TRACE"),
+	"PATCH":   C.CString("PATCH"),
+}
+
 // computeKnownVariables returns a set of CGI environment variables for the request.
 //
 // TODO: handle this case https://github.com/caddyserver/caddy/issues/3718
@@ -81,8 +98,9 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 	}
 
 	// Remove [] from IPv6 addresses
-	ip = strings.Replace(ip, "[", "", 1)
-	ip = strings.Replace(ip, "]", "", 1)
+	if len(ip) > 0 && ip[0] == '[' {
+		ip = ip[1 : len(ip)-1]
+	}
 
 	var https, sslProtocol, sslCipher, rs string
 
@@ -95,7 +113,7 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		rs = "https"
 		https = "on"
 
-		// and pass the protocol details in a manner compatible with apache's mod_ssl
+		// and pass the protocol details in a manner compatible with Apache's mod_ssl
 		// (which is why these have an SSL_ prefix and not TLS_).
 		if v, ok := tlsProtocolStrings[request.TLS.Version]; ok {
 			sslProtocol = v
@@ -135,7 +153,7 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 	if fc.originalRequest != nil {
 		requestURI = fc.originalRequest.URL.RequestURI()
 	} else {
-		requestURI = request.URL.RequestURI()
+		requestURI = fc.requestURI
 	}
 
 	C.frankenphp_register_bulk(
@@ -249,27 +267,67 @@ func splitCgiPath(fc *frankenPHPContext) {
 	// TODO: is it possible to delay this and avoid saving everything in the context?
 	// SCRIPT_FILENAME is the absolute path of SCRIPT_NAME
 	fc.scriptFilename = sanitizedPathJoin(fc.documentRoot, fc.scriptName)
-	fc.worker = getWorkerByPath(fc.scriptFilename)
+	fc.worker = workersByPath[fc.scriptFilename]
 }
 
-// splitPos returns the index where path should
-// be split based on SplitPath.
+var splitSearchNonASCII = search.New(language.Und, search.IgnoreCase)
+
+// splitPos returns the index where path should be split based on splitPath.
 // example: if splitPath is [".php"]
 // "/path/to/script.php/some/path": ("/path/to/script.php", "/some/path")
-//
-// Adapted from https://github.com/caddyserver/caddy/blob/master/modules/caddyhttp/reverseproxy/fastcgi/fastcgi.go
-// Copyright 2015 Matthew Holt and The Caddy Authors
 func splitPos(path string, splitPath []string) int {
 	if len(splitPath) == 0 {
 		return 0
 	}
 
-	lowerPath := strings.ToLower(path)
+	pathLen := len(path)
+
+	// We are sure that split strings are all ASCII-only and lower-case because of validation and normalization in WithRequestSplitPath
 	for _, split := range splitPath {
-		if idx := strings.Index(lowerPath, strings.ToLower(split)); idx > -1 {
-			return idx + len(split)
+		splitLen := len(split)
+
+		for i := 0; i < pathLen; i++ {
+			if path[i] >= utf8.RuneSelf {
+				if _, end := splitSearchNonASCII.IndexString(path, split); end > -1 {
+					return end
+				}
+
+				break
+			}
+
+			if i+splitLen > pathLen {
+				continue
+			}
+
+			match := true
+			for j := 0; j < splitLen; j++ {
+				c := path[i+j]
+
+				if c >= utf8.RuneSelf {
+					if _, end := splitSearchNonASCII.IndexString(path, split); end > -1 {
+						return end
+					}
+
+					break
+				}
+
+				if 'A' <= c && c <= 'Z' {
+					c += 'a' - 'A'
+				}
+
+				if c != split[j] {
+					match = false
+
+					break
+				}
+			}
+
+			if match {
+				return i + splitLen
+			}
 		}
 	}
+
 	return -1
 }
 
@@ -286,7 +344,11 @@ func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) 
 		return nil
 	}
 
-	info.request_method = thread.pinCString(request.Method)
+	if m, ok := cStringHTTPMethods[request.Method]; ok {
+		info.request_method = m
+	} else {
+		info.request_method = thread.pinCString(request.Method)
+	}
 	info.query_string = thread.pinCString(request.URL.RawQuery)
 	info.content_length = C.zend_long(request.ContentLength)
 
@@ -298,7 +360,7 @@ func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) 
 		info.path_translated = thread.pinCString(sanitizedPathJoin(fc.documentRoot, fc.pathInfo)) // See: http://www.oreilly.com/openbook/cgi/ch02_04.html
 	}
 
-	info.request_uri = thread.pinCString(request.URL.RequestURI())
+	info.request_uri = thread.pinCString(fc.requestURI)
 
 	info.proto_num = C.int(request.ProtoMajor*1000 + request.ProtoMinor)
 

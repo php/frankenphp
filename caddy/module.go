@@ -51,7 +51,7 @@ type FrankenPHPModule struct {
 	preparedEnv                 frankenphp.PreparedEnv
 	preparedEnvNeedsReplacement bool
 	logger                      *slog.Logger
-	mercureHubRequestOption     *frankenphp.RequestOption
+	requestOptions              []frankenphp.RequestOption
 }
 
 // CaddyModule returns the Caddy module information.
@@ -108,8 +108,7 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		} else {
 			f.Root = filepath.Join(frankenphp.EmbeddedAppPath, defaultDocumentRoot)
 
-			var rrs bool
-			f.ResolveRootSymlink = &rrs
+			f.ResolveRootSymlink = new(false)
 		}
 	} else if frankenphp.EmbeddedAppPath != "" && filepath.IsLocal(f.Root) {
 		f.Root = filepath.Join(frankenphp.EmbeddedAppPath, f.Root)
@@ -119,9 +118,19 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		f.SplitPath = []string{".php"}
 	}
 
+	if opt, err := frankenphp.WithRequestSplitPath(f.SplitPath); err == nil {
+		f.requestOptions = append(f.requestOptions, opt)
+	} else {
+		f.requestOptions = append(f.requestOptions, opt)
+	}
+
 	if f.ResolveRootSymlink == nil {
-		rrs := true
-		f.ResolveRootSymlink = &rrs
+		f.ResolveRootSymlink = new(true)
+	}
+
+	// Always pre-compute absolute file names for fallback matching
+	for i := range f.Workers {
+		f.Workers[i].absFileName, _ = fastabs.FastAbs(f.Workers[i].FileName)
 	}
 
 	if !needReplacement(f.Root) {
@@ -139,15 +148,25 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 
 			f.resolvedDocumentRoot = root
 
-			// Also resolve symlinks in worker file paths when resolve_root_symlink is true
+			// Resolve symlinks in worker file paths
 			for i, wc := range f.Workers {
-				if !filepath.IsAbs(wc.FileName) {
-					continue
+				if filepath.IsAbs(wc.FileName) {
+					resolvedPath, _ := filepath.EvalSymlinks(wc.FileName)
+					f.Workers[i].FileName = resolvedPath
+					f.Workers[i].absFileName = resolvedPath
 				}
-				resolvedPath, _ := filepath.EvalSymlinks(wc.FileName)
-				f.Workers[i].FileName = resolvedPath
 			}
 		}
+
+		// Pre-compute relative match paths for all workers (requires resolved document root)
+		docRootWithSep := f.resolvedDocumentRoot + string(filepath.Separator)
+		for i := range f.Workers {
+			if strings.HasPrefix(f.Workers[i].absFileName, docRootWithSep) {
+				f.Workers[i].matchRelPath = filepath.ToSlash(f.Workers[i].absFileName[len(f.resolvedDocumentRoot):])
+			}
+		}
+
+		f.requestOptions = append(f.requestOptions, frankenphp.WithRequestResolvedDocumentRoot(f.resolvedDocumentRoot))
 	}
 
 	if f.preparedEnv == nil {
@@ -160,6 +179,10 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 				break
 			}
 		}
+	}
+
+	if !f.preparedEnvNeedsReplacement {
+		f.requestOptions = append(f.requestOptions, frankenphp.WithRequestPreparedEnv(f.preparedEnv))
 	}
 
 	if err := f.configureHotReload(fapp); err != nil {
@@ -177,34 +200,32 @@ func needReplacement(s string) bool {
 // ServeHTTP implements caddyhttp.MiddlewareHandler.
 func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ caddyhttp.Handler) error {
 	ctx := r.Context()
-	origReq := ctx.Value(caddyhttp.OriginalRequestCtxKey).(http.Request)
 	repl := ctx.Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
 
-	var (
-		documentRootOption frankenphp.RequestOption
-		documentRoot       string
-	)
+	documentRoot := f.resolvedDocumentRoot
 
-	if f.resolvedDocumentRoot == "" {
+	opts := make([]frankenphp.RequestOption, 0, len(f.requestOptions)+4)
+	opts = append(opts, f.requestOptions...)
+
+	if documentRoot == "" {
 		documentRoot = repl.ReplaceKnown(f.Root, "")
 		if documentRoot == "" && frankenphp.EmbeddedAppPath != "" {
 			documentRoot = frankenphp.EmbeddedAppPath
 		}
+
 		// If we do not have a resolved document root, then we cannot resolve the symlink of our cwd because it may
 		// resolve to a different directory than the one we are currently in.
 		// This is especially important if there are workers running.
-		documentRootOption = frankenphp.WithRequestDocumentRoot(documentRoot, false)
-	} else {
-		documentRoot = f.resolvedDocumentRoot
-		documentRootOption = frankenphp.WithRequestResolvedDocumentRoot(documentRoot)
+		opts = append(opts, frankenphp.WithRequestDocumentRoot(documentRoot, false))
 	}
 
-	env := f.preparedEnv
 	if f.preparedEnvNeedsReplacement {
-		env = make(frankenphp.PreparedEnv, len(f.Env))
+		env := make(frankenphp.PreparedEnv, len(f.Env))
 		for k, v := range f.preparedEnv {
 			env[k] = repl.ReplaceKnown(v, "")
 		}
+
+		opts = append(opts, frankenphp.WithRequestPreparedEnv(env))
 	}
 
 	workerName := ""
@@ -215,31 +236,14 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 		}
 	}
 
-	var (
-		err error
-		fr  *http.Request
+	fr, err := frankenphp.NewRequestWithContext(
+		r,
+		append(
+			opts,
+			frankenphp.WithOriginalRequest(new(ctx.Value(caddyhttp.OriginalRequestCtxKey).(http.Request))),
+			frankenphp.WithWorkerName(workerName),
+		)...,
 	)
-
-	if f.mercureHubRequestOption == nil {
-		fr, err = frankenphp.NewRequestWithContext(
-			r,
-			documentRootOption,
-			frankenphp.WithRequestSplitPath(f.SplitPath),
-			frankenphp.WithRequestPreparedEnv(env),
-			frankenphp.WithOriginalRequest(&origReq),
-			frankenphp.WithWorkerName(workerName),
-		)
-	} else {
-		fr, err = frankenphp.NewRequestWithContext(
-			r,
-			documentRootOption,
-			frankenphp.WithRequestSplitPath(f.SplitPath),
-			frankenphp.WithRequestPreparedEnv(env),
-			frankenphp.WithOriginalRequest(&origReq),
-			frankenphp.WithWorkerName(workerName),
-			*f.mercureHubRequestOption,
-		)
-	}
 
 	if err != nil {
 		return caddyhttp.Error(http.StatusInternalServerError, err)
@@ -473,8 +477,7 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 		if phpsrv.Root == "" {
 			phpsrv.Root = filepath.Join(frankenphp.EmbeddedAppPath, defaultDocumentRoot)
 			fsrv.Root = phpsrv.Root
-			rrs := false
-			phpsrv.ResolveRootSymlink = &rrs
+			phpsrv.ResolveRootSymlink = new(false)
 		} else if filepath.IsLocal(fsrv.Root) {
 			phpsrv.Root = filepath.Join(frankenphp.EmbeddedAppPath, phpsrv.Root)
 			fsrv.Root = phpsrv.Root

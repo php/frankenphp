@@ -611,7 +611,10 @@ func go_sapi_flush(threadIndex C.uintptr_t) bool {
 		return true
 	}
 
-	if err := http.NewResponseController(fc.responseWriter).Flush(); err != nil {
+	if fc.responseController == nil {
+		fc.responseController = http.NewResponseController(fc.responseWriter)
+	}
+	if err := fc.responseController.Flush(); err != nil {
 		ctx := thread.context()
 
 		if globalLogger.Enabled(ctx, slog.LevelWarn) {
@@ -683,34 +686,28 @@ func getLogger(threadIndex C.uintptr_t) (*slog.Logger, context.Context) {
 func go_log(threadIndex C.uintptr_t, message *C.char, level C.int) {
 	logger, ctx := getLogger(threadIndex)
 
-	m := C.GoString(message)
 	le := syslogLevelInfo
-
 	if level >= C.int(syslogLevelEmerg) && level <= C.int(syslogLevelDebug) {
 		le = syslogLevel(level)
 	}
 
+	var slogLevel slog.Level
 	switch le {
 	case syslogLevelEmerg, syslogLevelAlert, syslogLevelCrit, syslogLevelErr:
-		if logger.Enabled(ctx, slog.LevelError) {
-			logger.LogAttrs(ctx, slog.LevelError, m, slog.String("syslog_level", le.String()))
-		}
-
+		slogLevel = slog.LevelError
 	case syslogLevelWarn:
-		if logger.Enabled(ctx, slog.LevelWarn) {
-			logger.LogAttrs(ctx, slog.LevelWarn, m, slog.String("syslog_level", le.String()))
-		}
-
+		slogLevel = slog.LevelWarn
 	case syslogLevelDebug:
-		if logger.Enabled(ctx, slog.LevelDebug) {
-			logger.LogAttrs(ctx, slog.LevelDebug, m, slog.String("syslog_level", le.String()))
-		}
-
+		slogLevel = slog.LevelDebug
 	default:
-		if logger.Enabled(ctx, slog.LevelInfo) {
-			logger.LogAttrs(ctx, slog.LevelInfo, m, slog.String("syslog_level", le.String()))
-		}
+		slogLevel = slog.LevelInfo
 	}
+
+	if !logger.Enabled(ctx, slogLevel) {
+		return
+	}
+
+	logger.LogAttrs(ctx, slogLevel, C.GoString(message), slog.String("syslog_level", le.String()))
 }
 
 //export go_log_attrs
@@ -805,6 +802,8 @@ func resetGlobals() {
 	globalCtx = context.Background()
 	globalLogger = slog.Default()
 	workers = nil
+	workersByName = nil
+	workersByPath = nil
 	watcherIsEnabled = false
 	globalMu.Unlock()
 }

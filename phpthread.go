@@ -19,12 +19,12 @@ type phpThread struct {
 	threadIndex int
 	requestChan chan contextHolder
 	drainChan   chan struct{}
-	handlerMu   sync.Mutex
+	handlerMu   sync.RWMutex
 	handler     threadHandler
 	state       *state.ThreadState
 }
 
-// interface that defines how the callbacks from the C thread should be handled
+// threadHandler defines how the callbacks from the C thread should be handled
 type threadHandler interface {
 	name() string
 	beforeScriptExecution() string
@@ -65,9 +65,12 @@ func (thread *phpThread) boot() {
 // shutdown the underlying PHP thread
 func (thread *phpThread) shutdown() {
 	if !thread.state.RequestSafeStateChange(state.ShuttingDown) {
-		// already shutting down or done
+		// already shutting down or done, wait for the C thread to finish
+		thread.state.WaitFor(state.Done, state.Reserved)
+
 		return
 	}
+
 	close(thread.drainChan)
 	thread.state.WaitFor(state.Done)
 	thread.drainChan = make(chan struct{})
@@ -78,17 +81,19 @@ func (thread *phpThread) shutdown() {
 	}
 }
 
-// change the thread handler safely
+// setHandler changes the thread handler safely
 // must be called from outside the PHP thread
 func (thread *phpThread) setHandler(handler threadHandler) {
 	thread.handlerMu.Lock()
 	defer thread.handlerMu.Unlock()
+
 	if !thread.state.RequestSafeStateChange(state.TransitionRequested) {
 		// no state change allowed == shutdown or done
 		return
 	}
 
 	close(thread.drainChan)
+
 	thread.state.WaitFor(state.TransitionInProgress)
 	thread.handler = handler
 	thread.drainChan = make(chan struct{})
@@ -119,9 +124,10 @@ func (thread *phpThread) context() context.Context {
 }
 
 func (thread *phpThread) name() string {
-	thread.handlerMu.Lock()
+	thread.handlerMu.RLock()
 	name := thread.handler.name()
-	thread.handlerMu.Unlock()
+	thread.handlerMu.RUnlock()
+
 	return name
 }
 
@@ -132,6 +138,7 @@ func (thread *phpThread) pinString(s string) *C.char {
 	if sData == nil {
 		return nil
 	}
+
 	thread.Pin(sData)
 
 	return (*C.char)(unsafe.Pointer(sData))
