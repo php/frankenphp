@@ -6,7 +6,7 @@ return function () {
     $var = 'MY_VAR_' . ($_GET['var'] ?? '');
     // Setting an environment variable
     $result = putenv("$var=HelloWorld");
-    echo $result ? "Set MY_VAR successfully.\n MY_VAR = " . getenv($var) . "\n" : "Failed to set MY_VAR.\n";
+    echo $result ? "Set MY_VAR successfully.\nMY_VAR = " . getenv($var) . "\n" : "Failed to set MY_VAR.\n";
 
     // putenv should not affect $_ENV
     $result = $_ENV[$var] ?? null;
