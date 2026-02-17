@@ -1,17 +1,12 @@
 <?php
 
-require_once __DIR__.'/../_executor.php';
+require_once __DIR__ . '/../_executor.php';
 
-return function() {
+return function () {
     $var = 'MY_VAR_' . ($_GET['var'] ?? '');
     // Setting an environment variable
     $result = putenv("$var=HelloWorld");
-    if ($result) {
-        echo "Set MY_VAR successfully.\n";
-        echo "MY_VAR = " . getenv($var) . "\n";
-    } else {
-        echo "Failed to set MY_VAR.\n";
-    }
+    echo $result ? "Set MY_VAR successfully.\n MY_VAR = " . getenv($var) . "\n" : "Failed to set MY_VAR.\n";
 
     // putenv should not affect $_ENV
     $result = $_ENV[$var] ?? null;
@@ -26,11 +21,7 @@ return function() {
     if ($result) {
         echo "Unset MY_VAR successfully.\n";
         $value = getenv($var);
-        if ($value === false) {
-            echo "MY_VAR is unset.\n";
-        } else {
-            echo "MY_VAR = " . $value . "\n";
-        }
+        echo $value === false ? "MY_VAR is unset.\n" : "MY_VAR = $value\n";
     } else {
         echo "Failed to unset MY_VAR.\n";
     }
@@ -39,22 +30,14 @@ return function() {
     if ($result) {
         echo "MY_VAR set to empty successfully.\n";
         $value = getenv($var);
-        if ($value === false) {
-            echo "MY_VAR is unset.\n";
-        } else {
-            echo "MY_VAR = " . $value . "\n";
-        }
+        echo $value === false ? "MY_VAR is unset.\n" : "MY_VAR = $value\n";
     } else {
         echo "Failed to set MY_VAR.\n";
     }
 
     // Attempt to unset a non-existing variable
     $result = putenv('NON_EXISTING_VAR' . ($_GET['var'] ?? ''));
-    if ($result) {
-        echo "Unset NON_EXISTING_VAR successfully.\n";
-    } else {
-        echo "Failed to unset NON_EXISTING_VAR.\n";
-    }
+    echo $result ? "Unset NON_EXISTING_VAR successfully.\n" : "Failed to unset NON_EXISTING_VAR.\n";
 
     // Inserting an invalid variable should fail (null byte in key)
     $result = putenv("INVALID\x0_VAR=value");
