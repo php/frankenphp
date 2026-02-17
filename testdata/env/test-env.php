@@ -57,11 +57,13 @@ return function() {
     }
 
     // Inserting an invalid variable should fail (null byte in key)
-    putenv("INVALID\x0_VAR=value");
+    $result = putenv("INVALID\x0_VAR=value");
     if (getenv("INVALID\x0_VAR")) {
         echo "Invalid value was inserted (unexpected).\n";
-    } else {
+    } else if ($result) {
         echo "Invalid value was not inserted.\n";
+    } else {
+        echo "Invalid value was not inserted, but regular PHP should still return 'true' here.\n";
     }
 
     getenv();

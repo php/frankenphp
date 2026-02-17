@@ -537,29 +537,37 @@ PHP_FUNCTION(frankenphp_putenv) {
     sandboxed_env = zend_array_dup(main_thread_env);
   }
 
-  // cut the string at the first '='
-  char *eq_pos = memchr(setting, '=', setting_len);
-  bool put_env_success = true;
-  if (eq_pos != NULL) {
-    size_t name_len = eq_pos - setting;
-    size_t value_len =
-        (setting_len > name_len + 1) ? (setting_len - name_len - 1) : 0;
-    put_env_success =
-        go_putenv(setting, (int)name_len, eq_pos + 1, (int)value_len);
-    if (put_env_success) {
-      zval val = {0};
-      ZVAL_STRINGL(&val, eq_pos + 1, value_len);
-      zend_hash_str_update(sandboxed_env, setting, name_len, &val);
-    }
-  } else {
-    // no '=' found, delete the variable
-    put_env_success = go_putenv(setting, (int)setting_len, NULL, 0);
-    if (put_env_success) {
-      zend_hash_str_del(sandboxed_env, setting, setting_len);
-    }
+  /* cut at null byte to stay consistent with regular putenv */
+  char *null_pos = memchr(setting, '\0', setting_len);
+  if (null_pos != NULL) {
+    setting_len = null_pos - setting;
   }
 
-  RETURN_BOOL(put_env_success);
+  /* cut the string at the first '=' */
+  char *eq_pos = memchr(setting, '=', setting_len);
+  bool success = true;
+
+  /* no '=' found, delete the variable */
+  if (eq_pos == NULL) {
+    success = go_putenv(setting, (int)setting_len, NULL, 0);
+    if (success) {
+      zend_hash_str_del(sandboxed_env, setting, setting_len);
+    }
+
+    RETURN_BOOL(success);
+  }
+
+  size_t name_len = eq_pos - setting;
+  size_t value_len =
+      (setting_len > name_len + 1) ? (setting_len - name_len - 1) : 0;
+  success = go_putenv(setting, (int)name_len, eq_pos + 1, (int)value_len);
+  if (success) {
+    zval val = {0};
+    ZVAL_STRINGL(&val, eq_pos + 1, value_len);
+    zend_hash_str_update(sandboxed_env, setting, name_len, &val);
+  }
+
+  RETURN_BOOL(success);
 } /* }}} */
 
 /* {{{ Get the env from the sandboxed environment */
