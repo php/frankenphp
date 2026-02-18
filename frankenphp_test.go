@@ -289,6 +289,46 @@ func testInput(t *testing.T, opts *testOptions) {
 	}, opts)
 }
 
+func TestFilterInputDefault_module(t *testing.T) { testFilterInputDefault(t, nil) }
+func TestFilterInputDefault_worker(t *testing.T) {
+	testFilterInputDefault(t, &testOptions{workerScript: "filter.php"})
+}
+func testFilterInputDefault(t *testing.T, opts *testOptions) {
+	if opts == nil {
+		opts = &testOptions{}
+	}
+	opts.initOpts = append(opts.initOpts, frankenphp.WithPhpIni(map[string]string{
+		"filter.default": "string.tolower",
+	}))
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		req := httptest.NewRequest("GET", "http://example.com/filter.php", nil)
+		w := httptest.NewRecorder()
+		handler(w, req)
+
+		resp := w.Result()
+		body, _ := io.ReadAll(resp.Body)
+
+		assert.Equal(t, "GET", string(body))
+	}, opts)
+}
+
+func TestFilterInput_module(t *testing.T) { testFilterInput(t, nil) }
+func TestFilterInput_worker(t *testing.T) {
+	testFilterInput(t, &testOptions{workerScript: "filter.php"})
+}
+func testFilterInput(t *testing.T, opts *testOptions) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		req := httptest.NewRequest("GET", "http://example.com/filter.php", nil)
+		w := httptest.NewRecorder()
+		handler(w, req)
+
+		resp := w.Result()
+		body, _ := io.ReadAll(resp.Body)
+
+		assert.Equal(t, "GET", string(body))
+	}, opts)
+}
+
 func TestPostSuperGlobals_module(t *testing.T) { testPostSuperGlobals(t, nil) }
 func TestPostSuperGlobals_worker(t *testing.T) {
 	testPostSuperGlobals(t, &testOptions{workerScript: "super-globals.php"})

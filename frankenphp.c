@@ -70,7 +70,6 @@ frankenphp_config frankenphp_get_config() {
   };
 }
 
-bool should_filter_var = 0;
 __thread uintptr_t thread_index;
 __thread bool is_worker_thread = false;
 __thread zval *os_environment = NULL;
@@ -917,8 +916,7 @@ static inline void frankenphp_register_trusted_var(zend_string *z_key,
   }
   size_t new_val_len = val_len;
 
-  if (!should_filter_var ||
-      sapi_module.input_filter(PARSE_SERVER, ZSTR_VAL(z_key), &value,
+  if (sapi_module.input_filter(PARSE_SERVER, ZSTR_VAL(z_key), &value,
                                new_val_len, &new_val_len)) {
     zval z_value;
     ZVAL_STRINGL_FAST(&z_value, value, new_val_len);
@@ -1049,8 +1047,7 @@ void frankenphp_register_variable_safe(char *key, char *val, size_t val_len,
     val = "";
   }
   size_t new_val_len = val_len;
-  if (!should_filter_var ||
-      sapi_module.input_filter(PARSE_SERVER, key, &val, new_val_len,
+  if (sapi_module.input_filter(PARSE_SERVER, key, &val, new_val_len,
                                &new_val_len)) {
     php_register_variable_safe(key, val, new_val_len, track_vars_array);
   }
@@ -1235,12 +1232,6 @@ static void *php_main(void *arg) {
   }
 
   frankenphp_sapi_module.startup(&frankenphp_sapi_module);
-
-  /* check if a default filter is set in php.ini and only filter if
-   * it is, this is deprecated and will be removed in PHP 9 */
-  char *default_filter;
-  cfg_get_string("filter.default", &default_filter);
-  should_filter_var = default_filter != NULL;
 
   go_frankenphp_main_thread_is_ready();
 
