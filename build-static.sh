@@ -147,6 +147,13 @@ else
 	spcCommand="./bin/spc"
 fi
 
+# turn potentially relative EMBED path into absolute path
+if [ -n "${EMBED}" ]; then
+	if [[ "${EMBED}" != /* ]]; then
+		EMBED="${CURRENT_DIR}/${EMBED}"
+	fi
+fi
+
 # Extensions to build
 if [ -z "${PHP_EXTENSIONS}" ]; then
 	# enable EMBED mode, first check if project has dumped extensions
@@ -178,9 +185,6 @@ fi
 
 # Embed PHP app, if any
 if [ -n "${EMBED}" ] && [ -d "${EMBED}" ]; then
-	if [[ "${EMBED}" != /* ]]; then
-		EMBED="${CURRENT_DIR}/${EMBED}"
-	fi
 	# shellcheck disable=SC2089
 	SPC_OPT_BUILD_ARGS="${SPC_OPT_BUILD_ARGS} --with-frankenphp-app='${EMBED}'"
 fi
