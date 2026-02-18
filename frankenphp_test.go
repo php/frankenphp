@@ -1360,6 +1360,46 @@ func TestSessionNoLeakBetweenRequests_worker(t *testing.T) {
 	})
 }
 
+// TestSessionLazySavePath reproduces issue #2185:
+// When session.save_path is set lazily on the first request (not during worker boot),
+// frankenphp_restore_ini() resets it to empty on subsequent requests, causing session data loss.
+func TestSessionLazySavePath(t *testing.T) {
+	runTest(t, func(_ func(http.ResponseWriter, *http.Request), ts *httptest.Server, _ int) {
+		jar, err := cookiejar.New(&cookiejar.Options{})
+		assert.NoError(t, err)
+		client := &http.Client{Jar: jar}
+
+		// Request 1: session.save_path is set lazily (not during boot), session data is written.
+		resp1, err := client.Get(ts.URL + "/session-lazy-save-path.php?action=write&value=issue2185")
+		assert.NoError(t, err)
+		body1, _ := io.ReadAll(resp1.Body)
+		_ = resp1.Body.Close()
+
+		body1Str := string(body1)
+		assert.Contains(t, body1Str, "WRITTEN", "first request should write to session")
+		assert.Contains(t, body1Str, "VALUE:issue2185")
+
+		// Request 2: frankenphp_restore_ini() resets session.save_path to empty;
+		// the framework skips re-setting it → session data is lost.
+		resp2, err := client.Get(ts.URL + "/session-lazy-save-path.php?action=read")
+		assert.NoError(t, err)
+		body2, _ := io.ReadAll(resp2.Body)
+		_ = resp2.Body.Close()
+
+		body2Str := string(body2)
+
+		assert.Contains(t, body2Str, "VALUE:issue2185",
+			"BUG #2185: session data lost because session.save_path was reset to empty.\nRequest 1: %s\nRequest 2: %s",
+			body1Str, body2Str)
+	}, &testOptions{
+		workerScript:       "session-lazy-save-path.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		realServer:         true,
+	})
+}
+
+
 func TestSessionNoLeakAfterExit_worker(t *testing.T) {
 	runTest(t, func(_ func(http.ResponseWriter, *http.Request), ts *httptest.Server, i int) {
 		// Client A: Set a secret value in session and call exit(1)
