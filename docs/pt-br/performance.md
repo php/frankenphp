@@ -143,7 +143,7 @@ Uma abordagem alternativa com 0 operações desnecessárias no sistema de arquiv
 seria usar a diretiva `php` e dividir os arquivos estáticos dos arquivos PHP por caminho.
 Essa abordagem funciona bem se toda a sua aplicação for servida por um arquivo
 de entrada.
-Um exemplo de [configuração](config.md#caddyfile-config) que serve
+Um exemplo de [configuração](config.md#configuracao-do-caddyfile) que serve
 arquivos estáticos atrás de uma pasta `/assets` poderia ser assim:
 
 ```caddyfile
