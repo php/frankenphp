@@ -19,7 +19,7 @@ Doğru değerleri bulmak için gerçek trafiği simüle eden yük testleri yapma
 ### `max_threads`
 
 Trafiğinizin neye benzeyeceğini tam olarak bilmek her zaman daha iyi olsa da, gerçek dünya uygulamaları daha
-tahmin edilemez olma eğilimindedir. `max_threads` [yapılandırması](config.md#caddyfile-config), FrankenPHP'nin çalışma zamanında belirtilen sınıra kadar ek iş parçacıkları otomatik olarak oluşturmasına olanak tanır.
+tahmin edilemez olma eğilimindedir. `max_threads` [yapılandırması](config.md#caddyfile-konfigürasyonu), FrankenPHP'nin çalışma zamanında belirtilen sınıra kadar ek iş parçacıkları otomatik olarak oluşturmasına olanak tanır.
 `max_threads`, trafiğinizi yönetmek için kaç iş parçacığına ihtiyacınız olduğunu anlamanıza yardımcı olabilir ve sunucuyu gecikme artışlarına karşı daha dirençli hale getirebilir.
 Eğer `auto` olarak ayarlanırsa, sınır `php.ini` dosyanızdaki `memory_limit` değerine göre tahmin edilecektir. Bunu yapamazsa,
 `auto` bunun yerine varsayılan olarak 2x `num_threads` olacaktır. `auto`'nun ihtiyaç duyulan iş parçacığı sayısını büyük ölçüde küçümseyebileceğini unutmayın.
@@ -102,7 +102,7 @@ route {
 ```
 
 0 gereksiz dosya sistemi işlemiyle alternatif bir yaklaşım, bunun yerine `php` yönergesini kullanmak ve dosyaları PHP'den yola göre ayırmaktır. Bu yaklaşım, tüm uygulamanızın tek bir giriş dosyası tarafından sunulması durumunda iyi çalışır.
-Statik dosyaları bir `/assets` klasörünün arkasında sunan bir örnek [yapılandırma](config.md#caddyfile-config) şöyle görünebilir:
+Statik dosyaları bir `/assets` klasörünün arkasında sunan bir örnek [yapılandırma](config.md#caddyfile-konfigürasyonu) şöyle görünebilir:
 
 ```caddyfile
 route {
