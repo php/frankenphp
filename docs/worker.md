@@ -163,6 +163,24 @@ frankenphp {
 }
 ```
 
+## Memory Management
+
+The PHP `memory_limit` directive applies per worker. If a worker exceeds the memory limit while handling a request, it will be automatically restarted and an error will be logged.
+
+You can use `ini_set('memory_limit', '512M')` to change the limit dynamically during a request. The limit is automatically reset to the value defined in `php.ini` after each request is handled.
+
+When running in Docker, make sure to account for all workers when setting the container memory limit. As a rule of thumb, `num_threads` x `memory_limit` should be lower than the available memory (see [Performance](performance.md#number-of-threads-and-workers) for details).
+
+You can configure `memory_limit` directly in your `Caddyfile` using the `php_ini` directive (see [PHP config](config.md#php-config)):
+
+```caddyfile
+{
+    frankenphp {
+        php_ini memory_limit 256M
+    }
+}
+```
+
 ## Superglobals Behavior
 
 [PHP superglobals](https://www.php.net/manual/en/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...)
