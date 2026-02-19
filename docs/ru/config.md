@@ -1,4 +1,4 @@
-﻿# Конфигурация
+# Конфигурация
 
 FrankenPHP, Caddy, а также модули Mercure и Vulcain могут быть настроены с использованием [конфигурационных форматов, поддерживаемых Caddy](https://caddyserver.com/docs/getting-started#your-first-config).
 
