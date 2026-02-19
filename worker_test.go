@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -173,4 +174,39 @@ func TestKeepRunningOnConnectionAbort(t *testing.T) {
 
 		assert.Equal(t, "requests:2", body2, "should not have stopped execution after the first request was aborted")
 	}, &testOptions{workerScript: "worker-with-counter.php", nbWorkers: 1, nbParallelRequests: 1})
+}
+
+func TestWorkerRecoverFromTimeout(t *testing.T) {
+	if !frankenphp.Config().ZendMaxExecutionTimers {
+		t.Skip("requires ZEND_MAX_EXECUTION_TIMERS")
+	}
+
+	runTest(t, func(_ func(http.ResponseWriter, *http.Request), ts *httptest.Server, i int) {
+		client := &http.Client{Timeout: 5 * time.Second}
+
+		// Trigger a request that will hit max_execution_time and crash the worker
+		resp, err := client.Get(ts.URL + "/worker-timeout-recovery.php?action=timeout")
+		if err == nil {
+			_, _ = io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+		}
+
+		// After the worker restarts, it should be able to serve new requests
+		assert.Eventually(t, func() bool {
+			resp, err := client.Get(ts.URL + "/worker-timeout-recovery.php?action=ping")
+			if err != nil {
+				return false
+			}
+
+			body, _ := io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+
+			return string(body) == "pong"
+		}, 5*time.Second, 50*time.Millisecond, "worker should recover after max_execution_time timeout")
+	}, &testOptions{
+		workerScript:       "worker-timeout-recovery.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		realServer:         true,
+	})
 }

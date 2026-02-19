@@ -385,6 +385,12 @@ static void frankenphp_cleanup_worker_state(void) {
 
 /* Adapted from php_request_shutdown */
 static void frankenphp_worker_request_shutdown() {
+#ifdef ZEND_MAX_EXECUTION_TIMERS
+  /* Disable any execution timer set during the request callback to prevent
+   * stale timers from firing between requests */
+  zend_unset_timeout();
+#endif
+
   /* Flush all output buffers */
   zend_try { php_output_end_all(); }
   zend_end_try();
