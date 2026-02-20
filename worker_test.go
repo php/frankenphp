@@ -160,11 +160,9 @@ func TestWorkerHasOSEnvironmentVariableInSERVER(t *testing.T) {
 }
 
 func TestWorkerWithArgs(t *testing.T) {
-	var buf fmt.Stringer
 	logger, buf := newTestLogger(t)
 	cwd, _ := os.Getwd()
-	testDataDir := cwd + "/testdata/"
-	workerFile := testDataDir + "worker-with-args.php"
+	workerFile := cwd + "/testdata/worker-with-args.php"
 
 	require.NoError(
 		t,
@@ -174,20 +172,18 @@ func TestWorkerWithArgs(t *testing.T) {
 				"non-http-worker",
 				workerFile,
 				1,
-				frankenphp.WithWorkerArgs([]string{"arg1", "arg2", "arg3"}),
+				frankenphp.WithWorkerArgs(true, []string{"arg1", "arg2", "arg3"}),
 			),
 		),
 	)
 	t.Cleanup(frankenphp.Shutdown)
 
 	require.Eventually(t, func() bool {
-		logOutput := buf.String()
-		return strings.Contains(logOutput, "just executing a script")
+		return strings.Contains(buf.String(), "just executing a script")
 	}, 5*time.Second, 30*time.Millisecond, "Worker did not execute")
 
 	require.Eventually(t, func() bool {
-		logOutput := buf.String()
 		expectedArgv := strings.Join([]string{workerFile, "arg1", "arg2", "arg3"}, ",")
-		return strings.Contains(logOutput, "argc is 4") && strings.Contains(logOutput, expectedArgv)
+		return strings.Contains(buf.String(), "argc is 4") && strings.Contains(buf.String(), expectedArgv)
 	}, 5*time.Second, 30*time.Millisecond, "Worker did not receive the expected arguments")
 }
