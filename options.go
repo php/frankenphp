@@ -241,10 +241,10 @@ func WithWorkerOnServerShutdown(f func()) WorkerOption {
 }
 
 // WithWorkerArgs passes the args to the worker and marks it as non-HTTP
-func WithWorkerArgs(args []string) WorkerOption {
+func WithWorkerArgs(nonHttp bool, args []string) WorkerOption {
 	return func(w *workerOpt) error {
 		w.args = args
-		w.nonHttp = true
+		w.nonHttp = nonHttp
 
 		return nil
 	}

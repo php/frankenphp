@@ -48,6 +48,7 @@ type workerConfig struct {
 	requestOptions []frankenphp.RequestOption
 	absFileName    string
 	matchRelPath   string // pre-computed relative URL path for fast matching
+	nonHttp         bool
 }
 
 func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
@@ -147,6 +148,7 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 			}
 		case "args":
 			wc.Args = d.RemainingArgs()
+			wc.nonHttp = true
 		default:
 			return wc, wrongSubDirectiveError("worker", "name, file, num, env, watch, match, max_consecutive_failures, max_threads", v)
 		}
