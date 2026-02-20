@@ -30,7 +30,7 @@ type worker struct {
 	threadMutex            sync.RWMutex
 	allowPathMatching      bool
 	maxConsecutiveFailures int
-	args                   map[string]string
+	args                   []string
 	nonHttp                bool
 	onThreadReady          func(int)
 	onThreadShutdown       func(int)

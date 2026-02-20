@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -156,4 +157,37 @@ func TestWorkerHasOSEnvironmentVariableInSERVER(t *testing.T) {
 		assert.Contains(t, string(body), "CUSTOM_OS_ENV_VARIABLE")
 		assert.Contains(t, string(body), "custom_env_variable_value")
 	}, &testOptions{workerScript: "worker.php", nbWorkers: 1, nbParallelRequests: 1})
+}
+
+func TestWorkerWithArgs(t *testing.T) {
+	var buf fmt.Stringer
+	logger, buf := newTestLogger(t)
+	cwd, _ := os.Getwd()
+	testDataDir := cwd + "/testdata/"
+	workerFile := testDataDir + "worker-with-args.php"
+
+	require.NoError(
+		t,
+		frankenphp.Init(
+			frankenphp.WithLogger(logger),
+			frankenphp.WithWorkers(
+				"non-http-worker",
+				workerFile,
+				1,
+				frankenphp.WithWorkerArgs([]string{"arg1", "arg2", "arg3"}),
+			),
+		),
+	)
+	t.Cleanup(frankenphp.Shutdown)
+
+	require.Eventually(t, func() bool {
+		logOutput := buf.String()
+		return strings.Contains(logOutput, "just executing a script")
+	}, 5*time.Second, 30*time.Millisecond, "Worker did not execute")
+
+	require.Eventually(t, func() bool {
+		logOutput := buf.String()
+		expectedArgv := strings.Join([]string{workerFile, "arg1", "arg2", "arg3"}, ",")
+		return strings.Contains(logOutput, "argc is 4") && strings.Contains(logOutput, expectedArgv)
+	}, 5*time.Second, 30*time.Millisecond, "Worker did not receive the expected arguments")
 }

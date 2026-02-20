@@ -44,7 +44,7 @@ type workerOpt struct {
 	watch                  []string
 	maxConsecutiveFailures int
 	extensionWorkers       *extensionWorkers
-	args                   map[string]string
+	args                   []string
 	nonHttp                bool
 	onThreadReady          func(int)
 	onThreadShutdown       func(int)
@@ -241,7 +241,7 @@ func WithWorkerOnServerShutdown(f func()) WorkerOption {
 }
 
 // WithWorkerArgs passes the args to the worker and marks it as non-HTTP
-func WithWorkerArgs(args map[string]string) WorkerOption {
+func WithWorkerArgs(args []string) WorkerOption {
 	return func(w *workerOpt) error {
 		w.args = args
 		w.nonHttp = true

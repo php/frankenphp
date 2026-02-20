@@ -1098,6 +1098,11 @@ static void frankenphp_register_variables(zval *track_vars_array) {
   go_register_variables(thread_index, track_vars_array);
 }
 
+void frankenphp_register_args(int argc, char **argv){
+	SG(request_info).argv = argv;
+	SG(request_info).argc = argc;
+}
+
 static void frankenphp_log_message(const char *message, int syslog_type_int) {
   go_log(thread_index, (char *)message, syslog_type_int);
 }

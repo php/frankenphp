@@ -131,6 +131,11 @@ func setupWorkerScript(handler *workerThread, worker *worker) {
 		metrics.ReadyWorker(handler.worker.name)
 		handler.state.Set(state.Ready)
 		handler.isBootingScript = false
+		if len(worker.args) > 0 {
+			args := append([]string{handler.worker.fileName}, handler.worker.args...)
+			argc, argv := convertArgs(args)
+			C.frankenphp_register_args(argc, (**C.char)(unsafe.Pointer(&argv[0])))
+		}
 	}
 }
 
