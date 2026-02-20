@@ -159,6 +159,7 @@ func (f *FrankenPHPApp) Start() error {
 			frankenphp.WithWorkerMaxFailures(w.MaxConsecutiveFailures),
 			frankenphp.WithWorkerMaxThreads(w.MaxThreads),
 			frankenphp.WithWorkerRequestOptions(w.requestOptions...),
+			frankenphp.WithWorkerArgs(w.Args),
 		)
 
 		f.opts = append(f.opts, frankenphp.WithWorkers(w.Name, repl.ReplaceKnown(w.FileName, ""), w.Num, w.options...))

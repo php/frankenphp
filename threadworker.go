@@ -125,6 +125,13 @@ func setupWorkerScript(handler *workerThread, worker *worker) {
 	if globalLogger.Enabled(ctx, slog.LevelDebug) {
 		globalLogger.LogAttrs(ctx, slog.LevelDebug, "starting", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex))
 	}
+
+	// non-HTTP workers are ready immediately
+	if worker.nonHttp {
+		metrics.ReadyWorker(handler.worker.name)
+		handler.state.Set(state.Ready)
+		handler.isBootingScript = false
+	}
 }
 
 func tearDownWorkerScript(handler *workerThread, exitStatus int) {
@@ -207,14 +214,14 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 		if !C.frankenphp_shutdown_dummy_request() {
 			panic("Not in CGI context")
 		}
-	}
 
-	// worker threads are 'ready' after they first reach frankenphp_handle_request()
-	// 'state.TransitionComplete' is only true on the first boot of the worker script,
-	// while 'isBootingScript' is true on every boot of the worker script
-	if handler.state.Is(state.TransitionComplete) {
-		metrics.ReadyWorker(handler.worker.name)
-		handler.state.Set(state.Ready)
+		// worker threads are 'ready' after they first reach frankenphp_handle_request()
+		// 'state.TransitionComplete' is only true on the first boot of the worker script,
+		// while 'isBootingScript' is true on every boot of the worker script
+		if handler.state.Is(state.TransitionComplete) {
+			metrics.ReadyWorker(handler.worker.name)
+			handler.state.Set(state.Ready)
+		}
 	}
 
 	handler.state.MarkAsWaiting(true)

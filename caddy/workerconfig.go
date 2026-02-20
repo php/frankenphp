@@ -41,6 +41,8 @@ type workerConfig struct {
 	MatchPath []string `json:"match_path,omitempty"`
 	// MaxConsecutiveFailures sets the maximum number of consecutive failures before panicking (defaults to 6, set to -1 to never panick)
 	MaxConsecutiveFailures int `json:"max_consecutive_failures,omitempty"`
+	// WorkerArgs passes command line arguments to the worker scripts and sets the worker to 'ready' state immediately
+	Args map[string]string `json:"-"`
 
 	options        []frankenphp.WorkerOption
 	requestOptions []frankenphp.RequestOption
@@ -143,8 +145,15 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 			if v < -1 {
 				return wc, d.Errf("max_consecutive_failures must be >= -1")
 			}
-
-			wc.MaxConsecutiveFailures = v
+		case "args":
+			wc.Args = make(map[string]string)
+			for d.NextBlock(1) {
+				key := d.Val()
+				if !d.NextArg() {
+					return wc, d.ArgErr()
+				}
+				wc.Args[key] = d.Val()
+            }
 		default:
 			return wc, wrongSubDirectiveError("worker", "name, file, num, env, watch, match, max_consecutive_failures, max_threads", v)
 		}

@@ -30,6 +30,8 @@ type worker struct {
 	threadMutex            sync.RWMutex
 	allowPathMatching      bool
 	maxConsecutiveFailures int
+	args                   map[string]string
+	nonHttp                bool
 	onThreadReady          func(int)
 	onThreadShutdown       func(int)
 	queuedRequests         atomic.Int32
@@ -98,7 +100,6 @@ func initWorkers(opt []workerOpt) error {
 	return nil
 }
 
-
 func newWorker(o workerOpt) (*worker, error) {
 	// Order is important!
 	// This order ensures that FrankenPHP started from inside a symlinked directory will properly resolve any paths.
@@ -145,8 +146,10 @@ func newWorker(o workerOpt) (*worker, error) {
 		maxThreads:             o.maxThreads,
 		requestChan:            make(chan contextHolder),
 		threads:                make([]*phpThread, 0, o.num),
-		allowPathMatching:      allowPathMatching,
+		allowPathMatching:      allowPathMatching && !o.nonHttp,
 		maxConsecutiveFailures: o.maxConsecutiveFailures,
+		args:                   o.args,
+		nonHttp:                o.nonHttp,
 		onThreadReady:          o.onThreadReady,
 		onThreadShutdown:       o.onThreadShutdown,
 	}
