@@ -30,7 +30,8 @@ type worker struct {
 	threadMutex            sync.RWMutex
 	allowPathMatching      bool
 	maxConsecutiveFailures int
-	args                   []string
+	argv                   []*C.char
+	argc                   C.int
 	nonHttp                bool
 	onThreadReady          func(int)
 	onThreadShutdown       func(int)
@@ -148,10 +149,13 @@ func newWorker(o workerOpt) (*worker, error) {
 		threads:                make([]*phpThread, 0, o.num),
 		allowPathMatching:      allowPathMatching && !o.nonHttp,
 		maxConsecutiveFailures: o.maxConsecutiveFailures,
-		args:                   o.args,
 		nonHttp:                o.nonHttp,
 		onThreadReady:          o.onThreadReady,
 		onThreadShutdown:       o.onThreadShutdown,
+	}
+
+	if len(o.args) > 0 {
+		w.argc, w.argv = convertArgs(append([]string{absFileName}, o.args...))
 	}
 
 	w.configureMercure(&o)
