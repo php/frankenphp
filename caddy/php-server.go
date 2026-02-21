@@ -113,7 +113,7 @@ func cmdPHPServer(fs caddycmd.Flags) (int, error) {
 		}
 
 		if _, err := os.Stat("Caddyfile"); err == nil {
-			config, _, err := caddycmd.LoadConfig("Caddyfile", "caddyfile")
+			config, _, _, err := caddycmd.LoadConfig("Caddyfile", "caddyfile")
 			if err != nil {
 				return caddy.ExitCodeFailedStartup, err
 			}
