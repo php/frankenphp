@@ -2,11 +2,9 @@
 
 package caddy
 
-type mercureContext struct {
-}
+import "github.com/caddyserver/caddy/v2"
 
-func (f *FrankenPHPModule) configureHotReload(_ *FrankenPHPApp) error {
-	return nil
+type mercureContext struct {
 }
 
 func (f *FrankenPHPModule) assignMercureHub(_ caddy.Context) {
