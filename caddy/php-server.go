@@ -251,7 +251,7 @@ func cmdPHPServer(fs caddycmd.Flags) (int, error) {
 	}
 
 	if mercure {
-		mercureRoute, err := addMercureRoute()
+		mercureRoute, err := createMercureRoute()
 		if err != nil {
         	panic(err)
         }
