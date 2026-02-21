@@ -253,7 +253,7 @@ func cmdPHPServer(fs caddycmd.Flags) (int, error) {
 	if mercure {
 		mercureRoute, err := createMercureRoute()
 		if err != nil {
-        	panic(err)
+        	return caddy.ExitCodeFailedStartup, err
         }
 
 		subroute.Routes = append(caddyhttp.RouteList{mercureRoute}, subroute.Routes...)
