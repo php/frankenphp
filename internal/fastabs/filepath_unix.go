@@ -6,8 +6,9 @@ import (
 	"os"
 	"path/filepath"
 )
+
 var (
-	wd string
+	wd    string
 	wderr error
 )
 
@@ -38,4 +39,3 @@ func FastAbs(path string) (string, error) {
 
 	return filepath.Join(wd, path), nil
 }
-

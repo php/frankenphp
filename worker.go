@@ -98,7 +98,6 @@ func initWorkers(opt []workerOpt) error {
 	return nil
 }
 
-
 func newWorker(o workerOpt) (*worker, error) {
 	// Order is important!
 	// This order ensures that FrankenPHP started from inside a symlinked directory will properly resolve any paths.
