@@ -80,7 +80,6 @@ __thread uintptr_t thread_index;
 __thread bool is_worker_thread = false;
 __thread HashTable *sandboxed_env = NULL;
 
-
 void frankenphp_update_local_thread_context(bool is_worker) {
   is_worker_thread = is_worker;
 
