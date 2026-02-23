@@ -22,8 +22,6 @@ import (
 	"github.com/dunglas/frankenphp/internal/fastabs"
 )
 
-var serverHeader = []string{"FrankenPHP Caddy"}
-
 // FrankenPHPModule represents the "php_server" and "php" directives in the Caddyfile
 // they are responsible for forwarding requests to FrankenPHP via "ServeHTTP"
 //
@@ -249,8 +247,6 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 		return caddyhttp.Error(http.StatusInternalServerError, err)
 	}
 
-	// TODO: set caddyhttp.ServerHeader when https://github.com/caddyserver/caddy/pull/7338 will be released
-	w.Header()["Server"] = serverHeader
 	if err = frankenphp.ServeHTTP(w, fr); err != nil && !errors.As(err, &frankenphp.ErrRejected{}) {
 		return caddyhttp.Error(http.StatusInternalServerError, err)
 	}
