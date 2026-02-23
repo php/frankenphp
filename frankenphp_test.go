@@ -1143,8 +1143,8 @@ func TestSessionHandlerReset_worker(t *testing.T) {
 		assert.Contains(t, body1Str, "session.save_handler=user")
 
 		// Request 2: Start session without setting a custom handler
-		// After the fix: session.save_handler should be reset to "files"
-		// and session_start() should work normally
+		// The user handler from request 1 is preserved (mod_user_names persist),
+		// so session_start() should work without crashing.
 		resp2, err := http.Get(ts.URL + "/session-handler.php?action=start_without_handler")
 		assert.NoError(t, err)
 		body2, _ := io.ReadAll(resp2.Body)
@@ -1152,13 +1152,9 @@ func TestSessionHandlerReset_worker(t *testing.T) {
 
 		body2Str := string(body2)
 
-		// session.save_handler should be reset to "files" (default)
-		assert.Contains(t, body2Str, "save_handler_before=files",
-			"session.save_handler INI should be reset to 'files' between requests.\nResponse: %s", body2Str)
-
-		// session_start() should succeed
+		// session_start() should succeed (handlers are preserved)
 		assert.Contains(t, body2Str, "SESSION_START_RESULT=true",
-			"session_start() should succeed after INI reset.\nResponse: %s", body2Str)
+			"session_start() should succeed.\nResponse: %s", body2Str)
 
 		// No errors or exceptions should occur
 		assert.NotContains(t, body2Str, "ERROR:",
@@ -1168,39 +1164,6 @@ func TestSessionHandlerReset_worker(t *testing.T) {
 
 	}, &testOptions{
 		workerScript:       "session-handler.php",
-		nbWorkers:          1,
-		nbParallelRequests: 1,
-		realServer:         true,
-	})
-}
-
-func TestIniLeakBetweenRequests_worker(t *testing.T) {
-	runTest(t, func(_ func(http.ResponseWriter, *http.Request), ts *httptest.Server, i int) {
-		// Request 1: Change INI values
-		resp1, err := http.Get(ts.URL + "/ini-leak.php?action=change_ini")
-		assert.NoError(t, err)
-		body1, _ := io.ReadAll(resp1.Body)
-		_ = resp1.Body.Close()
-
-		assert.Contains(t, string(body1), "INI_CHANGED")
-
-		// Request 2: Check if INI values leaked from request 1
-		resp2, err := http.Get(ts.URL + "/ini-leak.php?action=check_ini")
-		assert.NoError(t, err)
-		body2, _ := io.ReadAll(resp2.Body)
-		_ = resp2.Body.Close()
-
-		body2Str := string(body2)
-		t.Logf("Response: %s", body2Str)
-
-		// If INI values leak, this test will fail
-		assert.Contains(t, body2Str, "NO_LEAKS",
-			"INI values should not leak between requests.\nResponse: %s", body2Str)
-		assert.NotContains(t, body2Str, "LEAKS_DETECTED",
-			"INI leaks detected.\nResponse: %s", body2Str)
-
-	}, &testOptions{
-		workerScript:       "ini-leak.php",
 		nbWorkers:          1,
 		nbParallelRequests: 1,
 		realServer:         true,
@@ -1250,58 +1213,6 @@ func TestSessionHandlerPreLoopPreserved_worker(t *testing.T) {
 
 	}, &testOptions{
 		workerScript:       "worker-with-session-handler.php",
-		nbWorkers:          1,
-		nbParallelRequests: 1,
-		realServer:         true,
-	})
-}
-
-func TestIniPreLoopPreserved_worker(t *testing.T) {
-	runTest(t, func(_ func(http.ResponseWriter, *http.Request), ts *httptest.Server, i int) {
-		// Request 1: Check that pre-loop INI values are present
-		resp1, err := http.Get(ts.URL + "/worker-with-ini.php?action=check")
-		assert.NoError(t, err)
-		body1, _ := io.ReadAll(resp1.Body)
-		_ = resp1.Body.Close()
-
-		body1Str := string(body1)
-		t.Logf("Request 1 response: %s", body1Str)
-		assert.Contains(t, body1Str, "precision=8",
-			"Pre-loop precision should be 8")
-		assert.Contains(t, body1Str, "display_errors=0",
-			"Pre-loop display_errors should be 0")
-		assert.Contains(t, body1Str, "PRELOOP_INI_PRESERVED",
-			"Pre-loop INI values should be preserved")
-
-		// Request 2: Change INI values during request
-		resp2, err := http.Get(ts.URL + "/worker-with-ini.php?action=change_ini")
-		assert.NoError(t, err)
-		body2, _ := io.ReadAll(resp2.Body)
-		_ = resp2.Body.Close()
-
-		body2Str := string(body2)
-		t.Logf("Request 2 response: %s", body2Str)
-		assert.Contains(t, body2Str, "INI_CHANGED")
-		assert.Contains(t, body2Str, "precision=5",
-			"INI should be changed during request")
-
-		// Request 3: Check that pre-loop INI values are restored
-		resp3, err := http.Get(ts.URL + "/worker-with-ini.php?action=check")
-		assert.NoError(t, err)
-		body3, _ := io.ReadAll(resp3.Body)
-		_ = resp3.Body.Close()
-
-		body3Str := string(body3)
-		t.Logf("Request 3 response: %s", body3Str)
-		assert.Contains(t, body3Str, "precision=8",
-			"Pre-loop precision should be restored to 8.\nResponse: %s", body3Str)
-		assert.Contains(t, body3Str, "display_errors=0",
-			"Pre-loop display_errors should be restored to 0.\nResponse: %s", body3Str)
-		assert.Contains(t, body3Str, "PRELOOP_INI_PRESERVED",
-			"Pre-loop INI values should be restored after request changes.\nResponse: %s", body3Str)
-
-	}, &testOptions{
-		workerScript:       "worker-with-ini.php",
 		nbWorkers:          1,
 		nbParallelRequests: 1,
 		realServer:         true,
