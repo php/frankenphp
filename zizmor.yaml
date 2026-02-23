@@ -4,3 +4,10 @@ rules:
     config:
       policies:
         "*": ref-pin
+  dangerous-triggers:
+    ignore:
+      - docker.yaml
+      - static.yaml
+  github-env:
+    ignore:
+      - static.yaml

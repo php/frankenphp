@@ -2,21 +2,12 @@
 name: Build binary releases
 concurrency:
   cancel-in-progress: true
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
 
 on:
-  pull_request:
-    branches:
-      - main
-    paths:
-      - "docker-bake.hcl"
-      - ".github/workflows/static.yaml"
-      - "**cgo.go"
-      - "**Dockerfile"
-      - "**.c"
-      - "**.h"
-      - "**.sh"
-      - "**.stub.php"
+  workflow_run:
+    workflows: ["Tests"]
+    types: [completed]
   push:
     branches:
       - main
@@ -43,12 +34,16 @@ env:
 jobs:
   prepare:
     runs-on: ubuntu-24.04
+    if: >
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'pull_request')
     outputs:
-      push: ${{ toJson((steps.check.outputs.ref || (github.event_name == 'workflow_dispatch' && inputs.version) || startsWith(github.ref, 'refs/tags/') || (github.ref == 'refs/heads/main' && github.event_name != 'pull_request')) && true || false) }}
+      push: ${{ toJson((steps.check.outputs.ref || (github.event_name == 'workflow_dispatch' && inputs.version) || startsWith(github.ref, 'refs/tags/') || (github.ref == 'refs/heads/main' && github.event_name == 'push')) && true || false) }}
       platforms: ${{ steps.matrix.outputs.platforms }}
       metadata: ${{ steps.matrix.outputs.metadata }}
       gnu_metadata: ${{ steps.matrix.outputs.gnu_metadata }}
-      ref: ${{ steps.check.outputs.ref }}
+      ref: ${{ steps.check.outputs.ref || (github.event_name == 'workflow_run' && github.event.workflow_run.head_sha) || '' }}
     steps:
       - name: Get version
         id: check
@@ -65,7 +60,7 @@ jobs:
           REF: ${{ (github.ref_type == 'tag' && github.ref_name) || (github.event_name == 'workflow_dispatch' && inputs.version) || '' }}
       - uses: actions/checkout@v6
         with:
-          ref: ${{ steps.check.outputs.ref }}
+          ref: ${{ steps.check.outputs.ref || (github.event_name == 'workflow_run' && github.event.workflow_run.head_sha) || '' }}
           persist-credentials: false
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -80,7 +75,7 @@ jobs:
             echo gnu_metadata="${GNU_METADATA}"
           } >> "${GITHUB_OUTPUT}"
         env:
-          SHA: ${{ github.sha }}
+          SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           VERSION: ${{ steps.check.outputs.ref || 'dev' }}
 
   build-linux-musl:
@@ -103,6 +98,7 @@ jobs:
     name: Build ${{ matrix.platform }} static musl binary${{ matrix.debug && ' (debug)' || '' }}${{ matrix.mimalloc && ' (mimalloc)' || '' }}
     runs-on: ${{ startsWith(matrix.platform, 'linux/arm') && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     needs: [prepare]
+
     steps:
       - name: Prepare
         id: prepare
@@ -119,7 +115,9 @@ jobs:
           platforms: ${{ matrix.platform }}
       - name: Login to DockerHub
         uses: docker/login-action@v3
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        if: >
+          github.event_name != 'workflow_run' ||
+          github.event.workflow_run.head_repository.full_name == github.repository
         with:
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_PASSWORD }}
@@ -129,6 +127,8 @@ jobs:
             export VERSION=${GITHUB_REF_NAME:1}
           elif [ "${GITHUB_EVENT_NAME}" == "schedule" ]; then
             export VERSION="${REF}"
+          elif [ "${GITHUB_EVENT_NAME}" == "workflow_run" ]; then
+            export VERSION="${WORKFLOW_RUN_HEAD_SHA}"
           else
             export VERSION=${GITHUB_SHA}
           fi
@@ -136,6 +136,7 @@ jobs:
           echo "VERSION=${VERSION}" >> "${GITHUB_ENV}"
         env:
           REF: ${{ needs.prepare.outputs.ref }}
+          WORKFLOW_RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
       - name: Build
         id: build
         uses: docker/bake-action@v6
@@ -147,7 +148,7 @@ jobs:
           set: |
             ${{ matrix.debug && 'static-builder-musl.args.DEBUG_SYMBOLS=1' || '' }}
             ${{ matrix.mimalloc && 'static-builder-musl.args.MIMALLOC=1' || '' }}
-            ${{ (github.event_name == 'pull_request' || matrix.platform == 'linux/arm64') && 'static-builder-musl.args.NO_COMPRESS=1' || '' }}
+            ${{ (github.event_name == 'workflow_run' || matrix.platform == 'linux/arm64') && 'static-builder-musl.args.NO_COMPRESS=1' || '' }}
             *.tags=
             *.platform=${{ matrix.platform }}
             ${{ fromJson(needs.prepare.outputs.push) && '' || format('*.cache-from=type=gha,scope={0}-static-builder-musl{1}{2}', needs.prepare.outputs.ref || github.ref, matrix.debug && '-debug' || '', matrix.mimalloc && '-mimalloc' || '') }}
@@ -155,7 +156,7 @@ jobs:
             ${{ fromJson(needs.prepare.outputs.push) && '' || format('*.cache-to=type=gha,scope={0}-static-builder-musl{1}{2},ignore-error=true', needs.prepare.outputs.ref || github.ref, matrix.debug && '-debug' || '', matrix.mimalloc && '-mimalloc' || '') }}
             ${{ (fromJson(needs.prepare.outputs.push) && !matrix.debug && !matrix.mimalloc) && format('*.output=type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME) || '' }}
         env:
-          SHA: ${{ github.sha }}
+          SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - # Workaround for https://github.com/actions/runner/pull/2477#issuecomment-1501003600
         name: Export metadata
@@ -230,6 +231,7 @@ jobs:
     name: Build ${{ matrix.platform }} static GNU binary
     runs-on: ${{ startsWith(matrix.platform, 'linux/arm') && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     needs: [prepare]
+
     steps:
       # Inspired by https://gist.github.com/antiphishfish/1e3fbc3f64ef6f1ab2f47457d2da5d9d and https://github.com/apache/flink/blob/master/tools/azure-pipelines/free_disk_space.sh
       - name: Free disk space
@@ -274,6 +276,8 @@ jobs:
             export VERSION=${GITHUB_REF_NAME:1}
           elif [ "${GITHUB_EVENT_NAME}" == "schedule" ]; then
             export VERSION="${REF}"
+          elif [ "${GITHUB_EVENT_NAME}" == "workflow_run" ]; then
+            export VERSION="${WORKFLOW_RUN_HEAD_SHA}"
           else
             export VERSION=${GITHUB_SHA}
           fi
@@ -281,13 +285,16 @@ jobs:
           echo "VERSION=${VERSION}" >> "${GITHUB_ENV}"
         env:
           REF: ${{ needs.prepare.outputs.ref }}
+          WORKFLOW_RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
           platforms: ${{ matrix.platform }}
       - name: Login to DockerHub
         uses: docker/login-action@v3
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        if: >
+          github.event_name != 'workflow_run' ||
+          github.event.workflow_run.head_repository.full_name == github.repository
         with:
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_PASSWORD }}
@@ -300,7 +307,7 @@ jobs:
           source: .
           targets: static-builder-gnu
           set: |
-            ${{ (github.event_name == 'pull_request' || matrix.platform == 'linux/arm64') && 'static-builder-gnu.args.NO_COMPRESS=1' || '' }}
+            ${{ (github.event_name == 'workflow_run' || matrix.platform == 'linux/arm64') && 'static-builder-gnu.args.NO_COMPRESS=1' || '' }}
             *.tags=
             *.platform=${{ matrix.platform }}
             ${{ fromJson(needs.prepare.outputs.push) && '' || format('*.cache-from=type=gha,scope={0}-static-builder-gnu', needs.prepare.outputs.ref || github.ref) }}
@@ -308,7 +315,7 @@ jobs:
             ${{ fromJson(needs.prepare.outputs.push) && '' || format('*.cache-to=type=gha,scope={0}-static-builder-gnu,ignore-error=true', needs.prepare.outputs.ref || github.ref) }}
             ${{ fromJson(needs.prepare.outputs.push) && format('*.output=type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME) || '' }}
         env:
-          SHA: ${{ github.sha }}
+          SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - # Workaround for https://github.com/actions/runner/pull/2477#issuecomment-1501003600
         name: Export metadata
@@ -400,7 +407,6 @@ jobs:
         uses: docker/setup-buildx-action@v3
       - name: Login to DockerHub
         uses: docker/login-action@v3
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         with:
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_PASSWORD }}
@@ -445,6 +451,7 @@ jobs:
     name: Build macOS ${{ matrix.platform }} binaries
     runs-on: ${{ matrix.platform == 'arm64' && 'macos-15' || 'macos-15-intel' }}
     needs: [prepare]
+
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
     steps:
@@ -465,6 +472,8 @@ jobs:
             export FRANKENPHP_VERSION=${GITHUB_REF_NAME:1}
           elif [ "${GITHUB_EVENT_NAME}" == "schedule" ]; then
             export FRANKENPHP_VERSION="${REF}"
+          elif [ "${GITHUB_EVENT_NAME}" == "workflow_run" ]; then
+            export FRANKENPHP_VERSION="${WORKFLOW_RUN_HEAD_SHA}"
           else
             export FRANKENPHP_VERSION=${GITHUB_SHA}
           fi
@@ -472,19 +481,20 @@ jobs:
           echo "FRANKENPHP_VERSION=${FRANKENPHP_VERSION}" >> "${GITHUB_ENV}"
         env:
           REF: ${{ needs.prepare.outputs.ref }}
+          WORKFLOW_RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
       - name: Build FrankenPHP
         run: ./build-static.sh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE: ${{ (needs.prepare.outputs.ref || github.ref_type == 'tag') && '1' || '' }}
-          NO_COMPRESS: ${{ github.event_name == 'pull_request' && '1' || '' }}
+          RELEASE: ${{ fromJson(needs.prepare.outputs.push) && (needs.prepare.outputs.ref || github.ref_type == 'tag') && '1' || '' }}
+          NO_COMPRESS: ${{ github.event_name == 'workflow_run' && '1' || '' }}
       - name: Upload logs
         if: ${{ failure() }}
         uses: actions/upload-artifact@v6
         with:
           path: dist/static-php-cli/log
-          name: static-php-cli-log-${{ matrix.platform }}-${{ github.sha }}
-      - if: needs.prepare.outputs.ref || github.ref_type == 'tag'
+          name: static-php-cli-log-${{ matrix.platform }}-${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      - if: fromJson(needs.prepare.outputs.push) && (needs.prepare.outputs.ref || github.ref_type == 'tag')
         uses: actions/attest-build-provenance@v3
         with:
           subject-path: ${{ github.workspace }}/dist/frankenphp-mac-*

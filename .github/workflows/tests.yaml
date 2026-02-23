@@ -20,8 +20,84 @@ env:
   GOTOOLCHAIN: local
   GOEXPERIMENT: cgocheck2
 jobs:
+  lint:
+    name: Lint Code Base
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+      statuses: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Lint Code Base
+        uses: super-linter/super-linter/slim@v8
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LINTER_RULES_PATH: /
+          MARKDOWN_CONFIG_FILE: .markdown-lint.yaml
+          VALIDATE_CPP: false
+          VALIDATE_JSCPD: false
+          VALIDATE_GO: false
+          VALIDATE_GO_MODULES: false
+          VALIDATE_PHP_PHPCS: false
+          VALIDATE_PHP_PHPSTAN: false
+          VALIDATE_PHP_PSALM: false
+          VALIDATE_TERRAGRUNT: false
+          VALIDATE_DOCKERFILE_HADOLINT: false
+          VALIDATE_TRIVY: false
+          # Prettier, Biome and StandardJS are incompatible
+          VALIDATE_JAVASCRIPT_PRETTIER: false
+          VALIDATE_TYPESCRIPT_PRETTIER: false
+          VALIDATE_BIOME_FORMAT: false
+          VALIDATE_BIOME_LINT: false
+          # Conflicts with MARKDOWN
+          VALIDATE_MARKDOWN_PRETTIER: false
+          # To re-enable when https://github.com/super-linter/super-linter/issues/7466 will be closed
+          VALIDATE_SPELL_CODESPELL: false
+  go-lint:
+    name: Go Lint
+    runs-on: ubuntu-latest
+    env:
+      LIBRARY_PATH: ${{ github.workspace }}/watcher/target/lib
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+          cache-dependency-path: |
+            go.sum
+            caddy/go.sum
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          ini-file: development
+          coverage: none
+          tools: none
+        env:
+          phpts: ts
+          debug: true
+      - name: Install e-dant/watcher
+        uses: ./.github/actions/watcher
+      - name: Set CGO flags
+        run: echo "CGO_CFLAGS=-I${PWD}/watcher/target/include $(php-config --includes)" >> "${GITHUB_ENV}"
+      - name: Lint Go code
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+      - name: Ensure go.mod is tidy
+        run: go mod tidy -diff
+      - name: Ensure caddy/go.mod is tidy
+        run: go mod tidy -diff
+        working-directory: caddy/
   tests-linux:
     name: Tests (Linux, PHP ${{ matrix.php-versions }})
+    needs: [lint, go-lint]
     runs-on: ubuntu-latest
     continue-on-error: false
     strategy:
@@ -43,7 +119,7 @@ jobs:
         with:
           go-version: "1.26"
           cache-dependency-path: |
-            go.sum 
+            go.sum
             caddy/go.sum
       - uses: shivammathur/setup-php@v2
         with:
@@ -81,20 +157,9 @@ jobs:
         run: sudo ../caddy/frankenphp/frankenphp start
       - name: Run integrations tests
         run: ./reload_test.sh
-      - name: Lint Go code
-        uses: golangci/golangci-lint-action@v9
-        if: matrix.php-versions == '8.5'
-        with:
-          version: latest
-      - name: Ensure go.mod is tidy
-        if: matrix.php-versions == '8.5'
-        run: go mod tidy -diff
-      - name: Ensure caddy/go.mod is tidy
-        if: matrix.php-versions == '8.5'
-        run: go mod tidy -diff
-        working-directory: caddy/
   integration-tests:
     name: Integration Tests (Linux, PHP ${{ matrix.php-versions }})
+    needs: [lint, go-lint]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -138,6 +203,7 @@ jobs:
         run: go test -tags integration -v -timeout 30m
   tests-mac:
     name: Tests (macOS, PHP 8.5)
+    needs: [lint, go-lint]
     runs-on: macos-latest
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1

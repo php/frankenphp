@@ -2,20 +2,11 @@
 name: Build Docker images
 concurrency:
   cancel-in-progress: true
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
 on:
-  pull_request:
-    branches:
-      - main
-    paths:
-      - "docker-bake.hcl"
-      - ".github/workflows/docker.yaml"
-      - "**cgo.go"
-      - "**Dockerfile"
-      - "**.c"
-      - "**.h"
-      - "**.sh"
-      - "**.stub.php"
+  workflow_run:
+    workflows: ["Tests"]
+    types: [completed]
   push:
     branches:
       - main
@@ -37,9 +28,13 @@ env:
 jobs:
   prepare:
     runs-on: ubuntu-24.04
+    if: >
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'pull_request')
     outputs:
       # Push if it's a scheduled job, a tag, or if we're committing to the main branch
-      push: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.version) || startsWith(github.ref, 'refs/tags/') || (github.ref == 'refs/heads/main' && github.event_name != 'pull_request')) && true || false }}
+      push: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.version) || startsWith(github.ref, 'refs/tags/') || (github.ref == 'refs/heads/main' && github.event_name == 'push')) && true || false }}
       variants: ${{ steps.matrix.outputs.variants }}
       platforms: ${{ steps.matrix.outputs.platforms }}
       metadata: ${{ steps.matrix.outputs.metadata }}
@@ -49,13 +44,14 @@ jobs:
       php84_version: ${{ steps.check.outputs.php84_version }}
       php85_version: ${{ steps.check.outputs.php85_version }}
       skip: ${{ steps.check.outputs.skip }}
-      ref: ${{ steps.check.outputs.ref || (github.event_name == 'workflow_dispatch' && inputs.version) || '' }}
+      ref: ${{ steps.check.outputs.ref || (github.event_name == 'workflow_dispatch' && inputs.version) || (github.event_name == 'workflow_run' && github.event.workflow_run.head_sha) || '' }}
       base_fingerprint: ${{ steps.check.outputs.base_fingerprint }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || '' }}
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Check PHP versions and base image fingerprint
@@ -76,7 +72,7 @@ jobs:
             echo platforms="$(jq -c 'first(.target[]) | .platforms' <<< "${METADATA}")"
           } >> "${GITHUB_OUTPUT}"
         env:
-          SHA: ${{ github.sha }}
+          SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           VERSION: ${{ (github.ref_type == 'tag' && github.ref_name) || steps.check.outputs.ref || 'dev' }}
           PHP_VERSION: ${{ steps.check.outputs.php_version }}
   build:
@@ -127,7 +123,9 @@ jobs:
           platforms: ${{ matrix.platform }}
       - name: Login to DockerHub
         uses: docker/login-action@v3
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        if: >
+          github.event_name != 'workflow_run' ||
+          github.event.workflow_run.head_repository.full_name == github.repository
         with:
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_PASSWORD }}
@@ -143,7 +141,7 @@ jobs:
             runner-${{ matrix.variant }}
           # Remove tags to prevent "can't push tagged ref [...] by digest" error
           set: |
-            ${{ (github.event_name == 'pull_request') && '*.args.NO_COMPRESS=1' || '' }}
+            ${{ (github.event_name == 'workflow_run') && '*.args.NO_COMPRESS=1' || '' }}
             *.tags=
             *.platform=${{ matrix.platform }}
             ${{ fromJson(needs.prepare.outputs.push) && '' || format('builder-{0}.cache-from=type=gha,scope=builder-{0}-{1}-{2}', matrix.variant, needs.prepare.outputs.ref || github.ref, matrix.platform) }}
@@ -154,7 +152,7 @@ jobs:
             ${{ fromJson(needs.prepare.outputs.push) && '' || format('runner-{0}.cache-to=type=gha,scope=runner-{0}-{1}-{2},ignore-error=true', matrix.variant, needs.prepare.outputs.ref || github.ref, matrix.platform) }}
             ${{ fromJson(needs.prepare.outputs.push) && format('*.output=type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME) || '' }}
         env:
-          SHA: ${{ github.sha }}
+          SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           VERSION: ${{ (github.ref_type == 'tag' && github.ref_name) || needs.prepare.outputs.ref || 'dev' }}
           PHP_VERSION: ${{ needs.prepare.outputs.php_version }}
           BASE_FINGERPRINT: ${{ needs.prepare.outputs.base_fingerprint }}
@@ -225,7 +223,6 @@ jobs:
         uses: docker/setup-buildx-action@v3
       - name: Login to DockerHub
         uses: docker/login-action@v3
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         with:
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_PASSWORD }}
