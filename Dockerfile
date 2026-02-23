@@ -93,7 +93,8 @@ RUN --mount=type=secret,id=github-token \
     sed 's/"//g' | \
     xargs curl -L | \
     tar xz --strip-components 1 && \
-    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && \
+    # -Wno-error=use-after-free: GCC 12 on Bookworm i386 emits a spurious warning in libstdc++ basic_string.h
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="-Wno-error=use-after-free" && \
     cmake --build build && \
     cmake --install build && \
     ldconfig
