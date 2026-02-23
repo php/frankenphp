@@ -7,7 +7,7 @@ retract v1.0.0-rc.1 // Human error
 require (
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/dunglas/mercure v0.21.8
-	github.com/e-dant/watcher v0.0.0-20260202035023-10268e78355f
+	github.com/e-dant/watcher v0.0.0-20260223030516-06f84a1314be
 	github.com/maypok86/otter/v2 v2.3.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1

@@ -22,8 +22,8 @@ github.com/dunglas/mercure v0.21.8 h1:D+SxSq0VqdB29lfMXrsvDkFvq/cTL94aKCC0R4heKV
 github.com/dunglas/mercure v0.21.8/go.mod h1:kt4RJpixJOcPN+x9Z53VBhpJYSdyEEzuu9/99vJIocQ=
 github.com/dunglas/skipfilter v1.0.0 h1:JG9SgGg4n6BlFwuTYzb9RIqjH7PfwszvWehanrYWPF4=
 github.com/dunglas/skipfilter v1.0.0/go.mod h1:ryhr8j7CAHSjzeN7wI6YEuwoArQ3OQmRqWWVCEAfb9w=
-github.com/e-dant/watcher v0.0.0-20260202035023-10268e78355f h1:UDB5nhFRW7IOOpLk/eP1UGj7URmPimFGV+01/EG9qR8=
-github.com/e-dant/watcher v0.0.0-20260202035023-10268e78355f/go.mod h1:PmV4IVmBJVqT2NcfTGN4+sZ+qGe3PA0qkphAtOHeFG0=
+github.com/e-dant/watcher v0.0.0-20260223030516-06f84a1314be h1:vqHrvilasyJcnru/0Z4FoojsQJUIfXGVplte7JtupfY=
+github.com/e-dant/watcher v0.0.0-20260223030516-06f84a1314be/go.mod h1:PmV4IVmBJVqT2NcfTGN4+sZ+qGe3PA0qkphAtOHeFG0=
 github.com/felixge/httpsnoop v1.0.4 h1:NFTV2Zj1bL4mc9sqWACXbQFVBBg2W3GPvqp8/ESS2Wg=
 github.com/felixge/httpsnoop v1.0.4/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
 github.com/frankban/quicktest v1.14.6 h1:7Xjx+VpznH+oBnejlPUj8oUpdxnVs4f8XU8WnHkI4W8=
