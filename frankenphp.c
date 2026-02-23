@@ -1183,10 +1183,6 @@ int frankenphp_execute_script(char *file_name) {
     sandboxed_env = NULL;
   }
 
-  if (is_worker_thread) {
-    frankenphp_cleanup_worker_state();
-  }
-
   php_request_shutdown((void *)0);
   frankenphp_free_request_context();
 
