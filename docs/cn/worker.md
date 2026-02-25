@@ -165,7 +165,7 @@ frankenphp {
 
 ## 超全局变量行为
 
-[PHP 超全局变量](https://www.php.net/manual/en/language.variables.superglobals.php)（`$_SERVER`、`$_ENV`、`$_GET`...）
+[PHP 超全局变量](https://www.php.net/manual/zh/language.variables.superglobals.php)（`$_SERVER`、`$_ENV`、`$_GET`...）
 行为如下：
 
 - 在第一次调用 `frankenphp_handle_request()` 之前，超全局变量包含绑定到 worker 脚本本身的值

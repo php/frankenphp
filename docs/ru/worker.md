@@ -39,7 +39,7 @@ frankenphp php-server --worker /path/to/your/worker/script.php --watch="/path/to
 
 ## Symfony Runtime
 
-> [!СОВЕТ]
+> [!TIP]
 > Следующий раздел актуален только для версий Symfony до 7.4, где была введена нативная поддержка режима воркеров FrankenPHP.
 
 Worker режим FrankenPHP поддерживается компонентом [Symfony Runtime](https://symfony.com/doc/current/components/runtime.html).

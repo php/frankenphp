@@ -131,7 +131,7 @@ docker run \
 
 ### Belirli Sayıda İstekten Sonra Worker'ı Yeniden Başlatın
 
-PHP başlangıçta uzun süreli işlemler için tasarlanmadığından, hala bellek sızdıran birçOK kütüphane ve eski kod vardır.
+PHP başlangıçta uzun süreli işlemler için tasarlanmadığından, hala bellek sızdıran birçok kütüphane ve eski kod vardır.
 Bu tür kodları worker modunda kullanmak için geçici bir çözüm, belirli sayıda isteği işledikten sonra worker betiğini yeniden başlatmaktır:
 
 Önceki worker kod parçacığı, `MAX_REQUESTS` adlı bir ortam değişkeni ayarlayarak işlenecek maksimum istek sayısını yapılandırmaya izin verir.
