@@ -39,9 +39,9 @@ php_server {
 }
 ```
 
-Par défaut, FrankenPHP surveillera tous les fichiers du répertoire de travail actuel correspondant à cette syntaxe globale : `./**/*.{css,env,gif,htm,html,jpg,jpeg,js,mjs,php,png,svg,twig,webp,xml,yaml,yml}`
+Par défaut, FrankenPHP surveillera tous les fichiers du répertoire de travail actuel correspondant au glob pattern : `./**/*.{css,env,gif,htm,html,jpg,jpeg,js,mjs,php,png,svg,twig,webp,xml,yaml,yml}`
 
-Il est possible de définir explicitement les fichiers à surveiller en utilisant la syntaxe globale :
+Il est possible de définir explicitement les fichiers à surveiller en utilisant le glob pattern :
 
 ```caddyfile
 localhost
