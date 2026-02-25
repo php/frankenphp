@@ -185,8 +185,12 @@ func TestFinishBootingAWorkerScript(t *testing.T) {
 
 func TestReturnAnErrorIf2WorkersHaveTheSameFileName(t *testing.T) {
 	workers = []*worker{}
+	workersByName = map[string]*worker{}
+	workersByPath = map[string]*worker{}
 	w, err1 := newWorker(workerOpt{fileName: testDataPath + "/index.php"})
 	workers = append(workers, w)
+	workersByName[w.name] = w
+	workersByPath[w.fileName] = w
 	_, err2 := newWorker(workerOpt{fileName: testDataPath + "/index.php"})
 
 	assert.NoError(t, err1)
@@ -195,8 +199,12 @@ func TestReturnAnErrorIf2WorkersHaveTheSameFileName(t *testing.T) {
 
 func TestReturnAnErrorIf2ModuleWorkersHaveTheSameName(t *testing.T) {
 	workers = []*worker{}
+	workersByName = map[string]*worker{}
+	workersByPath = map[string]*worker{}
 	w, err1 := newWorker(workerOpt{fileName: testDataPath + "/index.php", name: "workername"})
 	workers = append(workers, w)
+	workersByName[w.name] = w
+	workersByPath[w.fileName] = w
 	_, err2 := newWorker(workerOpt{fileName: testDataPath + "/hello.php", name: "workername"})
 
 	assert.NoError(t, err1)
@@ -242,9 +250,9 @@ func allPossibleTransitions(worker1Path string, worker2Path string) []func(*phpT
 				thread.boot()
 			}
 		},
-		func(thread *phpThread) { convertToWorkerThread(thread, getWorkerByPath(worker1Path)) },
+		func(thread *phpThread) { convertToWorkerThread(thread, workersByPath[worker1Path]) },
 		convertToInactiveThread,
-		func(thread *phpThread) { convertToWorkerThread(thread, getWorkerByPath(worker2Path)) },
+		func(thread *phpThread) { convertToWorkerThread(thread, workersByPath[worker2Path]) },
 		convertToInactiveThread,
 	}
 }

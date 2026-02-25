@@ -81,15 +81,15 @@ func addWorkerThread(worker *worker) (*phpThread, error) {
 
 // scaleWorkerThread adds a worker PHP thread automatically
 func scaleWorkerThread(worker *worker) {
+	// probe CPU usage before acquiring the lock (avoids holding lock during 120ms sleep)
+	if !cpu.ProbeCPUs(cpuProbeTime, maxCpuUsageForScaling, mainThread.done) {
+		return
+	}
+
 	scalingMu.Lock()
 	defer scalingMu.Unlock()
 
 	if !mainThread.state.Is(state.Ready) {
-		return
-	}
-
-	// probe CPU usage before scaling
-	if !cpu.ProbeCPUs(cpuProbeTime, maxCpuUsageForScaling, mainThread.done) {
 		return
 	}
 
@@ -111,15 +111,15 @@ func scaleWorkerThread(worker *worker) {
 
 // scaleRegularThread adds a regular PHP thread automatically
 func scaleRegularThread() {
+	// probe CPU usage before acquiring the lock (avoids holding lock during 120ms sleep)
+	if !cpu.ProbeCPUs(cpuProbeTime, maxCpuUsageForScaling, mainThread.done) {
+		return
+	}
+
 	scalingMu.Lock()
 	defer scalingMu.Unlock()
 
 	if !mainThread.state.Is(state.Ready) {
-		return
-	}
-
-	// probe CPU usage before scaling
-	if !cpu.ProbeCPUs(cpuProbeTime, maxCpuUsageForScaling, mainThread.done) {
 		return
 	}
 

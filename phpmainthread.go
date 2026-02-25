@@ -198,6 +198,9 @@ func go_get_custom_php_ini(disableTimeouts C.bool) *C.char {
 	// Pass the php.ini overrides to PHP before startup
 	// TODO: if needed this would also be possible on a per-thread basis
 	var overrides strings.Builder
+
+	// 32 is an over-estimate for php.ini settings
+	overrides.Grow(len(mainThread.phpIni) * 32)
 	for k, v := range mainThread.phpIni {
 		overrides.WriteString(k)
 		overrides.WriteByte('=')

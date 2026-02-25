@@ -5,7 +5,7 @@ However, it is possible to substantially improve performance using an appropriat
 
 ## Number of Threads and Workers
 
-By default, FrankenPHP starts 2 times more threads and workers (in worker mode) than the available numbers of CPU.
+By default, FrankenPHP starts 2 times more threads and workers (in worker mode) than the available number of CPU cores.
 
 The appropriate values depend heavily on how your application is written, what it does, and your hardware.
 We strongly recommend changing these values. For best system stability, it is recommended to have `num_threads` x `memory_limit` < `available_memory`.
@@ -44,6 +44,8 @@ Also, [some bugs only happen when using musl](https://github.com/php/php-src/iss
 In production environments, we recommend using FrankenPHP linked against glibc, compiled with an appropriate optimization level.
 
 This can be achieved by using the Debian Docker images, using [our maintainers .deb, .rpm, or .apk packages](https://pkgs.henderkes.com), or by [compiling FrankenPHP from sources](compile.md).
+
+For leaner or more secure containers, you may want to consider [a hardened Debian image](docker.md#hardening-images) rather than Alpine.
 
 ## Go Runtime Configuration
 
@@ -87,6 +89,18 @@ php_server {
 ```
 
 This can significantly reduce the number of unnecessary file operations.
+A worker equivalent of the previous configuration would be:
+
+```caddyfile
+route {
+    php_server { # use "php" instead of "php_server" if you don't need the file server at all
+        root /root/to/your/app
+        worker /path/to/worker.php {
+            match * # send all requests directly to the worker
+        }
+    }
+}
+```
 
 An alternate approach with 0 unnecessary file system operations would be to instead use the `php` directive and split
 files from PHP by path. This approach works well if your entire application is served by one entry file.
@@ -164,22 +178,18 @@ limits the concurrency of requests going towards the slow endpoint, similar to a
 connection pool.
 
 ```caddyfile
-{
-    frankenphp {
-        max_threads 100 # max 100 threads shared by all workers
-    }
-}
-
 example.com {
     php_server {
         root /app/public # the root of your application
         worker index.php {
             match /slow-endpoint/* # all requests with path /slow-endpoint/* are handled by this thread pool
-            num 10 # minimum 10 threads for requests matching /slow-endpoint/*
+            num 1 # minimum 1 threads for requests matching /slow-endpoint/*
+            max_threads 20 # allow up to 20 threads for requests matching /slow-endpoint/*, if needed
         }
         worker index.php {
             match * # all other requests are handled separately
-            num 20 # minimum 20 threads for other requests, even if the slow endppoints start hanging
+            num 1 # minimum 1 threads for other requests, even if the slow endpoints start hanging
+            max_threads 20 # allow up to 20 threads for other requests, if needed
         }
     }
 }
