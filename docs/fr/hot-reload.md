@@ -8,7 +8,7 @@ Cette fonctionnalité offre un workflow similaire au **Hot Module Replacement (H
 Au lieu de rafraîchir manuellement le navigateur après chaque modification de fichier (code PHP, templates, fichiers JavaScript et CSS...),
 FrankenPHP met à jour le contenu en temps réel.
 
-Le Hot Reload fonctionne nativement avec WordPress, Laravel, Symfony et tout autre application ou framework PHP.
+Le Hot Reload fonctionne nativement avec WordPress, Laravel, Symfony et toute autre application ou framework PHP.
 
 Lorsqu'il est activé, FrankenPHP surveille votre répertoire de travail actuel pour détecter les modifications du système de fichiers.
 Quand un fichier est modifié, il envoie une mise à jour [Mercure](mercure.md) au navigateur.
