@@ -453,7 +453,7 @@ jobs:
           ref: ${{ needs.prepare.outputs.ref }}
           persist-credentials: false
       - uses: actions/setup-go@v6
-        with:
+        with: # zizmor: ignore[cache-poisoning]
           go-version: "1.26"
           cache-dependency-path: |
             go.sum
