@@ -5,13 +5,13 @@ package caddy
 import (
 	"encoding/json"
 	"errors"
-	"os"
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 	"github.com/dunglas/frankenphp"
 	"github.com/dunglas/mercure"
 	mercureCaddy "github.com/dunglas/mercure/caddy"
+	"os"
 )
 
 func init() {
@@ -67,5 +67,5 @@ func createMercureRoute() (caddyhttp.Route, error) {
 		},
 	}
 
-	return mercureRoute, nil;
+	return mercureRoute, nil
 }
