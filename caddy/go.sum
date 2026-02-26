@@ -165,8 +165,8 @@ github.com/dunglas/vulcain/caddy v1.2.1/go.mod h1:8QrmLTfURmW2VgjTR6Gb9a53FrZjsp
 github.com/dustin/go-humanize v1.0.0/go.mod h1:HtrtbFcZ19U5GC7JDqmcUSB87Iq5E25KnS6fMYU6eOk=
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
 github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
-github.com/e-dant/watcher/watcher-go v0.0.0-20260104182512-c28e9078050a h1:e/m9m8cJgjzw2Ol7tKTu4B/lM5F3Ym7ryKI+oyw0T8Y=
-github.com/e-dant/watcher/watcher-go v0.0.0-20260104182512-c28e9078050a/go.mod h1:sVUOkwtftoj71nnJRG2S0oWNfXFdKpz/M9vK0z06nmM=
+github.com/e-dant/watcher v0.0.0-20260223030516-06f84a1314be h1:vqHrvilasyJcnru/0Z4FoojsQJUIfXGVplte7JtupfY=
+github.com/e-dant/watcher v0.0.0-20260223030516-06f84a1314be/go.mod h1:PmV4IVmBJVqT2NcfTGN4+sZ+qGe3PA0qkphAtOHeFG0=
 github.com/felixge/httpsnoop v1.0.4 h1:NFTV2Zj1bL4mc9sqWACXbQFVBBg2W3GPvqp8/ESS2Wg=
 github.com/felixge/httpsnoop v1.0.4/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
 github.com/fortytw2/leaktest v1.3.0 h1:u8491cBMTQ8ft8aeV+adlcytMZylmA5nnwwkRZjI8vw=

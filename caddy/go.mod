@@ -64,7 +64,7 @@ require (
 	github.com/dunglas/skipfilter v1.0.0 // indirect
 	github.com/dunglas/vulcain v1.2.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/e-dant/watcher/watcher-go v0.0.0-20260104182512-c28e9078050a // indirect
+	github.com/e-dant/watcher v0.0.0-20260223030516-06f84a1314be // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect

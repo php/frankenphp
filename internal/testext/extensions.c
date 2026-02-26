@@ -1,3 +1,4 @@
+#include "extension.h"
 #include <php.h>
 #include <zend_exceptions.h>
 
