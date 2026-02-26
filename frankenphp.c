@@ -1080,6 +1080,26 @@ static void *php_main(void *arg) {
 
   sapi_startup(&frankenphp_sapi_module);
 
+  /* TODO: adapted from https://github.com/php/php-src/pull/16958, remove when merged. */
+#ifdef PHP_WIN32
+  {
+    const DWORD flags = GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                        GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT;
+    HMODULE module;
+    wchar_t filename[MAX_PATH];
+    if (GetModuleHandleExW(flags, (LPCWSTR)&frankenphp_sapi_module, &module)) {
+      DWORD len = GetModuleFileNameW(module, filename, MAX_PATH);
+      if (len > 0 && len < MAX_PATH) {
+        wchar_t *slash = wcsrchr(filename, L'\\');
+        if (slash) {
+          *slash = L'\0';
+          SetDllDirectoryW(filename);
+        }
+      }
+    }
+  }
+#endif
+
 #ifdef ZEND_MAX_EXECUTION_TIMERS
   /* overwrite php.ini with custom user settings */
   char *php_ini_overrides = go_get_custom_php_ini(false);
