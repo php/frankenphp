@@ -86,6 +86,67 @@ The server is listening on `127.0.0.1:8080`:
 curl -v http://127.0.0.1:8080/phpinfo.php
 ```
 
+## Windows development
+
+1. Configure Git to always use `lf` line endings
+    ```powershell
+    git config --global core.autocrlf false
+    git config --global core.eol lf
+    ```
+2. Install Visual Studio, Git and Go:
+    ```powershell
+    winget install -e --id Microsoft.VisualStudio.2022.Community --override "--passive --wait --add Microsoft.VisualStudio.Workload.NativeDesktop --add Microsoft.VisualStudio.Component.VC.Llvm.Clang --includeRecommended"
+    winget install -e --id GoLang.Go --id Git.Git
+    ```
+
+3. Install vcpkg:
+    ```powershell
+    cd c:\
+    gh repo clone microsoft/vcpkg
+    .\vcpkg\bootstrap-vcpkg.bat
+    ```
+
+4. [Download the latest version of the watcher library for Windows](https://github.com/e-dant/watcher/releases) and extract it in a directory named `C:\watcher`
+5. [Download the latest **Thread Safe** version of PHP and of the PHP SDK for Windows](https://windows.php.net/download/), extract them in directories named `C:\php` and `C:\php-devel`
+6. Clone the FrankenPHP Git repository:
+    ```powershell
+    git clone https://github.com/php/frankenphp C:\frankenphp
+    cd C:\frankenphp
+    ```
+
+7. Install the dependencies:
+    ```powershell
+    vcpkg install
+    ```
+
+8. Configure the needed environment variables (PowerShell):
+
+    ```powershell
+    $env:PATH += ';C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\Llvm\bin'
+    $env:GOTOOLCHAIN = 'go1.26rc1'
+    $env:CC = 'clang'
+    $env:CXX = 'clang++'
+    $env:CGO_CFLAGS = "-IC:\frankenphp\vcpkg_installed\x64-windows\include -IC:\watcher-x86_64-pc-windows-msvc -IC:\php-8.5.1-devel-vs17-x64\include -IC:\php-8.5.1-devel-vs17-x64\include\main -IC:\php-8.5.1-devel-vs17-x64\include\TSRM -IC:\php-8.5.1-devel-vs17-x64\include\Zend -IC:\php-8.5.1-devel-vs17-x64\include\ext"
+    $env:CGO_LDFLAGS = '-LC:\vcpkg\installed\x64-windows\lib -lbrotlienc -LC:\watcher-x86_64-pc-windows-msvc -llibwatcher-c -LC:\php-8.5.1-Win32-vs17-x64 -LC:\php-8.5.1-devel-vs17-x64\lib -lphp8ts -lphp8embed'
+    ```
+
+8. Run the tests:
+
+    ```powershell
+    go test -ldflags '-extldflags="-fuse-ld=lld"' ./...
+    cd caddy
+    go test -ldflags '-extldflags="-fuse-ld=lld"' -tags nobadger,nomysql,nopgx ./...
+    cd ..
+    ```
+
+10. Build the binary:
+
+    ```powershell
+    cd caddy/frankenphp
+    go build -ldflags '-extldflags="-fuse-ld=lld"' -tags nobadger,nomysql,nopgx
+    cd ../..
+    ```
+
 ## Building Docker Images Locally
 
 Print bake plan:
