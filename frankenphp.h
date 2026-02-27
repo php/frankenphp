@@ -81,8 +81,6 @@ typedef struct frankenphp_server_vars {
   size_t https_len;
   char *ssl_protocol;
   size_t ssl_protocol_len;
-  char *request_scheme;
-  size_t request_scheme_len;
   char *server_name;
   size_t server_name_len;
   char *server_port;
@@ -97,7 +95,48 @@ typedef struct frankenphp_server_vars {
   size_t request_uri_len;
   char *ssl_cipher;
   size_t ssl_cipher_len;
+  zend_string *request_scheme;
 } frankenphp_server_vars;
+
+/**
+ * Cached interned strings for memory and performance benefits
+ * Add more hard-coded strings here if needed
+ */
+typedef struct frankenphp_interned_strings_t {
+  zend_string *remote_addr;
+  zend_string *remote_host;
+  zend_string *remote_port;
+  zend_string *document_root;
+  zend_string *path_info;
+  zend_string *php_self;
+  zend_string *document_uri;
+  zend_string *script_filename;
+  zend_string *script_name;
+  zend_string *http;
+  zend_string *https;
+  zend_string *ssl_protocol;
+  zend_string *request_scheme;
+  zend_string *server_name;
+  zend_string *server_port;
+  zend_string *content_length;
+  zend_string *server_protocol;
+  zend_string *http_host;
+  zend_string *request_uri;
+  zend_string *ssl_cipher;
+  zend_string *server_software;
+  zend_string *server_software_str;
+  zend_string *gateway_interface;
+  zend_string *gateway_interface_str;
+  zend_string *auth_type;
+  zend_string *remote_ident;
+  zend_string *content_type;
+  zend_string *path_translated;
+  zend_string *query_string;
+  zend_string *remote_user;
+  zend_string *request_method;
+} frankenphp_interned_strings_t;
+
+extern frankenphp_interned_strings_t frankenphp_interned_strings;
 
 typedef struct frankenphp_version {
   unsigned char major_version;

@@ -21,7 +21,7 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
-	"github.com/dunglas/frankenphp/internal/stringcache"
+	"github.com/dunglas/frankenphp/internal/phpheaders"
 	"golang.org/x/text/language"
 	"golang.org/x/text/search"
 )
@@ -69,15 +69,16 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		ip = ip[1 : len(ip)-1]
 	}
 
-	var https, sslProtocol, sslCipher, rs string
+	var https, sslProtocol, sslCipher string
+	var rs *C.zend_string
 
 	if request.TLS == nil {
-		rs = "http"
+		rs = C.frankenphp_interned_strings.http
 		https = ""
 		sslProtocol = ""
 		sslCipher = ""
 	} else {
-		rs = "https"
+		rs = C.frankenphp_interned_strings.https
 		https = "on"
 
 		// and pass the protocol details in a manner compatible with Apache's mod_ssl
@@ -106,9 +107,9 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		// even if the port is the default port for the scheme and could otherwise be omitted from a URI.
 		// https://tools.ietf.org/html/rfc3875#section-4.1.15
 		switch rs {
-		case "https":
+		case C.frankenphp_interned_strings.https:
 			reqPort = "443"
-		case "http":
+		case C.frankenphp_interned_strings.http:
 			reqPort = "80"
 		}
 	}
@@ -152,8 +153,6 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		https_len:           C.size_t(len(https)),
 		ssl_protocol:        toUnsafeChar(sslProtocol),
 		ssl_protocol_len:    C.size_t(len(sslProtocol)),
-		request_scheme:      toUnsafeChar(rs),
-		request_scheme_len:  C.size_t(len(rs)),
 		server_name:         toUnsafeChar(reqHost),
 		server_name_len:     C.size_t(len(reqHost)),
 		server_port:         toUnsafeChar(serverPort),
@@ -168,6 +167,7 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		request_uri_len:     C.size_t(len(requestURI)),
 		ssl_cipher:          toUnsafeChar(sslCipher),
 		ssl_cipher_len:      C.size_t(len(sslCipher)),
+		request_scheme:      rs,
 	})
 }
 
@@ -181,7 +181,7 @@ func addHeadersToServer(ctx context.Context, request *http.Request, trackVarsArr
 
 		// if the header name could not be cached, it needs to be registered safely
 		// this is more inefficient but allows additional sanitizing by PHP
-		k := stringcache.GetUnCommonHeader(ctx, field)
+		k := phpheaders.GetUnCommonHeader(ctx, field)
 		v := strings.Join(val, ", ")
 		C.frankenphp_register_variable_safe(toUnsafeChar(k), toUnsafeChar(v), C.size_t(len(v)), trackVarsArray)
 	}
@@ -194,8 +194,8 @@ func addPreparedEnvToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 	fc.env = nil
 }
 
-//export go_register_variables
-func go_register_variables(threadIndex C.uintptr_t, trackVarsArray *C.zval) {
+//export go_register_server_variables
+func go_register_server_variables(threadIndex C.uintptr_t, trackVarsArray *C.zval) {
 	thread := phpThreads[threadIndex]
 	fc := thread.frankenPHPContext()
 
@@ -312,7 +312,7 @@ func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) 
 	}
 
 	if m, ok := cStringHTTPMethods[request.Method]; ok {
-		info.request_method = m
+		info.request_method = (*C.char)(m)
 	} else {
 		info.request_method = thread.pinCString(request.Method)
 	}
