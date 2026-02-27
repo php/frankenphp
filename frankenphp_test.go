@@ -140,6 +140,12 @@ func TestMain(m *testing.M) {
 		slog.SetDefault(slog.New(slog.DiscardHandler))
 	}
 
+	// setup custom environment var for TestWorkerHasOSEnvironmentVariableInSERVER
+	if os.Setenv("CUSTOM_OS_ENV_VARIABLE", "custom_env_variable_value") != nil {
+		fmt.Println("Failed to set environment variable for tests")
+		os.Exit(1)
+	}
+
 	os.Exit(m.Run())
 }
 
@@ -695,11 +701,11 @@ func TestFailingWorker(t *testing.T) {
 	assert.Error(t, err, "should return an immediate error if workers fail on startup")
 }
 
-func TestEnv(t *testing.T) {
-	testEnv(t, &testOptions{nbParallelRequests: 1})
+func TestEnv_module(t *testing.T) {
+	testEnv(t, &testOptions{nbParallelRequests: 1, phpIni: map[string]string{"variables_order": "EGPCS"}})
 }
-func TestEnvWorker(t *testing.T) {
-	testEnv(t, &testOptions{nbParallelRequests: 1, workerScript: "env/test-env.php"})
+func TestEnv_worker(t *testing.T) {
+	testEnv(t, &testOptions{nbParallelRequests: 1, workerScript: "env/test-env.php", phpIni: map[string]string{"variables_order": "EGPCS"}})
 }
 
 // testEnv cannot be run in parallel due to https://github.com/golang/go/issues/63567
@@ -714,7 +720,7 @@ func testEnv(t *testing.T, opts *testOptions) {
 		stdoutStderr, err := cmd.CombinedOutput()
 		if err != nil {
 			// php is not installed or other issue, use the hardcoded output below:
-			stdoutStderr = []byte("Set MY_VAR successfully.\nMY_VAR = HelloWorld\nUnset MY_VAR successfully.\nMY_VAR is unset.\nMY_VAR set to empty successfully.\nMY_VAR = \nUnset NON_EXISTING_VAR successfully.\n")
+			stdoutStderr = []byte("Set MY_VAR successfully.\nMY_VAR = HelloWorld\nMY_VAR not found in $_ENV.\nMY_VAR not found in $_SERVER.\nUnset MY_VAR successfully.\nMY_VAR is unset.\nMY_VAR set to empty successfully.\nMY_VAR = \nUnset NON_EXISTING_VAR successfully.\nInvalid value was not inserted.\n")
 		}
 
 		assert.Equal(t, string(stdoutStderr), body)

@@ -8,12 +8,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"testing"
-
-	"github.com/stretchr/testify/require"
 
 	"github.com/dunglas/frankenphp"
 	"github.com/stretchr/testify/assert"
@@ -144,8 +141,6 @@ func ExampleServeHTTP_workers() {
 }
 
 func TestWorkerHasOSEnvironmentVariableInSERVER(t *testing.T) {
-	require.NoError(t, os.Setenv("CUSTOM_OS_ENV_VARIABLE", "custom_env_variable_value"))
-
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
 		req := httptest.NewRequest("GET", "http://example.com/worker.php", nil)
 		w := httptest.NewRecorder()

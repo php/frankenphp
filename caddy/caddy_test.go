@@ -61,6 +61,16 @@ func escapeMetricLabel(s string) string {
 	return strings.ReplaceAll(s, "\\", "\\\\")
 }
 
+func TestMain(m *testing.M) {
+	// setup custom environment vars for TestOsEnv
+	if os.Setenv("ENV1", "value1") != nil || os.Setenv("ENV2", "value2") != nil {
+		fmt.Println("Failed to set environment variables for tests")
+		os.Exit(1)
+	}
+
+	os.Exit(m.Run())
+}
+
 func TestPHP(t *testing.T) {
 	var wg sync.WaitGroup
 	tester := caddytest.NewTester(t)
@@ -957,9 +967,6 @@ func testSingleIniConfiguration(tester *caddytest.Tester, key string, value stri
 }
 
 func TestOsEnv(t *testing.T) {
-	require.NoError(t, os.Setenv("ENV1", "value1"))
-	require.NoError(t, os.Setenv("ENV2", "value2"))
-
 	tester := caddytest.NewTester(t)
 	tester.InitServer(`
 		{
