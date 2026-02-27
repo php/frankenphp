@@ -49,7 +49,7 @@ zend_string *frankenphp_init_persistent_string(const char *string, size_t len) {
   return z_string;
 }
 
-#define FRANKENPHP_INTERNED_STR(str)                                             \
+#define FRANKENPHP_INTERNED_STR(str)                                           \
   frankenphp_init_persistent_string(str, sizeof(str) - 1)
 
 static frankenphp_interned_strings_t frankenphp_init_interned_strings() {

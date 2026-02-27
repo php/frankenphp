@@ -1,7 +1,5 @@
 package frankenphp
 
-// #cgo nocallback frankenphp_init_persistent_string
-// #cgo noescape frankenphp_init_persistent_string
 // #include "frankenphp.h"
 // #include "types.h"
 import "C"
@@ -10,12 +8,17 @@ import (
 	"strings"
 )
 
+var lengthOfEnv = 0
+
 //export go_init_os_env
 func go_init_os_env(mainThreadEnv *C.zend_array) {
-	for _, envVar := range os.Environ() {
+	fullEnv := os.Environ()
+	lengthOfEnv = len(fullEnv)
+
+	for _, envVar := range fullEnv {
 		key, val, _ := strings.Cut(envVar, "=")
-		zkey := C.frankenphp_init_persistent_string(toUnsafeChar(key), C.size_t(len(key)))
-		zStr := C.frankenphp_init_persistent_string(toUnsafeChar(val), C.size_t(len(val)))
+		zkey := newPersistentZendString(key)
+		zStr := newPersistentZendString(val)
 		C.__hash_update_string__(mainThreadEnv, zkey, zStr)
 	}
 }

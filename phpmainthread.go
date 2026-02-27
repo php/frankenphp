@@ -3,7 +3,6 @@ package frankenphp
 // #cgo nocallback frankenphp_new_main_thread
 // #cgo noescape frankenphp_new_main_thread
 // #include <php_variables.h>
-// #cgo noescape frankenphp_init_persistent_string
 // #include "frankenphp.h"
 // #include <php_variables.h>
 import "C"
@@ -13,18 +12,18 @@ import (
 	"sync"
 
 	"github.com/dunglas/frankenphp/internal/memory"
-	"github.com/dunglas/frankenphp/internal/phpheaders"
 	"github.com/dunglas/frankenphp/internal/state"
+	"github.com/dunglas/frankenphp/internal/stringcache"
 )
 
 // represents the main PHP thread
 // the thread needs to keep running as long as all other threads are running
 type phpMainThread struct {
-	state           *state.ThreadState
-	done            chan struct{}
-	numThreads      int
-	maxThreads      int
-	phpIni          map[string]string
+	state      *state.ThreadState
+	done       chan struct{}
+	numThreads int
+	maxThreads int
+	phpIni     map[string]string
 }
 
 var (
@@ -111,9 +110,9 @@ func (mainThread *phpMainThread) start() error {
 
 	// cache common request headers as zend_strings (HTTP_ACCEPT, HTTP_USER_AGENT, etc.)
 	if commonHeaders == nil {
-		commonHeaders = make(map[string]*C.zend_string, len(phpheaders.CommonRequestHeaders))
-		for key, phpKey := range phpheaders.CommonRequestHeaders {
-			commonHeaders[key] = C.frankenphp_init_persistent_string(C.CString(phpKey), C.size_t(len(phpKey)))
+		commonHeaders = make(map[string]*C.zend_string, len(stringcache.CommonRequestHeaders))
+		for key, phpKey := range stringcache.CommonRequestHeaders {
+			commonHeaders[key] = newPersistentZendString(phpKey)
 		}
 	}
 

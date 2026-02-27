@@ -37,7 +37,7 @@
 
 #include "_cgo_export.h"
 #include "frankenphp_arginfo.h"
-#include "internal/strings/strings.h"
+#include "internal/stringcache/stringcache.h"
 
 #if defined(PHP_WIN32) && defined(ZTS)
 ZEND_TSRMLS_CACHE_DEFINE()
@@ -810,8 +810,8 @@ static inline void frankenphp_register_trusted_var(zend_string *z_key,
 }
 
 /* Register known $_SERVER variables in bulk to avoid cgo overhead */
-void frankenphp_register_bulk(zval *track_vars_array,
-                              frankenphp_server_vars vars) {
+void frankenphp_register_server_vars(zval *track_vars_array,
+                                     frankenphp_server_vars vars) {
   HashTable *ht = Z_ARRVAL_P(track_vars_array);
   zend_hash_extend(ht, vars.total_num_vars, 0);
 
@@ -856,28 +856,36 @@ void frankenphp_register_bulk(zval *track_vars_array,
 }
 
 /* Register variables from SG(request_info) into $_SERVER */
+static inline void
+frankenphp_register_variable_from_request_info(zend_string *zKey, char *value,
+                                               bool must_be_present,
+                                               zval *track_vars_array) {
+  if (value != NULL) {
+    frankenphp_register_trusted_var(zKey, value, strlen(value),
+                                    Z_ARRVAL_P(track_vars_array));
+  } else if (must_be_present) {
+    frankenphp_register_trusted_var(zKey, NULL, 0,
+                                    Z_ARRVAL_P(track_vars_array));
+  }
+}
+
 static void
 frankenphp_register_variables_from_request_info(zval *track_vars_array) {
-  HashTable *ht = Z_ARRVAL_P(track_vars_array);
-
-#define FRANKENPHP_REGISTER_FROM_INFO(key, field, required)                    \
-  do {                                                                         \
-    char *value = (char *)SG(request_info).field;                              \
-    if (value != NULL) {                                                       \
-      frankenphp_register_trusted_var(interned_strings.key, value,             \
-                                      strlen(value), ht);                      \
-    } else if (required) {                                                     \
-      frankenphp_register_trusted_var(interned_strings.key, NULL, 0, ht);      \
-    }                                                                          \
-  } while (0)
-
-  FRANKENPHP_REGISTER_FROM_INFO(content_type, content_type, true);
-  FRANKENPHP_REGISTER_FROM_INFO(path_translated, path_translated, false);
-  FRANKENPHP_REGISTER_FROM_INFO(query_string, query_string, true);
-  FRANKENPHP_REGISTER_FROM_INFO(remote_user, auth_user, false);
-  FRANKENPHP_REGISTER_FROM_INFO(request_method, request_method, false);
-
-#undef FRANKENPHP_REGISTER_FROM_INFO
+  frankenphp_register_variable_from_request_info(
+      interned_strings.content_type, (char *)SG(request_info).content_type,
+      true, track_vars_array);
+  frankenphp_register_variable_from_request_info(
+      interned_strings.path_translated,
+      (char *)SG(request_info).path_translated, false, track_vars_array);
+  frankenphp_register_variable_from_request_info(interned_strings.query_string,
+                                                 SG(request_info).query_string,
+                                                 true, track_vars_array);
+  frankenphp_register_variable_from_request_info(
+      interned_strings.remote_user, (char *)SG(request_info).auth_user, false,
+      track_vars_array);
+  frankenphp_register_variable_from_request_info(
+      interned_strings.request_method, (char *)SG(request_info).request_method,
+      false, track_vars_array);
 }
 
 /* Only hard-coded keys may be registered this way */
@@ -924,7 +932,10 @@ static void frankenphp_register_variables(zval *track_vars_array) {
    */
   zend_hash_copy(Z_ARR_P(track_vars_array), main_thread_env, NULL);
 
+  /* All CGI variables are imported from the request context in go */
   go_register_variables(thread_index, track_vars_array);
+
+  /* Some variables are already present in SG(request_info) */
   frankenphp_register_variables_from_request_info(track_vars_array);
 }
 

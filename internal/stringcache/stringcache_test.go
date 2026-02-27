@@ -1,4 +1,4 @@
-package phpheaders
+package stringcache
 
 import (
 	"net/http/httptest"

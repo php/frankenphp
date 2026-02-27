@@ -1,11 +1,13 @@
 package frankenphp
 
-// #cgo nocallback frankenphp_register_bulk
+// #cgo nocallback frankenphp_register_server_vars
 // #cgo nocallback frankenphp_register_variable_safe
 // #cgo nocallback frankenphp_register_variable_unsafe
-// #cgo noescape frankenphp_register_bulk
+// #cgo nocallback frankenphp_init_persistent_string
+// #cgo noescape frankenphp_register_server_vars
 // #cgo noescape frankenphp_register_variable_safe
-// #cgo noescape frankenphp_register_single
+// #cgo noescape frankenphp_register_variable_unsafe
+// #cgo noescape frankenphp_init_persistent_string
 // #include <php_variables.h>
 // #include "frankenphp.h"
 import "C"
@@ -19,7 +21,7 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
-	"github.com/dunglas/frankenphp/internal/phpheaders"
+	"github.com/dunglas/frankenphp/internal/stringcache"
 	"golang.org/x/text/language"
 	"golang.org/x/text/search"
 )
@@ -123,10 +125,10 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 
 	requestPath := ensureLeadingSlash(request.URL.Path)
 
-	C.frankenphp_register_bulk(trackVarsArray, C.frankenphp_server_vars{
+	C.frankenphp_register_server_vars(trackVarsArray, C.frankenphp_server_vars{
 		// approximate total length to avoid array re-hashing:
 		// 28 CGI vars + headers + environment
-		total_num_vars: C.size_t(28 + len(fc.env) + len(request.Header) + len(mainThread.sandboxedEnv)),
+		total_num_vars: C.size_t(28 + len(fc.env) + len(request.Header) + lengthOfEnv),
 
 		remote_addr:         toUnsafeChar(ip),
 		remote_addr_len:     C.size_t(len(ip)),
@@ -179,7 +181,7 @@ func addHeadersToServer(ctx context.Context, request *http.Request, trackVarsArr
 
 		// if the header name could not be cached, it needs to be registered safely
 		// this is more inefficient but allows additional sanitizing by PHP
-		k := phpheaders.GetUnCommonHeader(ctx, field)
+		k := stringcache.GetUnCommonHeader(ctx, field)
 		v := strings.Join(val, ", ")
 		C.frankenphp_register_variable_safe(toUnsafeChar(k), toUnsafeChar(v), C.size_t(len(v)), trackVarsArray)
 	}
@@ -375,8 +377,14 @@ func ensureLeadingSlash(path string) string {
 	return "/" + path
 }
 
+// Use a go string on the C side without allocations (C may not modify the string)
+// Best case scenario: The string is implicitly pinned
+// eg: C.call_funcion(toUnsafeChar(string)) <- go will not GC the string in this case
 func toUnsafeChar(s string) *C.char {
-	sData := unsafe.StringData(s)
+	return (*C.char)(unsafe.Pointer(unsafe.StringData(s)))
+}
 
-	return (*C.char)(unsafe.Pointer(sData))
+// initialize a global zend_string that must never be freed and is ignored by CG
+func newPersistentZendString(str string) *C.zend_string {
+	return C.frankenphp_init_persistent_string(toUnsafeChar(str), C.size_t(len(str)))
 }

@@ -131,8 +131,8 @@ void frankenphp_register_variable_unsafe(zend_string *z_key, char *value,
                                          zval *track_vars_array);
 void frankenphp_register_variable_safe(char *key, char *var, size_t val_len,
                                        zval *track_vars_array);
-void frankenphp_register_bulk(zval *track_vars_array,
-                              frankenphp_server_vars vars);
+void frankenphp_register_server_vars(zval *track_vars_array,
+                                     frankenphp_server_vars vars);
 
 zend_string *frankenphp_init_persistent_string(const char *string, size_t len);
 int frankenphp_reset_opcache(void);
