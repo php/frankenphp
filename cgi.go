@@ -73,12 +73,12 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 	var rs *C.zend_string
 
 	if request.TLS == nil {
-		rs = C.frankenphp_interned_strings.http
+		rs = C.frankenphp_interned_strings.httpLowercase
 		https = ""
 		sslProtocol = ""
 		sslCipher = ""
 	} else {
-		rs = C.frankenphp_interned_strings.https
+		rs = C.frankenphp_interned_strings.httpsLowercase
 		https = "on"
 
 		// and pass the protocol details in a manner compatible with Apache's mod_ssl
@@ -107,9 +107,9 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		// even if the port is the default port for the scheme and could otherwise be omitted from a URI.
 		// https://tools.ietf.org/html/rfc3875#section-4.1.15
 		switch rs {
-		case C.frankenphp_interned_strings.https:
+		case C.frankenphp_interned_strings.httpsLowercase:
 			reqPort = "443"
-		case C.frankenphp_interned_strings.http:
+		case C.frankenphp_interned_strings.httpLowercase:
 			reqPort = "80"
 		}
 	}

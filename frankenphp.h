@@ -112,8 +112,9 @@ typedef struct frankenphp_interned_strings_t {
   zend_string *document_uri;
   zend_string *script_filename;
   zend_string *script_name;
-  zend_string *http;
   zend_string *https;
+  zend_string *httpsLowercase;
+  zend_string *httpLowercase;
   zend_string *ssl_protocol;
   zend_string *request_scheme;
   zend_string *server_name;
