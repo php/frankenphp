@@ -3,7 +3,9 @@ package frankenphp
 // #cgo nocallback frankenphp_new_main_thread
 // #cgo noescape frankenphp_new_main_thread
 // #include <php_variables.h>
+// #cgo noescape frankenphp_init_persistent_string
 // #include "frankenphp.h"
+// #include <php_variables.h>
 import "C"
 import (
 	"log/slog"

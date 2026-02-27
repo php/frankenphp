@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddytest"
@@ -19,7 +20,46 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// waitForServerReady polls the server with retries until it responds to HTTP requests.
+// This handles a race condition during Caddy config reload on macOS where SO_REUSEPORT
+// can briefly route connections to the old listener being shut down,
+// resulting in "connection reset by peer".
+func waitForServerReady(t *testing.T, url string) {
+	t.Helper()
+
+	client := &http.Client{Timeout: 1 * time.Second}
+	for range 10 {
+		resp, err := client.Get(url)
+		if err == nil {
+			require.NoError(t, resp.Body.Close())
+
+			return
+		}
+
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
 var testPort = "9080"
+
+// skipIfSymlinkNotValid skips the test if the given path is not a valid symlink
+func skipIfSymlinkNotValid(t *testing.T, path string) {
+	t.Helper()
+
+	info, err := os.Lstat(path)
+	if err != nil {
+		t.Skipf("symlink test skipped: cannot stat %s: %v", path, err)
+	}
+
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Skipf("symlink test skipped: %s is not a symlink (git may not support symlinks on this platform)", path)
+	}
+}
+
+// escapeMetricLabel escapes backslashes in label values for Prometheus text format
+func escapeMetricLabel(s string) string {
+	return strings.ReplaceAll(s, "\\", "\\\\")
+}
 
 func TestPHP(t *testing.T) {
 	var wg sync.WaitGroup
@@ -406,6 +446,7 @@ func TestPHPServerDirective(t *testing.T) {
 		}
 		`, "caddyfile")
 
+	waitForServerReady(t, "http://localhost:"+testPort)
 	tester.AssertGetResponse("http://localhost:"+testPort, http.StatusOK, "I am by birth a Genevese (i not set)")
 	tester.AssertGetResponse("http://localhost:"+testPort+"/hello.txt", http.StatusOK, "Hello\n")
 	tester.AssertGetResponse("http://localhost:"+testPort+"/not-found.txt", http.StatusOK, "I am by birth a Genevese (i not set)")
@@ -431,6 +472,7 @@ func TestPHPServerDirectiveDisableFileServer(t *testing.T) {
 		}
 		`, "caddyfile")
 
+	waitForServerReady(t, "http://localhost:"+testPort)
 	tester.AssertGetResponse("http://localhost:"+testPort, http.StatusOK, "I am by birth a Genevese (i not set)")
 	tester.AssertGetResponse("http://localhost:"+testPort+"/not-found.txt", http.StatusOK, "I am by birth a Genevese (i not set)")
 }
@@ -489,7 +531,9 @@ func TestMetrics(t *testing.T) {
 	// Fetch metrics
 	resp, err := http.Get("http://localhost:2999/metrics")
 	require.NoError(t, err, "failed to fetch metrics")
-	defer resp.Body.Close()
+	t.Cleanup(func() {
+		require.NoError(t, resp.Body.Close())
+	})
 
 	// Read and parse metrics
 	metrics := new(bytes.Buffer)
@@ -548,6 +592,7 @@ func TestWorkerMetrics(t *testing.T) {
 	`, "caddyfile")
 
 	workerName, _ := fastabs.FastAbs("../testdata/index.php")
+	workerName = escapeMetricLabel(workerName)
 
 	// Make some requests
 	for i := range 10 {
@@ -562,7 +607,9 @@ func TestWorkerMetrics(t *testing.T) {
 	// Fetch metrics
 	resp, err := http.Get("http://localhost:2999/metrics")
 	require.NoError(t, err, "failed to fetch metrics")
-	defer resp.Body.Close()
+	t.Cleanup(func() {
+		require.NoError(t, resp.Body.Close())
+	})
 
 	// Read and parse metrics
 	metrics := new(bytes.Buffer)
@@ -654,7 +701,9 @@ func TestNamedWorkerMetrics(t *testing.T) {
 	// Fetch metrics
 	resp, err := http.Get("http://localhost:2999/metrics")
 	require.NoError(t, err, "failed to fetch metrics")
-	defer resp.Body.Close()
+	t.Cleanup(func() {
+		require.NoError(t, resp.Body.Close())
+	})
 
 	// Read and parse metrics
 	metrics := new(bytes.Buffer)
@@ -731,6 +780,7 @@ func TestAutoWorkerConfig(t *testing.T) {
 	`, "caddyfile")
 
 	workerName, _ := fastabs.FastAbs("../testdata/index.php")
+	workerName = escapeMetricLabel(workerName)
 
 	// Make some requests
 	for i := range 10 {
@@ -745,7 +795,9 @@ func TestAutoWorkerConfig(t *testing.T) {
 	// Fetch metrics
 	resp, err := http.Get("http://localhost:2999/metrics")
 	require.NoError(t, err, "failed to fetch metrics")
-	defer resp.Body.Close()
+	t.Cleanup(func() {
+		require.NoError(t, resp.Body.Close())
+	})
 
 	// Read and parse metrics
 	metrics := new(bytes.Buffer)
@@ -804,6 +856,7 @@ func TestAllDefinedServerVars(t *testing.T) {
 	expectedBody = strings.ReplaceAll(expectedBody, "{documentRoot}", documentRoot)
 	expectedBody = strings.ReplaceAll(expectedBody, "\r\n", "\n")
 	expectedBody = strings.ReplaceAll(expectedBody, "{testPort}", testPort)
+	expectedBody = strings.ReplaceAll(expectedBody, documentRoot+"/", documentRoot+string(filepath.Separator))
 	tester := caddytest.NewTester(t)
 	tester.InitServer(`
 		{
@@ -904,8 +957,9 @@ func testSingleIniConfiguration(tester *caddytest.Tester, key string, value stri
 }
 
 func TestOsEnv(t *testing.T) {
-	os.Setenv("ENV1", "value1")
-	os.Setenv("ENV2", "value2")
+	require.NoError(t, os.Setenv("ENV1", "value1"))
+	require.NoError(t, os.Setenv("ENV2", "value2"))
+
 	tester := caddytest.NewTester(t)
 	tester.InitServer(`
 		{
@@ -1050,9 +1104,11 @@ func TestMaxWaitTimeWorker(t *testing.T) {
 func getStatusCode(url string, t *testing.T) int {
 	req, err := http.NewRequest("GET", url, nil)
 	require.NoError(t, err)
+
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	require.NoError(t, resp.Body.Close())
+
 	return resp.StatusCode
 }
 
@@ -1111,7 +1167,9 @@ func TestMultiWorkersMetrics(t *testing.T) {
 	// Fetch metrics
 	resp, err := http.Get("http://localhost:2999/metrics")
 	require.NoError(t, err, "failed to fetch metrics")
-	defer resp.Body.Close()
+	t.Cleanup(func() {
+		require.NoError(t, resp.Body.Close())
+	})
 
 	// Read and parse metrics
 	metrics := new(bytes.Buffer)
@@ -1217,7 +1275,9 @@ func TestDisabledMetrics(t *testing.T) {
 	// Fetch metrics
 	resp, err := http.Get("http://localhost:2999/metrics")
 	require.NoError(t, err, "failed to fetch metrics")
-	defer resp.Body.Close()
+	t.Cleanup(func() {
+		require.NoError(t, resp.Body.Close())
+	})
 
 	// Read and parse metrics
 	metrics := new(bytes.Buffer)
@@ -1276,7 +1336,9 @@ func TestWorkerRestart(t *testing.T) {
 
 	resp, err := http.Get("http://localhost:2999/metrics")
 	require.NoError(t, err, "failed to fetch metrics")
-	defer resp.Body.Close()
+	t.Cleanup(func() {
+		require.NoError(t, resp.Body.Close())
+	})
 
 	// Read and parse metrics
 	metrics := new(bytes.Buffer)
@@ -1505,6 +1567,7 @@ func TestLog(t *testing.T) {
 func TestSymlinkWorkerPaths(t *testing.T) {
 	cwd, _ := os.Getwd()
 	publicDir := filepath.Join(cwd, "..", "testdata", "symlinks", "public")
+	skipIfSymlinkNotValid(t, publicDir)
 
 	t.Run("NeighboringWorkerScript", func(t *testing.T) {
 		// Scenario: neighboring worker script
@@ -1640,6 +1703,7 @@ func TestSymlinkResolveRoot(t *testing.T) {
 	cwd, _ := os.Getwd()
 	testDir := filepath.Join(cwd, "..", "testdata", "symlinks", "test")
 	publicDir := filepath.Join(cwd, "..", "testdata", "symlinks", "public")
+	skipIfSymlinkNotValid(t, publicDir)
 
 	t.Run("ResolveRootSymlink", func(t *testing.T) {
 		// Tests that resolve_root_symlink directive works correctly
@@ -1698,6 +1762,7 @@ func TestSymlinkResolveRoot(t *testing.T) {
 func TestSymlinkWorkerBehavior(t *testing.T) {
 	cwd, _ := os.Getwd()
 	publicDir := filepath.Join(cwd, "..", "testdata", "symlinks", "public")
+	skipIfSymlinkNotValid(t, publicDir)
 
 	t.Run("WorkerScriptFailsWithoutWorkerMode", func(t *testing.T) {
 		// Tests that accessing a worker-only script without configuring it as a worker actually results in an error

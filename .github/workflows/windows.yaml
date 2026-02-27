@@ -1,0 +1,223 @@
+name: Build Windows release
+
+concurrency:
+  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "docker-bake.hcl"
+      - "vcpkg.json"
+      - ".github/workflows/static.yaml"
+      - "**cgo.go"
+      - "**Dockerfile"
+      - "**.c"
+      - "**.h"
+      - "**.sh"
+      - "**.stub.php"
+  push:
+    branches:
+      - main
+    tags:
+      - v*.*.*
+  workflow_dispatch:
+    inputs:
+      #checkov:skip=CKV_GHA_7
+      version:
+        description: "FrankenPHP version"
+        required: false
+        type: string
+  schedule:
+    - cron: "0 8 * * *"
+
+permissions:
+  contents: read
+
+env:
+  GOTOOLCHAIN: local
+  GOFLAGS: "-ldflags=-extldflags=-fuse-ld=lld -tags=nobadger,nomysql,nopgx"
+  PHP_DOWNLOAD_BASE: "https://downloads.php.net/~windows/releases/"
+  CC: clang
+  CXX: clang++
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: powershell
+
+    steps:
+      - name: Configure Git
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+
+      - name: Checkout Code
+        uses: actions/checkout@v6
+        with:
+          path: frankenphp
+          persist-credentials: false
+
+      - name: Set FRANKENPHP_VERSION
+        run: |
+          if ($env:GITHUB_REF_TYPE -eq "tag") {
+            $frankenphpVersion = $env:GITHUB_REF_NAME.Substring(1)
+          } elseif ($env:GITHUB_EVENT_NAME -eq "schedule") {
+            $frankenphpVersion = $env:GITHUB_REF
+          } else {
+            $frankenphpVersion = $env:GITHUB_SHA
+          }
+
+          echo "FRANKENPHP_VERSION=$frankenphpVersion" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with: # zizmor: ignore[cache-poisoning]
+          go-version: "1.26"
+          cache-dependency-path: |
+            frankenphp/go.sum
+            frankenphp/caddy/go.sum
+          cache: ${{ github.event_name != 'release' }}
+          check-latest: true
+
+      - name: Install Vcpkg Libraries
+        working-directory: frankenphp
+        run: "vcpkg install"
+
+      - name: Download Watcher
+        run: |
+          $latestTag = gh release list --repo e-dant/watcher --limit 1 --exclude-drafts --exclude-pre-releases --json tagName --jq '.[0].tagName'
+          Write-Host "Latest Watcher version: $latestTag"
+
+          gh release download $latestTag --repo e-dant/watcher --pattern "*x86_64-pc-windows-msvc.tar" -O watcher.tar
+
+          tar -xf "watcher.tar" -C "$env:GITHUB_WORKSPACE"
+          Rename-Item -Path "$env:GITHUB_WORKSPACE\x86_64-pc-windows-msvc" -NewName "watcher"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download PHP
+        run: |
+          $webContent = Invoke-WebRequest -Uri $env:PHP_DOWNLOAD_BASE -UseBasicParsing
+          $links = $webContent.Links.Href | Where-Object { $_ -match "php-\d+\.\d+\.\d+-Win32-vs17-x64\.zip$" }
+
+          if (-not $links) { throw "Could not find PHP zip files at $env:PHP_DOWNLOAD_BASE" }
+
+          $latestFile = $links | Sort-Object { if ($_ -match '(\d+\.\d+\.\d+)') { [version]$matches[1] } } | Select-Object -Last 1
+
+          $version = if ($latestFile -match '(\d+\.\d+\.\d+)') { $matches[1] }
+          Write-Host "Detected latest PHP version: $version"
+
+          "PHP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+          $phpZip = "php-$version-Win32-vs17-x64.zip"
+          $develZip = "php-devel-pack-$version-Win32-vs17-x64.zip"
+
+          $dirName = "frankenphp-$env:FRANKENPHP_VERSION-php-$version-Win32-vs17-x64"
+
+          echo "DIR_NAME=$dirName" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+          Invoke-WebRequest -Uri "$env:PHP_DOWNLOAD_BASE/$phpZip" -OutFile "$env:TEMP\php.zip"
+          Expand-Archive -Path "$env:TEMP\php.zip" -DestinationPath "$env:GITHUB_WORKSPACE\$dirName"
+
+          Invoke-WebRequest -Uri "$env:PHP_DOWNLOAD_BASE/$develZip" -OutFile "$env:TEMP\php-devel.zip"
+          Expand-Archive -Path "$env:TEMP\php-devel.zip" -DestinationPath "$env:GITHUB_WORKSPACE\php-devel"
+
+      - name: Prepare env
+        run: |
+          $vcpkgRoot = "$env:GITHUB_WORKSPACE\frankenphp\vcpkg_installed\x64-windows"
+          $watcherRoot = "$env:GITHUB_WORKSPACE\watcher"
+          $phpBin = "$env:GITHUB_WORKSPACE\$env:DIR_NAME"
+          $phpDevel = "$env:GITHUB_WORKSPACE\php-devel\php-$env:PHP_VERSION-devel-vs17-x64"
+
+          echo "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\Llvm\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          echo "$vcpkgRoot\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          echo "$watcherRoot" | Out-File -FilePath $env:GITHUB_PATH -Append
+          echo "$phpBin" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+          echo "CGO_CFLAGS=-DFRANKENPHP_VERSION=$env:FRANKENPHP_VERSION -I$vcpkgRoot\include -I$watcherRoot -I$phpDevel\include -I$phpDevel\include\main -I$phpDevel\include\TSRM -I$phpDevel\include\Zend -I$phpDevel\include\ext" | Out-File -FilePath $env:GITHUB_ENV -Append
+          echo "CGO_LDFLAGS=-L$vcpkgRoot\lib -lbrotlienc -L$watcherRoot -llibwatcher-c -L$phpBin -L$phpDevel\lib -lphp8ts -lphp8embed" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Embed Windows icon and metadata
+        working-directory: frankenphp\caddy\frankenphp
+        run: |
+          go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
+
+          $major = 0; $minor = 0; $patch = 0; $build = 0
+          if ($env:FRANKENPHP_VERSION -match '^(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)$') {
+            $major = [int]$Matches['major']
+            $minor = [int]$Matches['minor']
+            $patch = [int]$Matches['patch']
+          }
+
+          $json = @{
+            FixedFileInfo = @{
+              FileVersion = @{ Major = $major; Minor = $minor; Patch = $patch; Build = $build }
+              ProductVersion = @{ Major = $major; Minor = $minor; Patch = $patch; Build = $build }
+            }
+            StringFileInfo = @{
+              CompanyName = "FrankenPHP"
+              FileDescription = "The modern PHP app server"
+              FileVersion = $env:FRANKENPHP_VERSION
+              InternalName = "frankenphp"
+              OriginalFilename = "frankenphp.exe"
+              LegalCopyright = "(c) 2022 Kévin Dunglas, MIT License"
+              ProductName = "FrankenPHP"
+              ProductVersion = $env:FRANKENPHP_VERSION
+              Comments = "https://frankenphp.dev/"
+            }
+            VarFileInfo = @{
+              Translation = @{ LangID = 9; CharsetID = 1200 }
+            }
+          } | ConvertTo-Json -Depth 10
+          [System.IO.File]::WriteAllText("versioninfo.json", $json, [System.Text.Encoding]::Default)
+
+          goversioninfo -64 -icon ..\..\frankenphp.ico versioninfo.json -o resource.syso
+
+      - name: Build FrankenPHP
+        run: |
+          $customVersion = "FrankenPHP $env:FRANKENPHP_VERSION PHP $env:PHP_VERSION Caddy"
+          go build -ldflags="-extldflags=-fuse-ld=lld -X 'github.com/caddyserver/caddy/v2.CustomVersion=$customVersion' -X 'github.com/caddyserver/caddy/v2/modules/caddyhttp.ServerHeader=FrankenPHP Caddy'"
+        working-directory: frankenphp\caddy\frankenphp
+
+      - name: Create Directory
+        run: |
+          Copy-Item frankenphp\caddy\frankenphp\frankenphp.exe $env:DIR_NAME
+          Copy-Item watcher\libwatcher-c.dll $env:DIR_NAME
+          Copy-Item frankenphp\vcpkg_installed\x64-windows\bin\brotlienc.dll $env:DIR_NAME
+          Copy-Item frankenphp\vcpkg_installed\x64-windows\bin\brotlidec.dll $env:DIR_NAME
+          Copy-Item frankenphp\vcpkg_installed\x64-windows\bin\brotlicommon.dll $env:DIR_NAME
+          Copy-Item frankenphp\vcpkg_installed\x64-windows\bin\pthreadVC3.dll $env:DIR_NAME
+
+      - name: Upload Artifact
+        if: github.event_name != 'release'
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ env.DIR_NAME }}
+          path: ${{ env.DIR_NAME }}
+          if-no-files-found: error
+
+      - name: Zip Release Artifact
+        if: github.event_name == 'release'
+        run: Compress-Archive -Path "$env:DIR_NAME\*" -DestinationPath "$env:DIR_NAME.zip"
+
+      - name: Upload Release Asset
+        if: github.event_name == 'release'
+        run: gh release upload $env:GITHUB_EVENT_RELEASE_TAG_NAME "$env:DIR_NAME.zip" --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_EVENT_RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
+
+      - name: Run Tests
+        run: |
+          "opcache.enable=0`r`nopcache.enable_cli=0" | Out-File php.ini
+          $env:PHPRC = Get-Location
+
+          go test ./...
+          cd caddy
+          go test ./...
+        working-directory: ${{ github.workspace }}\frankenphp

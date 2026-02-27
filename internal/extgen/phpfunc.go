@@ -16,7 +16,7 @@ func (pfg *PHPFuncGenerator) generate(fn phpFunction) string {
 	paramInfo := pfg.paramParser.analyzeParameters(fn.Params)
 
 	funcName := NamespacedName(pfg.namespace, fn.Name)
-	builder.WriteString(fmt.Sprintf("PHP_FUNCTION(%s)\n{\n", funcName))
+	_, _ = fmt.Fprintf(&builder, "PHP_FUNCTION(%s)\n{\n", funcName)
 
 	if decl := pfg.paramParser.generateParamDeclarations(fn.Params); decl != "" {
 		builder.WriteString(decl + "\n")

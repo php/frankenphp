@@ -15,6 +15,8 @@ package frankenphp
 #cgo noescape __zval_double__
 #cgo noescape __zval_string__
 #cgo noescape __zval_arr__
+#cgo noescape __emalloc__
+#cgo noescape __efree__
 #include "types.h"
 */
 import "C"
