@@ -21,13 +21,12 @@ const (
 	downScaleCheckTime = 5 * time.Second
 	// max amount of threads stopped in one iteration of downScaleCheckTime
 	maxTerminationCount = 10
-	// autoscaled threads waiting for longer than this time are downscaled
-	maxThreadIdleTime = 5 * time.Second
 )
 
 var (
 	ErrMaxThreadsReached = errors.New("max amount of overall threads reached")
 
+	maxIdleTime       = 5 * time.Second
 	scaleChan         chan *frankenPHPContext
 	autoScaledThreads = []*phpThread{}
 	scalingMu         = new(sync.RWMutex)
@@ -221,7 +220,7 @@ func deactivateThreads() {
 		}
 
 		// convert threads to inactive if they have been idle for too long
-		if thread.state.Is(state.Ready) && waitTime > maxThreadIdleTime.Milliseconds() {
+		if thread.state.Is(state.Ready) && waitTime > maxIdleTime.Milliseconds() {
 			convertToInactiveThread(thread)
 			stoppedThreadCount++
 			autoScaledThreads = append(autoScaledThreads[:i], autoScaledThreads[i+1:]...)

@@ -30,6 +30,7 @@ type opt struct {
 	metrics     Metrics
 	phpIni      map[string]string
 	maxWaitTime time.Duration
+	maxIdleTime time.Duration
 }
 
 type workerOpt struct {
@@ -151,6 +152,15 @@ func WithPhpIni(overrides map[string]string) Option {
 func WithMaxWaitTime(maxWaitTime time.Duration) Option {
 	return func(o *opt) error {
 		o.maxWaitTime = maxWaitTime
+
+		return nil
+	}
+}
+
+// WithMaxIdleTime configures the max time an autoscaled thread may be idle before being deactivated.
+func WithMaxIdleTime(maxIdleTime time.Duration) Option {
+	return func(o *opt) error {
+		o.maxIdleTime = maxIdleTime
 
 		return nil
 	}

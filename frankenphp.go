@@ -276,6 +276,10 @@ func Init(options ...Option) error {
 
 	maxWaitTime = opt.maxWaitTime
 
+	if opt.maxIdleTime > 0 {
+		maxIdleTime = opt.maxIdleTime
+	}
+
 	workerThreadCount, err := calculateMaxThreads(opt)
 	if err != nil {
 		Shutdown()
@@ -781,5 +785,6 @@ func resetGlobals() {
 	workersByName = nil
 	workersByPath = nil
 	watcherIsEnabled = false
+	maxIdleTime = 5 * time.Second
 	globalMu.Unlock()
 }
