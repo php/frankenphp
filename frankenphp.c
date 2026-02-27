@@ -855,6 +855,7 @@ void frankenphp_register_server_vars(zval *track_vars_array,
   zend_hash_update(ht, frankenphp_interned_strings.remote_ident, &zv);
 }
 
+/** Create an immutable zend_string that lasts for the whole process **/
 zend_string *frankenphp_init_persistent_string(const char *string, size_t len) {
   /* persistent strings will be ignored by the GC at the end of a request */
   zend_string *z_string = zend_string_init(string, len, 1);
@@ -988,7 +989,7 @@ static void frankenphp_register_variables(zval *track_vars_array) {
    */
   zend_hash_copy(Z_ARR_P(track_vars_array), main_thread_env, NULL);
 
-  /* All CGI variables are imported from the request context in go */
+  /* import CGI variables from the request context in go */
   go_register_server_variables(thread_index, track_vars_array);
 
   /* Some variables are already present in SG(request_info) */

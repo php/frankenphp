@@ -2,7 +2,6 @@ package frankenphp
 
 // #cgo nocallback frankenphp_new_main_thread
 // #cgo noescape frankenphp_new_main_thread
-// #include <php_variables.h>
 // #include "frankenphp.h"
 // #include <php_variables.h>
 import "C"

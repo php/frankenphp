@@ -312,7 +312,7 @@ func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) 
 	}
 
 	if m, ok := cStringHTTPMethods[request.Method]; ok {
-		info.request_method = (*C.char)(m)
+		info.request_method = m
 	} else {
 		info.request_method = thread.pinCString(request.Method)
 	}
