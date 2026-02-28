@@ -137,9 +137,9 @@ typedef struct frankenphp_server_vars {
   X(request_method, "REQUEST_METHOD")
 
 typedef struct frankenphp_interned_strings_t {
-#define DEFINE_STRUCT_FIELD(name, str) zend_string *name;
-  FRANKENPHP_INTERNED_STRINGS_LIST(DEFINE_STRUCT_FIELD)
-#undef DEFINE_STRUCT_FIELD
+#define F_DEFINE_STRUCT_FIELD(name, str) zend_string *name;
+  FRANKENPHP_INTERNED_STRINGS_LIST(F_DEFINE_STRUCT_FIELD)
+#undef F_DEFINE_STRUCT_FIELD
 } frankenphp_interned_strings_t;
 
 extern frankenphp_interned_strings_t frankenphp_interned_strings;

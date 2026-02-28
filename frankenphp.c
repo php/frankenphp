@@ -867,17 +867,17 @@ zend_string *frankenphp_init_persistent_string(const char *string, size_t len) {
   return z_string;
 }
 
-void frankenphp_init_interned_strings(void) {
+static void frankenphp_init_interned_strings(void) {
   if (frankenphp_interned_strings.remote_addr != NULL) {
     return; /* already initialized */
   }
 
-#define INITIALIZE_FIELD(name, str)                                            \
+#define F_INITIALIZE_FIELD(name, str)                                            \
   frankenphp_interned_strings.name =                                           \
       frankenphp_init_persistent_string(str, sizeof(str) - 1);
 
-  FRANKENPHP_INTERNED_STRINGS_LIST(INITIALIZE_FIELD)
-#undef INITIALIZE_FIELD
+  FRANKENPHP_INTERNED_STRINGS_LIST(F_INITIALIZE_FIELD)
+#undef F_INITIALIZE_FIELD
 }
 
 /* Register variables from SG(request_info) into $_SERVER */
