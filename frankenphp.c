@@ -867,51 +867,18 @@ zend_string *frankenphp_init_persistent_string(const char *string, size_t len) {
   return z_string;
 }
 
-#define FRANKENPHP_INTERNED_STR(str)                                           \
-  frankenphp_init_persistent_string(str, sizeof(str) - 1)
-
 void frankenphp_init_interned_strings(void) {
   if (frankenphp_interned_strings.remote_addr != NULL) {
     return; /* already initialized */
   }
 
-  frankenphp_interned_strings = (frankenphp_interned_strings_t){
-      .remote_addr = FRANKENPHP_INTERNED_STR("REMOTE_ADDR"),
-      .remote_host = FRANKENPHP_INTERNED_STR("REMOTE_HOST"),
-      .remote_port = FRANKENPHP_INTERNED_STR("REMOTE_PORT"),
-      .document_root = FRANKENPHP_INTERNED_STR("DOCUMENT_ROOT"),
-      .path_info = FRANKENPHP_INTERNED_STR("PATH_INFO"),
-      .php_self = FRANKENPHP_INTERNED_STR("PHP_SELF"),
-      .document_uri = FRANKENPHP_INTERNED_STR("DOCUMENT_URI"),
-      .script_filename = FRANKENPHP_INTERNED_STR("SCRIPT_FILENAME"),
-      .script_name = FRANKENPHP_INTERNED_STR("SCRIPT_NAME"),
-      .https = FRANKENPHP_INTERNED_STR("HTTPS"),
-      .httpsLowercase = FRANKENPHP_INTERNED_STR("https"),
-      .httpLowercase = FRANKENPHP_INTERNED_STR("http"),
-      .ssl_protocol = FRANKENPHP_INTERNED_STR("SSL_PROTOCOL"),
-      .request_scheme = FRANKENPHP_INTERNED_STR("REQUEST_SCHEME"),
-      .server_name = FRANKENPHP_INTERNED_STR("SERVER_NAME"),
-      .server_port = FRANKENPHP_INTERNED_STR("SERVER_PORT"),
-      .content_length = FRANKENPHP_INTERNED_STR("CONTENT_LENGTH"),
-      .server_protocol = FRANKENPHP_INTERNED_STR("SERVER_PROTOCOL"),
-      .http_host = FRANKENPHP_INTERNED_STR("HTTP_HOST"),
-      .request_uri = FRANKENPHP_INTERNED_STR("REQUEST_URI"),
-      .ssl_cipher = FRANKENPHP_INTERNED_STR("SSL_CIPHER"),
-      .server_software = FRANKENPHP_INTERNED_STR("SERVER_SOFTWARE"),
-      .server_software_str = FRANKENPHP_INTERNED_STR("FrankenPHP"),
-      .gateway_interface = FRANKENPHP_INTERNED_STR("GATEWAY_INTERFACE"),
-      .gateway_interface_str = FRANKENPHP_INTERNED_STR("CGI/1.1"),
-      .auth_type = FRANKENPHP_INTERNED_STR("AUTH_TYPE"),
-      .remote_ident = FRANKENPHP_INTERNED_STR("REMOTE_IDENT"),
-      .content_type = FRANKENPHP_INTERNED_STR("CONTENT_TYPE"),
-      .path_translated = FRANKENPHP_INTERNED_STR("PATH_TRANSLATED"),
-      .query_string = FRANKENPHP_INTERNED_STR("QUERY_STRING"),
-      .remote_user = FRANKENPHP_INTERNED_STR("REMOTE_USER"),
-      .request_method = FRANKENPHP_INTERNED_STR("REQUEST_METHOD"),
-  };
-}
+#define INITIALIZE_FIELD(name, str)                                            \
+  frankenphp_interned_strings.name =                                           \
+      frankenphp_init_persistent_string(str, sizeof(str) - 1);
 
-#undef FRANKENPHP_INTERNED_STR
+  FRANKENPHP_INTERNED_STRINGS_LIST(INITIALIZE_FIELD)
+#undef INITIALIZE_FIELD
+}
 
 /* Register variables from SG(request_info) into $_SERVER */
 static inline void

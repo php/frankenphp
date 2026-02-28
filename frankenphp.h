@@ -102,39 +102,44 @@ typedef struct frankenphp_server_vars {
  * Cached interned strings for memory and performance benefits
  * Add more hard-coded strings here if needed
  */
+#define FRANKENPHP_INTERNED_STRINGS_LIST(X)                                    \
+  X(remote_addr, "REMOTE_ADDR")                                                \
+  X(remote_host, "REMOTE_HOST")                                                \
+  X(remote_port, "REMOTE_PORT")                                                \
+  X(document_root, "DOCUMENT_ROOT")                                            \
+  X(path_info, "PATH_INFO")                                                    \
+  X(php_self, "PHP_SELF")                                                      \
+  X(document_uri, "DOCUMENT_URI")                                              \
+  X(script_filename, "SCRIPT_FILENAME")                                        \
+  X(script_name, "SCRIPT_NAME")                                                \
+  X(https, "HTTPS")                                                            \
+  X(httpsLowercase, "https")                                                   \
+  X(httpLowercase, "http")                                                     \
+  X(ssl_protocol, "SSL_PROTOCOL")                                              \
+  X(request_scheme, "REQUEST_SCHEME")                                          \
+  X(server_name, "SERVER_NAME")                                                \
+  X(server_port, "SERVER_PORT")                                                \
+  X(content_length, "CONTENT_LENGTH")                                          \
+  X(server_protocol, "SERVER_PROTOCOL")                                        \
+  X(http_host, "HTTP_HOST")                                                    \
+  X(request_uri, "REQUEST_URI")                                                \
+  X(ssl_cipher, "SSL_CIPHER")                                                  \
+  X(server_software, "SERVER_SOFTWARE")                                        \
+  X(server_software_str, "FrankenPHP")                                         \
+  X(gateway_interface, "GATEWAY_INTERFACE")                                    \
+  X(gateway_interface_str, "CGI/1.1")                                          \
+  X(auth_type, "AUTH_TYPE")                                                    \
+  X(remote_ident, "REMOTE_IDENT")                                              \
+  X(content_type, "CONTENT_TYPE")                                              \
+  X(path_translated, "PATH_TRANSLATED")                                        \
+  X(query_string, "QUERY_STRING")                                              \
+  X(remote_user, "REMOTE_USER")                                                \
+  X(request_method, "REQUEST_METHOD")
+
 typedef struct frankenphp_interned_strings_t {
-  zend_string *remote_addr;
-  zend_string *remote_host;
-  zend_string *remote_port;
-  zend_string *document_root;
-  zend_string *path_info;
-  zend_string *php_self;
-  zend_string *document_uri;
-  zend_string *script_filename;
-  zend_string *script_name;
-  zend_string *https;
-  zend_string *httpsLowercase;
-  zend_string *httpLowercase;
-  zend_string *ssl_protocol;
-  zend_string *request_scheme;
-  zend_string *server_name;
-  zend_string *server_port;
-  zend_string *content_length;
-  zend_string *server_protocol;
-  zend_string *http_host;
-  zend_string *request_uri;
-  zend_string *ssl_cipher;
-  zend_string *server_software;
-  zend_string *server_software_str;
-  zend_string *gateway_interface;
-  zend_string *gateway_interface_str;
-  zend_string *auth_type;
-  zend_string *remote_ident;
-  zend_string *content_type;
-  zend_string *path_translated;
-  zend_string *query_string;
-  zend_string *remote_user;
-  zend_string *request_method;
+#define DEFINE_STRUCT_FIELD(name, str) zend_string *name;
+  FRANKENPHP_INTERNED_STRINGS_LIST(DEFINE_STRUCT_FIELD)
+#undef DEFINE_STRUCT_FIELD
 } frankenphp_interned_strings_t;
 
 extern frankenphp_interned_strings_t frankenphp_interned_strings;
