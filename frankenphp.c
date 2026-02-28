@@ -829,7 +829,6 @@ void frankenphp_register_server_vars(zval *track_vars_array,
   FRANKENPHP_REGISTER_VAR(script_filename);
   FRANKENPHP_REGISTER_VAR(script_name);
   FRANKENPHP_REGISTER_VAR(https);
-  FRANKENPHP_REGISTER_VAR(ssl_protocol);
   FRANKENPHP_REGISTER_VAR(ssl_cipher);
   FRANKENPHP_REGISTER_VAR(server_name);
   FRANKENPHP_REGISTER_VAR(server_port);
@@ -840,7 +839,7 @@ void frankenphp_register_server_vars(zval *track_vars_array,
 
 #undef FRANKENPHP_REGISTER_VAR
 
-  // update values with known zend_strings
+  /* update values with hard-coded zend_strings */
   zval zv;
   ZVAL_STR(&zv, frankenphp_interned_strings.gateway_interface_str);
   zend_hash_update(ht, frankenphp_interned_strings.gateway_interface, &zv);
@@ -848,11 +847,17 @@ void frankenphp_register_server_vars(zval *track_vars_array,
   zend_hash_update(ht, frankenphp_interned_strings.server_software, &zv);
   ZVAL_STR(&zv, vars.request_scheme);
   zend_hash_update(ht, frankenphp_interned_strings.request_scheme, &zv);
+  if (vars.ssl_protocol == NULL) {
+    ZVAL_EMPTY_STRING(&zv);
+  } else {
+    ZVAL_STR(&zv, vars.ssl_protocol);
+  }
+  zend_hash_update(ht, frankenphp_interned_strings.ssl_protocol, &zv);
 
-  // update values with always empty strings
+  /* update values with always empty strings */
   ZVAL_EMPTY_STRING(&zv);
-  zend_hash_update(ht, frankenphp_interned_strings.auth_type, &zv);
-  zend_hash_update(ht, frankenphp_interned_strings.remote_ident, &zv);
+  zend_hash_update_empty_string(ht, frankenphp_interned_strings.auth_type, &zv);
+  zend_hash_update_empty_string(ht, frankenphp_interned_strings.remote_ident, &zv);
 }
 
 /** Create an immutable zend_string that lasts for the whole process **/
@@ -872,7 +877,7 @@ static void frankenphp_init_interned_strings(void) {
     return; /* already initialized */
   }
 
-#define F_INITIALIZE_FIELD(name, str)                                            \
+#define F_INITIALIZE_FIELD(name, str)                                          \
   frankenphp_interned_strings.name =                                           \
       frankenphp_init_persistent_string(str, sizeof(str) - 1);
 

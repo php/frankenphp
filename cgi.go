@@ -26,15 +26,6 @@ import (
 	"golang.org/x/text/search"
 )
 
-// Protocol versions, in Apache mod_ssl format: https://httpd.apache.org/docs/current/mod/mod_ssl.html
-// Note that these are slightly different from SupportedProtocols in caddytls/config.go
-var tlsProtocolStrings = map[uint16]string{
-	tls.VersionTLS10: "TLSv1",
-	tls.VersionTLS11: "TLSv1.1",
-	tls.VersionTLS12: "TLSv1.2",
-	tls.VersionTLS13: "TLSv1.3",
-}
-
 // cStringHTTPMethods caches C string versions of common HTTP methods
 // to avoid allocations in pinCString on every request.
 var cStringHTTPMethods = map[string]*C.char{
@@ -69,13 +60,14 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		ip = ip[1 : len(ip)-1]
 	}
 
-	var https, sslProtocol, sslCipher string
+	var https, sslCipher string
+	var sslProtocol *C.zend_string
 	var rs *C.zend_string
 
 	if request.TLS == nil {
 		rs = C.frankenphp_interned_strings.httpLowercase
 		https = ""
-		sslProtocol = ""
+		sslProtocol = nil
 		sslCipher = ""
 	} else {
 		rs = C.frankenphp_interned_strings.httpsLowercase
@@ -83,11 +75,7 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 
 		// and pass the protocol details in a manner compatible with Apache's mod_ssl
 		// (which is why these have an SSL_ prefix and not TLS_).
-		if v, ok := tlsProtocolStrings[request.TLS.Version]; ok {
-			sslProtocol = v
-		} else {
-			sslProtocol = ""
-		}
+		sslProtocol = tlsProtocol(request.TLS.Version)
 
 		if request.TLS.CipherSuite != 0 {
 			sslCipher = tls.CipherSuiteName(request.TLS.CipherSuite)
@@ -151,8 +139,6 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		script_name_len:     C.size_t(len(fc.scriptName)),
 		https:               toUnsafeChar(https),
 		https_len:           C.size_t(len(https)),
-		ssl_protocol:        toUnsafeChar(sslProtocol),
-		ssl_protocol_len:    C.size_t(len(sslProtocol)),
 		server_name:         toUnsafeChar(reqHost),
 		server_name_len:     C.size_t(len(reqHost)),
 		server_port:         toUnsafeChar(serverPort),
@@ -168,6 +154,7 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		ssl_cipher:          toUnsafeChar(sslCipher),
 		ssl_cipher_len:      C.size_t(len(sslCipher)),
 		request_scheme:      rs,
+		ssl_protocol:        sslProtocol,
 	})
 }
 
@@ -387,4 +374,21 @@ func toUnsafeChar(s string) *C.char {
 // initialize a global zend_string that must never be freed and is ignored by CG
 func newPersistentZendString(str string) *C.zend_string {
 	return C.frankenphp_init_persistent_string(toUnsafeChar(str), C.size_t(len(str)))
+}
+
+// Protocol versions, in Apache mod_ssl format: https://httpd.apache.org/docs/current/mod/mod_ssl.html
+// Note that these are slightly different from SupportedProtocols in caddytls/config.go
+func tlsProtocol(proto uint16) *C.zend_string {
+	switch proto {
+	case tls.VersionTLS10:
+		return C.frankenphp_interned_strings.tls1
+	case tls.VersionTLS11:
+		return C.frankenphp_interned_strings.tls11
+	case tls.VersionTLS12:
+		return C.frankenphp_interned_strings.tls12
+	case tls.VersionTLS13:
+		return C.frankenphp_interned_strings.tls13
+	default:
+		return nil
+	}
 }
