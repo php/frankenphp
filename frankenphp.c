@@ -1080,7 +1080,8 @@ static void *php_main(void *arg) {
 
   sapi_startup(&frankenphp_sapi_module);
 
-  /* TODO: adapted from https://github.com/php/php-src/pull/16958, remove when merged. */
+  /* TODO: adapted from https://github.com/php/php-src/pull/16958, remove when
+   * merged. */
 #ifdef PHP_WIN32
   {
     const DWORD flags = GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
