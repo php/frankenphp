@@ -2,11 +2,11 @@ package frankenphp
 
 // #cgo nocallback frankenphp_register_server_vars
 // #cgo nocallback frankenphp_register_variable_safe
-// #cgo nocallback frankenphp_register_variable_unsafe
+// #cgo nocallback frankenphp_register_known_variable
 // #cgo nocallback frankenphp_init_persistent_string
 // #cgo noescape frankenphp_register_server_vars
 // #cgo noescape frankenphp_register_variable_safe
-// #cgo noescape frankenphp_register_variable_unsafe
+// #cgo noescape frankenphp_register_known_variable
 // #cgo noescape frankenphp_init_persistent_string
 // #include "frankenphp.h"
 // #include <php_variables.h>
@@ -160,7 +160,7 @@ func addHeadersToServer(ctx context.Context, request *http.Request, trackVarsArr
 	for field, val := range request.Header {
 		if k := commonHeaders[field]; k != nil {
 			v := strings.Join(val, ", ")
-			C.frankenphp_register_variable_unsafe(k, toUnsafeChar(v), C.size_t(len(v)), trackVarsArray)
+			C.frankenphp_register_known_variable(k, toUnsafeChar(v), C.size_t(len(v)), trackVarsArray)
 			continue
 		}
 

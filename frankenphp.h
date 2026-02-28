@@ -123,7 +123,7 @@ typedef struct frankenphp_server_vars {
   X(request_uri, "REQUEST_URI")                                                \
   X(ssl_cipher, "SSL_CIPHER")                                                  \
   X(server_software, "SERVER_SOFTWARE")                                        \
-  X(server_software_str, "FrankenPHP")                                         \
+  X(frankenphp, "FrankenPHP")                                                  \
   X(gateway_interface, "GATEWAY_INTERFACE")                                    \
   X(gateway_interface_str, "CGI/1.1")                                          \
   X(auth_type, "AUTH_TYPE")                                                    \
@@ -174,7 +174,7 @@ void frankenphp_update_local_thread_context(bool is_worker);
 int frankenphp_execute_script_cli(char *script, int argc, char **argv,
                                   bool eval);
 
-void frankenphp_register_variable_unsafe(zend_string *z_key, char *value,
+void frankenphp_register_known_variable(zend_string *z_key, char *value,
                                          size_t val_len,
                                          zval *track_vars_array);
 void frankenphp_register_variable_safe(char *key, char *var, size_t val_len,

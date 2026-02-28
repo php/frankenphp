@@ -842,7 +842,7 @@ void frankenphp_register_server_vars(zval *track_vars_array,
   zval zv;
   ZVAL_STR(&zv, frankenphp_interned_strings.gateway_interface_str);
   zend_hash_update(ht, frankenphp_interned_strings.gateway_interface, &zv);
-  ZVAL_STR(&zv, frankenphp_interned_strings.server_software_str);
+  ZVAL_STR(&zv, frankenphp_interned_strings.frankenphp);
   zend_hash_update(ht, frankenphp_interned_strings.server_software, &zv);
   ZVAL_STR(&zv, vars.request_scheme);
   zend_hash_update(ht, frankenphp_interned_strings.request_scheme, &zv);
@@ -916,7 +916,7 @@ frankenphp_register_variables_from_request_info(zval *track_vars_array) {
 }
 
 /* Only hard-coded keys may be registered this way */
-void frankenphp_register_variable_unsafe(zend_string *z_key, char *value,
+void frankenphp_register_known_variable(zend_string *z_key, char *value,
                                          size_t val_len,
                                          zval *track_vars_array) {
   frankenphp_register_trusted_var(z_key, value, val_len,
