@@ -828,7 +828,6 @@ void frankenphp_register_server_vars(zval *track_vars_array,
   FRANKENPHP_REGISTER_VAR(document_uri);
   FRANKENPHP_REGISTER_VAR(script_filename);
   FRANKENPHP_REGISTER_VAR(script_name);
-  FRANKENPHP_REGISTER_VAR(https);
   FRANKENPHP_REGISTER_VAR(ssl_cipher);
   FRANKENPHP_REGISTER_VAR(server_name);
   FRANKENPHP_REGISTER_VAR(server_port);
@@ -847,17 +846,15 @@ void frankenphp_register_server_vars(zval *track_vars_array,
   zend_hash_update(ht, frankenphp_interned_strings.server_software, &zv);
   ZVAL_STR(&zv, vars.request_scheme);
   zend_hash_update(ht, frankenphp_interned_strings.request_scheme, &zv);
-  if (vars.ssl_protocol == NULL) {
-    ZVAL_EMPTY_STRING(&zv);
-  } else {
-    ZVAL_STR(&zv, vars.ssl_protocol);
-  }
+  ZVAL_STR(&zv, vars.ssl_protocol);
   zend_hash_update(ht, frankenphp_interned_strings.ssl_protocol, &zv);
+  ZVAL_STR(&zv, vars.https);
+  zend_hash_update(ht, frankenphp_interned_strings.https, &zv);
 
   /* update values with always empty strings */
   ZVAL_EMPTY_STRING(&zv);
-  zend_hash_update_empty_string(ht, frankenphp_interned_strings.auth_type, &zv);
-  zend_hash_update_empty_string(ht, frankenphp_interned_strings.remote_ident, &zv);
+  zend_hash_update(ht, frankenphp_interned_strings.auth_type, &zv);
+  zend_hash_update(ht, frankenphp_interned_strings.remote_ident, &zv);
 }
 
 /** Create an immutable zend_string that lasts for the whole process **/

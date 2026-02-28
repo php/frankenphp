@@ -60,18 +60,17 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		ip = ip[1 : len(ip)-1]
 	}
 
-	var https, sslCipher string
-	var sslProtocol *C.zend_string
-	var rs *C.zend_string
+	var rs, https, sslProtocol *C.zend_string
+	var sslCipher string
 
 	if request.TLS == nil {
 		rs = C.frankenphp_interned_strings.httpLowercase
-		https = ""
-		sslProtocol = nil
+		https = C.zend_empty_string
+		sslProtocol = C.zend_empty_string
 		sslCipher = ""
 	} else {
 		rs = C.frankenphp_interned_strings.httpsLowercase
-		https = "on"
+		https = C.frankenphp_interned_strings.on
 
 		// and pass the protocol details in a manner compatible with Apache's mod_ssl
 		// (which is why these have an SSL_ prefix and not TLS_).
@@ -137,8 +136,6 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		script_filename_len: C.size_t(len(fc.scriptFilename)),
 		script_name:         toUnsafeChar(fc.scriptName),
 		script_name_len:     C.size_t(len(fc.scriptName)),
-		https:               toUnsafeChar(https),
-		https_len:           C.size_t(len(https)),
 		server_name:         toUnsafeChar(reqHost),
 		server_name_len:     C.size_t(len(reqHost)),
 		server_port:         toUnsafeChar(serverPort),
@@ -155,6 +152,7 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		ssl_cipher_len:      C.size_t(len(sslCipher)),
 		request_scheme:      rs,
 		ssl_protocol:        sslProtocol,
+		https:               https,
 	})
 }
 
@@ -389,6 +387,6 @@ func tlsProtocol(proto uint16) *C.zend_string {
 	case tls.VersionTLS13:
 		return C.frankenphp_interned_strings.tls13
 	default:
-		return nil
+		return C.zend_empty_string
 	}
 }

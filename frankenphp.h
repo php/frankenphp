@@ -77,8 +77,6 @@ typedef struct frankenphp_server_vars {
   size_t script_filename_len;
   char *script_name;
   size_t script_name_len;
-  char *https;
-  size_t https_len;
   char *server_name;
   size_t server_name_len;
   char *server_port;
@@ -95,6 +93,7 @@ typedef struct frankenphp_server_vars {
   size_t ssl_cipher_len;
   zend_string *request_scheme;
   zend_string *ssl_protocol;
+  zend_string *https;
 } frankenphp_server_vars;
 
 /**
@@ -137,7 +136,8 @@ typedef struct frankenphp_server_vars {
   X(tls1, "TLSv1")                                                             \
   X(tls11, "TLSv1.1")                                                          \
   X(tls12, "TLSv1.2")                                                          \
-  X(tls13, "TLSv1.3")
+  X(tls13, "TLSv1.3")                                                          \
+  X(on, "on")
 
 typedef struct frankenphp_interned_strings_t {
 #define F_DEFINE_STRUCT_FIELD(name, str) zend_string *name;
