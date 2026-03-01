@@ -1090,8 +1090,7 @@ static void *php_main(void *arg) {
     /* Use a larger buffer to support long module paths on Windows. */
     wchar_t filename[32768];
     if (GetModuleHandleExW(flags, (LPCWSTR)&frankenphp_sapi_module, &module)) {
-      const DWORD filename_capacity =
-          (DWORD)(sizeof(filename) / sizeof(filename[0]));
+      const DWORD filename_capacity = (DWORD)_countof(filename);
       DWORD len = GetModuleFileNameW(module, filename, filename_capacity);
       if (len > 0 && len < filename_capacity) {
         wchar_t *slash = wcsrchr(filename, L'\\');
