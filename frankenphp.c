@@ -1087,14 +1087,21 @@ static void *php_main(void *arg) {
     const DWORD flags = GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                         GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT;
     HMODULE module;
-    wchar_t filename[MAX_PATH];
+    /* Use a larger buffer to support long module paths on Windows. */
+    wchar_t filename[32768];
     if (GetModuleHandleExW(flags, (LPCWSTR)&frankenphp_sapi_module, &module)) {
-      DWORD len = GetModuleFileNameW(module, filename, MAX_PATH);
-      if (len > 0 && len < MAX_PATH) {
+      const DWORD filename_capacity =
+          (DWORD)(sizeof(filename) / sizeof(filename[0]));
+      DWORD len = GetModuleFileNameW(module, filename, filename_capacity);
+      if (len > 0 && len < filename_capacity) {
         wchar_t *slash = wcsrchr(filename, L'\\');
         if (slash) {
           *slash = L'\0';
-          SetDllDirectoryW(filename);
+          if (!SetDllDirectoryW(filename)) {
+            fprintf(stderr,
+                    "Warning: SetDllDirectoryW failed (error %lu)\n",
+                    GetLastError());
+          }
         }
       }
     }
