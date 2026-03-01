@@ -785,6 +785,6 @@ func resetGlobals() {
 	workersByName = nil
 	workersByPath = nil
 	watcherIsEnabled = false
-	maxIdleTime = 5 * time.Second
+	maxIdleTime = defaultMaxIdleTime
 	globalMu.Unlock()
 }

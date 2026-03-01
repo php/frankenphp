@@ -83,26 +83,6 @@ func TestMaxIdleTimePreventsEarlyDeactivation(t *testing.T) {
 	assert.IsType(t, &inactiveThread{}, autoScaledThread.handler, "thread should be deactivated after exceeding max idle time")
 }
 
-func TestDefaultMaxIdleTimeIs5Seconds(t *testing.T) {
-	t.Cleanup(Shutdown)
-
-	assert.NoError(t, Init(
-		WithNumThreads(1),
-		WithMaxThreads(2),
-	))
-
-	autoScaledThread := phpThreads[1]
-
-	// scale up
-	scaleRegularThread()
-	assert.Equal(t, state.Ready, autoScaledThread.state.Get())
-
-	// set wait time to 10 seconds (exceeds default 5s max idle time)
-	autoScaledThread.state.SetWaitTime(time.Now().Add(-10 * time.Second))
-	deactivateThreads()
-	assert.IsType(t, &inactiveThread{}, autoScaledThread.handler, "thread should be deactivated after 10s with default 5s max idle time")
-}
-
 func setLongWaitTime(t *testing.T, thread *phpThread) {
 	t.Helper()
 

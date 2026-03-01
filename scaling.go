@@ -21,12 +21,14 @@ const (
 	downScaleCheckTime = 5 * time.Second
 	// max amount of threads stopped in one iteration of downScaleCheckTime
 	maxTerminationCount = 10
+	// default time an autoscaled thread may be idle before being deactivated
+	defaultMaxIdleTime = 5 * time.Second
 )
 
 var (
 	ErrMaxThreadsReached = errors.New("max amount of overall threads reached")
 
-	maxIdleTime       = 5 * time.Second
+	maxIdleTime       = defaultMaxIdleTime
 	scaleChan         chan *frankenPHPContext
 	autoScaledThreads = []*phpThread{}
 	scalingMu         = new(sync.RWMutex)
