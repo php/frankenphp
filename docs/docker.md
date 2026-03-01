@@ -256,17 +256,16 @@ COPY "$PATH_TO_CADDYFILE" /etc/caddy/Caddyfile
 
 # Copy frankenphp and necessary libs
 COPY --from=builder /usr/local/bin/frankenphp /usr/local/bin/frankenphp
-COPY --from=builder --chown=nonroot:nonroot /usr/local/lib/php/extensions /usr/local/lib/php/extensions
+COPY --from=builder /usr/local/lib/php/extensions /usr/local/lib/php/extensions
 COPY --from=builder /tmp/libs /usr/lib
 
 # Copy php.ini configuration files
 COPY --from=builder /usr/local/etc/php/conf.d /usr/local/etc/php/conf.d
 COPY --from=builder /usr/local/etc/php/php.ini-production /usr/local/etc/php/php.ini
 
-# Create necessary caddy dirs
-# These dirs also need to be writable in case of a read-only root filesystem
-ENV XDG_CONFIG_HOME=/config
-ENV XDG_DATA_HOME=/data
+# Caddy data dirs — must be writable for nonroot, even on a read-only root filesystem
+ENV XDG_CONFIG_HOME=/config \
+    XDG_DATA_HOME=/data
 COPY --from=builder --chown=nonroot:nonroot /data/caddy /data/caddy
 COPY --from=builder --chown=nonroot:nonroot /config/caddy /config/caddy
 
