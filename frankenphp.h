@@ -125,7 +125,7 @@ typedef struct frankenphp_server_vars {
   X(server_software, "SERVER_SOFTWARE")                                        \
   X(frankenphp, "FrankenPHP")                                                  \
   X(gateway_interface, "GATEWAY_INTERFACE")                                    \
-  X(gateway_interface_str, "CGI/1.1")                                          \
+  X(cgi11, "CGI/1.1")                                                          \
   X(auth_type, "AUTH_TYPE")                                                    \
   X(remote_ident, "REMOTE_IDENT")                                              \
   X(content_type, "CONTENT_TYPE")                                              \

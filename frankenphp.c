@@ -840,7 +840,7 @@ void frankenphp_register_server_vars(zval *track_vars_array,
 
   /* update values with hard-coded zend_strings */
   zval zv;
-  ZVAL_STR(&zv, frankenphp_strings.gateway_interface_str);
+  ZVAL_STR(&zv, frankenphp_strings.cgi11);
   zend_hash_update_ind(ht, frankenphp_strings.gateway_interface, &zv);
   ZVAL_STR(&zv, frankenphp_strings.frankenphp);
   zend_hash_update_ind(ht, frankenphp_strings.server_software, &zv);
