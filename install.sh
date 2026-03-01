@@ -126,9 +126,41 @@ Darwin*)
 		;;
 	esac
 	;;
-Windows | MINGW64_NT*)
-	echo "❗ Use WSL to run FrankenPHP on Windows: https://learn.microsoft.com/windows/wsl/"
-	exit 1
+Windows | CYGWIN_NT* | MSYS_NT* | MINGW*)
+	if ! command -v unzip >/dev/null 2>&1 && ! command -v powershell.exe >/dev/null 2>&1; then
+		echo "❗ Please install unzip to extract FrankenPHP"
+		exit 1
+	fi
+
+	WIN_ASSET=$(curl -s https://api.github.com/repos/php/frankenphp/releases/latest | \
+		grep -o '"name": *"frankenphp-[^"]*-Win32-vs17-x64\.zip"' | head -1 | \
+		sed 's/"name": *"//;s/"//')
+
+	if [ -z "${WIN_ASSET}" ]; then
+		echo "❗ Could not find a Windows release asset"
+		echo "❗ Check https://github.com/php/frankenphp/releases for available downloads"
+		exit 1
+	fi
+
+	echo "📦 Downloading ${bold}FrankenPHP${normal} for Windows (x64):"
+
+	TMPZIP="/tmp/frankenphp-windows-$$.zip"
+	curl -L --progress-bar "https://github.com/php/frankenphp/releases/latest/download/${WIN_ASSET}" -o "${TMPZIP}"
+
+	echo "📂 Extracting to ${italic}${BIN_DIR}${normal}..."
+	if command -v unzip >/dev/null 2>&1; then
+		unzip -o -q "${TMPZIP}" -d "${BIN_DIR}"
+	else
+		powershell.exe -Command "Expand-Archive -Force -Path '$(cygpath -w "${TMPZIP}")' -DestinationPath '$(cygpath -w "${BIN_DIR}")'"
+	fi
+	rm -f "${TMPZIP}"
+
+	echo
+	echo "🥳 FrankenPHP downloaded successfully to ${italic}${BIN_DIR}${normal}"
+	echo "🔧 Add ${italic}${BIN_DIR}${normal} to your PATH to use ${italic}frankenphp.exe${normal} globally."
+	echo
+	echo "⭐ If you like FrankenPHP, please give it a star on GitHub: ${italic}https://github.com/php/frankenphp${normal}"
+	exit 0
 	;;
 *)
 	THE_ARCH_BIN=""
