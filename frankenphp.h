@@ -137,7 +137,8 @@ typedef struct frankenphp_server_vars {
   X(tls11, "TLSv1.1")                                                          \
   X(tls12, "TLSv1.2")                                                          \
   X(tls13, "TLSv1.3")                                                          \
-  X(on, "on")
+  X(on, "on")                                                                  \
+  X(empty, "")
 
 typedef struct frankenphp_interned_strings_t {
 #define F_DEFINE_STRUCT_FIELD(name, str) zend_string *name;
@@ -145,7 +146,7 @@ typedef struct frankenphp_interned_strings_t {
 #undef F_DEFINE_STRUCT_FIELD
 } frankenphp_interned_strings_t;
 
-extern frankenphp_interned_strings_t frankenphp_interned_strings;
+extern frankenphp_interned_strings_t frankenphp_strings;
 
 typedef struct frankenphp_version {
   unsigned char major_version;
@@ -175,8 +176,7 @@ int frankenphp_execute_script_cli(char *script, int argc, char **argv,
                                   bool eval);
 
 void frankenphp_register_known_variable(zend_string *z_key, char *value,
-                                         size_t val_len,
-                                         zval *track_vars_array);
+                                        size_t val_len, zval *track_vars_array);
 void frankenphp_register_variable_safe(char *key, char *var, size_t val_len,
                                        zval *track_vars_array);
 void frankenphp_register_server_vars(zval *track_vars_array,

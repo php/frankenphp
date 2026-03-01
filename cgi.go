@@ -64,13 +64,13 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 	var sslCipher string
 
 	if request.TLS == nil {
-		rs = C.frankenphp_interned_strings.httpLowercase
-		https = C.zend_empty_string
-		sslProtocol = C.zend_empty_string
+		rs = C.frankenphp_strings.httpLowercase
+		https = C.frankenphp_strings.empty
+		sslProtocol = C.frankenphp_strings.empty
 		sslCipher = ""
 	} else {
-		rs = C.frankenphp_interned_strings.httpsLowercase
-		https = C.frankenphp_interned_strings.on
+		rs = C.frankenphp_strings.httpsLowercase
+		https = C.frankenphp_strings.on
 
 		// and pass the protocol details in a manner compatible with Apache's mod_ssl
 		// (which is why these have an SSL_ prefix and not TLS_).
@@ -94,9 +94,9 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		// even if the port is the default port for the scheme and could otherwise be omitted from a URI.
 		// https://tools.ietf.org/html/rfc3875#section-4.1.15
 		switch rs {
-		case C.frankenphp_interned_strings.httpsLowercase:
+		case C.frankenphp_strings.httpsLowercase:
 			reqPort = "443"
-		case C.frankenphp_interned_strings.httpLowercase:
+		case C.frankenphp_strings.httpLowercase:
 			reqPort = "80"
 		}
 	}
@@ -116,8 +116,9 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 	C.frankenphp_register_server_vars(trackVarsArray, C.frankenphp_server_vars{
 		// approximate total length to avoid array re-hashing:
 		// 28 CGI vars + headers + environment
-		total_num_vars: C.size_t(28 + len(fc.env) + len(request.Header) + lengthOfEnv),
+		total_num_vars: C.size_t(28 + len(request.Header) + len(fc.env) + lengthOfEnv),
 
+		// CGI vars with variable values
 		remote_addr:         toUnsafeChar(ip),
 		remote_addr_len:     C.size_t(len(ip)),
 		remote_host:         toUnsafeChar(ip),
@@ -150,9 +151,11 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		request_uri_len:     C.size_t(len(requestURI)),
 		ssl_cipher:          toUnsafeChar(sslCipher),
 		ssl_cipher_len:      C.size_t(len(sslCipher)),
-		request_scheme:      rs,
-		ssl_protocol:        sslProtocol,
-		https:               https,
+
+		// CGI vars with known values
+		request_scheme: rs,          // "http" or "https"
+		ssl_protocol:   sslProtocol, // values from tlsProtocol
+		https:          https,       // "on" or empty
 	})
 }
 
@@ -379,14 +382,14 @@ func newPersistentZendString(str string) *C.zend_string {
 func tlsProtocol(proto uint16) *C.zend_string {
 	switch proto {
 	case tls.VersionTLS10:
-		return C.frankenphp_interned_strings.tls1
+		return C.frankenphp_strings.tls1
 	case tls.VersionTLS11:
-		return C.frankenphp_interned_strings.tls11
+		return C.frankenphp_strings.tls11
 	case tls.VersionTLS12:
-		return C.frankenphp_interned_strings.tls12
+		return C.frankenphp_strings.tls12
 	case tls.VersionTLS13:
-		return C.frankenphp_interned_strings.tls13
+		return C.frankenphp_strings.tls13
 	default:
-		return C.zend_empty_string
+		return C.frankenphp_strings.empty
 	}
 }
