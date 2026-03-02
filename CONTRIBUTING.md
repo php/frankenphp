@@ -99,7 +99,8 @@ curl -v http://127.0.0.1:8080/phpinfo.php
 
     ```powershell
     winget install -e --id Microsoft.VisualStudio.2022.Community --override "--passive --wait --add Microsoft.VisualStudio.Workload.NativeDesktop --add Microsoft.VisualStudio.Component.VC.Llvm.Clang --includeRecommended"
-    winget install -e --id GoLang.Go --id Git.Git
+    winget install -e --id GoLang.Go
+    winget install -e --id Git.Git
     ```
 
 3. Install vcpkg:
