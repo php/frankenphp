@@ -132,8 +132,8 @@ Windows | CYGWIN_NT* | MSYS_NT* | MINGW*)
 		exit 1
 	fi
 
-	WIN_ASSET=$(curl -s https://api.github.com/repos/php/frankenphp/releases/latest | \
-		grep -o '"name": *"frankenphp-[^"]*-Win32-vs17-x64\.zip"' | head -1 | \
+	WIN_ASSET=$(curl -s https://api.github.com/repos/php/frankenphp/releases/latest |
+		grep -o '"name": *"frankenphp-[^"]*-Win32-vs17-x64\.zip"' | head -1 |
 		sed 's/"name": *"//;s/"//')
 
 	if [ -z "${WIN_ASSET}" ]; then
