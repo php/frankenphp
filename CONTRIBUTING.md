@@ -106,8 +106,8 @@ curl -v http://127.0.0.1:8080/phpinfo.php
 3. Install vcpkg:
 
     ```powershell
-    cd c:\
-    gh repo clone microsoft/vcpkg
+    cd C:\
+    git clone https://github.com/microsoft/vcpkg
     .\vcpkg\bootstrap-vcpkg.bat
     ```
 
