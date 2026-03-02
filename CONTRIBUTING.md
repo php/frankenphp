@@ -17,7 +17,7 @@ The image contains the usual development tools (Go, GDB, Valgrind, Neovim...) an
 - additional configuration files: `/etc/frankenphp/php.d/*.ini`
 - php extensions: `/usr/lib/frankenphp/modules/`
 
-If your Docker version is lower than 23.0, the build will fail due to dockerignore [pattern issue](https://github.com/moby/moby/pull/42676). Add directories to `.dockerignore`.
+If your Docker version is lower than 23.0, the build will fail due to dockerignore [pattern issue](https://github.com/moby/moby/pull/42676). Add directories to `.dockerignore`:
 
 ```patch
  !testdata/*.php
@@ -93,7 +93,7 @@ curl -v http://127.0.0.1:8080/phpinfo.php
     git config --global core.autocrlf false
     git config --global core.eol lf
     ```
-2. Install Visual Studio, Git and Go:
+2. Install Visual Studio, Git, and Go:
     ```powershell
     winget install -e --id Microsoft.VisualStudio.2022.Community --override "--passive --wait --add Microsoft.VisualStudio.Workload.NativeDesktop --add Microsoft.VisualStudio.Component.VC.Llvm.Clang --includeRecommended"
     winget install -e --id GoLang.Go --id Git.Git
@@ -106,7 +106,7 @@ curl -v http://127.0.0.1:8080/phpinfo.php
     .\vcpkg\bootstrap-vcpkg.bat
     ```
 
-4. [Download the latest version of the watcher library for Windows](https://github.com/e-dant/watcher/releases) and extract it in a directory named `C:\watcher`
+4. [Download the latest version of the watcher library for Windows](https://github.com/e-dant/watcher/releases) and extract it to a directory named `C:\watcher`
 5. [Download the latest **Thread Safe** version of PHP and of the PHP SDK for Windows](https://windows.php.net/download/), extract them in directories named `C:\php` and `C:\php-devel`
 6. Clone the FrankenPHP Git repository:
     ```powershell
@@ -123,19 +123,18 @@ curl -v http://127.0.0.1:8080/phpinfo.php
 
     ```powershell
     $env:PATH += ';C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\Llvm\bin'
-    $env:GOTOOLCHAIN = 'go1.26rc1'
     $env:CC = 'clang'
     $env:CXX = 'clang++'
-    $env:CGO_CFLAGS = "-IC:\frankenphp\vcpkg_installed\x64-windows\include -IC:\watcher-x86_64-pc-windows-msvc -IC:\php-8.5.1-devel-vs17-x64\include -IC:\php-8.5.1-devel-vs17-x64\include\main -IC:\php-8.5.1-devel-vs17-x64\include\TSRM -IC:\php-8.5.1-devel-vs17-x64\include\Zend -IC:\php-8.5.1-devel-vs17-x64\include\ext"
-    $env:CGO_LDFLAGS = '-LC:\vcpkg\installed\x64-windows\lib -lbrotlienc -LC:\watcher-x86_64-pc-windows-msvc -llibwatcher-c -LC:\php-8.5.1-Win32-vs17-x64 -LC:\php-8.5.1-devel-vs17-x64\lib -lphp8ts -lphp8embed'
+    $env:CGO_CFLAGS = "-IC:\frankenphp\vcpkg_installed\x64-windows\include -IC:\watcher-x86_64-pc-windows-msvc -IC:\php-devel\include -IC:\php-devel\include\main -IC:\php-devel-vs17-x64\include\TSRM -IC:\php-devel\include\Zend -IC:\php-devel\include\ext"
+    $env:CGO_LDFLAGS = '-LC:\vcpkg\installed\x64-windows\lib -lbrotlienc -LC:\watcher-x86_64-pc-windows-msvc -llibwatcher-c -LC:\php -LC:\php-devel\lib -lphp8ts -lphp8embed'
     ```
 
 8. Run the tests:
 
     ```powershell
-    go test -ldflags '-extldflags="-fuse-ld=lld"' ./...
+    go test -race -ldflags '-extldflags="-fuse-ld=lld"' ./...
     cd caddy
-    go test -ldflags '-extldflags="-fuse-ld=lld"' -tags nobadger,nomysql,nopgx ./...
+    go test -race -ldflags '-extldflags="-fuse-ld=lld"' -tags nobadger,nomysql,nopgx ./...
     cd ..
     ```
 
@@ -149,7 +148,7 @@ curl -v http://127.0.0.1:8080/phpinfo.php
 
 ## Building Docker Images Locally
 
-Print bake plan:
+Print Bake plan:
 
 ```console
 docker buildx bake -f docker-bake.hcl --print
@@ -186,7 +185,7 @@ docker buildx bake -f docker-bake.hcl --pull --no-cache --push
    docker cp $(docker create --name static-builder-musl dunglas/frankenphp:static-builder-musl):/go/src/app/dist/frankenphp-linux-$(uname -m) frankenphp
    ```
 
-2. Replace your current version of `frankenphp` by the debug FrankenPHP executable
+2. Replace your current version of `frankenphp` with the debug FrankenPHP executable
 3. Start FrankenPHP as usual (alternatively, you can directly start FrankenPHP with GDB: `gdb --args frankenphp run`)
 4. Attach to the process with GDB:
 
@@ -268,7 +267,7 @@ strace -e 'trace=!futex,epoll_ctl,epoll_pwait,tgkill,rt_sigreturn' -p 1
 
 ## Translating the Documentation
 
-To translate the documentation and the site in a new language,
+To translate the documentation and the site into a new language,
 follow these steps:
 
 1. Create a new directory named with the language's 2-character ISO code in this repository's `docs/` directory
@@ -276,6 +275,6 @@ follow these steps:
 3. Copy the `README.md` and `CONTRIBUTING.md` files from the root directory to the new directory
 4. Translate the content of the files, but don't change the filenames, also don't translate strings starting with `> [!` (it's special markup for GitHub)
 5. Create a Pull Request with the translations
-6. In the [site repository](https://github.com/dunglas/frankenphp-website/tree/main), copy and translate the translation files in the `content/`, `data/` and `i18n/` directories
+6. In the [site repository](https://github.com/dunglas/frankenphp-website/tree/main), copy and translate the translation files in the `content/`, `data/`, and `i18n/` directories
 7. Translate the values in the created YAML file
 8. Open a Pull Request on the site repository
