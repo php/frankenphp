@@ -94,6 +94,7 @@ curl -v http://127.0.0.1:8080/phpinfo.php
     git config --global core.autocrlf false
     git config --global core.eol lf
     ```
+
 2. Install Visual Studio, Git, and Go:
 
     ```powershell
@@ -102,6 +103,7 @@ curl -v http://127.0.0.1:8080/phpinfo.php
     ```
 
 3. Install vcpkg:
+
     ```powershell
     cd c:\
     gh repo clone microsoft/vcpkg
