@@ -17,7 +17,7 @@ $ErrorActionPreference = "Stop"
 if ($env:BIN_DIR) {
     $BinDir = $env:BIN_DIR
 } else {
-    $BinDir = Get-Location
+    $BinDir = (Get-Location).Path
 }
 
 Write-Host "Querying latest FrankenPHP release..." -ForegroundColor Cyan
@@ -42,7 +42,7 @@ Write-Host "Downloading $($asset.name)..." -ForegroundColor Cyan
 $tmpZip = Join-Path $env:TEMP "frankenphp-windows-$PID.zip"
 
 try {
-    Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $tmpZip -UseBasicParsing
+    Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $tmpZip
 } catch {
     Write-Host "Download failed: $_" -ForegroundColor Red
     exit 1

@@ -16,7 +16,7 @@ ARCH=$(uname -m)
 GNU=""
 
 if ! command -v curl >/dev/null 2>&1; then
-	echo "Please install curl to download FrankenPHP"
+	echo "❗ Please install curl to download FrankenPHP"
 	exit 1
 fi
 
@@ -126,9 +126,9 @@ Darwin*)
 		;;
 	esac
 	;;
-Windows | CYGWIN_NT* | MSYS_NT* | MINGW*)
+CYGWIN_NT* | MSYS_NT* | MINGW*)
 	if ! command -v unzip >/dev/null 2>&1 && ! command -v powershell.exe >/dev/null 2>&1; then
-		echo "❗ Please install unzip to extract FrankenPHP"
+		echo "❗ Please install unzip or ensure PowerShell is available to extract FrankenPHP"
 		exit 1
 	fi
 
@@ -157,7 +157,7 @@ Windows | CYGWIN_NT* | MSYS_NT* | MINGW*)
 
 	echo
 	echo "🥳 FrankenPHP downloaded successfully to ${italic}${BIN_DIR}${normal}"
-	echo "🔧 Add ${italic}${BIN_DIR}${normal} to your PATH to use ${italic}frankenphp.exe${normal} globally."
+	echo "🔧 Add ${italic}$(cygpath -w "${BIN_DIR}")${normal} to your Windows PATH to use ${italic}frankenphp.exe${normal} globally."
 	echo
 	echo "⭐ If you like FrankenPHP, please give it a star on GitHub: ${italic}https://github.com/php/frankenphp${normal}"
 	exit 0
