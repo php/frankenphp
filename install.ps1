@@ -4,20 +4,20 @@
     Downloads and installs the latest FrankenPHP release for Windows.
 .DESCRIPTION
     This script downloads the latest FrankenPHP Windows release from GitHub
-    and extracts it to the specified directory (current directory by default).
+    and extracts it to the specified directory (~\.frankenphp by default).
 
     Usage as a one-liner:
         irm https://github.com/php/frankenphp/raw/refs/heads/main/install.ps1 | iex
     Custom install directory:
-        $env:BIN_DIR = 'C:\frankenphp'; irm https://github.com/php/frankenphp/raw/refs/heads/main/install.ps1 | iex
+        $env:FRANKENPHP_INSTALL = 'C:\frankenphp'; irm https://github.com/php/frankenphp/raw/refs/heads/main/install.ps1 | iex
 #>
 
 $ErrorActionPreference = "Stop"
 
-if ($env:BIN_DIR) {
-    $BinDir = $env:BIN_DIR
+if ($env:FRANKENPHP_INSTALL) {
+    $BinDir = $env:FRANKENPHP_INSTALL
 } else {
-    $BinDir = (Get-Location).Path
+    $BinDir = Join-Path $HOME ".frankenphp"
 }
 
 Write-Host "Querying latest FrankenPHP release..." -ForegroundColor Cyan
