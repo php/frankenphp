@@ -57,7 +57,7 @@ cd testdata/
 The server is listening on `127.0.0.1:80`:
 
 > [!NOTE]
-> if you are using Docker, you will have to either bind container port 80 or execute from inside the container
+> If you are using Docker, you will have to either bind container port 80 or execute from inside the container
 
 ```console
 curl -vk http://127.0.0.1/phpinfo.php
@@ -89,11 +89,13 @@ curl -v http://127.0.0.1:8080/phpinfo.php
 ## Windows development
 
 1. Configure Git to always use `lf` line endings
+
     ```powershell
     git config --global core.autocrlf false
     git config --global core.eol lf
     ```
 2. Install Visual Studio, Git, and Go:
+
     ```powershell
     winget install -e --id Microsoft.VisualStudio.2022.Community --override "--passive --wait --add Microsoft.VisualStudio.Workload.NativeDesktop --add Microsoft.VisualStudio.Component.VC.Llvm.Clang --includeRecommended"
     winget install -e --id GoLang.Go --id Git.Git
@@ -109,12 +111,14 @@ curl -v http://127.0.0.1:8080/phpinfo.php
 4. [Download the latest version of the watcher library for Windows](https://github.com/e-dant/watcher/releases) and extract it to a directory named `C:\watcher`
 5. [Download the latest **Thread Safe** version of PHP and of the PHP SDK for Windows](https://windows.php.net/download/), extract them in directories named `C:\php` and `C:\php-devel`
 6. Clone the FrankenPHP Git repository:
+
     ```powershell
     git clone https://github.com/php/frankenphp C:\frankenphp
     cd C:\frankenphp
     ```
 
 7. Install the dependencies:
+
     ```powershell
     vcpkg install
     ```
