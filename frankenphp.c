@@ -1097,8 +1097,7 @@ static void *php_main(void *arg) {
         if (slash) {
           *slash = L'\0';
           if (!SetDllDirectoryW(filename)) {
-            fprintf(stderr,
-                    "Warning: SetDllDirectoryW failed (error %lu)\n",
+            fprintf(stderr, "Warning: SetDllDirectoryW failed (error %lu)\n",
                     GetLastError());
           }
         }
