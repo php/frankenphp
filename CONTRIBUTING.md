@@ -30,14 +30,14 @@ If your Docker version is lower than 23.0, the build will fail due to dockerigno
 
 [Follow the instructions to compile from sources](https://frankenphp.dev/docs/compile/) and pass the `--debug` configuration flag.
 
-## Running the test suite
+## Running the Test Suite
 
 ```console
 export CGO_CFLAGS=$(php-config --includes) CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)"
 go test -race -v ./...
 ```
 
-## Caddy module
+## Caddy Module
 
 Build Caddy with the FrankenPHP Caddy module:
 
@@ -63,7 +63,7 @@ The server is listening on `127.0.0.1:80`:
 curl -vk http://127.0.0.1/phpinfo.php
 ```
 
-## Minimal test server
+## Minimal Test Server
 
 Build the minimal test server:
 
@@ -86,7 +86,7 @@ The server is listening on `127.0.0.1:8080`:
 curl -v http://127.0.0.1:8080/phpinfo.php
 ```
 
-## Windows development
+## Windows Development
 
 1. Configure Git to always use `lf` line endings
 
