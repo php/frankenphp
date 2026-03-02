@@ -1,4 +1,4 @@
-﻿# Konfigürasyon
+# Konfigürasyon
 
 FrankenPHP, Caddy'nin yanı sıra Mercure ve Vulcain modülleri [Caddy tarafından desteklenen formatlar](https://caddyserver.com/docs/getting-started#your-first-config) kullanılarak yapılandırılabilir.
 
