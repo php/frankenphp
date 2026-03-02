@@ -133,7 +133,7 @@ curl -v http://127.0.0.1:8080/phpinfo.php
     $env:CC = 'clang'
     $env:CXX = 'clang++'
     $env:CGO_CFLAGS = "-IC:\frankenphp\vcpkg_installed\x64-windows\include -IC:\watcher-x86_64-pc-windows-msvc -IC:\php-devel\include -IC:\php-devel\include\main -IC:\php-devel-vs17-x64\include\TSRM -IC:\php-devel\include\Zend -IC:\php-devel\include\ext"
-    $env:CGO_LDFLAGS = '-LC:\vcpkg\installed\x64-windows\lib -lbrotlienc -LC:\watcher-x86_64-pc-windows-msvc -llibwatcher-c -LC:\php -LC:\php-devel\lib -lphp8ts -lphp8embed'
+    $env:CGO_LDFLAGS = '-LC:\frankenphp\vcpkg_installed\x64-windows\lib -lbrotlienc -LC:\watcher-x86_64-pc-windows-msvc -llibwatcher-c -LC:\php -LC:\php-devel\lib -lphp8ts -lphp8embed'
     ```
 
 8. Run the tests:
