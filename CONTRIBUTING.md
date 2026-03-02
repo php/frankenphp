@@ -123,7 +123,7 @@ curl -v http://127.0.0.1:8080/phpinfo.php
 7. Install the dependencies:
 
     ```powershell
-    vcpkg install
+    C:\vcpkg\vcpkg.exe install
     ```
 
 8. Configure the needed environment variables (PowerShell):
