@@ -1,0 +1,18 @@
+---
+name: Deploy Docs
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "docs/**"
+      - "README.md"
+      - "CONTRIBUTING.md"
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger website deployment
+        env:
+          GH_TOKEN: ${{ secrets.WEBSITE_DEPLOY_TOKEN }}
+        run: gh api repos/dunglas/frankenphp-website/actions/workflows/hugo.yaml/dispatches -f ref=main
