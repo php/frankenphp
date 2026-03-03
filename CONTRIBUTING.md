@@ -33,7 +33,7 @@ If your Docker version is lower than 23.0, the build will fail due to dockerigno
 ## Running the Test Suite
 
 ```console
-export CGO_CFLAGS=$(php-config --includes) CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)"
+export CGO_CFLAGS=-O0 -g $(php-config --includes) CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)"
 go test -race -v ./...
 ```
 
@@ -132,7 +132,7 @@ curl -v http://127.0.0.1:8080/phpinfo.php
     $env:PATH += ';C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\Llvm\bin'
     $env:CC = 'clang'
     $env:CXX = 'clang++'
-    $env:CGO_CFLAGS = "-IC:\frankenphp\vcpkg_installed\x64-windows\include -IC:\watcher -IC:\php-devel\include -IC:\php-devel\include\main -IC:\php-devel\include\TSRM -IC:\php-devel\include\Zend -IC:\php-devel\include\ext"
+    $env:CGO_CFLAGS = "-O0 -g -IC:\frankenphp\vcpkg_installed\x64-windows\include -IC:\watcher -IC:\php-devel\include -IC:\php-devel\include\main -IC:\php-devel\include\TSRM -IC:\php-devel\include\Zend -IC:\php-devel\include\ext"
     $env:CGO_LDFLAGS = '-LC:\frankenphp\vcpkg_installed\x64-windows\lib -lbrotlienc -LC:\watcher -llibwatcher-c -LC:\php -LC:\php-devel\lib -lphp8ts -lphp8embed'
     ```
 
@@ -222,7 +222,7 @@ docker buildx bake -f docker-bake.hcl --pull --no-cache --push
 
    ```patch
        - name: Set CGO flags
-         run: echo "CGO_CFLAGS=$(php-config --includes)" >> "$GITHUB_ENV"
+         run: echo "CGO_CFLAGS=-O0 -g $(php-config --includes)" >> "$GITHUB_ENV"
    +   - run: |
    +       sudo apt install gdb
    +       mkdir -p /home/runner/.config/gdb/
