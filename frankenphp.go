@@ -418,7 +418,7 @@ func ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) error 
 }
 
 //export go_ub_write
-func go_ub_write(threadIndex C.uintptr_t, cBuf *C.char, length C.int) (C.size_t, C.bool) {
+func go_ub_write(threadIndex C.uintptr_t, cBuf *C.char, length C.size_t) (C.size_t, C.bool) {
 	thread := phpThreads[threadIndex]
 	fc := thread.frankenPHPContext()
 
