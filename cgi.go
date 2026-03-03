@@ -367,7 +367,7 @@ func ensureLeadingSlash(path string) string {
 
 // toUnsafeChar returns a *C.char pointing at the backing bytes the Go string.
 // If C does not store the string, it may be passed directly in a Cgo call (most efficient).
-// If C stores the string, it must be pinned explicitlyinstead (inefficient).
+// If C stores the string, it must be pinned explicitly instead (inefficient).
 // C may never modify the string.
 func toUnsafeChar(s string) *C.char {
 	return (*C.char)(unsafe.Pointer(unsafe.StringData(s)))
