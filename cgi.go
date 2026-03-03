@@ -365,14 +365,14 @@ func ensureLeadingSlash(path string) string {
 	return "/" + path
 }
 
-// Use a go string on the C side without allocations (C may not modify the string)
-// Best case scenario: The string is implicitly pinned
-// eg: C.call_funcion(toUnsafeChar(string)) <- go will not GC the string in this case
+// toUnsafeChar returns a *C.char pointing at the backing bytes of s.
+// If C does not modify or store the string it may be passed directly in a Cgo call.
+// If the pointer survives the Cgo call, it must be pinned instead (inefficient).
 func toUnsafeChar(s string) *C.char {
 	return (*C.char)(unsafe.Pointer(unsafe.StringData(s)))
 }
 
-// initialize a global zend_string that must never be freed and is ignored by CG
+// initialize a global zend_string that must never be freed and is ignored by GC
 func newPersistentZendString(str string) *C.zend_string {
 	return C.frankenphp_init_persistent_string(toUnsafeChar(str), C.size_t(len(str)))
 }
