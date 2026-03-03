@@ -63,23 +63,24 @@ if [ -z "${PHP_VERSION}" ]; then
 	get_latest_php_version() {
 		input="$1"
 		# Try php.net API first
-		json=$(curl -s "https://www.php.net/releases/index.php?json&version=$input")
-		latest=$(echo "$json" | jq -r '.version' 2>/dev/null)
-
-		if [[ "$latest" == "$input"* ]]; then
-			echo "$latest"
-			return
+		if json=$(curl -fsSL "https://www.php.net/releases/index.php?json&version=$input" 2>/dev/null); then
+			latest=$(echo "$json" | jq -r '.version' 2>/dev/null) || true
+			if [[ "$latest" == "$input"* ]]; then
+				echo "$latest"
+				return
+			fi
 		fi
 
 		# Fallback: use the latest GitHub release from php/php-src
 		if type "gh" >/dev/null 2>&1; then
-			latest=$(gh release list --repo php/php-src --exclude-drafts --exclude-pre-releases --json tagName --jq "[.[].tagName | select(startswith(\"php-${input}.\"))] | first | ltrimstr(\"php-\")")
+			latest=$(gh release list --repo php/php-src --exclude-drafts --exclude-pre-releases --json tagName --jq "[.[].tagName | select(startswith(\"php-${input}.\"))] | first | ltrimstr(\"php-\")") || true
 		fi
 		if [[ "$latest" == "$input"* ]]; then
 			echo "$latest"
 			return
 		fi
 
+		echo "Failed to determine PHP version from both php.net and GitHub, using default: $input" >&2
 		echo "$input"
 	}
 

@@ -56,8 +56,8 @@ jobs:
         run: |
           # Try php.net API first
           if curl -fsSL 'https://www.php.net/releases/index.php?json&max=1&version=8.5' -o version.json 2>/dev/null; then
-            version="$(jq -r 'keys[0]' version.json)"
-            archive="$(jq -r '.[] .source[] | select(.filename |endswith(".xz")) | "https://www.php.net/distributions/" + .filename' version.json)"
+            version="$(jq -r 'keys[0]' version.json 2>/dev/null)" || true
+            archive="$(jq -r '.[] .source[] | select(.filename |endswith(".xz")) | "https://www.php.net/distributions/" + .filename' version.json 2>/dev/null)" || true
             if [ -n "$version" ] && [ "$version" != "null" ] && [ -n "$archive" ] && [ "$archive" != "null" ]; then
               echo "version=$version" >> "$GITHUB_OUTPUT"
               echo "archive=$archive" >> "$GITHUB_OUTPUT"
@@ -65,8 +65,14 @@ jobs:
             fi
           fi
 
+          echo "php.net API unavailable, falling back to GitHub releases..."
+
           # Fallback: use the latest GitHub release from php/php-src
-          version=$(gh release list --repo php/php-src --exclude-drafts --exclude-pre-releases --json tagName --jq '[.[].tagName | select(startswith("php-8.5."))] | first | ltrimstr("php-")')
+          version=$(gh release list --repo php/php-src --exclude-drafts --exclude-pre-releases --json tagName --jq '[.[].tagName | select(startswith("php-8.5."))] | first | ltrimstr("php-")') || true
+          if [ -z "$version" ] || [ "$version" = "null" ]; then
+            echo "::error::Failed to determine PHP version from both php.net and GitHub"
+            exit 1
+          fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "archive=https://github.com/php/php-src/archive/refs/tags/php-${version}.tar.gz" >> "$GITHUB_OUTPUT"
       - name: Cache PHP
@@ -84,6 +90,10 @@ jobs:
             *)    curl -fsSL "${URL}" | tar -zx -C php --strip-components=1 ;;
           esac
           cd php/
+          # GitHub source archives don't include ./configure, generate it
+          if [ ! -f ./configure ]; then
+            ./buildconf -f
+          fi
           ./configure \
             CFLAGS="$CFLAGS" \
             LDFLAGS="$LDFLAGS" \
