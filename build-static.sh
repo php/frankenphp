@@ -62,14 +62,25 @@ fi
 if [ -z "${PHP_VERSION}" ]; then
 	get_latest_php_version() {
 		input="$1"
+		# Try php.net API first
 		json=$(curl -s "https://www.php.net/releases/index.php?json&version=$input")
-		latest=$(echo "$json" | jq -r '.version')
+		latest=$(echo "$json" | jq -r '.version' 2>/dev/null)
 
 		if [[ "$latest" == "$input"* ]]; then
 			echo "$latest"
-		else
-			echo "$input"
+			return
 		fi
+
+		# Fallback: use the latest GitHub release from php/php-src
+		if type "gh" >/dev/null 2>&1; then
+			latest=$(gh release list --repo php/php-src --exclude-drafts --exclude-pre-releases --json tagName --jq "[.[].tagName | select(startswith(\"php-${input}.\"))] | first | ltrimstr(\"php-\")")
+		fi
+		if [[ "$latest" == "$input"* ]]; then
+			echo "$latest"
+			return
+		fi
+
+		echo "$input"
 	}
 
 	PHP_VERSION="$(get_latest_php_version "8.5")"
