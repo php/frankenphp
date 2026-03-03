@@ -1080,6 +1080,32 @@ static void *php_main(void *arg) {
 
   sapi_startup(&frankenphp_sapi_module);
 
+  /* TODO: adapted from https://github.com/php/php-src/pull/16958, remove when
+   * merged. */
+#ifdef PHP_WIN32
+  {
+    const DWORD flags = GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                        GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT;
+    HMODULE module;
+    /* Use a larger buffer to support long module paths on Windows. */
+    wchar_t filename[32768];
+    if (GetModuleHandleExW(flags, (LPCWSTR)&frankenphp_sapi_module, &module)) {
+      const DWORD filename_capacity = (DWORD)_countof(filename);
+      DWORD len = GetModuleFileNameW(module, filename, filename_capacity);
+      if (len > 0 && len < filename_capacity) {
+        wchar_t *slash = wcsrchr(filename, L'\\');
+        if (slash) {
+          *slash = L'\0';
+          if (!SetDllDirectoryW(filename)) {
+            fprintf(stderr, "Warning: SetDllDirectoryW failed (error %lu)\n",
+                    GetLastError());
+          }
+        }
+      }
+    }
+  }
+#endif
+
 #ifdef ZEND_MAX_EXECUTION_TIMERS
   /* overwrite php.ini with custom user settings */
   char *php_ini_overrides = go_get_custom_php_ini(false);
