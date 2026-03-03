@@ -4,7 +4,7 @@ Les images Docker de [FrankenPHP](https://hub.docker.com/r/dunglas/frankenphp) s
 
 Des variantes pour PHP 8.2, 8.3, 8.4 et 8.5 sont disponibles. [Parcourir les tags](https://hub.docker.com/r/dunglas/frankenphp/tags).
 
-Les tags suivent le modèle suivant : `dunglas/frankenphp:<frankenphp-version>-php<php-version>-<os>`
+Les tags suivent le pattern suivant : `dunglas/frankenphp:<frankenphp-version>-php<php-version>-<os>`
 
 - `<frankenphp-version>` et `<php-version>` sont respectivement les numéros de version de FrankenPHP et PHP, allant de majeur (e.g. `1`), mineur (e.g. `1.2`) à des versions correctives (e.g. `1.2.3`).
 - `<os>` est soit `trixie` (pour Debian Trixie), `bookworm` (pour Debian Bookworm), ou `alpine` (pour la dernière version stable d'Alpine).
@@ -30,11 +30,11 @@ docker run -it --rm --name my-running-app my-php-app
 
 ## Comment ajuster la configuration
 
-Pour plus de commodité, un [`Caddyfile` par défaut](https://github.com/php/frankenphp/blob/main/caddy/frankenphp/Caddyfile) contenant des variables d'environnement utiles est fourni dans l'image.
+Pour une meilleure expérience initiale, un [`Caddyfile` par défaut](https://github.com/php/frankenphp/blob/main/caddy/frankenphp/Caddyfile) contenant des variables d'environnement communément utilisées est fourni dans l'image.
 
 ## Comment installer plus d'extensions PHP
 
-Le script [`docker-php-extension-installer`](https://github.com/mlocati/docker-php-extension-installer) est fourni dans l'image de base. L'ajout d'extensions PHP supplémentaires est simple :
+Le script [`docker-php-extension-installer`](https://github.com/mlocati/docker-php-extension-installer) est fourni dans l'image de base. L'ajout d'extensions PHP supplémentaires se fait de cette manière :
 
 ```dockerfile
 FROM dunglas/frankenphp
@@ -112,7 +112,7 @@ docker run -v $PWD:/app/public -p 80:80 -p 443:443 -p 443:443/udp --tty my-php-a
 
 > [!TIP]
 >
-> L'option `--tty` permet d'avoir des logs agréables à lire au lieu de logs JSON.
+> L'option --tty permet d'avoir des logs lisibles par un humain au lieu de logs JSON.
 
 Avec Docker Compose :
 
@@ -197,12 +197,12 @@ Les images Docker sont construites :
 - lorsqu'une nouvelle version est taguée
 - tous les jours à 4h UTC, si de nouvelles versions des images officielles PHP sont disponibles
 
-## Durcir les images
+## Durcir la sécurité les images
 
 Pour réduire davantage la surface d'attaque et la taille de vos images Docker FrankenPHP, il est également possible de les construire sur une image [Google distroless](https://github.com/GoogleContainerTools/distroless) ou [Docker hardened](https://www.docker.com/products/hardened-images).
 
 > [!WARNING]
-> Ces images de base minimales n'incluent pas de shell ou de gestionnaire de paquets, ce qui rend le débogage plus difficile. Elles sont donc recommandées uniquement pour la production si la sécurité est une priorité élevée.
+> Ces images de base minimales n'incluent pas de shell ou de gestionnaire de paquets, ce qui rend le débogage plus difficile. Elles sont donc recommandées uniquement pour la production si la sécurité est une priorité.
 
 Lors de l'ajout d'extensions PHP supplémentaires, vous aurez besoin d'une étape de build intermédiaire :
 
