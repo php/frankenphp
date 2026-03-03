@@ -35,7 +35,7 @@ La commande suivante déclenchera un redémarrage si un fichier se terminant par
 frankenphp php-server --worker /path/to/your/worker/script.php --watch="/path/to/your/app/**/*.php"
 ```
 
-Cette fonctionnalité est souvent utilisée en combinaison avec le [rechargement à chaud](hot-reload.md).
+Cette fonctionnalité se combine très bien avec le [rechargement à chaud](hot-reload.md).
 
 ## Runtime Symfony
 
@@ -78,7 +78,7 @@ require __DIR__.'/vendor/autoload.php';
 $myApp = new \App\Kernel();
 $myApp->boot();
 
-// Gestionnaire en dehors de la boucle pour de meilleures performances (moins de travail effectué)
+// Déclarer le hanler en dehors de la boucle pour de meilleures performances (moins de travail effectué)
 $handler = static function () use ($myApp) {
     try {
         // Appelé lorsqu'une requête est reçue,
