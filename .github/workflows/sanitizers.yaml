@@ -92,6 +92,7 @@ jobs:
           cd php/
           # GitHub source archives don't include ./configure, generate it
           if [ ! -f ./configure ]; then
+            sudo apt-get install -y re2c
             ./buildconf -f
           fi
           ./configure \
