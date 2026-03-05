@@ -65,7 +65,7 @@ jobs:
         name: Compile PHP
         run: |
           mkdir php/
-          MIRROR_URL=$(echo "${URL}" | sed 's|https://www.php.net|https://phpmirror.static-php.dev|')
+          MIRROR_URL=${URL/https:\/\/www.php.net/https:\/\/phpmirror.static-php.dev}
           (curl -fsSL "${URL}" || curl -fsSL "${MIRROR_URL}") | tar -Jx -C php --strip-components=1
           cd php/
           ./configure \
