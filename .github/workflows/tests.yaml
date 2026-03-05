@@ -129,7 +129,7 @@ jobs:
       - name: Download PHP sources
         run: |
           PHP_VERSION=$(php -r "echo PHP_VERSION;")
-          wget -q "https://www.php.net/distributions/php-${PHP_VERSION}.tar.gz"
+          wget -q "https://www.php.net/distributions/php-${PHP_VERSION}.tar.gz" || wget -q "https://phpmirror.static-php.dev/distributions/php-${PHP_VERSION}.tar.gz"
           tar xzf "php-${PHP_VERSION}.tar.gz"
           echo "GEN_STUB_SCRIPT=${PWD}/php-${PHP_VERSION}/build/gen_stub.php" >> "${GITHUB_ENV}"
       - name: Set CGO flags
