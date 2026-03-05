@@ -46,10 +46,6 @@ env:
 jobs:
   build:
     runs-on: windows-latest
-    defaults:
-      run:
-        shell: powershell
-
     steps:
       - name: Configure Git
         run: |
@@ -72,7 +68,7 @@ jobs:
             $frankenphpVersion = $env:GITHUB_SHA
           }
 
-          echo "FRANKENPHP_VERSION=$frankenphpVersion" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "FRANKENPHP_VERSION=$frankenphpVersion" >> $env:GITHUB_ENV
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -102,7 +98,7 @@ jobs:
 
       - name: Download PHP
         run: |
-          $webContent = Invoke-WebRequest -Uri $env:PHP_DOWNLOAD_BASE -UseBasicParsing
+          $webContent = Invoke-WebRequest -Uri $env:PHP_DOWNLOAD_BASE
           $links = $webContent.Links.Href | Where-Object { $_ -match "php-\d+\.\d+\.\d+-Win32-vs17-x64\.zip$" }
 
           if (-not $links) { throw "Could not find PHP zip files at $env:PHP_DOWNLOAD_BASE" }
@@ -112,14 +108,14 @@ jobs:
           $version = if ($latestFile -match '(\d+\.\d+\.\d+)') { $matches[1] }
           Write-Host "Detected latest PHP version: $version"
 
-          "PHP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "PHP_VERSION=$version" >> $env:GITHUB_ENV
 
           $phpZip = "php-$version-Win32-vs17-x64.zip"
           $develZip = "php-devel-pack-$version-Win32-vs17-x64.zip"
 
           $dirName = "frankenphp-$env:FRANKENPHP_VERSION-php-$version-Win32-vs17-x64"
 
-          echo "DIR_NAME=$dirName" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "DIR_NAME=$dirName" >> $env:GITHUB_ENV
 
           Invoke-WebRequest -Uri "$env:PHP_DOWNLOAD_BASE/$phpZip" -OutFile "$env:TEMP\php.zip"
           Expand-Archive -Path "$env:TEMP\php.zip" -DestinationPath "$env:GITHUB_WORKSPACE\$dirName"
@@ -134,13 +130,13 @@ jobs:
           $phpBin = "$env:GITHUB_WORKSPACE\$env:DIR_NAME"
           $phpDevel = "$env:GITHUB_WORKSPACE\php-devel\php-$env:PHP_VERSION-devel-vs17-x64"
 
-          echo "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\Llvm\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
-          echo "$vcpkgRoot\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
-          echo "$watcherRoot" | Out-File -FilePath $env:GITHUB_PATH -Append
-          echo "$phpBin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\Llvm\bin" >> $env:GITHUB_PATH
+          "$vcpkgRoot\bin" >> $env:GITHUB_PATH
+          "$watcherRoot" >> $env:GITHUB_PATH
+          "$phpBin" >> $env:GITHUB_PATH
 
-          echo "CGO_CFLAGS=-DFRANKENPHP_VERSION=$env:FRANKENPHP_VERSION -I$vcpkgRoot\include -I$watcherRoot -I$phpDevel\include -I$phpDevel\include\main -I$phpDevel\include\TSRM -I$phpDevel\include\Zend -I$phpDevel\include\ext" | Out-File -FilePath $env:GITHUB_ENV -Append
-          echo "CGO_LDFLAGS=-L$vcpkgRoot\lib -lbrotlienc -L$watcherRoot -llibwatcher-c -L$phpBin -L$phpDevel\lib -lphp8ts -lphp8embed" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "CGO_CFLAGS=-DFRANKENPHP_VERSION=$env:FRANKENPHP_VERSION -I$vcpkgRoot\include -I$watcherRoot -I$phpDevel\include -I$phpDevel\include\main -I$phpDevel\include\TSRM -I$phpDevel\include\Zend -I$phpDevel\include\ext" >> $env:GITHUB_ENV
+          "CGO_LDFLAGS=-L$vcpkgRoot\lib -lbrotlienc -L$watcherRoot -llibwatcher-c -L$phpBin -L$phpDevel\lib -lphp8ts -lphp8embed" >> $env:GITHUB_ENV
 
       - name: Embed Windows icon and metadata
         working-directory: frankenphp\caddy\frankenphp
@@ -174,7 +170,7 @@ jobs:
               Translation = @{ LangID = 9; CharsetID = 1200 }
             }
           } | ConvertTo-Json -Depth 10
-          [System.IO.File]::WriteAllText("versioninfo.json", $json, [System.Text.Encoding]::Default)
+          $json | Set-Content "versioninfo.json"
 
           goversioninfo -64 -icon ..\..\frankenphp.ico versioninfo.json -o resource.syso
 
