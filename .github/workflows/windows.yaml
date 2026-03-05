@@ -11,7 +11,7 @@ on:
     paths:
       - "docker-bake.hcl"
       - "vcpkg.json"
-      - ".github/workflows/static.yaml"
+      - ".github/workflows/windows.yaml"
       - "**cgo.go"
       - "**Dockerfile"
       - "**.c"
