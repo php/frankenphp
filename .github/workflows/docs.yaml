@@ -8,6 +8,9 @@ on:
       - "docs/**"
       - "README.md"
       - "CONTRIBUTING.md"
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   deploy:
     runs-on: ubuntu-latest
