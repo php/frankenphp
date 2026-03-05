@@ -102,7 +102,7 @@ jobs:
 
       - name: Download PHP
         run: |
-          $webContent = Invoke-WebRequest -Uri $env:PHP_DOWNLOAD_BASE -UseBasicParsing
+          $webContent = Invoke-WebRequest -Uri $env:PHP_DOWNLOAD_BASE
           $links = $webContent.Links.Href | Where-Object { $_ -match "php-\d+\.\d+\.\d+-Win32-vs17-x64\.zip$" }
 
           if (-not $links) { throw "Could not find PHP zip files at $env:PHP_DOWNLOAD_BASE" }
