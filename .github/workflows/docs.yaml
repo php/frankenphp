@@ -8,12 +8,13 @@ on:
       - "docs/**"
       - "README.md"
       - "CONTRIBUTING.md"
+permissions: {}
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - name: Trigger website deployment
         env:
