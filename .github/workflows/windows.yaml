@@ -1,3 +1,4 @@
+---
 name: Build Windows release
 
 concurrency:
@@ -8,21 +9,15 @@ on:
   pull_request:
     branches:
       - main
-    paths:
-      - "docker-bake.hcl"
-      - "vcpkg.json"
-      - ".github/workflows/windows.yaml"
-      - "**cgo.go"
-      - "**Dockerfile"
-      - "**.c"
-      - "**.h"
-      - "**.sh"
-      - "**.stub.php"
+    paths-ignore:
+      - "docs/**"
   push:
     branches:
       - main
     tags:
       - v*.*.*
+    paths-ignore:
+      - "docs/**"
   workflow_dispatch:
     inputs:
       #checkov:skip=CKV_GHA_7
