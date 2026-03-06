@@ -88,7 +88,7 @@ L'image `builder` fournie par FrankenPHP contient une version compilée de `libp
 > [!TIP]
 >
 > Si vous utilisez Alpine Linux et Symfony,
-> vous devrez peut-être [augmenter la taille de pile par défaut](compile.md#using-xcaddy).
+> vous devrez peut-être [augmenter la taille de pile par défaut](compile.md#utiliser-xcaddy).
 
 ## Activer le mode Worker par défaut
 
@@ -197,7 +197,7 @@ Les images Docker sont construites :
 - lorsqu'une nouvelle version est taguée
 - tous les jours à 4h UTC, si de nouvelles versions des images officielles PHP sont disponibles
 
-## Durcir la sécurité les images
+## Durcir la sécurité des images
 
 Pour réduire davantage la surface d'attaque et la taille de vos images Docker FrankenPHP, il est également possible de les construire sur une image [Google distroless](https://github.com/GoogleContainerTools/distroless) ou [Docker hardened](https://www.docker.com/products/hardened-images).
 

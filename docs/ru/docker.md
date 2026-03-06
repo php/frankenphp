@@ -124,9 +124,9 @@ docker run -v $PWD:/app/public -p 80:80 -p 443:443 -p 443:443/udp --tty my-php-a
 services:
   php:
     image: dunglas/frankenphp
-    # uncomment the following line if you want to use a custom Dockerfile
+    # раскомментируйте следующую строку, если хотите использовать собственный Dockerfile
     #build: .
-    # uncomment the following line if you want to run this in a production environment
+    # раскомментируйте следующую строку для работы в production-окружении
     # restart: always
     ports:
       - "80:80" # HTTP
@@ -136,10 +136,10 @@ services:
       - ./:/app/public
       - caddy_data:/data
       - caddy_config:/config
-    # comment the following line in production, it allows to have nice human-readable logs in dev
+    # закомментируйте следующую строку в production — в dev она обеспечивает удобочитаемые логи
     tty: true
 
-# Volumes needed for Caddy certificates and configuration
+# Тома, необходимые для сертификатов и конфигурации Caddy
 volumes:
   caddy_data:
   caddy_config:
@@ -157,11 +157,11 @@ FROM dunglas/frankenphp
 ARG USER=appuser
 
 RUN \
-	# Use "adduser -D ${USER}" for alpine based distros
+	# Для дистрибутивов на основе Alpine используйте "adduser -D ${USER}"
 	useradd ${USER}; \
-	# Add additional capability to bind to port 80 and 443
+	# Добавить возможность привязки к портам 80 и 443
 	setcap CAP_NET_BIND_SERVICE=+eip /usr/local/bin/frankenphp; \
-	# Give write access to /config/caddy and /data/caddy
+	# Предоставить доступ на запись в /config/caddy и /data/caddy
 	chown -R ${USER}:${USER} /config/caddy /data/caddy
 
 USER ${USER}
@@ -179,11 +179,11 @@ FROM dunglas/frankenphp
 ARG USER=appuser
 
 RUN \
-	# Use "adduser -D ${USER}" for alpine based distros
+	# Для дистрибутивов на основе Alpine используйте "adduser -D ${USER}"
 	useradd ${USER}; \
-	# Remove default capability
+	# Удалить стандартные возможности
 	setcap -r /usr/local/bin/frankenphp; \
-	# Give write access to /config/caddy and /data/caddy
+	# Предоставить доступ на запись в /config/caddy и /data/caddy
 	chown -R ${USER}:${USER} /config/caddy /data/caddy
 
 USER ${USER}
@@ -212,11 +212,11 @@ Docker-образы собираются:
 ```dockerfile
 FROM dunglas/frankenphp AS builder
 
-# Add additional PHP extensions here
+# Добавьте дополнительные PHP-расширения здесь
 RUN install-php-extensions pdo_mysql pdo_pgsql #...
 
-# Copy shared libs of frankenphp and all installed extensions to temporary location
-# You can also do this step manually by analyzing ldd output of frankenphp binary and each extension .so file
+# Скопировать общие библиотеки frankenphp и всех установленных расширений во временное место
+# Этот шаг можно также выполнить вручную, проанализировав вывод ldd для бинарного файла frankenphp и каждого файла расширения .so
 RUN apt-get update && apt-get install -y libtree && \
     EXT_DIR="$(php -r 'echo ini_get("extension_dir");')" && \
     FRANKENPHP_BIN="$(which frankenphp)"; \
@@ -234,30 +234,30 @@ RUN apt-get update && apt-get install -y libtree && \
     done
 
 
-# Distroless debian base image, make sure this is the same debian version as the base image
+# Базовый образ Distroless Debian — убедитесь, что версия Debian совпадает с базовым образом
 FROM gcr.io/distroless/base-debian13
-# Docker hardened image alternative
+# Альтернатива: Docker Hardened Image
 # FROM dhi.io/debian:13
 
-# Location of your app and Caddyfile to be copied into the container
+# Путь к приложению и Caddyfile для копирования в контейнер
 ARG PATH_TO_APP="."
 ARG PATH_TO_CADDYFILE="./Caddyfile"
 
-# Copy your app into /app
-# For further hardening make sure only writable paths are owned by the nonroot user
+# Скопировать приложение в /app
+# Для дополнительного усиления убедитесь, что только записываемые пути принадлежат пользователю nonroot
 COPY --chown=nonroot:nonroot "$PATH_TO_APP" /app
 COPY "$PATH_TO_CADDYFILE" /etc/caddy/Caddyfile
 
-# Copy frankenphp and necessary libs
+# Скопировать frankenphp и необходимые библиотеки
 COPY --from=builder /usr/local/bin/frankenphp /usr/local/bin/frankenphp
 COPY --from=builder /usr/local/lib/php/extensions /usr/local/lib/php/extensions
 COPY --from=builder /tmp/libs /usr/lib
 
-# Copy php.ini configuration files
+# Скопировать конфигурационные файлы php.ini
 COPY --from=builder /usr/local/etc/php/conf.d /usr/local/etc/php/conf.d
 COPY --from=builder /usr/local/etc/php/php.ini-production /usr/local/etc/php/php.ini
 
-# Caddy data dirs — must be writable for nonroot, even on a read-only root filesystem
+# Директории данных Caddy — должны быть доступны для записи пользователю nonroot даже в файловой системе только для чтения
 ENV XDG_CONFIG_HOME=/config \
     XDG_DATA_HOME=/data
 COPY --from=builder --chown=nonroot:nonroot /data/caddy /data/caddy
@@ -267,7 +267,7 @@ USER nonroot
 
 WORKDIR /app
 
-# entrypoint to run frankenphp with the provided Caddyfile
+# Точка входа для запуска frankenphp с указанным Caddyfile
 ENTRYPOINT ["/usr/local/bin/frankenphp", "run", "-c", "/etc/caddy/Caddyfile"]
 ```
 
