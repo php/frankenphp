@@ -96,6 +96,7 @@ You can also explicitly configure FrankenPHP using the [global option](https://c
 		num_threads <num_threads> # Sets the number of PHP threads to start. Default: 2x the number of available CPUs.
 		max_threads <num_threads> # Limits the number of additional PHP threads that can be started at runtime. Default: num_threads. Can be set to 'auto'.
 		max_wait_time <duration> # Sets the maximum time a request may wait for a free PHP thread before timing out. Default: disabled.
+		max_idle_time <duration> # Sets the maximum time an autoscaled thread may be idle before being deactivated. Default: 5s.
 		php_ini <key> <value> # Set a php.ini directive. Can be used several times to set multiple directives.
 		worker {
 			file <path> # Sets the path to the worker script.

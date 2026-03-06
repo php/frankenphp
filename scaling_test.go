@@ -57,6 +57,32 @@ func TestScaleAWorkerThreadUpAndDown(t *testing.T) {
 	assert.IsType(t, &inactiveThread{}, autoScaledThread.handler)
 }
 
+func TestMaxIdleTimePreventsEarlyDeactivation(t *testing.T) {
+	t.Cleanup(Shutdown)
+
+	assert.NoError(t, Init(
+		WithNumThreads(1),
+		WithMaxThreads(2),
+		WithMaxIdleTime(time.Hour),
+	))
+
+	autoScaledThread := phpThreads[1]
+
+	// scale up
+	scaleRegularThread()
+	assert.Equal(t, state.Ready, autoScaledThread.state.Get())
+
+	// set wait time to 30 minutes (less than 1 hour max idle time)
+	autoScaledThread.state.SetWaitTime(time.Now().Add(-30 * time.Minute))
+	deactivateThreads()
+	assert.IsType(t, &regularThread{}, autoScaledThread.handler, "thread should still be active after 30min with 1h max idle time")
+
+	// set wait time to over 1 hour (exceeds max idle time)
+	autoScaledThread.state.SetWaitTime(time.Now().Add(-time.Hour - time.Minute))
+	deactivateThreads()
+	assert.IsType(t, &inactiveThread{}, autoScaledThread.handler, "thread should be deactivated after exceeding max idle time")
+}
+
 func setLongWaitTime(t *testing.T, thread *phpThread) {
 	t.Helper()
 
