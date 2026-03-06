@@ -132,20 +132,10 @@ CYGWIN_NT* | MSYS_NT* | MINGW*)
 		exit 1
 	fi
 
-	WIN_ASSET=$(curl -s https://api.github.com/repos/php/frankenphp/releases/latest |
-		grep -o '"name": *"frankenphp-[^"]*-Win32-vs17-x64\.zip"' | head -1 |
-		sed 's/"name": *"//;s/"//')
-
-	if [ -z "${WIN_ASSET}" ]; then
-		echo "❗ Could not find a Windows release asset"
-		echo "❗ Check https://github.com/php/frankenphp/releases for available downloads"
-		exit 1
-	fi
-
 	echo "📦 Downloading ${bold}FrankenPHP${normal} for Windows (x64):"
 
 	TMPZIP="/tmp/frankenphp-windows-$$.zip"
-	curl -L --progress-bar "https://github.com/php/frankenphp/releases/latest/download/${WIN_ASSET}" -o "${TMPZIP}"
+	curl -L --progress-bar "https://github.com/php/frankenphp/releases/latest/download/frankenphp-windows-x86_64.zip" -o "${TMPZIP}"
 
 	echo "📂 Extracting to ${italic}${BIN_DIR}${normal}..."
 	if command -v unzip >/dev/null 2>&1; then

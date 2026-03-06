@@ -20,29 +20,12 @@ if ($env:FRANKENPHP_INSTALL) {
     $BinDir = Join-Path $HOME ".frankenphp"
 }
 
-Write-Host "Querying latest FrankenPHP release..." -ForegroundColor Cyan
-
-try {
-    $release = Invoke-RestMethod -Uri "https://api.github.com/repos/php/frankenphp/releases/latest"
-} catch {
-    Write-Host "Could not query GitHub releases: $_" -ForegroundColor Red
-    exit 1
-}
-
-$asset = $release.assets | Where-Object { $_.name -match "Win32-vs17-x64\.zip$" } | Select-Object -First 1
-
-if (-not $asset) {
-    Write-Host "Could not find a Windows release asset." -ForegroundColor Red
-    Write-Host "Check https://github.com/php/frankenphp/releases for available downloads." -ForegroundColor Red
-    exit 1
-}
-
-Write-Host "Downloading $($asset.name)..." -ForegroundColor Cyan
+Write-Host "Downloading FrankenPHP for Windows (x64)..." -ForegroundColor Cyan
 
 $tmpZip = Join-Path $env:TEMP "frankenphp-windows-$PID.zip"
 
 try {
-    Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $tmpZip
+    Invoke-WebRequest -Uri "https://github.com/php/frankenphp/releases/latest/download/frankenphp-windows-x86_64.zip" -OutFile $tmpZip
 } catch {
     Write-Host "Download failed: $_" -ForegroundColor Red
     exit 1

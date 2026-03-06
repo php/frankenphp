@@ -8,6 +8,8 @@ on:
       - "docs/**"
       - "README.md"
       - "CONTRIBUTING.md"
+      - "install.ps1"
+      - "install.sh"
 permissions: {}
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

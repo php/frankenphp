@@ -29,7 +29,7 @@ on:
     - cron: "0 8 * * *"
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   GOTOOLCHAIN: local
@@ -55,15 +55,24 @@ jobs:
 
       - name: Set FRANKENPHP_VERSION
         run: |
+          $releaseTag = $env:INPUT_REF
+          if (-not $releaseTag -and $env:GITHUB_EVENT_NAME -eq "schedule") {
+            $releaseTag = (gh release view --repo php/frankenphp --json tagName --jq '.tagName')
+          }
+
           if ($env:GITHUB_REF_TYPE -eq "tag") {
             $frankenphpVersion = $env:GITHUB_REF_NAME.Substring(1)
-          } elseif ($env:GITHUB_EVENT_NAME -eq "schedule") {
-            $frankenphpVersion = $env:GITHUB_REF
+          } elseif ($releaseTag) {
+            $frankenphpVersion = $releaseTag
           } else {
             $frankenphpVersion = $env:GITHUB_SHA
           }
 
           "FRANKENPHP_VERSION=$frankenphpVersion" >> $env:GITHUB_ENV
+          "RELEASE_TAG=$releaseTag" >> $env:GITHUB_ENV
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_REF: ${{ (github.ref_type == 'tag' && github.ref_name) || (github.event_name == 'workflow_dispatch' && inputs.version) || '' }}
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -72,7 +81,7 @@ jobs:
           cache-dependency-path: |
             frankenphp/go.sum
             frankenphp/caddy/go.sum
-          cache: ${{ github.event_name != 'release' }}
+          cache: ${{ !startsWith(github.ref, 'refs/tags/') }}
           check-latest: true
 
       - name: Install Vcpkg Libraries
@@ -108,7 +117,7 @@ jobs:
           $phpZip = "php-$version-Win32-vs17-x64.zip"
           $develZip = "php-devel-pack-$version-Win32-vs17-x64.zip"
 
-          $dirName = "frankenphp-$env:FRANKENPHP_VERSION-php-$version-Win32-vs17-x64"
+          $dirName = "frankenphp-windows-x86_64"
 
           "DIR_NAME=$dirName" >> $env:GITHUB_ENV
 
@@ -185,7 +194,7 @@ jobs:
           Copy-Item frankenphp\vcpkg_installed\x64-windows\bin\pthreadVC3.dll $env:DIR_NAME
 
       - name: Upload Artifact
-        if: github.event_name != 'release'
+        if: ${{ !env.RELEASE_TAG }}
         uses: actions/upload-artifact@v6
         with:
           name: ${{ env.DIR_NAME }}
@@ -193,15 +202,14 @@ jobs:
           if-no-files-found: error
 
       - name: Zip Release Artifact
-        if: github.event_name == 'release'
+        if: ${{ env.RELEASE_TAG }}
         run: Compress-Archive -Path "$env:DIR_NAME\*" -DestinationPath "$env:DIR_NAME.zip"
 
       - name: Upload Release Asset
-        if: github.event_name == 'release'
-        run: gh release upload $env:GITHUB_EVENT_RELEASE_TAG_NAME "$env:DIR_NAME.zip" --clobber
+        if: ${{ env.RELEASE_TAG }}
+        run: gh release upload "$env:RELEASE_TAG" "$env:DIR_NAME.zip" --repo php/frankenphp --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_EVENT_RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
 
       - name: Run Tests
         run: |
