@@ -809,15 +809,6 @@ func ExampleServeHTTP() {
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
-func ExampleExecuteScriptCLI() {
-	if len(os.Args) <= 1 {
-		log.Println("Usage: my-program script.php")
-		os.Exit(1)
-	}
-
-	os.Exit(frankenphp.ExecuteScriptCLI(os.Args))
-}
-
 func BenchmarkHelloWorld(b *testing.B) {
 	require.NoError(b, frankenphp.Init())
 	b.Cleanup(frankenphp.Shutdown)
