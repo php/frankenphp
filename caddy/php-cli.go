@@ -35,7 +35,7 @@ func cmdPHPCLI(fs caddycmd.Flags) (int, error) {
 		}
 	}
 
-	status := frankenphp.ExecuteScriptCLI(args)
+	status := frankenphp.ExecuteScriptCLI(args[0], args)
 
 	os.Exit(status)
 

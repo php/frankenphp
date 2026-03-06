@@ -750,15 +750,6 @@ func go_is_context_done(threadIndex C.uintptr_t) C.bool {
 	return C.bool(phpThreads[threadIndex].frankenPHPContext().isDone)
 }
 
-func ExecuteScriptCLI(args []string) int {
-	// Ensure extensions are registered before CLI execution
-	registerExtensions()
-	argc, argv := convertArgs(args)
-	defer freeArgs(argv)
-
-	return int(C.frankenphp_execute_script_cli(nil, argc, (**C.char)(unsafe.Pointer(&argv[0])), false))
-}
-
 func convertArgs(args []string) (C.int, []*C.char) {
 	argc := C.int(len(args))
 	argv := make([]*C.char, argc)
