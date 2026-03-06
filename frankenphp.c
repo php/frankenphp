@@ -949,10 +949,9 @@ void frankenphp_register_variable_safe(char *key, char *val, size_t val_len,
   }
 }
 
-void register_server_variable_filtered(const char *key,
-                                                     char **val,
-                                                     size_t *val_len,
-                                                     zval *track_vars_array) {
+void register_server_variable_filtered(const char *key, char **val,
+                                       size_t *val_len,
+                                       zval *track_vars_array) {
   if (sapi_module.input_filter(PARSE_SERVER, key, val, *val_len, val_len)) {
     php_register_variable_safe(key, *val, *val_len, track_vars_array);
   }
@@ -1271,8 +1270,7 @@ int frankenphp_execute_script_cli(char *script, int argc, char **argv,
   void *exit_status;
 
   cli_exec_args_t args = {
-      .script = script, .argc = argc, .argv = argv, .eval = eval
-  };
+      .script = script, .argc = argc, .argv = argv, .eval = eval};
 
   /*
    * Start the script in a dedicated thread to prevent conflicts between Go and

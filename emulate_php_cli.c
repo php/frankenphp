@@ -36,7 +36,8 @@ typedef struct {
 cli_exec_args_t *cli_args;
 
 /* Function declaration to avoid implicit declaration error */
-void register_server_variable_filtered(const char *key, char **val, size_t *val_len, zval *track_vars_array);
+void register_server_variable_filtered(const char *key, char **val,
+                                       size_t *val_len, zval *track_vars_array);
 
 /*
  * CLI code is adapted from
@@ -124,7 +125,7 @@ static void sapi_cli_register_variables(zval *track_vars_array) /* {{{ */
 
 void *emulate_script_cli(void *arg) {
   void *exit_status;
-  cli_exec_args_t* args = arg;
+  cli_exec_args_t *args = arg;
   cli_args = args;
   bool eval = args->eval;
 
