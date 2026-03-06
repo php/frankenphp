@@ -60,7 +60,7 @@ A variante Alpine Linux das imagens oficiais do Docker e os binários padrão qu
 fornecemos usam [a biblioteca C musl](https://musl.libc.org).
 
 O PHP é conhecido por ser
-[mais lento](https://gitlab.alpinux.org/alpine/aports/-/issues/14381)
+[mais lento](https://gitlab.alpinelinux.org/alpine/aports/-/issues/14381)
 ao usar esta biblioteca C alternativa em vez da biblioteca GNU tradicional,
 especialmente quando compilado no modo ZTS (thread-safe), necessário para o
 FrankenPHP. A diferença pode ser significativa em um ambiente com muitas threads.
