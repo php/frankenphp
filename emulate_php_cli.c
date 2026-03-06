@@ -20,6 +20,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #if defined(__linux__)
 #include <sys/prctl.h>
@@ -127,7 +128,27 @@ void *emulate_script_cli(void *arg) {
   void *exit_status;
   cli_exec_args_t *args = arg;
   cli_args = args;
-  bool eval = args->eval;
+
+  /* Parse argv to detect -r (eval mode) and find the script path */
+  bool eval = false;
+  char *script = NULL;
+  for (int i = 1; i < args->argc; i++) {
+    if (strcmp(args->argv[i], "-r") == 0 && i + 1 < args->argc) {
+      eval = true;
+      script = args->argv[i + 1];
+      break;
+    } else if (args->argv[i][0] != '-') {
+      script = args->argv[i];
+      break;
+    }
+  }
+
+  if (script == NULL) {
+    return (void *)(intptr_t)1;
+  }
+
+  /* Update cli_args->script so sapi_cli_register_variables uses the right path */
+  cli_args->script = script;
 
   /*
    * The SAPI name "cli" is hardcoded into too many programs... let's usurp it.
@@ -141,11 +162,11 @@ void *emulate_script_cli(void *arg) {
   cli_register_file_handles(false);
   zend_first_try {
     if (eval) {
-      /* evaluate the cli_args->script as literal PHP code (php-cli -r "...") */
-      zend_eval_string_ex(cli_args->script, NULL, "Command line code", 1);
+      /* evaluate script as literal PHP code (php-cli -r "...") */
+      zend_eval_string_ex(script, NULL, "Command line code", 1);
     } else {
       zend_file_handle file_handle;
-      zend_stream_init_filename(&file_handle, cli_args->script);
+      zend_stream_init_filename(&file_handle, script);
 
       CG(skip_shebang) = 1;
       php_execute_script(&file_handle);
