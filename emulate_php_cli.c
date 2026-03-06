@@ -1,4 +1,7 @@
-﻿#include <SAPI.h>
+﻿#ifndef HAVE_EMBED_CLI
+
+#include "frankenphp.h"
+#include <SAPI.h>
 #include <Zend/zend_alloc.h>
 #include <Zend/zend_exceptions.h>
 #include <Zend/zend_interfaces.h>
@@ -8,7 +11,11 @@
 #include <ext/standard/head.h>
 #include <inttypes.h>
 #include <php.h>
+#ifdef PHP_WIN32
+#include <config.w32.h>
+#else
 #include <php_config.h>
+#endif
 #include <php_ini.h>
 #include <php_main.h>
 #include <php_output.h>
@@ -21,7 +28,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef ZEND_WIN32
 #include <unistd.h>
+#endif
 #if defined(__linux__)
 #include <sys/prctl.h>
 #elif defined(__FreeBSD__) || defined(__OpenBSD__)
@@ -147,7 +156,8 @@ void *emulate_script_cli(void *arg) {
     return (void *)(intptr_t)1;
   }
 
-  /* Update cli_args->script so sapi_cli_register_variables uses the right path */
+  /* Update cli_args->script so sapi_cli_register_variables uses the right path
+   */
   cli_args->script = script;
 
   /*
@@ -180,3 +190,5 @@ void *emulate_script_cli(void *arg) {
 
   return exit_status;
 }
+
+#endif /* !HAVE_EMBED_CLI */
