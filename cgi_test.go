@@ -25,7 +25,7 @@ func TestEnsureLeadingSlash(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.input + "-" + tt.expected, func(t *testing.T) {
+		t.Run(tt.input+"-"+tt.expected, func(t *testing.T) {
 			t.Parallel()
 
 			assert.Equal(t, tt.expected, ensureLeadingSlash(tt.input), "ensureLeadingSlash(%q)", tt.input)

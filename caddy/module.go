@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -21,8 +22,6 @@ import (
 	"github.com/dunglas/frankenphp"
 	"github.com/dunglas/frankenphp/internal/fastabs"
 )
-
-var serverHeader = []string{"FrankenPHP Caddy"}
 
 // FrankenPHPModule represents the "php_server" and "php" directives in the Caddyfile
 // they are responsible for forwarding requests to FrankenPHP via "ServeHTTP"
@@ -249,8 +248,6 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 		return caddyhttp.Error(http.StatusInternalServerError, err)
 	}
 
-	// TODO: set caddyhttp.ServerHeader when https://github.com/caddyserver/caddy/pull/7338 will be released
-	w.Header()["Server"] = serverHeader
 	if err = frankenphp.ServeHTTP(w, fr); err != nil && !errors.As(err, &frankenphp.ErrRejected{}) {
 		return caddyhttp.Error(http.StatusInternalServerError, err)
 	}
@@ -497,7 +494,13 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 	if indexFile != "off" {
 		dirRedir := false
 		dirIndex := "{http.request.uri.path}/" + indexFile
+		// On Windows, first_exist_fallback doesn't work correctly because
+		// glob is skipped and patterns are returned as-is without checking existence.
+		// Use first_exist instead to ensure all files are checked.
 		tryPolicy := "first_exist_fallback"
+		if runtime.GOOS == "windows" {
+			tryPolicy = "first_exist"
+		}
 
 		// if tryFiles wasn't overridden, use a reasonable default
 		if len(tryFiles) == 0 {

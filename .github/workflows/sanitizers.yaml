@@ -52,7 +52,7 @@ jobs:
       - name: Determine PHP version
         id: determine-php-version
         run: |
-          curl -fsSL 'https://www.php.net/releases/index.php?json&max=1&version=8.5' -o version.json
+          curl -fsSL 'https://www.php.net/releases/index.php?json&max=1&version=8.5' -o version.json 2>/dev/null || curl -fsSL 'https://phpmirror.static-php.dev/releases/index.php?json&max=1&version=8.5' -o version.json
           echo version="$(jq -r 'keys[0]' version.json)" >> "$GITHUB_OUTPUT"
           echo archive="$(jq -r '.[] .source[] | select(.filename |endswith(".xz")) | "https://www.php.net/distributions/" + .filename' version.json)" >> "$GITHUB_OUTPUT"
       - name: Cache PHP
@@ -65,7 +65,8 @@ jobs:
         name: Compile PHP
         run: |
           mkdir php/
-          curl -fsSL "${URL}" | tar -Jx -C php --strip-components=1
+          MIRROR_URL=${URL/https:\/\/www.php.net/https:\/\/phpmirror.static-php.dev}
+          (curl -fsSL "${URL}" || curl -fsSL "${MIRROR_URL}") | tar -Jx -C php --strip-components=1
           cd php/
           ./configure \
             CFLAGS="$CFLAGS" \

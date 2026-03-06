@@ -12,7 +12,7 @@ type State int
 
 const (
 	// lifecycle States of a thread
-	Reserved      State = iota
+	Reserved State = iota
 	Booting
 	BootRequested
 	ShuttingDown

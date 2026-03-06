@@ -1,5 +1,5 @@
 ---
-name: Build Docker images
+name: Build Docker Images
 concurrency:
   cancel-in-progress: true
   group: ${{ github.workflow }}-${{ github.ref }}
