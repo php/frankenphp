@@ -16,20 +16,99 @@ FrankenPHP can also be used as a standalone Go library to embed PHP in any app u
 
 ## Getting Started
 
-### Standalone Binary
-
-We provide static FrankenPHP binaries for Linux and macOS
-containing [PHP 8.4](https://www.php.net/releases/8.4/en.php) and most popular PHP extensions.
-
 On Windows, use [WSL](https://learn.microsoft.com/windows/wsl/) to run FrankenPHP.
 
-[Download FrankenPHP](https://github.com/php/frankenphp/releases) or copy this line into your
-terminal to automatically install the version appropriate for your platform:
+### Install Script
+
+You can copy this line into your terminal to automatically
+install an appropriate version for your platform:
 
 ```console
 curl https://frankenphp.dev/install.sh | sh
-mv frankenphp /usr/local/bin/
 ```
+
+### Standalone Binary
+
+We provide static FrankenPHP binaries for development purposes on Linux and macOS
+containing [PHP 8.4](https://www.php.net/releases/8.4/en.php) and most popular PHP extensions.
+
+[Download FrankenPHP](https://github.com/php/frankenphp/releases)
+
+**Installing extensions:** Most common extensions are bundled. It's not possible to install more extensions.
+
+### rpm Packages
+
+Our maintainers offer rpm packages for all systems using `dnf`. To install, run:
+
+```console
+sudo dnf install https://rpm.henderkes.com/static-php-1-0.noarch.rpm
+sudo dnf module enable php-zts:static-8.4 # 8.2-8.5 available
+sudo dnf install frankenphp
+```
+
+**Installing extensions:** `sudo dnf install php-zts-<extension>`
+
+For extensions not available by default, use [PIE](https://github.com/php/pie):
+
+```console
+sudo dnf install pie-zts
+sudo pie-zts install asgrim/example-pie-extension
+```
+
+### deb Packages
+
+Our maintainers offer deb packages for all systems using `apt`. To install, run:
+
+```console
+VERSION=85 # 82-85 available
+sudo curl https://pkg.henderkes.com/api/packages/${VERSION}/debian/repository.key -o /etc/apt/keyrings/static-php${VERSION}.asc
+echo "deb [signed-by=/etc/apt/keyrings/static-php${VERSION}.asc] https://pkg.henderkes.com/api/packages/${VERSION}/debian php-zts main" | sudo tee -a /etc/apt/sources.list.d/static-php${VERSION}.list
+sudo apt update
+sudo apt install frankenphp
+```
+
+**Installing extensions:** `sudo apt install php-zts-<extension>`
+
+For extensions not available by default, use [PIE](https://github.com/php/pie):
+
+```console
+sudo apt install pie-zts
+sudo pie-zts install asgrim/example-pie-extension
+```
+
+### apk Packages
+
+Our maintainers offer apk packages for all systems using `apk`. To install, run:
+
+```console
+VERSION=85 # 82-85 available
+echo "https://pkg.henderkes.com/api/packages/${VERSION}/alpine/main/php-zts" | sudo tee -a /etc/apk/repositories
+KEYFILE=$(curl -sJOw '%{filename_effective}' https://pkg.henderkes.com/api/packages/${VERSION}/alpine/key)
+sudo mv ${KEYFILE} /etc/apk/keys/ && 
+sudo apk update && 
+sudo apk add frankenphp
+```
+
+**Installing extensions:** `sudo apk add php-zts-<extension>`
+
+For extensions not available by default, use [PIE](https://github.com/php/pie):
+
+```console
+sudo apk add pie-zts
+sudo pie-zts install asgrim/example-pie-extension
+```
+
+### Homebrew
+
+FrankenPHP is also available as a [Homebrew](https://brew.sh) package for macOS and Linux.
+
+```console
+brew install dunglas/frankenphp/frankenphp
+```
+
+**Installing extensions:** Use [PIE](https://github.com/php/pie).
+
+### Usage
 
 To serve the content of the current directory, run:
 
@@ -41,6 +120,12 @@ You can also run command-line scripts with:
 
 ```console
 frankenphp php-cli /path/to/your/script.php
+```
+
+For the deb and rpm packages, you can also start the systemd service:
+
+```console
+sudo systemctl start frankenphp
 ```
 
 ### Docker
@@ -60,28 +145,14 @@ Go to `https://localhost`, and enjoy!
 > Do not attempt to use `https://127.0.0.1`. Use `https://localhost` and accept the self-signed certificate.
 > Use the [`SERVER_NAME` environment variable](docs/config.md#environment-variables) to change the domain to use.
 
-### Homebrew
-
-FrankenPHP is also available as a [Homebrew](https://brew.sh) package for macOS and Linux.
-
-To install it:
-
-```console
-brew install dunglas/frankenphp/frankenphp
-```
-
-To serve the content of the current directory, run:
-
-```console
-frankenphp php-server
-```
-
 ## Docs
 
 - [Classic mode](https://frankenphp.dev/docs/classic/)
 - [Worker mode](https://frankenphp.dev/docs/worker/)
 - [Early Hints support (103 HTTP status code)](https://frankenphp.dev/docs/early-hints/)
 - [Real-time](https://frankenphp.dev/docs/mercure/)
+- [Logging](https://frankenphp.dev/docs/logging/)
+- [Hot reloading](https://frankenphp.dev/docs/hot-reload/)
 - [Efficiently Serving Large Static Files](https://frankenphp.dev/docs/x-sendfile/)
 - [Configuration](https://frankenphp.dev/docs/config/)
 - [Writing PHP Extensions in Go](https://frankenphp.dev/docs/extensions/)
@@ -92,6 +163,7 @@ frankenphp php-server
 - [Create static binaries](https://frankenphp.dev/docs/static/)
 - [Compile from sources](https://frankenphp.dev/docs/compile/)
 - [Monitoring FrankenPHP](https://frankenphp.dev/docs/metrics/)
+- [WordPress integration](https://frankenphp.dev/docs/wordpress/)
 - [Laravel integration](https://frankenphp.dev/docs/laravel/)
 - [Known issues](https://frankenphp.dev/docs/known-issues/)
 - [Demo app (Symfony) and benchmarks](https://github.com/dunglas/frankenphp-demo)

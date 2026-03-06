@@ -35,7 +35,12 @@ The following command will trigger a restart if any file ending in `.php` in the
 frankenphp php-server --worker /path/to/your/worker/script.php --watch="/path/to/your/app/**/*.php"
 ```
 
+This feature is often used in combination with [hot reloading](hot-reload.md).
+
 ## Symfony Runtime
+
+> [!TIP]
+> The following section is only necessary prior to Symfony 7.4, where native support for FrankenPHP worker mode was introduced.
 
 The worker mode of FrankenPHP is supported by the [Symfony Runtime Component](https://symfony.com/doc/current/components/runtime.html).
 To start any Symfony application in a worker, install the FrankenPHP package of [PHP Runtime](https://github.com/php-runtime/runtime):
@@ -67,9 +72,6 @@ The following example shows how to create your own worker script without relying
 <?php
 // public/index.php
 
-// Prevent worker script termination when a client connection is interrupted
-ignore_user_abort(true);
-
 // Boot your app
 require __DIR__.'/vendor/autoload.php';
 
@@ -78,9 +80,15 @@ $myApp->boot();
 
 // Handler outside the loop for better performance (doing less work)
 $handler = static function () use ($myApp) {
-    // Called when a request is received,
-    // superglobals, php://input and the like are reset
-    echo $myApp->handle($_GET, $_POST, $_COOKIE, $_FILES, $_SERVER);
+    try {
+        // Called when a request is received,
+        // superglobals, php://input and the like are reset
+        echo $myApp->handle($_GET, $_POST, $_COOKIE, $_FILES, $_SERVER);
+    } catch (\Throwable $exception) {
+        // `set_exception_handler` is called only when the worker script ends,
+        // which may not be what you expect, so catch and handle exceptions here
+        (new \MyCustomExceptionHandler)->handleException($exception);
+    }
 };
 
 $maxRequests = (int)($_SERVER['MAX_REQUESTS'] ?? 0);

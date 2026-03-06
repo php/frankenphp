@@ -145,14 +145,14 @@ func TestParameterParser_GenerateParamDeclarations(t *testing.T) {
 			params: []phpParameter{
 				{Name: "items", PhpType: phpArray, HasDefault: false},
 			},
-			expected: "    zval *items = NULL;",
+			expected: "    zend_array *items = NULL;",
 		},
 		{
 			name: "nullable array parameter",
 			params: []phpParameter{
 				{Name: "items", PhpType: phpArray, HasDefault: false, IsNullable: true},
 			},
-			expected: "    zval *items = NULL;",
+			expected: "    zend_array *items = NULL;",
 		},
 		{
 			name: "mixed types with array",
@@ -161,7 +161,44 @@ func TestParameterParser_GenerateParamDeclarations(t *testing.T) {
 				{Name: "items", PhpType: phpArray, HasDefault: false},
 				{Name: "count", PhpType: phpInt, HasDefault: true, DefaultValue: "5"},
 			},
-			expected: "    zend_string *name = NULL;\n    zval *items = NULL;\n    zend_long count = 5;",
+			expected: "    zend_string *name = NULL;\n    zend_array *items = NULL;\n    zend_long count = 5;",
+		},
+		{
+			name: "mixed parameter",
+			params: []phpParameter{
+				{Name: "m", PhpType: phpMixed, HasDefault: false},
+			},
+			expected: "    zval *m = NULL;",
+		},
+		{
+			name: "nullable mixed parameter",
+			params: []phpParameter{
+				{Name: "m", PhpType: phpMixed, HasDefault: false, IsNullable: true},
+			},
+			expected: "    zval *m = NULL;",
+		},
+		{
+			name: "callable parameter",
+			params: []phpParameter{
+				{Name: "callback", PhpType: phpCallable, HasDefault: false},
+			},
+			expected: "    zval *callback_callback;",
+		},
+		{
+			name: "nullable callable parameter",
+			params: []phpParameter{
+				{Name: "callback", PhpType: phpCallable, HasDefault: false, IsNullable: true},
+			},
+			expected: "    zval *callback_callback;",
+		},
+		{
+			name: "mixed types with callable",
+			params: []phpParameter{
+				{Name: "data", PhpType: phpArray, HasDefault: false},
+				{Name: "callback", PhpType: phpCallable, HasDefault: false},
+				{Name: "options", PhpType: phpInt, HasDefault: true, DefaultValue: "0"},
+			},
+			expected: "    zend_array *data = NULL;\n    zval *callback_callback;\n    zend_long options = 0;",
 		},
 	}
 
@@ -186,9 +223,7 @@ func TestParameterParser_GenerateParamParsing(t *testing.T) {
 			name:          "no parameters",
 			params:        []phpParameter{},
 			requiredCount: 0,
-			expected: `    if (zend_parse_parameters_none() == FAILURE) {
-        RETURN_THROWS();
-    }`,
+			expected:      `    ZEND_PARSE_PARAMETERS_NONE();`,
 		},
 		{
 			name: "single required string parameter",
@@ -278,6 +313,29 @@ func TestParameterParser_GenerateGoCallParams(t *testing.T) {
 			},
 			expected: "name, items, (long) count",
 		},
+		{
+			name: "callable parameter",
+			params: []phpParameter{
+				{Name: "callback", PhpType: "callable"},
+			},
+			expected: "callback_callback",
+		},
+		{
+			name: "nullable callable parameter",
+			params: []phpParameter{
+				{Name: "callback", PhpType: "callable", IsNullable: true},
+			},
+			expected: "callback_callback",
+		},
+		{
+			name: "mixed parameters with callable",
+			params: []phpParameter{
+				{Name: "data", PhpType: "array"},
+				{Name: "callback", PhpType: "callable"},
+				{Name: "limit", PhpType: "int"},
+			},
+			expected: "data, callback_callback, (long) limit",
+		},
 	}
 
 	for _, tt := range tests {
@@ -339,12 +397,32 @@ func TestParameterParser_GenerateParamParsingMacro(t *testing.T) {
 		{
 			name:     "array parameter",
 			param:    phpParameter{Name: "items", PhpType: phpArray},
-			expected: "\n        Z_PARAM_ARRAY(items)",
+			expected: "\n        Z_PARAM_ARRAY_HT(items)",
 		},
 		{
 			name:     "nullable array parameter",
 			param:    phpParameter{Name: "items", PhpType: phpArray, IsNullable: true},
-			expected: "\n        Z_PARAM_ARRAY_OR_NULL(items)",
+			expected: "\n        Z_PARAM_ARRAY_HT_OR_NULL(items)",
+		},
+		{
+			name:     "mixed parameter",
+			param:    phpParameter{Name: "m", PhpType: phpMixed},
+			expected: "\n        Z_PARAM_ZVAL(m)",
+		},
+		{
+			name:     "nullable mixed parameter",
+			param:    phpParameter{Name: "m", PhpType: phpMixed, IsNullable: true},
+			expected: "\n        Z_PARAM_ZVAL_OR_NULL(m)",
+		},
+		{
+			name:     "callable parameter",
+			param:    phpParameter{Name: "callback", PhpType: phpCallable},
+			expected: "\n        Z_PARAM_ZVAL(callback_callback)",
+		},
+		{
+			name:     "nullable callable parameter",
+			param:    phpParameter{Name: "callback", PhpType: phpCallable, IsNullable: true},
+			expected: "\n        Z_PARAM_ZVAL_OR_NULL(callback_callback)",
 		},
 		{
 			name:     "unknown type",
@@ -457,6 +535,16 @@ func TestParameterParser_GenerateSingleGoCallParam(t *testing.T) {
 			expected: "items",
 		},
 		{
+			name:     "callable parameter",
+			param:    phpParameter{Name: "callback", PhpType: "callable"},
+			expected: "callback_callback",
+		},
+		{
+			name:     "nullable callable parameter",
+			param:    phpParameter{Name: "callback", PhpType: "callable", IsNullable: true},
+			expected: "callback_callback",
+		},
+		{
 			name:     "unknown type",
 			param:    phpParameter{Name: "unknown", PhpType: phpType("unknown")},
 			expected: "unknown",
@@ -527,12 +615,22 @@ func TestParameterParser_GenerateSingleParamDeclaration(t *testing.T) {
 		{
 			name:     "array parameter",
 			param:    phpParameter{Name: "items", PhpType: phpArray, HasDefault: false},
-			expected: []string{"zval *items = NULL;"},
+			expected: []string{"zend_array *items = NULL;"},
 		},
 		{
 			name:     "nullable array parameter",
 			param:    phpParameter{Name: "items", PhpType: phpArray, HasDefault: false, IsNullable: true},
-			expected: []string{"zval *items = NULL;"},
+			expected: []string{"zend_array *items = NULL;"},
+		},
+		{
+			name:     "callable parameter",
+			param:    phpParameter{Name: "callback", PhpType: "callable", HasDefault: false},
+			expected: []string{"zval *callback_callback;"},
+		},
+		{
+			name:     "nullable callable parameter",
+			param:    phpParameter{Name: "callback", PhpType: "callable", HasDefault: false, IsNullable: true},
+			expected: []string{"zval *callback_callback;"},
 		},
 	}
 

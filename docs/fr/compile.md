@@ -82,7 +82,7 @@ Certaines fonctionnalités de FrankenPHP nécessitent des dépendances optionnel
 Ces fonctionnalités peuvent également être désactivées en passant des tags de compilation au compilateur Go.
 
 | Fonctionnalité                                          | Dépendance                                                            | Tag de compilation pour la désactiver |
-|---------------------------------------------------------|-----------------------------------------------------------------------|---------------------------------------|
+| ------------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------- |
 | Compression Brotli                                      | [Brotli](https://github.com/google/brotli)                            | nobrotli                              |
 | Redémarrage des workers en cas de changement de fichier | [Watcher C](https://github.com/e-dant/watcher/tree/release/watcher-c) | nowatcher                             |
 

@@ -134,7 +134,7 @@ func TestStubGenerator_BuildContent(t *testing.T) {
 			contains: []string{
 				"<?php",
 				"/** @generate-class-entries */",
-				"const GLOBAL_CONST = \"test\";",
+				`const GLOBAL_CONST = "test";`,
 			},
 		},
 		{

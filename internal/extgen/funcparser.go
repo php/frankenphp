@@ -50,7 +50,7 @@ func (fp *FuncParser) parse(filename string) (functions []phpFunction, err error
 				continue
 			}
 
-			if err := validator.validateScalarTypes(*phpFunc); err != nil {
+			if err := validator.validateTypes(*phpFunc); err != nil {
 				fmt.Printf("Warning: Function '%s' uses unsupported types: %v\n", phpFunc.Name, err)
 
 				continue
@@ -128,8 +128,8 @@ func (fp *FuncParser) parseSignature(signature string) (*phpFunction, error) {
 
 	var params []phpParameter
 	if paramsStr != "" {
-		paramParts := strings.Split(paramsStr, ",")
-		for _, part := range paramParts {
+		paramParts := strings.SplitSeq(paramsStr, ",")
+		for part := range paramParts {
 			param, err := fp.parseParameter(strings.TrimSpace(part))
 			if err != nil {
 				return nil, fmt.Errorf("parsing parameter '%s': %w", part, err)

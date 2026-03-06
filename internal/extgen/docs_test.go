@@ -1,12 +1,12 @@
 package extgen
 
 import (
-	"github.com/stretchr/testify/require"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDocumentationGenerator_Generate(t *testing.T) {
@@ -378,8 +378,7 @@ func BenchmarkDocumentationGenerator_GenerateMarkdown(b *testing.B) {
 		generator: generator,
 	}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := docGen.generateMarkdown()
 		assert.NoError(b, err)
 	}

@@ -2,6 +2,8 @@
 
 set -e
 
+SUDO=""
+
 if [ -z "${BIN_DIR}" ]; then
 	BIN_DIR=$(pwd)
 fi
@@ -13,6 +15,11 @@ OS=$(uname -s)
 ARCH=$(uname -m)
 GNU=""
 
+if ! command -v curl >/dev/null 2>&1; then
+	echo "Please install curl to download FrankenPHP"
+	exit 1
+fi
+
 if type "tput" >/dev/null 2>&1; then
 	bold=$(tput bold || true)
 	italic=$(tput sitm || true)
@@ -21,6 +28,77 @@ fi
 
 case ${OS} in
 Linux*)
+	if [ "${ARCH}" = "aarch64" ] || [ "${ARCH}" = "x86_64" ]; then
+		if command -v dnf >/dev/null 2>&1; then
+			echo "📦 Detected dnf. Installing FrankenPHP from RPM repository..."
+			if [ "$(id -u)" -ne 0 ]; then
+				SUDO="sudo"
+				echo "❗ Enter your password to grant sudo powers for package installation"
+				${SUDO} -v || true
+			fi
+			${SUDO} dnf -y install https://rpm.henderkes.com/static-php-1-1.noarch.rpm
+			${SUDO} dnf -y module enable php-zts:static-8.5 || true
+			${SUDO} dnf -y install frankenphp
+			echo
+			echo "🥳 FrankenPHP installed to ${italic}/usr/bin/frankenphp${normal} successfully."
+			echo "❗ The systemd service uses the Caddyfile in ${italic}/etc/frankenphp/Caddyfile${normal}"
+			echo "❗ Your php.ini is found in ${italic}/etc/php-zts/php.ini${normal}"
+			echo
+			echo "⭐ If you like FrankenPHP, please give it a star on GitHub: ${italic}https://github.com/php/frankenphp${normal}"
+			exit 0
+		fi
+
+		if command -v apt-get >/dev/null 2>&1; then
+			echo "📦 Detected apt-get. Installing FrankenPHP from DEB repository..."
+			if [ "$(id -u)" -ne 0 ]; then
+				SUDO="sudo"
+				echo "❗ Enter your password to grant sudo powers for package installation"
+				${SUDO} -v || true
+			fi
+			${SUDO} sh -c 'curl -fsSL https://pkg.henderkes.com/api/packages/85/debian/repository.key -o /etc/apt/keyrings/static-php85.asc'
+			${SUDO} sh -c 'echo "deb [signed-by=/etc/apt/keyrings/static-php85.asc] https://pkg.henderkes.com/api/packages/85/debian php-zts main" | sudo tee -a /etc/apt/sources.list.d/static-php85.list'
+			${SUDO} apt-get update
+			${SUDO} apt-get -y install frankenphp
+			echo
+			echo "🥳 FrankenPHP installed to ${italic}/usr/bin/frankenphp${normal} successfully."
+			echo "❗ The systemd service uses the Caddyfile in ${italic}/etc/frankenphp/Caddyfile${normal}"
+			echo "❗ Your php.ini is found in ${italic}/etc/php-zts/php.ini${normal}"
+			echo
+			echo "⭐ If you like FrankenPHP, please give it a star on GitHub: ${italic}https://github.com/php/frankenphp${normal}"
+			exit 0
+		fi
+
+		if command -v apk >/dev/null 2>&1; then
+			echo "📦 Detected apk. Installing FrankenPHP from APK repository..."
+			if [ "$(id -u)" -ne 0 ]; then
+				SUDO="sudo"
+				echo "❗ Enter your password to grant sudo powers for package installation"
+				${SUDO} -v || true
+			fi
+
+			KEY_URL="https://pkg.henderkes.com/api/packages/85/alpine/key"
+			${SUDO} sh -c "cd /etc/apk/keys && curl -JOsS \"$KEY_URL\" 2>/dev/null || true"
+
+			REPO_URL="https://pkg.henderkes.com/api/packages/85/alpine/main/php-zts"
+			if grep -q "$REPO_URL" /etc/apk/repositories 2>/dev/null; then
+				echo "Repository already exists in /etc/apk/repositories"
+			else
+				${SUDO} sh -c "echo \"$REPO_URL\" >> /etc/apk/repositories"
+				${SUDO} apk update
+				echo "Repository added to /etc/apk/repositories"
+			fi
+
+			${SUDO} apk add frankenphp
+			echo
+			echo "🥳 FrankenPHP installed to ${italic}/usr/bin/frankenphp${normal} successfully."
+			echo "❗ The OpenRC service uses the Caddyfile in ${italic}/etc/frankenphp/Caddyfile${normal}"
+			echo "❗ Your php.ini is found in ${italic}/etc/php-zts/php.ini${normal}"
+			echo
+			echo "⭐ If you like FrankenPHP, please give it a star on GitHub: ${italic}https://github.com/php/frankenphp${normal}"
+			exit 0
+		fi
+	fi
+
 	case ${ARCH} in
 	aarch64)
 		THE_ARCH_BIN="frankenphp-linux-aarch64"
@@ -58,11 +136,10 @@ Windows | MINGW64_NT*)
 esac
 
 if [ -z "${THE_ARCH_BIN}" ]; then
-	echo "❗ FrankenPHP is not supported on ${OS} and ${ARCH}"
+	echo "❗ Precompiled binaries are not available for ${ARCH}-${OS}"
+	echo "❗ You can compile from sources by following the documentation at: https://frankenphp.dev/docs/compile/"
 	exit 1
 fi
-
-SUDO=""
 
 echo "📦 Downloading ${bold}FrankenPHP${normal} for ${OS}${GNU} (${ARCH}):"
 
@@ -75,20 +152,27 @@ if [ $? -eq 1 ]; then
 	SUDO="sudo"
 fi
 
-if type "curl" >/dev/null 2>&1; then
-	curl -L --progress-bar "https://github.com/php/frankenphp/releases/latest/download/${THE_ARCH_BIN}" -o "${DEST}"
-elif type "wget" >/dev/null 2>&1; then
-	${SUDO} wget "https://github.com/php/frankenphp/releases/latest/download/${THE_ARCH_BIN}" -O "${DEST}"
-else
-	echo "❗ Please install ${italic}curl${normal} or ${italic}wget${normal} to download FrankenPHP"
-	exit 1
-fi
+curl -L --progress-bar "https://github.com/php/frankenphp/releases/latest/download/${THE_ARCH_BIN}" -o "${DEST}"
 
 ${SUDO} chmod +x "${DEST}"
+# Allow binding to ports 80/443 without running as root (if setcap is available)
+if command -v setcap >/dev/null 2>&1; then
+	${SUDO} setcap 'cap_net_bind_service=+ep' "${DEST}" || true
+else
+	echo "❗ install setcap (e.g. libcap2-bin) to allow FrankenPHP to bind to ports 80/443 without root:"
+	echo "	 ${bold}sudo setcap 'cap_net_bind_service=+ep' \"${DEST}\"${normal}"
+fi
 
 echo
 echo "🥳 FrankenPHP downloaded successfully to ${italic}${DEST}${normal}"
-echo "🔧 Move the binary to ${italic}/usr/local/bin/${normal} or another directory in your ${italic}PATH${normal} to use it globally:"
-echo "   ${bold}sudo mv ${DEST} /usr/local/bin/${normal}"
+echo "❗ It uses ${italic}/etc/frankenphp/php.ini${normal} if found."
+case ":$PATH:" in
+*":$DEST:"*) ;;
+*)
+	echo "🔧 Move the binary to ${italic}/usr/local/bin/${normal} or another directory in your ${italic}PATH${normal} to use it globally:"
+	echo "	${bold}sudo mv ${DEST} /usr/local/bin/${normal}"
+	;;
+esac
+
 echo
 echo "⭐ If you like FrankenPHP, please give it a star on GitHub: ${italic}https://github.com/php/frankenphp${normal}"

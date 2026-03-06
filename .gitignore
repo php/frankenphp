@@ -2,6 +2,8 @@
 /internal/testserver/testserver
 /internal/testcli/testcli
 /dist
+/github_conf
+/super-linter-output
 .DS_Store
 .idea/
 .vscode/

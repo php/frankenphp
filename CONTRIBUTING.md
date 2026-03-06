@@ -17,7 +17,7 @@ The image contains the usual development tools (Go, GDB, Valgrind, Neovim...) an
 - additional configuration files: `/etc/frankenphp/php.d/*.ini`
 - php extensions: `/usr/lib/frankenphp/modules/`
 
-If your docker version is lower than 23.0, the build will fail due to dockerignore [pattern issue](https://github.com/moby/moby/pull/42676). Add directories to `.dockerignore`.
+If your Docker version is lower than 23.0, the build will fail due to dockerignore [pattern issue](https://github.com/moby/moby/pull/42676). Add directories to `.dockerignore`.
 
 ```patch
  !testdata/*.php
@@ -33,7 +33,8 @@ If your docker version is lower than 23.0, the build will fail due to dockerigno
 ## Running the test suite
 
 ```console
-go test -tags watcher -race -v ./...
+export CGO_CFLAGS=$(php-config --includes) CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)"
+go test -race -v ./...
 ```
 
 ## Caddy module
@@ -42,7 +43,7 @@ Build Caddy with the FrankenPHP Caddy module:
 
 ```console
 cd caddy/frankenphp/
-go build -tags watcher,brotli,nobadger,nomysql,nopgx
+go build -tags nobadger,nomysql,nopgx
 cd ../../
 ```
 
@@ -175,7 +176,7 @@ docker buildx bake -f docker-bake.hcl --pull --no-cache --push
 8. In the container, you can use GDB and the like:
 
    ```console
-   go test -tags watcher -c -ldflags=-w
+   go test -tags -c -ldflags=-w
    gdb --args frankenphp.test -test.run ^MyTest$
    ```
 
@@ -195,7 +196,7 @@ docker buildx bake -f docker-bake.hcl --pull --no-cache --push
 ## Docker-Related Resources
 
 - [Bake file definition](https://docs.docker.com/build/customize/bake/file-definition/)
-- [docker buildx build](https://docs.docker.com/engine/reference/commandline/buildx_build/)
+- [`docker buildx build`](https://docs.docker.com/engine/reference/commandline/buildx_build/)
 
 ## Useful Command
 

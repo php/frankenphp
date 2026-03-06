@@ -12,15 +12,30 @@ package frankenphp
 // #include "frankenphp.h"
 import "C"
 import (
+	"context"
 	"crypto/tls"
 	"net"
+	"net/http"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 	"unsafe"
 
 	"github.com/dunglas/frankenphp/internal/phpheaders"
+	"golang.org/x/text/language"
+	"golang.org/x/text/search"
 )
 
+// Protocol versions, in Apache mod_ssl format: https://httpd.apache.org/docs/current/mod/mod_ssl.html
+// Note that these are slightly different from SupportedProtocols in caddytls/config.go
+var tlsProtocolStrings = map[uint16]string{
+	tls.VersionTLS10: "TLSv1",
+	tls.VersionTLS11: "TLSv1.1",
+	tls.VersionTLS12: "TLSv1.2",
+	tls.VersionTLS13: "TLSv1.3",
+}
+
+// Known $_SERVER keys
 var knownServerKeys = []string{
 	"CONTENT_LENGTH",
 	"DOCUMENT_ROOT",
@@ -52,11 +67,25 @@ var knownServerKeys = []string{
 	"REQUEST_URI",
 }
 
+// cStringHTTPMethods caches C string versions of common HTTP methods
+// to avoid allocations in pinCString on every request.
+var cStringHTTPMethods = map[string]*C.char{
+	"GET":     C.CString("GET"),
+	"HEAD":    C.CString("HEAD"),
+	"POST":    C.CString("POST"),
+	"PUT":     C.CString("PUT"),
+	"DELETE":  C.CString("DELETE"),
+	"CONNECT": C.CString("CONNECT"),
+	"OPTIONS": C.CString("OPTIONS"),
+	"TRACE":   C.CString("TRACE"),
+	"PATCH":   C.CString("PATCH"),
+}
+
 // computeKnownVariables returns a set of CGI environment variables for the request.
 //
 // TODO: handle this case https://github.com/caddyserver/caddy/issues/3718
 // Inspired by https://github.com/caddyserver/caddy/blob/master/modules/caddyhttp/reverseproxy/fastcgi/fastcgi.go
-func addKnownVariablesToServer(thread *phpThread, fc *frankenPHPContext, trackVarsArray *C.zval) {
+func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 	request := fc.request
 	keys := mainThread.knownServerKeys
 	// Separate remote IP and port; more lenient than net.SplitHostPort
@@ -69,13 +98,12 @@ func addKnownVariablesToServer(thread *phpThread, fc *frankenPHPContext, trackVa
 	}
 
 	// Remove [] from IPv6 addresses
-	ip = strings.Replace(ip, "[", "", 1)
-	ip = strings.Replace(ip, "]", "", 1)
+	if len(ip) > 0 && ip[0] == '[' {
+		ip = ip[1 : len(ip)-1]
+	}
 
-	var https string
-	var sslProtocol string
-	var sslCipher string
-	var rs string
+	var https, sslProtocol, sslCipher, rs string
+
 	if request.TLS == nil {
 		rs = "http"
 		https = ""
@@ -85,7 +113,7 @@ func addKnownVariablesToServer(thread *phpThread, fc *frankenPHPContext, trackVa
 		rs = "https"
 		https = "on"
 
-		// and pass the protocol details in a manner compatible with apache's mod_ssl
+		// and pass the protocol details in a manner compatible with Apache's mod_ssl
 		// (which is why these have an SSL_ prefix and not TLS_).
 		if v, ok := tlsProtocolStrings[request.TLS.Version]; ok {
 			sslProtocol = v
@@ -125,7 +153,7 @@ func addKnownVariablesToServer(thread *phpThread, fc *frankenPHPContext, trackVa
 	if fc.originalRequest != nil {
 		requestURI = fc.originalRequest.URL.RequestURI()
 	} else {
-		requestURI = request.URL.RequestURI()
+		requestURI = fc.requestURI
 	}
 
 	C.frankenphp_register_bulk(
@@ -135,7 +163,7 @@ func addKnownVariablesToServer(thread *phpThread, fc *frankenPHPContext, trackVa
 		packCgiVariable(keys["REMOTE_PORT"], port),
 		packCgiVariable(keys["DOCUMENT_ROOT"], fc.documentRoot),
 		packCgiVariable(keys["PATH_INFO"], fc.pathInfo),
-		packCgiVariable(keys["PHP_SELF"], request.URL.Path),
+		packCgiVariable(keys["PHP_SELF"], ensureLeadingSlash(request.URL.Path)),
 		packCgiVariable(keys["DOCUMENT_URI"], fc.docURI),
 		packCgiVariable(keys["SCRIPT_FILENAME"], fc.scriptFilename),
 		packCgiVariable(keys["SCRIPT_NAME"], fc.scriptName),
@@ -176,8 +204,8 @@ func packCgiVariable(key *C.zend_string, value string) C.ht_key_value_pair {
 	return C.ht_key_value_pair{key, toUnsafeChar(value), C.size_t(len(value))}
 }
 
-func addHeadersToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
-	for field, val := range fc.request.Header {
+func addHeadersToServer(ctx context.Context, request *http.Request, trackVarsArray *C.zval) {
+	for field, val := range request.Header {
 		if k := mainThread.commonHeaders[field]; k != nil {
 			v := strings.Join(val, ", ")
 			C.frankenphp_register_single(k, toUnsafeChar(v), C.size_t(len(v)), trackVarsArray)
@@ -186,7 +214,7 @@ func addHeadersToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 
 		// if the header name could not be cached, it needs to be registered safely
 		// this is more inefficient but allows additional sanitizing by PHP
-		k := phpheaders.GetUnCommonHeader(field)
+		k := phpheaders.GetUnCommonHeader(ctx, field)
 		v := strings.Join(val, ", ")
 		C.frankenphp_register_variable_safe(toUnsafeChar(k), toUnsafeChar(v), C.size_t(len(v)), trackVarsArray)
 	}
@@ -202,41 +230,146 @@ func addPreparedEnvToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 //export go_register_variables
 func go_register_variables(threadIndex C.uintptr_t, trackVarsArray *C.zval) {
 	thread := phpThreads[threadIndex]
-	fc := thread.getRequestContext()
+	fc := thread.frankenPHPContext()
 
-	addKnownVariablesToServer(thread, fc, trackVarsArray)
-	addHeadersToServer(fc, trackVarsArray)
+	if fc.request != nil {
+		addKnownVariablesToServer(fc, trackVarsArray)
+		addHeadersToServer(thread.context(), fc.request, trackVarsArray)
+	}
 
 	// The Prepared Environment is registered last and can overwrite any previous values
 	addPreparedEnvToServer(fc, trackVarsArray)
 }
 
-// splitPos returns the index where path should
-// be split based on SplitPath.
-//
-// Adapted from https://github.com/caddyserver/caddy/blob/master/modules/caddyhttp/reverseproxy/fastcgi/fastcgi.go
-// Copyright 2015 Matthew Holt and The Caddy Authors
-func splitPos(fc *frankenPHPContext, path string) int {
-	if len(fc.splitPath) == 0 {
+// splitCgiPath splits the request path into SCRIPT_NAME, SCRIPT_FILENAME, PATH_INFO, DOCUMENT_URI
+func splitCgiPath(fc *frankenPHPContext) {
+	path := fc.request.URL.Path
+	splitPath := fc.splitPath
+
+	if splitPath == nil {
+		splitPath = []string{".php"}
+	}
+
+	if splitPos := splitPos(path, splitPath); splitPos > -1 {
+		fc.docURI = path[:splitPos]
+		fc.pathInfo = path[splitPos:]
+
+		// Strip PATH_INFO from SCRIPT_NAME
+		fc.scriptName = strings.TrimSuffix(path, fc.pathInfo)
+
+		// Ensure the SCRIPT_NAME has a leading slash for compliance with RFC3875
+		// Info: https://tools.ietf.org/html/rfc3875#section-4.1.13
+		if fc.scriptName != "" && !strings.HasPrefix(fc.scriptName, "/") {
+			fc.scriptName = "/" + fc.scriptName
+		}
+	}
+
+	// TODO: is it possible to delay this and avoid saving everything in the context?
+	// SCRIPT_FILENAME is the absolute path of SCRIPT_NAME
+	fc.scriptFilename = sanitizedPathJoin(fc.documentRoot, fc.scriptName)
+	fc.worker = workersByPath[fc.scriptFilename]
+}
+
+var splitSearchNonASCII = search.New(language.Und, search.IgnoreCase)
+
+// splitPos returns the index where path should be split based on splitPath.
+// example: if splitPath is [".php"]
+// "/path/to/script.php/some/path": ("/path/to/script.php", "/some/path")
+func splitPos(path string, splitPath []string) int {
+	if len(splitPath) == 0 {
 		return 0
 	}
 
-	lowerPath := strings.ToLower(path)
-	for _, split := range fc.splitPath {
-		if idx := strings.Index(lowerPath, strings.ToLower(split)); idx > -1 {
-			return idx + len(split)
+	pathLen := len(path)
+
+	// We are sure that split strings are all ASCII-only and lower-case because of validation and normalization in WithRequestSplitPath
+	for _, split := range splitPath {
+		splitLen := len(split)
+
+		for i := 0; i < pathLen; i++ {
+			if path[i] >= utf8.RuneSelf {
+				if _, end := splitSearchNonASCII.IndexString(path, split); end > -1 {
+					return end
+				}
+
+				break
+			}
+
+			if i+splitLen > pathLen {
+				continue
+			}
+
+			match := true
+			for j := 0; j < splitLen; j++ {
+				c := path[i+j]
+
+				if c >= utf8.RuneSelf {
+					if _, end := splitSearchNonASCII.IndexString(path, split); end > -1 {
+						return end
+					}
+
+					break
+				}
+
+				if 'A' <= c && c <= 'Z' {
+					c += 'a' - 'A'
+				}
+
+				if c != split[j] {
+					match = false
+
+					break
+				}
+			}
+
+			if match {
+				return i + splitLen
+			}
 		}
 	}
+
 	return -1
 }
 
-// Map of supported protocols to Apache ssl_mod format
-// Note that these are slightly different from SupportedProtocols in caddytls/config.go
-var tlsProtocolStrings = map[uint16]string{
-	tls.VersionTLS10: "TLSv1",
-	tls.VersionTLS11: "TLSv1.1",
-	tls.VersionTLS12: "TLSv1.2",
-	tls.VersionTLS13: "TLSv1.3",
+// go_update_request_info updates the sapi_request_info struct
+// See: https://github.com/php/php-src/blob/345e04b619c3bc11ea17ee02cdecad6ae8ce5891/main/SAPI.h#L72
+//
+//export go_update_request_info
+func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) *C.char {
+	thread := phpThreads[threadIndex]
+	fc := thread.frankenPHPContext()
+	request := fc.request
+
+	if request == nil {
+		return nil
+	}
+
+	if m, ok := cStringHTTPMethods[request.Method]; ok {
+		info.request_method = m
+	} else {
+		info.request_method = thread.pinCString(request.Method)
+	}
+	info.query_string = thread.pinCString(request.URL.RawQuery)
+	info.content_length = C.zend_long(request.ContentLength)
+
+	if contentType := request.Header.Get("Content-Type"); contentType != "" {
+		info.content_type = thread.pinCString(contentType)
+	}
+
+	if fc.pathInfo != "" {
+		info.path_translated = thread.pinCString(sanitizedPathJoin(fc.documentRoot, fc.pathInfo)) // See: http://www.oreilly.com/openbook/cgi/ch02_04.html
+	}
+
+	info.request_uri = thread.pinCString(fc.requestURI)
+
+	info.proto_num = C.int(request.ProtoMajor*1000 + request.ProtoMinor)
+
+	authorizationHeader := request.Header.Get("Authorization")
+	if authorizationHeader == "" {
+		return nil
+	}
+
+	return thread.pinCString(authorizationHeader)
 }
 
 // SanitizedPathJoin performs filepath.Join(root, reqPath) that
@@ -269,7 +402,16 @@ func sanitizedPathJoin(root, reqPath string) string {
 
 const separator = string(filepath.Separator)
 
+func ensureLeadingSlash(path string) string {
+	if path == "" || path[0] == '/' {
+		return path
+	}
+
+	return "/" + path
+}
+
 func toUnsafeChar(s string) *C.char {
 	sData := unsafe.StringData(s)
+
 	return (*C.char)(unsafe.Pointer(sData))
 }

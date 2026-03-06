@@ -1,10 +1,11 @@
 package extgen
 
 import (
-	"github.com/stretchr/testify/require"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -14,6 +15,7 @@ func TestSourceAnalyzer_Analyze(t *testing.T) {
 		name              string
 		sourceContent     string
 		expectedImports   []string
+		expectedVariables []string
 		expectedFunctions []string
 		expectError       bool
 	}{
@@ -34,7 +36,8 @@ func regularFunction() {
 func exportedFunction() string {
 	return "exported"
 }`,
-			expectedImports: []string{`"fmt"`, `"strings"`},
+			expectedImports:   []string{`"fmt"`, `"strings"`},
+			expectedVariables: nil,
 			expectedFunctions: []string{
 				`func regularFunction() {
 	fmt.Println("hello")
@@ -53,7 +56,8 @@ import (
 )
 
 func test() {}`,
-			expectedImports: []string{`custom "fmt"`, `. "strings"`, `_ "os"`},
+			expectedImports:   []string{`custom "fmt"`, `. "strings"`, `_ "os"`},
+			expectedVariables: nil,
 			expectedFunctions: []string{
 				`func test() {}`,
 			},
@@ -82,7 +86,8 @@ func internalTwo() string {
 func exportedTwo() bool {
 	return true
 }`,
-			expectedImports: []string{},
+			expectedImports:   []string{},
+			expectedVariables: nil,
 			expectedFunctions: []string{
 				`func internalOne() {
 	// some code
@@ -116,7 +121,8 @@ func exportedComplex() {
 	}
 	fmt.Println(obj)
 }`,
-			expectedImports: []string{},
+			expectedImports:   []string{},
+			expectedVariables: nil,
 			expectedFunctions: []string{
 				`func complexFunction() {
 	if true {
@@ -163,10 +169,50 @@ func shouldNotBeExported() {}
 func normalFunction() {
 	//export_php:function inside function should not count
 }`,
-			expectedImports: []string{},
+			expectedImports:   []string{},
+			expectedVariables: nil,
 			expectedFunctions: []string{
 				`func normalFunction() {
 	//export_php:function inside function should not count
+}`,
+			},
+			expectError: false,
+		},
+		{
+			name: "file with variable blocks",
+			sourceContent: `package main
+
+import (
+	"sync"
+)
+
+var (
+	mu    sync.RWMutex
+	store = map[string]struct {
+		val     string
+		expires int64
+	}{}
+)
+
+var singleVar = "test"
+
+func testFunction() {
+	// test function
+}`,
+			expectedImports: []string{`"sync"`},
+			expectedVariables: []string{
+				`var (
+	mu    sync.RWMutex
+	store = map[string]struct {
+		val     string
+		expires int64
+	}{}
+)`,
+				`var singleVar = "test"`,
+			},
+			expectedFunctions: []string{
+				`func testFunction() {
+	// test function
 }`,
 			},
 			expectError: false,
@@ -181,7 +227,7 @@ func normalFunction() {
 			require.NoError(t, os.WriteFile(filename, []byte(tt.sourceContent), 0644))
 
 			analyzer := &SourceAnalyzer{}
-			imports, functions, err := analyzer.analyze(filename)
+			_, variables, functions, err := analyzer.analyze(filename)
 
 			if tt.expectError {
 				assert.Error(t, err, "expected error")
@@ -190,10 +236,7 @@ func normalFunction() {
 
 			assert.NoError(t, err, "unexpected error")
 
-			if len(imports) != 0 && len(tt.expectedImports) != 0 {
-				assert.Equal(t, tt.expectedImports, imports, "imports mismatch")
-			}
-
+			assert.Equal(t, tt.expectedVariables, variables, "variables mismatch")
 			assert.Len(t, functions, len(tt.expectedFunctions), "function count mismatch")
 
 			for i, expected := range tt.expectedFunctions {
@@ -207,7 +250,7 @@ func TestSourceAnalyzer_Analyze_InvalidFile(t *testing.T) {
 	analyzer := &SourceAnalyzer{}
 
 	t.Run("nonexistent file", func(t *testing.T) {
-		_, _, err := analyzer.analyze("/nonexistent/file.go")
+		_, _, _, err := analyzer.analyze("/nonexistent/file.go")
 		assert.Error(t, err, "expected error for nonexistent file")
 	})
 
@@ -222,7 +265,7 @@ func TestSourceAnalyzer_Analyze_InvalidFile(t *testing.T) {
 
 		require.NoError(t, os.WriteFile(filename, []byte(invalidContent), 0644))
 
-		_, _, err := analyzer.analyze(filename)
+		_, _, _, err := analyzer.analyze(filename)
 		assert.Error(t, err, "expected error for invalid syntax")
 	})
 }
@@ -338,6 +381,110 @@ var x = 10`,
 	}
 }
 
+func TestSourceAnalyzer_InternalFunctionPreservation(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	sourceContent := `package main
+
+import (
+	"fmt"
+	"strings"
+)
+
+//export_php: exported1(): string
+func exported1() *go_value {
+	return String(internal1())
+}
+
+func internal1() string {
+	return "helper1"
+}
+
+//export_php: exported2(): void
+func exported2() {
+	internal2()
+}
+
+func internal2() {
+	fmt.Println("helper2")
+}
+
+func internal3(data string) string {
+	return strings.ToUpper(data)
+}`
+
+	sourceFile := filepath.Join(tmpDir, "test.go")
+	require.NoError(t, os.WriteFile(sourceFile, []byte(sourceContent), 0644))
+
+	analyzer := &SourceAnalyzer{}
+	packageName, variables, internalFuncs, err := analyzer.analyze(sourceFile)
+	require.NoError(t, err)
+
+	assert.Equal(t, "main", packageName)
+
+	assert.Len(t, internalFuncs, 3, "Should extract exactly 3 internal functions")
+
+	expectedInternalFuncs := []string{
+		`func internal1() string {
+	return "helper1"
+}`,
+		`func internal2() {
+	fmt.Println("helper2")
+}`,
+		`func internal3(data string) string {
+	return strings.ToUpper(data)
+}`,
+	}
+
+	for i, expected := range expectedInternalFuncs {
+		assert.Equal(t, expected, internalFuncs[i], "Internal function %d should match", i)
+	}
+
+	assert.Empty(t, variables, "Should not have variables")
+}
+
+func TestSourceAnalyzer_VariableBlockPreservation(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	sourceContent := `package main
+
+import (
+	"sync"
+)
+
+var (
+	mu    sync.RWMutex
+	cache = make(map[string]string)
+)
+
+var globalCounter int = 0
+
+//export_php: test(): void
+func test() {}`
+
+	sourceFile := filepath.Join(tmpDir, "test.go")
+	require.NoError(t, os.WriteFile(sourceFile, []byte(sourceContent), 0644))
+
+	analyzer := &SourceAnalyzer{}
+	packageName, variables, internalFuncs, err := analyzer.analyze(sourceFile)
+	require.NoError(t, err)
+
+	assert.Equal(t, "main", packageName)
+
+	assert.Len(t, variables, 2, "Should extract exactly 2 variable declarations")
+
+	expectedVar1 := `var (
+	mu    sync.RWMutex
+	cache = make(map[string]string)
+)`
+	expectedVar2 := `var globalCounter int = 0`
+
+	assert.Equal(t, expectedVar1, variables[0], "First variable block should match")
+	assert.Equal(t, expectedVar2, variables[1], "Second variable declaration should match")
+
+	assert.Empty(t, internalFuncs, "Should not have internal functions (only exported function)")
+}
+
 func BenchmarkSourceAnalyzer_Analyze(b *testing.B) {
 	content := `package main
 
@@ -371,9 +518,8 @@ func internalTwo() {
 
 	analyzer := &SourceAnalyzer{}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _, err := analyzer.analyze(filename)
+	for b.Loop() {
+		_, _, _, err := analyzer.analyze(filename)
 		require.NoError(b, err)
 	}
 }
@@ -391,8 +537,7 @@ func test3() {
 
 	analyzer := &SourceAnalyzer{}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		analyzer.extractInternalFunctions(content)
 	}
 }

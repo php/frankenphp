@@ -23,7 +23,7 @@ func registerExtensions() {
 	}
 
 	registerOnce.Do(func() {
-		C.register_extensions(extensions[0], C.int(len(extensions)))
+		C.register_extensions((**C.zend_module_entry)(unsafe.Pointer(&extensions[0])), C.int(len(extensions)))
 		extensions = nil
 	})
 }

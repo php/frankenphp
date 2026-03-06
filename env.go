@@ -1,10 +1,9 @@
 package frankenphp
 
 // #cgo nocallback frankenphp_init_persistent_string
-// #cgo nocallback frankenphp_add_assoc_str_ex
 // #cgo noescape frankenphp_init_persistent_string
-// #cgo noescape frankenphp_add_assoc_str_ex
 // #include "frankenphp.h"
+// #include <Zend/zend_API.h>
 import "C"
 import (
 	"os"
@@ -98,7 +97,7 @@ func go_getfullenv(threadIndex C.uintptr_t, trackVarsArray *C.zval) {
 	env := getSandboxedEnv(thread)
 
 	for key, val := range env {
-		C.frankenphp_add_assoc_str_ex(trackVarsArray, toUnsafeChar(key), C.size_t(len(key)), val)
+		C.add_assoc_str_ex(trackVarsArray, toUnsafeChar(key), C.size_t(len(key)), val)
 	}
 }
 

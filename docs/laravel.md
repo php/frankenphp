@@ -76,6 +76,8 @@ The `octane:frankenphp` command can take the following options:
 > [!TIP]
 > To get structured JSON logs (useful when using log analytics solutions), explicitly the pass `--log-level` option.
 
+See also [how to use Mercure with Octane](#mercure-support).
+
 Learn more about [Laravel Octane in its official documentation](https://laravel.com/docs/octane).
 
 ## Laravel Apps As Standalone Binaries
@@ -88,7 +90,8 @@ Follow these steps to package your Laravel app as a standalone binary for Linux:
 1. Create a file named `static-build.Dockerfile` in the repository of your app:
 
    ```dockerfile
-   FROM --platform=linux/amd64 dunglas/frankenphp:static-builder
+   FROM --platform=linux/amd64 dunglas/frankenphp:static-builder-gnu
+   # If you intend to run the binary on musl-libc systems, use static-builder-musl instead
 
    # Copy your app
    WORKDIR /go/src/app/dist/app
@@ -165,6 +168,34 @@ By default, Laravel stores uploaded files, caches, logs, etc. in the application
 This is not suitable for embedded applications, as each new version will be extracted into a different temporary directory.
 
 Set the `LARAVEL_STORAGE_PATH` environment variable (for example, in your `.env` file) or call the `Illuminate\Foundation\Application::useStoragePath()` method to use a directory outside the temporary directory.
+
+### Mercure Support
+
+[Mercure](https://mercure.rocks) is a great way to add real-time capabilities to your Laravel apps.
+FrankenPHP includes [Mercure support out of the box](mercure.md).
+
+If you are not using [Octane](#laravel-octane), see [the Mercure documentation entry](mercure.md).
+
+If you are using Octane, you can use enable Mercure support by adding the following lines to your `config/octane.php` file:
+
+```php
+// ...
+
+return [
+    // ...
+
+    'mercure' => [
+        'anonymous' => true,
+        'publisher_jwt' => '!ChangeThisMercureHubJWTSecretKey!',
+        'subscriber_jwt' => '!ChangeThisMercureHubJWTSecretKey!',
+    ],
+];
+```
+
+You can use [all directives supported by Mercure](https://mercure.rocks/docs/hub/config#directives) in this array.
+
+To publish and subscribe to updates, we recommend using the [Laravel Mercure Broadcaster](https://github.com/mvanduijker/laravel-mercure-broadcaster) library.
+Alternatively, see [the Mercure documentation](mercure.md) to do it in pure PHP and JavaScript.
 
 ### Running Octane With Standalone Binaries
 

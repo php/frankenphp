@@ -1,10 +1,10 @@
 package frankenphp_test
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -17,9 +17,6 @@ import (
 
 	"github.com/dunglas/frankenphp"
 	"github.com/stretchr/testify/assert"
-	"go.uber.org/zap/exp/zapslog"
-	"go.uber.org/zap/zapcore"
-	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestWorker(t *testing.T) {
@@ -97,8 +94,7 @@ func TestWorkerEnv(t *testing.T) {
 }
 
 func TestWorkerGetOpt(t *testing.T) {
-	obs, logs := observer.New(zapcore.InfoLevel)
-	logger := slog.New(zapslog.NewHandler(obs))
+	logger, buf := newTestLogger(t)
 
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
 		req := httptest.NewRequest("GET", fmt.Sprintf("http://example.com/worker-getopt.php?i=%d", i), nil)
@@ -114,9 +110,7 @@ func TestWorkerGetOpt(t *testing.T) {
 		assert.Contains(t, string(body), fmt.Sprintf("[REQUEST_URI] => /worker-getopt.php?i=%d", i))
 	}, &testOptions{logger: logger, workerScript: "worker-getopt.php", env: map[string]string{"FOO": "bar"}})
 
-	for _, l := range logs.FilterFieldKey("exit_status").All() {
-		assert.Failf(t, "unexpected exit status", "exit status: %d", l.ContextMap()["exit_status"])
-	}
+	assert.NotRegexp(t, buf.String(), "exit_status=[1-9]")
 }
 
 func ExampleServeHTTP_workers() {
@@ -163,4 +157,20 @@ func TestWorkerHasOSEnvironmentVariableInSERVER(t *testing.T) {
 		assert.Contains(t, string(body), "CUSTOM_OS_ENV_VARIABLE")
 		assert.Contains(t, string(body), "custom_env_variable_value")
 	}, &testOptions{workerScript: "worker.php", nbWorkers: 1, nbParallelRequests: 1})
+}
+
+func TestKeepRunningOnConnectionAbort(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		req := httptest.NewRequest("GET", "http://example.com/worker-with-counter.php", nil)
+
+		ctx, cancel := context.WithCancel(req.Context())
+		req = req.WithContext(ctx)
+		cancel()
+		body1, _ := testRequest(req, handler, t)
+
+		assert.Equal(t, "requests:1", body1, "should have handled exactly one request")
+		body2, _ := testGet("http://example.com/worker-with-counter.php", handler, t)
+
+		assert.Equal(t, "requests:2", body2, "should not have stopped execution after the first request was aborted")
+	}, &testOptions{workerScript: "worker-with-counter.php", nbWorkers: 1, nbParallelRequests: 1})
 }

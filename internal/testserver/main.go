@@ -10,8 +10,11 @@ import (
 )
 
 func main() {
+	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	if err := frankenphp.Init(frankenphp.WithLogger(logger)); err != nil {
+
+
+	if err := frankenphp.Init(frankenphp.WithContext(ctx), frankenphp.WithLogger(logger)); err != nil {
 		panic(err)
 	}
 	defer frankenphp.Shutdown()
@@ -32,6 +35,9 @@ func main() {
 		port = "8080"
 	}
 
-	logger.LogAttrs(context.Background(), slog.LevelError, "server error", slog.Any("error", http.ListenAndServe(":"+port, nil)))
+	if logger.Enabled(ctx, slog.LevelError) {
+		logger.LogAttrs(ctx, slog.LevelError, "server error", slog.Any("error", http.ListenAndServe(":"+port, nil)))
+	}
+
 	os.Exit(1)
 }

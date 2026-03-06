@@ -33,7 +33,7 @@ As covered in the manual implementation section below as well, you need to [get 
 The first step to writing a PHP extension in Go is to create a new Go module. You can use the following command for this:
 
 ```console
-go mod init github.com/my-account/my-module
+go mod init example.com/example
 ```
 
 The second step is to [get the PHP sources](https://www.php.net/downloads.php) for the next steps. Once you have them, decompress them into the directory of your choice, not inside your Go module:
@@ -47,10 +47,15 @@ tar xf php-*
 Everything is now setup to write your native function in Go. Create a new file named `stringext.go`. Our first function will take a string as an argument, the number of times to repeat it, a boolean to indicate whether to reverse the string, and return the resulting string. This should look like this:
 
 ```go
+package example
+
+// #include <Zend/zend_types.h>
+import "C"
 import (
-    "C"
-    "github.com/dunglas/frankenphp"
     "strings"
+	"unsafe"
+
+	"github.com/dunglas/frankenphp"
 )
 
 //export_php:function repeat_this(string $str, int $count, bool $reverse): string
@@ -72,28 +77,34 @@ func repeat_this(s *C.zend_string, count int64, reverse bool) unsafe.Pointer {
 
 There are two important things to note here:
 
-* A directive comment `//export_php:function` defines the function signature in PHP. This is how the generator knows how to generate the PHP function with the right parameters and return type;
-* The function must return an `unsafe.Pointer`. FrankenPHP provides an API to help you with type juggling between C and Go.
+- A directive comment `//export_php:function` defines the function signature in PHP. This is how the generator knows how to generate the PHP function with the right parameters and return type;
+- The function must return an `unsafe.Pointer`. FrankenPHP provides an API to help you with type juggling between C and Go.
 
 While the first point speaks for itself, the second may be harder to apprehend. Let's take a deeper dive to type juggling in the next section.
 
 ### Type Juggling
 
-While some variable types have the same memory representation between C/PHP and Go, some types require more logic to be directly used. This is maybe the hardest part when it comes to writing extensions because it requires understanding internals of the Zend Engine and how variables are stored internally in PHP. This table summarizes what you need to know:
+While some variable types have the same memory representation between C/PHP and Go, some types require more logic to be directly used. This is maybe the hardest part when it comes to writing extensions because it requires understanding internals of the Zend Engine and how variables are stored internally in PHP.
+This table summarizes what you need to know:
 
-| PHP type           | Go type             | Direct conversion | C to Go helper        | Go to C helper         | Class Methods Support |
-|--------------------|---------------------|-------------------|-----------------------|------------------------|-----------------------|
-| `int`              | `int64`             | ✅                 | -                     | -                      | ✅                     |
-| `?int`             | `*int64`            | ✅                 | -                     | -                      | ✅                     |
-| `float`            | `float64`           | ✅                 | -                     | -                      | ✅                     |
-| `?float`           | `*float64`          | ✅                 | -                     | -                      | ✅                     |
-| `bool`             | `bool`              | ✅                 | -                     | -                      | ✅                     |
-| `?bool`            | `*bool`             | ✅                 | -                     | -                      | ✅                     |
-| `string`/`?string` | `*C.zend_string`    | ❌                 | frankenphp.GoString() | frankenphp.PHPString() | ✅                     |
-| `array`            | `*frankenphp.Array` | ❌                 | frankenphp.GoArray()  | frankenphp.PHPArray()  | ✅                     |
-| `object`           | `struct`            | ❌                 | _Not yet implemented_ | _Not yet implemented_  | ❌                     |
+| PHP type           | Go type                       | Direct conversion | C to Go helper                    | Go to C helper                     | Class Methods Support |
+| ------------------ | ----------------------------- | ----------------- | --------------------------------- | ---------------------------------- | --------------------- |
+| `int`              | `int64`                       | ✅                | -                                 | -                                  | ✅                    |
+| `?int`             | `*int64`                      | ✅                | -                                 | -                                  | ✅                    |
+| `float`            | `float64`                     | ✅                | -                                 | -                                  | ✅                    |
+| `?float`           | `*float64`                    | ✅                | -                                 | -                                  | ✅                    |
+| `bool`             | `bool`                        | ✅                | -                                 | -                                  | ✅                    |
+| `?bool`            | `*bool`                       | ✅                | -                                 | -                                  | ✅                    |
+| `string`/`?string` | `*C.zend_string`              | ❌                | `frankenphp.GoString()`           | `frankenphp.PHPString()`           | ✅                    |
+| `array`            | `frankenphp.AssociativeArray` | ❌                | `frankenphp.GoAssociativeArray()` | `frankenphp.PHPAssociativeArray()` | ✅                    |
+| `array`            | `map[string]any`              | ❌                | `frankenphp.GoMap()`              | `frankenphp.PHPMap()`              | ✅                    |
+| `array`            | `[]any`                       | ❌                | `frankenphp.GoPackedArray()`      | `frankenphp.PHPPackedArray()`      | ✅                    |
+| `mixed`            | `any`                         | ❌                | `GoValue()`                       | `PHPValue()`                       | ❌                    |
+| `callable`         | `*C.zval`                     | ❌                | -                                 | frankenphp.CallPHPCallable()       | ❌                    |
+| `object`           | `struct`                      | ❌                | _Not yet implemented_             | _Not yet implemented_              | ❌                    |
 
 > [!NOTE]
+>
 > This table is not exhaustive yet and will be completed as the FrankenPHP types API gets more complete.
 >
 > For class methods specifically, primitive types and arrays are currently supported. Objects cannot be used as method parameters or return types yet.
@@ -102,61 +113,150 @@ If you refer to the code snippet of the previous section, you can see that helpe
 
 #### Working with Arrays
 
-FrankenPHP provides native support for PHP arrays through the `frankenphp.Array` type. This type represents both PHP indexed arrays (lists) and associative arrays (hashmaps) with ordered key-value pairs.
+FrankenPHP provides native support for PHP arrays through `frankenphp.AssociativeArray` or direct conversion to a map or slice.
+
+`AssociativeArray` represents a [hash map](https://en.wikipedia.org/wiki/Hash_table) composed of a `Map: map[string]any`field and an optional `Order: []string` field (unlike PHP "associative arrays", Go maps aren't ordered).
+
+If order or association are not needed, it's also possible to directly convert to a slice `[]any` or unordered map `map[string]any`.
 
 **Creating and manipulating arrays in Go:**
 
 ```go
-//export_php:function process_data(array $input): array
-func process_data(arr *C.zval) unsafe.Pointer {
-    // Convert PHP array to Go
-    goArray := frankenphp.GoArray(unsafe.Pointer(arr))
-	
-	result := &frankenphp.Array{}
-    
-    result.SetInt(0, "first")
-    result.SetInt(1, "second")
-    result.Append("third") // Automatically assigns next integer key
-    
-    result.SetString("name", "John")
-    result.SetString("age", int64(30))
-    
-    for i := uint32(0); i < goArray.Len(); i++ {
-        key, value := goArray.At(i)
-        if key.Type == frankenphp.PHPStringKey {
-            result.SetString("processed_"+key.Str, value)
-        } else {
-            result.SetInt(key.Int+100, value)
-        }
+package example
+
+// #include <Zend/zend_types.h>
+import "C"
+import (
+    "unsafe"
+
+    "github.com/dunglas/frankenphp"
+)
+
+// export_php:function process_data_ordered(array $input): array
+func process_data_ordered_map(arr *C.zend_array) unsafe.Pointer {
+	// Convert PHP associative array to Go while keeping the order
+	associativeArray, err := frankenphp.GoAssociativeArray[any](unsafe.Pointer(arr))
+    if err != nil {
+        // handle error
     }
-    
-    // Convert back to PHP array
-    return frankenphp.PHPArray(result)
+
+	// loop over the entries in order
+	for _, key := range associativeArray.Order {
+		value, _ = associativeArray.Map[key]
+		// do something with key and value
+	}
+
+	// return an ordered array
+	// if 'Order' is not empty, only the key-value pairs in 'Order' will be respected
+	return frankenphp.PHPAssociativeArray[string](frankenphp.AssociativeArray[string]{
+		Map: map[string]string{
+			"key1": "value1",
+			"key2": "value2",
+		},
+		Order: []string{"key1", "key2"},
+	})
+}
+
+// export_php:function process_data_unordered(array $input): array
+func process_data_unordered_map(arr *C.zend_array) unsafe.Pointer {
+	// Convert PHP associative array to a Go map without keeping the order
+	// ignoring the order will be more performant
+	goMap, err := frankenphp.GoMap[any](unsafe.Pointer(arr))
+    if err != nil {
+        // handle error
+    }
+
+	// loop over the entries in no specific order
+	for key, value := range goMap {
+		// do something with key and value
+	}
+
+	// return an unordered array
+	return frankenphp.PHPMap(map[string]string {
+		"key1": "value1",
+		"key2": "value2",
+	})
+}
+
+// export_php:function process_data_packed(array $input): array
+func process_data_packed(arr *C.zend_array) unsafe.Pointer {
+	// Convert PHP packed array to Go
+	goSlice, err := frankenphp.GoPackedArray(unsafe.Pointer(arr))
+    if err != nil {
+        // handle error
+    }
+
+	// loop over the slice in order
+	for index, value := range goSlice {
+		// do something with index and value
+	}
+
+	// return a packed array
+	return frankenphp.PHPPackedArray([]string{"value1", "value2", "value3"})
 }
 ```
 
-**Key features of `frankenphp.Array`:**
+**Key features of array conversion:**
 
-* **Ordered key-value pairs** - Maintains insertion order like PHP arrays
-* **Mixed key types** - Supports both integer and string keys in the same array
-* **Type safety** - The `PHPKey` type ensures proper key handling
-* **Automatic list detection** - When converting to PHP, automatically detects if array should be a packed list or hashmap
-* **Objects are not supported** - Currently, only scalar types and arrays can be used as values. Providing an object will result in a `null` value in the PHP array.
+- **Ordered key-value pairs** - Option to keep the order of the associative array
+- **Optimized for multiple cases** - Option to ditch the order for better performance or convert straight to a slice
+- **Automatic list detection** - When converting to PHP, automatically detects if array should be a packed list or hashmap
+- **Nested Arrays** - Arrays can be nested and will convert all support types automatically (`int64`,`float64`,`string`,`bool`,`nil`,`AssociativeArray`,`map[string]any`,`[]any`)
+- **Objects are not supported** - Currently, only scalar types and arrays can be used as values. Providing an object will result in a `null` value in the PHP array.
 
-**Available methods:**
+##### Available methods: Packed and Associative
 
-* `SetInt(key int64, value interface{})` - Set value with integer key
-* `SetString(key string, value interface{})` - Set value with string key  
-* `Append(value interface{})` - Add value with next available integer key
-* `Len() uint32` - Get number of elements
-* `At(index uint32) (PHPKey, interface{})` - Get key-value pair at index
-* `frankenphp.PHPArray(arr *frankenphp.Array) unsafe.Pointer` - Convert to PHP array
+- `frankenphp.PHPAssociativeArray(arr frankenphp.AssociativeArray) unsafe.Pointer` - Convert to an ordered PHP array with key-value pairs
+- `frankenphp.PHPMap(arr map[string]any) unsafe.Pointer` - Convert a map to an unordered PHP array with key-value pairs
+- `frankenphp.PHPPackedArray(slice []any) unsafe.Pointer` - Convert a slice to a PHP packed array with indexed values only
+- `frankenphp.GoAssociativeArray(arr unsafe.Pointer, ordered bool) frankenphp.AssociativeArray` - Convert a PHP array to an ordered Go `AssociativeArray` (map with order)
+- `frankenphp.GoMap(arr unsafe.Pointer) map[string]any` - Convert a PHP array to an unordered Go map
+- `frankenphp.GoPackedArray(arr unsafe.Pointer) []any` - Convert a PHP array to a Go slice
+- `frankenphp.IsPacked(zval *C.zend_array) bool` - Check if a PHP array is packed (indexed only) or associative (key-value pairs)
+
+### Working with Callables
+
+FrankenPHP provides a way to work with PHP callables using the `frankenphp.CallPHPCallable` helper. This allows you to call PHP functions or methods from Go code.
+
+To showcase this, let's create our own `array_map()` function that takes a callable and an array, applies the callable to each element of the array, and returns a new array with the results:
+
+```go
+// export_php:function my_array_map(array $data, callable $callback): array
+func my_array_map(arr *C.zend_array, callback *C.zval) unsafe.Pointer {
+	goSlice, err := frankenphp.GoPackedArray[any](unsafe.Pointer(arr))
+	if err != nil {
+		panic(err)
+	}
+
+	result := make([]any, len(goSlice))
+
+	for index, value := range goSlice {
+		result[index] = frankenphp.CallPHPCallable(unsafe.Pointer(callback), []interface{}{value})
+	}
+
+	return frankenphp.PHPPackedArray(result)
+}
+```
+
+Notice how we use `frankenphp.CallPHPCallable()` to call the PHP callable passed as a parameter. This function takes a pointer to the callable and an array of arguments, and it returns the result of the callable execution. You can use the callable syntax you're used to:
+
+```php
+<?php
+
+$result = my_array_map([1, 2, 3], function($x) { return $x * 2; });
+// $result will be [2, 4, 6]
+
+$result = my_array_map(['hello', 'world'], 'strtoupper');
+// $result will be ['HELLO', 'WORLD']
+```
 
 ### Declaring a Native PHP Class
 
 The generator supports declaring **opaque classes** as Go structs, which can be used to create PHP objects. You can use the `//export_php:class` directive comment to define a PHP class. For example:
 
 ```go
+package example
+
 //export_php:class User
 type UserStruct struct {
     Name string
@@ -168,11 +268,11 @@ type UserStruct struct {
 
 **Opaque classes** are classes where the internal structure (properties) is hidden from PHP code. This means:
 
-* **No direct property access**: You cannot read or write properties directly from PHP (`$user->name` won't work)
-* **Method-only interface** - All interactions must go through methods you define
-* **Better encapsulation** - Internal data structure is completely controlled by Go code
-* **Type safety** - No risk of PHP code corrupting internal state with wrong types
-* **Cleaner API** - Forces to design a proper public interface
+- **No direct property access**: You cannot read or write properties directly from PHP (`$user->name` won't work)
+- **Method-only interface** - All interactions must go through methods you define
+- **Better encapsulation** - Internal data structure is completely controlled by Go code
+- **Type safety** - No risk of PHP code corrupting internal state with wrong types
+- **Cleaner API** - Forces to design a proper public interface
 
 This approach provides better encapsulation and prevents PHP code from accidentally corrupting the internal state of your Go objects. All interactions with the object must go through the methods you explicitly define.
 
@@ -181,6 +281,16 @@ This approach provides better encapsulation and prevents PHP code from accidenta
 Since properties are not directly accessible, you **must define methods** to interact with your opaque classes. Use the `//export_php:method` directive to define behavior:
 
 ```go
+package example
+
+// #include <Zend/zend_types.h>
+import "C"
+import (
+    "unsafe"
+
+    "github.com/dunglas/frankenphp"
+)
+
 //export_php:class User
 type UserStruct struct {
     Name string
@@ -213,18 +323,28 @@ func (us *UserStruct) SetNamePrefix(prefix *C.zend_string) {
 The generator supports nullable parameters using the `?` prefix in PHP signatures. When a parameter is nullable, it becomes a pointer in your Go function, allowing you to check if the value was `null` in PHP:
 
 ```go
+package example
+
+// #include <Zend/zend_types.h>
+import "C"
+import (
+	"unsafe"
+
+	"github.com/dunglas/frankenphp"
+)
+
 //export_php:method User::updateInfo(?string $name, ?int $age, ?bool $active): void
 func (us *UserStruct) UpdateInfo(name *C.zend_string, age *int64, active *bool) {
     // Check if name was provided (not null)
     if name != nil {
         us.Name = frankenphp.GoString(unsafe.Pointer(name))
     }
-    
+
     // Check if age was provided (not null)
     if age != nil {
         us.Age = int(*age)
     }
-    
+
     // Check if active was provided (not null)
     if active != nil {
         us.Active = *active
@@ -234,12 +354,13 @@ func (us *UserStruct) UpdateInfo(name *C.zend_string, age *int64, active *bool) 
 
 **Key points about nullable parameters:**
 
-* **Nullable primitive types** (`?int`, `?float`, `?bool`) become pointers (`*int64`, `*float64`, `*bool`) in Go
-* **Nullable strings** (`?string`) remain as `*C.zend_string` but can be `nil`
-* **Check for `nil`** before dereferencing pointer values
-* **PHP `null` becomes Go `nil`** - when PHP passes `null`, your Go function receives a `nil` pointer
+- **Nullable primitive types** (`?int`, `?float`, `?bool`) become pointers (`*int64`, `*float64`, `*bool`) in Go
+- **Nullable strings** (`?string`) remain as `*C.zend_string` but can be `nil`
+- **Check for `nil`** before dereferencing pointer values
+- **PHP `null` becomes Go `nil`** - when PHP passes `null`, your Go function receives a `nil` pointer
 
 > [!WARNING]
+>
 > Currently, class methods have the following limitations. **Objects are not supported** as parameter types or return types. **Arrays are fully supported** for both parameters and return types. Supported types: `string`, `int`, `float`, `bool`, `array`, and `void` (for return type). **Nullable parameter types are fully supported** for all scalar types (`?string`, `?int`, `?float`, `?bool`).
 
 After generating the extension, you will be allowed to use the class and its methods in PHP. Note that you **cannot access properties directly**:
@@ -269,13 +390,15 @@ This design ensures that your Go code has complete control over how the object's
 
 ### Declaring Constants
 
-The generator supports exporting Go constants to PHP using two directives: `//export_php:const` for global constants and `//export_php:classconstant` for class constants. This allows you to share configuration values, status codes, and other constants between Go and PHP code.
+The generator supports exporting Go constants to PHP using two directives: `//export_php:const` for global constants and `//export_php:classconst` for class constants. This allows you to share configuration values, status codes, and other constants between Go and PHP code.
 
 #### Global Constants
 
 Use the `//export_php:const` directive to create global PHP constants:
 
 ```go
+package example
+
 //export_php:const
 const MAX_CONNECTIONS = 100
 
@@ -283,35 +406,41 @@ const MAX_CONNECTIONS = 100
 const API_VERSION = "1.2.3"
 
 //export_php:const
-const STATUS_OK = iota
-
-//export_php:const
-const STATUS_ERROR = iota
+const (
+	STATUS_OK = iota
+	STATUS_ERROR
+)
 ```
+
+> [!NOTE]
+> PHP constants will take the name of the Go constant, thus using upper case letters is recommended.
 
 #### Class Constants
 
-Use the `//export_php:classconstant ClassName` directive to create constants that belong to a specific PHP class:
+Use the `//export_php:classconst ClassName` directive to create constants that belong to a specific PHP class:
 
 ```go
-//export_php:classconstant User
+package example
+
+//export_php:classconst User
 const STATUS_ACTIVE = 1
 
-//export_php:classconstant User
+//export_php:classconst User
 const STATUS_INACTIVE = 0
 
-//export_php:classconstant User
+//export_php:classconst User
 const ROLE_ADMIN = "admin"
 
-//export_php:classconstant Order
-const STATE_PENDING = iota
-
-//export_php:classconstant Order
-const STATE_PROCESSING = iota
-
-//export_php:classconstant Order
-const STATE_COMPLETED = iota
+//export_php:classconst Order
+const (
+	STATE_PENDING = iota
+	STATE_PROCESSING
+	STATE_COMPLETED
+)
 ```
+
+> [!NOTE]
+> Just like global constants, the class constants will take the name of the Go constant.
 
 Class constants are accessible using the class name scope in PHP:
 
@@ -333,10 +462,15 @@ The directive supports various value types including strings, integers, booleans
 You can use constants just like you are used to in the Go code. For example, let's take the `repeat_this()` function we declared earlier and change the last argument to an integer:
 
 ```go
+package example
+
+// #include <Zend/zend_types.h>
+import "C"
 import (
-    "C"
-    "github.com/dunglas/frankenphp"
-    "strings"
+	"strings"
+	"unsafe"
+
+	"github.com/dunglas/frankenphp"
 )
 
 //export_php:const
@@ -345,45 +479,45 @@ const STR_REVERSE = iota
 //export_php:const
 const STR_NORMAL = iota
 
-//export_php:classconstant StringProcessor
+//export_php:classconst StringProcessor
 const MODE_LOWERCASE = 1
 
-//export_php:classconstant StringProcessor
+//export_php:classconst StringProcessor
 const MODE_UPPERCASE = 2
 
 //export_php:function repeat_this(string $str, int $count, int $mode): string
 func repeat_this(s *C.zend_string, count int64, mode int) unsafe.Pointer {
-    str := frankenphp.GoString(unsafe.Pointer(s))
+	str := frankenphp.GoString(unsafe.Pointer(s))
 
-    result := strings.Repeat(str, int(count))
-    if mode == STR_REVERSE { 
-        // reverse the string
-    }
+	result := strings.Repeat(str, int(count))
+	if mode == STR_REVERSE {
+		// reverse the string
+	}
 
-    if mode == STR_NORMAL {
-        // no-op, just to showcase the constant
-    }
+	if mode == STR_NORMAL {
+		// no-op, just to showcase the constant
+	}
 
-    return frankenphp.PHPString(result, false)
+	return frankenphp.PHPString(result, false)
 }
 
 //export_php:class StringProcessor
 type StringProcessorStruct struct {
-    // internal fields
+	// internal fields
 }
 
 //export_php:method StringProcessor::process(string $input, int $mode): string
 func (sp *StringProcessorStruct) Process(input *C.zend_string, mode int64) unsafe.Pointer {
-    str := frankenphp.GoString(unsafe.Pointer(input))
-    
-    switch mode {
-    case MODE_LOWERCASE:
-        str = strings.ToLower(str)
-    case MODE_UPPERCASE:
-        str = strings.ToUpper(str)
-    }
-    
-    return frankenphp.PHPString(str, false)
+	str := frankenphp.GoString(unsafe.Pointer(input))
+
+	switch mode {
+	case MODE_LOWERCASE:
+		str = strings.ToLower(str)
+	case MODE_UPPERCASE:
+		str = strings.ToUpper(str)
+	}
+
+	return frankenphp.PHPString(str, false)
 }
 ```
 
@@ -397,9 +531,13 @@ Use the `//export_php:namespace` directive at the top of your Go file to place a
 
 ```go
 //export_php:namespace My\Extension
-package main
+package example
 
-import "C"
+import (
+    "unsafe"
+
+    "github.com/dunglas/frankenphp"
+)
 
 //export_php:function hello(): string
 func hello() string {
@@ -437,23 +575,34 @@ echo My\Extension\STATUS_ACTIVE; // 1
 
 #### Important Notes
 
-* Only **one** namespace directive is allowed per file. If multiple namespace directives are found, the generator will return an error.
-* The namespace applies to **all** exported symbols in the file: functions, classes, methods, and constants.
-* Namespace names follow PHP namespace conventions using backslashes (`\`) as separators.
-* If no namespace is declared, symbols are exported to the global namespace as usual.
+- Only **one** namespace directive is allowed per file. If multiple namespace directives are found, the generator will return an error.
+- The namespace applies to **all** exported symbols in the file: functions, classes, methods, and constants.
+- Namespace names follow PHP namespace conventions using backslashes (`\`) as separators.
+- If no namespace is declared, symbols are exported to the global namespace as usual.
 
 ### Generating the Extension
 
 This is where the magic happens, and your extension can now be generated. You can run the generator with the following command:
 
 ```console
-GEN_STUB_FILE=php-src/build/gen_stub.php frankenphp extension-init my_extension.go 
+GEN_STUB_SCRIPT=php-src/build/gen_stub.php frankenphp extension-init my_extension.go
 ```
 
 > [!NOTE]
-> Don't forget to set the `GEN_STUB_FILE` environment variable to the path of the `gen_stub.php` file in the PHP sources you downloaded earlier. This is the same `gen_stub.php` script mentioned in the manual implementation section.
+> Don't forget to set the `GEN_STUB_SCRIPT` environment variable to the path of the `gen_stub.php` file in the PHP sources you downloaded earlier. This is the same `gen_stub.php` script mentioned in the manual implementation section.
 
-If everything went well, a new directory named `build` should have been created. This directory contains the generated files for your extension, including the `my_extension.go` file with the generated PHP function stubs.
+If everything went well, your project directory should contain the following files for your extension:
+
+- **`my_extension.go`** - Your original source file (remains unchanged)
+- **`my_extension_generated.go`** - Generated file with CGO wrappers that call your functions
+- **`my_extension.stub.php`** - PHP stub file for IDE autocompletion
+- **`my_extension_arginfo.h`** - PHP argument information
+- **`my_extension.h`** - C header file
+- **`my_extension.c`** - C implementation file
+- **`README.md`** - Documentation
+
+> [!IMPORTANT]
+> **Your source file (`my_extension.go`) is never modified.** The generator creates a separate `_generated.go` file containing CGO wrappers that call your original functions. This means you can safely version control your source file without worrying about generated code polluting it.
 
 ### Integrating the Generated Extension into FrankenPHP
 
@@ -502,25 +651,26 @@ We'll see how to write a simple PHP extension in Go that defines a new native fu
 In your module, you need to define a new native function that will be called from PHP. To do this, create a file with the name you want, for example, `extension.go`, and add the following code:
 
 ```go
-package ext_go
+package example
 
-//#include "extension.h"
+// #include "extension.h"
 import "C"
 import (
-    "unsafe"
-    "github.com/caddyserver/caddy/v2"
-    "github.com/dunglas/frankenphp"
+	"log/slog"
+	"unsafe"
+
+	"github.com/dunglas/frankenphp"
 )
 
 func init() {
-    frankenphp.RegisterExtension(unsafe.Pointer(&C.ext_module_entry))
+	frankenphp.RegisterExtension(unsafe.Pointer(&C.ext_module_entry))
 }
 
 //export go_print_something
 func go_print_something() {
-    go func() {
-        caddy.Log().Info("Hello from a goroutine!")
-    }()
+	go func() {
+		slog.Info("Hello from a goroutine!")
+	}()
 }
 ```
 
@@ -567,9 +717,9 @@ extern zend_module_entry ext_module_entry;
 
 Next, create a file named `extension.c` that will perform the following steps:
 
-* Include PHP headers;
-* Declare our new native PHP function `go_print()`;
-* Declare the extension metadata.
+- Include PHP headers;
+- Declare our new native PHP function `go_print()`;
+- Declare the extension metadata.
 
 Let's start by including the required headers:
 
@@ -696,21 +846,33 @@ There's only one thing left to do: implement the `go_upper` function in Go.
 Our Go function will take a `*C.zend_string` as a parameter, convert it to a Go string using FrankenPHP's helper function, process it, and return the result as a new `*C.zend_string`. The helper functions handle all the memory management and conversion complexity for us.
 
 ```go
-import "strings"
+package example
+
+// #include <Zend/zend_types.h>
+import "C"
+import (
+    "unsafe"
+    "strings"
+
+    "github.com/dunglas/frankenphp"
+)
 
 //export go_upper
 func go_upper(s *C.zend_string) *C.zend_string {
     str := frankenphp.GoString(unsafe.Pointer(s))
-    
+
     upper := strings.ToUpper(str)
-    
+
     return (*C.zend_string)(frankenphp.PHPString(upper, false))
 }
 ```
 
-This approach is much cleaner and safer than manual memory management. FrankenPHP's helper functions handle the conversion between PHP's `zend_string` format and Go strings automatically. The `false` parameter in `PHPString()` indicates that we want to create a new non-persistent string (freed at the end of the request).
+This approach is much cleaner and safer than manual memory management.
+FrankenPHP's helper functions handle the conversion between PHP's `zend_string` format and Go strings automatically.
+The `false` parameter in `PHPString()` indicates that we want to create a new non-persistent string (freed at the end of the request).
 
 > [!TIP]
+>
 > In this example, we don't perform any error handling, but you should always check that pointers are not `nil` and that the data is valid before using it in your Go functions.
 
 ### Integrating the Extension into FrankenPHP

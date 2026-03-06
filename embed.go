@@ -17,7 +17,15 @@ import (
 	"time"
 )
 
-// EmbeddedAppPath contains the path of the embedded PHP application (empty if none)
+// EmbeddedAppPath contains the path of the embedded PHP application (empty if none).
+// It can be set at build time using -ldflags to override the default extraction path:
+//
+//	go build -ldflags "-X github.com/dunglas/frankenphp.EmbeddedAppPath=/app" ...
+//
+// When set, the embedded app is extracted to this fixed path instead of a temp
+// directory with a checksum suffix. This is useful when the app contains
+// pre-compiled artifacts (e.g. OPcache file cache) that reference absolute paths
+// and need a predictable extraction location.
 var EmbeddedAppPath string
 
 //go:embed app.tar
@@ -32,14 +40,14 @@ func init() {
 		return
 	}
 
-	appPath := filepath.Join(os.TempDir(), "frankenphp_"+string(embeddedAppChecksum))
-
-	if err := untar(appPath); err != nil {
-		_ = os.RemoveAll(appPath)
-		panic(err)
+	if EmbeddedAppPath == "" {
+		EmbeddedAppPath = filepath.Join(os.TempDir(), "frankenphp_"+string(embeddedAppChecksum))
 	}
 
-	EmbeddedAppPath = appPath
+	if err := untar(EmbeddedAppPath); err != nil {
+		_ = os.RemoveAll(EmbeddedAppPath)
+		panic(err)
+	}
 }
 
 // untar reads the tar file from r and writes it into dir.

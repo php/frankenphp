@@ -5,7 +5,7 @@ mais parfois, il est nécessaire d'exécuter du code PHP avant de les envoyer :
 contrôle d'accès, statistiques, en-têtes HTTP personnalisés...
 
 Malheureusement, utiliser PHP pour servir de gros fichiers statiques est inefficace comparé à
-à l'utilisation directe du serveur web (surcharge mémoire, diminution des performances...).
+l'utilisation directe du serveur web (surcharge mémoire, diminution des performances...).
 
 FrankenPHP permet de déléguer l'envoi des fichiers statiques au serveur web
 **après** avoir exécuté du code PHP personnalisé.

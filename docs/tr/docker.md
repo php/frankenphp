@@ -2,7 +2,7 @@
 
 [Resmi PHP imajları](https://hub.docker.com/_/php/) temel alınarak [FrankenPHP Docker imajları](https://hub.docker.com/r/dunglas/frankenphp) hazırlanmıştır. Popüler mimariler için Debian ve Alpine Linux varyantları sağlanmıştır. Debian dağıtımı tavsiye edilir.
 
-PHP 8.2, 8.3 ve 8.4 için varyantlar sağlanmıştır. [Etiketlere göz atın](https://hub.docker.com/r/dunglas/frankenphp/tags).
+PHP 8.2, 8.3, 8.4 ve 8.5 için varyantlar sağlanmıştır. [Etiketlere göz atın](https://hub.docker.com/r/dunglas/frankenphp/tags).
 
 ## İmajlar Nasıl Kullanılır
 

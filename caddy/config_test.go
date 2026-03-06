@@ -181,7 +181,7 @@ func TestModuleWorkerWithWatchConfiguration(t *testing.T) {
 
 	// Verify that the watch directories were set correctly
 	require.Len(t, module.Workers[0].Watch, 3, "Expected three watch patterns")
-	require.Equal(t, "./**/*.{php,yaml,yml,twig,env}", module.Workers[0].Watch[0], "First watch pattern should be the default")
+	require.Equal(t, defaultWatchPattern, module.Workers[0].Watch[0], "First watch pattern should be the default")
 	require.Equal(t, "./src/**/*.php", module.Workers[0].Watch[1], "Second watch pattern should match the configuration")
 	require.Equal(t, "./config/**/*.yaml", module.Workers[0].Watch[2], "Third watch pattern should match the configuration")
 }

@@ -1,5 +1,9 @@
 package frankenphp
 
+import (
+	"github.com/dunglas/frankenphp/internal/state"
+)
+
 // EXPERIMENTAL: ThreadDebugState prints the state of a single PHP thread - debugging purposes only
 type ThreadDebugState struct {
 	Index                    int
@@ -23,7 +27,7 @@ func DebugState() FrankenPHPDebugState {
 		ReservedThreadCount: 0,
 	}
 	for _, thread := range phpThreads {
-		if thread.state.is(stateReserved) {
+		if thread.state.Is(state.Reserved) {
 			fullState.ReservedThreadCount++
 			continue
 		}
@@ -38,9 +42,9 @@ func threadDebugState(thread *phpThread) ThreadDebugState {
 	return ThreadDebugState{
 		Index:                    thread.threadIndex,
 		Name:                     thread.name(),
-		State:                    thread.state.name(),
-		IsWaiting:                thread.state.isInWaitingState(),
-		IsBusy:                   !thread.state.isInWaitingState(),
-		WaitingSinceMilliseconds: thread.state.waitTime(),
+		State:                    thread.state.Name(),
+		IsWaiting:                thread.state.IsInWaitingState(),
+		IsBusy:                   !thread.state.IsInWaitingState(),
+		WaitingSinceMilliseconds: thread.state.WaitTime(),
 	}
 }

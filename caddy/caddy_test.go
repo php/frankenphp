@@ -11,14 +11,34 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddytest"
-	"github.com/dunglas/frankenphp"
 	"github.com/dunglas/frankenphp/internal/fastabs"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
 )
+
+// waitForServerReady polls the server with retries until it responds to HTTP requests.
+// This handles a race condition during Caddy config reload on macOS where SO_REUSEPORT
+// can briefly route connections to the old listener being shut down,
+// resulting in "connection reset by peer".
+func waitForServerReady(t *testing.T, url string) {
+	t.Helper()
+
+	client := &http.Client{Timeout: 1 * time.Second}
+	for range 10 {
+		resp, err := client.Get(url)
+		if err == nil {
+			require.NoError(t, resp.Body.Close())
+
+			return
+		}
+
+		time.Sleep(100 * time.Millisecond)
+	}
+}
 
 var testPort = "9080"
 
@@ -42,7 +62,7 @@ func TestPHP(t *testing.T) {
 		}
 		`, "caddyfile")
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		wg.Add(1)
 
 		go func(i int) {
@@ -105,7 +125,7 @@ func TestWorker(t *testing.T) {
 		}
 		`, "caddyfile")
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		wg.Add(1)
 
 		go func(i int) {
@@ -157,7 +177,7 @@ func TestGlobalAndModuleWorker(t *testing.T) {
 		}
 		`, "caddyfile")
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 
 		go func(i int) {
@@ -167,6 +187,28 @@ func TestGlobalAndModuleWorker(t *testing.T) {
 		}(i)
 	}
 	wg.Wait()
+}
+
+func TestModuleWorkerInheritsEnv(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	tester.InitServer(`
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		http://localhost:`+testPort+` {
+			route {
+				php {
+					root ../testdata
+					env APP_ENV inherit_this
+					worker worker-with-env.php
+				}
+			}
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/worker-with-env.php", http.StatusOK, "Worker has APP_ENV=inherit_this")
 }
 
 func TestNamedModuleWorkers(t *testing.T) {
@@ -209,7 +251,7 @@ func TestNamedModuleWorkers(t *testing.T) {
 		}
 		`, "caddyfile")
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 
 		go func(i int) {
@@ -385,8 +427,9 @@ func TestPHPServerDirective(t *testing.T) {
 		}
 		`, "caddyfile")
 
+	waitForServerReady(t, "http://localhost:"+testPort)
 	tester.AssertGetResponse("http://localhost:"+testPort, http.StatusOK, "I am by birth a Genevese (i not set)")
-	tester.AssertGetResponse("http://localhost:"+testPort+"/hello.txt", http.StatusOK, "Hello")
+	tester.AssertGetResponse("http://localhost:"+testPort+"/hello.txt", http.StatusOK, "Hello\n")
 	tester.AssertGetResponse("http://localhost:"+testPort+"/not-found.txt", http.StatusOK, "I am by birth a Genevese (i not set)")
 }
 
@@ -410,6 +453,7 @@ func TestPHPServerDirectiveDisableFileServer(t *testing.T) {
 		}
 		`, "caddyfile")
 
+	waitForServerReady(t, "http://localhost:"+testPort)
 	tester.AssertGetResponse("http://localhost:"+testPort, http.StatusOK, "I am by birth a Genevese (i not set)")
 	tester.AssertGetResponse("http://localhost:"+testPort+"/not-found.txt", http.StatusOK, "I am by birth a Genevese (i not set)")
 }
@@ -456,7 +500,7 @@ func TestMetrics(t *testing.T) {
 	`, "caddyfile")
 
 	// Make some requests
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(i int) {
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/index.php?i=%d", i), http.StatusOK, fmt.Sprintf("I am by birth a Genevese (%d)", i))
@@ -468,14 +512,16 @@ func TestMetrics(t *testing.T) {
 	// Fetch metrics
 	resp, err := http.Get("http://localhost:2999/metrics")
 	require.NoError(t, err, "failed to fetch metrics")
-	defer resp.Body.Close()
+	t.Cleanup(func() {
+		require.NoError(t, resp.Body.Close())
+	})
 
 	// Read and parse metrics
 	metrics := new(bytes.Buffer)
 	_, err = metrics.ReadFrom(resp.Body)
 	require.NoError(t, err, "failed to read metrics")
 
-	cpus := fmt.Sprintf("%d", frankenphp.MaxThreads)
+	cpus := strconv.Itoa(getNumThreads(t, tester))
 
 	// Check metrics
 	expectedMetrics := `
@@ -529,7 +575,7 @@ func TestWorkerMetrics(t *testing.T) {
 	workerName, _ := fastabs.FastAbs("../testdata/index.php")
 
 	// Make some requests
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(i int) {
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/index.php?i=%d", i), http.StatusOK, fmt.Sprintf("I am by birth a Genevese (%d)", i))
@@ -541,14 +587,16 @@ func TestWorkerMetrics(t *testing.T) {
 	// Fetch metrics
 	resp, err := http.Get("http://localhost:2999/metrics")
 	require.NoError(t, err, "failed to fetch metrics")
-	defer resp.Body.Close()
+	t.Cleanup(func() {
+		require.NoError(t, resp.Body.Close())
+	})
 
 	// Read and parse metrics
 	metrics := new(bytes.Buffer)
 	_, err = metrics.ReadFrom(resp.Body)
 	require.NoError(t, err, "failed to read metrics")
 
-	cpus := fmt.Sprintf("%d", frankenphp.MaxThreads)
+	cpus := strconv.Itoa(getNumThreads(t, tester))
 
 	// Check metrics
 	expectedMetrics := `
@@ -621,7 +669,7 @@ func TestNamedWorkerMetrics(t *testing.T) {
 	`, "caddyfile")
 
 	// Make some requests
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(i int) {
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/index.php?i=%d", i), http.StatusOK, fmt.Sprintf("I am by birth a Genevese (%d)", i))
@@ -633,14 +681,16 @@ func TestNamedWorkerMetrics(t *testing.T) {
 	// Fetch metrics
 	resp, err := http.Get("http://localhost:2999/metrics")
 	require.NoError(t, err, "failed to fetch metrics")
-	defer resp.Body.Close()
+	t.Cleanup(func() {
+		require.NoError(t, resp.Body.Close())
+	})
 
 	// Read and parse metrics
 	metrics := new(bytes.Buffer)
 	_, err = metrics.ReadFrom(resp.Body)
 	require.NoError(t, err, "failed to read metrics")
 
-	cpus := fmt.Sprintf("%d", frankenphp.MaxThreads)
+	cpus := strconv.Itoa(getNumThreads(t, tester))
 
 	// Check metrics
 	expectedMetrics := `
@@ -712,7 +762,7 @@ func TestAutoWorkerConfig(t *testing.T) {
 	workerName, _ := fastabs.FastAbs("../testdata/index.php")
 
 	// Make some requests
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(i int) {
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/index.php?i=%d", i), http.StatusOK, fmt.Sprintf("I am by birth a Genevese (%d)", i))
@@ -724,15 +774,18 @@ func TestAutoWorkerConfig(t *testing.T) {
 	// Fetch metrics
 	resp, err := http.Get("http://localhost:2999/metrics")
 	require.NoError(t, err, "failed to fetch metrics")
-	defer resp.Body.Close()
+	t.Cleanup(func() {
+		require.NoError(t, resp.Body.Close())
+	})
 
 	// Read and parse metrics
 	metrics := new(bytes.Buffer)
 	_, err = metrics.ReadFrom(resp.Body)
 	require.NoError(t, err, "failed to read metrics")
 
-	cpus := fmt.Sprintf("%d", frankenphp.MaxThreads)
-	workers := fmt.Sprintf("%d", frankenphp.MaxThreads-1)
+	numThreads := getNumThreads(t, tester)
+	cpus := strconv.Itoa(numThreads)
+	workers := strconv.Itoa(numThreads - 1)
 
 	// Check metrics
 	expectedMetrics := `
@@ -872,7 +925,7 @@ func TestPHPIniBlockConfiguration(t *testing.T) {
 
 func testSingleIniConfiguration(tester *caddytest.Tester, key string, value string) {
 	// test twice to ensure the ini setting is not lost
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		tester.AssertGetResponse(
 			"http://localhost:"+testPort+"/ini.php?key="+key,
 			http.StatusOK,
@@ -882,8 +935,9 @@ func testSingleIniConfiguration(tester *caddytest.Tester, key string, value stri
 }
 
 func TestOsEnv(t *testing.T) {
-	os.Setenv("ENV1", "value1")
-	os.Setenv("ENV2", "value2")
+	require.NoError(t, os.Setenv("ENV1", "value1"))
+	require.NoError(t, os.Setenv("ENV2", "value2"))
+
 	tester := caddytest.NewTester(t)
 	tester.InitServer(`
 		{
@@ -940,10 +994,10 @@ func TestMaxWaitTime(t *testing.T) {
 	wg := sync.WaitGroup{}
 	success := atomic.Bool{}
 	wg.Add(10)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		go func() {
 			statusCode := getStatusCode("http://localhost:"+testPort+"/sleep.php?sleep=10", t)
-			if statusCode == http.StatusGatewayTimeout {
+			if statusCode == http.StatusServiceUnavailable {
 				success.Store(true)
 			}
 			wg.Done()
@@ -951,7 +1005,7 @@ func TestMaxWaitTime(t *testing.T) {
 	}
 	wg.Wait()
 
-	require.True(t, success.Load(), "At least one request should have failed with a 504 Gateway Timeout status")
+	require.True(t, success.Load(), "At least one request should have failed with a 503 Service Unavailable status")
 }
 
 func TestMaxWaitTimeWorker(t *testing.T) {
@@ -987,26 +1041,29 @@ func TestMaxWaitTimeWorker(t *testing.T) {
 	wg := sync.WaitGroup{}
 	success := atomic.Bool{}
 	wg.Add(10)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		go func() {
-			statusCode := getStatusCode("http://localhost:"+testPort+"/sleep.php?sleep=10000&iteration=1", t)
-			if statusCode == http.StatusGatewayTimeout {
+			statusCode := getStatusCode("http://localhost:"+testPort+"/sleep.php?sleep=10&iteration=1", t)
+			if statusCode == http.StatusServiceUnavailable {
 				success.Store(true)
 			}
 			wg.Done()
 		}()
 	}
 	wg.Wait()
-	require.True(t, success.Load(), "At least one request should have failed with a 504 Gateway Timeout status")
+	require.True(t, success.Load(), "At least one request should have failed with a 503 Service Unavailable status")
 
 	// Fetch metrics
 	resp, err := http.Get("http://localhost:2999/metrics")
 	require.NoError(t, err, "failed to fetch metrics")
-	defer resp.Body.Close()
+	t.Cleanup(func() {
+		require.NoError(t, resp.Body.Close())
+	})
 
 	// Read and parse metrics
 	metrics := new(bytes.Buffer)
 	_, err = metrics.ReadFrom(resp.Body)
+	require.NoError(t, err)
 
 	expectedMetrics := `
 	# TYPE frankenphp_worker_queue_depth gauge
@@ -1025,9 +1082,11 @@ func TestMaxWaitTimeWorker(t *testing.T) {
 func getStatusCode(url string, t *testing.T) int {
 	req, err := http.NewRequest("GET", url, nil)
 	require.NoError(t, err)
+
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	require.NoError(t, resp.Body.Close())
+
 	return resp.StatusCode
 }
 
@@ -1074,7 +1133,7 @@ func TestMultiWorkersMetrics(t *testing.T) {
 	`, "caddyfile")
 
 	// Make some requests
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(i int) {
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/index.php?i=%d", i), http.StatusOK, fmt.Sprintf("I am by birth a Genevese (%d)", i))
@@ -1086,14 +1145,16 @@ func TestMultiWorkersMetrics(t *testing.T) {
 	// Fetch metrics
 	resp, err := http.Get("http://localhost:2999/metrics")
 	require.NoError(t, err, "failed to fetch metrics")
-	defer resp.Body.Close()
+	t.Cleanup(func() {
+		require.NoError(t, resp.Body.Close())
+	})
 
 	// Read and parse metrics
 	metrics := new(bytes.Buffer)
 	_, err = metrics.ReadFrom(resp.Body)
 	require.NoError(t, err, "failed to read metrics")
 
-	cpus := fmt.Sprintf("%d", frankenphp.MaxThreads)
+	cpus := strconv.Itoa(getNumThreads(t, tester))
 
 	// Check metrics
 	expectedMetrics := `
@@ -1180,7 +1241,7 @@ func TestDisabledMetrics(t *testing.T) {
 	`, "caddyfile")
 
 	// Make some requests
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(i int) {
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/index.php?i=%d", i), http.StatusOK, fmt.Sprintf("I am by birth a Genevese (%d)", i))
@@ -1192,7 +1253,9 @@ func TestDisabledMetrics(t *testing.T) {
 	// Fetch metrics
 	resp, err := http.Get("http://localhost:2999/metrics")
 	require.NoError(t, err, "failed to fetch metrics")
-	defer resp.Body.Close()
+	t.Cleanup(func() {
+		require.NoError(t, resp.Body.Close())
+	})
 
 	// Read and parse metrics
 	metrics := new(bytes.Buffer)
@@ -1251,7 +1314,9 @@ func TestWorkerRestart(t *testing.T) {
 
 	resp, err := http.Get("http://localhost:2999/metrics")
 	require.NoError(t, err, "failed to fetch metrics")
-	defer resp.Body.Close()
+	t.Cleanup(func() {
+		require.NoError(t, resp.Body.Close())
+	})
 
 	// Read and parse metrics
 	metrics := new(bytes.Buffer)
@@ -1285,7 +1350,7 @@ func TestWorkerRestart(t *testing.T) {
 		))
 
 	// Make some requests
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(i int) {
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/worker-restart.php?i=%d", i), http.StatusOK, fmt.Sprintf("Counter (%d)", i))
@@ -1337,7 +1402,7 @@ func TestWorkerMatchDirective(t *testing.T) {
 		}
 		`, "caddyfile")
 
-	// worker is outside of public directory, match anyways
+	// worker is outside public directory, match anyway
 	tester.AssertGetResponse("http://localhost:"+testPort+"/matched-path", http.StatusOK, "requests:1")
 	tester.AssertGetResponse("http://localhost:"+testPort+"/matched-path/anywhere", http.StatusOK, "requests:2")
 
@@ -1422,4 +1487,306 @@ func TestWorkerMatchDirectiveWithoutFileServer(t *testing.T) {
 	// do not find the file at static.txt
 	// the request should completely fall through the php_server module
 	tester.AssertGetResponse("http://localhost:"+testPort+"/static.txt", http.StatusNotFound, "Request falls through")
+}
+
+func TestDd(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	tester.InitServer(`
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		http://localhost:`+testPort+` {
+			php {
+				worker ../testdata/dd.php 1 {
+					match *
+				}
+			}
+		`, "caddyfile")
+
+	// simulate Symfony's dd()
+	tester.AssertGetResponse(
+		"http://localhost:"+testPort+"/some-path?output=dump123",
+		http.StatusInternalServerError,
+		"dump123",
+	)
+}
+
+func TestLog(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	tester.InitServer(`
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		http://localhost:`+testPort+` {
+			log {
+				output stdout
+				format json
+			}
+
+			root ../testdata
+			php_server {
+				worker ../testdata/log-frankenphp_log.php
+			}
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse(
+		"http://localhost:"+testPort+"/log-frankenphp_log.php?i=0",
+		http.StatusOK,
+		"",
+	)
+}
+
+// TestSymlinkWorkerPaths tests different ways to reference worker scripts in symlinked directories
+func TestSymlinkWorkerPaths(t *testing.T) {
+	cwd, _ := os.Getwd()
+	publicDir := filepath.Join(cwd, "..", "testdata", "symlinks", "public")
+
+	t.Run("NeighboringWorkerScript", func(t *testing.T) {
+		// Scenario: neighboring worker script
+		// Given frankenphp located in the test folder
+		// When I execute `frankenphp php-server --listen localhost:8080 -w index.php` from `public`
+		// Then I expect to see the worker script executed successfully
+		tester := caddytest.NewTester(t)
+		tester.InitServer(`
+			{
+				skip_install_trust
+				admin localhost:2999
+				http_port `+testPort+`
+
+				frankenphp {
+					worker `+publicDir+`/index.php 1
+				}
+			}
+
+			localhost:`+testPort+` {
+				route {
+					php {
+						root `+publicDir+`
+						resolve_root_symlink true
+					}
+				}
+			}
+			`, "caddyfile")
+
+		tester.AssertGetResponse("http://localhost:"+testPort+"/index.php", http.StatusOK, "Request: 0\n")
+	})
+
+	t.Run("NestedWorkerScript", func(t *testing.T) {
+		// Scenario: nested worker script
+		// Given frankenphp located in the test folder
+		// When I execute `frankenphp --listen localhost:8080 -w nested/index.php` from `public`
+		// Then I expect to see the worker script executed successfully
+		tester := caddytest.NewTester(t)
+		tester.InitServer(`
+			{
+				skip_install_trust
+				admin localhost:2999
+				http_port `+testPort+`
+
+				frankenphp {
+					worker `+publicDir+`/nested/index.php 1
+				}
+			}
+
+			localhost:`+testPort+` {
+				route {
+					php {
+						root `+publicDir+`
+						resolve_root_symlink true
+					}
+				}
+			}
+			`, "caddyfile")
+
+		tester.AssertGetResponse("http://localhost:"+testPort+"/nested/index.php", http.StatusOK, "Nested request: 0\n")
+	})
+
+	t.Run("OutsideSymlinkedFolder", func(t *testing.T) {
+		// Scenario: outside the symlinked folder
+		// Given frankenphp located in the root folder
+		// When I execute `frankenphp --listen localhost:8080 -w public/index.php` from the root folder
+		// Then I expect to see the worker script executed successfully
+		tester := caddytest.NewTester(t)
+		tester.InitServer(`
+			{
+				skip_install_trust
+				admin localhost:2999
+				http_port `+testPort+`
+
+				frankenphp {
+					worker {
+						name outside_worker
+						file `+publicDir+`/index.php
+						num 1
+					}
+				}
+			}
+
+			localhost:`+testPort+` {
+				route {
+					php {
+						root `+publicDir+`
+						resolve_root_symlink true
+					}
+				}
+			}
+			`, "caddyfile")
+
+		tester.AssertGetResponse("http://localhost:"+testPort+"/index.php", http.StatusOK, "Request: 0\n")
+	})
+
+	t.Run("SpecifiedRootDirectory", func(t *testing.T) {
+		// Scenario: specified root directory
+		// Given frankenphp located in the root folder
+		// When I execute `frankenphp --listen localhost:8080 -w public/index.php -r public` from the root folder
+		// Then I expect to see the worker script executed successfully
+		tester := caddytest.NewTester(t)
+		tester.InitServer(`
+			{
+				skip_install_trust
+				admin localhost:2999
+				http_port `+testPort+`
+
+				frankenphp {
+					worker {
+						name specified_root_worker
+						file `+publicDir+`/index.php
+						num 1
+					}
+				}
+			}
+
+			localhost:`+testPort+` {
+				route {
+					php {
+						root `+publicDir+`
+						resolve_root_symlink true
+					}
+				}
+			}
+			`, "caddyfile")
+
+		tester.AssertGetResponse("http://localhost:"+testPort+"/index.php", http.StatusOK, "Request: 0\n")
+	})
+}
+
+// TestSymlinkResolveRoot tests the resolve_root_symlink directive behavior
+func TestSymlinkResolveRoot(t *testing.T) {
+	cwd, _ := os.Getwd()
+	testDir := filepath.Join(cwd, "..", "testdata", "symlinks", "test")
+	publicDir := filepath.Join(cwd, "..", "testdata", "symlinks", "public")
+
+	t.Run("ResolveRootSymlink", func(t *testing.T) {
+		// Tests that resolve_root_symlink directive works correctly
+		tester := caddytest.NewTester(t)
+		tester.InitServer(`
+			{
+				skip_install_trust
+				admin localhost:2999
+				http_port `+testPort+`
+
+				frankenphp {
+					worker `+publicDir+`/document-root.php 1
+				}
+			}
+
+			localhost:`+testPort+` {
+				route {
+					php {
+						root `+publicDir+`
+						resolve_root_symlink true
+					}
+				}
+			}
+			`, "caddyfile")
+
+		// DOCUMENT_ROOT should be the resolved path (testDir)
+		tester.AssertGetResponse("http://localhost:"+testPort+"/document-root.php", http.StatusOK, "DOCUMENT_ROOT="+testDir+"\n")
+	})
+
+	t.Run("NoResolveRootSymlink", func(t *testing.T) {
+		// Tests that symlinks are preserved when resolve_root_symlink is false (non-worker mode)
+		tester := caddytest.NewTester(t)
+		tester.InitServer(`
+			{
+				skip_install_trust
+				admin localhost:2999
+				http_port `+testPort+`
+			}
+
+			localhost:`+testPort+` {
+				route {
+					php {
+						root `+publicDir+`
+						resolve_root_symlink false
+					}
+				}
+			}
+			`, "caddyfile")
+
+		// DOCUMENT_ROOT should be the symlink path (publicDir) when resolve_root_symlink is false
+		tester.AssertGetResponse("http://localhost:"+testPort+"/document-root.php", http.StatusOK, "DOCUMENT_ROOT="+publicDir+"\n")
+	})
+}
+
+// TestSymlinkWorkerBehavior tests worker behavior with symlinked directories
+func TestSymlinkWorkerBehavior(t *testing.T) {
+	cwd, _ := os.Getwd()
+	publicDir := filepath.Join(cwd, "..", "testdata", "symlinks", "public")
+
+	t.Run("WorkerScriptFailsWithoutWorkerMode", func(t *testing.T) {
+		// Tests that accessing a worker-only script without configuring it as a worker actually results in an error
+		tester := caddytest.NewTester(t)
+		tester.InitServer(`
+			{
+				skip_install_trust
+				admin localhost:2999
+				http_port `+testPort+`
+			}
+
+			localhost:`+testPort+` {
+				route {
+					php {
+						root `+publicDir+`
+					}
+				}
+			}
+			`, "caddyfile")
+
+		// Accessing the worker script without worker configuration MUST fail
+		// The script checks $_SERVER['FRANKENPHP_WORKER'] and dies if not set
+		tester.AssertGetResponse("http://localhost:"+testPort+"/index.php", http.StatusOK, "Error: This script must be run in worker mode (FRANKENPHP_WORKER not set to '1')\n")
+	})
+
+	t.Run("MultipleRequests", func(t *testing.T) {
+		// Tests that symlinked workers handle multiple requests correctly
+		tester := caddytest.NewTester(t)
+		tester.InitServer(`
+			{
+				skip_install_trust
+				admin localhost:2999
+				http_port `+testPort+`
+			}
+
+			localhost:`+testPort+` {
+				route {
+					php {
+						root `+publicDir+`
+						resolve_root_symlink true
+						worker index.php 1
+					}
+				}
+			}
+			`, "caddyfile")
+
+		// Make multiple requests - each should increment the counter
+		for i := 0; i < 5; i++ {
+			tester.AssertGetResponse("http://localhost:"+testPort+"/index.php", http.StatusOK, fmt.Sprintf("Request: %d\n", i))
+		}
+	})
 }

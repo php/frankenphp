@@ -4,6 +4,7 @@
 #include <Zend/zend_interfaces.h>
 #include <Zend/zend_types.h>
 #include <errno.h>
+#include <ext/session/php_session.h>
 #include <ext/spl/spl_exceptions.h>
 #include <ext/standard/head.h>
 #include <inttypes.h>
@@ -58,7 +59,6 @@ frankenphp_version frankenphp_get_version() {
 
 frankenphp_config frankenphp_get_config() {
   return (frankenphp_config){
-      frankenphp_get_version(),
 #ifdef ZTS
       true,
 #else
@@ -78,9 +78,68 @@ frankenphp_config frankenphp_get_config() {
 }
 
 bool should_filter_var = 0;
+bool original_user_abort_setting = 0;
+
 __thread uintptr_t thread_index;
 __thread bool is_worker_thread = false;
 __thread zval *os_environment = NULL;
+__thread HashTable *worker_ini_snapshot = NULL;
+
+/* Session user handler names (same structure as PS(mod_user_names)).
+ * In PHP 8.2, mod_user_names is a union with .name.ps_* access.
+ * In PHP 8.3+, mod_user_names is a direct struct with .ps_* access. */
+typedef struct {
+  zval ps_open;
+  zval ps_close;
+  zval ps_read;
+  zval ps_write;
+  zval ps_destroy;
+  zval ps_gc;
+  zval ps_create_sid;
+  zval ps_validate_sid;
+  zval ps_update_timestamp;
+} session_user_handlers;
+
+/* Macro to access PS(mod_user_names) handlers across PHP versions */
+#if PHP_VERSION_ID >= 80300
+#define PS_MOD_USER_NAMES(handler) PS(mod_user_names).handler
+#else
+#define PS_MOD_USER_NAMES(handler) PS(mod_user_names).name.handler
+#endif
+
+#define FOR_EACH_SESSION_HANDLER(op)                                           \
+  op(ps_open);                                                                 \
+  op(ps_close);                                                                \
+  op(ps_read);                                                                 \
+  op(ps_write);                                                                \
+  op(ps_destroy);                                                              \
+  op(ps_gc);                                                                   \
+  op(ps_create_sid);                                                           \
+  op(ps_validate_sid);                                                         \
+  op(ps_update_timestamp)
+
+__thread session_user_handlers *worker_session_handlers_snapshot = NULL;
+
+void frankenphp_update_local_thread_context(bool is_worker) {
+  is_worker_thread = is_worker;
+
+  /* workers should keep running if the user aborts the connection */
+  PG(ignore_user_abort) = is_worker ? 1 : original_user_abort_setting;
+}
+
+static void frankenphp_update_request_context() {
+  /* the server context is stored on the go side, still SG(server_context) needs
+   * to not be NULL */
+  SG(server_context) = (void *)1;
+  /* status It is not reset by zend engine, set it to 200. */
+  SG(sapi_headers).http_response_code = 200;
+
+  char *authorization_header =
+      go_update_request_info(thread_index, &SG(request_info));
+
+  /* let PHP handle basic auth */
+  php_handle_auth_data(authorization_header);
+}
 
 static void frankenphp_free_request_context() {
   if (SG(request_info).cookie_data != NULL) {
@@ -89,8 +148,6 @@ static void frankenphp_free_request_context() {
   }
 
   /* freed via thread.Unpin() */
-  SG(request_info).auth_password = NULL;
-  SG(request_info).auth_user = NULL;
   SG(request_info).request_method = NULL;
   SG(request_info).query_string = NULL;
   SG(request_info).content_type = NULL;
@@ -98,13 +155,57 @@ static void frankenphp_free_request_context() {
   SG(request_info).request_uri = NULL;
 }
 
-static void frankenphp_destroy_super_globals() {
+/* reset all 'auto globals' in worker mode except of $_ENV
+ * see: php_hash_environment() */
+static void frankenphp_reset_super_globals() {
   zend_try {
-    for (int i = 0; i < NUM_TRACK_VARS; i++) {
-      zval_ptr_dtor_nogc(&PG(http_globals)[i]);
-    }
+    /* only $_FILES needs to be flushed explicitly
+     * $_GET, $_POST, $_COOKIE and $_SERVER are flushed on reimport
+     * $_ENV is not flushed
+     * for more info see: php_startup_auto_globals()
+     */
+    zval *files = &PG(http_globals)[TRACK_VARS_FILES];
+    zval_ptr_dtor_nogc(files);
+    memset(files, 0, sizeof(*files));
+
+    /* $_SESSION must be explicitly deleted from the symbol table.
+     * Unlike other superglobals, $_SESSION is stored in EG(symbol_table)
+     * with a reference to PS(http_session_vars). The session RSHUTDOWN
+     * only decrements the refcount but doesn't remove it from the symbol
+     * table, causing data to leak between requests. */
+    zend_hash_str_del(&EG(symbol_table), "_SESSION", sizeof("_SESSION") - 1);
   }
   zend_end_try();
+
+  zend_auto_global *auto_global;
+  zend_string *_env = ZSTR_KNOWN(ZEND_STR_AUTOGLOBAL_ENV);
+  zend_string *_server = ZSTR_KNOWN(ZEND_STR_AUTOGLOBAL_SERVER);
+  ZEND_HASH_MAP_FOREACH_PTR(CG(auto_globals), auto_global) {
+    if (auto_global->name == _env) {
+      /* skip $_ENV */
+    } else if (auto_global->name == _server) {
+      /* always reimport $_SERVER */
+      auto_global->armed = auto_global->auto_global_callback(auto_global->name);
+    } else if (auto_global->jit) {
+      /* JIT globals ($_REQUEST, $GLOBALS) need special handling:
+       * - $GLOBALS will always be handled by the application, we skip it
+       * For $_REQUEST:
+       * - If in symbol_table: re-initialize with current request data
+       * - If not: do nothing, it may be armed by jit later */
+      if (auto_global->name == ZSTR_KNOWN(ZEND_STR_AUTOGLOBAL_REQUEST) &&
+          zend_hash_exists(&EG(symbol_table), auto_global->name)) {
+        auto_global->armed =
+            auto_global->auto_global_callback(auto_global->name);
+      }
+    } else if (auto_global->auto_global_callback) {
+      /* $_GET, $_POST, $_COOKIE, $_FILES are reimported here */
+      auto_global->armed = auto_global->auto_global_callback(auto_global->name);
+    } else {
+      /* $_SESSION will land here (not an http_global) */
+      auto_global->armed = 0;
+    }
+  }
+  ZEND_HASH_FOREACH_END();
 }
 
 /*
@@ -129,6 +230,166 @@ static void frankenphp_release_temporary_streams() {
   ZEND_HASH_FOREACH_END();
 }
 
+/* Destructor for INI snapshot hash table entries */
+static void frankenphp_ini_snapshot_dtor(zval *zv) {
+  zend_string_release((zend_string *)Z_PTR_P(zv));
+}
+
+/* Save the current state of modified INI entries.
+ * This captures INI values set by the framework before the worker loop. */
+static void frankenphp_snapshot_ini(void) {
+  if (worker_ini_snapshot != NULL) {
+    return; /* Already snapshotted */
+  }
+
+  if (EG(modified_ini_directives) == NULL) {
+    /* Allocate empty table to mark as snapshotted */
+    ALLOC_HASHTABLE(worker_ini_snapshot);
+    zend_hash_init(worker_ini_snapshot, 0, NULL, frankenphp_ini_snapshot_dtor,
+                   0);
+    return;
+  }
+
+  uint32_t num_modified = zend_hash_num_elements(EG(modified_ini_directives));
+  ALLOC_HASHTABLE(worker_ini_snapshot);
+  zend_hash_init(worker_ini_snapshot, num_modified, NULL,
+                 frankenphp_ini_snapshot_dtor, 0);
+
+  zend_ini_entry *ini_entry;
+  ZEND_HASH_FOREACH_PTR(EG(modified_ini_directives), ini_entry) {
+    if (ini_entry->value) {
+      zend_hash_add_ptr(worker_ini_snapshot, ini_entry->name,
+                        zend_string_copy(ini_entry->value));
+    }
+  }
+  ZEND_HASH_FOREACH_END();
+}
+
+/* Restore INI values to the state captured by frankenphp_snapshot_ini().
+ * - Entries in snapshot with changed values: restore to snapshot value
+ * - Entries not in snapshot: restore to startup default */
+static void frankenphp_restore_ini(void) {
+  if (worker_ini_snapshot == NULL || EG(modified_ini_directives) == NULL) {
+    return;
+  }
+
+  zend_ini_entry *ini_entry;
+  zend_string *snapshot_value;
+  zend_string *entry_name;
+
+  /* Collect entries to restore to default in a separate array.
+   * We cannot call zend_restore_ini_entry() during iteration because
+   * it calls zend_hash_del() on EG(modified_ini_directives). */
+  uint32_t max_entries = zend_hash_num_elements(EG(modified_ini_directives));
+  zend_string **entries_to_restore =
+      max_entries ? emalloc(max_entries * sizeof(zend_string *)) : NULL;
+  size_t restore_count = 0;
+
+  ZEND_HASH_FOREACH_STR_KEY_PTR(EG(modified_ini_directives), entry_name,
+                                ini_entry) {
+    snapshot_value = zend_hash_find_ptr(worker_ini_snapshot, entry_name);
+
+    if (snapshot_value == NULL) {
+      /* Entry was not in snapshot: collect for restore to startup default */
+      entries_to_restore[restore_count++] = zend_string_copy(entry_name);
+    } else if (!zend_string_equals(ini_entry->value, snapshot_value)) {
+      /* Entry was in snapshot but value changed: restore to snapshot value.
+       * zend_alter_ini_entry() does not delete from modified_ini_directives. */
+      zend_alter_ini_entry(entry_name, snapshot_value, PHP_INI_USER,
+                           PHP_INI_STAGE_RUNTIME);
+    }
+    /* else: Entry in snapshot with same value, nothing to do */
+  }
+  ZEND_HASH_FOREACH_END();
+
+  /* Now restore entries to default outside of iteration */
+  for (size_t i = 0; i < restore_count; i++) {
+    zend_restore_ini_entry(entries_to_restore[i], PHP_INI_STAGE_RUNTIME);
+    zend_string_release(entries_to_restore[i]);
+  }
+  if (entries_to_restore) {
+    efree(entries_to_restore);
+  }
+}
+
+/* Save session user handlers set before the worker loop.
+ * This allows frameworks to define custom session handlers that persist. */
+static void frankenphp_snapshot_session_handlers(void) {
+  if (worker_session_handlers_snapshot != NULL) {
+    return; /* Already snapshotted */
+  }
+
+  /* Check if session module is loaded */
+  if (zend_hash_str_find_ptr(&module_registry, "session",
+                             sizeof("session") - 1) == NULL) {
+    return; /* Session module not available */
+  }
+
+  /* Check if user session handlers are defined */
+  if (Z_ISUNDEF(PS_MOD_USER_NAMES(ps_open))) {
+    return; /* No user handlers to snapshot */
+  }
+
+  worker_session_handlers_snapshot = emalloc(sizeof(session_user_handlers));
+
+  /* Copy each handler zval with incremented reference count */
+#define SNAPSHOT_HANDLER(h)                                                    \
+  if (!Z_ISUNDEF(PS_MOD_USER_NAMES(h))) {                                      \
+    ZVAL_COPY(&worker_session_handlers_snapshot->h, &PS_MOD_USER_NAMES(h));    \
+  } else {                                                                     \
+    ZVAL_UNDEF(&worker_session_handlers_snapshot->h);                          \
+  }
+
+  FOR_EACH_SESSION_HANDLER(SNAPSHOT_HANDLER);
+
+#undef SNAPSHOT_HANDLER
+}
+
+/* Restore session user handlers from snapshot after RSHUTDOWN freed them. */
+static void frankenphp_restore_session_handlers(void) {
+  if (worker_session_handlers_snapshot == NULL) {
+    return;
+  }
+
+  /* Restore each handler zval.
+   * Session RSHUTDOWN already freed the handlers via zval_ptr_dtor and set
+   * them to UNDEF, so we don't need to destroy them again. We simply copy
+   * from the snapshot (which holds its own reference). */
+#define RESTORE_HANDLER(h)                                                     \
+  if (!Z_ISUNDEF(worker_session_handlers_snapshot->h)) {                       \
+    ZVAL_COPY(&PS_MOD_USER_NAMES(h), &worker_session_handlers_snapshot->h);    \
+  }
+
+  FOR_EACH_SESSION_HANDLER(RESTORE_HANDLER);
+
+#undef RESTORE_HANDLER
+}
+
+/* Free worker state when the worker script terminates. */
+static void frankenphp_cleanup_worker_state(void) {
+  /* Free INI snapshot */
+  if (worker_ini_snapshot != NULL) {
+    zend_hash_destroy(worker_ini_snapshot);
+    FREE_HASHTABLE(worker_ini_snapshot);
+    worker_ini_snapshot = NULL;
+  }
+
+  /* Free session handlers snapshot */
+  if (worker_session_handlers_snapshot != NULL) {
+#define FREE_HANDLER(h)                                                        \
+  if (!Z_ISUNDEF(worker_session_handlers_snapshot->h)) {                       \
+    zval_ptr_dtor(&worker_session_handlers_snapshot->h);                       \
+  }
+
+    FOR_EACH_SESSION_HANDLER(FREE_HANDLER);
+
+#undef FREE_HANDLER
+
+    efree(worker_session_handlers_snapshot);
+    worker_session_handlers_snapshot = NULL;
+  }
+}
+
 /* Adapted from php_request_shutdown */
 static void frankenphp_worker_request_shutdown() {
   /* Flush all output buffers */
@@ -150,9 +411,9 @@ static void frankenphp_worker_request_shutdown() {
   zend_end_try();
 
   /* SAPI related shutdown (free stuff) */
-  frankenphp_free_request_context();
   zend_try { sapi_deactivate(); }
   zend_end_try();
+  frankenphp_free_request_context();
 
   zend_set_memory_limit(PG(memory_limit));
 }
@@ -163,6 +424,12 @@ bool frankenphp_shutdown_dummy_request(void) {
     return false;
   }
 
+  /* Snapshot INI and session handlers BEFORE shutdown.
+   * The framework has set these up before the worker loop, and we want
+   * to preserve them. Session RSHUTDOWN will free the handlers. */
+  frankenphp_snapshot_ini();
+  frankenphp_snapshot_session_handlers();
+
   frankenphp_worker_request_shutdown();
 
   return true;
@@ -172,17 +439,13 @@ PHPAPI void get_full_env(zval *track_vars_array) {
   go_getfullenv(thread_index, track_vars_array);
 }
 
-void frankenphp_add_assoc_str_ex(zval *track_vars_array, char *key,
-                                 size_t keylen, zend_string *val) {
-  add_assoc_str_ex(track_vars_array, key, keylen, val);
-}
-
 /* Adapted from php_request_startup() */
 static int frankenphp_worker_request_startup() {
   int retval = SUCCESS;
 
+  frankenphp_update_request_context();
+
   zend_try {
-    frankenphp_destroy_super_globals();
     frankenphp_release_temporary_streams();
     php_output_activate();
 
@@ -220,21 +483,13 @@ static int frankenphp_worker_request_startup() {
       php_output_set_implicit_flush(1);
     }
 
-    php_hash_environment();
+    frankenphp_reset_super_globals();
 
-    /* zend_is_auto_global will force a re-import of the $_SERVER global */
-    zend_is_auto_global(ZSTR_KNOWN(ZEND_STR_AUTOGLOBAL_SERVER));
-
-    /* disarm the $_ENV auto_global to prevent it from being reloaded in worker
-     * mode */
-    if (zend_hash_str_exists(&EG(symbol_table), "_ENV", 4)) {
-      zend_auto_global *env_global;
-      if ((env_global = zend_hash_find_ptr(
-               CG(auto_globals), ZSTR_KNOWN(ZEND_STR_AUTOGLOBAL_ENV))) !=
-          NULL) {
-        env_global->armed = 0;
-      }
-    }
+    /* Restore INI values changed during the previous request back to their
+     * snapshot state (captured in frankenphp_shutdown_dummy_request).
+     * This ensures framework settings persist while request-level changes
+     * are reset. */
+    frankenphp_restore_ini();
 
     const char **module_name;
     zend_module_entry *module;
@@ -245,6 +500,12 @@ static int frankenphp_worker_request_startup() {
         module->request_startup_func(module->type, module->module_number);
       }
     }
+
+    /* Restore session handlers AFTER session RINIT.
+     * Session RSHUTDOWN frees mod_user_names callbacks, so we must restore
+     * them before user code runs. This must happen after RINIT because
+     * session RINIT may reset some state. */
+    frankenphp_restore_session_handlers();
   }
   zend_catch { retval = FAILURE; }
   zend_end_try();
@@ -411,10 +672,11 @@ PHP_FUNCTION(frankenphp_handle_request) {
   zend_unset_timeout();
 #endif
 
-  bool has_request = go_frankenphp_worker_handle_request_start(thread_index);
+  struct go_frankenphp_worker_handle_request_start_return result =
+      go_frankenphp_worker_handle_request_start(thread_index);
   if (frankenphp_worker_request_startup() == FAILURE
       /* Shutting down */
-      || !has_request) {
+      || !result.r0) {
     RETURN_FALSE;
   }
 
@@ -429,24 +691,39 @@ PHP_FUNCTION(frankenphp_handle_request) {
 
   /* Call the PHP func passed to frankenphp_handle_request() */
   zval retval = {0};
+  zval *callback_ret = NULL;
+
   fci.size = sizeof fci;
   fci.retval = &retval;
-  if (zend_call_function(&fci, &fcc) == SUCCESS) {
-    zval_ptr_dtor(&retval);
+  fci.params = result.r1;
+  fci.param_count = result.r1 == NULL ? 0 : 1;
+
+  if (zend_call_function(&fci, &fcc) == SUCCESS && Z_TYPE(retval) != IS_UNDEF) {
+    callback_ret = &retval;
   }
 
   /*
    * If an exception occurred, print the message to the client before
-   * closing the connection and bailout.
+   * closing the connection.
    */
-  if (EG(exception) && !zend_is_unwind_exit(EG(exception)) &&
-      !zend_is_graceful_exit(EG(exception))) {
-    zend_exception_error(EG(exception), E_ERROR);
-    zend_bailout();
+  if (EG(exception)) {
+    if (!zend_is_unwind_exit(EG(exception)) &&
+        !zend_is_graceful_exit(EG(exception))) {
+      zend_exception_error(EG(exception), E_ERROR);
+    } else {
+      /* exit() will jump directly to after php_execute_script */
+      zend_bailout();
+    }
   }
 
   frankenphp_worker_request_shutdown();
-  go_frankenphp_finish_worker_request(thread_index);
+  go_frankenphp_finish_worker_request(thread_index, callback_ret);
+  if (result.r1 != NULL) {
+    zval_ptr_dtor(result.r1);
+  }
+  if (callback_ret != NULL) {
+    zval_ptr_dtor(&retval);
+  }
 
   RETURN_TRUE;
 }
@@ -472,7 +749,72 @@ PHP_FUNCTION(headers_send) {
   RETURN_LONG(sapi_send_headers());
 }
 
+PHP_FUNCTION(mercure_publish) {
+  zval *topics;
+  zend_string *data = NULL, *id = NULL, *type = NULL;
+  zend_bool private = 0;
+  zend_long retry = 0;
+  bool retry_is_null = 1;
+
+  ZEND_PARSE_PARAMETERS_START(1, 6)
+  Z_PARAM_ZVAL(topics)
+  Z_PARAM_OPTIONAL
+  Z_PARAM_STR_OR_NULL(data)
+  Z_PARAM_BOOL(private)
+  Z_PARAM_STR_OR_NULL(id)
+  Z_PARAM_STR_OR_NULL(type)
+  Z_PARAM_LONG_OR_NULL(retry, retry_is_null)
+  ZEND_PARSE_PARAMETERS_END();
+
+  if (Z_TYPE_P(topics) != IS_ARRAY && Z_TYPE_P(topics) != IS_STRING) {
+    zend_argument_type_error(1, "must be of type array|string");
+    RETURN_THROWS();
+  }
+
+  struct go_mercure_publish_return result =
+      go_mercure_publish(thread_index, topics, data, private, id, type, retry);
+
+  switch (result.r1) {
+  case 0:
+    RETURN_STR(result.r0);
+  case 1:
+    zend_throw_exception(spl_ce_RuntimeException, "No Mercure hub configured",
+                         0);
+    RETURN_THROWS();
+  case 2:
+    zend_throw_exception(spl_ce_RuntimeException, "Publish failed", 0);
+    RETURN_THROWS();
+  }
+
+  zend_throw_exception(spl_ce_RuntimeException,
+                       "FrankenPHP not built with Mercure support", 0);
+  RETURN_THROWS();
+}
+
+PHP_FUNCTION(frankenphp_log) {
+  zend_string *message = NULL;
+  zend_long level = 0;
+  zval *context = NULL;
+
+  ZEND_PARSE_PARAMETERS_START(1, 3)
+  Z_PARAM_STR(message)
+  Z_PARAM_OPTIONAL
+  Z_PARAM_LONG(level)
+  Z_PARAM_ARRAY(context)
+  ZEND_PARSE_PARAMETERS_END();
+
+  char *ret = NULL;
+  ret = go_log_attrs(thread_index, message, level, context);
+  if (ret != NULL) {
+    zend_throw_exception(spl_ce_RuntimeException, ret, 0);
+    free(ret);
+    RETURN_THROWS();
+  }
+}
+
 PHP_MINIT_FUNCTION(frankenphp) {
+  register_frankenphp_symbols(module_number);
+
   zend_function *func;
 
   // Override putenv
@@ -510,40 +852,10 @@ static zend_module_entry frankenphp_module = {
 
 static void frankenphp_request_shutdown() {
   if (is_worker_thread) {
-    /* ensure $_ENV is not in an invalid state before shutdown */
-    zval_ptr_dtor_nogc(&PG(http_globals)[TRACK_VARS_ENV]);
-    array_init(&PG(http_globals)[TRACK_VARS_ENV]);
+    frankenphp_cleanup_worker_state();
   }
   php_request_shutdown((void *)0);
   frankenphp_free_request_context();
-}
-
-int frankenphp_update_server_context(bool is_worker_request,
-
-                                     const char *request_method,
-                                     char *query_string,
-                                     zend_long content_length,
-                                     char *path_translated, char *request_uri,
-                                     const char *content_type, char *auth_user,
-                                     char *auth_password, int proto_num) {
-
-  SG(server_context) = (void *)1;
-  is_worker_thread = is_worker_request;
-
-  // It is not reset by zend engine, set it to 200.
-  SG(sapi_headers).http_response_code = 200;
-
-  SG(request_info).auth_password = auth_password;
-  SG(request_info).auth_user = auth_user;
-  SG(request_info).request_method = request_method;
-  SG(request_info).query_string = query_string;
-  SG(request_info).content_type = content_type;
-  SG(request_info).content_length = content_length;
-  SG(request_info).path_translated = path_translated;
-  SG(request_info).request_uri = request_uri;
-  SG(request_info).proto_num = proto_num;
-
-  return SUCCESS;
 }
 
 static int frankenphp_startup(sapi_module_struct *sapi_module) {
@@ -606,8 +918,9 @@ static char *frankenphp_read_cookies(void) {
 }
 
 /* all variables with well defined keys can safely be registered like this */
-void frankenphp_register_trusted_var(zend_string *z_key, char *value,
-                                     size_t val_len, HashTable *ht) {
+static inline void frankenphp_register_trusted_var(zend_string *z_key,
+                                                   char *value, size_t val_len,
+                                                   HashTable *ht) {
   if (value == NULL) {
     zval empty;
     ZVAL_EMPTY_STRING(&empty);
@@ -782,6 +1095,11 @@ static void frankenphp_register_variables(zval *track_vars_array) {
   /* In worker mode we cache the os environment */
   if (os_environment == NULL) {
     os_environment = malloc(sizeof(zval));
+    if (os_environment == NULL) {
+      php_error(E_ERROR, "Failed to allocate memory for os_environment");
+
+      return;
+    }
     array_init(os_environment);
     get_full_env(os_environment);
     // php_import_environment_variables(os_environment);
@@ -793,7 +1111,7 @@ static void frankenphp_register_variables(zval *track_vars_array) {
 }
 
 static void frankenphp_log_message(const char *message, int syslog_type_int) {
-  go_log((char *)message, syslog_type_int);
+  go_log(thread_index, (char *)message, syslog_type_int);
 }
 
 static char *frankenphp_getenv(const char *name, size_t name_len) {
@@ -935,6 +1253,7 @@ static void *php_main(void *arg) {
   char *default_filter;
   cfg_get_string("filter.default", &default_filter);
   should_filter_var = default_filter != NULL;
+  original_user_abort_setting = PG(ignore_user_abort);
 
   go_frankenphp_main_thread_is_ready();
 
@@ -976,12 +1295,13 @@ bool frankenphp_new_php_thread(uintptr_t thread_index) {
   return true;
 }
 
-int frankenphp_request_startup() {
+static int frankenphp_request_startup() {
+  frankenphp_update_request_context();
   if (php_request_startup() == SUCCESS) {
     return SUCCESS;
   }
 
-  php_request_shutdown((void *)0);
+  frankenphp_request_shutdown();
 
   return FAILURE;
 }
@@ -1016,7 +1336,6 @@ int frankenphp_execute_script(char *file_name) {
 
   zend_destroy_file_handle(&file_handle);
 
-  frankenphp_free_request_context();
   frankenphp_request_shutdown();
 
   return status;
@@ -1080,7 +1399,7 @@ int frankenphp_reset_opcache(void) {
 
 int frankenphp_get_current_memory_limit() { return PG(memory_limit); }
 
-static zend_module_entry *modules = NULL;
+static zend_module_entry **modules = NULL;
 static int modules_len = 0;
 static int (*original_php_register_internal_extensions_func)(void) = NULL;
 
@@ -1091,7 +1410,7 @@ PHPAPI int register_internal_extensions(void) {
   }
 
   for (int i = 0; i < modules_len; i++) {
-    if (zend_register_internal_module(&modules[i]) == NULL) {
+    if (zend_register_internal_module(modules[i]) == NULL) {
       return FAILURE;
     }
   }
@@ -1102,7 +1421,7 @@ PHPAPI int register_internal_extensions(void) {
   return SUCCESS;
 }
 
-void register_extensions(zend_module_entry *m, int len) {
+void register_extensions(zend_module_entry **m, int len) {
   modules = m;
   modules_len = len;
 

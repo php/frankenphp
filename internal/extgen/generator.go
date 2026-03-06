@@ -5,8 +5,6 @@ import (
 	"os"
 )
 
-const BuildDir = "build"
-
 type Generator struct {
 	BaseName   string
 	SourceFile string
@@ -52,10 +50,6 @@ func (g *Generator) Generate() error {
 }
 
 func (g *Generator) setupBuildDirectory() error {
-	if err := os.RemoveAll(g.BuildDir); err != nil {
-		return fmt.Errorf("removing build directory: %w", err)
-	}
-
 	return os.MkdirAll(g.BuildDir, 0755)
 }
 
