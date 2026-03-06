@@ -78,7 +78,7 @@ require __DIR__.'/vendor/autoload.php';
 $myApp = new \App\Kernel();
 $myApp->boot();
 
-// Déclarer le hanler en dehors de la boucle pour de meilleures performances (moins de travail effectué)
+// Déclarer le handler en dehors de la boucle pour de meilleures performances (moins de travail effectué)
 $handler = static function () use ($myApp) {
     try {
         // Appelé lorsqu'une requête est reçue,
