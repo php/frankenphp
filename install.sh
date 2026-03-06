@@ -135,7 +135,11 @@ CYGWIN_NT* | MSYS_NT* | MINGW*)
 	echo "📦 Downloading ${bold}FrankenPHP${normal} for Windows (x64):"
 
 	TMPZIP="/tmp/frankenphp-windows-$$.zip"
-	curl -L --progress-bar "https://github.com/php/frankenphp/releases/latest/download/frankenphp-windows-x86_64.zip" -o "${TMPZIP}"
+	if ! curl -f -L --progress-bar "https://github.com/php/frankenphp/releases/latest/download/frankenphp-windows-x86_64.zip" -o "${TMPZIP}"; then
+		echo "❗ Failed to download FrankenPHP for Windows. Please check your internet connection or download it manually from:"
+		echo "   https://github.com/php/frankenphp/releases/latest"
+		exit 1
+	fi
 
 	echo "📂 Extracting to ${italic}${BIN_DIR}${normal}..."
 	if command -v unzip >/dev/null 2>&1; then

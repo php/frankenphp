@@ -29,7 +29,7 @@ on:
     - cron: "0 8 * * *"
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   GOTOOLCHAIN: local
@@ -40,6 +40,8 @@ env:
 
 jobs:
   build:
+    permissions:
+      contents: write
     runs-on: windows-latest
     steps:
       - name: Configure Git
@@ -63,7 +65,11 @@ jobs:
           if ($env:GITHUB_REF_TYPE -eq "tag") {
             $frankenphpVersion = $env:GITHUB_REF_NAME.Substring(1)
           } elseif ($releaseTag) {
-            $frankenphpVersion = $releaseTag
+            if ($releaseTag.StartsWith("v")) {
+              $frankenphpVersion = $releaseTag.Substring(1)
+            } else {
+              $frankenphpVersion = $releaseTag
+            }
           } else {
             $frankenphpVersion = $env:GITHUB_SHA
           }
