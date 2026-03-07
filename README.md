@@ -4,7 +4,7 @@
 
 FrankenPHP is a modern application server for PHP built on top of the [Caddy](https://caddyserver.com/) web server.
 
-FrankenPHP gives superpowers to your PHP apps thanks to its stunning features: [_Early Hints_](https://frankenphp.dev/docs/early-hints/), [worker mode](https://frankenphp.dev/docs/worker/), [real-time capabilities](https://frankenphp.dev/docs/mercure/), automatic HTTPS, HTTP/2, and HTTP/3 support...
+FrankenPHP gives superpowers to your PHP apps thanks to its stunning features: [_Early Hints_](https://frankenphp.dev/docs/early-hints/), [worker mode](https://frankenphp.dev/docs/worker/), [real-time capabilities](https://frankenphp.dev/docs/mercure/), [hot reloading](https://frankenphp.dev/docs/hot-reload/), automatic HTTPS, HTTP/2, and HTTP/3 support...
 
 FrankenPHP works with any PHP app and makes your Laravel and Symfony projects faster than ever thanks to their official integrations with the worker mode.
 
@@ -16,25 +16,31 @@ FrankenPHP can also be used as a standalone Go library to embed PHP in any app u
 
 ## Getting Started
 
-On Windows, use [WSL](https://learn.microsoft.com/windows/wsl/) to run FrankenPHP.
-
 ### Install Script
 
-You can copy this line into your terminal to automatically
+On Linux and macOS, copy this line into your terminal to automatically
 install an appropriate version for your platform:
 
 ```console
 curl https://frankenphp.dev/install.sh | sh
 ```
 
+On Windows, run this in PowerShell:
+
+```powershell
+irm https://frankenphp.dev/install.ps1 | iex
+```
+
 ### Standalone Binary
 
-We provide static FrankenPHP binaries for development purposes on Linux and macOS
-containing [PHP 8.4](https://www.php.net/releases/8.4/en.php) and most popular PHP extensions.
+We provide FrankenPHP binaries for Linux, macOS and Windows
+containing [PHP 8.5](https://www.php.net/releases/8.5/).
+
+Linux and macOS binaries are statically linked, so they can be used on any distribution without installing any dependency.
+They contain most popular PHP extensions.
+Windows archives contain the official PHP binary for Windows.
 
 [Download FrankenPHP](https://github.com/php/frankenphp/releases)
-
-**Installing extensions:** Most common extensions are bundled. It's not possible to install more extensions.
 
 ### rpm Packages
 
@@ -42,7 +48,7 @@ Our maintainers offer rpm packages for all systems using `dnf`. To install, run:
 
 ```console
 sudo dnf install https://rpm.henderkes.com/static-php-1-0.noarch.rpm
-sudo dnf module enable php-zts:static-8.4 # 8.2-8.5 available
+sudo dnf module enable php-zts:static-8.5 # 8.2-8.5 available
 sudo dnf install frankenphp
 ```
 
