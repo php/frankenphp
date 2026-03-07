@@ -36,7 +36,7 @@ irm https://frankenphp.dev/install.ps1 | iex
 We provide FrankenPHP binaries for Linux, macOS and Windows
 containing [PHP 8.5](https://www.php.net/releases/8.5/).
 
-Linux and macOS binaries are statically linked, so they can be used on any distribution without installing any dependency.
+Linux binaries are statically linked, so they can be used on any Linux distribution without installing any dependency. macOS binaries are also self-contained.
 They contain most popular PHP extensions.
 Windows archives contain the official PHP binary for Windows.
 
