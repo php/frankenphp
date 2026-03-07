@@ -93,14 +93,11 @@ jobs:
       matrix:
         platform: ${{ fromJson(needs.prepare.outputs.platforms) }}
         debug: [false]
-        mimalloc: [false]
         include:
           - platform: linux/amd64
           - platform: linux/amd64
             debug: true
-          - platform: linux/amd64
-            mimalloc: true
-    name: Build ${{ matrix.platform }} static musl binary${{ matrix.debug && ' (debug)' || '' }}${{ matrix.mimalloc && ' (mimalloc)' || '' }}
+    name: Build ${{ matrix.platform }} static musl binary${{ matrix.debug && ' (debug)' || '' }}
     runs-on: ${{ startsWith(matrix.platform, 'linux/arm') && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     needs: [prepare]
     steps:
@@ -141,25 +138,24 @@ jobs:
         uses: docker/bake-action@v6
         with:
           pull: true
-          load: ${{ !fromJson(needs.prepare.outputs.push) || matrix.debug || matrix.mimalloc }}
+          load: ${{ !fromJson(needs.prepare.outputs.push) || matrix.debug }}
           source: .
           targets: static-builder-musl
           set: |
             ${{ matrix.debug && 'static-builder-musl.args.DEBUG_SYMBOLS=1' || '' }}
-            ${{ matrix.mimalloc && 'static-builder-musl.args.MIMALLOC=1' || '' }}
             ${{ (github.event_name == 'pull_request' || matrix.platform == 'linux/arm64') && 'static-builder-musl.args.NO_COMPRESS=1' || '' }}
             *.tags=
             *.platform=${{ matrix.platform }}
-            ${{ fromJson(needs.prepare.outputs.push) && '' || format('*.cache-from=type=gha,scope={0}-static-builder-musl{1}{2}', needs.prepare.outputs.ref || github.ref, matrix.debug && '-debug' || '', matrix.mimalloc && '-mimalloc' || '') }}
-            ${{ fromJson(needs.prepare.outputs.push) && '' || format('*.cache-from=type=gha,scope=refs/heads/main-static-builder-musl{0}{1}', matrix.debug && '-debug' || '', matrix.mimalloc && '-mimalloc' || '') }}
-            ${{ fromJson(needs.prepare.outputs.push) && '' || format('*.cache-to=type=gha,scope={0}-static-builder-musl{1}{2},ignore-error=true', needs.prepare.outputs.ref || github.ref, matrix.debug && '-debug' || '', matrix.mimalloc && '-mimalloc' || '') }}
-            ${{ (fromJson(needs.prepare.outputs.push) && !matrix.debug && !matrix.mimalloc) && format('*.output=type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME) || '' }}
+            ${{ fromJson(needs.prepare.outputs.push) && '' || format('*.cache-from=type=gha,scope={0}-static-builder-musl{1}', needs.prepare.outputs.ref || github.ref, matrix.debug && '-debug' || '') }}
+            ${{ fromJson(needs.prepare.outputs.push) && '' || format('*.cache-from=type=gha,scope=refs/heads/main-static-builder-musl{0}', matrix.debug && '-debug' || '') }}
+            ${{ fromJson(needs.prepare.outputs.push) && '' || format('*.cache-to=type=gha,scope={0}-static-builder-musl{1},ignore-error=true', needs.prepare.outputs.ref || github.ref, matrix.debug && '-debug' || '') }}
+            ${{ (fromJson(needs.prepare.outputs.push) && !matrix.debug) && format('*.output=type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME) || '' }}
         env:
           SHA: ${{ github.sha }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - # Workaround for https://github.com/actions/runner/pull/2477#issuecomment-1501003600
         name: Export metadata
-        if: fromJson(needs.prepare.outputs.push) && !matrix.debug && !matrix.mimalloc
+        if: fromJson(needs.prepare.outputs.push) && !matrix.debug
         run: |
           mkdir -p /tmp/metadata
 
@@ -169,7 +165,7 @@ jobs:
         env:
           METADATA: ${{ steps.build.outputs.metadata }}
       - name: Upload metadata
-        if: fromJson(needs.prepare.outputs.push) && !matrix.debug && !matrix.mimalloc
+        if: fromJson(needs.prepare.outputs.push) && !matrix.debug
         uses: actions/upload-artifact@v6
         with:
           name: metadata-static-builder-musl-${{ steps.prepare.outputs.sanitized_platform }}
@@ -181,9 +177,9 @@ jobs:
           # shellcheck disable=SC2034
           # TODO: remove "containerimage.config.digest" fallback once all runners use buildx v0.18+
           # which replaced it with "containerimage.digest" and "containerimage.descriptor"
-          digest=$(jq -r '."static-builder-musl" | ${{ (fromJson(needs.prepare.outputs.push) && !matrix.debug && !matrix.mimalloc) && '."containerimage.digest"' || '(."containerimage.config.digest" // ."containerimage.digest")' }}' <<< "${METADATA}")
-          docker create --platform="${PLATFORM}" --name static-builder-musl "${{ (fromJson(needs.prepare.outputs.push) && !matrix.debug && !matrix.mimalloc) && '${IMAGE_NAME}@${digest}' || '${digest}' }}"
-          docker cp "static-builder-musl:/go/src/app/dist/${BINARY}" "${BINARY}${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }}"
+          digest=$(jq -r '."static-builder-musl" | ${{ (fromJson(needs.prepare.outputs.push) && !matrix.debug) && '."containerimage.digest"' || '(."containerimage.config.digest" // ."containerimage.digest")' }}' <<< "${METADATA}")
+          docker create --platform="${PLATFORM}" --name static-builder-musl "${{ (fromJson(needs.prepare.outputs.push) && !matrix.debug) && '${IMAGE_NAME}@${digest}' || '${digest}' }}"
+          docker cp "static-builder-musl:/go/src/app/dist/${BINARY}" "${BINARY}${{ matrix.debug && '-debug' || '' }}"
         env:
           METADATA: ${{ steps.build.outputs.metadata }}
           BINARY: frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}
@@ -192,12 +188,12 @@ jobs:
         if: ${{ !fromJson(needs.prepare.outputs.push) }}
         uses: actions/upload-artifact@v6
         with:
-          name: frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }}
-          path: frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }}
+          name: frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}${{ matrix.debug && '-debug' || '' }}
+          path: frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}${{ matrix.debug && '-debug' || '' }}
           compression-level: 0
       - name: Upload assets
         if: fromJson(needs.prepare.outputs.push) && (needs.prepare.outputs.ref || github.ref_type == 'tag')
-        run: gh release upload "${REF}" frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }} --repo dunglas/frankenphp --clobber
+        run: gh release upload "${REF}" frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}${{ matrix.debug && '-debug' || '' }} --repo dunglas/frankenphp --clobber
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REF: ${{ (github.ref_type == 'tag' && github.ref_name) || needs.prepare.outputs.ref }}
@@ -216,7 +212,7 @@ jobs:
           "${BINARY}" list-modules | grep http.handlers.vulcain
           "${BINARY}" php-cli -r "echo 'Sanity check passed';"
         env:
-          BINARY: ./frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }}
+          BINARY: ./frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}${{ matrix.debug && '-debug' || '' }}
 
   build-linux-gnu:
     permissions:
