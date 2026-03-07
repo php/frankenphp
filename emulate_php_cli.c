@@ -34,8 +34,6 @@
 #include <pthread_np.h>
 #endif
 
-#if PHP_VERSION_ID >= 80600
-
 typedef struct {
   char *script;
   int argc;
@@ -189,5 +187,3 @@ void *emulate_script_cli(void *arg) {
 
   return exit_status;
 }
-
-#endif /* PHP_VERSION_ID >= 80600 */
