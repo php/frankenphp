@@ -44,6 +44,18 @@ jobs:
       contents: write
     runs-on: windows-latest
     steps:
+      - name: Determine ref
+        run: |
+          $ref = $env:REF
+          if (-not $ref -and $env:GITHUB_EVENT_NAME -eq "schedule") {
+            $ref = (gh release view --repo php/frankenphp --json tagName --jq '.tagName')
+          }
+
+          "REF=$ref" >> $env:GITHUB_ENV
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REF: ${{ (github.ref_type == 'tag' && github.ref_name) || (github.event_name == 'workflow_dispatch' && inputs.version) || '' }}
+
       - name: Configure Git
         run: |
           git config --global core.autocrlf false
@@ -52,33 +64,27 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v6
         with:
+          ref: ${{ env.REF || '' }}
           path: frankenphp
           persist-credentials: false
 
       - name: Set FRANKENPHP_VERSION
         run: |
-          $releaseTag = $env:INPUT_REF
-          if (-not $releaseTag -and $env:GITHUB_EVENT_NAME -eq "schedule") {
-            $releaseTag = (gh release view --repo php/frankenphp --json tagName --jq '.tagName')
-          }
+          $ref = $env:REF
 
           if ($env:GITHUB_REF_TYPE -eq "tag") {
             $frankenphpVersion = $env:GITHUB_REF_NAME.Substring(1)
-          } elseif ($releaseTag) {
-            if ($releaseTag.StartsWith("v")) {
-              $frankenphpVersion = $releaseTag.Substring(1)
+          } elseif ($ref) {
+            if ($ref.StartsWith("v")) {
+              $frankenphpVersion = $ref.Substring(1)
             } else {
-              $frankenphpVersion = $releaseTag
+              $frankenphpVersion = $ref
             }
           } else {
             $frankenphpVersion = $env:GITHUB_SHA
           }
 
           "FRANKENPHP_VERSION=$frankenphpVersion" >> $env:GITHUB_ENV
-          "RELEASE_TAG=$releaseTag" >> $env:GITHUB_ENV
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          INPUT_REF: ${{ (github.ref_type == 'tag' && github.ref_name) || (github.event_name == 'workflow_dispatch' && inputs.version) || '' }}
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -200,7 +206,7 @@ jobs:
           Copy-Item frankenphp\vcpkg_installed\x64-windows\bin\pthreadVC3.dll $env:DIR_NAME
 
       - name: Upload Artifact
-        if: ${{ !env.RELEASE_TAG }}
+        if: ${{ !env.REF }}
         uses: actions/upload-artifact@v6
         with:
           name: ${{ env.DIR_NAME }}
@@ -208,12 +214,12 @@ jobs:
           if-no-files-found: error
 
       - name: Zip Release Artifact
-        if: ${{ env.RELEASE_TAG }}
+        if: ${{ env.REF }}
         run: Compress-Archive -Path "$env:DIR_NAME\*" -DestinationPath "$env:DIR_NAME.zip"
 
       - name: Upload Release Asset
-        if: ${{ env.RELEASE_TAG }}
-        run: gh release upload "$env:RELEASE_TAG" "$env:DIR_NAME.zip" --repo php/frankenphp --clobber
+        if: ${{ env.REF }}
+        run: gh release upload "$env:REF" "$env:DIR_NAME.zip" --repo php/frankenphp --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
