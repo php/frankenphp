@@ -1,7 +1,4 @@
-﻿#ifndef HAVE_EMBED_CLI
-
-#include "frankenphp.h"
-#include <SAPI.h>
+﻿#include <SAPI.h>
 #include <Zend/zend_alloc.h>
 #include <Zend/zend_exceptions.h>
 #include <Zend/zend_interfaces.h>
@@ -36,6 +33,8 @@
 #elif defined(__FreeBSD__) || defined(__OpenBSD__)
 #include <pthread_np.h>
 #endif
+
+#if PHP_VERSION_ID >= 80600
 
 typedef struct {
   char *script;
@@ -191,4 +190,4 @@ void *emulate_script_cli(void *arg) {
   return exit_status;
 }
 
-#endif /* !HAVE_EMBED_CLI */
+#endif /* PHP_VERSION_ID >= 80600 */

@@ -36,7 +36,9 @@
 #include <pthread_np.h>
 #endif
 
-#ifndef HAVE_EMBED_CLI
+#if PHP_VERSION_ID >= 80600
+#include <sapi/cli/cli.h>
+#else
 #include "emulate_php_cli.h"
 #endif
 
@@ -1254,7 +1256,7 @@ static void *execute_script_cli(void *arg) {
   volatile int v = PHP_VERSION_ID;
   (void)v;
 
-#if HAVE_EMBED_CLI
+#if PHP_VERSION_ID >= 80600
   return (void *)(intptr_t)do_php_cli(args->argc, args->argv);
 #else
   return (void *)(intptr_t)emulate_script_cli(args);
