@@ -62,7 +62,7 @@ fi
 if [ -z "${PHP_VERSION}" ]; then
 	get_latest_php_version() {
 		input="$1"
-		json=$(curl -s "https://www.php.net/releases/index.php?json&version=$input")
+		json=$(curl -fsSL "https://www.php.net/releases/index.php?json&version=$input" 2>/dev/null || curl -fsSL "https://phpmirror.static-php.dev/releases/index.php?json&version=$input")
 		latest=$(echo "$json" | jq -r '.version')
 
 		if [[ "$latest" == "$input"* ]]; then
@@ -72,11 +72,11 @@ if [ -z "${PHP_VERSION}" ]; then
 		fi
 	}
 
-	PHP_VERSION="$(get_latest_php_version "8.4")"
+	PHP_VERSION="$(get_latest_php_version "8.5")"
 	export PHP_VERSION
 fi
 # default extension set
-defaultExtensions="amqp,apcu,ast,bcmath,brotli,bz2,calendar,ctype,curl,dba,dom,exif,fileinfo,filter,ftp,gd,gmp,gettext,iconv,igbinary,imagick,intl,ldap,lz4,mbregex,mbstring,memcache,memcached,mysqli,mysqlnd,opcache,openssl,password-argon2,parallel,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pdo_sqlsrv,pgsql,phar,posix,protobuf,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,ssh2,sysvmsg,sysvsem,sysvshm,tidy,tokenizer,xlswriter,xml,xmlreader,xmlwriter,xsl,xz,zip,zlib,yaml,zstd"
+defaultExtensions="amqp,apcu,ast,bcmath,brotli,bz2,calendar,ctype,curl,dba,dom,exif,fileinfo,filter,ftp,gd,gmp,gettext,iconv,igbinary,imagick,intl,ldap,lz4,mbregex,mbstring,memcached,mysqli,mysqlnd,opcache,openssl,password-argon2,parallel,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,protobuf,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,ssh2,sysvmsg,sysvsem,sysvshm,tidy,tokenizer,xlswriter,xml,xmlreader,xmlwriter,xsl,xz,zip,zlib,yaml,zstd"
 defaultExtensionLibs="libavif,nghttp2,nghttp3,ngtcp2,watcher"
 
 if [ -z "${FRANKENPHP_VERSION}" ]; then
@@ -147,6 +147,13 @@ else
 	spcCommand="./bin/spc"
 fi
 
+# turn potentially relative EMBED path into absolute path
+if [ -n "${EMBED}" ]; then
+	if [[ "${EMBED}" != /* ]]; then
+		EMBED="${CURRENT_DIR}/${EMBED}"
+	fi
+fi
+
 # Extensions to build
 if [ -z "${PHP_EXTENSIONS}" ]; then
 	# enable EMBED mode, first check if project has dumped extensions
@@ -178,9 +185,6 @@ fi
 
 # Embed PHP app, if any
 if [ -n "${EMBED}" ] && [ -d "${EMBED}" ]; then
-	if [[ "${EMBED}" != /* ]]; then
-		EMBED="${CURRENT_DIR}/${EMBED}"
-	fi
 	# shellcheck disable=SC2089
 	SPC_OPT_BUILD_ARGS="${SPC_OPT_BUILD_ARGS} --with-frankenphp-app='${EMBED}'"
 fi

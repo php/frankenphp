@@ -7,7 +7,7 @@ USE_LATEST_PHP="${USE_LATEST_PHP:-0}"
 
 if [[ -z "${GO_VERSION}" ]]; then
 	GO_VERSION="$(awk -F'"' '/variable "GO_VERSION"/ {f=1} f && /default/ {print $2; exit}' docker-bake.hcl)"
-	GO_VERSION="${GO_VERSION:-1.25}"
+	GO_VERSION="${GO_VERSION:-1.26}"
 fi
 
 if [[ -z "${PHP_VERSION}" ]]; then

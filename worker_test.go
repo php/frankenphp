@@ -1,18 +1,16 @@
 package frankenphp_test
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"testing"
-
-	"github.com/stretchr/testify/require"
 
 	"github.com/dunglas/frankenphp"
 	"github.com/stretchr/testify/assert"
@@ -138,8 +136,6 @@ func ExampleServeHTTP_workers() {
 }
 
 func TestWorkerHasOSEnvironmentVariableInSERVER(t *testing.T) {
-	require.NoError(t, os.Setenv("CUSTOM_OS_ENV_VARIABLE", "custom_env_variable_value"))
-
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
 		req := httptest.NewRequest("GET", "http://example.com/worker.php", nil)
 		w := httptest.NewRecorder()
@@ -151,4 +147,20 @@ func TestWorkerHasOSEnvironmentVariableInSERVER(t *testing.T) {
 		assert.Contains(t, string(body), "CUSTOM_OS_ENV_VARIABLE")
 		assert.Contains(t, string(body), "custom_env_variable_value")
 	}, &testOptions{workerScript: "worker.php", nbWorkers: 1, nbParallelRequests: 1})
+}
+
+func TestKeepRunningOnConnectionAbort(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		req := httptest.NewRequest("GET", "http://example.com/worker-with-counter.php", nil)
+
+		ctx, cancel := context.WithCancel(req.Context())
+		req = req.WithContext(ctx)
+		cancel()
+		body1, _ := testRequest(req, handler, t)
+
+		assert.Equal(t, "requests:1", body1, "should have handled exactly one request")
+		body2, _ := testGet("http://example.com/worker-with-counter.php", handler, t)
+
+		assert.Equal(t, "requests:2", body2, "should not have stopped execution after the first request was aborted")
+	}, &testOptions{workerScript: "worker-with-counter.php", nbWorkers: 1, nbParallelRequests: 1})
 }

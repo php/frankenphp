@@ -11,7 +11,7 @@ import (
 const (
 	StopReasonCrash = iota
 	StopReasonRestart
-	//StopReasonShutdown
+	StopReasonBootFailure // worker crashed before reaching frankenphp_handle_request
 )
 
 type StopReason int
@@ -125,10 +125,14 @@ func (m *PrometheusMetrics) StopWorker(name string, reason StopReason) {
 	}
 
 	m.totalWorkers.WithLabelValues(name).Dec()
-	m.readyWorkers.WithLabelValues(name).Dec()
+
+	// only decrement readyWorkers if the worker actually reached frankenphp_handle_request
+	if reason != StopReasonBootFailure {
+		m.readyWorkers.WithLabelValues(name).Dec()
+	}
 
 	switch reason {
-	case StopReasonCrash:
+	case StopReasonCrash, StopReasonBootFailure:
 		m.workerCrashes.WithLabelValues(name).Inc()
 	case StopReasonRestart:
 		m.workerRestarts.WithLabelValues(name).Inc()

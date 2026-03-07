@@ -28,14 +28,17 @@ type frankenPHPContext struct {
 	pathInfo       string
 	scriptName     string
 	scriptFilename string
+	requestURI     string
 	ctx            context.Context
+	
 
 	// Whether the request is already closed by us
 	isDone bool
 
-	responseWriter    http.ResponseWriter
-	handlerParameters any
-	handlerReturn     any
+	responseWriter     http.ResponseWriter
+	responseController *http.ResponseController
+	handlerParameters  any
+	handlerReturn      any
 
 	done      chan any
 	startedAt time.Time
@@ -81,6 +84,8 @@ func newFrankenPHPContext(responseWriter http.ResponseWriter, r *http.Request, o
 		// This needs to already happen here in case a worker script still matches the path.
 		splitCgiPath(fc)
 	}
+
+	fc.requestURI = r.URL.RequestURI()
 
 	return fc, nil
 }

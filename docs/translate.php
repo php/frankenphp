@@ -99,6 +99,7 @@ function sanitizeMarkdown(string $markdown): string
 
 $fileToTranslate = $argv;
 array_shift($fileToTranslate);
+$fileToTranslate = array_map(fn($filename) => trim($filename), $fileToTranslate);
 $apiKey = $_SERVER['GEMINI_API_KEY'] ?? $_ENV['GEMINI_API_KEY'] ?? '';
 if (!$apiKey) {
     echo 'Enter gemini api key ($GEMINI_API_KEY): ';

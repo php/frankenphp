@@ -13,7 +13,6 @@ func main() {
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-
 	if err := frankenphp.Init(frankenphp.WithContext(ctx), frankenphp.WithLogger(logger)); err != nil {
 		panic(err)
 	}

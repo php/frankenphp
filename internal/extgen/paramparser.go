@@ -92,7 +92,7 @@ func (pp *ParameterParser) generateParamParsing(params []phpParameter, requiredC
 	}
 
 	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf("    ZEND_PARSE_PARAMETERS_START(%d, %d)", requiredCount, len(params)))
+	_, _ = fmt.Fprintf(&builder, "    ZEND_PARSE_PARAMETERS_START(%d, %d)", requiredCount, len(params))
 
 	optionalStarted := false
 	for _, param := range params {

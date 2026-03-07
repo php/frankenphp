@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddytest"
@@ -19,12 +20,62 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// initServer initializes a Caddy test server and waits for it to be ready.
+// After InitServer, it polls the server to handle a race condition on macOS where
+// SO_REUSEPORT can briefly route connections to the old listener being shut down,
+// resulting in "connection reset by peer".
+func initServer(t *testing.T, tester *caddytest.Tester, config string, format string) {
+	t.Helper()
+	tester.InitServer(config, format)
+
+	client := &http.Client{Timeout: 1 * time.Second}
+	require.Eventually(t, func() bool {
+		resp, err := client.Get("http://localhost:" + testPort)
+		if err != nil {
+			return false
+		}
+
+		require.NoError(t, resp.Body.Close())
+
+		return true
+	}, 5*time.Second, 100*time.Millisecond, "server failed to become ready")
+}
+
 var testPort = "9080"
+
+// skipIfSymlinkNotValid skips the test if the given path is not a valid symlink
+func skipIfSymlinkNotValid(t *testing.T, path string) {
+	t.Helper()
+
+	info, err := os.Lstat(path)
+	if err != nil {
+		t.Skipf("symlink test skipped: cannot stat %s: %v", path, err)
+	}
+
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Skipf("symlink test skipped: %s is not a symlink (git may not support symlinks on this platform)", path)
+	}
+}
+
+// escapeMetricLabel escapes backslashes in label values for Prometheus text format
+func escapeMetricLabel(s string) string {
+	return strings.ReplaceAll(s, "\\", "\\\\")
+}
+
+func TestMain(m *testing.M) {
+	// setup custom environment vars for TestOsEnv
+	if os.Setenv("ENV1", "value1") != nil || os.Setenv("ENV2", "value2") != nil {
+		fmt.Println("Failed to set environment variables for tests")
+		os.Exit(1)
+	}
+
+	os.Exit(m.Run())
+}
 
 func TestPHP(t *testing.T) {
 	var wg sync.WaitGroup
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -54,7 +105,7 @@ func TestPHP(t *testing.T) {
 
 func TestLargeRequest(t *testing.T) {
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -83,7 +134,7 @@ func TestLargeRequest(t *testing.T) {
 func TestWorker(t *testing.T) {
 	var wg sync.WaitGroup
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -120,7 +171,7 @@ func TestGlobalAndModuleWorker(t *testing.T) {
 	testPortNum, _ := strconv.Atoi(testPort)
 	testPortTwo := strconv.Itoa(testPortNum + 1)
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -170,7 +221,7 @@ func TestGlobalAndModuleWorker(t *testing.T) {
 
 func TestModuleWorkerInheritsEnv(t *testing.T) {
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -195,7 +246,7 @@ func TestNamedModuleWorkers(t *testing.T) {
 	testPortNum, _ := strconv.Atoi(testPort)
 	testPortTwo := strconv.Itoa(testPortNum + 1)
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -244,7 +295,7 @@ func TestNamedModuleWorkers(t *testing.T) {
 
 func TestEnv(t *testing.T) {
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -275,7 +326,7 @@ func TestEnv(t *testing.T) {
 
 func TestJsonEnv(t *testing.T) {
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initServer(t, tester, `
 		{
 		"admin": {
 			"listen": "localhost:2999"
@@ -358,7 +409,7 @@ func TestJsonEnv(t *testing.T) {
 
 func TestCustomCaddyVariablesInEnv(t *testing.T) {
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -392,7 +443,7 @@ func TestCustomCaddyVariablesInEnv(t *testing.T) {
 
 func TestPHPServerDirective(t *testing.T) {
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -413,7 +464,7 @@ func TestPHPServerDirective(t *testing.T) {
 
 func TestPHPServerDirectiveDisableFileServer(t *testing.T) {
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -438,7 +489,7 @@ func TestPHPServerDirectiveDisableFileServer(t *testing.T) {
 func TestMetrics(t *testing.T) {
 	var wg sync.WaitGroup
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initServer(t, tester, `
 	{
 		skip_install_trust
 		admin localhost:2999
@@ -489,7 +540,9 @@ func TestMetrics(t *testing.T) {
 	// Fetch metrics
 	resp, err := http.Get("http://localhost:2999/metrics")
 	require.NoError(t, err, "failed to fetch metrics")
-	defer resp.Body.Close()
+	t.Cleanup(func() {
+		require.NoError(t, resp.Body.Close())
+	})
 
 	// Read and parse metrics
 	metrics := new(bytes.Buffer)
@@ -517,7 +570,7 @@ func TestMetrics(t *testing.T) {
 func TestWorkerMetrics(t *testing.T) {
 	var wg sync.WaitGroup
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initServer(t, tester, `
 	{
 		skip_install_trust
 		admin localhost:2999
@@ -548,6 +601,7 @@ func TestWorkerMetrics(t *testing.T) {
 	`, "caddyfile")
 
 	workerName, _ := fastabs.FastAbs("../testdata/index.php")
+	workerName = escapeMetricLabel(workerName)
 
 	// Make some requests
 	for i := range 10 {
@@ -562,7 +616,9 @@ func TestWorkerMetrics(t *testing.T) {
 	// Fetch metrics
 	resp, err := http.Get("http://localhost:2999/metrics")
 	require.NoError(t, err, "failed to fetch metrics")
-	defer resp.Body.Close()
+	t.Cleanup(func() {
+		require.NoError(t, resp.Body.Close())
+	})
 
 	// Read and parse metrics
 	metrics := new(bytes.Buffer)
@@ -615,7 +671,7 @@ func TestWorkerMetrics(t *testing.T) {
 func TestNamedWorkerMetrics(t *testing.T) {
 	var wg sync.WaitGroup
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initServer(t, tester, `
 	{
 		skip_install_trust
 		admin localhost:2999
@@ -654,7 +710,9 @@ func TestNamedWorkerMetrics(t *testing.T) {
 	// Fetch metrics
 	resp, err := http.Get("http://localhost:2999/metrics")
 	require.NoError(t, err, "failed to fetch metrics")
-	defer resp.Body.Close()
+	t.Cleanup(func() {
+		require.NoError(t, resp.Body.Close())
+	})
 
 	// Read and parse metrics
 	metrics := new(bytes.Buffer)
@@ -708,7 +766,7 @@ func TestNamedWorkerMetrics(t *testing.T) {
 func TestAutoWorkerConfig(t *testing.T) {
 	var wg sync.WaitGroup
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initServer(t, tester, `
 	{
 		skip_install_trust
 		admin localhost:2999
@@ -731,6 +789,7 @@ func TestAutoWorkerConfig(t *testing.T) {
 	`, "caddyfile")
 
 	workerName, _ := fastabs.FastAbs("../testdata/index.php")
+	workerName = escapeMetricLabel(workerName)
 
 	// Make some requests
 	for i := range 10 {
@@ -745,7 +804,9 @@ func TestAutoWorkerConfig(t *testing.T) {
 	// Fetch metrics
 	resp, err := http.Get("http://localhost:2999/metrics")
 	require.NoError(t, err, "failed to fetch metrics")
-	defer resp.Body.Close()
+	t.Cleanup(func() {
+		require.NoError(t, resp.Body.Close())
+	})
 
 	// Read and parse metrics
 	metrics := new(bytes.Buffer)
@@ -804,8 +865,9 @@ func TestAllDefinedServerVars(t *testing.T) {
 	expectedBody = strings.ReplaceAll(expectedBody, "{documentRoot}", documentRoot)
 	expectedBody = strings.ReplaceAll(expectedBody, "\r\n", "\n")
 	expectedBody = strings.ReplaceAll(expectedBody, "{testPort}", testPort)
+	expectedBody = strings.ReplaceAll(expectedBody, documentRoot+"/", documentRoot+string(filepath.Separator))
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -837,7 +899,7 @@ func TestAllDefinedServerVars(t *testing.T) {
 
 func TestPHPIniConfiguration(t *testing.T) {
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -865,7 +927,7 @@ func TestPHPIniConfiguration(t *testing.T) {
 
 func TestPHPIniBlockConfiguration(t *testing.T) {
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -904,10 +966,8 @@ func testSingleIniConfiguration(tester *caddytest.Tester, key string, value stri
 }
 
 func TestOsEnv(t *testing.T) {
-	os.Setenv("ENV1", "value1")
-	os.Setenv("ENV2", "value2")
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -937,7 +997,7 @@ func TestOsEnv(t *testing.T) {
 
 func TestMaxWaitTime(t *testing.T) {
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -978,7 +1038,7 @@ func TestMaxWaitTime(t *testing.T) {
 
 func TestMaxWaitTimeWorker(t *testing.T) {
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -1050,16 +1110,18 @@ func TestMaxWaitTimeWorker(t *testing.T) {
 func getStatusCode(url string, t *testing.T) int {
 	req, err := http.NewRequest("GET", url, nil)
 	require.NoError(t, err)
+
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	require.NoError(t, resp.Body.Close())
+
 	return resp.StatusCode
 }
 
 func TestMultiWorkersMetrics(t *testing.T) {
 	var wg sync.WaitGroup
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initServer(t, tester, `
 	{
 		skip_install_trust
 		admin localhost:2999
@@ -1111,7 +1173,9 @@ func TestMultiWorkersMetrics(t *testing.T) {
 	// Fetch metrics
 	resp, err := http.Get("http://localhost:2999/metrics")
 	require.NoError(t, err, "failed to fetch metrics")
-	defer resp.Body.Close()
+	t.Cleanup(func() {
+		require.NoError(t, resp.Body.Close())
+	})
 
 	// Read and parse metrics
 	metrics := new(bytes.Buffer)
@@ -1166,7 +1230,7 @@ func TestMultiWorkersMetrics(t *testing.T) {
 func TestDisabledMetrics(t *testing.T) {
 	var wg sync.WaitGroup
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initServer(t, tester, `
 	{
 		skip_install_trust
 		admin localhost:2999
@@ -1217,7 +1281,9 @@ func TestDisabledMetrics(t *testing.T) {
 	// Fetch metrics
 	resp, err := http.Get("http://localhost:2999/metrics")
 	require.NoError(t, err, "failed to fetch metrics")
-	defer resp.Body.Close()
+	t.Cleanup(func() {
+		require.NoError(t, resp.Body.Close())
+	})
 
 	// Read and parse metrics
 	metrics := new(bytes.Buffer)
@@ -1244,7 +1310,7 @@ func TestDisabledMetrics(t *testing.T) {
 func TestWorkerRestart(t *testing.T) {
 	var wg sync.WaitGroup
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initServer(t, tester, `
 	{
 		skip_install_trust
 		admin localhost:2999
@@ -1276,7 +1342,9 @@ func TestWorkerRestart(t *testing.T) {
 
 	resp, err := http.Get("http://localhost:2999/metrics")
 	require.NoError(t, err, "failed to fetch metrics")
-	defer resp.Body.Close()
+	t.Cleanup(func() {
+		require.NoError(t, resp.Body.Close())
+	})
 
 	// Read and parse metrics
 	metrics := new(bytes.Buffer)
@@ -1344,7 +1412,7 @@ func TestWorkerRestart(t *testing.T) {
 
 func TestWorkerMatchDirective(t *testing.T) {
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -1377,7 +1445,7 @@ func TestWorkerMatchDirective(t *testing.T) {
 
 func TestWorkerMatchDirectiveWithMultipleWorkers(t *testing.T) {
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -1418,7 +1486,7 @@ func TestWorkerMatchDirectiveWithMultipleWorkers(t *testing.T) {
 
 func TestWorkerMatchDirectiveWithoutFileServer(t *testing.T) {
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -1451,7 +1519,7 @@ func TestWorkerMatchDirectiveWithoutFileServer(t *testing.T) {
 
 func TestDd(t *testing.T) {
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -1475,7 +1543,7 @@ func TestDd(t *testing.T) {
 
 func TestLog(t *testing.T) {
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -1505,6 +1573,7 @@ func TestLog(t *testing.T) {
 func TestSymlinkWorkerPaths(t *testing.T) {
 	cwd, _ := os.Getwd()
 	publicDir := filepath.Join(cwd, "..", "testdata", "symlinks", "public")
+	skipIfSymlinkNotValid(t, publicDir)
 
 	t.Run("NeighboringWorkerScript", func(t *testing.T) {
 		// Scenario: neighboring worker script
@@ -1512,7 +1581,7 @@ func TestSymlinkWorkerPaths(t *testing.T) {
 		// When I execute `frankenphp php-server --listen localhost:8080 -w index.php` from `public`
 		// Then I expect to see the worker script executed successfully
 		tester := caddytest.NewTester(t)
-		tester.InitServer(`
+		initServer(t, tester, `
 			{
 				skip_install_trust
 				admin localhost:2999
@@ -1542,7 +1611,7 @@ func TestSymlinkWorkerPaths(t *testing.T) {
 		// When I execute `frankenphp --listen localhost:8080 -w nested/index.php` from `public`
 		// Then I expect to see the worker script executed successfully
 		tester := caddytest.NewTester(t)
-		tester.InitServer(`
+		initServer(t, tester, `
 			{
 				skip_install_trust
 				admin localhost:2999
@@ -1572,7 +1641,7 @@ func TestSymlinkWorkerPaths(t *testing.T) {
 		// When I execute `frankenphp --listen localhost:8080 -w public/index.php` from the root folder
 		// Then I expect to see the worker script executed successfully
 		tester := caddytest.NewTester(t)
-		tester.InitServer(`
+		initServer(t, tester, `
 			{
 				skip_install_trust
 				admin localhost:2999
@@ -1606,7 +1675,7 @@ func TestSymlinkWorkerPaths(t *testing.T) {
 		// When I execute `frankenphp --listen localhost:8080 -w public/index.php -r public` from the root folder
 		// Then I expect to see the worker script executed successfully
 		tester := caddytest.NewTester(t)
-		tester.InitServer(`
+		initServer(t, tester, `
 			{
 				skip_install_trust
 				admin localhost:2999
@@ -1640,11 +1709,12 @@ func TestSymlinkResolveRoot(t *testing.T) {
 	cwd, _ := os.Getwd()
 	testDir := filepath.Join(cwd, "..", "testdata", "symlinks", "test")
 	publicDir := filepath.Join(cwd, "..", "testdata", "symlinks", "public")
+	skipIfSymlinkNotValid(t, publicDir)
 
 	t.Run("ResolveRootSymlink", func(t *testing.T) {
 		// Tests that resolve_root_symlink directive works correctly
 		tester := caddytest.NewTester(t)
-		tester.InitServer(`
+		initServer(t, tester, `
 			{
 				skip_install_trust
 				admin localhost:2999
@@ -1672,7 +1742,7 @@ func TestSymlinkResolveRoot(t *testing.T) {
 	t.Run("NoResolveRootSymlink", func(t *testing.T) {
 		// Tests that symlinks are preserved when resolve_root_symlink is false (non-worker mode)
 		tester := caddytest.NewTester(t)
-		tester.InitServer(`
+		initServer(t, tester, `
 			{
 				skip_install_trust
 				admin localhost:2999
@@ -1698,11 +1768,12 @@ func TestSymlinkResolveRoot(t *testing.T) {
 func TestSymlinkWorkerBehavior(t *testing.T) {
 	cwd, _ := os.Getwd()
 	publicDir := filepath.Join(cwd, "..", "testdata", "symlinks", "public")
+	skipIfSymlinkNotValid(t, publicDir)
 
 	t.Run("WorkerScriptFailsWithoutWorkerMode", func(t *testing.T) {
 		// Tests that accessing a worker-only script without configuring it as a worker actually results in an error
 		tester := caddytest.NewTester(t)
-		tester.InitServer(`
+		initServer(t, tester, `
 			{
 				skip_install_trust
 				admin localhost:2999
@@ -1726,7 +1797,7 @@ func TestSymlinkWorkerBehavior(t *testing.T) {
 	t.Run("MultipleRequests", func(t *testing.T) {
 		// Tests that symlinked workers handle multiple requests correctly
 		tester := caddytest.NewTester(t)
-		tester.InitServer(`
+		initServer(t, tester, `
 			{
 				skip_install_trust
 				admin localhost:2999

@@ -55,6 +55,8 @@ type FrankenPHPApp struct {
 	PhpIni map[string]string `json:"php_ini,omitempty"`
 	// The maximum amount of time a request may be stalled waiting for a thread
 	MaxWaitTime time.Duration `json:"max_wait_time,omitempty"`
+	// The maximum amount of time an autoscaled thread may be idle before being deactivated
+	MaxIdleTime time.Duration `json:"max_idle_time,omitempty"`
 
 	opts    []frankenphp.Option
 	metrics frankenphp.Metrics
@@ -150,6 +152,7 @@ func (f *FrankenPHPApp) Start() error {
 		frankenphp.WithMetrics(f.metrics),
 		frankenphp.WithPhpIni(f.PhpIni),
 		frankenphp.WithMaxWaitTime(f.MaxWaitTime),
+		frankenphp.WithMaxIdleTime(f.MaxIdleTime),
 	)
 
 	for _, w := range f.Workers {
@@ -190,6 +193,7 @@ func (f *FrankenPHPApp) Stop() error {
 	f.Workers = nil
 	f.NumThreads = 0
 	f.MaxWaitTime = 0
+	f.MaxIdleTime = 0
 
 	optionsMU.Lock()
 	options = nil
@@ -242,6 +246,17 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				}
 
 				f.MaxWaitTime = v
+			case "max_idle_time":
+				if !d.NextArg() {
+					return d.ArgErr()
+				}
+
+				v, err := time.ParseDuration(d.Val())
+				if err != nil {
+					return d.Err("max_idle_time must be a valid duration (example: 30s)")
+				}
+
+				f.MaxIdleTime = v
 			case "php_ini":
 				parseIniLine := func(d *caddyfile.Dispenser) error {
 					key := d.Val()
@@ -298,7 +313,7 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 
 				f.Workers = append(f.Workers, wc)
 			default:
-				return wrongSubDirectiveError("frankenphp", "num_threads, max_threads, php_ini, worker, max_wait_time", d.Val())
+				return wrongSubDirectiveError("frankenphp", "num_threads, max_threads, php_ini, worker, max_wait_time, max_idle_time", d.Val())
 			}
 		}
 	}
