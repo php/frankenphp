@@ -160,6 +160,19 @@ func testHelloWorld(t *testing.T, opts *testOptions) {
 	}, opts)
 }
 
+func TestEnvVarsInPhpIni(t *testing.T) {
+	t.Setenv("OPCACHE_ENABLE", "0")
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/ini.php?key=opcache.enable", handler, t)
+		assert.Equal(t, "opcache.enable:0", body)
+	}, &testOptions{
+		phpIni: map[string]string{
+			"opcache.enable": "${OPCACHE_ENABLE}",
+		},
+	})
+}
+
 func TestFinishRequest_module(t *testing.T) { testFinishRequest(t, nil) }
 func TestFinishRequest_worker(t *testing.T) {
 	testFinishRequest(t, &testOptions{workerScript: "finish-request.php"})
