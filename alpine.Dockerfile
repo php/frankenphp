@@ -138,8 +138,10 @@ ENV GODEBUG=cgocheck=0
 
 # copy watcher shared library (libgcc and libstdc++ are needed for the watcher)
 COPY --from=builder /usr/local/lib/libwatcher* /usr/local/lib/
-RUN apk add --no-cache libstdc++ && \
+RUN apk add --no-cache libstdc++ mimalloc2 && \
 	ldconfig /usr/local/lib
+
+ENV LD_PRELOAD=/usr/lib/libmimalloc.so.2
 
 COPY --from=builder /usr/local/bin/frankenphp /usr/local/bin/frankenphp
 RUN setcap cap_net_bind_service=+ep /usr/local/bin/frankenphp && \
