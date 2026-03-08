@@ -974,6 +974,11 @@ static void frankenphp_log_message(const char *message, int syslog_type_int) {
 static char *frankenphp_getenv(const char *name, size_t name_len) {
   HashTable *ht = sandboxed_env ? sandboxed_env : main_thread_env;
 
+  /* main_thread_env is not yet available during PHP startup, but .ini parsing may call sapi_getenv */
+  if (ht == NULL) {
+    return getenv(name);
+  }
+
   zval *env_val = zend_hash_str_find(ht, name, name_len);
   if (env_val && Z_TYPE_P(env_val) == IS_STRING) {
     zend_string *str = Z_STR_P(env_val);
