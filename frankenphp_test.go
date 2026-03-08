@@ -167,7 +167,6 @@ func TestEnvVarsInPhpIni(t *testing.T) {
 		body, _ := testGet("http://example.com/ini.php?key=opcache.enable", handler, t)
 		assert.Equal(t, "opcache.enable:0", body)
 	}, &testOptions{
-		nbParallelRequests: 1,
 		phpIni: map[string]string{
 			"opcache.enable": "${OPCACHE_ENABLE}",
 		},
