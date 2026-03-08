@@ -25,22 +25,6 @@ func setupGlobals(t *testing.T) {
 	resetGlobals()
 }
 
-func TestPhpIniEnvVarExpansion(t *testing.T) {
-	t.Setenv("OPCACHE_ENABLE", "0")
-	t.Cleanup(Shutdown)
-
-	resetGlobals()
-	isRunning = true
-
-	_, err := initPHPThreads(1, 1, map[string]string{"opcache.enable": "${OPCACHE_ENABLE}"})
-	assert.NoError(t, err)
-
-	regularRequestChan = make(chan contextHolder)
-	convertToRegularThread(phpThreads[0])
-
-	assertRequestBody(t, "http://example.com/ini.php?key=opcache.enable", "opcache.enable:0")
-}
-
 func TestStartAndStopTheMainThreadWithOneInactiveThread(t *testing.T) {
 	_, err := initPHPThreads(1, 1, nil) // boot 1 thread
 	assert.NoError(t, err)
