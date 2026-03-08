@@ -974,7 +974,8 @@ static void frankenphp_log_message(const char *message, int syslog_type_int) {
 static char *frankenphp_getenv(const char *name, size_t name_len) {
   HashTable *ht = sandboxed_env ? sandboxed_env : main_thread_env;
 
-  /* main_thread_env is not yet available during PHP startup, but .ini parsing may call sapi_getenv */
+  /* main_thread_env is not yet available during PHP startup,
+   * but .ini parsing may call sapi_getenv */
   if (ht == NULL) {
     return getenv(name);
   }

@@ -25,6 +25,22 @@ func setupGlobals(t *testing.T) {
 	resetGlobals()
 }
 
+func TestPhpIniEnvVarExpansion(t *testing.T) {
+	t.Setenv("OPCACHE_ENABLE", "0")
+	t.Cleanup(Shutdown)
+
+	resetGlobals()
+	isRunning = true
+
+	_, err := initPHPThreads(1, 1, map[string]string{"opcache.enable": "${OPCACHE_ENABLE}"})
+	assert.NoError(t, err)
+
+	regularRequestChan = make(chan contextHolder)
+	convertToRegularThread(phpThreads[0])
+
+	assertRequestBody(t, "http://example.com/ini.php?key=opcache.enable", "opcache.enable:0")
+}
+
 func TestStartAndStopTheMainThreadWithOneInactiveThread(t *testing.T) {
 	_, err := initPHPThreads(1, 1, nil) // boot 1 thread
 	assert.NoError(t, err)
@@ -188,12 +204,11 @@ func TestReturnAnErrorIf2WorkersHaveTheSameFileName(t *testing.T) {
 	workersByName = map[string]*worker{}
 	workersByPath = map[string]*worker{}
 	w, err1 := newWorker(workerOpt{fileName: testDataPath + "/index.php"})
+	assert.NoError(t, err1)
 	workers = append(workers, w)
 	workersByName[w.name] = w
 	workersByPath[w.fileName] = w
 	_, err2 := newWorker(workerOpt{fileName: testDataPath + "/index.php"})
-
-	assert.NoError(t, err1)
 	assert.Error(t, err2, "two workers cannot have the same filename")
 }
 
@@ -202,12 +217,11 @@ func TestReturnAnErrorIf2ModuleWorkersHaveTheSameName(t *testing.T) {
 	workersByName = map[string]*worker{}
 	workersByPath = map[string]*worker{}
 	w, err1 := newWorker(workerOpt{fileName: testDataPath + "/index.php", name: "workername"})
+	assert.NoError(t, err1)
 	workers = append(workers, w)
 	workersByName[w.name] = w
 	workersByPath[w.fileName] = w
 	_, err2 := newWorker(workerOpt{fileName: testDataPath + "/hello.php", name: "workername"})
-
-	assert.NoError(t, err1)
 	assert.Error(t, err2, "two workers cannot have the same name")
 }
 
