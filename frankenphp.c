@@ -974,12 +974,6 @@ static void frankenphp_log_message(const char *message, int syslog_type_int) {
 static char *frankenphp_getenv(const char *name, size_t name_len) {
   HashTable *ht = sandboxed_env ? sandboxed_env : main_thread_env;
 
-  /* main_thread_env is not yet available during PHP startup,
-   * but .ini parsing may call sapi_getenv */
-  if (ht == NULL) {
-    return getenv(name);
-  }
-
   zval *env_val = zend_hash_str_find(ht, name, name_len);
   if (env_val && Z_TYPE_P(env_val) == IS_STRING) {
     zend_string *str = Z_STR_P(env_val);
@@ -1141,6 +1135,13 @@ static void *php_main(void *arg) {
 
   frankenphp_init_interned_strings();
 
+  /* take a snapshot of the environment for sandboxing */
+  if (main_thread_env == NULL) {
+    main_thread_env = pemalloc(sizeof(HashTable), 1);
+    zend_hash_init(main_thread_env, 8, NULL, NULL, 1);
+    go_init_os_env(main_thread_env);
+  }
+
   frankenphp_sapi_module.startup(&frankenphp_sapi_module);
 
   /* check if a default filter is set in php.ini and only filter if
@@ -1149,13 +1150,6 @@ static void *php_main(void *arg) {
   cfg_get_string("filter.default", &default_filter);
   should_filter_var = default_filter != NULL;
   original_user_abort_setting = PG(ignore_user_abort);
-
-  /* take a snapshot of the environment for sandboxing */
-  if (main_thread_env == NULL) {
-    main_thread_env = pemalloc(sizeof(HashTable), 1);
-    zend_hash_init(main_thread_env, 8, NULL, NULL, 1);
-    go_init_os_env(main_thread_env);
-  }
 
   go_frankenphp_main_thread_is_ready();
 
