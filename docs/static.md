@@ -27,6 +27,12 @@ docker buildx bake --load static-builder-musl
 docker cp $(docker create --name static-builder-musl dunglas/frankenphp:static-builder-musl):/go/src/app/dist/frankenphp-linux-$(uname -m) frankenphp ; docker rm static-builder-musl
 ```
 
+The resulting binary will be using the [mimalloc](https://microsoft.github.io/mimalloc/) allocator for better performance. If you wish to use musl's built-in allocator, set `MIMALLOC=0`:
+
+```console
+docker buildx bake --load --set static-builder-musl.args.MIMALLOC=0 static-builder-musl
+```
+
 ### glibc-Based, Mostly Static Build (With Dynamic Extension Support)
 
 For a binary that supports loading PHP extensions dynamically while still having the selected extensions compiled statically:

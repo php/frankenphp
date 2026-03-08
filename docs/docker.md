@@ -277,6 +277,25 @@ WORKDIR /app
 ENTRYPOINT ["/usr/local/bin/frankenphp", "run", "-c", "/etc/caddy/Caddyfile"]
 ```
 
+## Mimalloc
+
+The Alpine Linux Docker images use [mimalloc](https://github.com/microsoft/mimalloc) as the default memory allocator.
+This improves performance compared to musl's default allocator in threaded environments.
+
+To disable mimalloc, unset the `LD_PRELOAD` environment variable:
+
+```dockerfile
+FROM dunglas/frankenphp:alpine
+
+ENV LD_PRELOAD=''
+```
+
+Or at runtime:
+
+```console
+docker run -e LD_PRELOAD= dunglas/frankenphp:alpine
+```
+
 ## Development Versions
 
 Development versions are available in the [`dunglas/frankenphp-dev`](https://hub.docker.com/repository/docker/dunglas/frankenphp-dev) Docker repository.

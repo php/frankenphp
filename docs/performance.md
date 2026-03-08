@@ -41,9 +41,11 @@ especially when compiled in ZTS mode (thread-safe), which is required for Franke
 
 Also, [some bugs only happen when using musl](https://github.com/php/php-src/issues?q=sort%3Aupdated-desc+is%3Aissue+is%3Aopen+label%3ABug+musl).
 
-In production environments, we recommend using FrankenPHP linked against glibc, compiled with an appropriate optimization level.
+To mitigate musl's performance issues in threaded environments, the Alpine Docker images and static binaries use [mimalloc](https://github.com/microsoft/mimalloc) as the default memory allocator.
 
-This can be achieved by using the Debian Docker images, using [our maintainers .deb, .rpm, or .apk packages](https://pkgs.henderkes.com), or by [compiling FrankenPHP from sources](compile.md).
+In production environments, we still recommend using FrankenPHP linked against glibc, compiled with an appropriate optimization level.
+
+This can be achieved by using the Debian Docker images, using [our maintainers .deb or .rpm packages](https://pkgs.henderkes.com), or by [compiling FrankenPHP from sources](compile.md).
 
 For leaner or more secure containers, you may want to consider [a hardened Debian image](docker.md#hardening-images) rather than Alpine.
 
