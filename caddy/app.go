@@ -184,7 +184,6 @@ func (f *FrankenPHPApp) Stop() error {
 	// note: Exiting() is currently marked as 'experimental'
 	// https://github.com/caddyserver/caddy/blob/e76405d55058b0a3e5ba222b44b5ef00516116aa/caddy.go#L810
 	if caddy.Exiting() {
-		frankenphp.DrainWorkers()
 		frankenphp.Shutdown()
 	}
 
