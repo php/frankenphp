@@ -234,15 +234,14 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 		}
 	}
 
-
 	err := frankenphp.ServeHTTP(
 		w,
 		r,
 		append(
-		opts,
-		frankenphp.WithOriginalRequest(new(ctx.Value(caddyhttp.OriginalRequestCtxKey).(http.Request))),
-		frankenphp.WithWorkerName(workerName),
-	)...,
+			opts,
+			frankenphp.WithOriginalRequest(new(ctx.Value(caddyhttp.OriginalRequestCtxKey).(http.Request))),
+			frankenphp.WithWorkerName(workerName),
+		)...,
 	)
 
 	if err != nil {

@@ -30,7 +30,6 @@ type frankenPHPContext struct {
 	scriptFilename string
 	requestURI     string
 	ctx            context.Context
-	
 
 	// Whether the request is already closed by us
 	isDone bool
