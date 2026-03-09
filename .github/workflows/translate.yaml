@@ -49,7 +49,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LINTER_RULES_PATH: /
           MARKDOWN_CONFIG_FILE: .markdown-lint.yaml
-          FIX_NATURAL_LANGUAGE: true
+          VALIDATE_NATURAL_LANGUAGE: false
           FIX_MARKDOWN: true
       - name: Create Pull Request
         if: steps.md_files.outputs.found == 'true'
