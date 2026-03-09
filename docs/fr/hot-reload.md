@@ -83,8 +83,8 @@ php_server {
 Le serveur détecte les modifications et publie les modifications automatiquement. Le navigateur doit s'abonner à ces événements pour mettre à jour la page.
 FrankenPHP expose l'URL du Hub Mercure à utiliser pour s'abonner aux modifications de fichiers via la variable d'environnement `$_SERVER['FRANKENPHP_HOT_RELOAD']`.
 
-Une bibliothèque JavaScript pratique, [frankenphp-hot-reload](https://www.npmjs.com/package/frankenphp-hot-reload), est également disponible pour gérer la logique côté client.
-Pour l'utiliser, ajoutez ce qui suit à votre gabarit (*layout*) principal :
+La bibliothèque JavaScript [frankenphp-hot-reload](https://www.npmjs.com/package/frankenphp-hot-reload) gére la logique côté client.
+Pour l'utiliser, ajoutez le code suivant à votre gabarit (*layout*) principal :
 
 ```php
 <!DOCTYPE html>
@@ -116,7 +116,7 @@ Pour ce faire, ajoutez l'attribut `data-frankenphp-hot-reload-preserve` à l'él
 Si vous exécutez votre application en [mode Worker](worker.md), le script de votre application reste en mémoire.
 Cela signifie que les modifications de votre code PHP ne seront pas reflétées immédiatement, même si le navigateur recharge la page.
 
-Pour une meilleure expérience de développement, vous devriez combiner `hot_reload` avec [la sous-directive `watch` dans la directive `worker`](config.md#surveillance-des-modifications-de-fichier).
+Pour une meilleure expérience de développement, combinez `hot_reload` avec [la sous-directive `watch` dans la directive `worker`](config.md#surveillance-des-modifications-de-fichier).
 
 - `hot_reload` : rafraîchit le **navigateur** lorsque les fichiers changent
 - `worker.watch` : redémarre le worker lorsque les fichiers changent
