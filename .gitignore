@@ -12,3 +12,4 @@ frankenphp.test
 caddy/frankenphp/Build
 package/etc/php.ini
 *.log
+/vcpkg_installed/
