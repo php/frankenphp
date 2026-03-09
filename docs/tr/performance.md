@@ -146,7 +146,7 @@ Diğer durumlarda kazanç ihmal edilebilir olacaktır.
 
 ## Günlükler
 
-Günlük kaydı açıkça çok faydalıdır, ancak tanım gereği,
+Günlük kaydı açıkça çOK faydalıdır, ancak tanım gereği,
 giriş/çıkış işlemleri ve bellek ayırmaları gerektirir, bu da performansı önemli ölçüde azaltır.
 [Günlük seviyesini](https://caddyserver.com/docs/caddyfile/options#log) doğru bir şekilde ayarladığınızdan emin olun,
 ve yalnızca gerekli olanı günlüğe kaydedin.
@@ -192,4 +192,4 @@ example.com {
 }
 ```
 
-Genel olarak, çok yavaş uç noktaları, mesaj kuyrukları gibi ilgili mekanizmalar kullanarak eşzamansız olarak ele almak da tavsiye edilir.
+Genel olarak, çOK yavaş uç noktaları, mesaj kuyrukları gibi ilgili mekanizmalar kullanarak eşzamansız olarak ele almak da tavsiye edilir.
