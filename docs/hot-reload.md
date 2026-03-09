@@ -138,7 +138,7 @@ php_server {
 }
 ```
 
-## How it works
+## How It Works
 
 1. **Watch**: FrankenPHP monitors the filesystem for modifications using [the `e-dant/watcher` library](https://github.com/e-dant/watcher) under the hood (we contributed the Go binding).
 2. **Restart (Worker Mode)**: if `watch` is enabled in the worker config, the PHP worker is restarted to load the new code.
