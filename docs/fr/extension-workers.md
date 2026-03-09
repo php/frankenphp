@@ -1,6 +1,6 @@
 # Workers d'extension
 
-Les Workers d'extension permettent à votre [extension FrankenPHP](https://frankenphp.dev/docs/extensions/) de gérer un pool dédié de threads PHP pour exécuter des tâches en arrière-plan, gérer des événements asynchrones ou implémenter des protocoles personnalisés. Utile pour les systèmes de files d'attente, les écouteurs d'événements, les planificateurs, etc.
+Les Workers d'extension permettent à votre [extension FrankenPHP](https://frankenphp.dev/docs/extensions/) de gérer un pool dédié de threads PHP pour exécuter des tâches en arrière-plan, gérer des événements asynchrones ou implémenter des protocoles personnalisés. Cela se révèle utile pour les systèmes de files d'attente, les event listeners, les planificateurs, etc.
 
 ## Enregistrement du Worker
 
