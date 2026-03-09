@@ -2,11 +2,11 @@
 
 FrankenPHP includes a built-in **hot reload** feature designed to vastly improve the developer experience.
 
-![Mercure](hot-reload.png)
+![Hot Reload](hot-reload.png)
 
-This feature provides a workflow similar to **Hot Module Replacement (HMR)** found in modern JavaScript tooling (like Vite or webpack).
-Instead of manually refreshing the browser after every file change (PHP code, templates, JavaScript and CSS files...),
-FrankenPHP updates the content in real-time.
+This feature provides a workflow similar to **Hot Module Replacement (HMR)** in modern JavaScript tooling such as Vite or webpack.
+Instead of manually refreshing the browser after every file change (PHP code, templates, JavaScript, and CSS files...),
+FrankenPHP updates the page content in real-time.
 
 Hot Reload natively works with WordPress, Laravel, Symfony, and any other PHP application or framework.
 
@@ -23,9 +23,10 @@ Depending on your setup, the browser will either:
 To enable hot reloading, enable Mercure, then add the `hot_reload` sub-directive to the `php_server` directive in your `Caddyfile`.
 
 > [!WARNING]
+>
 > This feature is intended for **development environments only**.
-> Do not enable `hot_reload` in production, as watching the filesystem incurs performance overhead and exposes internal endpoints.
-
+> Do not enable `hot_reload` in production, as this feature is not secure (exposes sensitive internal details) and slows down the application.
+> 
 ```caddyfile
 localhost
 
@@ -41,7 +42,7 @@ php_server {
 
 By default, FrankenPHP will watch all files in the current working directory matching this glob pattern: `./**/*.{css,env,gif,htm,html,jpg,jpeg,js,mjs,php,png,svg,twig,webp,xml,yaml,yml}`
 
-It's possible to explicitly set the files to watch using the glob syntax:
+It's possible to set the files to watch using the glob syntax explicitly:
 
 ```caddyfile
 localhost
@@ -56,7 +57,7 @@ php_server {
 }
 ```
 
-Use the long form to specify the Mercure topic to use as well as which directories or files to watch by providing paths to the `hot_reload` option:
+Use the long form of `hot_reload` to specify the Mercure topic to use, as well as which directories or files to watch:
 
 ```caddyfile
 localhost
@@ -95,12 +96,22 @@ To use it, add the following to your main layout:
 <?php endif ?>
 ```
 
-The library will automatically subscribe to the Mercure hub, fetch the current URL in the background when a file change is detected and morph the DOM.
-It is available as a [npm](https://www.npmjs.com/package/frankenphp-hot-reload) package and on [GitHub](https://github.com/dunglas/frankenphp-hot-reload).
+The library will automatically subscribe to the Mercure hub, fetch the current URL in the background when a file change is detected, and morph the DOM.
+It is available as an [npm](https://www.npmjs.com/package/frankenphp-hot-reload) package and on [GitHub](https://github.com/dunglas/frankenphp-hot-reload).
 
 Alternatively, you can implement your own client-side logic by subscribing directly to the Mercure hub using the `EventSource` native JavaScript class.
 
-### Worker Mode
+### Preserving Existing DOM Nodes
+
+In rare cases, such as when using development tools [like the Symfony web debug toolbar](https://github.com/symfony/symfony/pull/62970),
+you may want to preserve specific DOM nodes.
+To do so, add the `data-frankenphp-hot-reload-preserve` attribute to the relevant HTML element:
+
+```html
+<div data-frankenphp-hot-reload-preserve><!-- My debug bar --></div>
+```
+
+## Worker Mode
 
 If you are running your application in [Worker Mode](https://frankenphp.dev/docs/worker/), your application script remains in memory.
 This means changes to your PHP code will not be reflected immediately, even if the browser reloads.
@@ -127,7 +138,7 @@ php_server {
 }
 ```
 
-### How it works
+## How it works
 
 1. **Watch**: FrankenPHP monitors the filesystem for modifications using [the `e-dant/watcher` library](https://github.com/e-dant/watcher) under the hood (we contributed the Go binding).
 2. **Restart (Worker Mode)**: if `watch` is enabled in the worker config, the PHP worker is restarted to load the new code.
