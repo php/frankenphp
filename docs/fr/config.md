@@ -1,8 +1,8 @@
 # Configuration
 
-FrankenPHP, Caddy ainsi que les modules [Mercure](mercure.md) et [Vulcain](https://vulcain.rocks) peuvent être configurés en utilisant [les formats pris en charge par Caddy](https://caddyserver.com/docs/getting-started#your-first-config).
+FrankenPHP, Caddy ainsi que les modules [Mercure](mercure.md) et [Vulcain](https://vulcain.rocks) peuvent être configurés à l'aide [des formats pris en charge par Caddy](https://caddyserver.com/docs/getting-started#your-first-config).
 
-Le format le plus courant est le `Caddyfile`, qui est un format texte simple et lisible par l'homme.
+Le format le plus courant est le `Caddyfile`, un format texte simple et facilement lisible par les humains.
 Par défaut, FrankenPHP recherchera un `Caddyfile` dans le répertoire courant.
 Vous pouvez spécifier un chemin personnalisé avec l'option `-c` ou `--config`.
 
@@ -12,7 +12,7 @@ Un `Caddyfile` minimal pour servir une application PHP est présenté ci-dessous
 # Le nom d'hôte auquel répondre
 localhost
 
-# Optionnellement, le répertoire à partir duquel servir les fichiers, sinon il utilise le répertoire courant par défaut
+# Optionnellement, le répertoire à partir duquel servir les fichiers, sinon le répertoire courant sera utilisé par défaut
 #root public/
 php_server
 ```
@@ -33,7 +33,7 @@ FrankenPHP :
 PHP :
 
 - `php.ini` : `/usr/local/etc/php/php.ini` (aucun `php.ini` n'est fourni par défaut)
-- fichiers de configuration supplémentaires : `/usr/local/etc/php/conf.d/*.ini`
+- Fichiers de configuration supplémentaires : `/usr/local/etc/php/conf.d/*.ini`
 - Extensions PHP : `/usr/local/lib/php/extensions/no-debug-zts-<YYYYMMDD>/`
 - Vous devriez copier un modèle officiel fourni par le projet PHP :
 
@@ -146,9 +146,9 @@ other.example.com {
 ```
 
 L'utilisation de la directive `php_server` est généralement ce dont vous avez besoin,
-mais si vous avez besoin d'un contrôle total, vous pouvez utiliser la directive de niveau inférieur `php`.
+mais si vous avez besoin d'un contrôle total, vous pouvez utiliser la sous-directive `php`.
 La directive `php` transmet toutes les entrées à PHP, au lieu de vérifier d'abord si
-c'est un fichier PHP ou pas. En savoir plus à ce sujet dans la [page performances](performance.md#try_files).
+c'est un fichier PHP ou pas. En savoir plus à ce sujet dans la [documentation liée aux performances](performance.md#try_files).
 
 Utiliser la directive `php_server` est équivalent à cette configuration :
 
@@ -184,7 +184,7 @@ php_server [<matcher>] {
 	file_server off # Désactive la directive file_server intégrée.
 	worker { # Crée un worker spécifique à ce serveur. Peut être spécifié plusieurs fois pour plusieurs workers.
 		file <path> # Définit le chemin vers le script worker, peut être relatif à la racine du php_server
-		num <num> # Définit le nombre de threads PHP à démarrer, par défaut 2x le nombre de CPUs disponibles
+		num <num> # Définit le nombre de threads PHP à démarrer, par défaut 2x le nombre de CPU disponibles
 		name <name> # Définit le nom du worker, utilisé dans les journaux et les métriques. Par défaut : chemin absolu du fichier du worker. Commence toujours par m# lorsqu'il est défini dans un bloc php_server.
 		watch <path> # Définit le chemin d'accès à surveiller pour les modifications de fichiers. Peut être spécifié plusieurs fois pour plusieurs chemins.
 		env <key> <value> # Définit une variable d'environnement supplémentaire avec la valeur donnée. Peut être spécifié plusieurs fois pour plusieurs variables d'environnement. Les variables d'environnement pour ce worker sont également héritées du parent php_server, mais peuvent être écrasées ici.
@@ -239,7 +239,7 @@ où le processus FrankenPHP a été lancé. Vous pouvez également spécifier un
 - Si vous avez défini plusieurs workers, ils seront tous redémarrés lorsqu'un fichier est modifié.
 - Méfiez-vous des fichiers créés au moment de l'exécution (comme les logs) car ils peuvent provoquer des redémarrages intempestifs du worker.
 
-Le file watcher est basé sur [e-dant/watcher](https://github.com/e-dant/watcher).
+La surveillance des fichiers est basée sur [e-dant/watcher](https://github.com/e-dant/watcher).
 
 ## Faire correspondre le Worker à un chemin
 
@@ -269,7 +269,7 @@ Les variables d'environnement suivantes peuvent être utilisées pour insérer d
 - `CADDY_GLOBAL_OPTIONS` : injecte [des options globales](https://caddyserver.com/docs/caddyfile/options)
 - `FRANKENPHP_CONFIG` : insère la configuration sous la directive `frankenphp`
 
-Comme pour les SAPI `FPM` et `CLI`, les variables d'environnement sont exposées dans la superglobale `$_SERVER` par défaut.
+Comme pour les SAPI FPM et CLI, les variables d'environnement sont exposées par défaut dans la superglobale `$_SERVER`.
 
 La valeur `S` de [la directive `variables_order` de PHP](https://www.php.net/manual/fr/ini.core.php#ini.variables-order) est toujours équivalente à `ES`, que `E` soit défini ailleurs dans cette directive ou non.
 
