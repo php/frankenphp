@@ -1,7 +1,8 @@
 <?php
 
-function preloaded_function(): string {
-    $_SERVER['TEST'] = '123';
-    putenv('TEST=123');
+// verify ENV can be accessed during preload
+$_ENV['TEST'] = '123';
+function preloaded_function(): string
+{
     return 'I am preloaded';
 }
