@@ -14,6 +14,21 @@ const LANGUAGES = [
     'ru' => 'Russian',
     'tr' => 'Turkish',
 ];
+const SYSTEM_PROMPT = <<<PROMPT
+    You are translating the docs of the FrankenPHP server from english to other languages.
+    You will receive the english version (authoritative) and a translation (possibly incomplete or incorrect).
+    Your task is to produce a corrected and complete translation in the target language.
+    You must strictly follow these rules:
+    - You must not change the structure of the document (headings, code blocks, etc.).
+    - You must not translate code, only comments inside the code.
+    - You must not translate link urls, only links texts.
+    - You may translate anchors to translation pages (config.md#translated-anchor), keep existing anchors as they are.
+    - You must not add or remove any content, only translate what is present.
+    - You must ensure that the translation is accurate and faithful to the original meaning.
+    - You must write in a natural and fluent style, appropriate for technical documentation.
+    - You must use the correct terminology for technical terms in the target language, don't translate technical terms if unsure.
+    - You must not include any explanations or notes, only the translated document.
+    PROMPT;
 
 function makeGeminiRequest(string $systemPrompt, string $userPrompt, string $model, string $apiKey, int $reties = 2): string
 {
@@ -51,21 +66,6 @@ function makeGeminiRequest(string $systemPrompt, string $userPrompt, string $mod
 
 function createPrompt(string $language, string $englishFile, string $currentTranslation): array
 {
-    $systemPrompt = <<<PROMPT
-        You are translating the docs of the FrankenPHP server from english to other languages.
-        You will receive the english version (authoritative) and a translation (possibly incomplete or incorrect).
-        Your task is to produce a corrected and complete translation in the target language.
-        You must strictly follow these rules:
-        - You must not change the structure of the document (headings, code blocks, etc.)
-        - You must not translate code, only comments and strings inside the code.
-        - You must not translate links to other documentation pages, only the link text.
-        - You must not add or remove any content, only translate what is present.
-        - You must ensure that the translation is accurate and faithful to the original meaning.
-        - You must write in a natural and fluent style, appropriate for technical documentation.
-        - You must use the correct terminology for technical terms in the target language, don't translate if unsure.
-        - You must not include any explanations or notes, only the translated document.
-        PROMPT;
-
     $languageName = LANGUAGES[$language];
     $userPrompt = <<<PROMPT
         Here is the english version of the document:
@@ -85,7 +85,7 @@ function createPrompt(string $language, string $englishFile, string $currentTran
         ```markdown
         PROMPT;
 
-    return [$systemPrompt, $userPrompt];
+    return [SYSTEM_PROMPT, $userPrompt];
 }
 
 function sanitizeMarkdown(string $markdown): string
