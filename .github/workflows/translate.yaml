@@ -20,6 +20,9 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          # zizmor: ignore[artipacked]
+          # persist-credentials is intentionally left enabled (unlike other workflows)
+          # because this workflow needs to push a branch via git push
       - id: md_files
         run: |
           FILES=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" -- 'docs/*.md')
@@ -52,17 +55,21 @@ jobs:
         if: steps.md_files.outputs.found == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+          ACTOR_ID: ${{ github.actor_id }}
+          RUN_ID: ${{ github.run_id }}
+          MD_FILES_LIST: ${{ steps.md_files.outputs.files }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          BRANCH="translations/${{ github.run_id }}"
+          BRANCH="translations/$RUN_ID"
           git checkout -b "$BRANCH"
           git add docs/
           git diff --cached --quiet && exit 0
-          git commit -m "docs: update translations" --author="${{ github.actor }} <${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com>"
+          git commit -m "docs: update translations" --author="$ACTOR <$ACTOR_ID+$ACTOR@users.noreply.github.com>"
           git push origin "$BRANCH"
           gh pr create \
             --title "docs: update translations" \
-            --body "Translation updates for: ${{ steps.md_files.outputs.files }}." \
+            --body "Translation updates for: $MD_FILES_LIST." \
             --label "translations" \
             --label "bot"
