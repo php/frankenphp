@@ -22,6 +22,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -1288,4 +1289,42 @@ func TestSessionNoLeakAfterExit_worker(t *testing.T) {
 		nbParallelRequests: 1,
 		realServer:         true,
 	})
+}
+
+func TestOpcachePreload_module(t *testing.T) {
+	testOpcachePreload(t, nil)
+}
+
+func TestOpcachePreload_worker(t *testing.T) {
+	testOpcachePreload(t, &testOptions{workerScript: "preload-check.php", nbWorkers: 1, nbParallelRequests: 1})
+}
+
+func testOpcachePreload(t *testing.T, opts *testOptions) {
+	cwd, _ := os.Getwd()
+	preloadScript := cwd + "/testdata/preload.php"
+
+	u, err := user.Current()
+	require.NoError(t, err)
+
+	phpIni := map[string]string{
+		"opcache.enable":       "1",
+		"opcache.preload":      preloadScript,
+		"opcache.preload_user": u.Username,
+	}
+
+	if opts == nil {
+		opts = &testOptions{}
+	}
+	if opts.phpIni == nil {
+		opts.phpIni = phpIni
+	} else {
+		for k, v := range phpIni {
+			opts.phpIni[k] = v
+		}
+	}
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		body, _ := testGet("http://example.com/preload-check.php", handler, t)
+		assert.Equal(t, "I am preloaded", body)
+	}, opts)
 }
