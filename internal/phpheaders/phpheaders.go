@@ -118,18 +118,16 @@ var CommonRequestHeaders = map[string]string{
 
 // Cache up to 256 uncommon headers
 // This is ~2.5x faster than converting the header each time
-var headerKeyCache = otter.Must[string, string](&otter.Options[string, string]{MaximumSize: 256})
-
-var headerNameReplacer = strings.NewReplacer(" ", "_", "-", "_")
+var (
+	headerKeyCache     = otter.Must[string, string](&otter.Options[string, string]{MaximumSize: 256})
+	headerNameReplacer = strings.NewReplacer(" ", "_", "-", "_")
+	loader             = otter.LoaderFunc[string, string](func(_ context.Context, key string) (string, error) {
+		return "HTTP_" + headerNameReplacer.Replace(strings.ToUpper(key)) + "\x00", nil
+	})
+)
 
 func GetUnCommonHeader(ctx context.Context, key string) string {
-	phpHeaderKey, err := headerKeyCache.Get(
-		ctx,
-		key,
-		otter.LoaderFunc[string, string](func(_ context.Context, key string) (string, error) {
-			return "HTTP_" + headerNameReplacer.Replace(strings.ToUpper(key)) + "\x00", nil
-		}),
-	)
+	phpHeaderKey, err := headerKeyCache.Get(ctx, key, loader)
 	if err != nil {
 		panic(err)
 	}
