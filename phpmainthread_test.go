@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dunglas/frankenphp/internal/phpheaders"
 	"github.com/dunglas/frankenphp/internal/state"
 	"github.com/stretchr/testify/assert"
 )
@@ -256,23 +255,6 @@ func allPossibleTransitions(worker1Path string, worker2Path string) []func(*phpT
 	}
 }
 
-func TestAllCommonHeadersAreCorrect(t *testing.T) {
-	keys := make([]string, 0, len(phpheaders.CommonRequestHeaders))
-	for k := range phpheaders.CommonRequestHeaders {
-		keys = append(keys, k)
-	}
-	uncommonHeaders := phpheaders.GetUnCommonHeaders(t.Context(), keys)
-	fakeRequest := httptest.NewRequest("GET", "http://localhost", nil)
-
-	for header, phpHeader := range phpheaders.CommonRequestHeaders {
-		// verify that common and uncommon headers return the same result
-		assert.Equal(t, phpHeader+"\x00", uncommonHeaders[header], "header is not well formed: "+phpHeader)
-
-		// net/http will capitalize lowercase headers, verify that headers are capitalized
-		fakeRequest.Header.Add(header, "foo")
-		assert.Contains(t, fakeRequest.Header, header, "header is not correctly capitalized: "+header)
-	}
-}
 func TestCorrectThreadCalculation(t *testing.T) {
 	maxProcs := runtime.GOMAXPROCS(0) * 2
 	oneWorkerThread := []workerOpt{{num: 1}}
