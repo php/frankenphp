@@ -1,0 +1,42 @@
+name: Wrap Issue Content
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  wrap_content:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.issue.body;
+
+            const wrapSection = (inputBody, marker, summary) => {
+              const regex = new RegExp(`(${marker})\\s*([\\s\\S]*?)(?=\\n### |$)`);
+
+              return inputBody.replace(regex, (match, header, content) => {
+                const trimmed = content.trim();
+                if (!trimmed || trimmed.includes("<details>")) return match;
+
+                return `${header}\n\n<details>\n<summary>${summary}</summary>\n\n${trimmed}\n\n</details>\n`;
+              });
+            };
+
+            let newBody = body;
+            newBody = wrapSection(newBody, "### PHP configuration", "phpinfo() output");
+            newBody = wrapSection(newBody, "### Relevant log output", "Relevant log output");
+
+            if (newBody !== body) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: newBody
+              });
+            }

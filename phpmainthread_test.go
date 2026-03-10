@@ -101,9 +101,9 @@ func TestTransitionThreadsWhileDoingRequests(t *testing.T) {
 
 	numThreads := 10
 	numRequestsPerThread := 100
-	worker1Path := testDataPath + "/transition-worker-1.php"
+	worker1Path := filepath.Join(testDataPath, "transition-worker-1.php")
 	worker1Name := "worker-1"
-	worker2Path := testDataPath + "/transition-worker-2.php"
+	worker2Path := filepath.Join(testDataPath, "transition-worker-2.php")
 	worker2Name := "worker-2"
 
 	assert.NoError(t, Init(
@@ -188,12 +188,11 @@ func TestReturnAnErrorIf2WorkersHaveTheSameFileName(t *testing.T) {
 	workersByName = map[string]*worker{}
 	workersByPath = map[string]*worker{}
 	w, err1 := newWorker(workerOpt{fileName: testDataPath + "/index.php"})
+	assert.NoError(t, err1)
 	workers = append(workers, w)
 	workersByName[w.name] = w
 	workersByPath[w.fileName] = w
 	_, err2 := newWorker(workerOpt{fileName: testDataPath + "/index.php"})
-
-	assert.NoError(t, err1)
 	assert.Error(t, err2, "two workers cannot have the same filename")
 }
 
@@ -202,12 +201,11 @@ func TestReturnAnErrorIf2ModuleWorkersHaveTheSameName(t *testing.T) {
 	workersByName = map[string]*worker{}
 	workersByPath = map[string]*worker{}
 	w, err1 := newWorker(workerOpt{fileName: testDataPath + "/index.php", name: "workername"})
+	assert.NoError(t, err1)
 	workers = append(workers, w)
 	workersByName[w.name] = w
 	workersByPath[w.fileName] = w
 	_, err2 := newWorker(workerOpt{fileName: testDataPath + "/hello.php", name: "workername"})
-
-	assert.NoError(t, err1)
 	assert.Error(t, err2, "two workers cannot have the same name")
 }
 

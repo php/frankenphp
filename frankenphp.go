@@ -14,10 +14,10 @@ package frankenphp
 
 // #include <stdlib.h>
 // #include <stdint.h>
+// #include "frankenphp.h"
 // #include <php_variables.h>
 // #include <zend_llist.h>
 // #include <SAPI.h>
-// #include "frankenphp.h"
 import "C"
 import (
 	"bytes"
@@ -211,7 +211,7 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 		return numWorkers, nil
 	}
 
-	if !maxThreadsIsSet && !numThreadsIsSet {
+	if !numThreadsIsSet {
 		if numWorkers >= maxProcs {
 			// Start at least as many threads as workers, and keep a free thread to handle requests in non-worker mode
 			opt.numThreads = numWorkers + 1
@@ -275,6 +275,10 @@ func Init(options ...Option) error {
 	}
 
 	maxWaitTime = opt.maxWaitTime
+
+	if opt.maxIdleTime > 0 {
+		maxIdleTime = opt.maxIdleTime
+	}
 
 	workerThreadCount, err := calculateMaxThreads(opt)
 	if err != nil {
@@ -418,7 +422,7 @@ func ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) error 
 }
 
 //export go_ub_write
-func go_ub_write(threadIndex C.uintptr_t, cBuf *C.char, length C.int) (C.size_t, C.bool) {
+func go_ub_write(threadIndex C.uintptr_t, cBuf *C.char, length C.size_t) (C.size_t, C.bool) {
 	thread := phpThreads[threadIndex]
 	fc := thread.frankenPHPContext()
 
@@ -500,11 +504,11 @@ func go_apache_request_headers(threadIndex C.uintptr_t) (*C.go_string, C.size_t)
 	return sd, C.size_t(len(fc.request.Header))
 }
 
-func addHeader(ctx context.Context, fc *frankenPHPContext, cString *C.char, length C.int) {
-	key, val := splitRawHeader(cString, int(length))
+func addHeader(ctx context.Context, fc *frankenPHPContext, h *C.sapi_header_struct) {
+	key, val := splitRawHeader(h.header, int(h.header_len))
 	if key == "" {
 		if fc.logger.Enabled(ctx, slog.LevelDebug) {
-			fc.logger.LogAttrs(ctx, slog.LevelDebug, "invalid header", slog.String("header", C.GoStringN(cString, length)))
+			fc.logger.LogAttrs(ctx, slog.LevelDebug, "invalid header", slog.String("header", C.GoStringN(h.header, C.int(h.header_len))))
 		}
 
 		return
@@ -564,7 +568,7 @@ func go_write_headers(threadIndex C.uintptr_t, status C.int, headers *C.zend_lli
 	for current != nil {
 		h := (*C.sapi_header_struct)(unsafe.Pointer(&(current.data)))
 
-		addHeader(thread.context(), fc, h.header, C.int(h.header_len))
+		addHeader(thread.context(), fc, h)
 		current = current.next
 	}
 
@@ -750,30 +754,6 @@ func go_is_context_done(threadIndex C.uintptr_t) C.bool {
 	return C.bool(phpThreads[threadIndex].frankenPHPContext().isDone)
 }
 
-// ExecuteScriptCLI executes the PHP script passed as parameter.
-// It returns the exit status code of the script.
-func ExecuteScriptCLI(script string, args []string) int {
-	// Ensure extensions are registered before CLI execution
-	registerExtensions()
-
-	cScript := C.CString(script)
-	defer C.free(unsafe.Pointer(cScript))
-
-	argc, argv := convertArgs(args)
-	defer freeArgs(argv)
-
-	return int(C.frankenphp_execute_script_cli(cScript, argc, (**C.char)(unsafe.Pointer(&argv[0])), false))
-}
-
-func ExecutePHPCode(phpCode string) int {
-	// Ensure extensions are registered before CLI execution
-	registerExtensions()
-
-	cCode := C.CString(phpCode)
-	defer C.free(unsafe.Pointer(cCode))
-	return int(C.frankenphp_execute_script_cli(cCode, 0, nil, true))
-}
-
 func convertArgs(args []string) (C.int, []*C.char) {
 	argc := C.int(len(args))
 	argv := make([]*C.char, argc)
@@ -805,5 +785,6 @@ func resetGlobals() {
 	workersByName = nil
 	workersByPath = nil
 	watcherIsEnabled = false
+	maxIdleTime = defaultMaxIdleTime
 	globalMu.Unlock()
 }

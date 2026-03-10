@@ -1,18 +1,17 @@
-# Usando workers do FrankenPHP
+# Usando Workers do FrankenPHP
 
 Inicialize sua aplicação uma vez e mantenha-a na memória.
 O FrankenPHP processará as requisições recebidas em poucos milissegundos.
 
-## Iniciando worker scripts
+## Iniciando Worker Scripts
 
 ### Docker
 
-Defina o valor da variável de ambiente `FRANKENPHP_CONFIG` como
-`worker /caminho/para/seu/worker/script.php`:
+Defina o valor da variável de ambiente `FRANKENPHP_CONFIG` como `worker /path/to/your/worker/script.php`:
 
 ```console
 docker run \
-    -e FRANKENPHP_CONFIG="worker /app/caminho/para/seu/worker/script.php" \
+    -e FRANKENPHP_CONFIG="worker /app/path/to/your/worker/script.php" \
     -v $PWD:/app \
     -p 80:80 -p 443:443 -p 443:443/udp \
     dunglas/frankenphp
@@ -20,41 +19,37 @@ docker run \
 
 ### Binário independente
 
-Use a opção `--worker` do comando `php-server` para servir o conteúdo do
-diretório atual usando um worker:
+Use a opção `--worker` do comando `php-server` para servir o conteúdo do diretório atual usando um worker:
 
 ```console
-frankenphp php-server --worker /caminho/para/seu/worker/script.php
+frankenphp php-server --worker /path/to/your/worker/script.php
 ```
 
-Se a sua aplicação PHP estiver [embutida no binário](embed.md), você pode
-adicionar um `Caddyfile` personalizado no diretório raiz da aplicação.
+Se a sua aplicação PHP estiver [embutida no binário](embed.md), você pode adicionar um `Caddyfile` personalizado no diretório raiz da aplicação.
 Ele será usado automaticamente.
 
-Também é possível
-[reiniciar o worker em caso de alterações em arquivos](config.md#monitorando-alteracoes-em-arquivos)
-com a opção `--watch`.
-O comando a seguir acionará uma reinicialização se qualquer arquivo terminado em
-`.php` no diretório `/caminho/para/sua/aplicacao/` ou subdiretórios for
-modificado:
+Também é possível [reiniciar o worker em caso de alterações em arquivos](config.md#watching-for-file-changes) com a opção `--watch`.
+O comando a seguir acionará uma reinicialização se qualquer arquivo terminado em `.php` no diretório `/path/to/your/app/` ou subdiretórios for modificado:
 
 ```console
-frankenphp php-server --worker /caminho/para/seu/worker/script.php --watch="/caminho/para/sua/aplicacao/**/*.php"
+frankenphp php-server --worker /path/to/your/worker/script.php --watch="/path/to/your/app/**/*.php"
 ```
+
+Este recurso é frequentemente usado em combinação com [hot reloading](hot-reload.md).
 
 ## Symfony Runtime
 
-O modo worker do FrankenPHP é suportado pelo
-[Componente Symfony Runtime](https://symfony.com/doc/current/components/runtime.html).
-Para iniciar qualquer aplicação Symfony em um worker, instale o pacote
-FrankenPHP do [PHP Runtime](https://github.com/php-runtime/runtime):
+> [!TIP]
+> A seção a seguir é necessária apenas antes do Symfony 7.4, onde o suporte nativo para o modo worker do FrankenPHP foi introduzido.
+
+O modo worker do FrankenPHP é suportado pelo [Componente Symfony Runtime](https://symfony.com/doc/current/components/runtime.html).
+Para iniciar qualquer aplicação Symfony em um worker, instale o pacote FrankenPHP do [PHP Runtime](https://github.com/php-runtime/runtime):
 
 ```console
 composer require runtime/frankenphp-symfony
 ```
 
-Inicie seu servidor de aplicações definindo a variável de ambiente `APP_RUNTIME`
-para usar o Symfony Runtime do FrankenPHP:
+Inicie seu servidor de aplicações definindo a variável de ambiente `APP_RUNTIME` para usar o Symfony Runtime do FrankenPHP:
 
 ```console
 docker run \
@@ -71,16 +66,11 @@ Consulte [a documentação dedicada](laravel.md#laravel-octane).
 
 ## Aplicações personalizadas
 
-O exemplo a seguir mostra como criar seu próprio worker script sem depender de
-uma biblioteca de terceiros:
+O exemplo a seguir mostra como criar seu próprio worker script sem depender de uma biblioteca de terceiros:
 
 ```php
 <?php
 // public/index.php
-
-// Impede o encerramento do worker script quando uma conexão do cliente for
-// interrompida
-ignore_user_abort(true);
 
 // Inicializa a aplicação
 require __DIR__.'/vendor/autoload.php';
@@ -90,9 +80,15 @@ $myApp->boot();
 
 // Manipulador fora do loop para melhor desempenho (fazendo menos trabalho)
 $handler = static function () use ($myApp) {
-    // Chamado quando uma requisição é recebida,
-    // superglobals, php://input e similares são redefinidos
-    echo $myApp->handle($_GET, $_POST, $_COOKIE, $_FILES, $_SERVER);
+    try {
+        // Chamado quando uma requisição é recebida,
+        // superglobais, php://input e similares são redefinidos
+        echo $myApp->handle($_GET, $_POST, $_COOKIE, $_FILES, $_SERVER);
+    } catch (\Throwable $exception) {
+        // `set_exception_handler` é chamado apenas quando o worker script termina,
+        // o que pode não ser o que você espera, então capture e trate exceções aqui
+        (new \MyCustomExceptionHandler)->handleException($exception);
+    }
 };
 
 $maxRequests = (int)($_SERVER['MAX_REQUESTS'] ?? 0);
@@ -102,8 +98,7 @@ for ($nbRequests = 0; !$maxRequests || $nbRequests < $maxRequests; ++$nbRequests
     // Faz algo depois de enviar a resposta HTTP
     $myApp->terminate();
 
-    // Chama o coletor de lixo para reduzir as chances de ele ser acionado no
-    // meio da geração de uma página
+    // Chama o coletor de lixo para reduzir as chances de ele ser acionado no meio da geração de uma página
     gc_collect_cycles();
 
     if (!$keepRunning) break;
@@ -113,8 +108,7 @@ for ($nbRequests = 0; !$maxRequests || $nbRequests < $maxRequests; ++$nbRequests
 $myApp->shutdown();
 ```
 
-Em seguida, inicie sua aplicação e use a variável de ambiente
-`FRANKENPHP_CONFIG` para configurar seu worker:
+Em seguida, inicie sua aplicação e use a variável de ambiente `FRANKENPHP_CONFIG` para configurar seu worker:
 
 ```console
 docker run \
@@ -135,44 +129,28 @@ docker run \
     dunglas/frankenphp
 ```
 
-### Reiniciar o worker após um certo número de requisições
+### Reiniciar o Worker Após um Certo Número de Requisições
 
-Como o PHP não foi originalmente projetado para processos de longa duração,
-ainda existem muitas bibliotecas e códigos legados que vazam memória.
-Uma solução alternativa para usar esse tipo de código no modo worker é reiniciar
-o worker script após processar um certo número de requisições:
+Como o PHP não foi originalmente projetado para processos de longa duração, ainda existem muitas bibliotecas e códigos legados que vazam memória.
+Uma solução alternativa para usar esse tipo de código no modo worker é reiniciar o worker script após processar um certo número de requisições:
 
-O trecho de código de worker anterior permite configurar um número máximo de
-requisições a serem processadas, definindo uma variável de ambiente chamada
-`MAX_REQUESTS`.
+O trecho de código de worker anterior permite configurar um número máximo de requisições a serem processadas, definindo uma variável de ambiente chamada `MAX_REQUESTS`.
 
-### Reiniciar os workers manualmente
+### Reiniciar os Workers Manualmente
 
-Embora seja possível reiniciar os workers
-[em alterações de arquivo](config.md#monitorando-alteracoes-em-arquivos), também
-é possível reiniciar todos os workers graciosamente por meio da
-[API de administração do Caddy](https://caddyserver.com/docs/api).
-Se o administrador estiver habilitado no seu
-[Caddyfile](config.md#configuracao-do-caddyfile), você pode executar ping no
-endpoint de reinicialização com uma simples requisição POST como esta:
+Embora seja possível reiniciar os workers [em alterações de arquivo](config.md#watching-for-file-changes), também é possível reiniciar todos os workers graciosamente por meio da [API de administração do Caddy](https://caddyserver.com/docs/api). Se o administrador estiver habilitado no seu [Caddyfile](config.md#caddyfile-config), você pode acionar o endpoint de reinicialização com uma simples requisição POST como esta:
 
 ```console
 curl -X POST http://localhost:2019/frankenphp/workers/restart
 ```
 
-### Falhas de worker
+### Falhas de Worker
 
-Se um worker script travar com um código de saída diferente de zero, o
-FrankenPHP o reiniciará com uma estratégia de backoff exponencial.
-Se o worker script permanecer ativo por mais tempo do que o último backoff \* 2,
-ele não irá penalizar o worker script e reiniciá-lo novamente.
-No entanto, se o worker script continuar a falhar com um código de saída
-diferente de zero em um curto período de tempo (por exemplo, com um erro de
-digitação em um script), o FrankenPHP travará com o erro:
-`too many consecutive failures` (muitas falhas consecutivas).
+Se um worker script travar com um código de saída diferente de zero, o FrankenPHP o reiniciará com uma estratégia de backoff exponencial.
+Se o worker script permanecer ativo por mais tempo do que o último backoff \* 2, ele não irá penalizar o worker script e reiniciá-lo novamente.
+No entanto, se o worker script continuar a falhar com um código de saída diferente de zero em um curto período de tempo (por exemplo, com um erro de digitação em um script), o FrankenPHP travará com o erro: `too many consecutive failures`.
 
-O número de falhas consecutivas pode ser configurado no seu
-[Caddyfile](config.md#caddyfile-config) com a opção `max_consecutive_failures`:
+O número de falhas consecutivas pode ser configurado no seu [Caddyfile](config.md#caddyfile-config) com a opção `max_consecutive_failures`:
 
 ```caddyfile
 frankenphp {
@@ -183,21 +161,14 @@ frankenphp {
 }
 ```
 
-## Comportamento das superglobais
+## Comportamento das Superglobais
 
-As
-[superglobais do PHP](https://www.php.net/manual/pt_BR/language.variables.superglobals.php)
-(`$_SERVER`, `$_ENV`, `$_GET`...) se comportam da seguinte maneira:
+As [superglobais do PHP](https://www.php.net/manual/pt_BR/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...) se comportam da seguinte maneira:
 
-- antes da primeira chamada para `frankenphp_handle_request()`, as superglobais
-  contêm valores vinculados ao próprio worker script.
-- durante e após a chamada para `frankenphp_handle_request()`, as superglobais
-  contêm valores gerados a partir da requisição HTTP processada.
-  Cada chamada para `frankenphp_handle_request()` altera os valores das
-  superglobais.
+- antes da primeira chamada para `frankenphp_handle_request()`, as superglobais contêm valores vinculados ao próprio worker script.
+- durante e após a chamada para `frankenphp_handle_request()`, as superglobais contêm valores gerados a partir da requisição HTTP processada. Cada chamada para `frankenphp_handle_request()` altera os valores das superglobais.
 
-Para acessar as superglobais do worker script dentro do retorno de chamada, você
-deve copiá-las e importar a cópia para o escopo do retorno de chamada:
+Para acessar as superglobais do worker script dentro do retorno de chamada, você deve copiá-las e importar a cópia para o escopo do retorno de chamada:
 
 ```php
 <?php
@@ -211,4 +182,3 @@ $handler = static function () use ($workerServer) {
 };
 
 // ...
-```

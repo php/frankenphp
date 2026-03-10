@@ -116,7 +116,6 @@ func setupWorkerScript(handler *workerThread, worker *worker) {
 	handler.dummyFrankenPHPContext = fc
 	handler.dummyContext = ctx
 	handler.isBootingScript = true
-	clearSandboxedEnv(handler.thread)
 
 	if globalLogger.Enabled(ctx, slog.LevelDebug) {
 		globalLogger.LogAttrs(ctx, slog.LevelDebug, "starting", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex))

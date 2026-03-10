@@ -10,8 +10,6 @@ import (
 	"strings"
 	"time"
 
-	mercureModule "github.com/dunglas/mercure/caddy"
-
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig"
 	caddycmd "github.com/caddyserver/caddy/v2/cmd"
@@ -253,33 +251,9 @@ func cmdPHPServer(fs caddycmd.Flags) (int, error) {
 	}
 
 	if mercure {
-		mercurePublisherJwtKey := os.Getenv("MERCURE_PUBLISHER_JWT_KEY")
-		if mercurePublisherJwtKey == "" {
-			panic(`The "MERCURE_PUBLISHER_JWT_KEY" environment variable must be set to use the Mercure.rocks hub`)
-		}
-
-		mercureSubscriberJwtKey := os.Getenv("MERCURE_SUBSCRIBER_JWT_KEY")
-		if mercureSubscriberJwtKey == "" {
-			panic(`The "MERCURE_SUBSCRIBER_JWT_KEY" environment variable must be set to use the Mercure.rocks hub`)
-		}
-
-		mercureRoute := caddyhttp.Route{
-			HandlersRaw: []json.RawMessage{caddyconfig.JSONModuleObject(
-				mercureModule.Mercure{
-					PublisherJWT: mercureModule.JWTConfig{
-						Alg: os.Getenv("MERCURE_PUBLISHER_JWT_ALG"),
-						Key: mercurePublisherJwtKey,
-					},
-					SubscriberJWT: mercureModule.JWTConfig{
-						Alg: os.Getenv("MERCURE_SUBSCRIBER_JWT_ALG"),
-						Key: mercureSubscriberJwtKey,
-					},
-				},
-				"handler",
-				"mercure",
-				nil,
-			),
-			},
+		mercureRoute, err := createMercureRoute()
+		if err != nil {
+			return caddy.ExitCodeFailedStartup, err
 		}
 
 		subroute.Routes = append(caddyhttp.RouteList{mercureRoute}, subroute.Routes...)

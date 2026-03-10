@@ -14,13 +14,19 @@ Bucket *get_ht_bucket_data(HashTable *ht, uint32_t index) {
   return NULL;
 }
 
-void *__emalloc__(size_t size) { return emalloc(size); }
+void *__emalloc__(size_t size) { return malloc(size); }
 
-void __efree__(void *ptr) { efree(ptr); }
+void __efree__(void *ptr) { free(ptr); }
 
 void __zend_hash_init__(HashTable *ht, uint32_t nSize, dtor_func_t pDestructor,
                         bool persistent) {
   zend_hash_init(ht, nSize, NULL, pDestructor, persistent);
+}
+
+void __hash_update_string__(zend_array *ht, zend_string *k, zend_string *v) {
+  zval zv = {0};
+  ZVAL_STR(&zv, v);
+  zend_hash_update(ht, k, &zv);
 }
 
 void __zval_null__(zval *zv) { ZVAL_NULL(zv); }

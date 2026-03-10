@@ -22,6 +22,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -140,6 +141,12 @@ func TestMain(m *testing.M) {
 		slog.SetDefault(slog.New(slog.DiscardHandler))
 	}
 
+	// setup custom environment var for TestWorkerHasOSEnvironmentVariableInSERVER
+	if os.Setenv("CUSTOM_OS_ENV_VARIABLE", "custom_env_variable_value") != nil {
+		fmt.Println("Failed to set environment variable for tests")
+		os.Exit(1)
+	}
+
 	os.Exit(m.Run())
 }
 
@@ -152,6 +159,19 @@ func testHelloWorld(t *testing.T, opts *testOptions) {
 		body, _ := testGet(fmt.Sprintf("http://example.com/index.php?i=%d", i), handler, t)
 		assert.Equal(t, fmt.Sprintf("I am by birth a Genevese (%d)", i), body)
 	}, opts)
+}
+
+func TestEnvVarsInPhpIni(t *testing.T) {
+	t.Setenv("OPCACHE_ENABLE", "0")
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/ini.php?key=opcache.enable", handler, t)
+		assert.Equal(t, "opcache.enable:0", body)
+	}, &testOptions{
+		phpIni: map[string]string{
+			"opcache.enable": "${OPCACHE_ENABLE}",
+		},
+	})
 }
 
 func TestFinishRequest_module(t *testing.T) { testFinishRequest(t, nil) }
@@ -695,11 +715,11 @@ func TestFailingWorker(t *testing.T) {
 	assert.Error(t, err, "should return an immediate error if workers fail on startup")
 }
 
-func TestEnv(t *testing.T) {
-	testEnv(t, &testOptions{nbParallelRequests: 1})
+func TestEnv_module(t *testing.T) {
+	testEnv(t, &testOptions{nbParallelRequests: 1, phpIni: map[string]string{"variables_order": "EGPCS"}})
 }
-func TestEnvWorker(t *testing.T) {
-	testEnv(t, &testOptions{nbParallelRequests: 1, workerScript: "env/test-env.php"})
+func TestEnv_worker(t *testing.T) {
+	testEnv(t, &testOptions{nbParallelRequests: 1, workerScript: "env/test-env.php", phpIni: map[string]string{"variables_order": "EGPCS"}})
 }
 
 // testEnv cannot be run in parallel due to https://github.com/golang/go/issues/63567
@@ -714,7 +734,7 @@ func testEnv(t *testing.T, opts *testOptions) {
 		stdoutStderr, err := cmd.CombinedOutput()
 		if err != nil {
 			// php is not installed or other issue, use the hardcoded output below:
-			stdoutStderr = []byte("Set MY_VAR successfully.\nMY_VAR = HelloWorld\nUnset MY_VAR successfully.\nMY_VAR is unset.\nMY_VAR set to empty successfully.\nMY_VAR = \nUnset NON_EXISTING_VAR successfully.\n")
+			stdoutStderr = []byte("Set MY_VAR successfully.\nMY_VAR = HelloWorld\nMY_VAR not found in $_ENV.\nMY_VAR not found in $_SERVER.\nUnset MY_VAR successfully.\nMY_VAR is unset.\nMY_VAR set to empty successfully.\nMY_VAR = \nUnset NON_EXISTING_VAR successfully.\nInvalid value was not inserted.\n")
 		}
 
 		assert.Equal(t, string(stdoutStderr), body)
@@ -784,40 +804,6 @@ func testFileUpload(t *testing.T, opts *testOptions) {
 	}, opts)
 }
 
-func TestExecuteScriptCLI(t *testing.T) {
-	if _, err := os.Stat("internal/testcli/testcli"); err != nil {
-		t.Skip("internal/testcli/testcli has not been compiled, run `cd internal/testcli/ && go build`")
-	}
-
-	cmd := exec.Command("internal/testcli/testcli", "testdata/command.php", "foo", "bar")
-	stdoutStderr, err := cmd.CombinedOutput()
-	assert.Error(t, err)
-
-	var exitError *exec.ExitError
-	if errors.As(err, &exitError) {
-		assert.Equal(t, 3, exitError.ExitCode())
-	}
-
-	stdoutStderrStr := string(stdoutStderr)
-
-	assert.Contains(t, stdoutStderrStr, `"foo"`)
-	assert.Contains(t, stdoutStderrStr, `"bar"`)
-	assert.Contains(t, stdoutStderrStr, "From the CLI")
-}
-
-func TestExecuteCLICode(t *testing.T) {
-	if _, err := os.Stat("internal/testcli/testcli"); err != nil {
-		t.Skip("internal/testcli/testcli has not been compiled, run `cd internal/testcli/ && go build`")
-	}
-
-	cmd := exec.Command("internal/testcli/testcli", "-r", "echo 'Hello World';")
-	stdoutStderr, err := cmd.CombinedOutput()
-	assert.NoError(t, err)
-
-	stdoutStderrStr := string(stdoutStderr)
-	assert.Equal(t, stdoutStderrStr, `Hello World`)
-}
-
 func ExampleServeHTTP() {
 	if err := frankenphp.Init(); err != nil {
 		panic(err)
@@ -835,15 +821,6 @@ func ExampleServeHTTP() {
 		}
 	})
 	log.Fatal(http.ListenAndServe(":8080", nil))
-}
-
-func ExampleExecuteScriptCLI() {
-	if len(os.Args) <= 1 {
-		log.Println("Usage: my-program script.php")
-		os.Exit(1)
-	}
-
-	os.Exit(frankenphp.ExecuteScriptCLI(os.Args[1], os.Args))
 }
 
 func BenchmarkHelloWorld(b *testing.B) {
@@ -1143,8 +1120,8 @@ func TestSessionHandlerReset_worker(t *testing.T) {
 		assert.Contains(t, body1Str, "session.save_handler=user")
 
 		// Request 2: Start session without setting a custom handler
-		// After the fix: session.save_handler should be reset to "files"
-		// and session_start() should work normally
+		// The user handler from request 1 is preserved (mod_user_names persist),
+		// so session_start() should work without crashing.
 		resp2, err := http.Get(ts.URL + "/session-handler.php?action=start_without_handler")
 		assert.NoError(t, err)
 		body2, _ := io.ReadAll(resp2.Body)
@@ -1152,13 +1129,9 @@ func TestSessionHandlerReset_worker(t *testing.T) {
 
 		body2Str := string(body2)
 
-		// session.save_handler should be reset to "files" (default)
-		assert.Contains(t, body2Str, "save_handler_before=files",
-			"session.save_handler INI should be reset to 'files' between requests.\nResponse: %s", body2Str)
-
-		// session_start() should succeed
+		// session_start() should succeed (handlers are preserved)
 		assert.Contains(t, body2Str, "SESSION_START_RESULT=true",
-			"session_start() should succeed after INI reset.\nResponse: %s", body2Str)
+			"session_start() should succeed.\nResponse: %s", body2Str)
 
 		// No errors or exceptions should occur
 		assert.NotContains(t, body2Str, "ERROR:",
@@ -1168,39 +1141,6 @@ func TestSessionHandlerReset_worker(t *testing.T) {
 
 	}, &testOptions{
 		workerScript:       "session-handler.php",
-		nbWorkers:          1,
-		nbParallelRequests: 1,
-		realServer:         true,
-	})
-}
-
-func TestIniLeakBetweenRequests_worker(t *testing.T) {
-	runTest(t, func(_ func(http.ResponseWriter, *http.Request), ts *httptest.Server, i int) {
-		// Request 1: Change INI values
-		resp1, err := http.Get(ts.URL + "/ini-leak.php?action=change_ini")
-		assert.NoError(t, err)
-		body1, _ := io.ReadAll(resp1.Body)
-		_ = resp1.Body.Close()
-
-		assert.Contains(t, string(body1), "INI_CHANGED")
-
-		// Request 2: Check if INI values leaked from request 1
-		resp2, err := http.Get(ts.URL + "/ini-leak.php?action=check_ini")
-		assert.NoError(t, err)
-		body2, _ := io.ReadAll(resp2.Body)
-		_ = resp2.Body.Close()
-
-		body2Str := string(body2)
-		t.Logf("Response: %s", body2Str)
-
-		// If INI values leak, this test will fail
-		assert.Contains(t, body2Str, "NO_LEAKS",
-			"INI values should not leak between requests.\nResponse: %s", body2Str)
-		assert.NotContains(t, body2Str, "LEAKS_DETECTED",
-			"INI leaks detected.\nResponse: %s", body2Str)
-
-	}, &testOptions{
-		workerScript:       "ini-leak.php",
 		nbWorkers:          1,
 		nbParallelRequests: 1,
 		realServer:         true,
@@ -1250,58 +1190,6 @@ func TestSessionHandlerPreLoopPreserved_worker(t *testing.T) {
 
 	}, &testOptions{
 		workerScript:       "worker-with-session-handler.php",
-		nbWorkers:          1,
-		nbParallelRequests: 1,
-		realServer:         true,
-	})
-}
-
-func TestIniPreLoopPreserved_worker(t *testing.T) {
-	runTest(t, func(_ func(http.ResponseWriter, *http.Request), ts *httptest.Server, i int) {
-		// Request 1: Check that pre-loop INI values are present
-		resp1, err := http.Get(ts.URL + "/worker-with-ini.php?action=check")
-		assert.NoError(t, err)
-		body1, _ := io.ReadAll(resp1.Body)
-		_ = resp1.Body.Close()
-
-		body1Str := string(body1)
-		t.Logf("Request 1 response: %s", body1Str)
-		assert.Contains(t, body1Str, "precision=8",
-			"Pre-loop precision should be 8")
-		assert.Contains(t, body1Str, "display_errors=0",
-			"Pre-loop display_errors should be 0")
-		assert.Contains(t, body1Str, "PRELOOP_INI_PRESERVED",
-			"Pre-loop INI values should be preserved")
-
-		// Request 2: Change INI values during request
-		resp2, err := http.Get(ts.URL + "/worker-with-ini.php?action=change_ini")
-		assert.NoError(t, err)
-		body2, _ := io.ReadAll(resp2.Body)
-		_ = resp2.Body.Close()
-
-		body2Str := string(body2)
-		t.Logf("Request 2 response: %s", body2Str)
-		assert.Contains(t, body2Str, "INI_CHANGED")
-		assert.Contains(t, body2Str, "precision=5",
-			"INI should be changed during request")
-
-		// Request 3: Check that pre-loop INI values are restored
-		resp3, err := http.Get(ts.URL + "/worker-with-ini.php?action=check")
-		assert.NoError(t, err)
-		body3, _ := io.ReadAll(resp3.Body)
-		_ = resp3.Body.Close()
-
-		body3Str := string(body3)
-		t.Logf("Request 3 response: %s", body3Str)
-		assert.Contains(t, body3Str, "precision=8",
-			"Pre-loop precision should be restored to 8.\nResponse: %s", body3Str)
-		assert.Contains(t, body3Str, "display_errors=0",
-			"Pre-loop display_errors should be restored to 0.\nResponse: %s", body3Str)
-		assert.Contains(t, body3Str, "PRELOOP_INI_PRESERVED",
-			"Pre-loop INI values should be restored after request changes.\nResponse: %s", body3Str)
-
-	}, &testOptions{
-		workerScript:       "worker-with-ini.php",
 		nbWorkers:          1,
 		nbParallelRequests: 1,
 		realServer:         true,
@@ -1414,4 +1302,31 @@ func TestSessionNoLeakAfterExit_worker(t *testing.T) {
 		nbParallelRequests: 1,
 		realServer:         true,
 	})
+}
+
+func TestOpcachePreload_module(t *testing.T) {
+	testOpcachePreload(t, &testOptions{env: map[string]string{"TEST": "123"}})
+}
+
+func TestOpcachePreload_worker(t *testing.T) {
+	testOpcachePreload(t, &testOptions{workerScript: "preload-check.php", nbWorkers: 1, nbParallelRequests: 1, env: map[string]string{"TEST": "123"}})
+}
+
+func testOpcachePreload(t *testing.T, opts *testOptions) {
+	cwd, _ := os.Getwd()
+	preloadScript := cwd + "/testdata/preload.php"
+
+	u, err := user.Current()
+	require.NoError(t, err)
+
+	opts.phpIni = map[string]string{
+		"opcache.enable":       "1",
+		"opcache.preload":      preloadScript,
+		"opcache.preload_user": u.Username,
+	}
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		body, _ := testGet("http://example.com/preload-check.php", handler, t)
+		assert.Equal(t, "I am preloaded", body)
+	}, opts)
 }

@@ -62,7 +62,7 @@ fi
 if [ -z "${PHP_VERSION}" ]; then
 	get_latest_php_version() {
 		input="$1"
-		json=$(curl -s "https://www.php.net/releases/index.php?json&version=$input")
+		json=$(curl -fsSL "https://www.php.net/releases/index.php?json&version=$input" 2>/dev/null || curl -fsSL "https://phpmirror.static-php.dev/releases/index.php?json&version=$input")
 		latest=$(echo "$json" | jq -r '.version')
 
 		if [[ "$latest" == "$input"* ]]; then
