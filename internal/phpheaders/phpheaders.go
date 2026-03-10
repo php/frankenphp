@@ -122,24 +122,19 @@ var CommonRequestHeaders = map[string]string{
 var (
 	headerKeyCache     = otter.Must[string, string](&otter.Options[string, string]{MaximumSize: 256})
 	headerNameReplacer = strings.NewReplacer(" ", "_", "-", "_")
-	bulkLoader         = otter.BulkLoaderFunc[string, string](func(ctx context.Context, keys []string) (map[string]string, error) {
-		result := make(map[string]string, len(keys))
-		for _, k := range keys {
-			result[k] = "HTTP_" + headerNameReplacer.Replace(strings.ToUpper(k)) + "\x00"
-		}
-
-		return result, nil
+	loader             = otter.LoaderFunc[string, string](func(_ context.Context, key string) (string, error) {
+		return "HTTP_" + headerNameReplacer.Replace(strings.ToUpper(key)) + "\x00", nil
 	})
 )
 
 func GetUnCommonHeaders(ctx context.Context, keys []string) map[string]string {
-	phpHeaderKeys, err := headerKeyCache.BulkGet(
-		ctx,
-		keys,
-		bulkLoader,
-	)
-	if err != nil {
-		panic(err)
+	phpHeaderKeys := make(map[string]string, len(keys))
+	for _, key := range keys {
+		phpHeaderKey, err := headerKeyCache.Get(ctx, key, loader)
+		if err != nil {
+			panic(err)
+		}
+		phpHeaderKeys[key] = phpHeaderKey
 	}
 
 	return phpHeaderKeys
