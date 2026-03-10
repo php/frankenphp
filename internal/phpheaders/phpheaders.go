@@ -127,17 +127,11 @@ var (
 	})
 )
 
-// GetUnCommonHeaders returns PHP header keys aligned with the input keys slice.
-func GetUnCommonHeaders(ctx context.Context, keys []string) []string {
-	phpHeaderKeys := make([]string, len(keys))
-	for i, key := range keys {
-		phpHeaderKey, err := headerKeyCache.Get(ctx, key, loader)
-		if err != nil {
-			panic(err)
-		}
-
-		phpHeaderKeys[i] = phpHeaderKey
+func GetUnCommonHeader(ctx context.Context, key string) string {
+	phpHeaderKey, err := headerKeyCache.Get(ctx, key, loader)
+	if err != nil {
+		panic(err)
 	}
 
-	return phpHeaderKeys
+	return phpHeaderKey
 }
