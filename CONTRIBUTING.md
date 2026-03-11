@@ -358,6 +358,32 @@ Now you can place breakpoints in C, C++ and Go files.
 
 ---
 
+### GoLand Setup on Windows
+
+1. Follow the [Windows Development section](#windows-development)
+
+   - Download from [JetBrains](https://www.jetbrains.com/go/download/)
+   - Launch GoLand
+
+2. Open in GoLand
+
+   - Select **Open** → Choose the directory where you cloned `frankenphp`
+
+3. Configure Go Build
+
+   - Go to **Run** → **Edit Configurations**
+   - Click **+** and select **Go Build**
+   - Name: `frankenphp`
+   - Run kind: **Directory**
+   - Directory: `.\caddy\frankenphp`
+   - Output directory: `.\caddy\frankenphp`
+   - Working directory: `.\caddy\frankenphp`
+   - Go tool arguments: `-tags=nobadger,nomysql,nopgx`
+   - Environment variables: see the [Windows Development section](#windows-development)
+   - Program arguments: e.g. `php-server`
+
+---
+
 ### Debugging and Integration Notes
 
 - Use CLion for debugging PHP internals and `cgo` glue code
