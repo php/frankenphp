@@ -249,21 +249,7 @@ docker buildx bake -f docker-bake.hcl --pull --no-cache --push
 
 9. When the bug is fixed, revert all these changes
 
-## Development Environment Setup
-
----
-
-### For Windows: WSL2 Setup
-
-FrankenPHP cannot be compiled natively on Windows, so to build and debug code, you need to run your IDE in WSL.
-
-1. Install WSL2:
-
-   ```powershell
-   wsl --install
-   ```
-
----
+## Development Environment Setup (WSL/Unix)
 
 ### Initial setup
 
