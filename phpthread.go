@@ -7,6 +7,7 @@ import (
 	"context"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"unsafe"
 
 	"github.com/dunglas/frankenphp/internal/state"
@@ -16,12 +17,14 @@ import (
 // identified by the index in the phpThreads slice
 type phpThread struct {
 	runtime.Pinner
-	threadIndex int
-	requestChan chan contextHolder
-	drainChan   chan struct{}
-	handlerMu   sync.RWMutex
-	handler     threadHandler
-	state       *state.ThreadState
+	threadIndex     int
+	requestChan     chan contextHolder
+	drainChan       chan struct{}
+	handlerMu       sync.RWMutex
+	handler         threadHandler
+	state           *state.ThreadState
+	requestCount    atomic.Int64
+	lastMemoryUsage atomic.Int64
 }
 
 // threadHandler defines how the callbacks from the C thread should be handled
@@ -173,6 +176,10 @@ func go_frankenphp_after_script_execution(threadIndex C.uintptr_t, exitStatus C.
 	if exitStatus < 0 {
 		panic(ErrScriptExecution)
 	}
+
+	thread.requestCount.Add(1)
+	thread.lastMemoryUsage.Store(int64(C.frankenphp_get_current_memory_usage()))
+
 	thread.handler.afterScriptExecution(int(exitStatus))
 
 	// unpin all memory used during script execution
