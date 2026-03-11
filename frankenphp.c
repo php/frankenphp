@@ -244,8 +244,12 @@ static void frankenphp_reset_session_state(void) {
 }
 #endif
 
+static __thread size_t thread_last_memory_usage = 0;
+
 /* Adapted from php_request_shutdown */
 static void frankenphp_worker_request_shutdown() {
+  thread_last_memory_usage = zend_memory_usage(0);
+
   /* Flush all output buffers */
   zend_try { php_output_end_all(); }
   zend_end_try();
@@ -1232,6 +1236,7 @@ int frankenphp_execute_script(char *file_name) {
     sandboxed_env = NULL;
   }
 
+  thread_last_memory_usage = zend_memory_usage(0);
   php_request_shutdown((void *)0);
   frankenphp_free_request_context();
 
@@ -1403,6 +1408,10 @@ int frankenphp_reset_opcache(void) {
 }
 
 int frankenphp_get_current_memory_limit() { return PG(memory_limit); }
+
+size_t frankenphp_get_current_memory_usage() {
+  return thread_last_memory_usage;
+}
 
 static zend_module_entry **modules = NULL;
 static int modules_len = 0;
