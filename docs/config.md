@@ -413,4 +413,10 @@ To load completions in your current shell session:
 frankenphp completion powershell | Out-String | Invoke-Expression
 ```
 
-To load completions for every new session, add the output of the above command to your PowerShell profile.
+To load completions for every new session, execute once:
+
+```powershell
+frankenphp completion powershell >> $PROFILE
+```
+
+You will need to start a new shell for this setup to take effect.

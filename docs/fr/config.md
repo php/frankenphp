@@ -407,4 +407,10 @@ Pour charger l'autocomplétion dans votre session shell actuelle :
 frankenphp completion powershell | Out-String | Invoke-Expression
 ```
 
-Pour charger l'autocomplétion à chaque nouvelle session, ajoutez la sortie de la commande ci-dessus à votre profil PowerShell.
+Pour charger l'autocomplétion à chaque nouvelle session, voici la commande à exécuter :
+
+```powershell
+frankenphp completion powershell >> $PROFILE
+```
+
+Vous devrez ensuite démarrer un nouveau shell pour que cette configuration prenne effet.
