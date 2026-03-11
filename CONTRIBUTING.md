@@ -349,8 +349,12 @@ Use GoLand for primary Go development, but the debugger cannot debug C code.
 - Go tool arguments: `-tags=nobadger,nomysql,nopgx`
 - Program arguments: e.g. `php-cli -i`
 
-You can now place breakpoints and debug through Go code when you debug the `frankenphp` configuration, but breakpoints
-in C code will not work.
+To debug C files from GoLand
+
+- Right click on a *.c file in the Project view on the left
+- Override file type → Go
+
+Now you can place breakpoints in C, C++ and Go files.
 
 ---
 
