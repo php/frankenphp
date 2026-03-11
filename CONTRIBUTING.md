@@ -324,7 +324,6 @@ Use GoLand for primary Go development, but the debugger cannot debug C code.
 1. Install GoLand (on your host OS)
 
    - Download from [JetBrains](https://www.jetbrains.com/go/download/)
-   - Launch (if on Windows, in WSL):
 
      ```bash
      goland &>/dev/null
@@ -362,14 +361,16 @@ Now you can place breakpoints in C, C++ and Go files.
 
 1. Follow the [Windows Development section](#windows-development)
 
+2. Install GoLand
+
    - Download from [JetBrains](https://www.jetbrains.com/go/download/)
    - Launch GoLand
 
-2. Open in GoLand
+3. Open in GoLand
 
    - Select **Open** → Choose the directory where you cloned `frankenphp`
 
-3. Configure Go Build
+4. Configure Go Build
 
    - Go to **Run** → **Edit Configurations**
    - Click **+** and select **Go Build**
