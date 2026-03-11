@@ -366,13 +366,13 @@ To load completions for every new session, run:
 **Linux:**
 
 ```console
-frankenphp completion bash > /etc/bash_completion.d/frankenphp
+frankenphp completion bash > /usr/share/bash-completion/completions/frankenphp
 ```
 
 **macOS:**
 
 ```console
-frankenphp completion bash > $(brew --prefix)/etc/bash_completion.d/frankenphp
+frankenphp completion bash > $(brew --prefix)/share/bash-completion/completions/frankenphp
 ```
 
 ### Zsh
@@ -416,7 +416,10 @@ frankenphp completion powershell | Out-String | Invoke-Expression
 To load completions for every new session, execute once:
 
 ```powershell
-frankenphp completion powershell >> $PROFILE
+frankenphp completion powershell | Out-File -FilePath (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")
+Add-Content -Path $PROFILE -Value '. (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")'
 ```
+
+You will need to start a new shell for this setup to take effect.
 
 You will need to start a new shell for this setup to take effect.

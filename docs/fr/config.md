@@ -360,13 +360,13 @@ Pour charger l'autocomplétion à chaque nouvelle session, exécutez :
 **Linux :**
 
 ```console
-frankenphp completion bash > /etc/bash_completion.d/frankenphp
+frankenphp completion bash > /usr/share/bash-completion/completions/frankenphp
 ```
 
 **macOS :**
 
 ```console
-frankenphp completion bash > $(brew --prefix)/etc/bash_completion.d/frankenphp
+frankenphp completion bash > $(brew --prefix)/share/bash-completion/completions/frankenphp
 ```
 
 ### Zsh
@@ -407,10 +407,13 @@ Pour charger l'autocomplétion dans votre session shell actuelle :
 frankenphp completion powershell | Out-String | Invoke-Expression
 ```
 
-Pour charger l'autocomplétion à chaque nouvelle session, voici la commande à exécuter :
+Pour charger l'autocomplétion à chaque nouvelle session, exécutez une fois :
 
 ```powershell
-frankenphp completion powershell >> $PROFILE
+frankenphp completion powershell | Out-File -FilePath (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")
+Add-Content -Path $PROFILE -Value '. (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")'
 ```
+
+Vous devrez démarrer un nouveau shell pour que cette configuration prenne effet.
 
 Vous devrez ensuite démarrer un nouveau shell pour que cette configuration prenne effet.
