@@ -13,3 +13,4 @@
 __debug_bin
 frankenphp.test
 *.log
+compile_flags.txt
