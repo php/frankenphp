@@ -266,8 +266,8 @@ COPY --from=builder /usr/local/etc/php/php.ini-production /usr/local/etc/php/php
 # Caddy data dirs — must be writable for nonroot, even on a read-only root filesystem
 ENV XDG_CONFIG_HOME=/config \
     XDG_DATA_HOME=/data
-COPY --from=builder --chown=nonroot:nonroot /data/caddy /data/caddy
-COPY --from=builder --chown=nonroot:nonroot /config/caddy /config/caddy
+COPY --from=builder --chown=nonroot:nonroot /data /data
+COPY --from=builder --chown=nonroot:nonroot /config /config
 
 USER nonroot
 
