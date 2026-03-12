@@ -280,9 +280,7 @@ The steps assume the following environment:
    - Set up a wrapper script that builds frankenphp for you, called `go_compile_frankenphp.sh`
 
    ```bash
-   export CGO_CFLAGS="-O0 -g $(php-config --includes)"
-   export CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)"
-   go build -tags=nobadger,nomysql,nopgx
+   CGO_CFLAGS="-O0 -g" ./go.sh
    ```
 
    - Under Program, select `go_compile_frankenphp.sh`
