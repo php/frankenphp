@@ -288,6 +288,8 @@ bool frankenphp_shutdown_dummy_request(void) {
 }
 
 void get_full_env(zval *track_vars_array) {
+  zend_hash_extend(Z_ARR_P(track_vars_array),
+                   zend_hash_num_elements(main_thread_env), 0);
   zend_hash_copy(Z_ARR_P(track_vars_array), main_thread_env, NULL);
 }
 
@@ -958,6 +960,8 @@ static void frankenphp_register_variables(zval *track_vars_array) {
    * $_SERVER and $_ENV should only contain values from the original
    * environment, not values added though putenv
    */
+  zend_hash_extend(Z_ARR_P(track_vars_array),
+                   zend_hash_num_elements(main_thread_env), 0);
   zend_hash_copy(Z_ARR_P(track_vars_array), main_thread_env, NULL);
 
   /* import CGI variables from the request context in go */
