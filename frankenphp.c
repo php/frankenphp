@@ -815,6 +815,7 @@ void frankenphp_register_server_vars(zval *track_vars_array,
                                      frankenphp_server_vars vars) {
   HashTable *ht = Z_ARRVAL_P(track_vars_array);
   zend_hash_extend(ht, vars.total_num_vars, 0);
+  zend_hash_copy(ht, main_thread_env, NULL);
 
   // update values with variable strings
 #define FRANKENPHP_REGISTER_VAR(name)                                          \
@@ -960,11 +961,7 @@ static void frankenphp_register_variables(zval *track_vars_array) {
    * $_SERVER and $_ENV should only contain values from the original
    * environment, not values added though putenv
    */
-  zend_hash_extend(Z_ARR_P(track_vars_array),
-                   zend_hash_num_elements(main_thread_env), 0);
-  zend_hash_copy(Z_ARR_P(track_vars_array), main_thread_env, NULL);
-
-  /* import CGI variables from the request context in go */
+  /* import environment and CGI variables from the request context in go */
   go_register_server_variables(thread_index, track_vars_array);
 
   /* Some variables are already present in SG(request_info) */
