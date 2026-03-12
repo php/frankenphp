@@ -197,7 +197,7 @@ Les images Docker sont construites :
 - lorsqu'une nouvelle version est taguée
 - tous les jours à 4h UTC, si de nouvelles versions des images officielles PHP sont disponibles
 
-## Durcir la sécurité des images
+## Renforcer la sécurité des images
 
 Pour réduire davantage la surface d'attaque et la taille de vos images Docker FrankenPHP, il est également possible de les construire sur une image [Google distroless](https://github.com/GoogleContainerTools/distroless) ou [Docker hardened](https://www.docker.com/products/hardened-images).
 
@@ -241,7 +241,7 @@ ARG PATH_TO_APP="."
 ARG PATH_TO_CADDYFILE="./Caddyfile"
 
 # Copiez votre application dans /app
-# Pour un durcissement supplémentaire, assurez-vous que seuls les chemins accessibles en écriture sont détenus par l'utilisateur non-root
+# Pour un renforcement supplémentaire, assurez-vous que seuls les chemins accessibles en écriture sont détenus par l'utilisateur non-root
 COPY --chown=nonroot:nonroot "$PATH_TO_APP" /app
 COPY "$PATH_TO_CADDYFILE" /etc/caddy/Caddyfile
 
