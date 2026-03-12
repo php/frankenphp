@@ -223,58 +223,42 @@ RUN install-php-extensions pdo_mysql pdo_pgsql #...
 
 # Copy shared libs of frankenphp and all installed extensions to temporary location
 # You can also do this step manually by analyzing ldd output of frankenphp binary and each extension .so file
-RUN apt-get update && apt-get install -y libtree && \
-    EXT_DIR="$(php -r 'echo ini_get("extension_dir");')" && \
-    FRANKENPHP_BIN="$(which frankenphp)"; \
-    LIBS_TMP_DIR="/tmp/libs"; \
-    mkdir -p "$LIBS_TMP_DIR"; \
-    for target in "$FRANKENPHP_BIN" $(find "$EXT_DIR" -maxdepth 2 -type f -name "*.so"); do \
-        libtree -pv "$target" | sed 's/.*── \(.*\) \[.*/\1/' | grep -v "^$target" | while IFS= read -r lib; do \
-            [ -z "$lib" ] && continue; \
-            base=$(basename "$lib"); \
-            destfile="$LIBS_TMP_DIR/$base"; \
-            if [ ! -f "$destfile" ]; then \
-                cp "$lib" "$destfile"; \
-            fi; \
-        done; \
-    done
+RUN apt-get update; \
+	apt-get install -y --no-install-recommends libtree; \
+	mkdir -p /tmp/libs; \
+	for target in $(which frankenphp) \
+		$(find "$(php -r 'echo ini_get("extension_dir");')" -maxdepth 2 -name "*.so"); do \
+		libtree -pv "$target" 2>/dev/null | grep -oP '(?:── )\K/\S+(?= \[)' | while IFS= read -r lib; do \
+			[ -f "$lib" ] && cp -n "$lib" /tmp/libs/; \
+		done; \
+	done;
 
 
-# Distroless debian base image, make sure this is the same debian version as the base image
+# Distroless Debian base image, make sure this matches the Debian version of the builder
 FROM gcr.io/distroless/base-debian13
-# Docker hardened image alternative
+# Docker hardened image alternative:
 # FROM dhi.io/debian:13
 
-# Location of your app and Caddyfile to be copied into the container
-ARG PATH_TO_APP="."
-ARG PATH_TO_CADDYFILE="./Caddyfile"
-
-# Copy your app into /app
-# For further hardening make sure only writable paths are owned by the nonroot user
-COPY --chown=nonroot:nonroot "$PATH_TO_APP" /app
-COPY "$PATH_TO_CADDYFILE" /etc/caddy/Caddyfile
-
-# Copy frankenphp and necessary libs
 COPY --from=builder /usr/local/bin/frankenphp /usr/local/bin/frankenphp
 COPY --from=builder /usr/local/lib/php/extensions /usr/local/lib/php/extensions
 COPY --from=builder /tmp/libs /usr/lib
 
-# Copy php.ini configuration files
 COPY --from=builder /usr/local/etc/php/conf.d /usr/local/etc/php/conf.d
 COPY --from=builder /usr/local/etc/php/php.ini-production /usr/local/etc/php/php.ini
 
-# Caddy data dirs — must be writable for nonroot, even on a read-only root filesystem
-ENV XDG_CONFIG_HOME=/config \
-    XDG_DATA_HOME=/data
+# Config and data dirs must be writable for nonroot, even on a read-only root filesystem
+ENV XDG_CONFIG_HOME=/config XDG_DATA_HOME=/data
 COPY --from=builder --chown=nonroot:nonroot /data /data
 COPY --from=builder --chown=nonroot:nonroot /config /config
 
-USER nonroot
+# Copy your app and Caddyfile
+COPY --chown=nonroot:nonroot . /app
+COPY Caddyfile /etc/caddy/Caddyfile
 
+USER nonroot
 WORKDIR /app
 
-# entrypoint to run frankenphp with the provided Caddyfile
-ENTRYPOINT ["/usr/local/bin/frankenphp", "run", "-c", "/etc/caddy/Caddyfile"]
+ENTRYPOINT ["/usr/local/bin/frankenphp", "run", "--config", "/etc/caddy/Caddyfile"]
 ```
 
 ## Development Versions
