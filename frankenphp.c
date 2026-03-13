@@ -89,6 +89,25 @@ __thread HashTable *sandboxed_env = NULL;
 __thread zval *os_environment = NULL;
 zif_handler orig_opcache_reset;
 
+/* Forward declaration */
+PHP_FUNCTION(frankenphp_opcache_reset);
+
+/* Try to override opcache_reset if opcache is loaded.
+ * Safe to call multiple times - skips if already overridden in this function
+ * table. Uses handler comparison instead of orig_opcache_reset check so that
+ * a fresh function table after PHP module restart is always re-overridden. */
+static void frankenphp_override_opcache_reset(void) {
+  zend_function *func = zend_hash_str_find_ptr(CG(function_table), "opcache_reset",
+                                               sizeof("opcache_reset") - 1);
+  if (func != NULL && func->type == ZEND_INTERNAL_FUNCTION &&
+      ((zend_internal_function *)func)->handler !=
+          ZEND_FN(frankenphp_opcache_reset)) {
+    orig_opcache_reset = ((zend_internal_function *)func)->handler;
+    ((zend_internal_function *)func)->handler =
+        ZEND_FN(frankenphp_opcache_reset);
+  }
+}
+
 void frankenphp_update_local_thread_context(bool is_worker) {
   is_worker_thread = is_worker;
 
@@ -724,14 +743,8 @@ PHP_MINIT_FUNCTION(frankenphp) {
     php_error(E_WARNING, "Failed to find built-in getenv function");
   }
 
-  // Override opcache_reset
-  func = zend_hash_str_find_ptr(CG(function_table), "opcache_reset",
-                                sizeof("opcache_reset") - 1);
-  if (func != NULL && func->type == ZEND_INTERNAL_FUNCTION) {
-    orig_opcache_reset = ((zend_internal_function *)func)->handler;
-    ((zend_internal_function *)func)->handler =
-        ZEND_FN(frankenphp_opcache_reset);
-  }
+  // Override opcache_reset (may not be available yet if opcache loads after us)
+  frankenphp_override_opcache_reset();
 
   return SUCCESS;
 }
@@ -751,7 +764,14 @@ static zend_module_entry frankenphp_module = {
 static int frankenphp_startup(sapi_module_struct *sapi_module) {
   php_import_environment_variables = get_full_env;
 
-  return php_module_startup(sapi_module, &frankenphp_module);
+  int result = php_module_startup(sapi_module, &frankenphp_module);
+  if (result == SUCCESS) {
+    /* All extensions are now loaded. Override opcache_reset if opcache
+     * was not yet available during our MINIT (shared extension load order). */
+    frankenphp_override_opcache_reset();
+  }
+
+  return result;
 }
 
 static int frankenphp_deactivate(void) { return SUCCESS; }
@@ -1412,17 +1432,12 @@ int frankenphp_execute_script_cli(char *script, int argc, char **argv,
 }
 
 int frankenphp_reset_opcache(void) {
-  zend_function *opcache_reset =
-      zend_hash_str_find_ptr(CG(function_table), ZEND_STRL("opcache_reset"));
-  if (opcache_reset) {
-    php_request_startup();
-    ((zend_internal_function *)opcache_reset)->handler = orig_opcache_reset;
-    zend_call_known_function(opcache_reset, NULL, NULL, NULL, 0, NULL, NULL);
-    ((zend_internal_function *)opcache_reset)->handler =
-        ZEND_FN(frankenphp_opcache_reset);
-    php_request_shutdown((void *)0);
-  }
-
+  zend_execute_data execute_data;
+  zval retval;
+  memset(&execute_data, 0, sizeof(execute_data));
+  ZVAL_UNDEF(&retval);
+  orig_opcache_reset(&execute_data, &retval);
+  zval_ptr_dtor(&retval);
   return 0;
 }
 

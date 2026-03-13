@@ -765,6 +765,10 @@ func go_schedule_opcache_reset(threadIndex C.uintptr_t) {
 	}
 }
 
+// opcacheResetOnce ensures only one thread calls the actual opcache_reset.
+// Multiple threads calling it concurrently can race on shared memory.
+var opcacheResetOnce sync.Once
+
 // restart all threads for an opcache_reset
 func restartThreadsAndOpcacheReset(withRegularThreads bool) {
 	// disallow scaling threads while restarting workers
@@ -773,6 +777,7 @@ func restartThreadsAndOpcacheReset(withRegularThreads bool) {
 
 	threadsToRestart := drainThreads(withRegularThreads)
 
+	opcacheResetOnce = sync.Once{}
 	opcacheResetWg := sync.WaitGroup{}
 	for _, thread := range threadsToRestart {
 		thread.state.Set(state.OpcacheResetting)
@@ -851,21 +856,9 @@ func drainThreads(withRegularThreads bool) []*phpThread {
 }
 
 func scheduleOpcacheReset(thread *phpThread) {
-	fc, _ := newDummyContext("/opcache_reset")
-
-	if workerThread, ok := thread.handler.(*workerThread); ok {
-		workerThread.dummyFrankenPHPContext = fc
-		defer func() { workerThread.dummyFrankenPHPContext = nil }()
-	}
-
-	if regularThread, ok := thread.handler.(*regularThread); ok {
-		regularThread.contextHolder.frankenPHPContext = fc
-		defer func() { regularThread.contextHolder.frankenPHPContext = nil }()
-	}
-
-	globalLogger.Info("resetting opcache", "thread", thread.name())
-	C.frankenphp_reset_opcache()
-	globalLogger.Info("opcache reset completed", "thread", thread.name())
+	opcacheResetOnce.Do(func() {
+		C.frankenphp_reset_opcache()
+	})
 }
 
 func convertArgs(args []string) (C.int, []*C.char) {
