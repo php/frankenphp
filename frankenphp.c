@@ -1,14 +1,21 @@
+#include "frankenphp.h"
 #include <SAPI.h>
 #include <Zend/zend_alloc.h>
 #include <Zend/zend_exceptions.h>
 #include <Zend/zend_interfaces.h>
-#include <Zend/zend_types.h>
 #include <errno.h>
 #include <ext/spl/spl_exceptions.h>
 #include <ext/standard/head.h>
+#ifdef HAVE_PHP_SESSION
+#include <ext/session/php_session.h>
+#endif
 #include <inttypes.h>
 #include <php.h>
+#ifdef PHP_WIN32
+#include <config.w32.h>
+#else
 #include <php_config.h>
+#endif
 #include <php_ini.h>
 #include <php_main.h>
 #include <php_output.h>
@@ -19,7 +26,9 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#ifndef ZEND_WIN32
 #include <unistd.h>
+#endif
 #if defined(__linux__)
 #include <sys/prctl.h>
 #elif defined(__FreeBSD__) || defined(__OpenBSD__)
@@ -40,7 +49,7 @@ ZEND_TSRMLS_CACHE_DEFINE()
  *
  * @see https://github.com/DataDog/dd-trace-php/pull/3169 for an example
  */
-static const char *MODULES_TO_RELOAD[] = {"filter", "session", NULL};
+static const char *MODULES_TO_RELOAD[] = {"filter", NULL};
 
 frankenphp_version frankenphp_get_version() {
   return (frankenphp_version){
@@ -70,13 +79,21 @@ frankenphp_config frankenphp_get_config() {
 }
 
 bool should_filter_var = 0;
+bool original_user_abort_setting = 0;
+frankenphp_interned_strings_t frankenphp_strings = {0};
+HashTable *main_thread_env = NULL;
+
 __thread uintptr_t thread_index;
 __thread bool is_worker_thread = false;
+__thread HashTable *sandboxed_env = NULL;
 __thread zval *os_environment = NULL;
 zif_handler orig_opcache_reset;
 
 void frankenphp_update_local_thread_context(bool is_worker) {
   is_worker_thread = is_worker;
+
+  /* workers should keep running if the user aborts the connection */
+  PG(ignore_user_abort) = is_worker ? 1 : original_user_abort_setting;
 }
 
 static void frankenphp_update_request_context() {
@@ -86,7 +103,11 @@ static void frankenphp_update_request_context() {
   /* status It is not reset by zend engine, set it to 200. */
   SG(sapi_headers).http_response_code = 200;
 
-  go_update_request_info(thread_index, &SG(request_info));
+  char *authorization_header =
+      go_update_request_info(thread_index, &SG(request_info));
+
+  /* let PHP handle basic auth */
+  php_handle_auth_data(authorization_header);
 }
 
 static void frankenphp_free_request_context() {
@@ -96,8 +117,6 @@ static void frankenphp_free_request_context() {
   }
 
   /* freed via thread.Unpin() */
-  SG(request_info).auth_password = NULL;
-  SG(request_info).auth_user = NULL;
   SG(request_info).request_method = NULL;
   SG(request_info).query_string = NULL;
   SG(request_info).content_type = NULL;
@@ -117,6 +136,13 @@ static void frankenphp_reset_super_globals() {
     zval *files = &PG(http_globals)[TRACK_VARS_FILES];
     zval_ptr_dtor_nogc(files);
     memset(files, 0, sizeof(*files));
+
+    /* $_SESSION must be explicitly deleted from the symbol table.
+     * Unlike other superglobals, $_SESSION is stored in EG(symbol_table)
+     * with a reference to PS(http_session_vars). The session RSHUTDOWN
+     * only decrements the refcount but doesn't remove it from the symbol
+     * table, causing data to leak between requests. */
+    zend_hash_str_del(&EG(symbol_table), "_SESSION", sizeof("_SESSION") - 1);
   }
   zend_end_try();
 
@@ -127,13 +153,19 @@ static void frankenphp_reset_super_globals() {
     if (auto_global->name == _env) {
       /* skip $_ENV */
     } else if (auto_global->name == _server) {
-      /* always reimport $_SERVER  */
+      /* always reimport $_SERVER */
       auto_global->armed = auto_global->auto_global_callback(auto_global->name);
     } else if (auto_global->jit) {
-      /* globals with jit are: $_SERVER, $_ENV, $_REQUEST, $GLOBALS,
-       * jit will only trigger on script parsing and therefore behaves
-       * differently in worker mode. We will skip all jit globals
-       */
+      /* JIT globals ($_REQUEST, $GLOBALS) need special handling:
+       * - $GLOBALS will always be handled by the application, we skip it
+       * For $_REQUEST:
+       * - If in symbol_table: re-initialize with current request data
+       * - If not: do nothing, it may be armed by jit later */
+      if (auto_global->name == ZSTR_KNOWN(ZEND_STR_AUTOGLOBAL_REQUEST) &&
+          zend_hash_exists(&EG(symbol_table), auto_global->name)) {
+        auto_global->armed =
+            auto_global->auto_global_callback(auto_global->name);
+      }
     } else if (auto_global->auto_global_callback) {
       /* $_GET, $_POST, $_COOKIE, $_FILES are reimported here */
       auto_global->armed = auto_global->auto_global_callback(auto_global->name);
@@ -167,6 +199,53 @@ static void frankenphp_release_temporary_streams() {
   ZEND_HASH_FOREACH_END();
 }
 
+#ifdef HAVE_PHP_SESSION
+/* Reset session state between worker requests, preserving user handlers.
+ * Based on php_rshutdown_session_globals() + php_rinit_session_globals(). */
+static void frankenphp_reset_session_state(void) {
+  if (PS(session_status) == php_session_active) {
+    php_session_flush(1);
+  }
+
+  if (!Z_ISUNDEF(PS(http_session_vars))) {
+    zval_ptr_dtor(&PS(http_session_vars));
+    ZVAL_UNDEF(&PS(http_session_vars));
+  }
+
+  if (PS(mod_data) || PS(mod_user_implemented)) {
+    zend_try { PS(mod)->s_close(&PS(mod_data)); }
+    zend_end_try();
+  }
+
+  if (PS(id)) {
+    zend_string_release_ex(PS(id), 0);
+    PS(id) = NULL;
+  }
+
+  if (PS(session_vars)) {
+    zend_string_release_ex(PS(session_vars), 0);
+    PS(session_vars) = NULL;
+  }
+
+  /* PS(mod_user_class_name) and PS(mod_user_names) are preserved */
+
+#if PHP_VERSION_ID >= 80300
+  if (PS(session_started_filename)) {
+    zend_string_release(PS(session_started_filename));
+    PS(session_started_filename) = NULL;
+    PS(session_started_lineno) = 0;
+  }
+#endif
+
+  PS(session_status) = php_session_none;
+  PS(in_save_handler) = 0;
+  PS(set_handler) = 0;
+  PS(mod_data) = NULL;
+  PS(mod_user_is_open) = 0;
+  PS(define_sid) = 1;
+}
+#endif
+
 /* Adapted from php_request_shutdown */
 static void frankenphp_worker_request_shutdown() {
   /* Flush all output buffers */
@@ -182,15 +261,19 @@ static void frankenphp_worker_request_shutdown() {
     }
   }
 
+#ifdef HAVE_PHP_SESSION
+  frankenphp_reset_session_state();
+#endif
+
   /* Shutdown output layer (send the set HTTP headers, cleanup output handlers,
    * etc.) */
   zend_try { php_output_deactivate(); }
   zend_end_try();
 
   /* SAPI related shutdown (free stuff) */
-  frankenphp_free_request_context();
   zend_try { sapi_deactivate(); }
   zend_end_try();
+  frankenphp_free_request_context();
 
   zend_set_memory_limit(PG(memory_limit));
 }
@@ -206,8 +289,10 @@ bool frankenphp_shutdown_dummy_request(void) {
   return true;
 }
 
-PHPAPI void get_full_env(zval *track_vars_array) {
-  go_getfullenv(thread_index, track_vars_array);
+void get_full_env(zval *track_vars_array) {
+  zend_hash_extend(Z_ARR_P(track_vars_array),
+                   zend_hash_num_elements(main_thread_env), 0);
+  zend_hash_copy(Z_ARR_P(track_vars_array), main_thread_env, NULL);
 }
 
 /* Adapted from php_request_startup() */
@@ -304,39 +389,72 @@ PHP_FUNCTION(frankenphp_putenv) {
     RETURN_FALSE;
   }
 
-  if (go_putenv(thread_index, setting, (int)setting_len)) {
-    RETURN_TRUE;
-  } else {
-    RETURN_FALSE;
+  if (setting_len == 0 || setting[0] == '=') {
+    zend_argument_value_error(1, "must have a valid syntax");
+    RETURN_THROWS();
   }
+
+  if (sandboxed_env == NULL) {
+    sandboxed_env = zend_array_dup(main_thread_env);
+  }
+
+  /* cut at null byte to stay consistent with regular putenv */
+  char *null_pos = memchr(setting, '\0', setting_len);
+  if (null_pos != NULL) {
+    setting_len = null_pos - setting;
+  }
+
+  /* cut the string at the first '=' */
+  char *eq_pos = memchr(setting, '=', setting_len);
+  bool success = true;
+
+  /* no '=' found, delete the variable */
+  if (eq_pos == NULL) {
+    success = go_putenv(setting, (int)setting_len, NULL, 0);
+    if (success) {
+      zend_hash_str_del(sandboxed_env, setting, setting_len);
+    }
+
+    RETURN_BOOL(success);
+  }
+
+  size_t name_len = eq_pos - setting;
+  size_t value_len =
+      (setting_len > name_len + 1) ? (setting_len - name_len - 1) : 0;
+  success = go_putenv(setting, (int)name_len, eq_pos + 1, (int)value_len);
+  if (success) {
+    zval val = {0};
+    ZVAL_STRINGL(&val, eq_pos + 1, value_len);
+    zend_hash_str_update(sandboxed_env, setting, name_len, &val);
+  }
+
+  RETURN_BOOL(success);
 } /* }}} */
 
-/* {{{ Call go's getenv to prevent race conditions */
+/* {{{ Get the env from the sandboxed environment */
 PHP_FUNCTION(frankenphp_getenv) {
-  char *name = NULL;
-  size_t name_len = 0;
+  zend_string *name = NULL;
   bool local_only = 0;
 
   ZEND_PARSE_PARAMETERS_START(0, 2)
   Z_PARAM_OPTIONAL
-  Z_PARAM_STRING_OR_NULL(name, name_len)
+  Z_PARAM_STR_OR_NULL(name)
   Z_PARAM_BOOL(local_only)
   ZEND_PARSE_PARAMETERS_END();
 
-  if (!name) {
-    array_init(return_value);
-    get_full_env(return_value);
+  HashTable *ht = sandboxed_env ? sandboxed_env : main_thread_env;
 
+  if (!name) {
+    RETURN_ARR(zend_array_dup(ht));
     return;
   }
 
-  struct go_getenv_return result = go_getenv(thread_index, name);
-
-  if (result.r0) {
-    // Return the single environment variable as a string
-    RETVAL_STR(result.r1);
+  zval *env_val = zend_hash_find(ht, name);
+  if (env_val && Z_TYPE_P(env_val) == IS_STRING) {
+    zend_string *str = Z_STR_P(env_val);
+    zend_string_addref(str);
+    RETVAL_STR(str);
   } else {
-    // Environment variable does not exist
     RETVAL_FALSE;
   }
 } /* }}} */
@@ -466,6 +584,11 @@ PHP_FUNCTION(frankenphp_handle_request) {
 
   if (zend_call_function(&fci, &fcc) == SUCCESS && Z_TYPE(retval) != IS_UNDEF) {
     callback_ret = &retval;
+
+    /* pass NULL instead of the NULL zval as return value */
+    if (Z_TYPE(retval) == IS_NULL) {
+      callback_ret = NULL;
+    }
   }
 
   /*
@@ -625,11 +748,6 @@ static zend_module_entry frankenphp_module = {
     TOSTRING(FRANKENPHP_VERSION),
     STANDARD_MODULE_PROPERTIES};
 
-static void frankenphp_request_shutdown() {
-  frankenphp_free_request_context();
-  php_request_shutdown((void *)0);
-}
-
 static int frankenphp_startup(sapi_module_struct *sapi_module) {
   php_import_environment_variables = get_full_env;
 
@@ -710,72 +828,54 @@ static inline void frankenphp_register_trusted_var(zend_string *z_key,
   }
 }
 
-void frankenphp_register_single(zend_string *z_key, char *value, size_t val_len,
-                                zval *track_vars_array) {
-  HashTable *ht = Z_ARRVAL_P(track_vars_array);
-  frankenphp_register_trusted_var(z_key, value, val_len, ht);
-}
-
 /* Register known $_SERVER variables in bulk to avoid cgo overhead */
-void frankenphp_register_bulk(
-    zval *track_vars_array, ht_key_value_pair remote_addr,
-    ht_key_value_pair remote_host, ht_key_value_pair remote_port,
-    ht_key_value_pair document_root, ht_key_value_pair path_info,
-    ht_key_value_pair php_self, ht_key_value_pair document_uri,
-    ht_key_value_pair script_filename, ht_key_value_pair script_name,
-    ht_key_value_pair https, ht_key_value_pair ssl_protocol,
-    ht_key_value_pair request_scheme, ht_key_value_pair server_name,
-    ht_key_value_pair server_port, ht_key_value_pair content_length,
-    ht_key_value_pair gateway_interface, ht_key_value_pair server_protocol,
-    ht_key_value_pair server_software, ht_key_value_pair http_host,
-    ht_key_value_pair auth_type, ht_key_value_pair remote_ident,
-    ht_key_value_pair request_uri, ht_key_value_pair ssl_cipher) {
+void frankenphp_register_server_vars(zval *track_vars_array,
+                                     frankenphp_server_vars vars) {
   HashTable *ht = Z_ARRVAL_P(track_vars_array);
-  frankenphp_register_trusted_var(remote_addr.key, remote_addr.val,
-                                  remote_addr.val_len, ht);
-  frankenphp_register_trusted_var(remote_host.key, remote_host.val,
-                                  remote_host.val_len, ht);
-  frankenphp_register_trusted_var(remote_port.key, remote_port.val,
-                                  remote_port.val_len, ht);
-  frankenphp_register_trusted_var(document_root.key, document_root.val,
-                                  document_root.val_len, ht);
-  frankenphp_register_trusted_var(path_info.key, path_info.val,
-                                  path_info.val_len, ht);
-  frankenphp_register_trusted_var(php_self.key, php_self.val, php_self.val_len,
-                                  ht);
-  frankenphp_register_trusted_var(document_uri.key, document_uri.val,
-                                  document_uri.val_len, ht);
-  frankenphp_register_trusted_var(script_filename.key, script_filename.val,
-                                  script_filename.val_len, ht);
-  frankenphp_register_trusted_var(script_name.key, script_name.val,
-                                  script_name.val_len, ht);
-  frankenphp_register_trusted_var(https.key, https.val, https.val_len, ht);
-  frankenphp_register_trusted_var(ssl_protocol.key, ssl_protocol.val,
-                                  ssl_protocol.val_len, ht);
-  frankenphp_register_trusted_var(ssl_cipher.key, ssl_cipher.val,
-                                  ssl_cipher.val_len, ht);
-  frankenphp_register_trusted_var(request_scheme.key, request_scheme.val,
-                                  request_scheme.val_len, ht);
-  frankenphp_register_trusted_var(server_name.key, server_name.val,
-                                  server_name.val_len, ht);
-  frankenphp_register_trusted_var(server_port.key, server_port.val,
-                                  server_port.val_len, ht);
-  frankenphp_register_trusted_var(content_length.key, content_length.val,
-                                  content_length.val_len, ht);
-  frankenphp_register_trusted_var(gateway_interface.key, gateway_interface.val,
-                                  gateway_interface.val_len, ht);
-  frankenphp_register_trusted_var(server_protocol.key, server_protocol.val,
-                                  server_protocol.val_len, ht);
-  frankenphp_register_trusted_var(server_software.key, server_software.val,
-                                  server_software.val_len, ht);
-  frankenphp_register_trusted_var(http_host.key, http_host.val,
-                                  http_host.val_len, ht);
-  frankenphp_register_trusted_var(auth_type.key, auth_type.val,
-                                  auth_type.val_len, ht);
-  frankenphp_register_trusted_var(remote_ident.key, remote_ident.val,
-                                  remote_ident.val_len, ht);
-  frankenphp_register_trusted_var(request_uri.key, request_uri.val,
-                                  request_uri.val_len, ht);
+  zend_hash_extend(ht, vars.total_num_vars, 0);
+  zend_hash_copy(ht, main_thread_env, NULL);
+
+  // update values with variable strings
+#define FRANKENPHP_REGISTER_VAR(name)                                          \
+  frankenphp_register_trusted_var(frankenphp_strings.name, vars.name,          \
+                                  vars.name##_len, ht)
+
+  FRANKENPHP_REGISTER_VAR(remote_addr);
+  FRANKENPHP_REGISTER_VAR(remote_host);
+  FRANKENPHP_REGISTER_VAR(remote_port);
+  FRANKENPHP_REGISTER_VAR(document_root);
+  FRANKENPHP_REGISTER_VAR(path_info);
+  FRANKENPHP_REGISTER_VAR(php_self);
+  FRANKENPHP_REGISTER_VAR(document_uri);
+  FRANKENPHP_REGISTER_VAR(script_filename);
+  FRANKENPHP_REGISTER_VAR(script_name);
+  FRANKENPHP_REGISTER_VAR(ssl_cipher);
+  FRANKENPHP_REGISTER_VAR(server_name);
+  FRANKENPHP_REGISTER_VAR(server_port);
+  FRANKENPHP_REGISTER_VAR(content_length);
+  FRANKENPHP_REGISTER_VAR(server_protocol);
+  FRANKENPHP_REGISTER_VAR(http_host);
+  FRANKENPHP_REGISTER_VAR(request_uri);
+
+#undef FRANKENPHP_REGISTER_VAR
+
+  /* update values with hard-coded zend_strings */
+  zval zv;
+  ZVAL_STR(&zv, frankenphp_strings.cgi11);
+  zend_hash_update_ind(ht, frankenphp_strings.gateway_interface, &zv);
+  ZVAL_STR(&zv, frankenphp_strings.frankenphp);
+  zend_hash_update_ind(ht, frankenphp_strings.server_software, &zv);
+  ZVAL_STR(&zv, vars.request_scheme);
+  zend_hash_update_ind(ht, frankenphp_strings.request_scheme, &zv);
+  ZVAL_STR(&zv, vars.ssl_protocol);
+  zend_hash_update_ind(ht, frankenphp_strings.ssl_protocol, &zv);
+  ZVAL_STR(&zv, vars.https);
+  zend_hash_update_ind(ht, frankenphp_strings.https, &zv);
+
+  /* update values with always empty strings */
+  ZVAL_EMPTY_STRING(&zv);
+  zend_hash_update_ind(ht, frankenphp_strings.auth_type, &zv);
+  zend_hash_update_ind(ht, frankenphp_strings.remote_ident, &zv);
 }
 
 /** Create an immutable zend_string that lasts for the whole process **/
@@ -790,7 +890,22 @@ zend_string *frankenphp_init_persistent_string(const char *string, size_t len) {
   return z_string;
 }
 
-static void
+/* initialize all hard-coded zend_strings once per process */
+static void frankenphp_init_interned_strings(void) {
+  if (frankenphp_strings.remote_addr != NULL) {
+    return; /* already initialized */
+  }
+
+#define F_INITIALIZE_FIELD(name, str)                                          \
+  frankenphp_strings.name =                                                    \
+      frankenphp_init_persistent_string(str, sizeof(str) - 1);
+
+  FRANKENPHP_INTERNED_STRINGS_LIST(F_INITIALIZE_FIELD)
+#undef F_INITIALIZE_FIELD
+}
+
+/* Register variables from SG(request_info) into $_SERVER */
+static inline void
 frankenphp_register_variable_from_request_info(zend_string *zKey, char *value,
                                                bool must_be_present,
                                                zval *track_vars_array) {
@@ -803,23 +918,31 @@ frankenphp_register_variable_from_request_info(zend_string *zKey, char *value,
   }
 }
 
-void frankenphp_register_variables_from_request_info(
-    zval *track_vars_array, zend_string *content_type,
-    zend_string *path_translated, zend_string *query_string,
-    zend_string *auth_user, zend_string *request_method) {
+static void
+frankenphp_register_variables_from_request_info(zval *track_vars_array) {
   frankenphp_register_variable_from_request_info(
-      content_type, (char *)SG(request_info).content_type, true,
+      frankenphp_strings.content_type, (char *)SG(request_info).content_type,
+      true, track_vars_array);
+  frankenphp_register_variable_from_request_info(
+      frankenphp_strings.path_translated,
+      (char *)SG(request_info).path_translated, false, track_vars_array);
+  frankenphp_register_variable_from_request_info(
+      frankenphp_strings.query_string, SG(request_info).query_string, true,
       track_vars_array);
   frankenphp_register_variable_from_request_info(
-      path_translated, (char *)SG(request_info).path_translated, false,
+      frankenphp_strings.remote_user, (char *)SG(request_info).auth_user, false,
       track_vars_array);
   frankenphp_register_variable_from_request_info(
-      query_string, SG(request_info).query_string, true, track_vars_array);
-  frankenphp_register_variable_from_request_info(
-      auth_user, (char *)SG(request_info).auth_user, false, track_vars_array);
-  frankenphp_register_variable_from_request_info(
-      request_method, (char *)SG(request_info).request_method, false,
-      track_vars_array);
+      frankenphp_strings.request_method,
+      (char *)SG(request_info).request_method, false, track_vars_array);
+}
+
+/* Only hard-coded keys may be registered this way */
+void frankenphp_register_known_variable(zend_string *z_key, char *value,
+                                        size_t val_len,
+                                        zval *track_vars_array) {
+  frankenphp_register_trusted_var(z_key, value, val_len,
+                                  Z_ARRVAL_P(track_vars_array));
 }
 
 /* variables with user-defined keys must be registered safely
@@ -852,34 +975,15 @@ static inline void register_server_variable_filtered(const char *key,
 static void frankenphp_register_variables(zval *track_vars_array) {
   /* https://www.php.net/manual/en/reserved.variables.server.php */
 
-  /* In CGI mode, we consider the environment to be a part of the server
-   * variables.
+  /* In CGI mode, the environment is part of the $_SERVER variables.
+   * $_SERVER and $_ENV should only contain values from the original
+   * environment, not values added though putenv
    */
+  /* import environment and CGI variables from the request context in go */
+  go_register_server_variables(thread_index, track_vars_array);
 
-  /* in non-worker mode we import the os environment regularly */
-  if (!is_worker_thread) {
-    get_full_env(track_vars_array);
-    // php_import_environment_variables(track_vars_array);
-    go_register_variables(thread_index, track_vars_array);
-    return;
-  }
-
-  /* In worker mode we cache the os environment */
-  if (os_environment == NULL) {
-    os_environment = malloc(sizeof(zval));
-    if (os_environment == NULL) {
-      php_error(E_ERROR, "Failed to allocate memory for os_environment");
-
-      return;
-    }
-    array_init(os_environment);
-    get_full_env(os_environment);
-    // php_import_environment_variables(os_environment);
-  }
-  zend_hash_copy(Z_ARR_P(track_vars_array), Z_ARR_P(os_environment),
-                 (copy_ctor_func_t)zval_add_ref);
-
-  go_register_variables(thread_index, track_vars_array);
+  /* Some variables are already present in SG(request_info) */
+  frankenphp_register_variables_from_request_info(track_vars_array);
 }
 
 static void frankenphp_log_message(const char *message, int syslog_type_int) {
@@ -887,10 +991,12 @@ static void frankenphp_log_message(const char *message, int syslog_type_int) {
 }
 
 static char *frankenphp_getenv(const char *name, size_t name_len) {
-  struct go_getenv_return result = go_getenv(thread_index, (char *)name);
+  HashTable *ht = sandboxed_env ? sandboxed_env : main_thread_env;
 
-  if (result.r0) {
-    return result.r1->val;
+  zval *env_val = zend_hash_str_find(ht, name, name_len);
+  if (env_val && Z_TYPE_P(env_val) == IS_STRING) {
+    zend_string *str = Z_STR_P(env_val);
+    return ZSTR_VAL(str);
   }
 
   return NULL;
@@ -976,6 +1082,7 @@ static void *php_thread(void *arg) {
 }
 
 static void *php_main(void *arg) {
+#ifndef ZEND_WIN32
   /*
    * SIGPIPE must be masked in non-Go threads:
    * https://pkg.go.dev/os/signal#hdr-Go_programs_that_use_cgo_or_SWIG
@@ -988,6 +1095,7 @@ static void *php_main(void *arg) {
     perror("failed to block SIGPIPE");
     exit(EXIT_FAILURE);
   }
+#endif
 
   set_thread_name("php-main");
 
@@ -1005,6 +1113,32 @@ static void *php_main(void *arg) {
 
   sapi_startup(&frankenphp_sapi_module);
 
+  /* TODO: adapted from https://github.com/php/php-src/pull/16958, remove when
+   * merged. */
+#ifdef PHP_WIN32
+  {
+    const DWORD flags = GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                        GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT;
+    HMODULE module;
+    /* Use a larger buffer to support long module paths on Windows. */
+    wchar_t filename[32768];
+    if (GetModuleHandleExW(flags, (LPCWSTR)&frankenphp_sapi_module, &module)) {
+      const DWORD filename_capacity = (DWORD)_countof(filename);
+      DWORD len = GetModuleFileNameW(module, filename, filename_capacity);
+      if (len > 0 && len < filename_capacity) {
+        wchar_t *slash = wcsrchr(filename, L'\\');
+        if (slash) {
+          *slash = L'\0';
+          if (!SetDllDirectoryW(filename)) {
+            fprintf(stderr, "Warning: SetDllDirectoryW failed (error %lu)\n",
+                    GetLastError());
+          }
+        }
+      }
+    }
+  }
+#endif
+
 #ifdef ZEND_MAX_EXECUTION_TIMERS
   /* overwrite php.ini with custom user settings */
   char *php_ini_overrides = go_get_custom_php_ini(false);
@@ -1018,6 +1152,15 @@ static void *php_main(void *arg) {
     frankenphp_sapi_module.ini_entries = php_ini_overrides;
   }
 
+  frankenphp_init_interned_strings();
+
+  /* take a snapshot of the environment for sandboxing */
+  if (main_thread_env == NULL) {
+    main_thread_env = pemalloc(sizeof(HashTable), 1);
+    zend_hash_init(main_thread_env, 8, NULL, NULL, 1);
+    go_init_os_env(main_thread_env);
+  }
+
   frankenphp_sapi_module.startup(&frankenphp_sapi_module);
 
   /* check if a default filter is set in php.ini and only filter if
@@ -1025,6 +1168,7 @@ static void *php_main(void *arg) {
   char *default_filter;
   cfg_get_string("filter.default", &default_filter);
   should_filter_var = default_filter != NULL;
+  original_user_abort_setting = PG(ignore_user_abort);
 
   go_frankenphp_main_thread_is_ready();
 
@@ -1072,8 +1216,8 @@ static int frankenphp_request_startup() {
     return SUCCESS;
   }
 
-  frankenphp_free_request_context();
   php_request_shutdown((void *)0);
+  frankenphp_free_request_context();
 
   return FAILURE;
 }
@@ -1099,16 +1243,16 @@ int frankenphp_execute_script(char *file_name) {
   zend_catch { status = EG(exit_status); }
   zend_end_try();
 
-  // free the cached os environment before shutting down the script
-  if (os_environment != NULL) {
-    zval_ptr_dtor(os_environment);
-    free(os_environment);
-    os_environment = NULL;
-  }
-
   zend_destroy_file_handle(&file_handle);
 
-  frankenphp_request_shutdown();
+  /* Reset the sandboxed environment */
+  if (sandboxed_env != NULL) {
+    zend_hash_release(sandboxed_env);
+    sandboxed_env = NULL;
+  }
+
+  php_request_shutdown((void *)0);
+  frankenphp_free_request_context();
 
   return status;
 }
@@ -1283,18 +1427,18 @@ int frankenphp_reset_opcache(void) {
 
 int frankenphp_get_current_memory_limit() { return PG(memory_limit); }
 
-static zend_module_entry *modules = NULL;
+static zend_module_entry **modules = NULL;
 static int modules_len = 0;
 static int (*original_php_register_internal_extensions_func)(void) = NULL;
 
-PHPAPI int register_internal_extensions(void) {
+int register_internal_extensions(void) {
   if (original_php_register_internal_extensions_func != NULL &&
       original_php_register_internal_extensions_func() != SUCCESS) {
     return FAILURE;
   }
 
   for (int i = 0; i < modules_len; i++) {
-    if (zend_register_internal_module(&modules[i]) == NULL) {
+    if (zend_register_internal_module(modules[i]) == NULL) {
       return FAILURE;
     }
   }
@@ -1305,7 +1449,7 @@ PHPAPI int register_internal_extensions(void) {
   return SUCCESS;
 }
 
-void register_extensions(zend_module_entry *m, int len) {
+void register_extensions(zend_module_entry **m, int len) {
   modules = m;
   modules_len = len;
 

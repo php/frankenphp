@@ -15,6 +15,8 @@ package frankenphp
 #cgo noescape __zval_double__
 #cgo noescape __zval_string__
 #cgo noescape __zval_arr__
+#cgo noescape __emalloc__
+#cgo noescape __efree__
 #include "types.h"
 */
 import "C"
@@ -257,7 +259,7 @@ func PHPPackedArray[T any](slice []T) unsafe.Pointer {
 // EXPERIMENTAL: GoValue converts a PHP zval to a Go value
 //
 // Zval having the null, bool, long, double, string and array types are currently supported.
-// Arrays can curently only be converted to any[] and AssociativeArray[any].
+// Arrays can currently only be converted to any[] and AssociativeArray[any].
 // Any other type will cause an error.
 // More types may be supported in the future.
 func GoValue[T any](zval unsafe.Pointer) (T, error) {

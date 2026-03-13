@@ -39,7 +39,7 @@ a flag de configuração `--debug`.
 ## Executando a suite de testes
 
 ```console
-go test -tags watcher -race -v ./...
+go test -race -v ./...
 ```
 
 ## Módulo Caddy
@@ -48,7 +48,7 @@ Construa o Caddy com o módulo Caddy FrankenPHP:
 
 ```console
 cd caddy/frankenphp/
-go build -tags watcher,brotli,nobadger,nomysql,nopgx
+go build -tags nobadger,nomysql,nopgx
 cd ../../
 ```
 
@@ -186,7 +186,7 @@ docker buildx bake -f docker-bake.hcl --pull --no-cache --push
 8. No contêiner, você pode usar o GDB e similares:
 
    ```console
-   go test -tags watcher -c -ldflags=-w
+   go test -c -ldflags=-w
    gdb --args frankenphp.test -test.run ^MyTest$
    ```
 

@@ -4,7 +4,7 @@
 
 FrankenPHP is a modern application server for PHP built on top of the [Caddy](https://caddyserver.com/) web server.
 
-FrankenPHP gives superpowers to your PHP apps thanks to its stunning features: [_Early Hints_](https://frankenphp.dev/docs/early-hints/), [worker mode](https://frankenphp.dev/docs/worker/), [real-time capabilities](https://frankenphp.dev/docs/mercure/), automatic HTTPS, HTTP/2, and HTTP/3 support...
+FrankenPHP gives superpowers to your PHP apps thanks to its stunning features: [_Early Hints_](https://frankenphp.dev/docs/early-hints/), [worker mode](https://frankenphp.dev/docs/worker/), [real-time capabilities](https://frankenphp.dev/docs/mercure/), [hot reloading](https://frankenphp.dev/docs/hot-reload/), automatic HTTPS, HTTP/2, and HTTP/3 support...
 
 FrankenPHP works with any PHP app and makes your Laravel and Symfony projects faster than ever thanks to their official integrations with the worker mode.
 
@@ -16,25 +16,31 @@ FrankenPHP can also be used as a standalone Go library to embed PHP in any app u
 
 ## Getting Started
 
-On Windows, use [WSL](https://learn.microsoft.com/windows/wsl/) to run FrankenPHP.
-
 ### Install Script
 
-You can copy this line into your terminal to automatically
+On Linux and macOS, copy this line into your terminal to automatically
 install an appropriate version for your platform:
 
 ```console
 curl https://frankenphp.dev/install.sh | sh
 ```
 
+On Windows, run this in PowerShell:
+
+```powershell
+irm https://frankenphp.dev/install.ps1 | iex
+```
+
 ### Standalone Binary
 
-We provide static FrankenPHP binaries for development purposes on Linux and macOS
-containing [PHP 8.4](https://www.php.net/releases/8.4/en.php) and most popular PHP extensions.
+We provide FrankenPHP binaries for Linux, macOS and Windows
+containing [PHP 8.5](https://www.php.net/releases/8.5/).
+
+Linux binaries are statically linked, so they can be used on any Linux distribution without installing any dependency. macOS binaries are also self-contained.
+They contain most popular PHP extensions.
+Windows archives contain the official PHP binary for Windows.
 
 [Download FrankenPHP](https://github.com/php/frankenphp/releases)
-
-**Installing extensions:** Most common extensions are bundled. It's not possible to install more extensions.
 
 ### rpm Packages
 
@@ -42,7 +48,7 @@ Our maintainers offer rpm packages for all systems using `dnf`. To install, run:
 
 ```console
 sudo dnf install https://rpm.henderkes.com/static-php-1-0.noarch.rpm
-sudo dnf module enable php-zts:static-8.4 # 8.2-8.5 available
+sudo dnf module enable php-zts:static-8.5 # 8.2-8.5 available
 sudo dnf install frankenphp
 ```
 
@@ -60,8 +66,9 @@ sudo pie-zts install asgrim/example-pie-extension
 Our maintainers offer deb packages for all systems using `apt`. To install, run:
 
 ```console
-sudo curl -fsSL https://key.henderkes.com/static-php.gpg -o /usr/share/keyrings/static-php.gpg && \
-echo "deb [signed-by=/usr/share/keyrings/static-php.gpg] https://deb.henderkes.com/ stable main" | sudo tee /etc/apt/sources.list.d/static-php.list && \
+VERSION=85 # 82-85 available
+sudo curl https://pkg.henderkes.com/api/packages/${VERSION}/debian/repository.key -o /etc/apt/keyrings/static-php${VERSION}.asc
+echo "deb [signed-by=/etc/apt/keyrings/static-php${VERSION}.asc] https://pkg.henderkes.com/api/packages/${VERSION}/debian php-zts main" | sudo tee -a /etc/apt/sources.list.d/static-php${VERSION}.list
 sudo apt update
 sudo apt install frankenphp
 ```
@@ -72,6 +79,28 @@ For extensions not available by default, use [PIE](https://github.com/php/pie):
 
 ```console
 sudo apt install pie-zts
+sudo pie-zts install asgrim/example-pie-extension
+```
+
+### apk Packages
+
+Our maintainers offer apk packages for all systems using `apk`. To install, run:
+
+```console
+VERSION=85 # 82-85 available
+echo "https://pkg.henderkes.com/api/packages/${VERSION}/alpine/main/php-zts" | sudo tee -a /etc/apk/repositories
+KEYFILE=$(curl -sJOw '%{filename_effective}' https://pkg.henderkes.com/api/packages/${VERSION}/alpine/key)
+sudo mv ${KEYFILE} /etc/apk/keys/ && 
+sudo apk update && 
+sudo apk add frankenphp
+```
+
+**Installing extensions:** `sudo apk add php-zts-<extension>`
+
+For extensions not available by default, use [PIE](https://github.com/php/pie):
+
+```console
+sudo apk add pie-zts
 sudo pie-zts install asgrim/example-pie-extension
 ```
 

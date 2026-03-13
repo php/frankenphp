@@ -223,9 +223,7 @@ func TestParameterParser_GenerateParamParsing(t *testing.T) {
 			name:          "no parameters",
 			params:        []phpParameter{},
 			requiredCount: 0,
-			expected: `    if (zend_parse_parameters_none() == FAILURE) {
-        RETURN_THROWS();
-    }`,
+			expected:      `    ZEND_PARSE_PARAMETERS_NONE();`,
 		},
 		{
 			name: "single required string parameter",

@@ -1,15 +1,15 @@
 package frankenphp
 
-// #cgo nocallback frankenphp_register_bulk
-// #cgo nocallback frankenphp_register_variables_from_request_info
+// #cgo nocallback frankenphp_register_server_vars
 // #cgo nocallback frankenphp_register_variable_safe
-// #cgo nocallback frankenphp_register_single
-// #cgo noescape frankenphp_register_bulk
-// #cgo noescape frankenphp_register_variables_from_request_info
+// #cgo nocallback frankenphp_register_known_variable
+// #cgo nocallback frankenphp_init_persistent_string
+// #cgo noescape frankenphp_register_server_vars
 // #cgo noescape frankenphp_register_variable_safe
-// #cgo noescape frankenphp_register_single
-// #include <php_variables.h>
+// #cgo noescape frankenphp_register_known_variable
+// #cgo noescape frankenphp_init_persistent_string
 // #include "frankenphp.h"
+// #include <php_variables.h>
 import "C"
 import (
 	"context"
@@ -18,50 +18,26 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 	"unsafe"
 
 	"github.com/dunglas/frankenphp/internal/phpheaders"
+	"golang.org/x/text/language"
+	"golang.org/x/text/search"
 )
 
-// Protocol versions, in Apache mod_ssl format: https://httpd.apache.org/docs/current/mod/mod_ssl.html
-// Note that these are slightly different from SupportedProtocols in caddytls/config.go
-var tlsProtocolStrings = map[uint16]string{
-	tls.VersionTLS10: "TLSv1",
-	tls.VersionTLS11: "TLSv1.1",
-	tls.VersionTLS12: "TLSv1.2",
-	tls.VersionTLS13: "TLSv1.3",
-}
-
-// Known $_SERVER keys
-var knownServerKeys = []string{
-	"CONTENT_LENGTH",
-	"DOCUMENT_ROOT",
-	"DOCUMENT_URI",
-	"GATEWAY_INTERFACE",
-	"HTTP_HOST",
-	"HTTPS",
-	"PATH_INFO",
-	"PHP_SELF",
-	"REMOTE_ADDR",
-	"REMOTE_HOST",
-	"REMOTE_PORT",
-	"REQUEST_SCHEME",
-	"SCRIPT_FILENAME",
-	"SCRIPT_NAME",
-	"SERVER_NAME",
-	"SERVER_PORT",
-	"SERVER_PROTOCOL",
-	"SERVER_SOFTWARE",
-	"SSL_PROTOCOL",
-	"SSL_CIPHER",
-	"AUTH_TYPE",
-	"REMOTE_IDENT",
-	"CONTENT_TYPE",
-	"PATH_TRANSLATED",
-	"QUERY_STRING",
-	"REMOTE_USER",
-	"REQUEST_METHOD",
-	"REQUEST_URI",
+// cStringHTTPMethods caches C string versions of common HTTP methods
+// to avoid allocations in pinCString on every request.
+var cStringHTTPMethods = map[string]*C.char{
+	"GET":     C.CString("GET"),
+	"HEAD":    C.CString("HEAD"),
+	"POST":    C.CString("POST"),
+	"PUT":     C.CString("PUT"),
+	"DELETE":  C.CString("DELETE"),
+	"CONNECT": C.CString("CONNECT"),
+	"OPTIONS": C.CString("OPTIONS"),
+	"TRACE":   C.CString("TRACE"),
+	"PATCH":   C.CString("PATCH"),
 }
 
 // computeKnownVariables returns a set of CGI environment variables for the request.
@@ -70,7 +46,6 @@ var knownServerKeys = []string{
 // Inspired by https://github.com/caddyserver/caddy/blob/master/modules/caddyhttp/reverseproxy/fastcgi/fastcgi.go
 func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 	request := fc.request
-	keys := mainThread.knownServerKeys
 	// Separate remote IP and port; more lenient than net.SplitHostPort
 	var ip, port string
 	if idx := strings.LastIndex(request.RemoteAddr, ":"); idx > -1 {
@@ -81,27 +56,25 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 	}
 
 	// Remove [] from IPv6 addresses
-	ip = strings.Replace(ip, "[", "", 1)
-	ip = strings.Replace(ip, "]", "", 1)
+	if len(ip) > 0 && ip[0] == '[' {
+		ip = ip[1 : len(ip)-1]
+	}
 
-	var https, sslProtocol, sslCipher, rs string
+	var rs, https, sslProtocol *C.zend_string
+	var sslCipher string
 
 	if request.TLS == nil {
-		rs = "http"
-		https = ""
-		sslProtocol = ""
+		rs = C.frankenphp_strings.httpLowercase
+		https = C.frankenphp_strings.empty
+		sslProtocol = C.frankenphp_strings.empty
 		sslCipher = ""
 	} else {
-		rs = "https"
-		https = "on"
+		rs = C.frankenphp_strings.httpsLowercase
+		https = C.frankenphp_strings.on
 
-		// and pass the protocol details in a manner compatible with apache's mod_ssl
+		// and pass the protocol details in a manner compatible with Apache's mod_ssl
 		// (which is why these have an SSL_ prefix and not TLS_).
-		if v, ok := tlsProtocolStrings[request.TLS.Version]; ok {
-			sslProtocol = v
-		} else {
-			sslProtocol = ""
-		}
+		sslProtocol = tlsProtocol(request.TLS.Version)
 
 		if request.TLS.CipherSuite != 0 {
 			sslCipher = tls.CipherSuiteName(request.TLS.CipherSuite)
@@ -121,9 +94,9 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		// even if the port is the default port for the scheme and could otherwise be omitted from a URI.
 		// https://tools.ietf.org/html/rfc3875#section-4.1.15
 		switch rs {
-		case "https":
+		case C.frankenphp_strings.httpsLowercase:
 			reqPort = "443"
-		case "http":
+		case C.frankenphp_strings.httpLowercase:
 			reqPort = "80"
 		}
 	}
@@ -135,62 +108,62 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 	if fc.originalRequest != nil {
 		requestURI = fc.originalRequest.URL.RequestURI()
 	} else {
-		requestURI = request.URL.RequestURI()
+		requestURI = fc.requestURI
 	}
 
-	C.frankenphp_register_bulk(
-		trackVarsArray,
-		packCgiVariable(keys["REMOTE_ADDR"], ip),
-		packCgiVariable(keys["REMOTE_HOST"], ip),
-		packCgiVariable(keys["REMOTE_PORT"], port),
-		packCgiVariable(keys["DOCUMENT_ROOT"], fc.documentRoot),
-		packCgiVariable(keys["PATH_INFO"], fc.pathInfo),
-		packCgiVariable(keys["PHP_SELF"], request.URL.Path),
-		packCgiVariable(keys["DOCUMENT_URI"], fc.docURI),
-		packCgiVariable(keys["SCRIPT_FILENAME"], fc.scriptFilename),
-		packCgiVariable(keys["SCRIPT_NAME"], fc.scriptName),
-		packCgiVariable(keys["HTTPS"], https),
-		packCgiVariable(keys["SSL_PROTOCOL"], sslProtocol),
-		packCgiVariable(keys["REQUEST_SCHEME"], rs),
-		packCgiVariable(keys["SERVER_NAME"], reqHost),
-		packCgiVariable(keys["SERVER_PORT"], serverPort),
-		// Variables defined in CGI 1.1 spec
-		// Some variables are unused but cleared explicitly to prevent
-		// the parent environment from interfering.
-		// These values can not be overridden
-		packCgiVariable(keys["CONTENT_LENGTH"], contentLength),
-		packCgiVariable(keys["GATEWAY_INTERFACE"], "CGI/1.1"),
-		packCgiVariable(keys["SERVER_PROTOCOL"], request.Proto),
-		packCgiVariable(keys["SERVER_SOFTWARE"], "FrankenPHP"),
-		packCgiVariable(keys["HTTP_HOST"], request.Host),
-		// These values are always empty but must be defined:
-		packCgiVariable(keys["AUTH_TYPE"], ""),
-		packCgiVariable(keys["REMOTE_IDENT"], ""),
-		// Request uri of the original request
-		packCgiVariable(keys["REQUEST_URI"], requestURI),
-		packCgiVariable(keys["SSL_CIPHER"], sslCipher),
-	)
+	requestPath := ensureLeadingSlash(request.URL.Path)
 
-	// These values are already present in the SG(request_info), so we'll register them from there
-	C.frankenphp_register_variables_from_request_info(
-		trackVarsArray,
-		keys["CONTENT_TYPE"],
-		keys["PATH_TRANSLATED"],
-		keys["QUERY_STRING"],
-		keys["REMOTE_USER"],
-		keys["REQUEST_METHOD"],
-	)
-}
+	C.frankenphp_register_server_vars(trackVarsArray, C.frankenphp_server_vars{
+		// approximate total length to avoid array re-hashing:
+		// 28 CGI vars + headers + environment
+		total_num_vars: C.size_t(28 + len(request.Header) + len(fc.env) + lengthOfEnv),
 
-func packCgiVariable(key *C.zend_string, value string) C.ht_key_value_pair {
-	return C.ht_key_value_pair{key, toUnsafeChar(value), C.size_t(len(value))}
+		// CGI vars with variable values
+		remote_addr:         toUnsafeChar(ip),
+		remote_addr_len:     C.size_t(len(ip)),
+		remote_host:         toUnsafeChar(ip),
+		remote_host_len:     C.size_t(len(ip)),
+		remote_port:         toUnsafeChar(port),
+		remote_port_len:     C.size_t(len(port)),
+		document_root:       toUnsafeChar(fc.documentRoot),
+		document_root_len:   C.size_t(len(fc.documentRoot)),
+		path_info:           toUnsafeChar(fc.pathInfo),
+		path_info_len:       C.size_t(len(fc.pathInfo)),
+		php_self:            toUnsafeChar(requestPath),
+		php_self_len:        C.size_t(len(requestPath)),
+		document_uri:        toUnsafeChar(fc.docURI),
+		document_uri_len:    C.size_t(len(fc.docURI)),
+		script_filename:     toUnsafeChar(fc.scriptFilename),
+		script_filename_len: C.size_t(len(fc.scriptFilename)),
+		script_name:         toUnsafeChar(fc.scriptName),
+		script_name_len:     C.size_t(len(fc.scriptName)),
+		server_name:         toUnsafeChar(reqHost),
+		server_name_len:     C.size_t(len(reqHost)),
+		server_port:         toUnsafeChar(serverPort),
+		server_port_len:     C.size_t(len(serverPort)),
+		content_length:      toUnsafeChar(contentLength),
+		content_length_len:  C.size_t(len(contentLength)),
+		server_protocol:     toUnsafeChar(request.Proto),
+		server_protocol_len: C.size_t(len(request.Proto)),
+		http_host:           toUnsafeChar(request.Host),
+		http_host_len:       C.size_t(len(request.Host)),
+		request_uri:         toUnsafeChar(requestURI),
+		request_uri_len:     C.size_t(len(requestURI)),
+		ssl_cipher:          toUnsafeChar(sslCipher),
+		ssl_cipher_len:      C.size_t(len(sslCipher)),
+
+		// CGI vars with known values
+		request_scheme: rs,          // "http" or "https"
+		ssl_protocol:   sslProtocol, // values from tlsProtocol
+		https:          https,       // "on" or empty
+	})
 }
 
 func addHeadersToServer(ctx context.Context, request *http.Request, trackVarsArray *C.zval) {
 	for field, val := range request.Header {
-		if k := mainThread.commonHeaders[field]; k != nil {
+		if k := commonHeaders[field]; k != nil {
 			v := strings.Join(val, ", ")
-			C.frankenphp_register_single(k, toUnsafeChar(v), C.size_t(len(v)), trackVarsArray)
+			C.frankenphp_register_known_variable(k, toUnsafeChar(v), C.size_t(len(v)), trackVarsArray)
 			continue
 		}
 
@@ -209,8 +182,8 @@ func addPreparedEnvToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 	fc.env = nil
 }
 
-//export go_register_variables
-func go_register_variables(threadIndex C.uintptr_t, trackVarsArray *C.zval) {
+//export go_register_server_variables
+func go_register_server_variables(threadIndex C.uintptr_t, trackVarsArray *C.zval) {
 	thread := phpThreads[threadIndex]
 	fc := thread.frankenPHPContext()
 
@@ -249,27 +222,67 @@ func splitCgiPath(fc *frankenPHPContext) {
 	// TODO: is it possible to delay this and avoid saving everything in the context?
 	// SCRIPT_FILENAME is the absolute path of SCRIPT_NAME
 	fc.scriptFilename = sanitizedPathJoin(fc.documentRoot, fc.scriptName)
-	fc.worker = getWorkerByPath(fc.scriptFilename)
+	fc.worker = workersByPath[fc.scriptFilename]
 }
 
-// splitPos returns the index where path should
-// be split based on SplitPath.
+var splitSearchNonASCII = search.New(language.Und, search.IgnoreCase)
+
+// splitPos returns the index where path should be split based on splitPath.
 // example: if splitPath is [".php"]
 // "/path/to/script.php/some/path": ("/path/to/script.php", "/some/path")
-//
-// Adapted from https://github.com/caddyserver/caddy/blob/master/modules/caddyhttp/reverseproxy/fastcgi/fastcgi.go
-// Copyright 2015 Matthew Holt and The Caddy Authors
 func splitPos(path string, splitPath []string) int {
 	if len(splitPath) == 0 {
 		return 0
 	}
 
-	lowerPath := strings.ToLower(path)
+	pathLen := len(path)
+
+	// We are sure that split strings are all ASCII-only and lower-case because of validation and normalization in WithRequestSplitPath
 	for _, split := range splitPath {
-		if idx := strings.Index(lowerPath, strings.ToLower(split)); idx > -1 {
-			return idx + len(split)
+		splitLen := len(split)
+
+		for i := 0; i < pathLen; i++ {
+			if path[i] >= utf8.RuneSelf {
+				if _, end := splitSearchNonASCII.IndexString(path, split); end > -1 {
+					return end
+				}
+
+				break
+			}
+
+			if i+splitLen > pathLen {
+				continue
+			}
+
+			match := true
+			for j := 0; j < splitLen; j++ {
+				c := path[i+j]
+
+				if c >= utf8.RuneSelf {
+					if _, end := splitSearchNonASCII.IndexString(path, split); end > -1 {
+						return end
+					}
+
+					break
+				}
+
+				if 'A' <= c && c <= 'Z' {
+					c += 'a' - 'A'
+				}
+
+				if c != split[j] {
+					match = false
+
+					break
+				}
+			}
+
+			if match {
+				return i + splitLen
+			}
 		}
 	}
+
 	return -1
 }
 
@@ -277,26 +290,20 @@ func splitPos(path string, splitPath []string) int {
 // See: https://github.com/php/php-src/blob/345e04b619c3bc11ea17ee02cdecad6ae8ce5891/main/SAPI.h#L72
 //
 //export go_update_request_info
-func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) {
+func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) *C.char {
 	thread := phpThreads[threadIndex]
 	fc := thread.frankenPHPContext()
 	request := fc.request
 
 	if request == nil {
-		return
+		return nil
 	}
 
-	authUser, authPassword, ok := request.BasicAuth()
-	if ok {
-		if authPassword != "" {
-			info.auth_password = thread.pinCString(authPassword)
-		}
-		if authUser != "" {
-			info.auth_user = thread.pinCString(authUser)
-		}
+	if m, ok := cStringHTTPMethods[request.Method]; ok {
+		info.request_method = m
+	} else {
+		info.request_method = thread.pinCString(request.Method)
 	}
-
-	info.request_method = thread.pinCString(request.Method)
 	info.query_string = thread.pinCString(request.URL.RawQuery)
 	info.content_length = C.zend_long(request.ContentLength)
 
@@ -308,9 +315,16 @@ func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) 
 		info.path_translated = thread.pinCString(sanitizedPathJoin(fc.documentRoot, fc.pathInfo)) // See: http://www.oreilly.com/openbook/cgi/ch02_04.html
 	}
 
-	info.request_uri = thread.pinCString(request.URL.RequestURI())
+	info.request_uri = thread.pinCString(fc.requestURI)
 
 	info.proto_num = C.int(request.ProtoMajor*1000 + request.ProtoMinor)
+
+	authorizationHeader := request.Header.Get("Authorization")
+	if authorizationHeader == "" {
+		return nil
+	}
+
+	return thread.pinCString(authorizationHeader)
 }
 
 // SanitizedPathJoin performs filepath.Join(root, reqPath) that
@@ -343,7 +357,40 @@ func sanitizedPathJoin(root, reqPath string) string {
 
 const separator = string(filepath.Separator)
 
+func ensureLeadingSlash(path string) string {
+	if path == "" || path[0] == '/' {
+		return path
+	}
+
+	return "/" + path
+}
+
+// toUnsafeChar returns a *C.char pointing at the backing bytes the Go string.
+// If C does not store the string, it may be passed directly in a Cgo call (most efficient).
+// If C stores the string, it must be pinned explicitly instead (inefficient).
+// C may never modify the string.
 func toUnsafeChar(s string) *C.char {
-	sData := unsafe.StringData(s)
-	return (*C.char)(unsafe.Pointer(sData))
+	return (*C.char)(unsafe.Pointer(unsafe.StringData(s)))
+}
+
+// initialize a global zend_string that must never be freed and is ignored by GC
+func newPersistentZendString(str string) *C.zend_string {
+	return C.frankenphp_init_persistent_string(toUnsafeChar(str), C.size_t(len(str)))
+}
+
+// Protocol versions, in Apache mod_ssl format: https://httpd.apache.org/docs/current/mod/mod_ssl.html
+// Note that these are slightly different from SupportedProtocols in caddytls/config.go
+func tlsProtocol(proto uint16) *C.zend_string {
+	switch proto {
+	case tls.VersionTLS10:
+		return C.frankenphp_strings.tls1
+	case tls.VersionTLS11:
+		return C.frankenphp_strings.tls11
+	case tls.VersionTLS12:
+		return C.frankenphp_strings.tls12
+	case tls.VersionTLS13:
+		return C.frankenphp_strings.tls13
+	default:
+		return C.frankenphp_strings.empty
+	}
 }

@@ -402,11 +402,14 @@ const MAX_CONNECTIONS = 100
 const API_VERSION = "1.2.3"
 
 //export_php:const
-const STATUS_OK = iota
-
-//export_php:const
-const STATUS_ERROR = iota
+const (
+	STATUS_OK = iota
+	STATUS_ERROR
+)
 ```
+
+> [!NOTE]
+> Les constantes PHP prennent le nom de la constante Go, d'où l'utilisation de majuscules pour les noms des constants en Go.
 
 #### Constantes de Classe
 
@@ -425,14 +428,15 @@ const STATUS_INACTIVE = 0
 const ROLE_ADMIN = "admin"
 
 //export_php:classconst Order
-const STATE_PENDING = iota
-
-//export_php:classconst Order
-const STATE_PROCESSING = iota
-
-//export_php:classconst Order
-const STATE_COMPLETED = iota
+const (
+	STATE_PENDING = iota
+	STATE_PROCESSING
+	STATE_COMPLETED
+)
 ```
+
+> [!NOTE]
+> Comme les constantes globales, les constantes de classe prennent le nom de la constante Go.
 
 Les constantes de classe sont accessibles en utilisant la portée du nom de classe en PHP :
 

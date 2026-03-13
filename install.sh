@@ -3,9 +3,6 @@
 set -e
 
 SUDO=""
-if [ "$(id -u)" -ne 0 ]; then
-	SUDO="sudo"
-fi
 
 if [ -z "${BIN_DIR}" ]; then
 	BIN_DIR=$(pwd)
@@ -19,7 +16,7 @@ ARCH=$(uname -m)
 GNU=""
 
 if ! command -v curl >/dev/null 2>&1; then
-	echo "Please install curl to download FrankenPHP"
+	echo "❗ Please install curl to download FrankenPHP"
 	exit 1
 fi
 
@@ -34,12 +31,13 @@ Linux*)
 	if [ "${ARCH}" = "aarch64" ] || [ "${ARCH}" = "x86_64" ]; then
 		if command -v dnf >/dev/null 2>&1; then
 			echo "📦 Detected dnf. Installing FrankenPHP from RPM repository..."
-			if [ -n "${SUDO}" ]; then
+			if [ "$(id -u)" -ne 0 ]; then
+				SUDO="sudo"
 				echo "❗ Enter your password to grant sudo powers for package installation"
 				${SUDO} -v || true
 			fi
-			${SUDO} dnf -y install https://rpm.henderkes.com/static-php-1-0.noarch.rpm
-			${SUDO} dnf -y module enable php-zts:static-8.4 || true
+			${SUDO} dnf -y install https://rpm.henderkes.com/static-php-1-1.noarch.rpm
+			${SUDO} dnf -y module enable php-zts:static-8.5 || true
 			${SUDO} dnf -y install frankenphp
 			echo
 			echo "🥳 FrankenPHP installed to ${italic}/usr/bin/frankenphp${normal} successfully."
@@ -50,24 +48,50 @@ Linux*)
 			exit 0
 		fi
 
-		if command -v apt >/dev/null 2>&1 || command -v apt-get >/dev/null 2>&1; then
-			echo "📦 Detected apt. Installing FrankenPHP from DEB repository..."
-			if [ -n "${SUDO}" ]; then
+		if command -v apt-get >/dev/null 2>&1; then
+			echo "📦 Detected apt-get. Installing FrankenPHP from DEB repository..."
+			if [ "$(id -u)" -ne 0 ]; then
+				SUDO="sudo"
 				echo "❗ Enter your password to grant sudo powers for package installation"
 				${SUDO} -v || true
 			fi
-			${SUDO} sh -c 'curl -fsSL https://key.henderkes.com/static-php.gpg -o /usr/share/keyrings/static-php.gpg'
-			${SUDO} sh -c 'echo "deb [signed-by=/usr/share/keyrings/static-php.gpg] https://deb.henderkes.com/ stable main" > /etc/apt/sources.list.d/static-php.list'
-			if command -v apt >/dev/null 2>&1; then
-				${SUDO} apt update
-				${SUDO} apt -y install frankenphp
-			else
-				${SUDO} apt-get update
-				${SUDO} apt-get -y install frankenphp
-			fi
+			${SUDO} sh -c 'curl -fsSL https://pkg.henderkes.com/api/packages/85/debian/repository.key -o /etc/apt/keyrings/static-php85.asc'
+			${SUDO} sh -c 'echo "deb [signed-by=/etc/apt/keyrings/static-php85.asc] https://pkg.henderkes.com/api/packages/85/debian php-zts main" | sudo tee -a /etc/apt/sources.list.d/static-php85.list'
+			${SUDO} apt-get update
+			${SUDO} apt-get -y install frankenphp
 			echo
 			echo "🥳 FrankenPHP installed to ${italic}/usr/bin/frankenphp${normal} successfully."
 			echo "❗ The systemd service uses the Caddyfile in ${italic}/etc/frankenphp/Caddyfile${normal}"
+			echo "❗ Your php.ini is found in ${italic}/etc/php-zts/php.ini${normal}"
+			echo
+			echo "⭐ If you like FrankenPHP, please give it a star on GitHub: ${italic}https://github.com/php/frankenphp${normal}"
+			exit 0
+		fi
+
+		if command -v apk >/dev/null 2>&1; then
+			echo "📦 Detected apk. Installing FrankenPHP from APK repository..."
+			if [ "$(id -u)" -ne 0 ]; then
+				SUDO="sudo"
+				echo "❗ Enter your password to grant sudo powers for package installation"
+				${SUDO} -v || true
+			fi
+
+			KEY_URL="https://pkg.henderkes.com/api/packages/85/alpine/key"
+			${SUDO} sh -c "cd /etc/apk/keys && curl -JOsS \"$KEY_URL\" 2>/dev/null || true"
+
+			REPO_URL="https://pkg.henderkes.com/api/packages/85/alpine/main/php-zts"
+			if grep -q "$REPO_URL" /etc/apk/repositories 2>/dev/null; then
+				echo "Repository already exists in /etc/apk/repositories"
+			else
+				${SUDO} sh -c "echo \"$REPO_URL\" >> /etc/apk/repositories"
+				${SUDO} apk update
+				echo "Repository added to /etc/apk/repositories"
+			fi
+
+			${SUDO} apk add frankenphp
+			echo
+			echo "🥳 FrankenPHP installed to ${italic}/usr/bin/frankenphp${normal} successfully."
+			echo "❗ The OpenRC service uses the Caddyfile in ${italic}/etc/frankenphp/Caddyfile${normal}"
 			echo "❗ Your php.ini is found in ${italic}/etc/php-zts/php.ini${normal}"
 			echo
 			echo "⭐ If you like FrankenPHP, please give it a star on GitHub: ${italic}https://github.com/php/frankenphp${normal}"
@@ -102,9 +126,35 @@ Darwin*)
 		;;
 	esac
 	;;
-Windows | MINGW64_NT*)
-	echo "❗ Use WSL to run FrankenPHP on Windows: https://learn.microsoft.com/windows/wsl/"
-	exit 1
+CYGWIN_NT* | MSYS_NT* | MINGW*)
+	if ! command -v unzip >/dev/null 2>&1 && ! command -v powershell.exe >/dev/null 2>&1; then
+		echo "❗ Please install unzip or ensure PowerShell is available to extract FrankenPHP"
+		exit 1
+	fi
+
+	echo "📦 Downloading ${bold}FrankenPHP${normal} for Windows (x64):"
+
+	TMPZIP="/tmp/frankenphp-windows-$$.zip"
+	if ! curl -f -L --progress-bar "https://github.com/php/frankenphp/releases/latest/download/frankenphp-windows-x86_64.zip" -o "${TMPZIP}"; then
+		echo "❗ Failed to download FrankenPHP for Windows. Please check your internet connection or download it manually from:"
+		echo "   https://github.com/php/frankenphp/releases/latest"
+		exit 1
+	fi
+
+	echo "📂 Extracting to ${italic}${BIN_DIR}${normal}..."
+	if command -v unzip >/dev/null 2>&1; then
+		unzip -o -q "${TMPZIP}" -d "${BIN_DIR}"
+	else
+		powershell.exe -Command "Expand-Archive -Force -Path '$(cygpath -w "${TMPZIP}")' -DestinationPath '$(cygpath -w "${BIN_DIR}")'"
+	fi
+	rm -f "${TMPZIP}"
+
+	echo
+	echo "🥳 FrankenPHP downloaded successfully to ${italic}${BIN_DIR}${normal}"
+	echo "🔧 Add ${italic}$(cygpath -w "${BIN_DIR}")${normal} to your Windows PATH to use ${italic}frankenphp.exe${normal} globally."
+	echo
+	echo "⭐ If you like FrankenPHP, please give it a star on GitHub: ${italic}https://github.com/php/frankenphp${normal}"
+	exit 0
 	;;
 *)
 	THE_ARCH_BIN=""

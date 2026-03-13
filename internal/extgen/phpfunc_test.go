@@ -26,7 +26,7 @@ func TestPHPFunctionGenerator_Generate(t *testing.T) {
 				"PHP_FUNCTION(greet)",
 				"zend_string *name = NULL;",
 				"Z_PARAM_STR(name)",
-				"zend_string *result = greet(name);",
+				"zend_string *result = go_greet(name);",
 				"RETURN_STR(result)",
 			},
 		},
@@ -61,7 +61,7 @@ func TestPHPFunctionGenerator_Generate(t *testing.T) {
 			},
 			contains: []string{
 				"PHP_FUNCTION(doSomething)",
-				"doSomething(action);",
+				"go_doSomething(action);",
 			},
 		},
 		{
@@ -109,7 +109,7 @@ func TestPHPFunctionGenerator_Generate(t *testing.T) {
 				"PHP_FUNCTION(process_array)",
 				"zend_array *input = NULL;",
 				"Z_PARAM_ARRAY_HT(input)",
-				"zend_array *result = process_array(input);",
+				"zend_array *result = go_process_array(input);",
 				"RETURN_ARR(result)",
 			},
 		},

@@ -150,9 +150,9 @@ jobs:
             ${{ (github.event_name == 'pull_request' || matrix.platform == 'linux/arm64') && 'static-builder-musl.args.NO_COMPRESS=1' || '' }}
             *.tags=
             *.platform=${{ matrix.platform }}
-            *.cache-from=type=gha,scope=${{ needs.prepare.outputs.ref || github.ref }}-static-builder-musl${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }}
-            *.cache-from=type=gha,scope=refs/heads/main-static-builder-musl${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }}
-            *.cache-to=type=gha,scope=${{ needs.prepare.outputs.ref || github.ref }}-static-builder-musl${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }},ignore-error=true
+            ${{ fromJson(needs.prepare.outputs.push) && '' || format('*.cache-from=type=gha,scope={0}-static-builder-musl{1}{2}', needs.prepare.outputs.ref || github.ref, matrix.debug && '-debug' || '', matrix.mimalloc && '-mimalloc' || '') }}
+            ${{ fromJson(needs.prepare.outputs.push) && '' || format('*.cache-from=type=gha,scope=refs/heads/main-static-builder-musl{0}{1}', matrix.debug && '-debug' || '', matrix.mimalloc && '-mimalloc' || '') }}
+            ${{ fromJson(needs.prepare.outputs.push) && '' || format('*.cache-to=type=gha,scope={0}-static-builder-musl{1}{2},ignore-error=true', needs.prepare.outputs.ref || github.ref, matrix.debug && '-debug' || '', matrix.mimalloc && '-mimalloc' || '') }}
             ${{ (fromJson(needs.prepare.outputs.push) && !matrix.debug && !matrix.mimalloc) && format('*.output=type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME) || '' }}
         env:
           SHA: ${{ github.sha }}
@@ -170,7 +170,7 @@ jobs:
           METADATA: ${{ steps.build.outputs.metadata }}
       - name: Upload metadata
         if: fromJson(needs.prepare.outputs.push) && !matrix.debug && !matrix.mimalloc
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: metadata-static-builder-musl-${{ steps.prepare.outputs.sanitized_platform }}
           path: /tmp/metadata/*
@@ -179,7 +179,9 @@ jobs:
       - name: Copy binary
         run: |
           # shellcheck disable=SC2034
-          digest=$(jq -r '."static-builder-musl"."${{ (fromJson(needs.prepare.outputs.push) && !matrix.debug && !matrix.mimalloc) && 'containerimage.digest' || 'containerimage.config.digest' }}"' <<< "${METADATA}")
+          # TODO: remove "containerimage.config.digest" fallback once all runners use buildx v0.18+
+          # which replaced it with "containerimage.digest" and "containerimage.descriptor"
+          digest=$(jq -r '."static-builder-musl" | ${{ (fromJson(needs.prepare.outputs.push) && !matrix.debug && !matrix.mimalloc) && '."containerimage.digest"' || '(."containerimage.config.digest" // ."containerimage.digest")' }}' <<< "${METADATA}")
           docker create --platform="${PLATFORM}" --name static-builder-musl "${{ (fromJson(needs.prepare.outputs.push) && !matrix.debug && !matrix.mimalloc) && '${IMAGE_NAME}@${digest}' || '${digest}' }}"
           docker cp "static-builder-musl:/go/src/app/dist/${BINARY}" "${BINARY}${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }}"
         env:
@@ -188,10 +190,11 @@ jobs:
           PLATFORM: ${{ matrix.platform }}
       - name: Upload artifact
         if: ${{ !fromJson(needs.prepare.outputs.push) }}
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }}
           path: frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }}
+          compression-level: 0
       - name: Upload assets
         if: fromJson(needs.prepare.outputs.push) && (needs.prepare.outputs.ref || github.ref_type == 'tag')
         run: gh release upload "${REF}" frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }} --repo dunglas/frankenphp --clobber
@@ -199,7 +202,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REF: ${{ (github.ref_type == 'tag' && github.ref_name) || needs.prepare.outputs.ref }}
       - if: fromJson(needs.prepare.outputs.push) && (needs.prepare.outputs.ref || github.ref_type == 'tag')
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: ${{ github.workspace }}/frankenphp-linux-*
       - name: Run sanity checks
@@ -300,9 +303,9 @@ jobs:
             ${{ (github.event_name == 'pull_request' || matrix.platform == 'linux/arm64') && 'static-builder-gnu.args.NO_COMPRESS=1' || '' }}
             *.tags=
             *.platform=${{ matrix.platform }}
-            *.cache-from=type=gha,scope=${{ needs.prepare.outputs.ref || github.ref }}-static-builder-gnu
-            *.cache-from=type=gha,scope=refs/heads/main-static-builder-gnu
-            *.cache-to=type=gha,scope=${{ needs.prepare.outputs.ref || github.ref }}-static-builder-gnu,ignore-error=true
+            ${{ fromJson(needs.prepare.outputs.push) && '' || format('*.cache-from=type=gha,scope={0}-static-builder-gnu', needs.prepare.outputs.ref || github.ref) }}
+            ${{ fromJson(needs.prepare.outputs.push) && '' || '*.cache-from=type=gha,scope=refs/heads/main-static-builder-gnu' }}
+            ${{ fromJson(needs.prepare.outputs.push) && '' || format('*.cache-to=type=gha,scope={0}-static-builder-gnu,ignore-error=true', needs.prepare.outputs.ref || github.ref) }}
             ${{ fromJson(needs.prepare.outputs.push) && format('*.output=type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME) || '' }}
         env:
           SHA: ${{ github.sha }}
@@ -320,7 +323,7 @@ jobs:
           METADATA: ${{ steps.build.outputs.metadata }}
       - name: Upload metadata
         if: fromJson(needs.prepare.outputs.push)
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: metadata-static-builder-gnu-${{ steps.prepare.outputs.sanitized_platform }}
           path: /tmp/metadata-gnu/*
@@ -329,7 +332,9 @@ jobs:
       - name: Copy all frankenphp* files
         run: |
           # shellcheck disable=SC2034
-          digest=$(jq -r '."static-builder-gnu"."${{ fromJson(needs.prepare.outputs.push) && 'containerimage.digest' || 'containerimage.config.digest' }}"' <<< "${METADATA}")
+          # TODO: remove "containerimage.config.digest" fallback once all runners use buildx v0.18+
+          # which replaced it with "containerimage.digest" and "containerimage.descriptor"
+          digest=$(jq -r '."static-builder-gnu" | ${{ fromJson(needs.prepare.outputs.push) && '."containerimage.digest"' || '(."containerimage.config.digest" // ."containerimage.digest")' }}' <<< "${METADATA}")
           container_id=$(docker create --platform="${PLATFORM}" "${{ fromJson(needs.prepare.outputs.push) && '${IMAGE_NAME}@${digest}' || '${digest}' }}")
           mkdir -p gh-output
           cd gh-output
@@ -344,7 +349,7 @@ jobs:
           PLATFORM: ${{ matrix.platform }}
       - name: Upload artifact
         if: ${{ !fromJson(needs.prepare.outputs.push) }}
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}-gnu-files
           path: gh-output/*
@@ -355,7 +360,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REF: ${{ (github.ref_type == 'tag' && github.ref_name) || needs.prepare.outputs.ref }}
       - if: fromJson(needs.prepare.outputs.push) && (needs.prepare.outputs.ref || github.ref_type == 'tag')
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: ${{ github.workspace }}/gh-output/frankenphp-linux-*-gnu
       - name: Run sanity checks
@@ -380,13 +385,13 @@ jobs:
     if: fromJson(needs.prepare.outputs.push)
     steps:
       - name: Download metadata
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           pattern: metadata-static-builder-musl-*
           path: /tmp/metadata
           merge-multiple: true
       - name: Download GNU metadata
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           pattern: metadata-static-builder-gnu-*
           path: /tmp/metadata-gnu
@@ -448,12 +453,12 @@ jobs:
           ref: ${{ needs.prepare.outputs.ref }}
           persist-credentials: false
       - uses: actions/setup-go@v6
-        with:
-          go-version: "1.25"
+        with: # zizmor: ignore[cache-poisoning]
+          go-version: "1.26"
           cache-dependency-path: |
             go.sum
             caddy/go.sum
-          cache: false
+          cache: ${{ github.event_name != 'release' }}
       - name: Set FRANKENPHP_VERSION
         run: |
           if [ "${GITHUB_REF_TYPE}" == "tag" ]; then
@@ -475,20 +480,21 @@ jobs:
           NO_COMPRESS: ${{ github.event_name == 'pull_request' && '1' || '' }}
       - name: Upload logs
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           path: dist/static-php-cli/log
           name: static-php-cli-log-${{ matrix.platform }}-${{ github.sha }}
       - if: needs.prepare.outputs.ref || github.ref_type == 'tag'
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: ${{ github.workspace }}/dist/frankenphp-mac-*
       - name: Upload artifact
         if: github.ref_type == 'branch'
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: frankenphp-mac-${{ matrix.platform }}
           path: dist/frankenphp-mac-${{ matrix.platform }}
+          compression-level: 0
       - name: Run sanity checks
         run: |
           "${BINARY}" version

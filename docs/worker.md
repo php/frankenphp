@@ -72,9 +72,6 @@ The following example shows how to create your own worker script without relying
 <?php
 // public/index.php
 
-// Prevent worker script termination when a client connection is interrupted
-ignore_user_abort(true);
-
 // Boot your app
 require __DIR__.'/vendor/autoload.php';
 

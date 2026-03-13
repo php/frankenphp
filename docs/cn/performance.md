@@ -5,7 +5,7 @@
 
 ## 线程和 Worker 数量
 
-默认情况下，FrankenPHP 启动的线程和 worker（在 worker 模式下）数量是可用 CPU 数量的 2 倍。
+默认情况下，FrankenPHP 启动的线程和 worker（在 worker 模式下）数量是可用 CPU 核心数的 2 倍。
 
 适当的值很大程度上取决于你的应用程序是如何编写的、它做什么以及你的硬件。
 我们强烈建议更改这些值。为了获得最佳的系统稳定性，建议 `num_threads` x `memory_limit` < `available_memory`。
@@ -41,11 +41,11 @@
 
 另外，[一些错误只在使用 musl 时发生](https://github.com/php/php-src/issues?q=sort%3Aupdated-desc+is%3Aissue+is%3Aopen+label%3ABug+musl)。
 
-在生产环境中，我们建议使用链接到 glibc 的 FrankenPHP。
+在生产环境中，我们建议使用链接到 glibc 的 FrankenPHP，并使用适当的优化级别进行编译。
 
-这可以通过使用 Debian Docker 镜像（默认）、从我们的 [Releases](https://github.com/php/frankenphp/releases) 下载 -gnu 后缀二进制文件，或通过[从源代码编译 FrankenPHP](compile.md) 来实现。
+这可以通过使用 Debian Docker 镜像、使用[我们的维护者提供的 .deb、.rpm 或 .apk 包](https://pkgs.henderkes.com)，或通过[从源代码编译 FrankenPHP](compile.md) 来实现。
 
-或者，我们提供使用 [mimalloc 分配器](https://github.com/microsoft/mimalloc) 编译的静态 musl 二进制文件，这缓解了线程场景中的问题。
+对于更精简或更安全的容器，你可能需要考虑使用[强化的 Debian 镜像](docker.md#hardening-images)而不是 Alpine。
 
 ## Go 运行时配置
 
@@ -89,6 +89,18 @@ php_server {
 ```
 
 这可以显著减少不必要的文件操作数量。
+上述配置的 worker 等效项为：
+
+```caddyfile
+route {
+    php_server { # 如果完全不需要文件服务器，请使用 "php" 而不是 "php_server"
+        root /root/to/your/app
+        worker /path/to/worker.php {
+            match * # 将所有请求直接发送到 worker
+        }
+    }
+}
+```
 
 另一种具有 0 个不必要文件系统操作的方法是改用 `php` 指令并按路径将
 文件与 PHP 分开。如果你的整个应用程序由一个入口文件提供服务，这种方法效果很好。
@@ -155,3 +167,28 @@ FrankenPHP 使用官方 PHP 解释器。
 
 有关更多详细信息，请阅读[专门的 Symfony 文档条目](https://symfony.com/doc/current/performance.html)
 （即使你不使用 Symfony，大多数提示也很有用）。
+
+## 拆分线程池
+
+应用程序与慢速外部服务交互是很常见的，例如在高负载下往往不可靠或持续需要 10 秒以上才能响应的 API。
+在这种情况下，将线程池拆分以拥有专用的“慢速”池可能会很有益。这可以防止慢速端点消耗所有服务器资源/线程，并限制指向慢速端点的请求并发性，类似于连接池。
+
+```caddyfile
+example.com {
+    php_server {
+        root /app/public # 你的应用程序根目录
+        worker index.php {
+            match /slow-endpoint/* # 所有路径为 /slow-endpoint/* 的请求都由这个线程池处理
+            num 1 # 匹配 /slow-endpoint/* 的请求至少有 1 个线程
+            max_threads 20 # 如果需要，允许最多 20 个线程处理匹配 /slow-endpoint/* 的请求
+        }
+        worker index.php {
+            match * # 所有其他请求单独处理
+            num 1 # 其他请求至少有 1 个线程，即使慢速端点开始挂起
+            max_threads 20 # 如果需要，允许最多 20 个线程处理其他请求
+        }
+    }
+}
+```
+
+通常，也建议通过使用消息队列等相关机制，异步处理非常慢的端点。

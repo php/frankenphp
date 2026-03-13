@@ -104,10 +104,6 @@ func (handler *workerThread) name() string {
 func setupWorkerScript(handler *workerThread, worker *worker) {
 	metrics.StartWorker(worker.name)
 
-	if handler.state.Is(state.Ready) {
-		metrics.ReadyWorker(handler.worker.name)
-	}
-
 	// Create a dummy request to set up the worker
 	fc, err := newDummyContext(
 		filepath.Base(worker.fileName),
@@ -123,7 +119,6 @@ func setupWorkerScript(handler *workerThread, worker *worker) {
 	handler.dummyFrankenPHPContext = fc
 	handler.dummyContext = ctx
 	handler.isBootingScript = true
-	clearSandboxedEnv(handler.thread)
 
 	if globalLogger.Enabled(ctx, slog.LevelDebug) {
 		globalLogger.LogAttrs(ctx, slog.LevelDebug, "starting", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex))
@@ -155,7 +150,11 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 	}
 
 	// worker has thrown a fatal error or has not reached frankenphp_handle_request
-	metrics.StopWorker(worker.name, StopReasonCrash)
+	if handler.isBootingScript {
+		metrics.StopWorker(worker.name, StopReasonBootFailure)
+	} else {
+		metrics.StopWorker(worker.name, StopReasonCrash)
+	}
 
 	if !handler.isBootingScript {
 		// fatal error (could be due to exit(1), timeouts, etc.)
@@ -210,13 +209,12 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 		if !C.frankenphp_shutdown_dummy_request() {
 			panic("Not in CGI context")
 		}
+
+		// worker is truly ready only after reaching frankenphp_handle_request()
+		metrics.ReadyWorker(handler.worker.name)
 	}
 
-	// worker threads are 'ready' after they first reach frankenphp_handle_request()
-	// 'state.TransitionComplete' is only true on the first boot of the worker script,
-	// while 'isBootingScript' is true on every boot of the worker script
 	if handler.state.Is(state.TransitionComplete) {
-		metrics.ReadyWorker(handler.worker.name)
 		handler.state.Set(state.Ready)
 	}
 

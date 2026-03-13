@@ -1,12 +1,14 @@
 # Создание кастомных Docker-образов
 
-[Docker-образы FrankenPHP](https://hub.docker.com/r/dunglas/frankenphp) основаны на [официальных PHP-образах](https://hub.docker.com/_/php/). Доступны варианты для Debian и Alpine Linux для популярных архитектур. Рекомендуется использовать Debian-варианты.
+[Docker-образы FrankenPHP](https://hub.docker.com/r/dunglas/frankenphp) основаны на [официальных PHP-образах](https://hub.docker.com/_/php/).
+Доступны варианты для Debian и Alpine Linux для популярных архитектур.
+Рекомендуется использовать Debian-варианты.
 
 Доступны версии для PHP 8.2, 8.3, 8.4 и 8.5.
 
 Теги следуют следующему шаблону: `dunglas/frankenphp:<frankenphp-version>-php<php-version>-<os>`.
 
-- `<frankenphp-version>` и `<php-version>` — версии FrankenPHP и PHP соответственно: от основных (например, `1`) до минорных (например, `1.2`) и патч-версий (например, `1.2.3`).
+- `<frankenphp-version>` и `<php-version>` — версии FrankenPHP и PHP соответственно, начиная с мажорных (например, `1`), минорных (например, `1.2`) и заканчивая патч-версиями (например, `1.2.3`).
 - `<os>` может быть `trixie` (для Debian Trixie), `bookworm` (для Debian Bookworm) или `alpine` (для последней стабильной версии Alpine).
 
 [Просмотреть доступные теги](https://hub.docker.com/r/dunglas/frankenphp/tags).
@@ -28,9 +30,13 @@ docker build -t my-php-app .
 docker run -it --rm --name my-running-app my-php-app
 ```
 
+## Как настроить конфигурацию
+
+Для удобства в образе предоставлен [Caddyfile по умолчанию](https://github.com/php/frankenphp/blob/main/caddy/frankenphp/Caddyfile), содержащий полезные переменные окружения.
+
 ## Как установить дополнительные PHP-расширения
 
-Скрипт [`docker-php-extension-installer`](https://github.com/mlocati/docker-php-extension-installer) включён в базовый образ. Установка дополнительных PHP-расширений осуществляется просто:
+Скрипт [`docker-php-extension-installer`](https://github.com/mlocati/docker-php-extension-installer) предоставляется в базовом образе. Установка дополнительных PHP-расширений осуществляется просто:
 
 ```dockerfile
 FROM dunglas/frankenphp
@@ -78,16 +84,17 @@ FROM dunglas/frankenphp AS runner
 COPY --from=builder /usr/local/bin/frankenphp /usr/local/bin/frankenphp
 ```
 
-Образ `builder`, предоставляемый FrankenPHP, содержит скомпилированную версию `libphp`.  
+Образ `builder`, предоставляемый FrankenPHP, содержит скомпилированную версию `libphp`.
 [Образы builder](https://hub.docker.com/r/dunglas/frankenphp/tags?name=builder) доступны для всех версий FrankenPHP и PHP, как для Debian, так и для Alpine.
 
 > [!TIP]
 >
-> Если вы используете Alpine Linux и Symfony, возможно, потребуется [увеличить размер стека](compile.md#использование-xcaddy).
+> Если вы используете Alpine Linux и Symfony,
+> возможно, потребуется [увеличить размер стека](compile.md#использование-xcaddy).
 
 ## Активировать worker режим по умолчанию
 
-Установите переменную окружения `FRANKENPHP_CONFIG`, чтобы запускать FrankenPHP с Worker-скриптом:
+Установите переменную окружения `FRANKENPHP_CONFIG`, чтобы запускать FrankenPHP с рабочим скриптом:
 
 ```dockerfile
 FROM dunglas/frankenphp
@@ -107,7 +114,7 @@ docker run -v $PWD:/app/public -p 80:80 -p 443:443 -p 443:443/udp --tty my-php-a
 
 > [!TIP]
 >
-> Опция `--tty` позволяет видеть удобочитаемые логи вместо JSON-формата.
+> Опция `--tty` позволяет получать удобочитаемые логи вместо JSON-формата.
 
 С использованием Docker Compose:
 
@@ -119,7 +126,7 @@ services:
     image: dunglas/frankenphp
     # раскомментируйте следующую строку, если хотите использовать собственный Dockerfile
     #build: .
-    # раскомментируйте следующую строку, если вы запускаете это в продакшн среде
+    # раскомментируйте следующую строку для работы в production-окружении
     # restart: always
     ports:
       - "80:80" # HTTP
@@ -129,10 +136,10 @@ services:
       - ./:/app/public
       - caddy_data:/data
       - caddy_config:/config
-    # закомментируйте следующую строку в продакшн среде, она позволяет получать удобочитаемые логи в режиме разработки
+    # закомментируйте следующую строку в production — в dev она обеспечивает удобочитаемые логи
     tty: true
 
-# Томы, необходимые для сертификатов и конфигурации Caddy
+# Тома, необходимые для сертификатов и конфигурации Caddy
 volumes:
   caddy_data:
   caddy_config:
@@ -140,7 +147,7 @@ volumes:
 
 ## Запуск под обычным пользователем
 
-FrankenPHP поддерживает запуск под обычным пользователем в Docker.
+FrankenPHP может запускаться под обычным пользователем в Docker.
 
 Пример `Dockerfile` для этого:
 
@@ -152,10 +159,10 @@ ARG USER=appuser
 RUN \
 	# Для дистрибутивов на основе Alpine используйте "adduser -D ${USER}"
 	useradd ${USER}; \
-	# Добавьте возможность привязываться к портам 80 и 443
+	# Добавить возможность привязки к портам 80 и 443
 	setcap CAP_NET_BIND_SERVICE=+eip /usr/local/bin/frankenphp; \
-	# Дайте права на запись для /data/caddy и /config/caddy
-	chown -R ${USER}:${USER} /data/caddy && chown -R ${USER}:${USER} /config/caddy
+	# Предоставить доступ на запись в /config/caddy и /data/caddy
+	chown -R ${USER}:${USER} /config/caddy /data/caddy
 
 USER ${USER}
 ```
@@ -172,30 +179,102 @@ FROM dunglas/frankenphp
 ARG USER=appuser
 
 RUN \
-	# Для Alpine-дистрибутивов используйте команду "adduser -D ${USER}"
+	# Для дистрибутивов на основе Alpine используйте "adduser -D ${USER}"
 	useradd ${USER}; \
-	# Удалите стандартные возможности
+	# Удалить стандартные возможности
 	setcap -r /usr/local/bin/frankenphp; \
-	# Дайте права на запись для /data/caddy и /config/caddy
-	chown -R ${USER}:${USER} /data/caddy && chown -R ${USER}:${USER} /config/caddy
+	# Предоставить доступ на запись в /config/caddy и /data/caddy
+	chown -R ${USER}:${USER} /config/caddy /data/caddy
 
 USER ${USER}
 ```
 
-Затем установите переменную окружения `SERVER_NAME`, чтобы использовать непривилегированный порт.  
+Затем установите переменную окружения `SERVER_NAME`, чтобы использовать непривилегированный порт.
 Пример: `:8000`.
 
 ## Обновления
 
-Docker-образы обновляются:
+Docker-образы собираются:
 
 - при выпуске новой версии;
 - ежедневно в 4 утра UTC, если доступны новые версии официальных PHP-образов.
 
+## Укрепление образов
+
+Чтобы ещё больше уменьшить поверхность атаки и размер ваших Docker-образов FrankenPHP, также возможно создавать их на основе [Google Distroless](https://github.com/GoogleContainerTools/distroless) или [Docker Hardened](https://www.docker.com/products/hardened-images) образов.
+
+> [!WARNING]
+> Эти минимальные базовые образы не включают оболочку или менеджер пакетов, что значительно усложняет отладку.
+> Поэтому они рекомендуются только для продакшена, если безопасность является высоким приоритетом.
+
+При добавлении дополнительных PHP-расширений вам потребуется промежуточная стадия сборки:
+
+```dockerfile
+FROM dunglas/frankenphp AS builder
+
+# Добавьте дополнительные PHP-расширения здесь
+RUN install-php-extensions pdo_mysql pdo_pgsql #...
+
+# Скопировать общие библиотеки frankenphp и всех установленных расширений во временное место
+# Этот шаг можно также выполнить вручную, проанализировав вывод ldd для бинарного файла frankenphp и каждого файла расширения .so
+RUN apt-get update && apt-get install -y libtree && \
+    EXT_DIR="$(php -r 'echo ini_get("extension_dir");')" && \
+    FRANKENPHP_BIN="$(which frankenphp)"; \
+    LIBS_TMP_DIR="/tmp/libs"; \
+    mkdir -p "$LIBS_TMP_DIR"; \
+    for target in "$FRANKENPHP_BIN" $(find "$EXT_DIR" -maxdepth 2 -type f -name "*.so"); do \
+        libtree -pv "$target" | sed 's/.*── \(.*\) \[.*/\1/' | grep -v "^$target" | while IFS= read -r lib; do \
+            [ -z "$lib" ] && continue; \
+            base=$(basename "$lib"); \
+            destfile="$LIBS_TMP_DIR/$base"; \
+            if [ ! -f "$destfile" ]; then \
+                cp "$lib" "$destfile"; \
+            fi; \
+        done; \
+    done
+
+
+# Базовый образ Distroless Debian — убедитесь, что версия Debian совпадает с базовым образом
+FROM gcr.io/distroless/base-debian13
+# Альтернатива: Docker Hardened Image
+# FROM dhi.io/debian:13
+
+# Путь к приложению и Caddyfile для копирования в контейнер
+ARG PATH_TO_APP="."
+ARG PATH_TO_CADDYFILE="./Caddyfile"
+
+# Скопировать приложение в /app
+# Для дополнительного усиления убедитесь, что только записываемые пути принадлежат пользователю nonroot
+COPY --chown=nonroot:nonroot "$PATH_TO_APP" /app
+COPY "$PATH_TO_CADDYFILE" /etc/caddy/Caddyfile
+
+# Скопировать frankenphp и необходимые библиотеки
+COPY --from=builder /usr/local/bin/frankenphp /usr/local/bin/frankenphp
+COPY --from=builder /usr/local/lib/php/extensions /usr/local/lib/php/extensions
+COPY --from=builder /tmp/libs /usr/lib
+
+# Скопировать конфигурационные файлы php.ini
+COPY --from=builder /usr/local/etc/php/conf.d /usr/local/etc/php/conf.d
+COPY --from=builder /usr/local/etc/php/php.ini-production /usr/local/etc/php/php.ini
+
+# Директории данных Caddy — должны быть доступны для записи пользователю nonroot даже в файловой системе только для чтения
+ENV XDG_CONFIG_HOME=/config \
+    XDG_DATA_HOME=/data
+COPY --from=builder --chown=nonroot:nonroot /data/caddy /data/caddy
+COPY --from=builder --chown=nonroot:nonroot /config/caddy /config/caddy
+
+USER nonroot
+
+WORKDIR /app
+
+# Точка входа для запуска frankenphp с указанным Caddyfile
+ENTRYPOINT ["/usr/local/bin/frankenphp", "run", "-c", "/etc/caddy/Caddyfile"]
+```
+
 ## Версии для разработки
 
-Версии для разработки доступны в Docker-репозитории [`dunglas/frankenphp-dev`](https://hub.docker.com/repository/docker/dunglas/frankenphp-dev).  
-Сборка запускается автоматически при каждом коммите в основную ветку GitHub-репозитория
+Версии для разработки доступны в Docker-репозитории [`dunglas/frankenphp-dev`](https://hub.docker.com/repository/docker/dunglas/frankenphp-dev).
+Сборка запускается автоматически при каждом коммите в основную ветку GitHub-репозитория.
 
-Теги с префиксом `latest*` указывают на актуальное состояние ветки `main`.  
+Теги `latest*` указывают на голову ветки `main`.
 Также доступны теги в формате `sha-<git-commit-hash>`.

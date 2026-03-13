@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 #checkov:skip=CKV_DOCKER_2
 #checkov:skip=CKV_DOCKER_3
-FROM golang:1.25-alpine
+FROM golang:1.26-alpine
 
 ENV GOTOOLCHAIN=local
 ENV CFLAGS="-ggdb3"

@@ -75,7 +75,7 @@ func (s *IntegrationTestSuite) createGoModule(sourceFile string) (string, error)
 
 	goModContent := fmt.Sprintf(`module %s
 
-go 1.25
+go 1.26
 
 require github.com/dunglas/frankenphp v0.0.0
 
@@ -480,6 +480,7 @@ func TestConstants(t *testing.T) {
 		[]string{
 			"TEST_MAX_RETRIES", "TEST_API_VERSION", "TEST_ENABLED", "TEST_PI",
 			"STATUS_PENDING", "STATUS_PROCESSING", "STATUS_COMPLETED",
+			"ONE", "TWO",
 		},
 	)
 	require.NoError(t, err, "all constants, functions, and classes should be accessible from PHP")

@@ -1,8 +1,5 @@
 package frankenphp
 
-//#include "frankenphp.h"
-//#include <sys/resource.h>
-import "C"
 import (
 	"errors"
 	"log/slog"
@@ -24,13 +21,14 @@ const (
 	downScaleCheckTime = 5 * time.Second
 	// max amount of threads stopped in one iteration of downScaleCheckTime
 	maxTerminationCount = 10
-	// autoscaled threads waiting for longer than this time are downscaled
-	maxThreadIdleTime = 5 * time.Second
+	// default time an autoscaled thread may be idle before being deactivated
+	defaultMaxIdleTime = 5 * time.Second
 )
 
 var (
 	ErrMaxThreadsReached = errors.New("max amount of overall threads reached")
 
+	maxIdleTime       = defaultMaxIdleTime
 	scaleChan         chan *frankenPHPContext
 	autoScaledThreads = []*phpThread{}
 	scalingMu         = new(sync.RWMutex)
@@ -84,15 +82,15 @@ func addWorkerThread(worker *worker) (*phpThread, error) {
 
 // scaleWorkerThread adds a worker PHP thread automatically
 func scaleWorkerThread(worker *worker) {
+	// probe CPU usage before acquiring the lock (avoids holding lock during 120ms sleep)
+	if !cpu.ProbeCPUs(cpuProbeTime, maxCpuUsageForScaling, mainThread.done) {
+		return
+	}
+
 	scalingMu.Lock()
 	defer scalingMu.Unlock()
 
 	if !mainThread.state.Is(state.Ready) {
-		return
-	}
-
-	// probe CPU usage before scaling
-	if !cpu.ProbeCPUs(cpuProbeTime, maxCpuUsageForScaling, mainThread.done) {
 		return
 	}
 
@@ -114,15 +112,15 @@ func scaleWorkerThread(worker *worker) {
 
 // scaleRegularThread adds a regular PHP thread automatically
 func scaleRegularThread() {
+	// probe CPU usage before acquiring the lock (avoids holding lock during 120ms sleep)
+	if !cpu.ProbeCPUs(cpuProbeTime, maxCpuUsageForScaling, mainThread.done) {
+		return
+	}
+
 	scalingMu.Lock()
 	defer scalingMu.Unlock()
 
 	if !mainThread.state.Is(state.Ready) {
-		return
-	}
-
-	// probe CPU usage before scaling
-	if !cpu.ProbeCPUs(cpuProbeTime, maxCpuUsageForScaling, mainThread.done) {
 		return
 	}
 
@@ -224,7 +222,7 @@ func deactivateThreads() {
 		}
 
 		// convert threads to inactive if they have been idle for too long
-		if thread.state.Is(state.Ready) && waitTime > maxThreadIdleTime.Milliseconds() {
+		if thread.state.Is(state.Ready) && waitTime > maxIdleTime.Milliseconds() {
 			convertToInactiveThread(thread)
 			stoppedThreadCount++
 			autoScaledThreads = append(autoScaledThreads[:i], autoScaledThreads[i+1:]...)

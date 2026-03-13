@@ -43,9 +43,9 @@ PHPは、従来のGNUライブラリの代わりにこの代替Cライブラリ�
 
 本番環境では、glibcにリンクされたFrankenPHPを使用することをお勧めします。
 
-これは、Debian Dockerイメージ（デフォルト）を使用するか、[リリースページ](https://github.com/php/frankenphp/releases)から -gnu サフィックス付きバイナリをダウンロードするか、あるいは[FrankenPHPをソースからコンパイル](compile.md)することで実現できます。
+これは、Debian Dockerイメージを使用するか、[公式パッケージ (.deb, .rpm, .apk)](https://pkgs.henderkes.com) を使用するか、あるいは[FrankenPHPをソースからコンパイル](compile.md)することで実現できます。
 
-または、[mimalloc allocator](https://github.com/microsoft/mimalloc)でコンパイルされた静的muslバイナリも提供しており、これによりスレッド環境での問題を軽減できます。
+より軽量で安全なコンテナのためには、Alpineよりも[強化されたDebianイメージ](docker.md#hardening-images)を検討することをお勧めします。
 
 ## Go Runtime設定
 
@@ -89,6 +89,18 @@ php_server {
 ```
 
 これにより、不要なファイルの操作の回数を大幅に削減できます。
+上記の構成をワーカーモードに相当させると、次のようになります:
+
+```caddyfile
+route {
+    php_server { # file server が全く不要な場合は "php_server" の代わりに "php" を使用します
+        root /root/to/your/app
+        worker /path/to/worker.php {
+            match * # すべてのリクエストを直接ワーカーに送信します
+        }
+    }
+}
+```
 
 ファイルシステムへの不要な操作を完全にゼロにする代替アプローチとして、`php`ディレクティブを使用し、
 パスによってPHPファイルとそれ以外を分ける方法があります。アプリケーション全体が1つのエントリーファイルで提供される場合、この方法は有効です。
@@ -155,3 +167,29 @@ FrankenPHPは公式のPHPインタープリターを使用しています。
 
 詳細については、[Symfonyの専用ドキュメントエントリ](https://symfony.com/doc/current/performance.html)をお読みください
 （Symfonyを使用していなくても、多くのヒントが役立ちます）。
+
+## スレッドプールの分割
+
+アプリケーションが、高負荷時に不安定になったり、常に10秒以上応答にかかるAPIのような遅い外部サービスと連携することはよくあります。
+このような場合、スレッドプールを分割して専用の「遅い」プールを持つことが有益です。
+これにより、遅いエンドポイントがすべてのサーバーリソース/スレッドを消費するのを防ぎ、コネクションプールと同様に、遅いエンドポイントへのリクエストの同時実行数を制限できます。
+
+```caddyfile
+example.com {
+    php_server {
+        root /app/public # アプリケーションのルート
+        worker index.php {
+            match /slow-endpoint/* # パスが /slow-endpoint/* のすべてリクエストはこのスレッドプールによって処理されます
+            num 1 # /slow-endpoint/* に一致するリクエストに対しては最低1スレッド
+            max_threads 20 # 必要に応じて、/slow-endpoint/* に一致するリクエストに対して最大20スレッドまで許可します
+        }
+        worker index.php {
+            match * # 他のすべてのリクエストは個別に処理されます
+            num 1 # 遅いエンドポイントがハングし始めても、他のリクエストには最低1スレッド
+            max_threads 20 # 必要に応じて、他のリクエストに対して最大20スレッドまで許可します
+        }
+    }
+}
+```
+
+一般的に、メッセージキューなどの適切なメカニズムを使用して、非常に遅いエンドポイントを非同期的に処理することも推奨されます。

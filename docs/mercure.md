@@ -19,6 +19,8 @@ localhost
 mercure {
     # The secret key used to sign the JWT tokens for publishers
     publisher_jwt !ChangeThisMercureHubJWTSecretKey!
+    # When publisher_jwt is set, you must set subscriber_jwt too!
+    subscriber_jwt !ChangeThisMercureHubJWTSecretKey!
     # Allows anonymous subscribers (without JWT)
     anonymous
 }

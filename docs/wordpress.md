@@ -7,9 +7,11 @@ Run [WordPress](https://wordpress.org/) with FrankenPHP to enjoy a modern, high-
 1. [Download WordPress](https://wordpress.org/download/)
 2. Extract the ZIP archive and open a terminal in the extracted directory
 3. Run:
+
    ```console
    frankenphp php-server
    ```
+
 4. Go to `http://localhost/wp-admin/` and follow the installation instructions
 5. Enjoy!
 

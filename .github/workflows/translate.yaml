@@ -1,0 +1,75 @@
+name: Translate Docs
+concurrency:
+  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "docs/*"
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  build:
+    name: Translate Docs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          # zizmor: ignore[artipacked]
+          # persist-credentials is intentionally left enabled (unlike other workflows)
+          # because this workflow needs to push a branch via git push
+      - id: md_files
+        run: |
+          FILES=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" -- 'docs/*.md' ':(exclude)docs/*/*.md')
+          FILES=$(echo "$FILES" | xargs -n1 basename | tr '\n' ' ')
+          [ -z "$FILES" ] && echo "found=false" >> "$GITHUB_OUTPUT" || echo "found=true" >> "$GITHUB_OUTPUT"
+          echo "files=$FILES" >> "$GITHUB_OUTPUT"
+      - name: Set up PHP
+        if: steps.md_files.outputs.found == 'true'
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+      - name: run translation script
+        if: steps.md_files.outputs.found == 'true'
+        env:
+          GEMINI_API_KEY: "${{ secrets.GEMINI_API_KEY }}"
+          MD_FILES: "${{ steps.md_files.outputs.files }}"
+        run: |
+          php ./docs/translate.php "$MD_FILES"
+      - name: Run Linter
+        if: steps.md_files.outputs.found == 'true'
+        continue-on-error: true
+        uses: super-linter/super-linter/slim@v8
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LINTER_RULES_PATH: /
+          MARKDOWN_CONFIG_FILE: .markdown-lint.yaml
+          VALIDATE_NATURAL_LANGUAGE: false
+          FIX_MARKDOWN: true
+      - name: Create Pull Request
+        if: steps.md_files.outputs.found == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+          ACTOR_ID: ${{ github.actor_id }}
+          RUN_ID: ${{ github.run_id }}
+          MD_FILES_LIST: ${{ steps.md_files.outputs.files }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          BRANCH="translations/$RUN_ID"
+          git checkout -b "$BRANCH"
+          git add docs/
+          git diff --cached --quiet && exit 0
+          git commit -m "docs: update translations" --author="$ACTOR <$ACTOR_ID+$ACTOR@users.noreply.github.com>"
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "docs: update translations" \
+            --body "Translation updates for: $MD_FILES_LIST." \
+            --label "translations" \
+            --label "bot"

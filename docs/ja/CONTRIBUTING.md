@@ -33,7 +33,7 @@ docker run --cap-add=SYS_PTRACE --security-opt seccomp=unconfined -p 8080:8080 -
 ## テストスイートの実行
 
 ```console
-go test -tags watcher -race -v ./...
+go test -race -v ./...
 ```
 
 ## Caddyモジュール
@@ -42,7 +42,7 @@ FrankenPHPのCaddyモジュール付きでCaddyをビルドします：
 
 ```console
 cd caddy/frankenphp/
-go build -tags watcher,brotli,nobadger,nomysql,nopgx
+go build -tags nobadger,nomysql,nopgx
 cd ../../
 ```
 
@@ -175,7 +175,7 @@ docker buildx bake -f docker-bake.hcl --pull --no-cache --push
 8. コンテナ内で、GDBなどを使用できます：
 
    ```console
-   go test -tags watcher -c -ldflags=-w
+   go test -c -ldflags=-w
    gdb --args frankenphp.test -test.run ^MyTest$
    ```
 
