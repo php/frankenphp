@@ -383,3 +383,66 @@ func BenchmarkDocumentationGenerator_GenerateMarkdown(b *testing.B) {
 		assert.NoError(b, err)
 	}
 }
+
+func TestDocumentationGenerator_OverwriteReadme(t *testing.T) {
+	tempDir := t.TempDir()
+	readmePath := filepath.Join(tempDir, "README.md")
+
+	err := os.WriteFile(readmePath, []byte("hello"), 0644)
+	require.NoError(t, err)
+
+	generator := &Generator{
+		BaseName: "testextension",
+		BuildDir: tempDir,
+		Functions: []phpFunction{
+			{
+				Name:       "greet",
+				ReturnType: phpString,
+				Params: []phpParameter{
+					{Name: "name", PhpType: phpString},
+				},
+				Signature: "greet(string $name): string",
+			},
+		},
+		Classes: []phpClass{},
+	}
+
+	docGen := &DocumentationGenerator{
+		generator: generator,
+	}
+
+	err = docGen.generate()
+	assert.NoError(t, err, "generate() unexpected error")
+
+	content, err := os.ReadFile(readmePath)
+	require.NoError(t, err, "Failed to read generated README.md")
+
+	assert.Equal(t, string(content), "hello")
+
+	// regenerate
+	docGen = &DocumentationGenerator{
+		generator: generator,
+		overwrite: true,
+	}
+
+	err = docGen.generate()
+	assert.NoError(t, err, "generate() unexpected error")
+
+	content, err = os.ReadFile(readmePath)
+	require.NoError(t, err, "Failed to read generated README.md")
+
+	contentStr := string(content)
+
+	assert.Contains(t, contentStr, "# testextension Extension", "README should contain extension title")
+	assert.Contains(t, contentStr, "Auto-generated PHP extension from Go code.", "README should contain description")
+
+	if len(generator.Functions) > 0 {
+		assert.Contains(t, contentStr, "## Functions", "README should contain functions section when functions exist")
+
+		for _, fn := range generator.Functions {
+			assert.Contains(t, contentStr, "### "+fn.Name, "README should contain function %s", fn.Name)
+			assert.Contains(t, contentStr, fn.Signature, "README should contain function signature for %s", fn.Name)
+		}
+	}
+
+}
