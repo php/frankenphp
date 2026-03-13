@@ -1418,7 +1418,8 @@ int frankenphp_reset_opcache(void) {
     php_request_startup();
     ((zend_internal_function *)opcache_reset)->handler = orig_opcache_reset;
     zend_call_known_function(opcache_reset, NULL, NULL, NULL, 0, NULL, NULL);
-    ((zend_internal_function *)opcache_reset)->handler = ZEND_FN(frankenphp_opcache_reset);
+    ((zend_internal_function *)opcache_reset)->handler =
+        ZEND_FN(frankenphp_opcache_reset);
     php_request_shutdown((void *)0);
   }
 
