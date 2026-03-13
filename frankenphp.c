@@ -97,8 +97,8 @@ PHP_FUNCTION(frankenphp_opcache_reset);
  * table. Uses handler comparison instead of orig_opcache_reset check so that
  * a fresh function table after PHP module restart is always re-overridden. */
 static void frankenphp_override_opcache_reset(void) {
-  zend_function *func = zend_hash_str_find_ptr(CG(function_table), "opcache_reset",
-                                               sizeof("opcache_reset") - 1);
+  zend_function *func = zend_hash_str_find_ptr(
+      CG(function_table), "opcache_reset", sizeof("opcache_reset") - 1);
   if (func != NULL && func->type == ZEND_INTERNAL_FUNCTION &&
       ((zend_internal_function *)func)->handler !=
           ZEND_FN(frankenphp_opcache_reset)) {
