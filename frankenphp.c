@@ -26,9 +26,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#ifndef ZEND_WIN32
-#include <unistd.h>
-#endif
 #if defined(__linux__)
 #include <sys/prctl.h>
 #elif defined(__FreeBSD__) || defined(__OpenBSD__)
