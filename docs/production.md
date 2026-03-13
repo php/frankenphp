@@ -137,6 +137,29 @@ Go to `https://your-domain-name.example.com` and enjoy!
 >
 > Docker can have a cache layer, make sure you have the right build for each deployment or rebuild your project with `--no-cache` option to avoid cache issue.
 
+## Running Behind a Reverse Proxy
+
+If FrankenPHP is running behind a reverse proxy or a load balancer (e.g., Nginx, AWS ELB, Google Cloud LB),
+you must configure the [`trusted_proxies` global option](https://caddyserver.com/docs/caddyfile/options#trusted-proxies) in your Caddyfile
+so that Caddy trusts incoming `X-Forwarded-*` headers:
+
+```caddyfile
+{
+	servers {
+		trusted_proxies static <your-IPs>
+	}
+}
+```
+
+Replace `private_ranges` with the actual IP ranges of your proxy if needed.
+
+Additionally, your PHP framework must also be configured to trust the proxy.
+For example, set the [`TRUSTED_PROXIES` environment variable](https://symfony.com/doc/current/deployment/proxies.html) for Symfony,
+or the [`trustedproxies` middleware](https://laravel.com/docs/trustedproxy) for Laravel.
+
+Without both configurations, headers such as `X-Forwarded-For` and `X-Forwarded-Proto` will be ignored,
+which can cause issues like incorrect HTTPS detection or wrong client IP addresses.
+
 ## Deploying on Multiple Nodes
 
 If you want to deploy your app on a cluster of machines, you can use [Docker Swarm](https://docs.docker.com/engine/swarm/stack-deploy/),
