@@ -8,6 +8,7 @@ The following extensions are known not to be compatible with FrankenPHP:
 | ----------------------------------------------------------------------------------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------- |
 | [imap](https://www.php.net/manual/en/imap.installation.php)                                                 | Not thread-safe | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap) |
 | [newrelic](https://docs.newrelic.com/docs/apm/agents/php-agent/getting-started/introduction-new-relic-php/) | Not thread-safe | -                                                                                                                    |
+| [gettext](https://www.php.net/manual/en/gettext.installation.php)                                           | Not thread-safe | [gettext/gettext](https://github.com/php-gettext/Gettext)                                                            |
 
 ## Buggy PHP Extensions
 
