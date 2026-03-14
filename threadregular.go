@@ -57,7 +57,6 @@ func (handler *regularThread) beforeScriptExecution() string {
 		}
 		handler.state.WaitFor(state.Ready, state.ShuttingDown)
 		return handler.beforeScriptExecution()
-
 	case state.Ready:
 		return handler.waitForRequest()
 

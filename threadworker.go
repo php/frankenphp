@@ -229,6 +229,14 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 			globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "shutting down", slog.String("worker", handler.worker.name), slog.Int("thread", handler.thread.threadIndex))
 		}
 
+		if Version().VersionID < 80300 {
+			// flush the opcache when restarting due to watcher or admin api
+			// note: this is done right before frankenphp_handle_request() returns 'false'
+			if handler.state.Is(state.Restarting) {
+				C.frankenphp_reset_opcache()
+			}
+		}
+
 		return false, nil
 	case requestCH = <-handler.thread.requestChan:
 	case requestCH = <-handler.worker.requestChan:

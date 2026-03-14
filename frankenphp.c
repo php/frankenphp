@@ -86,12 +86,12 @@ HashTable *main_thread_env = NULL;
 __thread uintptr_t thread_index;
 __thread bool is_worker_thread = false;
 __thread HashTable *sandboxed_env = NULL;
-zif_handler orig_opcache_reset;
-
-/* Forward declaration */
-PHP_FUNCTION(frankenphp_opcache_reset);
 
 #if PHP_VERSION_ID >= 80300
+/* Forward declaration */
+PHP_FUNCTION(frankenphp_opcache_reset);
+zif_handler orig_opcache_reset;
+
 /* Try to override opcache_reset if opcache is loaded.
  * Safe to call multiple times - skips if already overridden in this function
  * table. Uses handler comparison instead of orig_opcache_reset check so that
@@ -479,12 +479,14 @@ PHP_FUNCTION(frankenphp_getenv) {
   }
 } /* }}} */
 
+#if PHP_VERSION_ID >= 80300
 /* {{{ thread-safe opcache reset */
 PHP_FUNCTION(frankenphp_opcache_reset) {
   go_schedule_opcache_reset(thread_index);
 
   RETVAL_TRUE;
 } /* }}} */
+#endif
 
 /* {{{ Fetch all HTTP request headers */
 PHP_FUNCTION(frankenphp_request_headers) {
@@ -768,13 +770,13 @@ static int frankenphp_startup(sapi_module_struct *sapi_module) {
   php_import_environment_variables = get_full_env;
 
   int result = php_module_startup(sapi_module, &frankenphp_module);
+#if PHP_VERSION_ID >= 80300 && PHP_VERSION_ID < 80500
   if (result == SUCCESS) {
-#if PHP_VERSION_ID >= 80300
     /* All extensions are now loaded. Override opcache_reset if opcache
      * was not yet available during our MINIT (shared extension load order). */
     frankenphp_override_opcache_reset();
-#endif
   }
+#endif
 
   return result;
 }
@@ -1238,7 +1240,9 @@ bool frankenphp_new_php_thread(uintptr_t thread_index) {
 static int frankenphp_request_startup() {
   frankenphp_update_request_context();
   if (php_request_startup() == SUCCESS) {
-#if PHP_VERSION_ID >= 80300
+#if PHP_VERSION_ID >= 80300 && PHP_VERSION_ID < 80500
+    /* for php 8.5+ opcache is always compiled statically, so it's already
+     * hooked in main request startup */
     frankenphp_override_opcache_reset();
 #endif
     return SUCCESS;
@@ -1440,12 +1444,20 @@ int frankenphp_execute_script_cli(char *script, int argc, char **argv,
 }
 
 int frankenphp_reset_opcache(void) {
+#if PHP_VERSION_ID >= 80300
   zend_execute_data execute_data;
   zval retval;
   memset(&execute_data, 0, sizeof(execute_data));
   ZVAL_UNDEF(&retval);
   orig_opcache_reset(&execute_data, &retval);
   zval_ptr_dtor(&retval);
+#else
+  zend_function *opcache_reset =
+      zend_hash_str_find_ptr(CG(function_table), ZEND_STRL("opcache_reset"));
+  if (opcache_reset) {
+    zend_call_known_function(opcache_reset, NULL, NULL, NULL, 0, NULL, NULL);
+  }
+#endif
   return 0;
 }
 
