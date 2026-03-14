@@ -1305,11 +1305,11 @@ func TestSessionNoLeakAfterExit_worker(t *testing.T) {
 }
 
 func TestOpcachePreload_module(t *testing.T) {
-	testOpcachePreload(t, &testOptions{env: map[string]string{"TEST": "123"}})
+	testOpcachePreload(t, &testOptions{env: map[string]string{"TEST": "123"}, realServer: true})
 }
 
 func TestOpcachePreload_worker(t *testing.T) {
-	testOpcachePreload(t, &testOptions{workerScript: "preload-check.php", nbWorkers: 1, nbParallelRequests: 1, env: map[string]string{"TEST": "123"}})
+	testOpcachePreload(t, &testOptions{workerScript: "preload-check.php", env: map[string]string{"TEST": "123"}, realServer: true})
 }
 
 func testOpcachePreload(t *testing.T, opts *testOptions) {
@@ -1320,9 +1320,10 @@ func testOpcachePreload(t *testing.T, opts *testOptions) {
 	require.NoError(t, err)
 
 	opts.phpIni = map[string]string{
-		"opcache.enable":       "1",
-		"opcache.preload":      preloadScript,
-		"opcache.preload_user": u.Username,
+		"opcache.enable":              "1",
+		"opcache.preload":             preloadScript,
+		"opcache.preload_user":        u.Username,
+		"opcache.log_verbosity_level": "4",
 	}
 
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {

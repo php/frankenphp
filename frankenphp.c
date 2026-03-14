@@ -1138,7 +1138,6 @@ static void *php_main(void *arg) {
 
   /* take a snapshot of the environment for sandboxing */
   if (main_thread_env == NULL) {
-    // comment to trigger build
     main_thread_env = pemalloc(sizeof(HashTable), 1);
     zend_hash_init(main_thread_env, 8, NULL, NULL, 1);
     go_init_os_env(main_thread_env);
@@ -1228,7 +1227,7 @@ int frankenphp_execute_script(char *file_name) {
 
   zend_destroy_file_handle(&file_handle);
 
-  /* Reset the sandboxed environment */
+  /* Reset the sandboxed environment if it is in use */
   if (sandboxed_env != NULL) {
     zend_hash_release(sandboxed_env);
     sandboxed_env = NULL;
