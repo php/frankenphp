@@ -91,6 +91,7 @@ zif_handler orig_opcache_reset;
 /* Forward declaration */
 PHP_FUNCTION(frankenphp_opcache_reset);
 
+#if PHP_VERSION_ID >= 80300
 /* Try to override opcache_reset if opcache is loaded.
  * Safe to call multiple times - skips if already overridden in this function
  * table. Uses handler comparison instead of orig_opcache_reset check so that
@@ -106,6 +107,7 @@ static void frankenphp_override_opcache_reset(void) {
         ZEND_FN(frankenphp_opcache_reset);
   }
 }
+#endif
 
 void frankenphp_update_local_thread_context(bool is_worker) {
   is_worker_thread = is_worker;

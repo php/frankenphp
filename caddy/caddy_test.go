@@ -16,6 +16,7 @@ import (
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddytest"
+	"github.com/dunglas/frankenphp"
 	"github.com/dunglas/frankenphp/internal/fastabs"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
@@ -1544,6 +1545,9 @@ func TestDd(t *testing.T) {
 
 // test to force the opcache segfault race condition under concurrency (~1.7s)
 func TestOpcacheReset(t *testing.T) {
+	if frankenphp.Version().VersionID < 80300 {
+		t.Skip("opcache reset test requires PHP 8.3+")
+	}
 	tester := caddytest.NewTester(t)
 	tester.InitServer(`
 		{
