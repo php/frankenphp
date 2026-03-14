@@ -51,9 +51,11 @@ func (handler *workerThread) beforeScriptExecution() string {
 			handler.worker.onThreadShutdown(handler.thread.threadIndex)
 		}
 		handler.state.Set(state.Yielding)
-		handler.state.WaitFor(state.OpcacheResetting)
-		scheduleOpcacheReset(handler.thread)
-		handler.state.Set(state.OpcacheResettingDone)
+		if Version().VersionID >= 80300 {
+			handler.state.WaitFor(state.OpcacheResetting)
+			scheduleOpcacheReset(handler.thread)
+			handler.state.Set(state.OpcacheResettingDone)
+		}
 		handler.state.WaitFor(state.Ready, state.ShuttingDown)
 		return handler.beforeScriptExecution()
 	case state.Ready, state.TransitionComplete:

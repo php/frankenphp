@@ -777,7 +777,7 @@ func restartThreadsAndOpcacheReset(withRegularThreads bool) {
 
 	threadsToRestart := drainThreads(withRegularThreads)
 
-	// on 8.2 debian it segfaults, skip opcache reset
+	// on 8.2 opcache_reset() segfaults, skip it entirely
 	if Version().VersionID >= 80300 {
 		opcacheResetOnce = sync.Once{}
 		opcacheResetWg := sync.WaitGroup{}
@@ -787,7 +787,6 @@ func restartThreadsAndOpcacheReset(withRegularThreads bool) {
 				thread.state.WaitFor(state.OpcacheResettingDone)
 			})
 		}
-
 		opcacheResetWg.Wait()
 	}
 
