@@ -86,7 +86,6 @@ HashTable *main_thread_env = NULL;
 __thread uintptr_t thread_index;
 __thread bool is_worker_thread = false;
 __thread HashTable *sandboxed_env = NULL;
-__thread zval *os_environment = NULL;
 zif_handler orig_opcache_reset;
 
 /* Forward declaration */

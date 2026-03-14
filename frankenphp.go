@@ -777,16 +777,19 @@ func restartThreadsAndOpcacheReset(withRegularThreads bool) {
 
 	threadsToRestart := drainThreads(withRegularThreads)
 
-	opcacheResetOnce = sync.Once{}
-	opcacheResetWg := sync.WaitGroup{}
-	for _, thread := range threadsToRestart {
-		thread.state.Set(state.OpcacheResetting)
-		opcacheResetWg.Go(func() {
-			thread.state.WaitFor(state.OpcacheResettingDone)
-		})
-	}
+	// on 8.2 debian it segfaults, skip opcache reset
+	if Version().VersionID >= 80300 {
+		opcacheResetOnce = sync.Once{}
+		opcacheResetWg := sync.WaitGroup{}
+		for _, thread := range threadsToRestart {
+			thread.state.Set(state.OpcacheResetting)
+			opcacheResetWg.Go(func() {
+				thread.state.WaitFor(state.OpcacheResettingDone)
+			})
+		}
 
-	opcacheResetWg.Wait()
+		opcacheResetWg.Wait()
+	}
 
 	for _, thread := range threadsToRestart {
 		thread.drainChan = make(chan struct{})
