@@ -16,6 +16,7 @@ import (
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddytest"
+	"github.com/dunglas/frankenphp"
 	"github.com/dunglas/frankenphp/internal/fastabs"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
@@ -1828,6 +1829,12 @@ func TestOpcachePreload(t *testing.T) {
 	cwd, _ := os.Getwd()
 	testdataDir := filepath.Join(cwd, "..", "testdata")
 	u, _ := user.Current()
+
+	phpVersion := frankenphp.Version()
+	if phpVersion.MajorVersion == 8 && phpVersion.MinorVersion < 3 {
+		t.Skip("This test is only supported in PHP 8.3 and above")
+		return
+	}
 
 	initServer(t, tester, `
 		{

@@ -140,8 +140,8 @@ func TestMain(m *testing.M) {
 		slog.SetDefault(slog.New(slog.DiscardHandler))
 	}
 
-	// setup custom environment var for TestWorkerHasOSEnvironmentVariableInSERVER
-	if os.Setenv("CUSTOM_OS_ENV_VARIABLE", "custom_env_variable_value") != nil {
+	// setup custom environment var for TestWorkerHasOSEnvironmentVariableInSERVER and TestPhpIni
+	if os.Setenv("CUSTOM_OS_ENV_VARIABLE", "custom_env_variable_value") != nil || os.Setenv("LITERAL_ONE", "1") != nil {
 		fmt.Println("Failed to set environment variable for tests")
 		os.Exit(1)
 	}
@@ -161,14 +161,12 @@ func testHelloWorld(t *testing.T, opts *testOptions) {
 }
 
 func TestEnvVarsInPhpIni(t *testing.T) {
-	t.Setenv("OPCACHE_ENABLE", "0")
-
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
 		body, _ := testGet("http://example.com/ini.php?key=opcache.enable", handler, t)
-		assert.Equal(t, "opcache.enable:0", body)
+		assert.Equal(t, "opcache.enable:1", body)
 	}, &testOptions{
 		phpIni: map[string]string{
-			"opcache.enable": "${OPCACHE_ENABLE}",
+			"opcache.enable": "${LITERAL_ONE}",
 		},
 	})
 }
