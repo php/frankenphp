@@ -1232,6 +1232,7 @@ bool frankenphp_new_php_thread(uintptr_t thread_index) {
 
 static int frankenphp_request_startup() {
   frankenphp_update_request_context();
+  frankenphp_override_opcache_reset();
   if (php_request_startup() == SUCCESS) {
     return SUCCESS;
   }
