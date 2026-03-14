@@ -1324,6 +1324,10 @@ func testOpcachePreload(t *testing.T, opts *testOptions) {
 		"opcache.preload":             preloadScript,
 		"opcache.preload_user":        u.Username,
 		"opcache.log_verbosity_level": "4",
+		"opcache.jit":                 "disable",
+		"opcache.protect_memory":      "1",
+		"opcache.memory_consumption":  "256",
+		"opcache.validate_timestamps": "0",
 	}
 
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
