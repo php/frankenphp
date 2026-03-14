@@ -742,8 +742,10 @@ PHP_MINIT_FUNCTION(frankenphp) {
     php_error(E_WARNING, "Failed to find built-in getenv function");
   }
 
+#if PHP_VERSION_ID >= 80300
   // Override opcache_reset (may not be available yet if opcache loads after us)
   frankenphp_override_opcache_reset();
+#endif
 
   return SUCCESS;
 }
@@ -765,9 +767,11 @@ static int frankenphp_startup(sapi_module_struct *sapi_module) {
 
   int result = php_module_startup(sapi_module, &frankenphp_module);
   if (result == SUCCESS) {
+#if PHP_VERSION_ID >= 80300
     /* All extensions are now loaded. Override opcache_reset if opcache
      * was not yet available during our MINIT (shared extension load order). */
     frankenphp_override_opcache_reset();
+#endif
   }
 
   return result;
@@ -1232,7 +1236,9 @@ bool frankenphp_new_php_thread(uintptr_t thread_index) {
 static int frankenphp_request_startup() {
   frankenphp_update_request_context();
   if (php_request_startup() == SUCCESS) {
+#if PHP_VERSION_ID >= 80300
     frankenphp_override_opcache_reset();
+#endif
     return SUCCESS;
   }
 
