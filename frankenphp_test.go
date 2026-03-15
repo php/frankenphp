@@ -141,8 +141,8 @@ func TestMain(m *testing.M) {
 		slog.SetDefault(slog.New(slog.DiscardHandler))
 	}
 
-	// setup custom environment var for TestWorkerHasOSEnvironmentVariableInSERVER
-	if os.Setenv("CUSTOM_OS_ENV_VARIABLE", "custom_env_variable_value") != nil {
+	// setup custom environment var for TestWorkerHasOSEnvironmentVariableInSERVER and TestPhpIni
+	if os.Setenv("CUSTOM_OS_ENV_VARIABLE", "custom_env_variable_value") != nil || os.Setenv("LITERAL_ONE", "1") != nil {
 		fmt.Println("Failed to set environment variable for tests")
 		os.Exit(1)
 	}
@@ -162,14 +162,12 @@ func testHelloWorld(t *testing.T, opts *testOptions) {
 }
 
 func TestEnvVarsInPhpIni(t *testing.T) {
-	t.Setenv("OPCACHE_ENABLE", "0")
-
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
 		body, _ := testGet("http://example.com/ini.php?key=opcache.enable", handler, t)
-		assert.Equal(t, "opcache.enable:0", body)
+		assert.Equal(t, "opcache.enable:1", body)
 	}, &testOptions{
 		phpIni: map[string]string{
-			"opcache.enable": "${OPCACHE_ENABLE}",
+			"opcache.enable": "${LITERAL_ONE}",
 		},
 	})
 }
@@ -1305,14 +1303,19 @@ func TestSessionNoLeakAfterExit_worker(t *testing.T) {
 }
 
 func TestOpcachePreload_module(t *testing.T) {
-	testOpcachePreload(t, &testOptions{env: map[string]string{"TEST": "123"}})
+	testOpcachePreload(t, &testOptions{env: map[string]string{"TEST": "123"}, realServer: true})
 }
 
 func TestOpcachePreload_worker(t *testing.T) {
-	testOpcachePreload(t, &testOptions{workerScript: "preload-check.php", nbWorkers: 1, nbParallelRequests: 1, env: map[string]string{"TEST": "123"}})
+	testOpcachePreload(t, &testOptions{workerScript: "preload-check.php", env: map[string]string{"TEST": "123"}, realServer: true})
 }
 
 func testOpcachePreload(t *testing.T, opts *testOptions) {
+	if frankenphp.Version().VersionID <= 80300 {
+		t.Skip("This test is only supported in PHP 8.3 and above")
+		return
+	}
+
 	cwd, _ := os.Getwd()
 	preloadScript := cwd + "/testdata/preload.php"
 
@@ -1320,9 +1323,10 @@ func testOpcachePreload(t *testing.T, opts *testOptions) {
 	require.NoError(t, err)
 
 	opts.phpIni = map[string]string{
-		"opcache.enable":       "1",
-		"opcache.preload":      preloadScript,
-		"opcache.preload_user": u.Username,
+		"opcache.enable":              "1",
+		"opcache.preload":             preloadScript,
+		"opcache.preload_user":        u.Username,
+		"opcache.log_verbosity_level": "4",
 	}
 
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
