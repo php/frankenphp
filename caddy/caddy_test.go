@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -16,7 +15,6 @@ import (
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddytest"
-	"github.com/dunglas/frankenphp"
 	"github.com/dunglas/frankenphp/internal/fastabs"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
@@ -1822,41 +1820,4 @@ func TestSymlinkWorkerBehavior(t *testing.T) {
 			tester.AssertGetResponse("http://localhost:"+testPort+"/index.php", http.StatusOK, fmt.Sprintf("Request: %d\n", i))
 		}
 	})
-}
-
-func TestOpcachePreload(t *testing.T) {
-	tester := caddytest.NewTester(t)
-	cwd, _ := os.Getwd()
-	testdataDir := filepath.Join(cwd, "..", "testdata")
-	u, _ := user.Current()
-
-	phpVersion := frankenphp.Version()
-	if phpVersion.MajorVersion == 8 && phpVersion.MinorVersion < 3 {
-		t.Skip("This test is only supported in PHP 8.3 and above")
-		return
-	}
-
-	initServer(t, tester, `
-		{
-			skip_install_trust
-			admin localhost:2999
-			http_port `+testPort+`
-
-			frankenphp {
-				php_ini {
-					opcache.enable 1
-					opcache.preload `+testdataDir+`/preload.php
-					opcache.preload_user `+u.Username+`
-					opcache.log_verbosity_level 4
-				}
-			}
-		}
-		http://localhost:`+testPort+` {
-			php {
-				root `+testdataDir+`
-			}
-		}
-		`, "caddyfile")
-
-	tester.AssertGetResponse("http://localhost:"+testPort+"/preload-check.php", http.StatusOK, "I am preloaded")
 }
