@@ -13,7 +13,6 @@ var docFileContent string
 
 type DocumentationGenerator struct {
 	generator *Generator
-	overwrite bool
 }
 
 type DocTemplateData struct {
@@ -25,7 +24,7 @@ type DocTemplateData struct {
 func (dg *DocumentationGenerator) generate() error {
 	filename := filepath.Join(dg.generator.BuildDir, "README.md")
 
-	if _, err := os.Stat(filename); err == nil && !dg.overwrite {
+	if _, err := os.Stat(filename); err == nil {
 		return nil
 	}
 

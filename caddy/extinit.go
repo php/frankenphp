@@ -14,13 +14,11 @@ import (
 func init() {
 	caddycmd.RegisterCommand(caddycmd.Command{
 		Name:  "extension-init",
-		Usage: "go_extension.go [--overwrite-readme]",
+		Usage: "go_extension.go",
 		Short: "Initializes a PHP extension from a Go file (EXPERIMENTAL)",
 		Long: `
 Initializes a PHP extension from a Go file. This command generates the necessary C files for the extension, including the header and source files, as well as the arginfo file.`,
 		CobraFunc: func(cmd *cobra.Command) {
-			cmd.Flags().BoolP("overwrite-readme", "r", false, "Overwrite README.md if it exists")
-
 			cmd.RunE = cmdInitExtension
 		},
 	})
@@ -31,15 +29,10 @@ func cmdInitExtension(cmd *cobra.Command, args []string) error {
 		return errors.New("the path to the Go source is required")
 	}
 
-	overwriteReadme, err := cmd.Flags().GetBool("overwrite-readme")
-	if err != nil {
-		return err
-	}
-
 	sourceFile := args[0]
 	baseName := extgen.SanitizePackageName(strings.TrimSuffix(filepath.Base(sourceFile), ".go"))
 
-	generator := extgen.Generator{BaseName: baseName, SourceFile: sourceFile, BuildDir: filepath.Dir(sourceFile), OverwriteReadme: overwriteReadme}
+	generator := extgen.Generator{BaseName: baseName, SourceFile: sourceFile, BuildDir: filepath.Dir(sourceFile)}
 
 	if err := generator.Generate(); err != nil {
 		return err

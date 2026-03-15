@@ -6,14 +6,13 @@ import (
 )
 
 type Generator struct {
-	BaseName        string
-	SourceFile      string
-	BuildDir        string
-	Functions       []phpFunction
-	Classes         []phpClass
-	Constants       []phpConstant
-	Namespace       string
-	OverwriteReadme bool
+	BaseName   string
+	SourceFile string
+	BuildDir   string
+	Functions  []phpFunction
+	Classes    []phpClass
+	Constants  []phpConstant
+	Namespace  string
 }
 
 // EXPERIMENTAL
@@ -130,10 +129,7 @@ func (g *Generator) generateGoFile() error {
 }
 
 func (g *Generator) generateDocumentation() error {
-	docGen := DocumentationGenerator{
-		generator: g,
-		overwrite: g.OverwriteReadme,
-	}
+	docGen := DocumentationGenerator{g}
 	if err := docGen.generate(); err != nil {
 		return &GeneratorError{"documentation generation", "failed to generate documentation", err}
 	}
