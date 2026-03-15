@@ -25,6 +25,8 @@ const (
 	// States necessary for restarting workers
 	Restarting
 	Yielding
+	OpcacheResetting
+	OpcacheResettingDone
 
 	// States necessary for transitioning between different handlers
 	TransitionRequested
@@ -52,6 +54,10 @@ func (s State) String() string {
 		return "restarting"
 	case Yielding:
 		return "yielding"
+	case OpcacheResetting:
+		return "opcache resetting"
+	case OpcacheResettingDone:
+		return "opcache reset done"
 	case TransitionRequested:
 		return "transition requested"
 	case TransitionInProgress:
