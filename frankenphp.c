@@ -87,7 +87,6 @@ __thread uintptr_t thread_index;
 __thread bool is_worker_thread = false;
 __thread HashTable *sandboxed_env = NULL;
 
-#if PHP_VERSION_ID >= 80300
 /* Forward declaration */
 PHP_FUNCTION(frankenphp_opcache_reset);
 zif_handler orig_opcache_reset;
@@ -107,7 +106,6 @@ static void frankenphp_override_opcache_reset(void) {
         ZEND_FN(frankenphp_opcache_reset);
   }
 }
-#endif
 
 void frankenphp_update_local_thread_context(bool is_worker) {
   is_worker_thread = is_worker;
@@ -479,14 +477,12 @@ PHP_FUNCTION(frankenphp_getenv) {
   }
 } /* }}} */
 
-#if PHP_VERSION_ID >= 80300
 /* {{{ thread-safe opcache reset */
 PHP_FUNCTION(frankenphp_opcache_reset) {
   go_schedule_opcache_reset(thread_index);
 
   RETVAL_TRUE;
 } /* }}} */
-#endif
 
 /* {{{ Fetch all HTTP request headers */
 PHP_FUNCTION(frankenphp_request_headers) {
@@ -746,10 +742,9 @@ PHP_MINIT_FUNCTION(frankenphp) {
     php_error(E_WARNING, "Failed to find built-in getenv function");
   }
 
-#if PHP_VERSION_ID >= 80300
-  // Override opcache_reset (may not be available yet if opcache loads after us)
+  // Override opcache_reset (may not be available yet if opcache loads as a
+  // shared extension in PHP 8.4 and below)
   frankenphp_override_opcache_reset();
-#endif
 
   return SUCCESS;
 }
@@ -770,10 +765,10 @@ static int frankenphp_startup(sapi_module_struct *sapi_module) {
   php_import_environment_variables = get_full_env;
 
   int result = php_module_startup(sapi_module, &frankenphp_module);
-#if PHP_VERSION_ID >= 80300 && PHP_VERSION_ID < 80500
+#if PHP_VERSION_ID < 80500
   if (result == SUCCESS) {
-    /* All extensions are now loaded. Override opcache_reset if opcache
-     * was not yet available during our MINIT (shared extension load order). */
+    /* Override opcache here again if loaded as a shared extension
+     * (php 8.4 and under) */
     frankenphp_override_opcache_reset();
   }
 #endif
@@ -1240,9 +1235,9 @@ bool frankenphp_new_php_thread(uintptr_t thread_index) {
 static int frankenphp_request_startup() {
   frankenphp_update_request_context();
   if (php_request_startup() == SUCCESS) {
-#if PHP_VERSION_ID >= 80300 && PHP_VERSION_ID < 80500
-    /* for php 8.5+ opcache is always compiled statically, so it's already
-     * hooked in main request startup */
+#if PHP_VERSION_ID < 80500
+    /* Override opcache here again if loaded as a shared extension
+     * (php 8.4 and under) */
     frankenphp_override_opcache_reset();
 #endif
     return SUCCESS;
@@ -1444,20 +1439,12 @@ int frankenphp_execute_script_cli(char *script, int argc, char **argv,
 }
 
 int frankenphp_reset_opcache(void) {
-#if PHP_VERSION_ID >= 80300
   zend_execute_data execute_data;
   zval retval;
   memset(&execute_data, 0, sizeof(execute_data));
   ZVAL_UNDEF(&retval);
   orig_opcache_reset(&execute_data, &retval);
   zval_ptr_dtor(&retval);
-#else
-  zend_function *opcache_reset =
-      zend_hash_str_find_ptr(CG(function_table), ZEND_STRL("opcache_reset"));
-  if (opcache_reset) {
-    zend_call_known_function(opcache_reset, NULL, NULL, NULL, 0, NULL, NULL);
-  }
-#endif
   return 0;
 }
 
