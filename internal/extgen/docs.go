@@ -3,6 +3,7 @@ package extgen
 import (
 	"bytes"
 	_ "embed"
+	"os"
 	"path/filepath"
 	"text/template"
 )
@@ -22,6 +23,11 @@ type DocTemplateData struct {
 
 func (dg *DocumentationGenerator) generate() error {
 	filename := filepath.Join(dg.generator.BuildDir, "README.md")
+
+	if _, err := os.Stat(filename); err == nil {
+		return nil
+	}
+
 	content, err := dg.generateMarkdown()
 	if err != nil {
 		return err
