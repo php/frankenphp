@@ -1322,11 +1322,11 @@ func testOpcachePreload(t *testing.T, opts *testOptions) {
 	u, err := user.Current()
 	require.NoError(t, err)
 
+	// use opcache.log_verbosity_level:4 for debugging
 	opts.phpIni = map[string]string{
-		"opcache.enable":              "1",
-		"opcache.preload":             preloadScript,
-		"opcache.preload_user":        u.Username,
-		// "opcache.log_verbosity_level": "4", // uncomment if this test fails
+		"opcache.enable":       "1",
+		"opcache.preload":      preloadScript,
+		"opcache.preload_user": u.Username,
 	}
 
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
