@@ -142,7 +142,7 @@ func TestMain(m *testing.M) {
 	}
 
 	// setup custom environment var for TestWorkerHasOSEnvironmentVariableInSERVER and TestPhpIni
-	if os.Setenv("CUSTOM_OS_ENV_VARIABLE", "custom_env_variable_value") != nil || os.Setenv("LITERAL_ONE", "1") != nil {
+	if os.Setenv("CUSTOM_OS_ENV_VARIABLE", "custom_env_variable_value") != nil || os.Setenv("LITERAL_ZERO", "0") != nil {
 		fmt.Println("Failed to set environment variable for tests")
 		os.Exit(1)
 	}
@@ -164,10 +164,10 @@ func testHelloWorld(t *testing.T, opts *testOptions) {
 func TestEnvVarsInPhpIni(t *testing.T) {
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
 		body, _ := testGet("http://example.com/ini.php?key=opcache.enable", handler, t)
-		assert.Equal(t, "opcache.enable:1", body)
+		assert.Equal(t, "opcache.enable:0", body)
 	}, &testOptions{
 		phpIni: map[string]string{
-			"opcache.enable": "${LITERAL_ONE}",
+			"opcache.enable": "${LITERAL_ZERO}",
 		},
 	})
 }
@@ -1326,7 +1326,7 @@ func testOpcachePreload(t *testing.T, opts *testOptions) {
 		"opcache.enable":              "1",
 		"opcache.preload":             preloadScript,
 		"opcache.preload_user":        u.Username,
-		"opcache.log_verbosity_level": "4",
+		// "opcache.log_verbosity_level": "4", // uncomment if this test fails
 	}
 
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
