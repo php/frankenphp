@@ -347,3 +347,78 @@ docker run -v $PWD:/app/public \
     -p 80:80 -p 443:443 -p 443:443/udp \
     dunglas/frankenphp
 ```
+
+## Shell Completion
+
+FrankenPHPはBash、Zsh、Fish、およびPowerShell用のシェル補完機能を内蔵しています。これにより、すべてのコマンド（`php-server`、`php-cli`、`extension-init`などのカスタムコマンドを含む）とそのフラグのオートコンプリートが可能になります。
+
+### Bash
+
+現在のシェルセッションで補完を読み込むには：
+
+```console
+source <(frankenphp completion bash)
+```
+
+新しいセッションごとに補完を読み込むには、以下を実行してください：
+
+**Linux:**
+
+```console
+frankenphp completion bash > /usr/share/bash-completion/completions/frankenphp
+```
+
+**macOS:**
+
+```console
+frankenphp completion bash > $(brew --prefix)/share/bash-completion/completions/frankenphp
+```
+
+### Zsh
+
+シェル補完がまだ環境で有効になっていない場合は、有効にする必要があります。以下のコマンドを一度実行してください：
+
+```console
+echo "autoload -U compinit; compinit" >> ~/.zshrc
+```
+
+各セッションで補完を読み込むには、一度実行してください：
+
+```console
+frankenphp completion zsh > "${fpath[1]}/_frankenphp"
+```
+
+この設定を有効にするには、新しいシェルを起動する必要があります。
+
+### Fish
+
+現在のシェルセッションで補完を読み込むには：
+
+```console
+frankenphp completion fish | source
+```
+
+新しいセッションごとに補完を読み込むには、一度実行してください：
+
+```console
+frankenphp completion fish > ~/.config/fish/completions/frankenphp.fish
+```
+
+### PowerShell
+
+現在のシェルセッションで補完を読み込むには：
+
+```powershell
+frankenphp completion powershell | Out-String | Invoke-Expression
+```
+
+新しいセッションごとに補完を読み込むには、一度実行してください：
+
+```powershell
+frankenphp completion powershell | Out-File -FilePath (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")
+Add-Content -Path $PROFILE -Value '. (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")'
+```
+
+この設定を有効にするには、新しいシェルを起動する必要があります。
+
+この設定を有効にするには、新しいシェルを起動する必要があります。

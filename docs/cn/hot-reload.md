@@ -139,11 +139,11 @@ php_server {
 
 ## 工作原理
 
-1.  **监控**：FrankenPHP 使用底层 [e-dant/watcher 库](https://github.com/e-dant/watcher)（我们贡献了 Go 绑定）监控文件系统中的修改。
-2.  **重启 (Worker 模式)**：如果 worker 配置中启用了 `watch`，PHP worker 将重新启动以加载新代码。
-3.  **推送**：包含更改文件列表的 JSON 有效载荷被发送到内置的 [Mercure hub](https://mercure.rocks)。
-4.  **接收**：浏览器通过 JavaScript 库监听，接收 Mercure 事件。
-5.  **更新**：
+1. **监控**：FrankenPHP 使用底层 [e-dant/watcher 库](https://github.com/e-dant/watcher)（我们贡献了 Go 绑定）监控文件系统中的修改。
+2. **重启 (Worker 模式)**：如果 worker 配置中启用了 `watch`，PHP worker 将重新启动以加载新代码。
+3. **推送**：包含更改文件列表的 JSON 有效载荷被发送到内置的 [Mercure hub](https://mercure.rocks)。
+4. **接收**：浏览器通过 JavaScript 库监听，接收 Mercure 事件。
+5. **更新**：
 
     - 如果检测到 **Idiomorph**，它会获取更新的内容并修改当前的 HTML 以匹配新状态，即时应用更改而不会丢失状态。
     - 否则，将调用 `window.location.reload()` 来刷新页面。
