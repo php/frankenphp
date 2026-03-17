@@ -146,7 +146,7 @@ other.example.com {
 ```
 
 L'utilisation de la directive `php_server` est généralement ce dont vous avez besoin,
-mais si vous avez besoin d'un contrôle total, vous pouvez utiliser la directive de plus bas niveau `php`.
+mais si vous avez besoin d'un contrôle total, vous pouvez utiliser la sous-directive `php`.
 La directive `php` transmet toutes les entrées à PHP, au lieu de vérifier d'abord si
 c'est un fichier PHP ou pas. En savoir plus à ce sujet dans la [documentation liée aux performances](performance.md#try_files).
 
