@@ -1,5 +1,6 @@
 /caddy/frankenphp/Build
 /caddy/frankenphp/frankenphp
+/caddy/frankenphp/frankenphp.exe
 /dist
 /github_conf
 /internal/testserver/testserver
