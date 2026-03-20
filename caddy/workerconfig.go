@@ -41,7 +41,8 @@ type workerConfig struct {
 	MatchPath []string `json:"match_path,omitempty"`
 	// MaxConsecutiveFailures sets the maximum number of consecutive failures before panicking (defaults to 6, set to -1 to never panick)
 	MaxConsecutiveFailures int `json:"max_consecutive_failures,omitempty"`
-
+	// Background marks this worker as a background worker (non-HTTP)
+	Background         bool `json:"background,omitempty"`
 	options        []frankenphp.WorkerOption
 	requestOptions []frankenphp.RequestOption
 	absFileName    string
@@ -123,9 +124,13 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 				wc.Watch = append(wc.Watch, patterns...)
 			}
 		case "match":
-			// provision the path so it's identical to Caddy match rules
+			if wc.Background {
+				return wc, d.Err(`"match" is not supported for background workers, use "name" instead`)
+			}
+			args := d.RemainingArgs()
+			// For HTTP workers, provision as Caddy path matchers
 			// see: https://github.com/caddyserver/caddy/blob/master/modules/caddyhttp/matchers.go
-			caddyMatchPath := (caddyhttp.MatchPath)(d.RemainingArgs())
+			caddyMatchPath := (caddyhttp.MatchPath)(args)
 			if err := caddyMatchPath.Provision(caddy.Context{}); err != nil {
 				return wc, d.WrapErr(err)
 			}
@@ -145,13 +150,27 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 			}
 
 			wc.MaxConsecutiveFailures = v
+		case "background":
+			wc.Background = true
 		default:
-			return wc, wrongSubDirectiveError("worker", "name, file, num, env, watch, match, max_consecutive_failures, max_threads", v)
+			return wc, wrongSubDirectiveError("worker", "name, file, num, env, watch, match, max_consecutive_failures, max_threads, background", v)
 		}
 	}
 
 	if wc.FileName == "" {
 		return wc, d.Err(`the "file" argument must be specified`)
+	}
+
+	if wc.Background {
+		// Validate background worker constraints
+		if wc.Num > 1 {
+			return wc, d.Err(`"num" > 1 is not yet supported for background workers`)
+		}
+		if wc.MaxThreads > 1 {
+			return wc, d.Err(`"max_threads" > 1 is not yet supported for background workers`)
+		}
+		// MaxConsecutiveFailures defaults to 6 (same as HTTP workers)
+		// via defaultMaxConsecutiveFailures in options.go
 	}
 
 	if frankenphp.EmbeddedAppPath != "" && filepath.IsLocal(wc.FileName) {
@@ -174,6 +193,11 @@ func (wc *workerConfig) inheritEnv(env map[string]string) {
 }
 
 func (wc *workerConfig) matchesPath(r *http.Request, documentRoot string) bool {
+	// background workers don't handle HTTP requests
+	if wc.Background {
+		return false
+	}
+
 	// try to match against a pattern if one is assigned
 	if len(wc.MatchPath) != 0 {
 		return (caddyhttp.MatchPath)(wc.MatchPath).Match(r)

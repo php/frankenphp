@@ -78,7 +78,11 @@ func addWorkerThread(worker *worker) (*phpThread, error) {
 	if thread == nil {
 		return nil, ErrMaxThreadsReached
 	}
-	convertToWorkerThread(thread, worker)
+	if worker.isBackgroundWorker {
+		convertToBackgroundWorkerThread(thread, worker)
+	} else {
+		convertToWorkerThread(thread, worker)
+	}
 	thread.state.WaitFor(state.Ready, state.ShuttingDown, state.Reserved)
 	return thread, nil
 }

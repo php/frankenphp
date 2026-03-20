@@ -49,6 +49,8 @@ type workerOpt struct {
 	onThreadShutdown       func(int)
 	onServerStartup        func()
 	onServerShutdown       func()
+	isBackgroundWorker     bool
+	backgroundScope        string // scope ID for background worker isolation
 }
 
 // WithContext sets the main context to use.
@@ -80,6 +82,28 @@ func WithMaxThreads(maxThreads int) Option {
 func WithMetrics(m Metrics) Option {
 	return func(o *opt) error {
 		o.metrics = m
+
+		return nil
+	}
+}
+
+// WithWorkerBackground marks this worker as a background (non-HTTP) worker.
+// The worker's fileName is used as the entrypoint, and maxThreads as the
+// safety cap for lazy-started instances (catch-all only).
+func WithWorkerBackground() WorkerOption {
+	return func(w *workerOpt) error {
+		w.isBackgroundWorker = true
+
+		return nil
+	}
+}
+
+// WithWorkerBackgroundScope sets the scope ID for background worker isolation.
+// Workers in the same scope share a background worker lookup. Each php_server
+// block gets its own scope. The global frankenphp block uses scope "".
+func WithWorkerBackgroundScope(scope string) WorkerOption {
+	return func(w *workerOpt) error {
+		w.backgroundScope = scope
 
 		return nil
 	}

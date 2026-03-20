@@ -48,6 +48,7 @@ var (
 	ErrMainThreadCreation = errors.New("error creating the main thread")
 	ErrScriptExecution    = errors.New("error during PHP script execution")
 	ErrNotRunning         = errors.New("FrankenPHP is not running. For proper configuration visit: https://frankenphp.dev/docs/config/#caddyfile-config")
+	ErrNotHTTPWorker      = errors.New("worker is not an HTTP worker")
 
 	ErrInvalidRequestPath         = ErrRejected{"invalid request path", http.StatusBadRequest}
 	ErrInvalidContentLengthHeader = ErrRejected{"invalid Content-Length header", http.StatusBadRequest}
@@ -156,8 +157,23 @@ func Config() PHPConfig {
 func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 	maxProcs := runtime.GOMAXPROCS(0) * 2
 	maxThreadsFromWorkers := 0
+	reservedThreads := 0
 
 	for i, w := range opt.workers {
+		if w.isBackgroundWorker {
+			// Reserve at least 1 thread for each background worker
+			if w.maxThreads == 0 && w.num == 0 {
+				opt.workers[i].maxThreads = 1
+			}
+			extra := w.num
+			if extra < 1 {
+				extra = 1
+			}
+			reservedThreads += extra
+			numWorkers += extra
+			continue
+		}
+
 		if w.num <= 0 {
 			// https://github.com/php/frankenphp/issues/126
 			opt.workers[i].num = maxProcs
@@ -199,6 +215,8 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 			return 0, fmt.Errorf("num_threads (%d) must be greater than the number of worker threads (%d)", opt.numThreads, numWorkers)
 		}
 
+		opt.numThreads += reservedThreads
+		opt.maxThreads += reservedThreads
 		return numWorkers, nil
 	}
 
@@ -208,6 +226,8 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 			return 0, fmt.Errorf("max_threads (%d) must be greater than the number of worker threads (%d)", opt.maxThreads, numWorkers)
 		}
 
+		opt.numThreads += reservedThreads
+		opt.maxThreads += reservedThreads
 		return numWorkers, nil
 	}
 
@@ -220,6 +240,8 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 		}
 		opt.maxThreads = opt.numThreads
 
+		opt.numThreads += reservedThreads
+		opt.maxThreads += reservedThreads
 		return numWorkers, nil
 	}
 
@@ -232,6 +254,8 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 		return 0, fmt.Errorf("max_threads (%d) must be greater than or equal to num_threads (%d)", opt.maxThreads, opt.numThreads)
 	}
 
+	opt.numThreads += reservedThreads
+	opt.maxThreads += reservedThreads
 	return numWorkers, nil
 }
 
@@ -414,6 +438,9 @@ func ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) error 
 
 	// Detect if a worker is available to handle this request
 	if fc.worker != nil {
+		if fc.worker.isBackgroundWorker {
+			return ErrNotHTTPWorker
+		}
 		return fc.worker.handleRequest(ch)
 	}
 

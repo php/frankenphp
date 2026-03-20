@@ -79,6 +79,9 @@ func (handler *taskThread) name() string {
 	return "Task PHP Thread"
 }
 
+func (handler *taskThread) drain() {
+}
+
 func (handler *taskThread) waitForTasks() {
 	for {
 		select {

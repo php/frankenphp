@@ -7,6 +7,8 @@ package frankenphp_test
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -23,8 +25,8 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
-	"runtime"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -46,6 +48,7 @@ type testOptions struct {
 	realServer         bool
 	logger             *slog.Logger
 	initOpts           []frankenphp.Option
+	workerOpts         []frankenphp.WorkerOption
 	requestOpts        []frankenphp.RequestOption
 	phpIni             map[string]string
 }
@@ -67,6 +70,7 @@ func runTest(t *testing.T, test func(func(http.ResponseWriter, *http.Request), *
 			frankenphp.WithWorkerEnv(opts.env),
 			frankenphp.WithWorkerWatchMode(opts.watch),
 		}
+		workerOpts = append(workerOpts, opts.workerOpts...)
 		initOpts = append(initOpts, frankenphp.WithWorkers("workerName", testDataDir+opts.workerScript, opts.nbWorkers, workerOpts...))
 	}
 	initOpts = append(initOpts, opts.initOpts...)
@@ -801,6 +805,319 @@ func testFileUpload(t *testing.T, opts *testOptions) {
 
 		assert.Contains(t, string(body), "Upload OK")
 	}, opts)
+}
+
+func TestBackgroundWorkerGetVars(t *testing.T) {
+	cwd, _ := os.Getwd()
+	entrypoint := cwd + "/testdata/background-worker-with-argv.php"
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		// get_vars blocks until the background worker calls set_vars - no polling needed
+		body, _ := testGet("http://example.com/background-worker-start.php", handler, t)
+		assert.Equal(t, "test-worker", body)
+	}, &testOptions{
+		workerScript:       "background-worker-start.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		initOpts: []frankenphp.Option{
+			frankenphp.WithMaxThreads(50),
+			frankenphp.WithWorkers("", entrypoint, 0, frankenphp.WithWorkerBackground()),
+		},
+	})
+}
+
+func TestBackgroundWorkerGetVarsIdentity(t *testing.T) {
+	cwd, _ := os.Getwd()
+	entrypoint := cwd + "/testdata/background-worker-with-argv.php"
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/background-worker-identity.php", handler, t)
+		assert.Equal(t, "IDENTICAL", body)
+	}, &testOptions{
+		workerScript:       "background-worker-identity.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		initOpts: []frankenphp.Option{
+			frankenphp.WithMaxThreads(50),
+			frankenphp.WithWorkers("", entrypoint, 0, frankenphp.WithWorkerBackground()),
+		},
+	})
+}
+
+func TestBackgroundWorkerAtMostOnce(t *testing.T) {
+	cwd, _ := os.Getwd()
+	entrypoint := cwd + "/testdata/background-worker-dedup.php"
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/background-worker-start-twice.php", handler, t)
+		assert.Equal(t, "dedup-worker", body)
+	}, &testOptions{
+		workerScript:       "background-worker-start-twice.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		initOpts: []frankenphp.Option{
+			frankenphp.WithMaxThreads(50),
+			frankenphp.WithWorkers("", entrypoint, 0, frankenphp.WithWorkerBackground()),
+		},
+	})
+}
+
+func TestBackgroundWorkerNoEntrypoint(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/background-worker-no-entrypoint.php", handler, t)
+		assert.Equal(t, "no background worker configured in this php_server", body)
+	}, &testOptions{
+		workerScript:       "background-worker-no-entrypoint.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+	})
+}
+
+func TestBackgroundWorkerSetVarsValidation(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/background-worker-set-server-var-validation.php", handler, t)
+		assert.Contains(t, body, "NON_BACKGROUND:blocked")
+		assert.Contains(t, body, "STREAM_NON_BACKGROUND:blocked")
+	}, &testOptions{
+		workerScript:       "background-worker-set-server-var-validation.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+	})
+}
+
+func TestBackgroundWorkerTypeValidation(t *testing.T) {
+	cwd, _ := os.Getwd()
+	entrypoint := cwd + "/testdata/background-worker-type-validation-entrypoint.php"
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/background-worker-type-validation.php", handler, t)
+		assert.Contains(t, body, "INT_VAL:allowed")
+		assert.Contains(t, body, "INT_KEY:allowed")
+		assert.Contains(t, body, "NESTED:allowed")
+		assert.Contains(t, body, "OBJECT:blocked")
+		assert.Contains(t, body, "REFERENCE:blocked")
+		assert.Contains(t, body, "ENUM:allowed")
+		assert.Contains(t, body, "ENUM_RESTORED:match")
+	}, &testOptions{
+		workerScript:       "background-worker-type-validation.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		initOpts: []frankenphp.Option{
+			frankenphp.WithMaxThreads(50),
+			frankenphp.WithWorkers("", entrypoint, 0, frankenphp.WithWorkerBackground()),
+		},
+	})
+}
+
+func TestBackgroundWorkerBinarySafe(t *testing.T) {
+	cwd, _ := os.Getwd()
+	entrypoint := cwd + "/testdata/background-worker-binary-entrypoint.php"
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/background-worker-binary-safe.php", handler, t)
+		assert.Contains(t, body, "BINARY_LEN:11")
+		assert.Contains(t, body, "BINARY_CONTENT:"+hex.EncodeToString([]byte("hello\x00world")))
+		assert.Contains(t, body, "UTF8:héllo wörld 🚀")
+		assert.Contains(t, body, "EMPTY_EXISTS:yes")
+		assert.Contains(t, body, "EMPTY_LEN:0")
+	}, &testOptions{
+		workerScript:       "background-worker-binary-safe.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		initOpts: []frankenphp.Option{
+			frankenphp.WithMaxThreads(50),
+			frankenphp.WithWorkers("", entrypoint, 0, frankenphp.WithWorkerBackground()),
+		},
+	})
+}
+
+func TestBackgroundWorkerGetVarsMultiple(t *testing.T) {
+	cwd, _ := os.Getwd()
+	entrypoint := cwd + "/testdata/background-worker-multi-entrypoint.php"
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/background-worker-multi.php", handler, t)
+		assert.Equal(t, "worker-a:NAME_WORKER_A=worker-a,worker-b:NAME_WORKER_B=worker-b", body)
+	}, &testOptions{
+		workerScript:       "background-worker-multi.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		initOpts: []frankenphp.Option{
+			frankenphp.WithMaxThreads(50),
+			frankenphp.WithWorkers("", entrypoint, 0, frankenphp.WithWorkerBackground()),
+		},
+	})
+}
+
+func TestBackgroundWorkerEnumMissing(t *testing.T) {
+	cwd, _ := os.Getwd()
+	entrypoint := cwd + "/testdata/background-worker-enum-missing-entrypoint.php"
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/background-worker-enum-missing.php", handler, t)
+		assert.Contains(t, body, "LogicException:")
+		assert.Contains(t, body, "SidekickOnlyEnum")
+	}, &testOptions{
+		workerScript:       "background-worker-enum-missing.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		initOpts: []frankenphp.Option{
+			frankenphp.WithMaxThreads(50),
+			frankenphp.WithWorkers("", entrypoint, 0, frankenphp.WithWorkerBackground()),
+		},
+	})
+}
+
+func TestBackgroundWorkerCrashRestart(t *testing.T) {
+	cwd, _ := os.Getwd()
+	entrypoint := cwd + "/testdata/background-worker-crash.php"
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		// get_vars blocks - background worker crashes, restarts, then publishes
+		body, _ := testGet("http://example.com/background-worker-crash-starter.php", handler, t)
+		assert.Equal(t, "restarted", body)
+	}, &testOptions{
+		workerScript:       "background-worker-crash-starter.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		initOpts: []frankenphp.Option{
+			frankenphp.WithMaxThreads(50),
+			frankenphp.WithWorkers("", entrypoint, 0, frankenphp.WithWorkerBackground()),
+		},
+	})
+}
+
+func TestBackgroundWorkerSignalingStream(t *testing.T) {
+	cwd, _ := os.Getwd()
+	entrypoint := cwd + "/testdata/background-worker-stop-fd-entrypoint.php"
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/background-worker-stop-fd.php", handler, t)
+		assert.Equal(t, "stream", body)
+	}, &testOptions{
+		workerScript:       "background-worker-stop-fd.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		initOpts: []frankenphp.Option{
+			frankenphp.WithMaxThreads(50),
+			frankenphp.WithWorkers("", entrypoint, 0, frankenphp.WithWorkerBackground()),
+		},
+	})
+}
+
+func TestBackgroundWorkerStopsOnWorkerRestart(t *testing.T) {
+	cwd, _ := os.Getwd()
+	entrypoint := cwd + "/testdata/background-worker-restart-entrypoint.php"
+	name := fmt.Sprintf("restart-background-worker-%d", time.Now().UnixNano())
+	hash := fmt.Sprintf("%x", md5.Sum([]byte(name)))
+	runningMarker := filepath.Join(os.TempDir(), "background-worker-restart-running-"+hash)
+	t.Cleanup(func() {
+		_ = os.Remove(runningMarker)
+	})
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/background-worker-restart.php?name="+name, handler, t)
+		assert.Equal(t, "1", body)
+		require.FileExists(t, runningMarker)
+
+		frankenphp.RestartWorkers()
+
+		require.Eventually(t, func() bool {
+			_, err := os.Stat(runningMarker)
+			return errors.Is(err, os.ErrNotExist)
+		}, 5*time.Second, 50*time.Millisecond)
+
+		body, _ = testGet("http://example.com/background-worker-restart.php?name="+name, handler, t)
+		assert.Equal(t, "2", body)
+		require.FileExists(t, runningMarker)
+
+		frankenphp.RestartWorkers()
+
+		require.Eventually(t, func() bool {
+			_, err := os.Stat(runningMarker)
+			return errors.Is(err, os.ErrNotExist)
+		}, 5*time.Second, 50*time.Millisecond)
+	}, &testOptions{
+		workerScript:       "background-worker-restart.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		initOpts: []frankenphp.Option{
+			frankenphp.WithMaxThreads(50),
+			frankenphp.WithWorkers("", entrypoint, 0, frankenphp.WithWorkerBackground()),
+		},
+	})
+}
+
+func TestBackgroundWorkerSignalingStreamNonBackgroundWorker(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/background-worker-stop-fd-non-background-worker.php", handler, t)
+		assert.Equal(t, "thrown", body)
+	}, &testOptions{
+		workerScript:       "background-worker-stop-fd-non-background-worker.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+	})
+}
+
+func TestBackgroundWorkerMultipleEntrypoints(t *testing.T) {
+	cwd, _ := os.Getwd()
+
+	t.Run("entrypoint-a", func(t *testing.T) {
+		entrypoint := cwd + "/testdata/background-worker-multi-entrypoint-a.php"
+
+		runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+			body, _ := testGet("http://example.com/background-worker-multi-file.php", handler, t)
+			assert.Equal(t, "entrypoint-a:worker-from-a,entrypoint-a:worker-from-b", body)
+		}, &testOptions{
+			workerScript:       "background-worker-multi-file.php",
+			nbWorkers:          1,
+			nbParallelRequests: 1,
+			initOpts: []frankenphp.Option{
+				frankenphp.WithMaxThreads(50),
+				frankenphp.WithWorkers("", entrypoint, 0, frankenphp.WithWorkerBackground()),
+			},
+		})
+	})
+
+	t.Run("entrypoint-b", func(t *testing.T) {
+		entrypoint := cwd + "/testdata/background-worker-multi-entrypoint-b.php"
+
+		runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+			body, _ := testGet("http://example.com/background-worker-multi-file.php", handler, t)
+			assert.Equal(t, "entrypoint-b:worker-from-a,entrypoint-b:worker-from-b", body)
+		}, &testOptions{
+			workerScript:       "background-worker-multi-file.php",
+			nbWorkers:          1,
+			nbParallelRequests: 1,
+			initOpts: []frankenphp.Option{
+				frankenphp.WithMaxThreads(50),
+				frankenphp.WithWorkers("", entrypoint, 0, frankenphp.WithWorkerBackground()),
+			},
+		})
+	})
+}
+
+func TestBackgroundWorkerNamedAutoStart(t *testing.T) {
+	cwd, _ := os.Getwd()
+	entrypoint := cwd + "/testdata/background-worker-named-autostart.php"
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/background-worker-named-autostart-reader.php", handler, t)
+		assert.Equal(t, "my-named-worker|true", body)
+	}, &testOptions{
+		workerScript:       "background-worker-named-autostart-reader.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		initOpts: []frankenphp.Option{
+			frankenphp.WithMaxThreads(50),
+			// Simulate Caddy's m# prefix for module workers with auto-start
+			frankenphp.WithWorkers("m#my-named-worker", entrypoint, 1,
+				frankenphp.WithWorkerBackground(),
+			),
+			// Catch-all with 0 threads registers the lookup without starting threads
+			frankenphp.WithWorkers("", entrypoint, 0, frankenphp.WithWorkerBackground()),
+		},
+	})
 }
 
 func ExampleServeHTTP() {

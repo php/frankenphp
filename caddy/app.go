@@ -20,6 +20,7 @@ import (
 	"github.com/dunglas/frankenphp/internal/fastabs"
 )
 
+
 var (
 	options   []frankenphp.Option
 	optionsMU sync.RWMutex
@@ -163,6 +164,10 @@ func (f *FrankenPHPApp) Start() error {
 			frankenphp.WithWorkerMaxThreads(w.MaxThreads),
 			frankenphp.WithWorkerRequestOptions(w.requestOptions...),
 		)
+
+		if w.Background {
+			w.options = append(w.options, frankenphp.WithWorkerBackground())
+		}
 
 		f.opts = append(f.opts, frankenphp.WithWorkers(w.Name, repl.ReplaceKnown(w.FileName, ""), w.Num, w.options...))
 	}
