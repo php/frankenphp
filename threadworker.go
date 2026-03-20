@@ -98,13 +98,18 @@ func (handler *workerThread) name() string {
 	return "Worker PHP Thread - " + handler.worker.fileName
 }
 
+func (handler *workerThread) drain() {
+}
+
 func setupWorkerScript(handler *workerThread, worker *worker) {
 	metrics.StartWorker(worker.name)
 
-	// Create a dummy request to set up the worker
+	opts := append([]RequestOption(nil), worker.requestOptions...)
+	C.frankenphp_set_worker_name(nil, C._Bool(false))
+
 	fc, err := newDummyContext(
 		filepath.Base(worker.fileName),
-		worker.requestOptions...,
+		opts...,
 	)
 	if err != nil {
 		panic(err)
@@ -120,7 +125,9 @@ func setupWorkerScript(handler *workerThread, worker *worker) {
 	if globalLogger.Enabled(ctx, slog.LevelDebug) {
 		globalLogger.LogAttrs(ctx, slog.LevelDebug, "starting", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex))
 	}
+
 }
+
 
 func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 	worker := handler.worker

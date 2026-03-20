@@ -23,6 +23,7 @@ type frankenPHPContext struct {
 	request         *http.Request
 	originalRequest *http.Request
 	worker          *worker
+	backgroundScope string
 
 	docURI         string
 	pathInfo       string

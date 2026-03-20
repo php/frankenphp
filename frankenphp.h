@@ -170,7 +170,13 @@ bool frankenphp_new_php_thread(uintptr_t thread_index);
 
 bool frankenphp_shutdown_dummy_request(void);
 void frankenphp_update_local_thread_context(bool is_worker);
-
+void frankenphp_set_worker_name(char *name, bool background);
+int frankenphp_worker_get_stop_fd_write(void);
+int frankenphp_worker_write_stop_fd(int fd);
+int frankenphp_worker_write_task_signal(int fd);
+bool frankenphp_worker_copy_vars(zval *dst, int count, char **names,
+                                 size_t *name_lens, void **ptrs);
+void frankenphp_worker_close_fd(int fd);
 int frankenphp_execute_script_cli(char *script, int argc, char **argv,
                                   bool eval);
 
@@ -194,5 +200,10 @@ void frankenphp_destroy_thread_metrics(void);
 size_t frankenphp_get_thread_memory_usage(uintptr_t thread_index);
 
 void register_extensions(zend_module_entry **m, int len);
+
+void frankenphp_init_force_kill(int num_threads);
+void frankenphp_save_php_timer(uintptr_t thread_index);
+void frankenphp_force_kill_thread(uintptr_t thread_index);
+void frankenphp_destroy_force_kill(void);
 
 #endif

@@ -16,6 +16,10 @@ import (
 	"github.com/dunglas/frankenphp/internal/state"
 )
 
+// backgroundWorkerGracePeriod is the time background workers have to stop
+// gracefully after receiving the stop signal before being force-killed.
+const backgroundWorkerGracePeriod = 5 * time.Second
+
 // represents a worker script and can have many threads assigned to it
 type worker struct {
 	mercureContext
@@ -33,6 +37,13 @@ type worker struct {
 	onThreadReady          func(int)
 	onThreadShutdown       func(int)
 	queuedRequests         atomic.Int32
+	isBackgroundWorker     bool
+	backgroundScope        string
+	backgroundLookup       *backgroundWorkerLookup
+	backgroundRegistry     *backgroundWorkerRegistry
+	backgroundWorker       *backgroundWorkerState
+	backgroundReserveOnce  sync.Once
+	backgroundStopFdWrite  atomic.Int32 // write end of the stop pipe, -1 if not set
 }
 
 var (
@@ -71,12 +82,26 @@ func initWorkers(opt []workerOpt) error {
 		}
 	}
 
+	// Build per-scope background worker lookups
+	backgroundLookups = buildBackgroundWorkerLookups(workers, opt)
+	if backgroundLookups != nil {
+		for _, w := range workers {
+			if lookup := backgroundLookups[w.backgroundScope]; lookup != nil {
+				w.backgroundLookup = lookup
+			}
+		}
+	}
+
 	startupFailChan = make(chan error, totalThreadsToStart)
 
 	for _, w := range workers {
 		for i := 0; i < w.num; i++ {
 			thread := getInactivePHPThread()
-			convertToWorkerThread(thread, w)
+			if w.isBackgroundWorker {
+				convertToBackgroundWorkerThread(thread, w)
+			} else {
+				convertToWorkerThread(thread, w)
+			}
 
 			workersReady.Go(func() {
 				thread.state.WaitFor(state.Ready, state.ShuttingDown, state.Done)
@@ -122,7 +147,7 @@ func newWorker(o workerOpt) (*worker, error) {
 
 	// workers that have a name starting with "m#" are module workers
 	// they can only be matched by their name, not by their path
-	allowPathMatching := !strings.HasPrefix(o.name, "m#")
+	allowPathMatching := !strings.HasPrefix(o.name, "m#") && !o.isBackgroundWorker
 
 	if w := workersByPath[absFileName]; w != nil && allowPathMatching {
 		return w, fmt.Errorf("two workers cannot have the same filename: %q", absFileName)
@@ -148,7 +173,11 @@ func newWorker(o workerOpt) (*worker, error) {
 		maxConsecutiveFailures: o.maxConsecutiveFailures,
 		onThreadReady:          o.onThreadReady,
 		onThreadShutdown:       o.onThreadShutdown,
+		isBackgroundWorker:     o.isBackgroundWorker,
+		backgroundScope:        o.backgroundScope,
 	}
+
+	w.backgroundStopFdWrite.Store(-1)
 
 	w.configureMercure(&o)
 
@@ -162,11 +191,23 @@ func newWorker(o workerOpt) (*worker, error) {
 		o.extensionWorkers.internalWorker = w
 	}
 
+	// Reserve background worker state in the registry during init
+	if w.isBackgroundWorker && w.backgroundRegistry != nil {
+		bgw, _, err := w.backgroundRegistry.reserve(w.name)
+		if err != nil {
+			return nil, fmt.Errorf("failed to reserve background worker %q: %w", w.name, err)
+		}
+		w.backgroundWorker = bgw
+	}
+
 	return w, nil
 }
 
 // EXPERIMENTAL: DrainWorkers finishes all worker scripts before a graceful shutdown
 func DrainWorkers() {
+	scalingMu.Lock()
+	defer scalingMu.Unlock()
+
 	_ = drainWorkerThreads()
 }
 
@@ -174,21 +215,34 @@ func drainWorkerThreads() []*phpThread {
 	var (
 		ready          sync.WaitGroup
 		drainedThreads []*phpThread
+		bgThreads      []*phpThread
+		bgWorkers      []*worker
 	)
 
 	for _, worker := range workers {
 		worker.threadMutex.RLock()
-		ready.Add(len(worker.threads))
+		threads := append([]*phpThread(nil), worker.threads...)
+		worker.threadMutex.RUnlock()
 
-		for _, thread := range worker.threads {
-			if !thread.state.RequestSafeStateChange(state.Restarting) {
-				ready.Done()
-
-				// no state change allowed == thread is shutting down
-				// we'll proceed to restart all other threads anyway
+		for _, thread := range threads {
+			if worker.isBackgroundWorker {
+				// Signal background workers to stop via the signaling stream
+				if !thread.state.RequestSafeStateChange(state.ShuttingDown) {
+					continue
+				}
+				thread.handler.drain()
+				close(thread.drainChan)
+				bgThreads = append(bgThreads, thread)
+				bgWorkers = append(bgWorkers, worker)
 				continue
 			}
 
+			if !thread.state.RequestSafeStateChange(state.Restarting) {
+				continue
+			}
+
+			ready.Add(1)
+			thread.handler.drain()
 			close(thread.drainChan)
 			drainedThreads = append(drainedThreads, thread)
 
@@ -197,11 +251,64 @@ func drainWorkerThreads() []*phpThread {
 				ready.Done()
 			}(thread)
 		}
-
-		worker.threadMutex.RUnlock()
 	}
 
 	ready.Wait()
+
+	// Wait for background workers with a grace period.
+	// Well-written workers check the signaling stream and stop promptly.
+	// Stuck workers (e.g., blocking C calls) are abandoned after the timeout;
+	// new threads are created on restart, and the old thread exits when the
+	// blocking call eventually returns.
+	if len(bgThreads) > 0 {
+		bgDone := make(chan struct{})
+		go func() {
+			for _, thread := range bgThreads {
+				thread.state.WaitFor(state.Done)
+			}
+			close(bgDone)
+		}()
+
+		select {
+		case <-bgDone:
+			// all stopped gracefully
+		case <-time.After(backgroundWorkerGracePeriod):
+			// Best-effort force-kill: arm PHP's max_execution_time timer on
+			// stuck threads. Linux ZTS: arms PHP's timer. Windows: interrupts
+			// I/O and alertable waits. Other platforms: no-op.
+			// Safe because after 5s, stuck threads are guaranteed to be in C code.
+			for _, thread := range bgThreads {
+				if !thread.state.Is(state.Done) {
+					C.frankenphp_force_kill_thread(C.uintptr_t(thread.threadIndex))
+				}
+			}
+			globalLogger.Warn("background workers did not stop within grace period, force-killing stuck threads")
+		}
+
+		// Clean up registry entries for stopped workers
+		stopped := make(map[*worker]struct{}, len(bgWorkers))
+		for _, w := range bgWorkers {
+			if w.backgroundRegistry != nil && w.backgroundWorker != nil {
+				w.backgroundRegistry.remove(w.name, w.backgroundWorker)
+			}
+			stopped[w] = struct{}{}
+		}
+		filtered := workers[:0]
+		for _, w := range workers {
+			if _, ok := stopped[w]; !ok {
+				filtered = append(filtered, w)
+			}
+		}
+		workers = filtered
+
+		// Reset drained background threads for restart
+		for _, thread := range bgThreads {
+			thread.drainChan = make(chan struct{})
+			if mainThread.state.Is(state.Ready) {
+				thread.state.Set(state.Reserved)
+			}
+		}
+	}
 
 	return drainedThreads
 }

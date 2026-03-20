@@ -76,6 +76,9 @@ func (handler *regularThread) name() string {
 	return "Regular PHP Thread"
 }
 
+func (handler *regularThread) drain() {
+}
+
 func (handler *regularThread) waitForRequest() string {
 	handler.state.MarkAsWaiting(true)
 
