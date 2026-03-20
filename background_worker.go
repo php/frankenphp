@@ -163,6 +163,8 @@ func (registry *backgroundWorkerRegistry) reserve(name string) (*backgroundWorke
 
 	bgw := &backgroundWorkerState{
 		ready: make(chan struct{}),
+		tasks: make(chan *taskRequest, 1), // buffer=1: backpressure with signaling
+		dead:  make(chan struct{}),
 	}
 	registry.workers[name] = bgw
 
@@ -176,6 +178,9 @@ func (registry *backgroundWorkerRegistry) remove(name string, bgw *backgroundWor
 	if registry.workers[name] == bgw {
 		delete(registry.workers, name)
 	}
+
+	// Signal waiting senders that this worker is gone
+	bgw.deadOnce.Do(func() { close(bgw.dead) })
 }
 
 func startBackgroundWorker(thread *phpThread, bgWorkerName string) error {
@@ -225,6 +230,7 @@ func startBackgroundWorkerWithRegistry(registry *backgroundWorkerRegistry, bgWor
 	worker.isBackgroundWorker = true
 	worker.backgroundWorker = bgw
 	worker.backgroundRegistry = registry
+	bgw.fds = &worker.backgroundFds
 
 	for i := 0; i < numThreads; i++ {
 		bgWorkerThread := getInactivePHPThread()

@@ -26,6 +26,8 @@ type workerThread struct {
 	workerContext           context.Context
 	isBootingScript         bool // true if the worker has not reached frankenphp_handle_request yet
 	failureCount            int  // number of consecutive startup failures
+	currentTask             *taskRequest
+	stopFd                  int32 // this thread's own stop pipe fd (for cleanup in teardown)
 }
 
 func convertToWorkerThread(thread *phpThread, worker *worker) {

@@ -20,6 +20,37 @@ import (
 // gracefully after receiving the stop signal before being force-killed.
 const backgroundWorkerGracePeriod = 5 * time.Second
 
+// backgroundFdList is a thread-safe list of file descriptors for background worker stop pipes.
+type backgroundFdList struct {
+	mu  sync.RWMutex
+	fds []int32
+}
+
+func (l *backgroundFdList) addFd(fd int32) {
+	l.mu.Lock()
+	l.fds = append(l.fds, fd)
+	l.mu.Unlock()
+}
+
+func (l *backgroundFdList) removeFd(fd int32) {
+	l.mu.Lock()
+	for i, f := range l.fds {
+		if f == fd {
+			l.fds = append(l.fds[:i], l.fds[i+1:]...)
+			break
+		}
+	}
+	l.mu.Unlock()
+}
+
+func (l *backgroundFdList) writeAll(fn func(fd int32)) {
+	l.mu.RLock()
+	for _, fd := range l.fds {
+		fn(fd)
+	}
+	l.mu.RUnlock()
+}
+
 // represents a worker script and can have many threads assigned to it
 type worker struct {
 	mercureContext
@@ -43,7 +74,7 @@ type worker struct {
 	backgroundRegistry     *backgroundWorkerRegistry
 	backgroundWorker       *backgroundWorkerState
 	backgroundReserveOnce  sync.Once
-	backgroundStopFdWrite  atomic.Int32 // write end of the stop pipe, -1 if not set
+	backgroundFds          backgroundFdList
 }
 
 var (
@@ -176,8 +207,6 @@ func newWorker(o workerOpt) (*worker, error) {
 		isBackgroundWorker:     o.isBackgroundWorker,
 		backgroundScope:        o.backgroundScope,
 	}
-
-	w.backgroundStopFdWrite.Store(-1)
 
 	w.configureMercure(&o)
 

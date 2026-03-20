@@ -174,8 +174,11 @@ void frankenphp_set_worker_name(char *name, bool background);
 int frankenphp_worker_get_stop_fd_write(void);
 int frankenphp_worker_write_stop_fd(int fd);
 int frankenphp_worker_write_task_signal(int fd);
+int frankenphp_worker_pipe_nudge(int fd);
+void frankenphp_worker_free_persistent_ht(void *ptr);
 bool frankenphp_worker_copy_vars(zval *dst, int count, char **names,
                                  size_t *name_lens, void **ptrs);
+int frankenphp_worker_create_pipe(int *fds);
 void frankenphp_worker_close_fd(int fd);
 int frankenphp_execute_script_cli(char *script, int argc, char **argv,
                                   bool eval);

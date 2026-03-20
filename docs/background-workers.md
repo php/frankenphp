@@ -35,7 +35,7 @@ example.com {
 }
 ```
 
-- **Named** (with `name`): lazy-started on first `get_vars()` call, or auto-started at boot if `num 1` is set.
+- **Named** (with `name`): lazy-started on first `get_vars()` call, or auto-started at boot if `num 1` is set. Use `num` to run multiple threads for parallel task processing.
 - **Catch-all** (no `name`): also lazy-started. Use `max_threads` to cap how many can be created (defaults to 16). Not declaring a catch-all forbids unlisted names.
 - Each `php_server` block has its own isolated scope - two blocks can use the same worker names without conflict.
 - `max_consecutive_failures`, `env`, and `watch` work the same as HTTP workers.
@@ -74,6 +74,7 @@ Supported types: `null`, `bool`, `int`, `float`, `string`, `array` (nested), and
 ### `frankenphp_worker_get_signaling_stream(): resource`
 
 Returns a readable stream for receiving signals from FrankenPHP.
+Signals: `"stop\n"` (shutdown/restart), `"task\n"` (task available, see Task API below).
 Use `stream_select()` to wait between iterations instead of `sleep()`:
 
 ```php
@@ -94,6 +95,72 @@ function background_worker_should_stop(float $timeout = 0): bool
 > [!WARNING]
 > Avoid `sleep()` or `usleep()` in background workers - they block at the C level and cannot be interrupted.
 > Use `stream_select()` with the signaling stream instead.
+
+### Task API
+
+While `set_vars`/`get_vars` pushes config from background workers to HTTP workers,
+tasks enable the reverse: HTTP workers send work to background workers and stream results back.
+
+#### `frankenphp_worker_task_send(string $name, array $payload, float $timeout = 30.0): resource`
+
+Sends a task to a named background worker. Returns a readable stream for receiving results.
+
+- `$payload` follows the same type constraints as `set_vars`: `null`, scalars, arrays, enums. No objects or resources.
+- Blocks until a background worker thread picks up the task
+- The returned stream wakes up on each `task_update()` - use with `stream_select()` or `fgets()`
+- `fclose()` the stream to cancel the task or acknowledge completion
+- Throws `RuntimeException` on timeout or if the background worker exits
+
+#### `frankenphp_worker_task_receive(): ?array`
+
+Called from a background worker. Dequeues a pending task. Returns `[$stream, $payload]` or `null`.
+
+- Non-blocking: call it after receiving `"task\n"` on the signaling stream
+- `$stream`: writable stream - send results back via `task_update()`
+- `$payload`: the array sent by the HTTP worker
+- `fclose($stream)` when processing is complete
+
+#### `frankenphp_worker_task_update(resource $stream, array $data): void`
+
+Sends a result or progress update from the background worker to the sender.
+
+#### `frankenphp_worker_task_read(resource $stream): ?array`
+
+Reads the next update on the sender's side. Returns `null` when the background worker closes the stream cleanly.
+Throws `RuntimeException` if the background worker exited without completing the task.
+
+#### Example
+
+```php
+// Background worker: process tasks
+$signaling = frankenphp_worker_get_signaling_stream();
+
+while (true) {
+    $r = [$signaling];
+    $w = $e = [];
+    if (!stream_select($r, $w, $e, 30)) {
+        continue;
+    }
+
+    if ("stop\n" === $signal = fgets($signaling)) {
+        break;
+    }
+
+    if ("task\n" === $signal && [$stream, $payload] = frankenphp_worker_task_receive()) {
+        frankenphp_worker_task_update($stream, ['result' => process($payload)]);
+        fclose($stream);
+    }
+}
+```
+
+```php
+// HTTP worker: send a task and read the result
+$stream = frankenphp_worker_task_send('image-resizer', ['file' => 'photo.jpg']);
+$result = frankenphp_worker_task_read($stream);
+fclose($stream);
+```
+
+With `num 2` or more, multiple background threads share the same task queue - tasks are distributed automatically.
 
 ## Example
 

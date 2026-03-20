@@ -1110,11 +1110,176 @@ func TestBackgroundWorkerNamedAutoStart(t *testing.T) {
 		nbParallelRequests: 1,
 		initOpts: []frankenphp.Option{
 			frankenphp.WithMaxThreads(50),
-			// Simulate Caddy's m# prefix for module workers with auto-start
 			frankenphp.WithWorkers("m#my-named-worker", entrypoint, 1,
 				frankenphp.WithWorkerBackground(),
 			),
-			// Catch-all with 0 threads registers the lookup without starting threads
+			frankenphp.WithWorkers("", entrypoint, 0, frankenphp.WithWorkerBackground()),
+		},
+	})
+}
+
+func TestBackgroundWorkerTaskBasic(t *testing.T) {
+	cwd, _ := os.Getwd()
+	entrypoint := cwd + "/testdata/background-worker-task-entrypoint.php"
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/background-worker-task-sender.php", handler, t)
+		assert.Equal(t, "processed:hello", body)
+	}, &testOptions{
+		workerScript:       "background-worker-task-sender.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		initOpts: []frankenphp.Option{
+			frankenphp.WithMaxThreads(50),
+			frankenphp.WithWorkers("", entrypoint, 0, frankenphp.WithWorkerBackground()),
+		},
+	})
+}
+
+func TestBackgroundWorkerTaskProgress(t *testing.T) {
+	cwd, _ := os.Getwd()
+	entrypoint := cwd + "/testdata/background-worker-task-progress-entrypoint.php"
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/background-worker-task-progress-sender.php", handler, t)
+		assert.Equal(t, "progress:25,progress:75,completed:done", body)
+	}, &testOptions{
+		workerScript:       "background-worker-task-progress-sender.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		initOpts: []frankenphp.Option{
+			frankenphp.WithMaxThreads(50),
+			frankenphp.WithWorkers("", entrypoint, 0, frankenphp.WithWorkerBackground()),
+		},
+	})
+}
+
+func TestBackgroundWorkerTaskNonWorker(t *testing.T) {
+	cwd, _ := os.Getwd()
+	entrypoint := cwd + "/testdata/background-worker-task-entrypoint.php"
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/background-worker-task-non-worker.php", handler, t)
+		assert.Equal(t, "processed:from-non-worker", body)
+	}, &testOptions{
+		workerScript:       "background-worker-task-sender.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		initOpts: []frankenphp.Option{
+			frankenphp.WithMaxThreads(50),
+			frankenphp.WithWorkers("", entrypoint, 0, frankenphp.WithWorkerBackground()),
+		},
+	})
+}
+
+func TestBackgroundWorkerTaskCrash(t *testing.T) {
+	cwd, _ := os.Getwd()
+	entrypoint := cwd + "/testdata/background-worker-task-crash-entrypoint.php"
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/background-worker-task-crash-sender.php", handler, t)
+		// Background worker crashes - sender gets RuntimeException
+		assert.Equal(t, "ERROR:background worker exited without completing the task", body)
+	}, &testOptions{
+		workerScript:       "background-worker-task-crash-sender.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		initOpts: []frankenphp.Option{
+			frankenphp.WithMaxThreads(50),
+			frankenphp.WithWorkers("", entrypoint, 0, frankenphp.WithWorkerBackground()),
+		},
+	})
+}
+
+func TestBackgroundWorkerTaskCrashMidTask(t *testing.T) {
+	cwd, _ := os.Getwd()
+	entrypoint := cwd + "/testdata/background-worker-task-crash-mid-entrypoint.php"
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/background-worker-task-crash-mid-sender.php", handler, t)
+		// Background worker received the task then crashed - sender gets RuntimeException
+		assert.Equal(t, "CRASH:background worker exited without completing the task", body)
+	}, &testOptions{
+		workerScript:       "background-worker-task-crash-mid-sender.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		initOpts: []frankenphp.Option{
+			frankenphp.WithMaxThreads(50),
+			frankenphp.WithWorkers("", entrypoint, 0, frankenphp.WithWorkerBackground()),
+		},
+	})
+}
+
+func TestBackgroundWorkerTaskCancel(t *testing.T) {
+	cwd, _ := os.Getwd()
+	entrypoint := cwd + "/testdata/background-worker-task-entrypoint.php"
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/background-worker-task-cancel-sender.php", handler, t)
+		assert.Equal(t, "cancelled", body)
+	}, &testOptions{
+		workerScript:       "background-worker-task-cancel-sender.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		initOpts: []frankenphp.Option{
+			frankenphp.WithMaxThreads(50),
+			frankenphp.WithWorkers("", entrypoint, 0, frankenphp.WithWorkerBackground()),
+		},
+	})
+}
+
+func TestBackgroundWorkerTaskCancelThenSend(t *testing.T) {
+	cwd, _ := os.Getwd()
+	entrypoint := cwd + "/testdata/background-worker-task-entrypoint.php"
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/background-worker-task-cancel-then-send.php", handler, t)
+		assert.Equal(t, "processed:should-work", body)
+	}, &testOptions{
+		workerScript:       "background-worker-task-cancel-then-send.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		initOpts: []frankenphp.Option{
+			frankenphp.WithMaxThreads(50),
+			frankenphp.WithWorkers("", entrypoint, 0, frankenphp.WithWorkerBackground()),
+		},
+	})
+}
+
+func TestBackgroundWorkerTaskCancelThenCrash(t *testing.T) {
+	cwd, _ := os.Getwd()
+	entrypoint := cwd + "/testdata/background-worker-task-cancel-crash-entrypoint.php"
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/background-worker-task-cancel-crash-sender.php", handler, t)
+		assert.Equal(t, "cancelled", body)
+	}, &testOptions{
+		workerScript:       "background-worker-task-cancel-crash-sender.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		initOpts: []frankenphp.Option{
+			frankenphp.WithMaxThreads(50),
+			frankenphp.WithWorkers("", entrypoint, 0, frankenphp.WithWorkerBackground()),
+		},
+	})
+}
+
+func TestBackgroundWorkerTaskPooling(t *testing.T) {
+	cwd, _ := os.Getwd()
+	entrypoint := cwd + "/testdata/background-worker-task-pool-entrypoint.php"
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/background-worker-task-pool-sender.php", handler, t)
+		assert.Equal(t, "processed:first,processed:second", body)
+	}, &testOptions{
+		workerScript:       "background-worker-task-pool-sender.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		initOpts: []frankenphp.Option{
+			frankenphp.WithMaxThreads(50),
+			frankenphp.WithWorkers("pool-worker", entrypoint, 2,
+				frankenphp.WithWorkerBackground(),
+			),
 			frankenphp.WithWorkers("", entrypoint, 0, frankenphp.WithWorkerBackground()),
 		},
 	})

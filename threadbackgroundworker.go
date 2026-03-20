@@ -24,6 +24,10 @@ type backgroundWorkerState struct {
 	varsVersion atomic.Uint64 // incremented on each set_vars call
 	ready       chan struct{}
 	readyOnce   sync.Once
+	tasks       chan *taskRequest // buffered(1): sender blocks until receiver picks up
+	dead        chan struct{}     // closed when worker exits, unblocks waiting senders
+	deadOnce    sync.Once
+	fds         *backgroundFdList // signaling fds for task notifications
 }
 
 // backgroundWorkerThread handles background worker scripts.
@@ -36,6 +40,8 @@ type backgroundWorkerThread struct {
 	dummyContext          context.Context
 	isBootingScript       bool
 	failureCount          int
+	stopFd                int32
+	currentTask           *taskRequest
 }
 
 func convertToBackgroundWorkerThread(thread *phpThread, worker *worker) {
@@ -64,9 +70,9 @@ func (handler *backgroundWorkerThread) context() context.Context {
 }
 
 func (handler *backgroundWorkerThread) drain() {
-	if fd := handler.worker.backgroundStopFdWrite.Load(); fd >= 0 {
+	handler.worker.backgroundFds.writeAll(func(fd int32) {
 		C.frankenphp_worker_write_stop_fd(C.int(fd))
-	}
+	})
 }
 
 func (handler *backgroundWorkerThread) beforeScriptExecution() string {
@@ -112,6 +118,7 @@ func (handler *backgroundWorkerThread) setupScript() {
 			bgw, _, err := handler.worker.backgroundRegistry.reserve(strings.TrimPrefix(handler.worker.name, "m#"))
 			if err == nil {
 				handler.worker.backgroundWorker = bgw
+				bgw.fds = &handler.worker.backgroundFds
 			}
 		}
 	})
@@ -120,7 +127,16 @@ func (handler *backgroundWorkerThread) setupScript() {
 
 	opts := append([]RequestOption(nil), handler.worker.requestOptions...)
 	C.frankenphp_set_worker_name(handler.thread.pinCString(strings.TrimPrefix(handler.worker.name, "m#")), C._Bool(true))
-	handler.worker.backgroundStopFdWrite.Store(int32(C.frankenphp_worker_get_stop_fd_write()))
+	fd := int32(C.frankenphp_worker_get_stop_fd_write())
+	handler.stopFd = fd
+	handler.worker.backgroundFds.addFd(fd)
+
+	// Flush signals for tasks queued before the stop fd existed
+	if handler.worker.backgroundWorker != nil {
+		for range len(handler.worker.backgroundWorker.tasks) {
+			C.frankenphp_worker_write_task_signal(C.int(fd))
+		}
+	}
 
 	fc, err := newDummyContext(
 		filepath.Base(handler.worker.fileName),
@@ -146,7 +162,17 @@ func (handler *backgroundWorkerThread) setupScript() {
 }
 
 func (handler *backgroundWorkerThread) afterScriptExecution(exitStatus int) {
-	handler.worker.backgroundStopFdWrite.Store(-1)
+	// Task cleanup: remove fd, close in-flight task, drain pending
+	handler.worker.backgroundFds.removeFd(handler.stopFd)
+	handler.stopFd = 0
+	if handler.currentTask != nil {
+		handler.currentTask.abortBackgroundWorker()
+		handler.currentTask = nil
+	}
+	if handler.worker.backgroundWorker != nil {
+		handler.worker.backgroundWorker.drainPendingTasks()
+	}
+
 	worker := handler.worker
 	handler.dummyFrankenPHPContext = nil
 	handler.dummyContext = nil

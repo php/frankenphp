@@ -259,4 +259,104 @@ static void bg_worker_request_copy_zval(zval *dst, zval *src) {
     break;
   }
 }
+
+/* Move a persistent zval tree into request memory, freeing persistent data
+ * in one pass. Combines bg_worker_request_copy_zval +
+ * bg_worker_free_persistent_zval. */
+static void bg_worker_move_zval(zval *dst, zval *src) {
+  switch (Z_TYPE_P(src)) {
+  case IS_NULL:
+  case IS_FALSE:
+  case IS_TRUE:
+    ZVAL_COPY_VALUE(dst, src);
+    break;
+  case IS_LONG:
+    ZVAL_LONG(dst, Z_LVAL_P(src));
+    break;
+  case IS_DOUBLE:
+    ZVAL_DOUBLE(dst, Z_DVAL_P(src));
+    break;
+  case IS_STRING:
+    if (ZSTR_IS_INTERNED(Z_STR_P(src))) {
+      ZVAL_STR(dst, Z_STR_P(src)); /* zero-copy, no free */
+    } else {
+      ZVAL_STRINGL(dst, Z_STRVAL_P(src), Z_STRLEN_P(src));
+      zend_string_free(Z_STR_P(src));
+    }
+    break;
+  case IS_PTR: {
+    bg_worker_enum_t *e = (bg_worker_enum_t *)Z_PTR_P(src);
+    zend_class_entry *ce = zend_lookup_class(e->class_name);
+    if (!ce || !(ce->ce_flags & ZEND_ACC_ENUM)) {
+      zend_throw_exception_ex(spl_ce_LogicException, 0,
+                              "Background worker enum class \"%s\" not found",
+                              ZSTR_VAL(e->class_name));
+      ZVAL_NULL(dst);
+    } else {
+      zend_object *enum_obj =
+          zend_enum_get_case_cstr(ce, ZSTR_VAL(e->case_name));
+      if (!enum_obj) {
+        zend_throw_exception_ex(
+            spl_ce_LogicException, 0,
+            "Background worker enum case \"%s::%s\" not found",
+            ZSTR_VAL(e->class_name), ZSTR_VAL(e->case_name));
+        ZVAL_NULL(dst);
+      } else {
+        ZVAL_OBJ_COPY(dst, enum_obj);
+      }
+    }
+    if (!ZSTR_IS_INTERNED(e->class_name))
+      zend_string_free(e->class_name);
+    if (!ZSTR_IS_INTERNED(e->case_name))
+      zend_string_free(e->case_name);
+    pefree(e, 1);
+    break;
+  }
+  case IS_ARRAY: {
+    HashTable *src_ht = Z_ARRVAL_P(src);
+    array_init_size(dst, zend_hash_num_elements(src_ht));
+    HashTable *dst_ht = Z_ARRVAL_P(dst);
+
+    zend_string *key;
+    zend_ulong idx;
+    zval *val;
+    bool move_failed = false;
+    ZEND_HASH_FOREACH_KEY_VAL(src_ht, idx, key, val) {
+      if (move_failed) {
+        /* Free remaining persistent entries that were not moved */
+        bg_worker_free_persistent_zval(val);
+        continue;
+      }
+      zval rval;
+      bg_worker_move_zval(&rval, val);
+      if (EG(exception)) {
+        zval_ptr_dtor(&rval);
+        move_failed = true;
+        continue;
+      }
+      if (key) {
+        if (ZSTR_IS_INTERNED(key)) {
+          zend_hash_add_new(dst_ht, key, &rval);
+        } else {
+          zend_string *rkey =
+              zend_string_init(ZSTR_VAL(key), ZSTR_LEN(key), 0);
+          ZSTR_H(rkey) = ZSTR_H(key);
+          zend_hash_add_new(dst_ht, rkey, &rval);
+          zend_string_release(rkey);
+        }
+      } else {
+        zend_hash_index_add_new(dst_ht, idx, &rval);
+      }
+    }
+    ZEND_HASH_FOREACH_END();
+    zend_hash_destroy(src_ht);
+    pefree(src_ht, 1);
+    break;
+  }
+  default:
+    ZVAL_NULL(dst);
+    break;
+  }
+}
+
 #endif /* BG_WORKER_VARS_H */

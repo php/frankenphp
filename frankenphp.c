@@ -306,6 +306,18 @@ int frankenphp_worker_write_task_signal(int fd) {
   return bg_worker_pipe_write_impl(fd, "task\n", 5);
 }
 
+int frankenphp_worker_pipe_nudge(int fd) {
+  return bg_worker_pipe_write_impl(fd, "\n", 1);
+}
+
+int frankenphp_worker_create_pipe(int *fds) {
+#ifdef PHP_WIN32
+  return _pipe(fds, 4096, _O_BINARY);
+#else
+  return pipe(fds);
+#endif
+}
+
 void frankenphp_worker_close_fd(int fd) {
   if (fd >= 0) {
 #ifdef PHP_WIN32
@@ -842,6 +854,11 @@ PHP_FUNCTION(frankenphp_handle_request) {
 /* Persistent zval helpers: validation, deep-copy, immutable detection, enums */
 #include "bg_worker_vars.h"
 
+/* Go-callable wrapper to free a persistent HashTable (used by task cleanup) */
+void frankenphp_worker_free_persistent_ht(void *ptr) {
+  bg_worker_free_stored_vars(ptr);
+}
+
 PHP_FUNCTION(frankenphp_worker_set_vars) {
   zval *vars_array = NULL;
 
@@ -1094,6 +1111,408 @@ PHP_FUNCTION(frankenphp_worker_get_signaling_stream) {
 
   /* Keep an extra ref so PHP can't destroy the stream while TLS caches it */
   GC_ADDREF(Z_COUNTED_P(return_value));
+}
+
+/* Custom stream ops for background worker task (sender/read side) */
+typedef struct {
+  int task_id;
+  int read_fd;
+} bg_worker_task_sender_data;
+
+static ssize_t bg_worker_task_sender_write(php_stream *stream, const char *buf,
+                                           size_t count) {
+  return -1; /* read-only stream */
+}
+
+static ssize_t bg_worker_task_sender_read(php_stream *stream, char *buf,
+                                          size_t count) {
+  bg_worker_task_sender_data *data =
+      (bg_worker_task_sender_data *)stream->abstract;
+  if (!data || data->read_fd < 0)
+    return -1;
+#ifdef PHP_WIN32
+  return _read(data->read_fd, buf, (unsigned int)count);
+#else
+  return read(data->read_fd, buf, count);
+#endif
+}
+
+static int bg_worker_task_sender_close(php_stream *stream, int close_handle) {
+  bg_worker_task_sender_data *data =
+      (bg_worker_task_sender_data *)stream->abstract;
+  if (data) {
+    go_frankenphp_worker_task_cancel(data->task_id);
+    frankenphp_worker_close_fd(data->read_fd);
+    free(data);
+    stream->abstract = NULL;
+  }
+  return 0;
+}
+
+static int bg_worker_task_sender_cast(php_stream *stream, int castas,
+                                      void **ret) {
+  bg_worker_task_sender_data *data =
+      (bg_worker_task_sender_data *)stream->abstract;
+  if (!data)
+    return FAILURE;
+
+  switch (castas) {
+  case PHP_STREAM_AS_FD:
+  case PHP_STREAM_AS_SOCKETD:
+    if (ret)
+      *(int *)ret = data->read_fd;
+    return SUCCESS;
+  default:
+    return FAILURE;
+  }
+}
+
+static const php_stream_ops bg_worker_task_sender_ops = {
+    bg_worker_task_sender_write, /* write */
+    bg_worker_task_sender_read,  /* read */
+    bg_worker_task_sender_close, /* close */
+    NULL,                        /* flush */
+    "bg_worker_task_sender",     /* label */
+    NULL,                        /* seek */
+    bg_worker_task_sender_cast,  /* cast */
+    NULL,                        /* stat */
+    NULL,                        /* set_option */
+};
+
+PHP_FUNCTION(frankenphp_worker_task_send) {
+  char *name = NULL;
+  size_t name_len = 0;
+  zval *payload = NULL;
+  double timeout = 30.0;
+
+  ZEND_PARSE_PARAMETERS_START(2, 3);
+  Z_PARAM_STRING(name, name_len);
+  Z_PARAM_ARRAY(payload);
+  Z_PARAM_OPTIONAL;
+  Z_PARAM_DOUBLE(timeout);
+  ZEND_PARSE_PARAMETERS_END();
+
+  if (name_len == 0) {
+    zend_value_error("Background worker name must not be empty");
+    RETURN_THROWS();
+  }
+
+  HashTable *payload_ht;
+  bool payload_immutable = bg_worker_is_immutable(Z_ARRVAL_P(payload));
+
+  if (payload_immutable) {
+    payload_ht = Z_ARRVAL_P(payload);
+  } else {
+    zval *val;
+    ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(payload), val) {
+      if (!bg_worker_validate_zval(val)) {
+        zend_value_error("Task payload values must be null, scalars, arrays, "
+                         "or enums; objects and resources are not allowed");
+        RETURN_THROWS();
+      }
+    }
+    ZEND_HASH_FOREACH_END();
+
+    zval persistent_payload;
+    bg_worker_persist_zval(&persistent_payload, payload);
+    payload_ht = Z_ARRVAL(persistent_payload);
+  }
+
+  int task_id = -1;
+  int read_fd = -1;
+  int timeout_ms = (int)(timeout * 1000);
+  if (timeout_ms < 0) {
+    timeout_ms = 0;
+  }
+  char *error = go_frankenphp_worker_task_send(
+      thread_index, name, name_len, payload_ht, timeout_ms, &task_id, &read_fd);
+  if (error) {
+    if (!payload_immutable) {
+      zval z;
+      ZVAL_ARR(&z, payload_ht);
+      bg_worker_free_persistent_zval(&z);
+    }
+    zend_throw_exception(spl_ce_RuntimeException, error, 0);
+    free(error);
+    RETURN_THROWS();
+  }
+
+  /* Create a custom sender stream */
+  bg_worker_task_sender_data *sdata =
+      malloc(sizeof(bg_worker_task_sender_data));
+  sdata->task_id = task_id;
+  sdata->read_fd = read_fd;
+
+  php_stream *stream =
+      php_stream_alloc(&bg_worker_task_sender_ops, sdata, NULL, "rb");
+  if (!stream) {
+    free(sdata);
+    go_frankenphp_worker_task_cancel(task_id);
+    zend_throw_exception(spl_ce_RuntimeException,
+                         "failed to create task stream", 0);
+    RETURN_THROWS();
+  }
+
+  zval task_id_zval;
+  ZVAL_LONG(&task_id_zval, task_id);
+  stream->wrapperdata = task_id_zval;
+
+  php_stream_to_zval(stream, return_value);
+}
+
+PHP_FUNCTION(frankenphp_worker_task_read) {
+  zval *stream_zval = NULL;
+
+  ZEND_PARSE_PARAMETERS_START(1, 1);
+  Z_PARAM_RESOURCE(stream_zval);
+  ZEND_PARSE_PARAMETERS_END();
+
+  php_stream *stream = NULL;
+  php_stream_from_zval_no_verify(stream, stream_zval);
+  if (!stream || stream->ops != &bg_worker_task_sender_ops) {
+    zend_value_error(
+        "Argument #1 must be a task stream from frankenphp_worker_task_send()");
+    RETURN_THROWS();
+  }
+
+  if (!stream->abstract) {
+    RETURN_NULL(); /* stream already closed */
+  }
+
+  int task_id = (int)Z_LVAL(stream->wrapperdata);
+
+  /* Consume the signal byte from the pipe */
+  char buf[1];
+  if (php_stream_read(stream, buf, 1) <= 0) {
+    /* Pipe EOF - drain remaining FIFO items */
+    int eof_result = go_frankenphp_worker_task_read(task_id, NULL);
+    if (eof_result == -2) {
+      zend_throw_exception(spl_ce_RuntimeException,
+                           "background worker exited without completing the task",
+                           0);
+      RETURN_THROWS();
+    }
+    RETURN_NULL();
+  }
+
+  void *data = NULL;
+  int result = go_frankenphp_worker_task_read(task_id, &data);
+  if (result == -2) {
+    zend_throw_exception(spl_ce_RuntimeException,
+                         "background worker exited without completing the task", 0);
+    RETURN_THROWS();
+  }
+  if (result < 0 || data == NULL) {
+    RETURN_NULL();
+  }
+
+  HashTable *data_ht = (HashTable *)data;
+  if (bg_worker_is_immutable(data_ht)) {
+    ZVAL_ARR(return_value, data_ht);
+  } else {
+    zval src;
+    ZVAL_ARR(&src, data_ht);
+    bg_worker_move_zval(return_value, &src);
+  }
+}
+
+/* Custom stream ops for background worker task (receiver/write side) */
+typedef struct {
+  int task_id;
+  int write_fd;
+} bg_worker_task_stream_data;
+
+static ssize_t bg_worker_task_write(php_stream *stream, const char *buf,
+                                    size_t count) {
+  return -1; /* writing is done via task_update, not stream write */
+}
+
+static ssize_t bg_worker_task_read(php_stream *stream, char *buf,
+                                   size_t count) {
+  return -1; /* write-only stream */
+}
+
+static int bg_worker_task_close(php_stream *stream, int close_handle) {
+  bg_worker_task_stream_data *data =
+      (bg_worker_task_stream_data *)stream->abstract;
+  if (data) {
+    /* During explicit fclose(): clean close. During request shutdown
+     * (exit/crash): skip - afterScriptExecution handles cleanup. */
+    if (!(EG(flags) & EG_FLAGS_IN_SHUTDOWN)) {
+      go_frankenphp_worker_task_close(thread_index, data->task_id);
+    }
+    free(data);
+    stream->abstract = NULL;
+  }
+  return 0;
+}
+
+static int bg_worker_task_cast(php_stream *stream, int castas, void **ret) {
+  bg_worker_task_stream_data *data =
+      (bg_worker_task_stream_data *)stream->abstract;
+  if (!data)
+    return FAILURE;
+
+  switch (castas) {
+  case PHP_STREAM_AS_FD:
+  case PHP_STREAM_AS_SOCKETD:
+    if (ret)
+      *(int *)ret = data->write_fd;
+    return SUCCESS;
+  default:
+    return FAILURE;
+  }
+}
+
+static const php_stream_ops bg_worker_task_stream_ops = {
+    bg_worker_task_write, /* write */
+    bg_worker_task_read,  /* read */
+    bg_worker_task_close, /* close */
+    NULL,                 /* flush */
+    "bg_worker_task",     /* label */
+    NULL,                 /* seek */
+    bg_worker_task_cast,  /* cast */
+    NULL,                 /* stat */
+    NULL,                 /* set_option */
+};
+
+PHP_FUNCTION(frankenphp_worker_task_receive) {
+  ZEND_PARSE_PARAMETERS_NONE();
+
+  if (!is_background_worker) {
+    zend_throw_exception(spl_ce_RuntimeException,
+                         "frankenphp_worker_task_receive() can only be called "
+                         "from a background worker",
+                         0);
+    RETURN_THROWS();
+  }
+
+  void *payload = NULL;
+  int task_id = -1;
+  int result =
+      go_frankenphp_worker_task_receive(thread_index, &payload, &task_id);
+  if (result < 0) {
+    zend_throw_exception(spl_ce_RuntimeException,
+                         "frankenphp_worker_task_receive() can only be called "
+                         "from a background worker",
+                         0);
+    RETURN_THROWS();
+  }
+  if (result == 0) {
+    RETURN_NULL();
+  }
+
+  /* Create a custom task stream (write side) */
+  bg_worker_task_stream_data *sdata =
+      malloc(sizeof(bg_worker_task_stream_data));
+  sdata->task_id = task_id;
+  sdata->write_fd = -1; /* set by Go via pipe */
+
+  php_stream *stream =
+      php_stream_alloc(&bg_worker_task_stream_ops, sdata, NULL, "wb");
+  if (!stream) {
+    free(sdata);
+    go_frankenphp_worker_task_close(thread_index, task_id);
+    zend_throw_exception(spl_ce_RuntimeException,
+                         "failed to create task stream", 0);
+    RETURN_THROWS();
+  }
+
+  /* Store task_id in wrapperdata for task_update */
+  zval task_id_zval;
+  ZVAL_LONG(&task_id_zval, task_id);
+  stream->wrapperdata = task_id_zval;
+
+  /* Return [stream, payload] */
+  array_init(return_value);
+
+  zval stream_zval;
+  php_stream_to_zval(stream, &stream_zval);
+  add_next_index_zval(return_value, &stream_zval);
+
+  zval payload_zval;
+  if (payload) {
+    HashTable *pht = (HashTable *)payload;
+    if (bg_worker_is_immutable(pht)) {
+      ZVAL_ARR(&payload_zval, pht);
+    } else {
+      zval src;
+      ZVAL_ARR(&src, pht);
+      bg_worker_move_zval(&payload_zval, &src);
+    }
+  } else {
+    array_init(&payload_zval);
+  }
+  add_next_index_zval(return_value, &payload_zval);
+}
+
+PHP_FUNCTION(frankenphp_worker_task_update) {
+  zval *stream_zval = NULL;
+  zval *data = NULL;
+
+  ZEND_PARSE_PARAMETERS_START(2, 2);
+  Z_PARAM_RESOURCE(stream_zval);
+  Z_PARAM_ARRAY(data);
+  ZEND_PARSE_PARAMETERS_END();
+
+  if (!is_background_worker) {
+    zend_throw_exception(spl_ce_RuntimeException,
+                         "frankenphp_worker_task_update() can only be called "
+                         "from a background worker",
+                         0);
+    RETURN_THROWS();
+  }
+
+  php_stream *stream = NULL;
+  php_stream_from_zval_no_verify(stream, stream_zval);
+  if (!stream || stream->ops != &bg_worker_task_stream_ops) {
+    zend_value_error("Argument #1 must be a task stream from "
+                     "frankenphp_worker_task_receive()");
+    RETURN_THROWS();
+  }
+
+  if (!stream->abstract) {
+    zend_throw_exception(spl_ce_RuntimeException,
+                         "task stream is already closed", 0);
+    RETURN_THROWS();
+  }
+
+  int task_id = (int)Z_LVAL(stream->wrapperdata);
+
+  HashTable *update_ht;
+  bool update_immutable = bg_worker_is_immutable(Z_ARRVAL_P(data));
+
+  if (update_immutable) {
+    update_ht = Z_ARRVAL_P(data);
+  } else {
+    /* Validate data */
+    zval *val;
+    ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(data), val) {
+      if (!bg_worker_validate_zval(val)) {
+        zend_value_error(
+            "Task update values must be null, scalars, arrays, or enums");
+        RETURN_THROWS();
+      }
+    }
+    ZEND_HASH_FOREACH_END();
+
+    /* Deep-copy to persistent memory */
+    zval persistent;
+    bg_worker_persist_zval(&persistent, data);
+    update_ht = Z_ARRVAL(persistent);
+  }
+
+  char *error = go_frankenphp_worker_task_update(task_id, update_ht);
+  if (error) {
+    if (!update_immutable) {
+      zval z;
+      ZVAL_ARR(&z, update_ht);
+      bg_worker_free_persistent_zval(&z);
+    }
+    zend_throw_exception(spl_ce_RuntimeException, error, 0);
+    free(error);
+    RETURN_THROWS();
+  }
 }
 
 PHP_FUNCTION(headers_send) {
