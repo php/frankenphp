@@ -2,6 +2,7 @@ package frankenphp
 
 import (
 	"context"
+	"log/slog"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -15,8 +16,9 @@ import (
 type regularThread struct {
 	contextHolder
 
-	state  *state.ThreadState
-	thread *phpThread
+	state        *state.ThreadState
+	thread       *phpThread
+	requestCount int
 }
 
 var (
@@ -50,6 +52,11 @@ func (handler *regularThread) beforeScriptExecution() string {
 	case state.Ready:
 		return handler.waitForRequest()
 
+	case state.RebootReady:
+		handler.requestCount = 0
+		handler.state.Set(state.Ready)
+		return handler.waitForRequest()
+
 	case state.ShuttingDown:
 		detachRegularThread(handler.thread)
 		// signal to stop
@@ -77,6 +84,20 @@ func (handler *regularThread) name() string {
 }
 
 func (handler *regularThread) waitForRequest() string {
+	// max_requests reached: restart the thread to clean up all ZTS state
+	if maxRequestsPerThread > 0 && handler.requestCount >= maxRequestsPerThread {
+		if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
+			globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "max requests reached, restarting thread",
+				slog.Int("thread", handler.thread.threadIndex),
+				slog.Int("max_requests", maxRequestsPerThread),
+			)
+		}
+
+		if handler.thread.reboot() {
+			return ""
+		}
+	}
+
 	handler.state.MarkAsWaiting(true)
 
 	var ch contextHolder
@@ -89,6 +110,7 @@ func (handler *regularThread) waitForRequest() string {
 	case ch = <-handler.thread.requestChan:
 	}
 
+	handler.requestCount++
 	handler.thread.contextMu.Lock()
 	handler.ctx = ch.ctx
 	handler.contextHolder.frankenPHPContext = ch.frankenPHPContext

@@ -30,6 +30,11 @@ const (
 	TransitionRequested
 	TransitionInProgress
 	TransitionComplete
+
+	// thread is exiting the C loop for a full ZTS restart (max_requests)
+	Rebooting
+	// C thread has exited and ZTS state is cleaned up, ready to spawn a new C thread
+	RebootReady
 )
 
 func (s State) String() string {
@@ -58,6 +63,10 @@ func (s State) String() string {
 		return "transition in progress"
 	case TransitionComplete:
 		return "transition complete"
+	case Rebooting:
+		return "rebooting"
+	case RebootReady:
+		return "reboot ready"
 	default:
 		return "unknown"
 	}

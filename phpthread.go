@@ -65,6 +65,24 @@ func (thread *phpThread) boot() {
 	thread.state.WaitFor(state.Inactive)
 }
 
+// reboot exits the C thread loop for full ZTS cleanup, then spawns a fresh C thread.
+// Returns false if the thread is no longer in Ready state (e.g. shutting down).
+func (thread *phpThread) reboot() bool {
+	if !thread.state.CompareAndSwap(state.Ready, state.Rebooting) {
+		return false
+	}
+
+	go func() {
+		thread.state.WaitFor(state.RebootReady)
+
+		if !C.frankenphp_new_php_thread(C.uintptr_t(thread.threadIndex)) {
+			panic("unable to create thread")
+		}
+	}()
+
+	return true
+}
+
 // shutdown the underlying PHP thread
 func (thread *phpThread) shutdown() {
 	if !thread.state.RequestSafeStateChange(state.ShuttingDown) {
@@ -189,5 +207,9 @@ func go_frankenphp_after_script_execution(threadIndex C.uintptr_t, exitStatus C.
 func go_frankenphp_on_thread_shutdown(threadIndex C.uintptr_t) {
 	thread := phpThreads[threadIndex]
 	thread.Unpin()
-	thread.state.Set(state.Done)
+	if thread.state.Is(state.Rebooting) {
+		thread.state.Set(state.RebootReady)
+	} else {
+		thread.state.Set(state.Done)
+	}
 }
