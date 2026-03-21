@@ -1033,12 +1033,7 @@ static void set_thread_name(char *thread_name) {
 #endif
 }
 
-static void *php_thread(void *arg) {
-  thread_index = (uintptr_t)arg;
-  char thread_name[16] = {0};
-  snprintf(thread_name, 16, "php-%" PRIxPTR, thread_index);
-  set_thread_name(thread_name);
-
+static void initialize_zts() {
 #ifdef ZTS
   /* initial resource fetch */
   (void)ts_resource(0);
@@ -1046,6 +1041,21 @@ static void *php_thread(void *arg) {
   ZEND_TSRMLS_CACHE_UPDATE();
 #endif
 #endif
+}
+
+static void shutdown_zts() {
+#ifdef ZTS
+  ts_free_thread();
+#endif
+}
+
+static void *php_thread(void *arg) {
+  thread_index = (uintptr_t)arg;
+  char thread_name[16] = {0};
+  snprintf(thread_name, 16, "php-%" PRIxPTR, thread_index);
+  set_thread_name(thread_name);
+
+  initialize_zts();
 
   // loop until Go signals to stop
   char *scriptName = NULL;
@@ -1054,9 +1064,7 @@ static void *php_thread(void *arg) {
                                          frankenphp_execute_script(scriptName));
   }
 
-#ifdef ZTS
-  ts_free_thread();
-#endif
+  shutdown_zts();
 
   go_frankenphp_on_thread_shutdown(thread_index);
 
@@ -1233,8 +1241,26 @@ int frankenphp_execute_script(char *file_name) {
     sandboxed_env = NULL;
   }
 
-  php_request_shutdown((void *)0);
-  frankenphp_free_request_context();
+  zend_try {
+    php_request_shutdown((void *)0);
+    frankenphp_free_request_context();
+  }
+  zend_catch {
+    /*
+     * php shutdown can also potentially bailout with an error
+     * clear all thread-local memory and re-initialize ZTS
+     * last error will also cause a crash if not cleared
+     */
+    if (PG(last_error_message)) {
+      go_log_attrs(thread_index, PG(last_error_message), 8, NULL);
+      PG(last_error_message) = NULL;
+      PG(last_error_file) = NULL;
+    }
+    frankenphp_free_request_context();
+    shutdown_zts();
+    initialize_zts();
+  }
+  zend_end_try();
 
   return status;
 }
