@@ -1033,20 +1033,11 @@ static void set_thread_name(char *thread_name) {
 #endif
 }
 
-static void initialize_zts() {
-#ifdef ZTS
-  /* initial resource fetch */
-  (void)ts_resource(0);
-#ifdef PHP_WIN32
-  ZEND_TSRMLS_CACHE_UPDATE();
-#endif
-#endif
-}
-
-static void shutdown_zts() {
-#ifdef ZTS
-  ts_free_thread();
-#endif
+static inline void reset_sandboxed_environment() {
+  if (sandboxed_env != NULL) {
+    zend_hash_release(sandboxed_env);
+    sandboxed_env = NULL;
+  }
 }
 
 static void *php_thread(void *arg) {
@@ -1055,18 +1046,96 @@ static void *php_thread(void *arg) {
   snprintf(thread_name, 16, "php-%" PRIxPTR, thread_index);
   set_thread_name(thread_name);
 
-  initialize_zts();
+  /* Initial allocation of all global PHP memory for this thread */
+#ifdef ZTS
+  (void)ts_resource(0);
+#ifdef PHP_WIN32
+  ZEND_TSRMLS_CACHE_UPDATE();
+#endif
+#endif
 
-  // loop until Go signals to stop
-  char *scriptName = NULL;
-  while ((scriptName = go_frankenphp_before_script_execution(thread_index))) {
-    go_frankenphp_after_script_execution(thread_index,
-                                         frankenphp_execute_script(scriptName));
+  bool thread_is_healthy = true;
+  bool has_attempted_shutdown = false;
+
+  /* Main loop of the PHP thread, execute a PHP script and repeat until Go
+   * signals to stop */
+  zend_first_try {
+    char *scriptName = NULL;
+    while ((scriptName = go_frankenphp_before_script_execution(thread_index))) {
+      has_attempted_shutdown = false;
+
+      frankenphp_update_request_context();
+
+      if (UNEXPECTED(php_request_startup() == FAILURE)) {
+        /* Request startup failed, bail out to zend_catch */
+        frankenphp_log_message("Request startup failed, thread is unhealthy",
+                               LOG_ERR);
+        zend_bailout();
+      }
+
+      zend_file_handle file_handle;
+      zend_stream_init_filename(&file_handle, scriptName);
+
+      file_handle.primary_script = 1;
+      EG(exit_status) = 0;
+
+      /* Execute the PHP script, potential bailout to zend_catch */
+      php_execute_script(&file_handle);
+      zend_destroy_file_handle(&file_handle);
+      reset_sandboxed_environment();
+
+      has_attempted_shutdown = true;
+
+      /* shutdown the request, potential bailout to zend_catch */
+      php_request_shutdown((void *)0);
+      frankenphp_free_request_context();
+      go_frankenphp_after_script_execution(thread_index, EG(exit_status));
+    }
+  }
+  zend_catch {
+    /* Critical failure from php_execute_script or php_request_shutdown, mark
+     * the thread as unhealthy */
+    thread_is_healthy = false;
+    if (!has_attempted_shutdown) {
+      /* php_request_shutdown() was not called, force a shutdown now */
+      reset_sandboxed_environment();
+      zend_try { php_request_shutdown((void *)0); }
+      zend_catch {}
+      zend_end_try();
+    }
+
+    /* Log the last error message, it must be cleared to prevent a crash when
+     * freeing execution globals */
+    if (PG(last_error_message)) {
+      go_log_attrs(thread_index, PG(last_error_message), 8, NULL);
+      PG(last_error_message) = NULL;
+      PG(last_error_file) = NULL;
+    }
+    frankenphp_free_request_context();
+    go_frankenphp_after_script_execution(thread_index, EG(exit_status));
+  }
+  zend_end_try();
+
+#ifdef ZTS
+  ts_free_thread();
+#endif
+
+  /* Thread is healthy, signal to Go that the thread has shut down */
+  if (thread_is_healthy) {
+    go_frankenphp_on_thread_shutdown(thread_index);
+
+    return NULL;
   }
 
-  shutdown_zts();
+  /* Thread is unhealthy, PHP globals might be in a bad state after a bailout,
+   * restart the entire thread */
+  frankenphp_log_message("Restarting unhealthy thread", LOG_WARNING);
 
-  go_frankenphp_on_thread_shutdown(thread_index);
+  if (!frankenphp_new_php_thread(thread_index)) {
+    /* probably unreachable */
+    frankenphp_log_message("Failed to restart an unhealthy thread",
+                           LOG_ERR);
+  }
 
   return NULL;
 }
@@ -1198,71 +1267,6 @@ bool frankenphp_new_php_thread(uintptr_t thread_index) {
   }
   pthread_detach(thread);
   return true;
-}
-
-static int frankenphp_request_startup() {
-  frankenphp_update_request_context();
-  if (php_request_startup() == SUCCESS) {
-    return SUCCESS;
-  }
-
-  php_request_shutdown((void *)0);
-  frankenphp_free_request_context();
-
-  return FAILURE;
-}
-
-int frankenphp_execute_script(char *file_name) {
-  if (frankenphp_request_startup() == FAILURE) {
-
-    return FAILURE;
-  }
-
-  int status = SUCCESS;
-
-  zend_file_handle file_handle;
-  zend_stream_init_filename(&file_handle, file_name);
-
-  file_handle.primary_script = 1;
-
-  zend_first_try {
-    EG(exit_status) = 0;
-    php_execute_script(&file_handle);
-    status = EG(exit_status);
-  }
-  zend_catch { status = EG(exit_status); }
-  zend_end_try();
-
-  zend_destroy_file_handle(&file_handle);
-
-  /* Reset the sandboxed environment */
-  if (sandboxed_env != NULL) {
-    zend_hash_release(sandboxed_env);
-    sandboxed_env = NULL;
-  }
-
-  zend_try {
-    php_request_shutdown((void *)0);
-    frankenphp_free_request_context();
-  }
-  zend_catch {
-    /*
-     * php shutdown can also potentially bailout with an error
-     * clear all thread-local memory and re-initialize ZTS
-     * last error will also cause a crash if not cleared
-     */
-    if (PG(last_error_message)) {
-      go_log_attrs(thread_index, PG(last_error_message), 8, NULL);
-      PG(last_error_message) = NULL;
-      PG(last_error_file) = NULL;
-    }
-    frankenphp_free_request_context();
-    shutdown_zts();
-    initialize_zts();
-  }
-  zend_end_try();
-
-  return status;
 }
 
 /* Use global variables to store CLI arguments to prevent useless allocations */

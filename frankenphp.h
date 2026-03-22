@@ -169,7 +169,6 @@ int frankenphp_new_main_thread(int num_threads);
 bool frankenphp_new_php_thread(uintptr_t thread_index);
 
 bool frankenphp_shutdown_dummy_request(void);
-int frankenphp_execute_script(char *file_name);
 void frankenphp_update_local_thread_context(bool is_worker);
 
 int frankenphp_execute_script_cli(char *script, int argc, char **argv,
