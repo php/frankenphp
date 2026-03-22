@@ -140,11 +140,11 @@ php_server {
 
 ## Nasıl Çalışır
 
-1.  **İzleme**: FrankenPHP, arka planda [`e-dant/watcher` kütüphanesini](https://github.com/e-dant/watcher) kullanarak (Go bağlayıcısını biz geliştirdik) dosya sistemindeki değişiklikleri izler.
-2.  **Yeniden Başlatma (Çalışan Modu)**: Çalışan yapılandırmasında `watch` etkinse, yeni kodu yüklemek için PHP çalışanı yeniden başlatılır.
-3.  **Gönderme**: Değiştirilen dosyaların listesini içeren bir JSON yükü, yerleşik [Mercure hub'ına](https://mercure.rocks) gönderilir.
-4.  **Alma**: JavaScript kütüphanesi aracılığıyla dinleyen tarayıcı, Mercure olayını alır.
-5.  **Güncelleme**:
+1. **İzleme**: FrankenPHP, arka planda [`e-dant/watcher` kütüphanesini](https://github.com/e-dant/watcher) kullanarak (Go bağlayıcısını biz geliştirdik) dosya sistemindeki değişiklikleri izler.
+2. **Yeniden Başlatma (Çalışan Modu)**: Çalışan yapılandırmasında `watch` etkinse, yeni kodu yüklemek için PHP çalışanı yeniden başlatılır.
+3. **Gönderme**: Değiştirilen dosyaların listesini içeren bir JSON yükü, yerleşik [Mercure hub'ına](https://mercure.rocks) gönderilir.
+4. **Alma**: JavaScript kütüphanesi aracılığıyla dinleyen tarayıcı, Mercure olayını alır.
+5. **Güncelleme**:
 
--   **Idiomorph** algılanırsa, güncellenmiş içeriği getirir ve mevcut HTML'i yeni duruma uydurmak için dönüştürerek, durum kaybetmeden değişiklikleri anında uygular.
--   Aksi takdirde, sayfayı yenilemek için `window.location.reload()` çağrılır.
+- **Idiomorph** algılanırsa, güncellenmiş içeriği getirir ve mevcut HTML'i yeni duruma uydurmak için dönüştürerek, durum kaybetmeden değişiklikleri anında uygular.
+- Aksi takdirde, sayfayı yenilemek için `window.location.reload()` çağrılır.

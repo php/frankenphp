@@ -184,7 +184,7 @@ php_server [<matcher>] {
 	file_server off # Désactive la directive file_server intégrée.
 	worker { # Crée un worker spécifique à ce serveur. Peut être spécifié plusieurs fois pour plusieurs workers.
 		file <path> # Définit le chemin vers le script worker, peut être relatif à la racine du php_server
-		num <num> # Définit le nombre de threads PHP à démarrer, par défaut 2x le nombre de CPU disponibles
+		num <num> # Définit le nombre de threads PHP à démarrer, par défaut 2x le nombre de CPUs disponibles
 		name <name> # Définit le nom du worker, utilisé dans les journaux et les métriques. Par défaut : chemin absolu du fichier du worker. Commence toujours par m# lorsqu'il est défini dans un bloc php_server.
 		watch <path> # Définit le chemin d'accès à surveiller pour les modifications de fichiers. Peut être spécifié plusieurs fois pour plusieurs chemins.
 		env <key> <value> # Définit une variable d'environnement supplémentaire avec la valeur donnée. Peut être spécifié plusieurs fois pour plusieurs variables d'environnement. Les variables d'environnement pour ce worker sont également héritées du parent php_server, mais peuvent être écrasées ici.
@@ -245,7 +245,8 @@ La surveillance des fichiers est basée sur [e-dant/watcher](https://github.com/
 
 Dans les applications PHP traditionnelles, les scripts sont toujours placés dans le répertoire public. C'est également vrai pour les scripts worker, qui sont traités comme n'importe quel autre script PHP. Si vous souhaitez plutôt placer le script worker en dehors du répertoire public, vous pouvez le faire via la directive `match`.
 
-La directive `match` est une alternative optimisée à `try_files` disponible uniquement à l'intérieur de `php_server` et `php`. L'exemple suivant servira toujours un fichier dans le répertoire public s'il est présent et transmettra sinon la requête au worker correspondant au modèle de chemin.
+La directive `match` est une alternative optimisée à `try_files` disponible uniquement à l'intérieur de `php_server` et `php`. L'exemple suivant servira toujours un fichier dans le répertoire public s'il est présent
+et transmettra sinon la requête au worker correspondant au modèle de chemin.
 
 ```caddyfile
 {

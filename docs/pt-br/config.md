@@ -9,10 +9,10 @@ Você pode especificar um caminho personalizado com a opção `-c` ou `--config`
 Um `Caddyfile` mínimo para servir uma aplicação PHP é mostrado abaixo:
 
 ```caddyfile
-# The hostname to respond to
+# O nome do host para responder
 localhost
 
-# Optionally, the directory to serve files from, otherwise defaults to the current directory
+# Opcionalmente, o diretório para servir arquivos, caso contrário, o padrão é o diretório atual
 #root public/
 php_server
 ```
@@ -96,15 +96,15 @@ Você também pode configurar explicitamente o FrankenPHP usando a [opção glob
 		num_threads <num_threads> # Define o número de threads PHP a serem iniciadas. Padrão: 2x o número de CPUs disponíveis.
 		max_threads <num_threads> # Limita o número de threads PHP adicionais que podem ser iniciadas em tempo de execução. Padrão: num_threads. Pode ser definido como 'auto'.
 		max_wait_time <duration> # Define o tempo máximo que uma requisição pode esperar por uma thread PHP livre antes de atingir o tempo limite. Padrão: desabilitado.
-		max_idle_time <duration> # Define o tempo máximo que uma thread autoscaled pode ficar ociosa antes de ser desativada. Padrão: 5s.
+		max_idle_time <duration> # Define o tempo máximo que uma thread autoescalada pode ficar ociosa antes de ser desativada. Padrão: 5s.
 		php_ini <key> <value> # Define uma diretiva php.ini. Pode ser usada várias vezes para definir múltiplas diretivas.
 		worker {
-			file <path> # Define o caminho para o worker script.
+			file <path> # Define o caminho para o script do worker.
 			num <num> # Define o número de threads PHP a serem iniciadas, o padrão é 2x o número de CPUs disponíveis.
 			env <key> <value> # Define uma variável de ambiente extra para o valor fornecido. Pode ser especificada mais de uma vez para múltiplas variáveis de ambiente.
 			watch <path> # Define o caminho para monitorar alterações em arquivos. Pode ser especificada mais de uma vez para múltiplos caminhos.
 			name <name> # Define o nome do worker, usado em logs e métricas. Padrão: caminho absoluto do arquivo do worker
-			max_consecutive_failures <num> # Define o número máximo de falhas consecutivas antes do worker ser considerado não saudável. -1 significa que o worker sempre reiniciará. Padrão: 6.
+			max_consecutive_failures <num> # Define o número máximo de falhas consecutivas antes que o worker seja considerado não saudável. -1 significa que o worker sempre reiniciará. Padrão: 6.
 		}
 	}
 }
@@ -182,9 +182,9 @@ php_server [<matcher>] {
 	split_path <delim...> # Define as substrings para dividir o URI em duas partes. A primeira substring correspondente será usada para separar as "informações de caminho" do caminho. A primeira parte é sufixada com a substring correspondente e será assumida como o nome real do recurso (script CGI). A segunda parte será definida como PATH_INFO para o script usar. Padrão: `.php`
 	resolve_root_symlink false # Desabilita a resolução do diretório `root` para seu valor real avaliando um link simbólico, se houver (habilitado por padrão).
 	env <key> <value> # Define uma variável de ambiente extra para o valor fornecido. Pode ser especificada mais de uma vez para múltiplas variáveis de ambiente.
-	file_server off # Desabilita a diretiva interna file_server.
+	file_server off # Desabilita a diretiva integrada file_server.
 	worker { # Cria um worker específico para este servidor. Pode ser especificada mais de uma vez para múltiplos workers.
-		file <path> # Define o caminho para o worker script, pode ser relativo à raiz do php_server
+		file <path> # Define o caminho para o script do worker, pode ser relativo à raiz do php_server
 		num <num> # Define o número de threads PHP a serem iniciadas, o padrão é 2x o número de CPUs disponíveis.
 		name <name> # Define o nome para o worker, usado em logs e métricas. Padrão: caminho absoluto do arquivo do worker. Sempre começa com m# quando definido em um bloco php_server.
 		watch <path> # Define o caminho para monitorar alterações em arquivos. Pode ser especificada mais de uma vez para múltiplos caminhos.
@@ -348,3 +348,78 @@ docker run -v $PWD:/app/public \
     -p 80:80 -p 443:443 -p 443:443/udp \
     dunglas/frankenphp
 ```
+
+## Autocompletar do Shell
+
+FrankenPHP oferece suporte integrado de autocompletar do shell para Bash, Zsh, Fish e PowerShell. Isso permite o preenchimento automático para todos os comandos (incluindo comandos personalizados como `php-server`, `php-cli` e `extension-init`) e suas flags.
+
+### Bash
+
+Para carregar o autocompletar na sua sessão atual do shell:
+
+```console
+source <(frankenphp completion bash)
+```
+
+Para carregar o autocompletar para cada nova sessão, execute:
+
+**Linux:**
+
+```console
+frankenphp completion bash > /usr/share/bash-completion/completions/frankenphp
+```
+
+**macOS:**
+
+```console
+frankenphp completion bash > $(brew --prefix)/share/bash-completion/completions/frankenphp
+```
+
+### Zsh
+
+Se o autocompletar do shell ainda não estiver habilitado em seu ambiente, você precisará ativá-lo. Você pode executar o seguinte uma vez:
+
+```console
+echo "autoload -U compinit; compinit" >> ~/.zshrc
+```
+
+Para carregar o autocompletar para cada sessão, execute uma vez:
+
+```console
+frankenphp completion zsh > "${fpath[1]}/_frankenphp"
+```
+
+Você precisará iniciar um novo shell para que esta configuração tenha efeito.
+
+### Fish
+
+Para carregar o autocompletar na sua sessão atual do shell:
+
+```console
+frankenphp completion fish | source
+```
+
+Para carregar o autocompletar para cada nova sessão, execute uma vez:
+
+```console
+frankenphp completion fish > ~/.config/fish/completions/frankenphp.fish
+```
+
+### PowerShell
+
+Para carregar o autocompletar na sua sessão atual do shell:
+
+```powershell
+frankenphp completion powershell | Out-String | Invoke-Expression
+```
+
+Para carregar o autocompletar para cada nova sessão, execute uma vez:
+
+```powershell
+frankenphp completion powershell | Out-File -FilePath (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")
+Add-Content -Path $PROFILE -Value '. (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")'
+```
+
+Você precisará iniciar um novo shell para que esta configuração tenha efeito.
+
+Você precisará iniciar um novo shell para que esta configuração tenha efeito.
