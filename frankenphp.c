@@ -1133,8 +1133,7 @@ static void *php_thread(void *arg) {
 
   if (!frankenphp_new_php_thread(thread_index)) {
     /* probably unreachable */
-    frankenphp_log_message("Failed to restart an unhealthy thread",
-                           LOG_ERR);
+    frankenphp_log_message("Failed to restart an unhealthy thread", LOG_ERR);
   }
 
   return NULL;
