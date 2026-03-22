@@ -1116,6 +1116,7 @@ static void *php_thread(void *arg) {
   }
   zend_end_try();
 
+  /* free all global PHP memory reserved for this thread */
 #ifdef ZTS
   ts_free_thread();
 #endif
