@@ -18,12 +18,3 @@ func ExecuteScriptCLI(script string, args []string) int {
 
 	return int(C.frankenphp_execute_script_cli(cScript, argc, (**C.char)(unsafe.Pointer(&argv[0])), false))
 }
-
-func ExecutePHPCode(phpCode string) int {
-	// Ensure extensions are registered before CLI execution
-	registerExtensions()
-
-	cCode := C.CString(phpCode)
-	defer C.free(unsafe.Pointer(cCode))
-	return int(C.frankenphp_execute_script_cli(cCode, 0, nil, true))
-}
