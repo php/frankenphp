@@ -293,7 +293,6 @@ func go_frankenphp_finish_worker_request(threadIndex C.uintptr_t, retval *C.zval
 	}
 
 	thread.requestCount.Add(1)
-	thread.lastMemoryUsage.Store(int64(C.frankenphp_get_current_memory_usage()))
 
 	fc.closeContext()
 	thread.handler.(*workerThread).workerFrankenPHPContext = nil

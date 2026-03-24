@@ -1,5 +1,7 @@
 package frankenphp
 
+// #include "frankenphp.h"
+import "C"
 import (
 	"github.com/dunglas/frankenphp/internal/state"
 )
@@ -56,25 +58,30 @@ func threadDebugState(thread *phpThread) ThreadDebugState {
 	}
 
 	s.RequestCount = thread.requestCount.Load()
-	s.MemoryUsage = thread.lastMemoryUsage.Load()
+	s.MemoryUsage = int64(C.frankenphp_get_thread_memory_usage(C.uintptr_t(thread.threadIndex)))
 
-	if isBusy {
-		thread.handlerMu.RLock()
-		fc := thread.handler.frankenPHPContext()
-		thread.handlerMu.RUnlock()
+	if !isBusy {
+		return s
+	}
 
-		if fc != nil && fc.request != nil && fc.responseWriter != nil {
-			if fc.originalRequest != nil {
-				s.CurrentURI = fc.originalRequest.URL.RequestURI()
-				s.CurrentMethod = fc.originalRequest.Method
-			} else {
-				s.CurrentURI = fc.requestURI
-				s.CurrentMethod = fc.request.Method
-			}
-			if !fc.startedAt.IsZero() {
-				s.RequestStartedAt = fc.startedAt.UnixMilli()
-			}
-		}
+	thread.handlerMu.RLock()
+	defer thread.handlerMu.RUnlock()
+
+	fc := thread.handler.frankenPHPContext()
+	if fc == nil || fc.request == nil || fc.responseWriter == nil {
+		return s
+	}
+
+	if fc.originalRequest == nil {
+		s.CurrentURI = fc.requestURI
+		s.CurrentMethod = fc.request.Method
+	} else {
+		s.CurrentURI = fc.originalRequest.URL.RequestURI()
+		s.CurrentMethod = fc.originalRequest.Method
+	}
+
+	if !fc.startedAt.IsZero() {
+		s.RequestStartedAt = fc.startedAt.UnixMilli()
 	}
 
 	return s

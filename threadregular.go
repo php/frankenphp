@@ -60,6 +60,7 @@ func (handler *regularThread) beforeScriptExecution() string {
 }
 
 func (handler *regularThread) afterScriptExecution(_ int) {
+	handler.thread.requestCount.Add(1)
 	handler.afterRequest()
 }
 
