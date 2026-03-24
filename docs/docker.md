@@ -223,9 +223,9 @@ RUN install-php-extensions pdo_mysql pdo_pgsql #...
 
 # Copy shared libs of frankenphp and all installed extensions to temporary location
 # You can also do this step manually by analyzing ldd output of frankenphp binary and each extension .so file
-RUN apt-get update; \
-	apt-get install -y --no-install-recommends libtree; \
-	mkdir -p /tmp/libs; \
+RUN apt-get update && \
+	apt-get install -y --no-install-recommends libtree && \
+	mkdir -p /tmp/libs && \
 	for target in $(which frankenphp) \
 		$(find "$(php -r 'echo ini_get("extension_dir");')" -maxdepth 2 -name "*.so"); do \
 		libtree -pv "$target" 2>/dev/null | grep -oP '(?:── )\K/\S+(?= \[)' | while IFS= read -r lib; do \
@@ -251,8 +251,8 @@ ENV XDG_CONFIG_HOME=/config XDG_DATA_HOME=/data
 COPY --from=builder --chown=nonroot:nonroot /data /data
 COPY --from=builder --chown=nonroot:nonroot /config /config
 
-# Copy your app and Caddyfile
-COPY --chown=nonroot:nonroot . /app
+# Copy your app (kept root-owned) and Caddyfile
+COPY . /app
 COPY Caddyfile /etc/caddy/Caddyfile
 
 USER nonroot
