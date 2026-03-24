@@ -65,9 +65,17 @@ func threadDebugState(thread *phpThread) ThreadDebugState {
 	}
 
 	thread.handlerMu.RLock()
-	defer thread.handlerMu.RUnlock()
+	handler := thread.handler
+	thread.handlerMu.RUnlock()
 
-	fc := thread.handler.frankenPHPContext()
+	if handler == nil {
+		return s
+	}
+
+	thread.contextMu.RLock()
+	defer thread.contextMu.RUnlock()
+
+	fc := handler.frankenPHPContext()
 	if fc == nil || fc.request == nil || fc.responseWriter == nil {
 		return s
 	}
