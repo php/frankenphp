@@ -158,13 +158,14 @@ FROM dunglas/frankenphp
 
 ARG USER=appuser
 
-RUN \
+RUN <<-EOF
 	# Use "adduser -D ${USER}" for alpine based distros
-	useradd ${USER}; \
+	useradd ${USER}
 	# Add additional capability to bind to port 80 and 443
-	setcap CAP_NET_BIND_SERVICE=+eip /usr/local/bin/frankenphp; \
+	setcap CAP_NET_BIND_SERVICE=+eip /usr/local/bin/frankenphp
 	# Give write access to /config/caddy and /data/caddy
 	chown -R ${USER}:${USER} /config/caddy /data/caddy
+EOF
 
 USER ${USER}
 ```
@@ -182,13 +183,14 @@ FROM dunglas/frankenphp
 
 ARG USER=appuser
 
-RUN \
+RUN <<-EOF
 	# Use "adduser -D ${USER}" for alpine based distros
-	useradd ${USER}; \
+	useradd ${USER}
 	# Remove default capability
-	setcap -r /usr/local/bin/frankenphp; \
+	setcap -r /usr/local/bin/frankenphp
 	# Give write access to /config/caddy and /data/caddy
 	chown -R ${USER}:${USER} /config/caddy /data/caddy
+EOF
 
 USER ${USER}
 ```
@@ -223,20 +225,22 @@ RUN install-php-extensions pdo_mysql pdo_pgsql #...
 
 # Copy shared libs of frankenphp and all installed extensions to temporary location
 # You can also do this step manually by analyzing ldd output of frankenphp binary and each extension .so file
-RUN apt-get update && \
-	apt-get install -y --no-install-recommends libtree && \
-	mkdir -p /tmp/libs && \
+RUN <<-EOF
+	apt-get update
+	apt-get install -y --no-install-recommends libtree
+	mkdir -p /tmp/libs
 	for target in $(which frankenphp) \
-		$(find "$(php -r 'echo ini_get("extension_dir");')" -maxdepth 2 -name "*.so"); do \
-		libtree -pv "$target" 2>/dev/null | grep -oP '(?:── )\K/\S+(?= \[)' | while IFS= read -r lib; do \
-			[ -f "$lib" ] && cp -n "$lib" /tmp/libs/; \
-		done; \
-	done;
+		$(find "$(php -r 'echo ini_get("extension_dir");')" -maxdepth 2 -name "*.so"); do
+		libtree -pv "$target" 2>/dev/null | grep -oP '(?:── )\K/\S+(?= \[)' | while IFS= read -r lib; do
+			[ -f "$lib" ] && cp -n "$lib" /tmp/libs/
+		done
+	done
+EOF
 
 
 # Distroless Debian base image, make sure this matches the Debian version of the builder
 FROM gcr.io/distroless/base-debian13
-# Docker hardened image alternative:
+# Docker hardened image alternative
 # FROM dhi.io/debian:13
 
 COPY --from=builder /usr/local/bin/frankenphp /usr/local/bin/frankenphp
