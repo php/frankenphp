@@ -1545,6 +1545,7 @@ func TestDd(t *testing.T) {
 // test to force the opcache segfault race condition under concurrency (~1.7s)
 func TestOpcacheReset(t *testing.T) {
 	tester := caddytest.NewTester(t)
+	tester.Client.Timeout = 60 * time.Second
 	tester.InitServer(`
 		{
 			skip_install_trust
@@ -1557,6 +1558,7 @@ func TestOpcacheReset(t *testing.T) {
 				php_ini {
 					opcache.enable 1
 					opcache.log_verbosity_level 4
+					max_execution_time 30s
 				}
 			}
 		}
@@ -1574,7 +1576,7 @@ func TestOpcacheReset(t *testing.T) {
 		`, "caddyfile")
 
 	wg := sync.WaitGroup{}
-	numRequests := 100
+	numRequests := 1000
 	wg.Add(numRequests)
 	for i := 0; i < numRequests; i++ {
 
@@ -1584,6 +1586,7 @@ func TestOpcacheReset(t *testing.T) {
 		}
 
 		go func() {
+			defer wg.Done()
 			// randomly call opcache_reset
 			if rand.IntN(10) > 5 {
 				tester.AssertGetResponse(
@@ -1591,7 +1594,6 @@ func TestOpcacheReset(t *testing.T) {
 					http.StatusOK,
 					"opcache reset done",
 				)
-				wg.Done()
 				return
 			}
 
@@ -1601,7 +1603,6 @@ func TestOpcacheReset(t *testing.T) {
 				http.StatusOK,
 				fmt.Sprintf("slept for %d ms and worked for %d iterations", i, i),
 			)
-			wg.Done()
 		}()
 	}
 
