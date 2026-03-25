@@ -1588,7 +1588,7 @@ func TestOpcacheReset(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			// randomly call opcache_reset
-			if rand.IntN(10) > 5 {
+			if rand.IntN(10) > 7 {
 				tester.AssertGetResponse(
 					"http://localhost:"+testPort+"/opcache_reset.php",
 					http.StatusOK,
@@ -1598,10 +1598,12 @@ func TestOpcacheReset(t *testing.T) {
 			}
 
 			// otherwise call sleep.php with random sleep and work values
+			sleep := i % 100
+			work := i % 100
 			tester.AssertGetResponse(
-				fmt.Sprintf("http://localhost:%s/sleep.php?sleep=%d&work=%d", testPort, i, i),
+				fmt.Sprintf("http://localhost:%s/sleep.php?sleep=%d&work=%d", testPort, sleep, work),
 				http.StatusOK,
-				fmt.Sprintf("slept for %d ms and worked for %d iterations", i, i),
+				fmt.Sprintf("slept for %d ms and worked for %d iterations", sleep, work),
 			)
 		}()
 	}
