@@ -1593,6 +1593,10 @@ bool frankenphp_new_php_thread(uintptr_t thread_index) {
   return true;
 }
 
+uintptr_t frankenphp_thread_index(void) {
+  return thread_index;
+}
+
 /* Use global variables to store CLI arguments to prevent useless allocations */
 static char *cli_script;
 static int cli_argc;
