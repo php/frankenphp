@@ -80,7 +80,65 @@ There are two important things to note here:
 - A directive comment `//export_php:function` defines the function signature in PHP. This is how the generator knows how to generate the PHP function with the right parameters and return type;
 - The function must return an `unsafe.Pointer`. FrankenPHP provides an API to help you with type juggling between C and Go.
 
-While the first point speaks for itself, the second may be harder to apprehend. Let's take a deeper dive to type juggling in the next section.
+While the first point speaks for itself, the second may be harder to apprehend. Let's take a deeper dive to type juggling later in this guide.
+
+### Generating the Extension
+
+This is where the magic happens, and your extension can now be generated. You can run the generator with the following command:
+
+```console
+GEN_STUB_SCRIPT=php-src/build/gen_stub.php frankenphp extension-init my_extension.go
+```
+
+> [!NOTE]
+> Don't forget to set the `GEN_STUB_SCRIPT` environment variable to the path of the `gen_stub.php` file in the PHP sources you downloaded earlier. This is the same `gen_stub.php` script mentioned in the manual implementation section.
+
+If everything went well, your project directory should contain the following files for your extension:
+
+- **`my_extension.go`** - Your original source file (remains unchanged)
+- **`my_extension_generated.go`** - Generated file with CGO wrappers that call your functions
+- **`my_extension.stub.php`** - PHP stub file for IDE autocompletion
+- **`my_extension_arginfo.h`** - PHP argument information
+- **`my_extension.h`** - C header file
+- **`my_extension.c`** - C implementation file
+- **`README.md`** - Documentation
+
+> [!IMPORTANT]
+> **Your source file (`my_extension.go`) is never modified.** The generator creates a separate `_generated.go` file containing CGO wrappers that call your original functions. This means you can safely version control your source file without worrying about generated code polluting it.
+
+### Integrating the Generated Extension into FrankenPHP
+
+Our extension is now ready to be compiled and integrated into FrankenPHP. To do this, refer to the FrankenPHP [compilation documentation](compile.md) to learn how to compile FrankenPHP. Add the module using the `--with` flag, pointing to the path of your module:
+
+```console
+CGO_ENABLED=1 \
+XCADDY_GO_BUILD_FLAGS="-ldflags='-w -s' -tags=nobadger,nomysql,nopgx" \
+CGO_CFLAGS=$(php-config --includes) \
+CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)" \
+xcaddy build \
+    --output frankenphp \
+    --with github.com/my-account/my-module/build
+```
+
+Note that you point to the `/build` subdirectory that was created during the generation step. However, this is not mandatory: you can also copy the generated files to your module directory and point to it directly.
+
+### Testing Your Generated Extension
+
+You can create a PHP file to test the functions and classes you've created. For example, create an `index.php` file with the following content:
+
+```php
+<?php
+
+// Using global constants
+var_dump(repeat_this('Hello World', 5, STR_REVERSE));
+
+// Using class constants
+$processor = new StringProcessor();
+echo $processor->process('Hello World', StringProcessor::MODE_LOWERCASE);  // "hello world"
+echo $processor->process('Hello World', StringProcessor::MODE_UPPERCASE);  // "HELLO WORLD"
+```
+
+Once you've integrated your extension into FrankenPHP as demonstrated in the previous section, you can run this test file using `./frankenphp php-server`, and you should see your extension working.
 
 ### Type Juggling
 
@@ -579,64 +637,6 @@ echo My\Extension\STATUS_ACTIVE; // 1
 - The namespace applies to **all** exported symbols in the file: functions, classes, methods, and constants.
 - Namespace names follow PHP namespace conventions using backslashes (`\`) as separators.
 - If no namespace is declared, symbols are exported to the global namespace as usual.
-
-### Generating the Extension
-
-This is where the magic happens, and your extension can now be generated. You can run the generator with the following command:
-
-```console
-GEN_STUB_SCRIPT=php-src/build/gen_stub.php frankenphp extension-init my_extension.go
-```
-
-> [!NOTE]
-> Don't forget to set the `GEN_STUB_SCRIPT` environment variable to the path of the `gen_stub.php` file in the PHP sources you downloaded earlier. This is the same `gen_stub.php` script mentioned in the manual implementation section.
-
-If everything went well, your project directory should contain the following files for your extension:
-
-- **`my_extension.go`** - Your original source file (remains unchanged)
-- **`my_extension_generated.go`** - Generated file with CGO wrappers that call your functions
-- **`my_extension.stub.php`** - PHP stub file for IDE autocompletion
-- **`my_extension_arginfo.h`** - PHP argument information
-- **`my_extension.h`** - C header file
-- **`my_extension.c`** - C implementation file
-- **`README.md`** - Documentation
-
-> [!IMPORTANT]
-> **Your source file (`my_extension.go`) is never modified.** The generator creates a separate `_generated.go` file containing CGO wrappers that call your original functions. This means you can safely version control your source file without worrying about generated code polluting it.
-
-### Integrating the Generated Extension into FrankenPHP
-
-Our extension is now ready to be compiled and integrated into FrankenPHP. To do this, refer to the FrankenPHP [compilation documentation](compile.md) to learn how to compile FrankenPHP. Add the module using the `--with` flag, pointing to the path of your module:
-
-```console
-CGO_ENABLED=1 \
-XCADDY_GO_BUILD_FLAGS="-ldflags='-w -s' -tags=nobadger,nomysql,nopgx" \
-CGO_CFLAGS=$(php-config --includes) \
-CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)" \
-xcaddy build \
-    --output frankenphp \
-    --with github.com/my-account/my-module/build
-```
-
-Note that you point to the `/build` subdirectory that was created during the generation step. However, this is not mandatory: you can also copy the generated files to your module directory and point to it directly.
-
-### Testing Your Generated Extension
-
-You can create a PHP file to test the functions and classes you've created. For example, create an `index.php` file with the following content:
-
-```php
-<?php
-
-// Using global constants
-var_dump(repeat_this('Hello World', 5, STR_REVERSE));
-
-// Using class constants
-$processor = new StringProcessor();
-echo $processor->process('Hello World', StringProcessor::MODE_LOWERCASE);  // "hello world"
-echo $processor->process('Hello World', StringProcessor::MODE_UPPERCASE);  // "HELLO WORLD"
-```
-
-Once you've integrated your extension into FrankenPHP as demonstrated in the previous section, you can run this test file using `./frankenphp php-server`, and you should see your extension working.
 
 ## Manual Implementation
 
