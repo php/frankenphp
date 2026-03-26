@@ -1091,7 +1091,7 @@ static void *php_thread(void *arg) {
 
       /* Update the last memory usage for metrics */
       __atomic_store_n(&thread_metrics[thread_index].last_memory_usage,
-        zend_memory_usage(0), __ATOMIC_RELAXED);
+                       zend_memory_usage(0), __ATOMIC_RELAXED);
 
       has_attempted_shutdown = true;
 
