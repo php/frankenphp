@@ -58,14 +58,4 @@ header('X-Accel-Redirect: file.txt');
 
 ## Projects using the Symfony HttpFoundation component (Symfony, Laravel, Drupal...)
 
-Symfony HttpFoundation [natively supports this feature](https://symfony.com/doc/current/components/http_foundation.html#serving-files).
-It will automatically determine the correct value for the `X-Accel-Redirect` header and add it to the response.
-
-```php
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
-
-BinaryFileResponse::trustXSendfileTypeHeader();
-$response = new BinaryFileResponse(__DIR__.'/../private-files/file.txt');
-
-// ...
-```
+See [the Symfony documentation](symfony.md#serving-large-static-files-x-sendfile) for details on using this feature with Symfony HttpFoundation.

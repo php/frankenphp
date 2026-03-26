@@ -131,8 +131,10 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 	// make sure to close the worker request context
 	if handler.workerFrankenPHPContext != nil {
 		handler.workerFrankenPHPContext.closeContext()
+		handler.thread.contextMu.Lock()
 		handler.workerFrankenPHPContext = nil
 		handler.workerContext = nil
+		handler.thread.contextMu.Unlock()
 	}
 
 	// on exit status 0 we just run the worker script again
@@ -235,8 +237,10 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 	case requestCH = <-handler.worker.requestChan:
 	}
 
+	handler.thread.contextMu.Lock()
 	handler.workerContext = requestCH.ctx
 	handler.workerFrankenPHPContext = requestCH.frankenPHPContext
+	handler.thread.contextMu.Unlock()
 	handler.state.MarkAsWaiting(false)
 
 	if globalLogger.Enabled(requestCH.ctx, slog.LevelDebug) {
@@ -292,9 +296,13 @@ func go_frankenphp_finish_worker_request(threadIndex C.uintptr_t, retval *C.zval
 		fc.handlerReturn = r
 	}
 
+	thread.requestCount.Add(1)
+
 	fc.closeContext()
+	thread.contextMu.Lock()
 	thread.handler.(*workerThread).workerFrankenPHPContext = nil
 	thread.handler.(*workerThread).workerContext = nil
+	thread.contextMu.Unlock()
 
 	if globalLogger.Enabled(ctx, slog.LevelDebug) {
 		if fc.request == nil {

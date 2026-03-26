@@ -229,6 +229,8 @@ jobs:
           $env:PHPRC = Get-Location
 
           go test -race ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cd caddy
           go test -race ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         working-directory: ${{ github.workspace }}\frankenphp

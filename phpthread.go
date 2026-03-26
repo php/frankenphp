@@ -7,6 +7,7 @@ import (
 	"context"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"unsafe"
 
 	"github.com/dunglas/frankenphp/internal/state"
@@ -16,12 +17,14 @@ import (
 // identified by the index in the phpThreads slice
 type phpThread struct {
 	runtime.Pinner
-	threadIndex int
-	requestChan chan contextHolder
-	drainChan   chan struct{}
-	handlerMu   sync.RWMutex
-	handler     threadHandler
-	state       *state.ThreadState
+	threadIndex  int
+	requestChan  chan contextHolder
+	drainChan    chan struct{}
+	handlerMu    sync.RWMutex
+	handler      threadHandler
+	contextMu    sync.RWMutex
+	state        *state.ThreadState
+	requestCount atomic.Int64
 }
 
 // threadHandler defines how the callbacks from the C thread should be handled
@@ -125,10 +128,13 @@ func (thread *phpThread) context() context.Context {
 
 func (thread *phpThread) name() string {
 	thread.handlerMu.RLock()
-	name := thread.handler.name()
-	thread.handlerMu.RUnlock()
+	defer thread.handlerMu.RUnlock()
 
-	return name
+	if thread.handler == nil {
+		return "unknown"
+	}
+
+	return thread.handler.name()
 }
 
 // Pin a string that is not null-terminated

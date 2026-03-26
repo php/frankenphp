@@ -90,8 +90,8 @@ Our maintainers offer apk packages for all systems using `apk`. To install, run:
 VERSION=85 # 82-85 available
 echo "https://pkg.henderkes.com/api/packages/${VERSION}/alpine/main/php-zts" | sudo tee -a /etc/apk/repositories
 KEYFILE=$(curl -sJOw '%{filename_effective}' https://pkg.henderkes.com/api/packages/${VERSION}/alpine/key)
-sudo mv ${KEYFILE} /etc/apk/keys/ && 
-sudo apk update && 
+sudo mv ${KEYFILE} /etc/apk/keys/ &&
+sudo apk update &&
 sudo apk add frankenphp
 ```
 
@@ -170,6 +170,7 @@ Go to `https://localhost`, and enjoy!
 - [Compile from sources](https://frankenphp.dev/docs/compile/)
 - [Monitoring FrankenPHP](https://frankenphp.dev/docs/metrics/)
 - [WordPress integration](https://frankenphp.dev/docs/wordpress/)
+- [Symfony integration](https://frankenphp.dev/docs/symfony/)
 - [Laravel integration](https://frankenphp.dev/docs/laravel/)
 - [Known issues](https://frankenphp.dev/docs/known-issues/)
 - [Demo app (Symfony) and benchmarks](https://github.com/dunglas/frankenphp-demo)
@@ -178,7 +179,7 @@ Go to `https://localhost`, and enjoy!
 
 ## Examples and Skeletons
 
-- [Symfony](https://github.com/dunglas/symfony-docker)
+- [Symfony](https://frankenphp.dev/docs/symfony/)
 - [API Platform](https://api-platform.com/docs/symfony)
 - [Laravel](https://frankenphp.dev/docs/laravel/)
 - [Sulu](https://sulu.io/blog/running-sulu-with-frankenphp)

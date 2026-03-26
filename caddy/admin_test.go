@@ -82,6 +82,46 @@ func TestShowTheCorrectThreadDebugStatus(t *testing.T) {
 	assert.Len(t, debugState.ThreadDebugStates, 3)
 }
 
+func TestThreadDebugStateMetricsAfterRequests(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	tester.InitServer(`
+		{
+			skip_install_trust
+			admin localhost:2999
+			http_port `+testPort+`
+
+			frankenphp {
+				num_threads 2
+				worker ../testdata/worker-with-counter.php 1
+			}
+		}
+
+		localhost:`+testPort+` {
+			route {
+				root ../testdata
+				rewrite worker-with-counter.php
+				php
+			}
+		}
+		`, "caddyfile")
+
+	// make a few requests so counters are populated
+	tester.AssertGetResponse("http://localhost:"+testPort+"/", http.StatusOK, "requests:1")
+	tester.AssertGetResponse("http://localhost:"+testPort+"/", http.StatusOK, "requests:2")
+	tester.AssertGetResponse("http://localhost:"+testPort+"/", http.StatusOK, "requests:3")
+
+	debugState := getDebugState(t, tester)
+
+	hasRequestCount := false
+	for _, ts := range debugState.ThreadDebugStates {
+		if ts.RequestCount > 0 {
+			hasRequestCount = true
+			assert.Greater(t, ts.MemoryUsage, int64(0), "thread %d (%s) should report memory usage", ts.Index, ts.Name)
+		}
+	}
+	assert.True(t, hasRequestCount, "at least one thread should have RequestCount > 0 after serving requests")
+}
+
 func TestAutoScaleWorkerThreads(t *testing.T) {
 	wg := sync.WaitGroup{}
 	maxTries := 10

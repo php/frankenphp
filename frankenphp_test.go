@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"runtime"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -1313,6 +1314,10 @@ func TestOpcachePreload_worker(t *testing.T) {
 func testOpcachePreload(t *testing.T, opts *testOptions) {
 	if frankenphp.Version().VersionID <= 80300 {
 		t.Skip("This test is only supported in PHP 8.3 and above")
+		return
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("opcache.preload is not supported on Windows")
 		return
 	}
 

@@ -185,6 +185,14 @@ zend_string *frankenphp_init_persistent_string(const char *string, size_t len);
 int frankenphp_reset_opcache(void);
 int frankenphp_get_current_memory_limit();
 
+typedef struct {
+  size_t last_memory_usage;
+} frankenphp_thread_metrics;
+
+void frankenphp_init_thread_metrics(int max_threads);
+void frankenphp_destroy_thread_metrics(void);
+size_t frankenphp_get_thread_memory_usage(uintptr_t thread_index);
+
 void register_extensions(zend_module_entry **m, int len);
 
 #endif
