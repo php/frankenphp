@@ -7,12 +7,10 @@ import (
 	"log/slog"
 	"net/http"
 	"path/filepath"
-	"reflect"
 	"runtime"
 	"slices"
 	"strconv"
 	"strings"
-	"unsafe"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig"
@@ -687,22 +685,10 @@ func prependWorkerRoutes(routes caddyhttp.RouteList, h httpcaddyfile.Helper, f F
 	return routes
 }
 
-// access the Helper's unexported parentBlock field via
-// reflection and unsafe pointer read
 func extractSiteRoot(h httpcaddyfile.Helper) string {
-	v := reflect.ValueOf(&h).Elem()
-	pb := v.FieldByName("parentBlock")
-	if !pb.IsValid() {
-		return ""
-	}
-	sbPtr := (*caddyfile.ServerBlock)(unsafe.Pointer(pb.UnsafeAddr()))
-	// By the time php_server is parsed, matcher tokens have been deleted from segments
-	// by ExtractMatcherSet(). A matcherless "root <path>" has exactly 2 tokens and is
-	// the only form we can reliably identify as unconditional.
-	for _, seg := range sbPtr.Segments {
-		if seg.Directive() == "root" && len(seg) == 2 {
-			return seg[1].Text
-		}
+	// Caddy stores only unmatched or wildcard matcher roots
+	if root, ok := h.State["root"].(string); ok {
+		return root
 	}
 	return ""
 }
