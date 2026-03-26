@@ -3,18 +3,18 @@ package frankenphp
 import (
 	"errors"
 	"log/slog"
+	"os"
+	"runtime"
 	"sync"
 	"time"
 
-	"github.com/dunglas/frankenphp/internal/cpu"
 	"github.com/dunglas/frankenphp/internal/state"
+	"github.com/shirou/gopsutil/v4/process"
 )
 
 const (
 	// requests have to be stalled for at least this amount of time before scaling
 	minStallTime = 5 * time.Millisecond
-	// time to check for CPU usage before scaling a single thread
-	cpuProbeTime = 120 * time.Millisecond
 	// do not scale over this amount of CPU usage
 	maxCpuUsageForScaling = 0.8
 	// downscale idle threads every x seconds
@@ -26,6 +26,9 @@ const (
 )
 
 var (
+	cpuCount             = runtime.GOMAXPROCS(0)
+	cpuProc              *process.Process
+	cpuProcOnce          sync.Once
 	ErrMaxThreadsReached = errors.New("max amount of overall threads reached")
 
 	maxIdleTime       = defaultMaxIdleTime
@@ -33,6 +36,25 @@ var (
 	autoScaledThreads = []*phpThread{}
 	scalingMu         = new(sync.RWMutex)
 )
+
+// probeCPULoad checks if current process CPU usage is below a threshold.
+// Uses Percent(0) which returns the delta since the last call (non-blocking).
+// See: https://pkg.go.dev/github.com/shirou/gopsutil/v4/process#Process.Percent
+func probeCPULoad(maxLoadFactor float64) bool {
+	cpuProcOnce.Do(func() {
+		cpuProc, _ = process.NewProcess(int32(os.Getpid()))
+	})
+	if cpuProc == nil {
+		return false
+	}
+
+	cpuPercent, err := cpuProc.Percent(0)
+	if err != nil {
+		return false
+	}
+
+	return cpuPercent < float64(cpuCount)*100.0*maxLoadFactor
+}
 
 func initAutoScaling(mainThread *phpMainThread) {
 	if mainThread.maxThreads <= mainThread.numThreads {
@@ -82,8 +104,8 @@ func addWorkerThread(worker *worker) (*phpThread, error) {
 
 // scaleWorkerThread adds a worker PHP thread automatically
 func scaleWorkerThread(worker *worker) {
-	// probe CPU usage before acquiring the lock (avoids holding lock during 120ms sleep)
-	if !cpu.ProbeCPUs(cpuProbeTime, maxCpuUsageForScaling, mainThread.done) {
+	// probe CPU usage before acquiring the lock
+	if !probeCPULoad(maxCpuUsageForScaling) {
 		return
 	}
 
@@ -112,8 +134,8 @@ func scaleWorkerThread(worker *worker) {
 
 // scaleRegularThread adds a regular PHP thread automatically
 func scaleRegularThread() {
-	// probe CPU usage before acquiring the lock (avoids holding lock during 120ms sleep)
-	if !cpu.ProbeCPUs(cpuProbeTime, maxCpuUsageForScaling, mainThread.done) {
+	// probe CPU usage before acquiring the lock
+	if !probeCPULoad(maxCpuUsageForScaling) {
 		return
 	}
 

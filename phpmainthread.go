@@ -10,9 +10,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/dunglas/frankenphp/internal/memory"
 	"github.com/dunglas/frankenphp/internal/phpheaders"
 	"github.com/dunglas/frankenphp/internal/state"
+	"github.com/shirou/gopsutil/v4/mem"
 )
 
 // represents the main PHP thread
@@ -157,7 +157,11 @@ func (mainThread *phpMainThread) setAutomaticMaxThreads() {
 		return
 	}
 	perThreadMemoryLimit := int64(C.frankenphp_get_current_memory_limit())
-	totalSysMemory := memory.TotalSysMemory()
+	vmStat, err := mem.VirtualMemory()
+	totalSysMemory := uint64(0)
+	if err == nil {
+		totalSysMemory = vmStat.Available
+	}
 	if perThreadMemoryLimit <= 0 || totalSysMemory == 0 {
 		mainThread.maxThreads = mainThread.numThreads * 2
 		return
