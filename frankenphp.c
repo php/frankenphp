@@ -264,8 +264,13 @@ static void frankenphp_reset_session_state(void) {
 }
 #endif
 
+static frankenphp_thread_metrics *thread_metrics = NULL;
+
 /* Adapted from php_request_shutdown */
 static void frankenphp_worker_request_shutdown() {
+  __atomic_store_n(&thread_metrics[thread_index].last_memory_usage,
+                   zend_memory_usage(0), __ATOMIC_RELAXED);
+
   /* Flush all output buffers */
   zend_try { php_output_end_all(); }
   zend_end_try();
@@ -1073,32 +1078,119 @@ static void set_thread_name(char *thread_name) {
 #endif
 }
 
+static inline void reset_sandboxed_environment() {
+  if (sandboxed_env != NULL) {
+    zend_hash_release(sandboxed_env);
+    sandboxed_env = NULL;
+  }
+}
+
 static void *php_thread(void *arg) {
   thread_index = (uintptr_t)arg;
   char thread_name[16] = {0};
   snprintf(thread_name, 16, "php-%" PRIxPTR, thread_index);
   set_thread_name(thread_name);
 
+  /* Initial allocation of all global PHP memory for this thread */
 #ifdef ZTS
-  /* initial resource fetch */
   (void)ts_resource(0);
 #ifdef PHP_WIN32
   ZEND_TSRMLS_CACHE_UPDATE();
 #endif
 #endif
 
-  // loop until Go signals to stop
-  char *scriptName = NULL;
-  while ((scriptName = go_frankenphp_before_script_execution(thread_index))) {
-    go_frankenphp_after_script_execution(thread_index,
-                                         frankenphp_execute_script(scriptName));
-  }
+  bool thread_is_healthy = true;
+  bool has_attempted_shutdown = false;
 
+  /* Main loop of the PHP thread, execute a PHP script and repeat until Go
+   * signals to stop */
+  zend_first_try {
+    char *scriptName = NULL;
+    while ((scriptName = go_frankenphp_before_script_execution(thread_index))) {
+      has_attempted_shutdown = false;
+
+      frankenphp_update_request_context();
+
+      if (UNEXPECTED(php_request_startup() == FAILURE)) {
+        /* Request startup failed, bail out to zend_catch */
+        frankenphp_log_message("Request startup failed, thread is unhealthy",
+                               LOG_ERR);
+        zend_bailout();
+      }
+
+#if PHP_VERSION_ID < 80500
+      /* Override opcache here again if loaded as a shared extension
+       * (php 8.4 and under) */
+      frankenphp_override_opcache_reset();
+#endif
+
+      zend_file_handle file_handle;
+      zend_stream_init_filename(&file_handle, scriptName);
+
+      file_handle.primary_script = 1;
+      EG(exit_status) = 0;
+
+      /* Execute the PHP script, potential bailout to zend_catch */
+      php_execute_script(&file_handle);
+      zend_destroy_file_handle(&file_handle);
+      reset_sandboxed_environment();
+
+      /* Update the last memory usage for metrics */
+      __atomic_store_n(&thread_metrics[thread_index].last_memory_usage,
+                       zend_memory_usage(0), __ATOMIC_RELAXED);
+
+      has_attempted_shutdown = true;
+
+      /* shutdown the request, potential bailout to zend_catch */
+      php_request_shutdown((void *)0);
+      frankenphp_free_request_context();
+      go_frankenphp_after_script_execution(thread_index, EG(exit_status));
+    }
+  }
+  zend_catch {
+    /* Critical failure from php_execute_script or php_request_shutdown, mark
+     * the thread as unhealthy */
+    thread_is_healthy = false;
+    if (!has_attempted_shutdown) {
+      /* php_request_shutdown() was not called, force a shutdown now */
+      reset_sandboxed_environment();
+      zend_try { php_request_shutdown((void *)0); }
+      zend_catch {}
+      zend_end_try();
+    }
+
+    /* Log the last error message, it must be cleared to prevent a crash when
+     * freeing execution globals */
+    if (PG(last_error_message)) {
+      go_log_attrs(thread_index, PG(last_error_message), 8, NULL);
+      PG(last_error_message) = NULL;
+      PG(last_error_file) = NULL;
+    }
+    frankenphp_free_request_context();
+    go_frankenphp_after_script_execution(thread_index, EG(exit_status));
+  }
+  zend_end_try();
+
+  /* free all global PHP memory reserved for this thread */
 #ifdef ZTS
   ts_free_thread();
 #endif
 
-  go_frankenphp_on_thread_shutdown(thread_index);
+  /* Thread is healthy, signal to Go that the thread has shut down */
+  if (thread_is_healthy) {
+    go_frankenphp_on_thread_shutdown(thread_index);
+
+    return NULL;
+  }
+
+  /* Thread is unhealthy, PHP globals might be in a bad state after a bailout,
+   * restart the entire thread */
+  frankenphp_log_message("Restarting unhealthy thread", LOG_WARNING);
+
+  if (!frankenphp_new_php_thread(thread_index)) {
+    /* probably unreachable */
+    frankenphp_log_message("Failed to restart an unhealthy thread", LOG_ERR);
+  }
 
   return NULL;
 }
@@ -1230,58 +1322,6 @@ bool frankenphp_new_php_thread(uintptr_t thread_index) {
   }
   pthread_detach(thread);
   return true;
-}
-
-static int frankenphp_request_startup() {
-  frankenphp_update_request_context();
-  if (php_request_startup() == SUCCESS) {
-#if PHP_VERSION_ID < 80500
-    /* Override opcache here again if loaded as a shared extension
-     * (php 8.4 and under) */
-    frankenphp_override_opcache_reset();
-#endif
-    return SUCCESS;
-  }
-
-  php_request_shutdown((void *)0);
-  frankenphp_free_request_context();
-
-  return FAILURE;
-}
-
-int frankenphp_execute_script(char *file_name) {
-  if (frankenphp_request_startup() == FAILURE) {
-
-    return FAILURE;
-  }
-
-  int status = SUCCESS;
-
-  zend_file_handle file_handle;
-  zend_stream_init_filename(&file_handle, file_name);
-
-  file_handle.primary_script = 1;
-
-  zend_first_try {
-    EG(exit_status) = 0;
-    php_execute_script(&file_handle);
-    status = EG(exit_status);
-  }
-  zend_catch { status = EG(exit_status); }
-  zend_end_try();
-
-  zend_destroy_file_handle(&file_handle);
-
-  /* Reset the sandboxed environment if it is in use */
-  if (sandboxed_env != NULL) {
-    zend_hash_release(sandboxed_env);
-    sandboxed_env = NULL;
-  }
-
-  php_request_shutdown((void *)0);
-  frankenphp_free_request_context();
-
-  return status;
 }
 
 /* Use global variables to store CLI arguments to prevent useless allocations */
@@ -1449,6 +1489,20 @@ int frankenphp_reset_opcache(void) {
 }
 
 int frankenphp_get_current_memory_limit() { return PG(memory_limit); }
+
+void frankenphp_init_thread_metrics(int max_threads) {
+  thread_metrics = calloc(max_threads, sizeof(frankenphp_thread_metrics));
+}
+
+void frankenphp_destroy_thread_metrics(void) {
+  free(thread_metrics);
+  thread_metrics = NULL;
+}
+
+size_t frankenphp_get_thread_memory_usage(uintptr_t idx) {
+  return __atomic_load_n(&thread_metrics[idx].last_memory_usage,
+                         __ATOMIC_RELAXED);
+}
 
 static zend_module_entry **modules = NULL;
 static int modules_len = 0;

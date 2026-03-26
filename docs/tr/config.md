@@ -85,7 +85,7 @@ localhost {
 }
 ```
 
-Alternatif olarak, FrankenPHP'yi [global seçenek](https://caddyserver.com/docs/caddyfile/concepts#global-options) olan `frankenphp` kullanarak açıkça yapılandırabilirsiniz:
+Ayrıca, FrankenPHP'yi [global seçenek](https://caddyserver.com/docs/caddyfile/concepts#global-options) olan `frankenphp` kullanarak açıkça yapılandırabilirsiniz:
 
 ```caddyfile
 {
@@ -100,7 +100,7 @@ Alternatif olarak, FrankenPHP'yi [global seçenek](https://caddyserver.com/docs/
 			num <num> # Başlatılacak PHP iş parçacığı sayısını ayarlar, varsayılan değer mevcut CPU'ların 2 katıdır.
 			env <key> <value> # Ek bir ortam değişkenini verilen değere ayarlar. Birden fazla ortam değişkeni için birden fazla kez belirtilebilir.
 			watch <path> # Dosya değişikliklerini izlemek için yolu ayarlar. Birden fazla yol için birden fazla kez belirtilebilir.
-			name <name> # İşçinin adını ayarlar, günlüklerde ve metriklerde kullanılır. Varsayılan: işçi dosyasının mutlak yolu
+			name <name> # İşçinin adını ayarlar, günlüklerde ve metriklerde kullanılır. Varsayılan: işçi dosyasının mutlak yolu.
 			max_consecutive_failures <num> # İşçinin sağlıksız kabul edilmeden önceki maksimum ardışık hata sayısını ayarlar, -1 işçinin her zaman yeniden başlayacağı anlamına gelir. Varsayılan: 6.
 		}
 	}
@@ -181,7 +181,7 @@ php_server [<matcher>] {
 	file_server off # Yerleşik file_server yönergesini devre dışı bırakır.
 	worker { # Bu sunucuya özgü bir worker oluşturur. Birden fazla worker için birden fazla kez belirtilebilir.
 		file <path> # Worker betiğinin yolunu ayarlar, php_server köküne göre göreceli olabilir
-		num <num> # Başlatılacak PHP iş parçacığı sayısını ayarlar, varsayılan değer mevcut CPU'ların 2 katıdır
+		num <num> # Başlatılacak PHP iş parçacığı sayısını ayarlar, varsayılan değer mevcut CPU'ların 2 katıdır.
 		name <name> # Worker için günlüklerde ve metriklerde kullanılan bir ad ayarlar. Varsayılan: worker dosyasının mutlak yolu. Bir php_server bloğunda tanımlandığında her zaman m# ile başlar.
 		watch <path> # Dosya değişikliklerini izlemek için yolu ayarlar. Birden fazla yol için birden fazla kez belirtilebilir.
 		env <key> <value> # Ek bir ortam değişkenini verilen değere ayarlar. Birden fazla ortam değişkeni için birden fazla kez belirtilebilir. Bu worker için ortam değişkenleri ayrıca php_server üst öğesinden devralınır, ancak burada geçersiz kılınabilir.
@@ -332,3 +332,79 @@ docker run -v $PWD:/app/public \
     -e CADDY_GLOBAL_OPTIONS=debug \
     -p 80:80 -p 443:443 -p 443:443/udp \
     dunglas/frankenphp
+```
+
+## Shell Completion
+
+FrankenPHP, Bash, Zsh, Fish ve PowerShell için yerleşik kabuk tamamlama desteği sağlar. Bu, tüm komutlar ( `php-server`, `php-cli` ve `extension-init` gibi özel komutlar dahil) ve bunların bayrakları için otomatik tamamlama sağlar.
+
+### Bash
+
+Geçerli kabuk oturumunuzda tamamlamaları yüklemek için:
+
+```console
+source <(frankenphp completion bash)
+```
+
+Her yeni oturum için tamamlamaları yüklemek için şunu çalıştırın:
+
+**Linux:**
+
+```console
+frankenphp completion bash > /usr/share/bash-completion/completions/frankenphp
+```
+
+**macOS:**
+
+```console
+frankenphp completion bash > $(brew --prefix)/share/bash-completion/completions/frankenphp
+```
+
+### Zsh
+
+Ortamınızda kabuk tamamlama zaten etkin değilse, bunu etkinleştirmeniz gerekecektir. Aşağıdakini bir kez çalıştırabilirsiniz:
+
+```console
+echo "autoload -U compinit; compinit" >> ~/.zshrc
+```
+
+Her oturum için tamamlamaları yüklemek için, bir kez çalıştırın:
+
+```console
+frankenphp completion zsh > "${fpath[1]}/_frankenphp"
+```
+
+Bu kurulumun etkili olması için yeni bir kabuk başlatmanız gerekecektir.
+
+### Fish
+
+Geçerli kabuk oturumunuzda tamamlamaları yüklemek için:
+
+```console
+frankenphp completion fish | source
+```
+
+Her yeni oturum için tamamlamaları yüklemek için, bir kez çalıştırın:
+
+```console
+frankenphp completion fish > ~/.config/fish/completions/frankenphp.fish
+```
+
+### PowerShell
+
+Geçerli kabuk oturumunuzda tamamlamaları yüklemek için:
+
+```powershell
+frankenphp completion powershell | Out-String | Invoke-Expression
+```
+
+Her yeni oturum için tamamlamaları yüklemek için, bir kez çalıştırın:
+
+```powershell
+frankenphp completion powershell | Out-File -FilePath (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")
+Add-Content -Path $PROFILE -Value '. (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")'
+```
+
+Bu kurulumun etkili olması için yeni bir kabuk başlatmanız gerekecektir.
+
+Bu kurulumun etkili olması için yeni bir kabuk başlatmanız gerekecektir.
