@@ -696,9 +696,13 @@ func extractSiteRoot(h httpcaddyfile.Helper) string {
 		return ""
 	}
 	sbPtr := (*caddyfile.ServerBlock)(unsafe.Pointer(pb.UnsafeAddr()))
-	d := sbPtr.DispenseDirective("root")
-	if d.Next() && d.NextArg() {
-		return d.Val()
+	// By the time php_server is parsed, matcher tokens have been deleted from segments
+	// by ExtractMatcherSet(). A matcherless "root <path>" has exactly 2 tokens and is
+	// the only form we can reliably identify as unconditional.
+	for _, seg := range sbPtr.Segments {
+		if seg.Directive() == "root" && len(seg) == 2 {
+			return seg[1].Text
+		}
 	}
 	return ""
 }
