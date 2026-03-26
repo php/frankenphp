@@ -155,12 +155,22 @@ func Thread(index int) (*PHPThread, bool) {
 		return nil, false
 	}
 
-	thread := phpThreads[index]
-	if thread != nil {
-		return &PHPThread{thread.frankenPHPContext().request, thread}, true
+	if index >= len(phpThreads) {
+		return nil, false
 	}
 
-	return nil, false
+	thread := phpThreads[index]
+	if thread == nil {
+		return nil, false
+	}
+
+	fc := thread.frankenPHPContext()
+	var request *http.Request
+	if fc != nil {
+		request = fc.request
+	}
+
+	return &PHPThread{request, thread}, true
 }
 
 // Version returns infos about the PHP version.
