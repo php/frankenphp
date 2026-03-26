@@ -8,35 +8,16 @@ For [Symfony](https://symfony.com) projects, we recommend using [Symfony Docker]
 
 Alternatively, you can run your Symfony projects with FrankenPHP from your local machine:
 
-1. [Download the binary corresponding to your system](../README.md#standalone-binary)
+1. [Install FrankenPHP](../#getting-started)
 2. Add the following configuration to a file named `Caddyfile` in the root directory of your Symfony project:
 
    ```caddyfile
    # The domain name of your server
-   localhost {
-   	# Set the webroot to the public/ directory
-   	root public/
-   	# Enable compression (optional)
-   	encode zstd br gzip
+   localhost
 
-
-   	# Rewrite requests to non-existing files to the front controller
-   	@phpRoute {
-   		not file {path}
-   	}
-   	rewrite @phpRoute index.php
-
-   	@frontController path index.php
-   	php @frontController {
-   		# Optional: Enable worker mode for better performance
-   		worker {
-   			file ./public/index.php
-   		}
-   	}
-
-   	file_server {
-   		hide *.php
-   	}
+   php_server {
+   	# Optional: Enable worker mode for better performance
+   	worker index.php
    }
    ```
 
@@ -71,7 +52,7 @@ Learn more about [the worker mode](worker.md).
 
 Hot reloading is enabled by default in [Symfony Docker](https://github.com/dunglas/symfony-docker).
 
-To use the [hot reload](hot-reload.md) feature without Symfony Docker, enable [Mercure](mercure.md) and add the `hot_reload` sub-directive to the `php` directive in your `Caddyfile`:
+To use the [hot reload](hot-reload.md) feature without Symfony Docker, enable [Mercure](mercure.md) and add the `hot_reload` sub-directive to the `php_server` directive in your `Caddyfile`:
 
 ```caddyfile
 localhost
@@ -80,26 +61,9 @@ mercure {
 	anonymous
 }
 
-root public/
-
-@phpRoute {
-	not path /.well-known/mercure*
-	not file {path}
-}
-rewrite @phpRoute index.php
-
-@frontController path index.php
-php @frontController {
+php_server {
 	hot_reload
-	# Optional: enable worker in watch mode for better performance
-	worker {
-		file ./public/index.php
-		watch
-	}
-}
-
-file_server {
-	hide *.php
+	worker index.php
 }
 ```
 
@@ -128,34 +92,15 @@ Symfony's [AssetMapper component](https://symfony.com/doc/current/frontend/asset
 2. Update your `Caddyfile` to serve pre-compressed assets:
 
    ```caddyfile
-   {
-   	frankenphp
+   localhost
+
+   @assets path /assets/*
+   file_server @assets {
+   	precompressed zstd br gzip
    }
 
-   localhost {
-   	root public/
-
-   	@phpRoute {
-   		not file {path}
-   	}
-   	rewrite @phpRoute index.php
-
-   	@frontController path index.php
-   	php @frontController {
-   		# Optional: Enable worker mode for better performance
-   		worker {
-   			file ./public/index.php
-   		}
-   	}
-
-   	@assets path /assets/*
-   	file_server @assets {
-   		precompressed zstd br gzip
-   	}
-
-   	file_server {
-   		hide *.php
-   	}
+   php_server {
+   	worker index.php
    }
    ```
 
