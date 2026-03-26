@@ -1,5 +1,8 @@
 # Logging
 
+> [!TIP]
+> Logging is one part of FrankenPHP's observability story. See the [Observability](observability.md) page for the full picture, including real-time monitoring and metrics.
+
 FrankenPHP integrates seamlessly with [Caddy's logging system](https://caddyserver.com/docs/logging).
 You can log messages using standard PHP functions or leverage the dedicated `frankenphp_log()` function for advanced
 structured logging capabilities.
