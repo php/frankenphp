@@ -15,9 +15,10 @@ Alternatively, you can run your Symfony projects with FrankenPHP from your local
    # The domain name of your server
    localhost
 
+   root public/
    php_server {
    	# Optional: Enable worker mode for better performance
-   	worker index.php
+   	worker ./public/index.php
    }
    ```
 
@@ -61,9 +62,10 @@ mercure {
 	anonymous
 }
 
+root public/
 php_server {
 	hot_reload
-	worker index.php
+	worker ./public/index.php
 }
 ```
 
@@ -99,8 +101,9 @@ Symfony's [AssetMapper component](https://symfony.com/doc/current/frontend/asset
    	precompressed zstd br gzip
    }
 
+   root public/
    php_server {
-   	worker index.php
+   	worker ./public/index.php
    }
    ```
 
