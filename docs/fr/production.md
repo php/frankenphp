@@ -73,14 +73,14 @@ Pour déployer votre application en production, vous avez besoin d'un serveur.
 Dans ce tutoriel, nous utiliserons une machine virtuelle fournie par DigitalOcean, mais n'importe quel serveur Linux peut fonctionner.
 Si vous avez déjà un serveur Linux avec Docker installé, vous pouvez passer directement à [la section suivante](#configurer-un-nom-de-domaine).
 
-Sinon, utilisez [ce lien affilié](https://m.do.co/c/5d8aabe3ab80) pour obtenir $200 de crédit gratuit, créez un compte, puis cliquez sur "Créer un Droplet".
+Sinon, utilisez [ce lien affilié](https://m.do.co/c/5d8aabe3ab80) pour obtenir 200$ de crédit gratuit, créez un compte, puis cliquez sur "Créer un Droplet".
 Ensuite, cliquez sur l'onglet "Marketplace" sous la section "Choisir une image" et recherchez l'application nommée "Docker".
 Cela provisionnera un serveur Ubuntu avec les dernières versions de Docker et Docker Compose déjà installées !
 
 Pour des fins de test, les plans les moins chers seront suffisants.
-Pour une utilisation en production réelle, vous voudrez probablement choisir un plan dans la section "usage général" pour répondre à vos besoins.
+Pour une utilisation en production réelle, vous voudrez probablement choisir un plan dans la section "General Usage" pour répondre à vos besoins.
 
-![Déploiement de FrankenPHP sur DigitalOcean avec Docker](digitalocean-droplet.png)
+![Déployer FrankenPHP sur DigitalOcean avec Docker](../digitalocean-droplet.png)
 
 Vous pouvez conserver les paramètres par défaut pour les autres paramètres, ou les ajuster selon vos besoins.
 N'oubliez pas d'ajouter votre clé SSH ou de créer un mot de passe puis appuyez sur le bouton "Finalize and create".
@@ -105,7 +105,7 @@ your-domain-name.example.com.  IN  A     207.154.233.113
 
 Exemple avec le service DigitalOcean Domains ("Networking" > "Domains") :
 
-![Configuration DNS sur DigitalOcean](digitalocean-dns.png)
+![Configurer les DNS sur DigitalOcean](../digitalocean-dns.png)
 
 > [!NOTE]
 >
@@ -130,15 +130,15 @@ docker compose up --wait
 ```
 
 Votre serveur est opérationnel, et un certificat HTTPS a été automatiquement généré pour vous.
-Rendez-vous sur `https://your-domain-name.example.com` et profitez-en !
+Rendez-vous sur `https://your-domain-name.example.com` !
 
 > [!CAUTION]
 >
 > Docker peut avoir une couche de cache, assurez-vous d'avoir le bon build pour chaque déploiement ou reconstruisez votre projet avec l'option `--no-cache` pour éviter les problèmes de cache.
 
-## Exécuter derrière un proxy inverse
+## Exécuter derrière un reverse proxy
 
-Si FrankenPHP est exécuté derrière un proxy inverse ou un équilibreur de charge (par exemple, Nginx, AWS ELB, Google Cloud LB),
+Si FrankenPHP est exécuté derrière un reverse proxy ou un load-balancer (par exemple, Nginx, AWS ELB, Google Cloud LB),
 vous devez configurer l'[option globale `trusted_proxies`](https://caddyserver.com/docs/caddyfile/options#trusted-proxies) dans votre Caddyfile
 afin que Caddy fasse confiance aux en-têtes `X-Forwarded-*` entrants :
 
