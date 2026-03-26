@@ -109,6 +109,22 @@ Symfony's [AssetMapper component](https://symfony.com/doc/current/frontend/asset
 
 The `precompressed` directive tells Caddy to look for pre-compressed versions of the requested file (e.g., `app.css.zst`, `app.css.br`) and serve them directly if the client supports it.
 
+## Serving Large Static Files (`X-Sendfile`)
+
+FrankenPHP supports [efficiently serving large static files](x-sendfile.md) after executing PHP code (for access control, statistics, etc.).
+
+Symfony HttpFoundation [natively supports this feature](https://symfony.com/doc/current/components/http_foundation.html#serving-files).
+After [configuring your `Caddyfile`](x-sendfile.md#configuration), it will automatically determine the correct value for the `X-Accel-Redirect` header and add it to the response:
+
+```php
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
+
+BinaryFileResponse::trustXSendfileTypeHeader();
+$response = new BinaryFileResponse(__DIR__.'/../private-files/file.txt');
+
+// ...
+```
+
 ## Symfony Apps As Standalone Binaries
 
 Using [FrankenPHP's application embedding feature](embed.md), it's possible to distribute Symfony
