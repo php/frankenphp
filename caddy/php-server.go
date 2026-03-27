@@ -171,7 +171,7 @@ func cmdPHPServer(fs caddycmd.Flags) (int, error) {
 		}, nil),
 	}
 	rewriteHandler := rewrite.Rewrite{
-		URI: "{http.matchers.file.relative}",
+		URI: "{http.matchers.file.relative}{http.matchers.file.remainder}",
 	}
 	rewriteRoute := caddyhttp.Route{
 		MatcherSetsRaw: []caddy.ModuleMap{rewriteMatcherSet},
@@ -182,7 +182,7 @@ func cmdPHPServer(fs caddycmd.Flags) (int, error) {
 	// match only requests that are for PHP files
 	var pathList []string
 	for _, ext := range extensions {
-		pathList = append(pathList, "*"+ext)
+		pathList = append(pathList, "*"+ext, "*"+ext+"/*")
 	}
 	phpMatcherSet := caddy.ModuleMap{
 		"path": caddyconfig.JSON(pathList, nil),

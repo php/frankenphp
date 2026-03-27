@@ -559,7 +559,7 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 			}),
 		}
 		rewriteHandler := rewrite.Rewrite{
-			URI: "{http.matchers.file.relative}",
+			URI: "{http.matchers.file.relative}{http.matchers.file.remainder}",
 		}
 		rewriteRoute := caddyhttp.Route{
 			MatcherSetsRaw: []caddy.ModuleMap{rewriteMatcherSet},
@@ -573,7 +573,7 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 	// match only requests that are for PHP files
 	var pathList []string
 	for _, ext := range extensions {
-		pathList = append(pathList, "*"+ext)
+		pathList = append(pathList, "*"+ext, "*"+ext+"/*")
 	}
 	phpMatcherSet := caddy.ModuleMap{
 		"path": h.JSON(pathList),
