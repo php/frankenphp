@@ -111,8 +111,6 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		requestURI = fc.requestURI
 	}
 
-	requestPath := ensureLeadingSlash(request.URL.Path)
-
 	C.frankenphp_register_server_vars(trackVarsArray, C.frankenphp_server_vars{
 		// approximate total length to avoid array re-hashing:
 		// 28 CGI vars + headers + environment
@@ -129,8 +127,8 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		document_root_len:   C.size_t(len(fc.documentRoot)),
 		path_info:           toUnsafeChar(fc.pathInfo),
 		path_info_len:       C.size_t(len(fc.pathInfo)),
-		php_self:            toUnsafeChar(requestPath),
-		php_self_len:        C.size_t(len(requestPath)),
+		php_self:            toUnsafeChar(fc.scriptName),
+		php_self_len:        C.size_t(len(fc.scriptName)),
 		document_uri:        toUnsafeChar(fc.docURI),
 		document_uri_len:    C.size_t(len(fc.docURI)),
 		script_filename:     toUnsafeChar(fc.scriptFilename),
