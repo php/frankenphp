@@ -472,9 +472,11 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 		return nil, err
 	}
 
-	// If no root was specified inside php_server, inherit it from the site-level root directive
+	// If no root was specified inside php_server, inherit it from the site-level root directive.
+	// Skip roots containing placeholders (e.g. {env.APP_ROOT}).
+	// We can check for `{` here because {$ENV} vars are already resolved earlier
 	if phpsrv.Root == "" {
-		if siteRoot := extractSiteRoot(h); siteRoot != "" {
+		if siteRoot := extractSiteRoot(h); siteRoot != "" && !strings.Contains(siteRoot, "{") {
 			phpsrv.Root = siteRoot
 			fsrv.Root = siteRoot
 		}
