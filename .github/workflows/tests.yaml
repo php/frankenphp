@@ -65,12 +65,12 @@ jobs:
         working-directory: internal/testcli/
         run: go build
       - name: Compile library tests
-        run: go test -race -v -x -c
+        run: go test -race -failfast -v -x -c
       - name: Run library tests
-        run: ./frankenphp.test -test.v
+        run: ./frankenphp.test -test.v -test.failfast
       - name: Run Caddy module tests
         working-directory: caddy/
-        run: go test -race -v ./...
+        run: go test -race -failfast -v ./...
       - name: Run Fuzzing Tests
         working-directory: caddy/
         run: go test -fuzz FuzzRequest -fuzztime 20s
@@ -173,7 +173,7 @@ jobs:
       - name: Build
         run: go build -tags nowatcher
       - name: Run library tests
-        run: go test -tags nowatcher -race -v ./...
+        run: go test -tags nowatcher -race -failfast -v ./...
       - name: Run Caddy module tests
         working-directory: caddy/
-        run: go test -race -v ./...
+        run: go test -race -failfast -v ./...
