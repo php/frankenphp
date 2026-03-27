@@ -60,6 +60,7 @@ func (handler *regularThread) beforeScriptExecution() string {
 }
 
 func (handler *regularThread) afterScriptExecution(_ int) {
+	handler.thread.requestCount.Add(1)
 	handler.afterRequest()
 }
 
@@ -88,8 +89,10 @@ func (handler *regularThread) waitForRequest() string {
 	case ch = <-handler.thread.requestChan:
 	}
 
+	handler.thread.contextMu.Lock()
 	handler.ctx = ch.ctx
 	handler.contextHolder.frankenPHPContext = ch.frankenPHPContext
+	handler.thread.contextMu.Unlock()
 	handler.state.MarkAsWaiting(false)
 
 	// set the scriptFilename that should be executed
@@ -98,8 +101,10 @@ func (handler *regularThread) waitForRequest() string {
 
 func (handler *regularThread) afterRequest() {
 	handler.contextHolder.frankenPHPContext.closeContext()
+	handler.thread.contextMu.Lock()
 	handler.contextHolder.frankenPHPContext = nil
 	handler.ctx = nil
+	handler.thread.contextMu.Unlock()
 }
 
 func handleRequestWithRegularPHPThreads(ch contextHolder) error {

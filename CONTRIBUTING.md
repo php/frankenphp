@@ -90,60 +90,60 @@ curl -v http://127.0.0.1:8080/phpinfo.php
 
 1. Configure Git to always use `lf` line endings
 
-    ```powershell
-    git config --global core.autocrlf false
-    git config --global core.eol lf
-    ```
+   ```powershell
+   git config --global core.autocrlf false
+   git config --global core.eol lf
+   ```
 
 2. Install Visual Studio, Git, and Go:
 
-    ```powershell
-    winget install -e --id Microsoft.VisualStudio.2022.Community --override "--passive --wait --add Microsoft.VisualStudio.Workload.NativeDesktop --add Microsoft.VisualStudio.Component.VC.Llvm.Clang --includeRecommended"
-    winget install -e --id GoLang.Go
-    winget install -e --id Git.Git
-    ```
+   ```powershell
+   winget install -e --id Microsoft.VisualStudio.2022.Community --override "--passive --wait --add Microsoft.VisualStudio.Workload.NativeDesktop --add Microsoft.VisualStudio.Component.VC.Llvm.Clang --includeRecommended"
+   winget install -e --id GoLang.Go
+   winget install -e --id Git.Git
+   ```
 
 3. Install vcpkg:
 
-    ```powershell
-    cd C:\
-    git clone https://github.com/microsoft/vcpkg
-    .\vcpkg\bootstrap-vcpkg.bat
-    ```
+   ```powershell
+   cd C:\
+   git clone https://github.com/microsoft/vcpkg
+   .\vcpkg\bootstrap-vcpkg.bat
+   ```
 
 4. [Download the latest version of the watcher library for Windows](https://github.com/e-dant/watcher/releases) and extract it to a directory named `C:\watcher`
 5. [Download the latest **Thread Safe** version of PHP and of the PHP SDK for Windows](https://windows.php.net/download/), extract them in directories named `C:\php` and `C:\php-devel`
 6. Clone the FrankenPHP Git repository:
 
-    ```powershell
-    git clone https://github.com/php/frankenphp C:\frankenphp
-    cd C:\frankenphp
-    ```
+   ```powershell
+   git clone https://github.com/php/frankenphp C:\frankenphp
+   cd C:\frankenphp
+   ```
 
 7. Install the dependencies:
 
-    ```powershell
-    C:\vcpkg\vcpkg.exe install
-    ```
+   ```powershell
+   C:\vcpkg\vcpkg.exe install
+   ```
 
 8. Configure the needed environment variables (PowerShell):
 
-    ```powershell
-    $env:PATH += ';C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\Llvm\bin'
-    $env:CC = 'clang'
-    $env:CXX = 'clang++'
-    $env:CGO_CFLAGS = "-O0 -g -IC:\frankenphp\vcpkg_installed\x64-windows\include -IC:\watcher -IC:\php-devel\include -IC:\php-devel\include\main -IC:\php-devel\include\TSRM -IC:\php-devel\include\Zend -IC:\php-devel\include\ext"
-    $env:CGO_LDFLAGS = '-LC:\frankenphp\vcpkg_installed\x64-windows\lib -lbrotlienc -LC:\watcher -llibwatcher-c -LC:\php -LC:\php-devel\lib -lphp8ts -lphp8embed'
-    ```
+   ```powershell
+   $env:PATH += ';C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\Llvm\bin'
+   $env:CC = 'clang'
+   $env:CXX = 'clang++'
+   $env:CGO_CFLAGS = "-O0 -g -IC:\frankenphp\vcpkg_installed\x64-windows\include -IC:\watcher -IC:\php-devel\include -IC:\php-devel\include\main -IC:\php-devel\include\TSRM -IC:\php-devel\include\Zend -IC:\php-devel\include\ext"
+   $env:CGO_LDFLAGS = '-LC:\frankenphp\vcpkg_installed\x64-windows\lib -lbrotlienc -LC:\watcher -llibwatcher-c -LC:\php -LC:\php-devel\lib -lphp8ts -lphp8embed'
+   ```
 
 9. Run the tests:
 
-    ```powershell
-    go test -race -ldflags '-extldflags="-fuse-ld=lld"' ./...
-    cd caddy
-    go test -race -ldflags '-extldflags="-fuse-ld=lld"' -tags nobadger,nomysql,nopgx ./...
-    cd ..
-    ```
+   ```powershell
+   go test -race -ldflags '-extldflags="-fuse-ld=lld"' ./...
+   cd caddy
+   go test -race -ldflags '-extldflags="-fuse-ld=lld"' -tags nobadger,nomysql,nopgx ./...
+   cd ..
+   ```
 
 10. Build the binary:
 
