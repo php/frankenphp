@@ -486,6 +486,142 @@ func TestPHPServerDirectiveDisableFileServer(t *testing.T) {
 	tester.AssertGetResponse("http://localhost:"+testPort+"/not-found.txt", http.StatusOK, "I am by birth a Genevese (i not set)")
 }
 
+func TestPHPServerGlobals(t *testing.T) {
+	documentRoot, _ := filepath.Abs("../testdata")
+	scriptFilename := documentRoot + string(filepath.Separator) + "server-globals.php"
+
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+			http_port `+testPort+`
+			https_port 9443
+		}
+
+		localhost:`+testPort+` {
+			root ../testdata
+			php_server {
+				index server-globals.php
+			}
+		}
+		`, "caddyfile")
+
+	// Request to /en: no matching file, falls through to server-globals.php worker
+	// SCRIPT_NAME should be /server-globals.php, PHP_SELF should be /server-globals.php (no /en), PATH_INFO empty
+	tester.AssertGetResponse(
+		"http://localhost:"+testPort+"/en",
+		http.StatusOK,
+		"SCRIPT_NAME: /server-globals.php<br>"+
+			"SCRIPT_FILENAME: "+scriptFilename+"<br>"+
+			"PHP_SELF: /server-globals.php<br>"+
+			"PATH_INFO: <br>"+
+			"DOCUMENT_ROOT: "+documentRoot+"<br>"+
+			"REQUEST_URI: /en<br>",
+	)
+
+	// Request to /server-globals.php/en: explicit PHP file with path info
+	// SCRIPT_NAME should be /server-globals.php, PHP_SELF should be /server-globals.php/en, PATH_INFO should be /en
+	tester.AssertGetResponse(
+		"http://localhost:"+testPort+"/server-globals.php/en",
+		http.StatusOK,
+		"SCRIPT_NAME: /server-globals.php<br>"+
+			"SCRIPT_FILENAME: "+scriptFilename+"<br>"+
+			"PHP_SELF: /server-globals.php/en<br>"+
+			"PATH_INFO: /en<br>"+
+			"DOCUMENT_ROOT: "+documentRoot+"<br>"+
+			"REQUEST_URI: /server-globals.php/en<br>",
+	)
+}
+
+func TestWorkerPHPServerGlobals(t *testing.T) {
+	documentRoot, _ := filepath.Abs("../testdata")
+	scriptFilename := documentRoot + string(filepath.Separator) + "server-globals.php"
+	testPortNum, _ := strconv.Atoi(testPort)
+	testPortTwo := strconv.Itoa(testPortNum + 1)
+
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+
+			frankenphp {
+				worker {
+					file ../testdata/server-globals.php
+					num 1
+				}
+			}
+		}
+
+		http://localhost:`+testPort+` {
+			php_server {
+				root ../testdata
+				index server-globals.php
+			}
+		}
+
+		http://localhost:`+testPortTwo+` {
+			php_server {
+				root ../testdata
+				index server-globals.php
+				worker {
+					file server-globals.php
+					num 1
+				}
+			}
+		}
+		`, "caddyfile")
+
+	// === Site 1: global worker with php_server ===
+	// because we don't specify a php file, PATH_INFO should be empty
+	tester.AssertGetResponse(
+		"http://localhost:"+testPort+"/en",
+		http.StatusOK,
+		"SCRIPT_NAME: /server-globals.php<br>"+
+			"SCRIPT_FILENAME: "+scriptFilename+"<br>"+
+			"PHP_SELF: /server-globals.php<br>"+
+			"PATH_INFO: <br>"+
+			"DOCUMENT_ROOT: "+documentRoot+"<br>"+
+			"REQUEST_URI: /en<br>",
+	)
+
+	tester.AssertGetResponse(
+		"http://localhost:"+testPort+"/server-globals.php/en",
+		http.StatusOK,
+		"SCRIPT_NAME: /server-globals.php<br>"+
+			"SCRIPT_FILENAME: "+scriptFilename+"<br>"+
+			"PHP_SELF: /server-globals.php/en<br>"+
+			"PATH_INFO: /en<br>"+
+			"DOCUMENT_ROOT: "+documentRoot+"<br>"+
+			"REQUEST_URI: /server-globals.php/en<br>",
+	)
+
+	// === Site 2: php_server with its own worker ===
+	// because we specify a php file, PATH_INFO should be /en
+	tester.AssertGetResponse(
+		"http://localhost:"+testPortTwo+"/en",
+		http.StatusOK,
+		"SCRIPT_NAME: /server-globals.php<br>"+
+			"SCRIPT_FILENAME: "+scriptFilename+"<br>"+
+			"PHP_SELF: /server-globals.php<br>"+
+			"PATH_INFO: <br>"+
+			"DOCUMENT_ROOT: "+documentRoot+"<br>"+
+			"REQUEST_URI: /en<br>",
+	)
+
+	tester.AssertGetResponse(
+		"http://localhost:"+testPortTwo+"/server-globals.php/en",
+		http.StatusOK,
+		"SCRIPT_NAME: /server-globals.php<br>"+
+			"SCRIPT_FILENAME: "+scriptFilename+"<br>"+
+			"PHP_SELF: /server-globals.php/en<br>"+
+			"PATH_INFO: /en<br>"+
+			"DOCUMENT_ROOT: "+documentRoot+"<br>"+
+			"REQUEST_URI: /server-globals.php/en<br>",
+	)
+}
+
 func TestMetrics(t *testing.T) {
 	var wg sync.WaitGroup
 	tester := caddytest.NewTester(t)
