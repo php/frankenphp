@@ -4,12 +4,10 @@ go 1.26.0
 
 replace github.com/dunglas/frankenphp => ../
 
-replace github.com/caddyserver/caddy/v2 => github.com/henderkes/caddy/v2 v2.11.3-rc.frankenphp
-
 retract v1.0.0-rc.1 // Human error
 
 require (
-	github.com/caddyserver/caddy/v2 v2.11.2
+	github.com/caddyserver/caddy/v2 v2.11.3-0.20260328174442-62e9c052648f
 	github.com/caddyserver/certmagic v0.25.2
 	github.com/dunglas/caddy-cbrotli v1.0.1
 	github.com/dunglas/frankenphp v1.12.1

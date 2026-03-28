@@ -689,7 +689,7 @@ func prependWorkerRoutes(routes caddyhttp.RouteList, h httpcaddyfile.Helper, f F
 
 func extractSiteRoot(h httpcaddyfile.Helper) string {
 	// Caddy stores only unmatched or wildcard matcher roots
-	if root, ok := h.State["root"].(string); ok {
+	if root, ok := h.BlockState["root"].(string); ok {
 		return root
 	}
 	return ""
