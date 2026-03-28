@@ -218,13 +218,9 @@ func splitCgiPath(fc *frankenPHPContext) {
 	}
 
 	// Strip PATH_INFO from SCRIPT_NAME
-	fc.scriptName = strings.TrimSuffix(path, fc.pathInfo)
-
 	// Ensure the SCRIPT_NAME has a leading slash for compliance with RFC3875
 	// Info: https://tools.ietf.org/html/rfc3875#section-4.1.13
-	if fc.scriptName != "" && !strings.HasPrefix(fc.scriptName, "/") {
-		fc.scriptName = "/" + fc.scriptName
-	}
+	fc.scriptName = ensureLeadingSlash(strings.TrimSuffix(path, fc.pathInfo))
 
 	// TODO: is it possible to delay this and avoid saving everything in the context?
 	// SCRIPT_FILENAME is the absolute path of SCRIPT_NAME
