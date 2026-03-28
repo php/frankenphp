@@ -213,7 +213,7 @@ func splitCgiPath(fc *frankenPHPContext) {
 	// If a worker is already assigned explicitly, derive SCRIPT_NAME from its filename
 	if fc.worker != nil {
 		fc.scriptFilename = fc.worker.fileName
-		fc.scriptName = strings.TrimPrefix(fc.worker.fileName, fc.documentRoot)
+		fc.scriptName = filepath.ToSlash(strings.TrimPrefix(fc.worker.fileName, fc.documentRoot))
 		return
 	}
 
