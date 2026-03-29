@@ -639,9 +639,9 @@ func TestWorkerPHPServerGlobals(t *testing.T) {
 	tester.AssertGetResponse(
 		"http://localhost:"+testPortThree+"/en",
 		http.StatusOK,
-		"SCRIPT_NAME: "+documentRoot+"/server-globals.php<br>"+
+		"SCRIPT_NAME: <br>"+
 			"SCRIPT_FILENAME: "+scriptFilename+"<br>"+
-			"PHP_SELF: "+documentRoot+"/server-globals.php<br>"+
+			"PHP_SELF: <br>"+
 			"PATH_INFO: <br>"+
 			"DOCUMENT_ROOT: "+documentRoot2+"<br>"+
 			"REQUEST_URI: /en<br>",
@@ -650,9 +650,9 @@ func TestWorkerPHPServerGlobals(t *testing.T) {
 	tester.AssertGetResponse(
 		"http://localhost:"+testPortThree+"/server-globals.php/en",
 		http.StatusOK,
-		"SCRIPT_NAME: "+documentRoot+"/server-globals.php<br>"+
+		"SCRIPT_NAME: <br>"+
 			"SCRIPT_FILENAME: "+scriptFilename+"<br>"+
-			"PHP_SELF: "+documentRoot+"/server-globals.php/en<br>"+
+			"PHP_SELF: /en<br>"+
 			"PATH_INFO: /en<br>"+
 			"DOCUMENT_ROOT: "+documentRoot2+"<br>"+
 			"REQUEST_URI: /server-globals.php/en<br>",
