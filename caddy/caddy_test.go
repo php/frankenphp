@@ -536,9 +536,11 @@ func TestPHPServerGlobals(t *testing.T) {
 
 func TestWorkerPHPServerGlobals(t *testing.T) {
 	documentRoot, _ := filepath.Abs("../testdata")
+	documentRoot2, _ := filepath.Abs("../caddy")
 	scriptFilename := documentRoot + string(filepath.Separator) + "server-globals.php"
 	testPortNum, _ := strconv.Atoi(testPort)
 	testPortTwo := strconv.Itoa(testPortNum + 1)
+	testPortThree := strconv.Itoa(testPortNum + 2)
 
 	tester := caddytest.NewTester(t)
 	initServer(t, tester, `
@@ -568,6 +570,18 @@ func TestWorkerPHPServerGlobals(t *testing.T) {
 				worker {
 					file server-globals.php
 					num 1
+				}
+			}
+		}
+
+		http://localhost:`+testPortThree+` {
+			php_server {
+				root ./
+				index server-globals.php
+				worker {
+					file ../testdata/server-globals.php
+					num 1
+					match *
 				}
 			}
 		}
@@ -618,6 +632,29 @@ func TestWorkerPHPServerGlobals(t *testing.T) {
 			"PHP_SELF: /server-globals.php/en<br>"+
 			"PATH_INFO: /en<br>"+
 			"DOCUMENT_ROOT: "+documentRoot+"<br>"+
+			"REQUEST_URI: /server-globals.php/en<br>",
+	)
+
+	// === Site 3: php_server with its own match worker ===
+	tester.AssertGetResponse(
+		"http://localhost:"+testPortThree+"/en",
+		http.StatusOK,
+		"SCRIPT_NAME: "+documentRoot+"/server-globals.php<br>"+
+			"SCRIPT_FILENAME: "+scriptFilename+"<br>"+
+			"PHP_SELF: "+documentRoot+"/server-globals.php<br>"+
+			"PATH_INFO: <br>"+
+			"DOCUMENT_ROOT: "+documentRoot2+"<br>"+
+			"REQUEST_URI: /en<br>",
+	)
+
+	tester.AssertGetResponse(
+		"http://localhost:"+testPortThree+"/server-globals.php/en",
+		http.StatusOK,
+		"SCRIPT_NAME: "+documentRoot+"/server-globals.php<br>"+
+			"SCRIPT_FILENAME: "+scriptFilename+"<br>"+
+			"PHP_SELF: "+documentRoot+"/server-globals.php/en<br>"+
+			"PATH_INFO: /en<br>"+
+			"DOCUMENT_ROOT: "+documentRoot2+"<br>"+
 			"REQUEST_URI: /server-globals.php/en<br>",
 	)
 }
