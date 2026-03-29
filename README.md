@@ -68,7 +68,13 @@ Our maintainers offer deb packages for all systems using `apt`. To install, run:
 ```console
 VERSION=85 # 82-85 available
 sudo curl https://pkg.henderkes.com/api/packages/${VERSION}/debian/repository.key -o /etc/apt/keyrings/static-php${VERSION}.asc
-echo "deb [signed-by=/etc/apt/keyrings/static-php${VERSION}.asc] https://pkg.henderkes.com/api/packages/${VERSION}/debian php-zts main" | sudo tee -a /etc/apt/sources.list.d/static-php${VERSION}.list
+sudo tee -a /etc/apt/sources.list.d/static-php${VERSION}.sources <<EOF
+Types: deb
+URIs: https://pkg.henderkes.com/api/packages/${VERSION}/debian
+Suites: php-zts
+Components: main
+Signed-By: /etc/apt/keyrings/static-php${VERSION}.asc
+EOF
 sudo apt update
 sudo apt install frankenphp
 ```
