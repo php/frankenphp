@@ -35,7 +35,7 @@ type FrankenPHPModule struct {
 	mercureContext
 	hotReloadContext
 
-	// Deprecated: Use the `root` directive in the site block instead.
+	// Root sets the root folder to the site. Default: site `root` directive, or the path of the public directory of the embed app it exists.
 	Root string `json:"root,omitempty"`
 	// SplitPath sets the substrings for splitting the URI into two parts. The first matching substring will be used to split the "path info" from the path. The first piece is suffixed with the matching substring and will be assumed as the actual resource (CGI script) name. The second piece will be set to PATH_INFO for the CGI script to use. Default: `.php`.
 	SplitPath []string `json:"split_path,omitempty"`
