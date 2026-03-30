@@ -82,14 +82,10 @@ func initWorkers(opt []workerOpt) error {
 		}
 	}
 
-	// Build per-scope background worker lookups
+	// Build per-scope worker lookups (background workers + shared HTTP vars)
 	backgroundLookups = buildBackgroundWorkerLookups(workers, opt)
-	if backgroundLookups != nil {
-		for _, w := range workers {
-			if lookup := backgroundLookups[w.backgroundScope]; lookup != nil {
-				w.backgroundLookup = lookup
-			}
-		}
+	for _, w := range workers {
+		w.backgroundLookup = getOrCreateLookup(w.backgroundScope)
 	}
 
 	startupFailChan = make(chan error, totalThreadsToStart)

@@ -24,7 +24,7 @@ function frankenphp_set_vars(array $vars): void {}
 /**
  * @return array<string, null|scalar|array<mixed>|\UnitEnum>
  */
-function frankenphp_get_vars(string|array $name, float $timeout = 30.0): array {}
+function frankenphp_get_vars(string|array|null $name, float $timeout = 30.0): array {}
 
 /** @return resource */
 function frankenphp_get_worker_handle() {}

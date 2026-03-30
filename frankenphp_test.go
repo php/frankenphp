@@ -876,7 +876,7 @@ func TestBackgroundWorkerNoEntrypoint(t *testing.T) {
 func TestBackgroundWorkerSetVarsValidation(t *testing.T) {
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
 		body, _ := testGet("http://example.com/background-worker-set-server-var-validation.php", handler, t)
-		assert.Contains(t, body, "NON_BACKGROUND:blocked")
+		assert.Contains(t, body, "HTTP_SET_VARS:allowed")
 		assert.Contains(t, body, "STREAM_NON_BACKGROUND:blocked")
 	}, &testOptions{
 		workerScript:       "background-worker-set-server-var-validation.php",
@@ -1117,6 +1117,39 @@ func TestBackgroundWorkerNamedAutoStart(t *testing.T) {
 			// Catch-all with 0 threads registers the lookup without starting threads
 			frankenphp.WithWorkers("", entrypoint, 0, frankenphp.WithWorkerBackground()),
 		},
+	})
+}
+
+func TestHttpWorkerVars(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/background-worker-http-vars.php", handler, t)
+		assert.Equal(t, "http:1", body)
+	}, &testOptions{
+		workerScript:       "background-worker-http-vars.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+	})
+}
+
+func TestHttpWorkerVarsEmpty(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/background-worker-http-vars-empty.php", handler, t)
+		assert.Equal(t, "array:0", body)
+	}, &testOptions{
+		workerScript:       "background-worker-http-vars-empty.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+	})
+}
+
+func TestHttpWorkerVarsIdentity(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/background-worker-http-vars-identity.php", handler, t)
+		assert.Equal(t, "IDENTICAL", body)
+	}, &testOptions{
+		workerScript:       "background-worker-http-vars-identity.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
 	})
 }
 

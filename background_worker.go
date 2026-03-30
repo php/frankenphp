@@ -33,12 +33,17 @@ var backgroundLookups map[string]*backgroundWorkerLookup
 type backgroundWorkerLookup struct {
 	byName   map[string]*backgroundWorkerRegistry
 	catchAll *backgroundWorkerRegistry
+	httpVars backgroundWorkerState // shared vars bucket for HTTP workers in this scope
 }
 
 func newBackgroundWorkerLookup() *backgroundWorkerLookup {
-	return &backgroundWorkerLookup{
+	l := &backgroundWorkerLookup{
 		byName: make(map[string]*backgroundWorkerRegistry),
 	}
+	// httpVars is always "ready" — get_worker_vars(null) never blocks
+	l.httpVars.ready = make(chan struct{})
+	close(l.httpVars.ready)
+	return l
 }
 
 func (l *backgroundWorkerLookup) AddNamed(name string, registry *backgroundWorkerRegistry) {
@@ -244,6 +249,20 @@ func startBackgroundWorkerWithRegistry(registry *backgroundWorkerRegistry, bgWor
 	return nil
 }
 
+var backgroundLookupsMu sync.Mutex
+
+func getOrCreateLookup(scope string) *backgroundWorkerLookup {
+	if backgroundLookups == nil {
+		backgroundLookups = make(map[string]*backgroundWorkerLookup)
+	}
+	if l, ok := backgroundLookups[scope]; ok {
+		return l
+	}
+	l := newBackgroundWorkerLookup()
+	backgroundLookups[scope] = l
+	return l
+}
+
 func getLookup(thread *phpThread) *backgroundWorkerLookup {
 	if handler, ok := thread.handler.(*workerThread); ok && handler.worker.backgroundLookup != nil {
 		return handler.worker.backgroundLookup
@@ -253,16 +272,16 @@ func getLookup(thread *phpThread) *backgroundWorkerLookup {
 	}
 	// Non-worker requests: resolve scope from context
 	if fc, ok := fromContext(thread.context()); ok && fc.backgroundScope != "" {
-		if backgroundLookups != nil {
-			return backgroundLookups[fc.backgroundScope]
-		}
+		backgroundLookupsMu.Lock()
+		l := getOrCreateLookup(fc.backgroundScope)
+		backgroundLookupsMu.Unlock()
+		return l
 	}
 	// Fall back to global scope
-	if backgroundLookups != nil {
-		return backgroundLookups[""]
-	}
-
-	return nil
+	backgroundLookupsMu.Lock()
+	l := getOrCreateLookup("")
+	backgroundLookupsMu.Unlock()
+	return l
 }
 
 // go_frankenphp_get_vars starts background workers if needed, waits for them
@@ -277,7 +296,7 @@ func go_frankenphp_get_vars(threadIndex C.uintptr_t, names **C.char, nameLens *C
 	thread := phpThreads[threadIndex]
 	lookup := getLookup(thread)
 	if lookup == nil {
-		return C.CString("no background worker configured in this php_server")
+		return C.CString("no worker configured in this php_server")
 	}
 
 	n := int(nameCount)
@@ -288,6 +307,12 @@ func go_frankenphp_get_vars(threadIndex C.uintptr_t, names **C.char, nameLens *C
 	goNames := make([]string, n)
 	for i := 0; i < n; i++ {
 		goNames[i] = C.GoStringN(nameSlice[i], C.int(nameLenSlice[i]))
+
+		if goNames[i] == "" {
+			// Empty string = HTTP workers' shared scope (ready channel is pre-closed)
+			sks[i] = &lookup.httpVars
+			continue
+		}
 
 		// Start background worker if not already running
 		if err := startBackgroundWorker(thread, goNames[i]); err != nil {
@@ -363,23 +388,36 @@ func go_frankenphp_get_vars(threadIndex C.uintptr_t, names **C.char, nameLens *C
 func go_frankenphp_set_vars(threadIndex C.uintptr_t, varsPtr unsafe.Pointer, oldPtr *unsafe.Pointer) *C.char {
 	thread := phpThreads[threadIndex]
 
-	bgHandler, ok := thread.handler.(*backgroundWorkerThread)
-	if !ok || bgHandler.worker.backgroundWorker == nil {
-		return C.CString("frankenphp_set_vars() can only be called from a background worker")
+	// Background worker: write to named bucket
+	if bgHandler, ok := thread.handler.(*backgroundWorkerThread); ok && bgHandler.worker.backgroundWorker != nil {
+		sk := bgHandler.worker.backgroundWorker
+
+		sk.mu.Lock()
+		*oldPtr = sk.varsPtr
+		sk.varsPtr = varsPtr
+		sk.varsVersion.Add(1)
+		sk.mu.Unlock()
+
+		sk.readyOnce.Do(func() {
+			bgHandler.markBackgroundReady()
+			close(sk.ready)
+		})
+
+		return nil
 	}
 
-	sk := bgHandler.worker.backgroundWorker
+	// HTTP worker: write to scope's shared httpVars bucket
+	lookup := getLookup(thread)
+	if lookup == nil {
+		return C.CString("frankenphp_set_vars() requires a configured php_server block")
+	}
 
-	sk.mu.Lock()
-	*oldPtr = sk.varsPtr
-	sk.varsPtr = varsPtr
-	sk.varsVersion.Add(1)
-	sk.mu.Unlock()
-
-	sk.readyOnce.Do(func() {
-		bgHandler.markBackgroundReady()
-		close(sk.ready)
-	})
+	hv := &lookup.httpVars
+	hv.mu.Lock()
+	*oldPtr = hv.varsPtr
+	hv.varsPtr = varsPtr
+	hv.varsVersion.Add(1)
+	hv.mu.Unlock()
 
 	return nil
 }

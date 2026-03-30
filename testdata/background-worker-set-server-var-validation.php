@@ -3,12 +3,12 @@
 frankenphp_handle_request(function () {
     $results = [];
 
-    // set_vars from non-background-worker context should throw RuntimeException
+    // set_worker_vars from HTTP worker context should succeed
     try {
         frankenphp_set_vars(['KEY' => 'val']);
-        $results[] = 'NON_BACKGROUND:no_error';
+        $results[] = 'HTTP_SET_VARS:allowed';
     } catch (\RuntimeException $e) {
-        $results[] = 'NON_BACKGROUND:blocked';
+        $results[] = 'HTTP_SET_VARS:blocked';
     }
 
     // get_worker_handle from non-background-worker context should throw

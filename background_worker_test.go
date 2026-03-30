@@ -46,6 +46,32 @@ func (m *backgroundWorkerTestMetrics) QueuedRequest() {}
 
 func (m *backgroundWorkerTestMetrics) DequeuedRequest() {}
 
+func TestGetOrCreateLookup(t *testing.T) {
+	oldLookups := backgroundLookups
+	backgroundLookups = nil
+	t.Cleanup(func() {
+		backgroundLookups = oldLookups
+	})
+
+	l1 := getOrCreateLookup("scope-a")
+	require.NotNil(t, l1)
+	assert.NotNil(t, l1.byName)
+
+	l2 := getOrCreateLookup("scope-a")
+	assert.Same(t, l1, l2, "same scope should return the same lookup")
+
+	l3 := getOrCreateLookup("")
+	assert.NotSame(t, l1, l3, "different scope should return a different lookup")
+
+	// httpVars ready channel should be pre-closed
+	select {
+	case <-l1.httpVars.ready:
+		// expected
+	default:
+		t.Fatal("httpVars.ready should be closed")
+	}
+}
+
 func TestStartBackgroundWorkerFailureIsRetryable(t *testing.T) {
 	lookup := newBackgroundWorkerLookup()
 	lookup.catchAll = newBackgroundWorkerRegistry(testDataPath + "/background-worker-with-argv.php")

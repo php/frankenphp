@@ -949,9 +949,55 @@ PHP_FUNCTION(frankenphp_get_vars) {
   }
   int timeout_ms = (int)(timeout * 1000);
 
+  /* null: read from the HTTP workers' shared scope via empty string key */
+  if (Z_TYPE_P(names) == IS_NULL) {
+    char *empty = "";
+    size_t empty_len = 0;
+    uint64_t caller_version = 0;
+    uint64_t out_version = 0;
+    bg_worker_vars_cache_entry *cached = NULL;
+    if (worker_vars_cache) {
+      zval *entry_zv =
+          zend_hash_str_find(worker_vars_cache, empty, empty_len);
+      if (entry_zv) {
+        cached = Z_PTR_P(entry_zv);
+        caller_version = cached->version;
+      }
+    }
+
+    char *error = go_frankenphp_get_vars(
+        thread_index, &empty, &empty_len, 1, timeout_ms, return_value,
+        cached ? &caller_version : NULL, &out_version);
+    if (error) {
+      zend_throw_exception(spl_ce_RuntimeException, error, 0);
+      free(error);
+      RETURN_THROWS();
+    }
+    if (EG(exception)) {
+      RETURN_THROWS();
+    }
+
+    if (cached && out_version == caller_version) {
+      ZVAL_COPY(return_value, &cached->value);
+      return;
+    }
+
+    if (!worker_vars_cache) {
+      worker_vars_cache = malloc(sizeof(HashTable));
+      zend_hash_init(worker_vars_cache, 4, NULL, bg_worker_vars_cache_dtor, 1);
+    }
+    bg_worker_vars_cache_entry *entry = malloc(sizeof(*entry));
+    entry->version = out_version;
+    ZVAL_COPY(&entry->value, return_value);
+    zval entry_zv;
+    ZVAL_PTR(&entry_zv, entry);
+    zend_hash_str_update(worker_vars_cache, empty, empty_len, &entry_zv);
+    return;
+  }
+
   if (Z_TYPE_P(names) == IS_STRING) {
     if (Z_STRLEN_P(names) == 0) {
-      zend_value_error("Background worker name must not be empty");
+      zend_value_error("Worker name must not be empty");
       RETURN_THROWS();
     }
 
@@ -1005,9 +1051,9 @@ PHP_FUNCTION(frankenphp_get_vars) {
   }
 
   if (Z_TYPE_P(names) != IS_ARRAY) {
-    zend_type_error("Argument #1 ($name) must be of type string|array, %s "
-                    "given",
-                    zend_zval_type_name(names));
+    zend_type_error(
+        "Argument #1 ($name) must be of type string|array|null, %s given",
+        zend_zval_type_name(names));
     RETURN_THROWS();
   }
 
@@ -1016,7 +1062,7 @@ PHP_FUNCTION(frankenphp_get_vars) {
 
   ZEND_HASH_FOREACH_VAL(ht, val) {
     if (Z_TYPE_P(val) != IS_STRING || Z_STRLEN_P(val) == 0) {
-      zend_value_error("All background worker names must be non-empty strings");
+      zend_value_error("All worker names must be non-empty strings");
       RETURN_THROWS();
     }
   }

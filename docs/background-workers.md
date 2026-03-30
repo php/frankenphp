@@ -42,7 +42,7 @@ example.com {
 
 ## PHP API
 
-### `frankenphp_get_vars(string|array $name, float $timeout = 30.0): array`
+### `frankenphp_get_vars(string|array|null $name, float $timeout = 30.0): array`
 
 Starts a background worker (at-most-once) and returns its published vars.
 
@@ -52,9 +52,13 @@ $redis = frankenphp_get_vars('redis-watcher');
 
 $all = frankenphp_get_vars(['redis-watcher', 'feature-flags']);
 // ['redis-watcher' => [...], 'feature-flags' => [...]]
+
+// Read vars published by HTTP workers in the same scope
+$shared = frankenphp_get_vars(null);
 ```
 
-- First call blocks until the background worker calls `set_vars()` or the timeout expires
+- With a string name: blocks until the background worker calls `set_vars()` or the timeout expires
+- With `null`: returns the HTTP workers' shared vars immediately (empty array if none published yet)
 - Subsequent calls return the latest snapshot immediately
 - Within a single HTTP request, repeated calls with the same name return the same cached array - `===` comparisons are O(1)
 - Throws `RuntimeException` on timeout, missing entrypoint, or background worker crash
@@ -62,14 +66,18 @@ $all = frankenphp_get_vars(['redis-watcher', 'feature-flags']);
 
 ### `frankenphp_set_vars(array $vars): void`
 
-Publishes vars from inside a background worker.
+Publishes vars from a worker context.
+
+- From a **background worker**: publishes to the named worker's bucket (readable via `get_worker_vars('name')`)
+- From an **HTTP worker**: publishes to the scope's shared bucket (readable via `get_worker_vars(null)`)
+
 Each call **replaces** the entire vars array atomically.
 If the new value is identical (`===`) to the previous one, the call is a no-op.
 
 Values can be `null`, scalars (`bool`, `int`, `float`, `string`), nested `array`s, or **enum**s.
 Objects, resources, and references are rejected.
 
-- Throws `RuntimeException` if not called from a background worker context
+- Throws `RuntimeException` if not called from a worker context
 - Throws `ValueError` if values contain objects, resources, or references
 
 ### `frankenphp_get_worker_handle(): resource`
