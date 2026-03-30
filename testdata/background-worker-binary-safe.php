@@ -2,7 +2,7 @@
 
 frankenphp_handle_request(function () {
     try {
-        $vars = frankenphp_worker_get_vars('binary-worker', 5.0);
+        $vars = frankenphp_get_vars('binary-worker', 5.0);
     } catch (\Throwable $e) {
         echo 'ERROR:' . $e->getMessage();
         return;

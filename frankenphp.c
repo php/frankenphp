@@ -838,30 +838,28 @@ PHP_FUNCTION(frankenphp_handle_request) {
 /* Persistent zval helpers: validation, deep-copy, immutable detection, enums */
 #include "bg_worker_vars.h"
 
-PHP_FUNCTION(frankenphp_worker_set_vars) {
-  zval *vars_array = NULL;
+PHP_FUNCTION(frankenphp_set_vars) {
+  zval *vars = NULL;
 
   ZEND_PARSE_PARAMETERS_START(1, 1);
-  Z_PARAM_ARRAY(vars_array);
+  Z_PARAM_ARRAY(vars);
   ZEND_PARSE_PARAMETERS_END();
 
   /* Skip if the new value is identical to the last one.
    * Always update the cache so the next comparison can use pointer equality. */
   if (Z_TYPE(last_set_vars_zval) != IS_UNDEF &&
-      zend_is_identical(vars_array, &last_set_vars_zval)) {
+      zend_is_identical(vars, &last_set_vars_zval)) {
     zval_ptr_dtor(&last_set_vars_zval);
-    ZVAL_COPY(&last_set_vars_zval, vars_array);
+    ZVAL_COPY(&last_set_vars_zval, vars);
     return;
   }
 
-  HashTable *ht = Z_ARRVAL_P(vars_array);
+  HashTable *ht = Z_ARRVAL_P(vars);
 
   if (bg_worker_is_immutable(ht)) {
-    /* Fast path: immutable arrays are already in shared memory.
-     * No validation needed (immutable arrays contain only safe types).
-     * No deep-copy needed. */
+    /* Fast path: immutable arrays are already in shared memory. */
     void *old = NULL;
-    char *error = go_frankenphp_worker_set_vars(thread_index, ht, &old);
+    char *error = go_frankenphp_set_vars(thread_index, ht, &old);
     if (error) {
       zend_throw_exception(spl_ce_RuntimeException, error, 0);
       free(error);
@@ -869,23 +867,24 @@ PHP_FUNCTION(frankenphp_worker_set_vars) {
     }
     bg_worker_free_stored_vars(old);
   } else {
-    /* Slow path: validate, deep-copy to persistent memory */
+    /* Validate nested values */
     zval *val;
     ZEND_HASH_FOREACH_VAL(ht, val) {
       if (!bg_worker_validate_zval(val)) {
-        zend_value_error("Values must be null, scalars, arrays, or enums; "
-                         "objects and resources are not allowed");
+        zend_value_error(
+            "Vars values must be null, scalars, arrays, or enums; "
+            "objects and resources are not allowed");
         RETURN_THROWS();
       }
     }
     ZEND_HASH_FOREACH_END();
 
     zval persistent;
-    bg_worker_persist_zval(&persistent, vars_array);
+    bg_worker_persist_zval(&persistent, vars);
 
     void *old = NULL;
     char *error =
-        go_frankenphp_worker_set_vars(thread_index, Z_ARRVAL(persistent), &old);
+        go_frankenphp_set_vars(thread_index, Z_ARRVAL(persistent), &old);
     if (error) {
       bg_worker_free_persistent_zval(&persistent);
       zend_throw_exception(spl_ce_RuntimeException, error, 0);
@@ -899,7 +898,7 @@ PHP_FUNCTION(frankenphp_worker_set_vars) {
   if (Z_TYPE(last_set_vars_zval) != IS_UNDEF) {
     zval_ptr_dtor(&last_set_vars_zval);
   }
-  ZVAL_COPY(&last_set_vars_zval, vars_array);
+  ZVAL_COPY(&last_set_vars_zval, vars);
 }
 
 /* Copy vars from persistent storage into a PHP zval.
@@ -919,22 +918,22 @@ bool frankenphp_worker_copy_vars(zval *dst, int count, char **names,
 
   array_init(dst);
   for (int i = 0; i < count; i++) {
-    zval worker_vars;
+    zval entry;
     if (ptrs[i]) {
-      bg_worker_read_stored_vars(&worker_vars, ptrs[i]);
+      bg_worker_read_stored_vars(&entry, ptrs[i]);
       if (EG(exception)) {
-        zval_ptr_dtor(&worker_vars);
+        zval_ptr_dtor(&entry);
         return false;
       }
     } else {
-      array_init(&worker_vars);
+      array_init(&entry);
     }
-    add_assoc_zval_ex(dst, names[i], name_lens[i], &worker_vars);
+    add_assoc_zval_ex(dst, names[i], name_lens[i], &entry);
   }
   return true;
 }
 
-PHP_FUNCTION(frankenphp_worker_get_vars) {
+PHP_FUNCTION(frankenphp_get_vars) {
   zval *names = NULL;
   double timeout = 30.0;
 
@@ -972,7 +971,7 @@ PHP_FUNCTION(frankenphp_worker_get_vars) {
       }
     }
 
-    char *error = go_frankenphp_worker_get_vars(
+    char *error = go_frankenphp_get_vars(
         thread_index, &name_ptr, &name_len_val, 1, timeout_ms, return_value,
         cached ? &caller_version : NULL, &out_version);
     if (error) {
@@ -1034,7 +1033,7 @@ PHP_FUNCTION(frankenphp_worker_get_vars) {
   }
   ZEND_HASH_FOREACH_END();
 
-  char *error = go_frankenphp_worker_get_vars(
+  char *error = go_frankenphp_get_vars(
       thread_index, name_ptrs, name_lens_arr, name_count, timeout_ms,
       return_value, NULL, NULL);
   free(name_ptrs);
@@ -1046,12 +1045,12 @@ PHP_FUNCTION(frankenphp_worker_get_vars) {
   }
 }
 
-PHP_FUNCTION(frankenphp_worker_get_signaling_stream) {
+PHP_FUNCTION(frankenphp_get_worker_handle) {
   ZEND_PARSE_PARAMETERS_NONE();
 
   if (!is_background_worker) {
     zend_throw_exception(spl_ce_RuntimeException,
-                         "frankenphp_worker_get_signaling_stream() can only "
+                         "frankenphp_get_worker_handle() can only "
                          "be called from a background worker",
                          0);
     RETURN_THROWS();

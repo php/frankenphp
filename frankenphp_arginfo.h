@@ -5,16 +5,16 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_handle_request, 0, 1,
 	ZEND_ARG_TYPE_INFO(0, callback, IS_CALLABLE, 0)
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_worker_set_vars, 0, 1, IS_VOID, 0)
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_set_vars, 0, 1, IS_VOID, 0)
 	ZEND_ARG_TYPE_INFO(0, vars, IS_ARRAY, 0)
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_worker_get_vars, 0, 1, IS_ARRAY, 0)
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_get_vars, 0, 1, IS_ARRAY, 0)
 	ZEND_ARG_TYPE_MASK(0, name, MAY_BE_STRING|MAY_BE_ARRAY, NULL)
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, timeout, IS_DOUBLE, 0, "30.0")
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_INFO_EX(arginfo_frankenphp_worker_get_signaling_stream, 0, 0, 0)
+ZEND_BEGIN_ARG_INFO_EX(arginfo_frankenphp_get_worker_handle, 0, 0, 0)
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_headers_send, 0, 0, IS_LONG, 0)
@@ -55,9 +55,9 @@ ZEND_END_ARG_INFO()
 
 
 ZEND_FUNCTION(frankenphp_handle_request);
-ZEND_FUNCTION(frankenphp_worker_set_vars);
-ZEND_FUNCTION(frankenphp_worker_get_vars);
-ZEND_FUNCTION(frankenphp_worker_get_signaling_stream);
+ZEND_FUNCTION(frankenphp_set_vars);
+ZEND_FUNCTION(frankenphp_get_vars);
+ZEND_FUNCTION(frankenphp_get_worker_handle);
 ZEND_FUNCTION(headers_send);
 ZEND_FUNCTION(frankenphp_finish_request);
 ZEND_FUNCTION(frankenphp_request_headers);
@@ -68,9 +68,9 @@ ZEND_FUNCTION(frankenphp_log);
 
 static const zend_function_entry ext_functions[] = {
 	ZEND_FE(frankenphp_handle_request, arginfo_frankenphp_handle_request)
-	ZEND_FE(frankenphp_worker_set_vars, arginfo_frankenphp_worker_set_vars)
-	ZEND_FE(frankenphp_worker_get_vars, arginfo_frankenphp_worker_get_vars)
-	ZEND_FE(frankenphp_worker_get_signaling_stream, arginfo_frankenphp_worker_get_signaling_stream)
+	ZEND_FE(frankenphp_set_vars, arginfo_frankenphp_set_vars)
+	ZEND_FE(frankenphp_get_vars, arginfo_frankenphp_get_vars)
+	ZEND_FE(frankenphp_get_worker_handle, arginfo_frankenphp_get_worker_handle)
 	ZEND_FE(headers_send, arginfo_headers_send)
 	ZEND_FE(frankenphp_finish_request, arginfo_frankenphp_finish_request)
 	ZEND_FALIAS(fastcgi_finish_request, frankenphp_finish_request, arginfo_fastcgi_finish_request)

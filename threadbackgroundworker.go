@@ -16,7 +16,7 @@ import (
 	"github.com/dunglas/frankenphp/internal/state"
 )
 
-// backgroundWorkerState holds the shared state for a single background worker.
+// backgroundWorkerState holds the shared vars for a single background worker.
 // Accessed by the background worker thread (writes) and HTTP worker threads (reads).
 type backgroundWorkerState struct {
 	varsPtr     unsafe.Pointer // *C.HashTable, persistent, managed by C
@@ -29,13 +29,13 @@ type backgroundWorkerState struct {
 // backgroundWorkerThread handles background worker scripts.
 // Decoupled from workerThread; owns its own lifecycle state.
 type backgroundWorkerThread struct {
-	state                 *state.ThreadState
-	thread                *phpThread
-	worker                *worker
+	state                  *state.ThreadState
+	thread                 *phpThread
+	worker                 *worker
 	dummyFrankenPHPContext *frankenPHPContext
-	dummyContext          context.Context
-	isBootingScript       bool
-	failureCount          int
+	dummyContext           context.Context
+	isBootingScript        bool
+	failureCount           int
 }
 
 func convertToBackgroundWorkerThread(thread *phpThread, worker *worker) {

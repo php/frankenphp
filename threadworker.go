@@ -105,7 +105,6 @@ func setupWorkerScript(handler *workerThread, worker *worker) {
 	metrics.StartWorker(worker.name)
 
 	opts := append([]RequestOption(nil), worker.requestOptions...)
-	C.frankenphp_set_worker_name(nil, C._Bool(false))
 
 	fc, err := newDummyContext(
 		filepath.Base(worker.fileName),
@@ -127,7 +126,6 @@ func setupWorkerScript(handler *workerThread, worker *worker) {
 	}
 
 }
-
 
 func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 	worker := handler.worker

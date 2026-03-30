@@ -11,7 +11,7 @@ $results = [];
 
 // int values allowed
 try {
-    frankenphp_worker_set_vars(['KEY' => 123]);
+    frankenphp_set_vars(['KEY' => 123]);
     $results[] = 'INT_VAL:allowed';
 } catch (\Throwable $e) {
     $results[] = 'INT_VAL:blocked';
@@ -19,7 +19,7 @@ try {
 
 // int keys allowed
 try {
-    frankenphp_worker_set_vars([0 => 'val']);
+    frankenphp_set_vars([0 => 'val']);
     $results[] = 'INT_KEY:allowed';
 } catch (\Throwable $e) {
     $results[] = 'INT_KEY:blocked';
@@ -27,7 +27,7 @@ try {
 
 // nested arrays allowed
 try {
-    frankenphp_worker_set_vars(['nested' => ['a' => 1, 'b' => [true, null]]]);
+    frankenphp_set_vars(['nested' => ['a' => 1, 'b' => [true, null]]]);
     $results[] = 'NESTED:allowed';
 } catch (\Throwable $e) {
     $results[] = 'NESTED:blocked';
@@ -35,7 +35,7 @@ try {
 
 // objects rejected
 try {
-    frankenphp_worker_set_vars(['KEY' => new \stdClass()]);
+    frankenphp_set_vars(['KEY' => new \stdClass()]);
     $results[] = 'OBJECT:allowed';
 } catch (\ValueError $e) {
     $results[] = 'OBJECT:blocked';
@@ -44,7 +44,7 @@ try {
 // references rejected
 try {
     $ref = 'hello';
-    frankenphp_worker_set_vars(['KEY' => &$ref]);
+    frankenphp_set_vars(['KEY' => &$ref]);
     $results[] = 'REFERENCE:allowed';
 } catch (\ValueError $e) {
     $results[] = 'REFERENCE:blocked';
@@ -53,10 +53,10 @@ try {
 // enums allowed - final set_vars with all results
 try {
     $results[] = 'ENUM:allowed'; // if we get here, the call below will confirm it
-    frankenphp_worker_set_vars(['status' => TestStatus::Active, 'RESULTS' => implode(',', $results)]);
+    frankenphp_set_vars(['status' => TestStatus::Active, 'RESULTS' => implode(',', $results)]);
 } catch (\Throwable $e) {
     $results[array_key_last($results)] = 'ENUM:blocked';
-    frankenphp_worker_set_vars(['RESULTS' => implode(',', $results)]);
+    frankenphp_set_vars(['RESULTS' => implode(',', $results)]);
 }
 
 while (!background_worker_should_stop(30)) {

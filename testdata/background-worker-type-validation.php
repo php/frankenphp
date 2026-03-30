@@ -8,7 +8,7 @@ enum TestStatus {
 frankenphp_handle_request(function () {
     // Retry until we see the final snapshot with RESULTS
     for ($i = 0; $i < 100; $i++) {
-        $vars = frankenphp_worker_get_vars('type-validation');
+        $vars = frankenphp_get_vars('type-validation');
         if (isset($vars['RESULTS'])) break;
         usleep(10_000);
     }

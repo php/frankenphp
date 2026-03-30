@@ -4,7 +4,7 @@
 
 frankenphp_handle_request(function () {
     try {
-        $vars = frankenphp_worker_get_vars('enum-missing');
+        $vars = frankenphp_get_vars('enum-missing');
         echo 'no_error';
     } catch (\LogicException $e) {
         echo 'LogicException:' . $e->getMessage();

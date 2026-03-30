@@ -58,12 +58,11 @@ func (l *backgroundWorkerLookup) Resolve(name string) *backgroundWorkerRegistry 
 }
 
 type backgroundWorkerRegistry struct {
-	entrypoint     string
-	num            int      // threads per background worker (0 = lazy-start with 1 thread)
-	maxWorkers     int      // max lazy-started instances (0 = unlimited)
-	autoStartNames []string // names to start at boot when num >= 1
-	mu             sync.Mutex
-	workers        map[string]*backgroundWorkerState
+	entrypoint string
+	num        int // threads per background worker (0 = lazy-start with 1 thread)
+	maxWorkers int // max lazy-started instances (0 = unlimited)
+	mu         sync.Mutex
+	workers    map[string]*backgroundWorkerState
 }
 
 func newBackgroundWorkerRegistry(entrypoint string) *backgroundWorkerRegistry {
@@ -82,10 +81,6 @@ func (registry *backgroundWorkerRegistry) MaxThreads() int {
 
 func (registry *backgroundWorkerRegistry) SetNum(num int) {
 	registry.num = num
-}
-
-func (registry *backgroundWorkerRegistry) AddAutoStartNames(names ...string) {
-	registry.autoStartNames = append(registry.autoStartNames, names...)
 }
 
 func (registry *backgroundWorkerRegistry) SetMaxWorkers(max int) {
@@ -125,7 +120,6 @@ func buildBackgroundWorkerLookups(workers []*worker, opts []workerOpt) map[strin
 		if phpName != "" && phpName != w.fileName {
 			// Named background worker
 			if o.num > 0 {
-				registry.AddAutoStartNames(phpName)
 				registry.SetNum(o.num)
 			}
 			lookup.AddNamed(phpName, registry)
@@ -271,15 +265,15 @@ func getLookup(thread *phpThread) *backgroundWorkerLookup {
 	return nil
 }
 
-// go_frankenphp_worker_get_vars starts background workers if needed, waits for them
+// go_frankenphp_get_vars starts background workers if needed, waits for them
 // to be ready, takes read locks, copies vars via C helper, and releases locks.
 // All locking/unlocking happens within this single Go call.
 //
 // callerVersions/outVersions: if callerVersions is non-nil and all versions match,
 // the copy is skipped entirely (returns 1). outVersions receives current versions.
 //
-//export go_frankenphp_worker_get_vars
-func go_frankenphp_worker_get_vars(threadIndex C.uintptr_t, names **C.char, nameLens *C.size_t, nameCount C.int, timeoutMs C.int, returnValue *C.zval, callerVersions *C.uint64_t, outVersions *C.uint64_t) *C.char {
+//export go_frankenphp_get_vars
+func go_frankenphp_get_vars(threadIndex C.uintptr_t, names **C.char, nameLens *C.size_t, nameCount C.int, timeoutMs C.int, returnValue *C.zval, callerVersions *C.uint64_t, outVersions *C.uint64_t) *C.char {
 	thread := phpThreads[threadIndex]
 	lookup := getLookup(thread)
 	if lookup == nil {
@@ -365,13 +359,13 @@ func go_frankenphp_worker_get_vars(threadIndex C.uintptr_t, names **C.char, name
 	return nil
 }
 
-//export go_frankenphp_worker_set_vars
-func go_frankenphp_worker_set_vars(threadIndex C.uintptr_t, varsPtr unsafe.Pointer, oldPtr *unsafe.Pointer) *C.char {
+//export go_frankenphp_set_vars
+func go_frankenphp_set_vars(threadIndex C.uintptr_t, varsPtr unsafe.Pointer, oldPtr *unsafe.Pointer) *C.char {
 	thread := phpThreads[threadIndex]
 
 	bgHandler, ok := thread.handler.(*backgroundWorkerThread)
 	if !ok || bgHandler.worker.backgroundWorker == nil {
-		return C.CString("frankenphp_worker_set_vars() can only be called from a background worker")
+		return C.CString("frankenphp_set_vars() can only be called from a background worker")
 	}
 
 	sk := bgHandler.worker.backgroundWorker

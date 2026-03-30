@@ -9,7 +9,7 @@ $generation = file_exists($marker) ? ((int) file_get_contents($marker)) + 1 : 1;
 
 file_put_contents($marker, (string) $generation);
 file_put_contents($runningMarker, (string) getmypid());
-frankenphp_worker_set_vars(['GENERATION' => (string) $generation]);
+frankenphp_set_vars(['GENERATION' => (string) $generation]);
 
 try {
     while (!background_worker_should_stop(30)) {

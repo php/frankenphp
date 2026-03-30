@@ -2,7 +2,7 @@
 
 frankenphp_handle_request(function () {
     try {
-        frankenphp_worker_get_signaling_stream();
+        frankenphp_get_worker_handle();
         echo 'no_error';
     } catch (\RuntimeException $e) {
         echo 'thrown';

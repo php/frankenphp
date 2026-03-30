@@ -1,9 +1,9 @@
 <?php
 
 // Background worker for Caddy integration test
-frankenphp_worker_set_vars(['CADDY_TEST' => 'hello from background worker']);
+frankenphp_set_vars(['CADDY_TEST' => 'hello from background worker']);
 
-$stream = frankenphp_worker_get_signaling_stream();
+$stream = frankenphp_get_worker_handle();
 while (true) {
     $r = [$stream];
     $w = $e = [];

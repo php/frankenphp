@@ -17,17 +17,17 @@ const FRANKENPHP_LOG_LEVEL_ERROR = 8;
 function frankenphp_handle_request(callable $callback): bool {}
 
 /**
- * @param array<null|scalar|\UnitEnum|array<mixed>> $vars Nested arrays must recursively follow the same type constraints
+ * @param array<string, null|scalar|\UnitEnum|array<mixed>> $vars
  */
-function frankenphp_worker_set_vars(array $vars): void {}
+function frankenphp_set_vars(array $vars): void {}
 
 /**
- * @return array<null|scalar|array<mixed>|\UnitEnum> Nested arrays recursively follow the same type constraints
+ * @return array<string, null|scalar|array<mixed>|\UnitEnum>
  */
-function frankenphp_worker_get_vars(string|array $name, float $timeout = 30.0): array {}
+function frankenphp_get_vars(string|array $name, float $timeout = 30.0): array {}
 
 /** @return resource */
-function frankenphp_worker_get_signaling_stream() {}
+function frankenphp_get_worker_handle() {}
 
 function headers_send(int $status = 200): int {}
 

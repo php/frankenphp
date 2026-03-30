@@ -10,7 +10,7 @@ if (!$restarted) {
     exit(1);
 }
 
-frankenphp_worker_set_vars(['WORKER_STATUS' => 'restarted']);
+frankenphp_set_vars(['WORKER_STATUS' => 'restarted']);
 
 while (!background_worker_should_stop(30)) {
 }

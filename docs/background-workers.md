@@ -1,13 +1,13 @@
 # Background Workers
 
 Background workers are long-running PHP scripts that run outside the HTTP request cycle.
-They observe their environment and publish configuration that HTTP [workers](worker.md) can read in real time.
+They observe their environment and publish variables that HTTP [workers](worker.md) can read in real time.
 
 ## How It Works
 
 1. A background worker runs its own event loop (subscribe to Redis, watch files, poll an API...)
-2. It calls `frankenphp_worker_set_vars()` to publish a snapshot of key-value pairs
-3. HTTP workers call `frankenphp_worker_get_vars()` to read the latest snapshot
+2. It calls `frankenphp_set_vars()` to publish a snapshot of key-value pairs
+3. HTTP workers call `frankenphp_get_vars()` to read the latest snapshot
 4. The first `get_vars()` call blocks until the background worker has published - no startup race condition
 
 ## Configuration
@@ -42,15 +42,15 @@ example.com {
 
 ## PHP API
 
-### `frankenphp_worker_get_vars(string|array $name, float $timeout = 30.0): array`
+### `frankenphp_get_vars(string|array $name, float $timeout = 30.0): array`
 
-Starts a background worker (at-most-once) and returns its published variables.
+Starts a background worker (at-most-once) and returns its published vars.
 
 ```php
-$redis = frankenphp_worker_get_vars('redis-watcher');
+$redis = frankenphp_get_vars('redis-watcher');
 // ['MASTER_HOST' => '10.0.0.1', 'MASTER_PORT' => 6379]
 
-$all = frankenphp_worker_get_vars(['redis-watcher', 'feature-flags']);
+$all = frankenphp_get_vars(['redis-watcher', 'feature-flags']);
 // ['redis-watcher' => [...], 'feature-flags' => [...]]
 ```
 
@@ -60,18 +60,19 @@ $all = frankenphp_worker_get_vars(['redis-watcher', 'feature-flags']);
 - Throws `RuntimeException` on timeout, missing entrypoint, or background worker crash
 - Works in both worker and non-worker mode
 
-### `frankenphp_worker_set_vars(array $vars): void`
+### `frankenphp_set_vars(array $vars): void`
 
-Publishes a snapshot of key-value pairs from inside a background worker.
-Each call **replaces** the entire snapshot atomically.
+Publishes vars from inside a background worker.
+Each call **replaces** the entire vars array atomically.
 If the new value is identical (`===`) to the previous one, the call is a no-op.
 
-Supported types: `null`, `bool`, `int`, `float`, `string`, `array` (nested), and **enums**.
+Values can be `null`, scalars (`bool`, `int`, `float`, `string`), nested `array`s, or **enum**s.
+Objects, resources, and references are rejected.
 
 - Throws `RuntimeException` if not called from a background worker context
 - Throws `ValueError` if values contain objects, resources, or references
 
-### `frankenphp_worker_get_signaling_stream(): resource`
+### `frankenphp_get_worker_handle(): resource`
 
 Returns a readable stream for receiving signals from FrankenPHP.
 On shutdown or restart, the stream is closed - `fgets()` returns `false` (EOF).
@@ -81,7 +82,7 @@ Use `stream_select()` to wait between iterations instead of `sleep()`:
 function background_worker_should_stop(float $timeout = 0): bool
 {
     static $stream;
-    $stream ??= frankenphp_worker_get_signaling_stream();
+    $stream ??= frankenphp_get_worker_handle();
     $s = (int) $timeout;
 
     return match (@stream_select(...[[$stream], [], [], $s, (int) (($timeout - $s) * 1e6)])) {
@@ -118,7 +119,7 @@ function run_config_watcher(): void
     $redis->pconnect('127.0.0.1');
 
     do {
-        frankenphp_worker_set_vars([
+        frankenphp_set_vars([
             'maintenance' => (bool) $redis->get('maintenance_mode'),
             'feature_flags' => json_decode($redis->get('features'), true),
         ]);
@@ -134,7 +135,7 @@ to integrate the signaling stream into the event loop:
 ```php
 function run_redis_watcher(): void
 {
-    $signalingStream = frankenphp_worker_get_signaling_stream();
+    $signalingStream = frankenphp_get_worker_handle();
     $sentinel = Amp\Redis\createRedisClient('tcp://sentinel-host:26379');
 
     $subscription = $sentinel->subscribe('+switch-master');
@@ -142,7 +143,7 @@ function run_redis_watcher(): void
     Amp\async(function () use ($subscription) {
         foreach ($subscription as $message) {
             [$name, $oldIp, $oldPort, $newIp, $newPort] = explode(' ', $message);
-            frankenphp_worker_set_vars([
+            frankenphp_set_vars([
                 'MASTER_HOST' => $newIp,
                 'MASTER_PORT' => (int) $newPort,
             ]);
@@ -150,7 +151,7 @@ function run_redis_watcher(): void
     });
 
     $master = $sentinel->rawCommand('SENTINEL', 'get-master-addr-by-name', 'mymaster');
-    frankenphp_worker_set_vars([
+    frankenphp_set_vars([
         'MASTER_HOST' => $master[0],
         'MASTER_PORT' => (int) $master[1],
     ]);
@@ -174,7 +175,7 @@ $app = new App();
 $app->boot();
 
 while (frankenphp_handle_request(function () use ($app) {
-    $config = frankenphp_worker_get_vars('config-watcher');
+    $config = frankenphp_get_vars('config-watcher');
 
     $_SERVER += ['APP_REDIS_HOST' => $config['MASTER_HOST'], 'APP_REDIS_PORT' => $config['MASTER_PORT']];
     $app->handle($_GET, $_POST, $_COOKIE, $_FILES, $_SERVER);
@@ -186,8 +187,8 @@ while (frankenphp_handle_request(function () use ($app) {
 ### Graceful Degradation
 
 ```php
-if (function_exists('frankenphp_worker_get_vars')) {
-    $config = frankenphp_worker_get_vars('config-watcher');
+if (function_exists('frankenphp_get_vars')) {
+    $config = frankenphp_get_vars('config-watcher');
 } else {
     $config = ['MASTER_HOST' => getenv('REDIS_HOST') ?: '127.0.0.1'];
 }

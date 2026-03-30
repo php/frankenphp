@@ -7,7 +7,7 @@ enum SidekickOnlyEnum {
     case Foo;
 }
 
-frankenphp_worker_set_vars(['val' => SidekickOnlyEnum::Foo]);
+frankenphp_set_vars(['val' => SidekickOnlyEnum::Foo]);
 
 while (!background_worker_should_stop(30)) {
 }
