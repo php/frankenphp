@@ -652,8 +652,8 @@ func TestWorkerPHPServerGlobals(t *testing.T) {
 		http.StatusOK,
 		"SCRIPT_NAME: <br>"+
 			"SCRIPT_FILENAME: "+scriptFilename+"<br>"+
-			"PHP_SELF: /en<br>"+
-			"PATH_INFO: /en<br>"+
+			"PHP_SELF: <br>"+
+			"PATH_INFO: <br>"+
 			"DOCUMENT_ROOT: "+documentRoot2+"<br>"+
 			"REQUEST_URI: /server-globals.php/en<br>",
 	)

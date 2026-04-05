@@ -215,6 +215,8 @@ func splitCgiPath(fc *frankenPHPContext) {
 		fc.scriptFilename = fc.worker.fileName
 		if strings.HasPrefix(fc.worker.fileName, fc.documentRoot) {
 			fc.scriptName = filepath.ToSlash(strings.TrimPrefix(fc.worker.fileName, fc.documentRoot))
+		} else {
+			fc.pathInfo = ""
 		}
 		return
 	}
