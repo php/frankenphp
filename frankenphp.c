@@ -87,6 +87,11 @@ __thread uintptr_t thread_index;
 __thread bool is_worker_thread = false;
 __thread HashTable *sandboxed_env = NULL;
 
+#ifndef PHP_WIN32
+static bool is_forked_child = false;
+static void frankenphp_fork_child(void) { is_forked_child = true; }
+#endif
+
 void frankenphp_update_local_thread_context(bool is_worker) {
   is_worker_thread = is_worker;
 
@@ -601,6 +606,12 @@ PHP_FUNCTION(frankenphp_handle_request) {
     }
   }
 
+#ifndef PHP_WIN32
+  if (is_forked_child) {
+    _exit(0);
+  }
+#endif
+
   frankenphp_worker_request_shutdown();
   go_frankenphp_finish_worker_request(thread_index, callback_ret);
   if (result.r1 != NULL) {
@@ -699,6 +710,9 @@ PHP_FUNCTION(frankenphp_log) {
 
 PHP_MINIT_FUNCTION(frankenphp) {
   register_frankenphp_symbols(module_number);
+#ifndef PHP_WIN32
+  pthread_atfork(NULL, NULL, frankenphp_fork_child);
+#endif
 
   zend_function *func;
 
@@ -1086,6 +1100,11 @@ static void *php_thread(void *arg) {
 
       /* Execute the PHP script, potential bailout to zend_catch */
       php_execute_script(&file_handle);
+#ifndef PHP_WIN32
+      if (is_forked_child) {
+        _exit(EG(exit_status));
+      }
+#endif
       zend_destroy_file_handle(&file_handle);
       reset_sandboxed_environment();
 
@@ -1102,6 +1121,12 @@ static void *php_thread(void *arg) {
     }
   }
   zend_catch {
+#ifndef PHP_WIN32
+    if (is_forked_child) {
+      _exit(EG(exit_status));
+    }
+#endif
+
     /* Critical failure from php_execute_script or php_request_shutdown, mark
      * the thread as unhealthy */
     thread_is_healthy = false;
