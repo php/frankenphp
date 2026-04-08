@@ -488,7 +488,7 @@ func TestPHPServerDirectiveDisableFileServer(t *testing.T) {
 
 func TestPHPServerGlobals(t *testing.T) {
 	documentRoot, _ := filepath.Abs("../testdata")
-	scriptFilename := documentRoot + string(filepath.Separator) + "server-globals.php"
+	scriptFilename := filepath.Join(documentRoot, "server-globals.php")
 
 	tester := caddytest.NewTester(t)
 	initServer(t, tester, `
