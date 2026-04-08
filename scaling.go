@@ -40,14 +40,17 @@ func initAutoScaling(mainThread *phpMainThread) {
 		return
 	}
 
+	done := mainThread.done
+	mstate := mainThread.state
+
 	scalingMu.Lock()
 	scaleChan = make(chan *frankenPHPContext)
 	maxScaledThreads := mainThread.maxThreads - mainThread.numThreads
 	autoScaledThreads = make([]*phpThread, 0, maxScaledThreads)
 	scalingMu.Unlock()
 
-	go startUpscalingThreads(maxScaledThreads, scaleChan, mainThread.done)
-	go startDownScalingThreads(mainThread.done)
+	go startUpscalingThreads(maxScaledThreads, scaleChan, done, mstate)
+	go startDownScalingThreads(done)
 }
 
 func drainAutoScaling() {
@@ -81,16 +84,16 @@ func addWorkerThread(worker *worker) (*phpThread, error) {
 }
 
 // scaleWorkerThread adds a worker PHP thread automatically
-func scaleWorkerThread(worker *worker) {
+func scaleWorkerThread(worker *worker, done chan struct{}, mstate *state.ThreadState) {
 	// probe CPU usage before acquiring the lock (avoids holding lock during 120ms sleep)
-	if !cpu.ProbeCPUs(cpuProbeTime, maxCpuUsageForScaling, mainThread.done) {
+	if !cpu.ProbeCPUs(cpuProbeTime, maxCpuUsageForScaling, done) {
 		return
 	}
 
 	scalingMu.Lock()
 	defer scalingMu.Unlock()
 
-	if !mainThread.state.Is(state.Ready) {
+	if !mstate.Is(state.Ready) {
 		return
 	}
 
@@ -111,16 +114,16 @@ func scaleWorkerThread(worker *worker) {
 }
 
 // scaleRegularThread adds a regular PHP thread automatically
-func scaleRegularThread() {
+func scaleRegularThread(done chan struct{}, mstate *state.ThreadState) {
 	// probe CPU usage before acquiring the lock (avoids holding lock during 120ms sleep)
-	if !cpu.ProbeCPUs(cpuProbeTime, maxCpuUsageForScaling, mainThread.done) {
+	if !cpu.ProbeCPUs(cpuProbeTime, maxCpuUsageForScaling, done) {
 		return
 	}
 
 	scalingMu.Lock()
 	defer scalingMu.Unlock()
 
-	if !mainThread.state.Is(state.Ready) {
+	if !mstate.Is(state.Ready) {
 		return
 	}
 
@@ -140,7 +143,7 @@ func scaleRegularThread() {
 	}
 }
 
-func startUpscalingThreads(maxScaledThreads int, scale chan *frankenPHPContext, done chan struct{}) {
+func startUpscalingThreads(maxScaledThreads int, scale chan *frankenPHPContext, done chan struct{}, mstate *state.ThreadState) {
 	for {
 		scalingMu.Lock()
 		scaledThreadCount := len(autoScaledThreads)
@@ -171,7 +174,7 @@ func startUpscalingThreads(maxScaledThreads int, scale chan *frankenPHPContext, 
 
 			// if the request has been stalled long enough, scale
 			if fc.worker == nil {
-				scaleRegularThread()
+				scaleRegularThread(done, mstate)
 				continue
 			}
 
@@ -184,7 +187,7 @@ func startUpscalingThreads(maxScaledThreads int, scale chan *frankenPHPContext, 
 				continue
 			}
 
-			scaleWorkerThread(fc.worker)
+			scaleWorkerThread(fc.worker, done, mstate)
 		case <-done:
 			return
 		}

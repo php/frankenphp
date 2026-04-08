@@ -168,7 +168,7 @@ Go to `https://localhost`, and enjoy!
 - [Create **standalone**, self-executable PHP apps](https://frankenphp.dev/docs/embed/)
 - [Create static binaries](https://frankenphp.dev/docs/static/)
 - [Compile from sources](https://frankenphp.dev/docs/compile/)
-- [Monitoring FrankenPHP](https://frankenphp.dev/docs/metrics/)
+- [Observability](https://frankenphp.dev/docs/observability/)
 - [WordPress integration](https://frankenphp.dev/docs/wordpress/)
 - [Symfony integration](https://frankenphp.dev/docs/symfony/)
 - [Laravel integration](https://frankenphp.dev/docs/laravel/)

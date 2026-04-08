@@ -1,5 +1,8 @@
 # Metrics
 
+> [!TIP]
+> For a complete observability setup including real-time dashboards and production monitoring, see the [Observability](observability.md) page.
+
 When [Caddy metrics](https://caddyserver.com/docs/metrics) are enabled, FrankenPHP exposes the following metrics:
 
 - `frankenphp_total_threads`: The total number of PHP threads.
