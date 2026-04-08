@@ -612,7 +612,7 @@ func TestWorkerPHPServerGlobals(t *testing.T) {
 	)
 
 	// === Site 2: php_server with its own worker ===
-	// because we specify a php file, PATH_INFO should be /en
+	// because the request does not specify a php file, PATH_INFO should be empty
 	tester.AssertGetResponse(
 		"http://localhost:"+testPortTwo+"/en",
 		http.StatusOK,
