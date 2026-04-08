@@ -80,6 +80,7 @@ jobs:
           VERSION: ${{ (github.ref_type == 'tag' && github.ref_name) || steps.check.outputs.ref || 'dev' }}
           PHP_VERSION: ${{ steps.check.outputs.php_version }}
   build:
+    environment: dockerhub
     runs-on: ${{ startsWith(matrix.platform, 'linux/arm') && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     needs:
       - prepare
@@ -129,8 +130,8 @@ jobs:
         uses: docker/login-action@v4
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         with:
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.REGISTRY_PASSWORD }}
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Build
         id: build
         uses: docker/bake-action@v7
@@ -204,6 +205,7 @@ jobs:
 
   # Adapted from https://docs.docker.com/build/ci/github-actions/multi-platform/
   push:
+    environment: dockerhub
     runs-on: ubuntu-24.04
     needs:
       - prepare
@@ -227,8 +229,8 @@ jobs:
         uses: docker/login-action@v4
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         with:
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.REGISTRY_PASSWORD }}
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Create manifest list and push
         working-directory: /tmp/metadata
         run: |
