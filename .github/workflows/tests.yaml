@@ -166,7 +166,9 @@ jobs:
         env:
           phpts: ts
           debug: true
-      - name: Set Set CGO flags
+      - name: Install gotestsum
+        run: go install gotest.tools/gotestsum@latest
+      - name: Set CGO flags
         run: |
           {
            echo "CGO_CFLAGS=-I/opt/homebrew/include/ $(php-config --includes)"
@@ -174,8 +176,6 @@ jobs:
           } >> "${GITHUB_ENV}"
       - name: Build
         run: go build -tags nowatcher
-      - name: Install gotestsum
-        run: go install gotest.tools/gotestsum@latest
       - name: Run library tests
         run: gotestsum -- -tags nowatcher -race ./...
       - name: Run Caddy module tests
