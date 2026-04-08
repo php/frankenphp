@@ -13,6 +13,7 @@ permissions:
   pull-requests: write
 jobs:
   build:
+    environment: translate
     name: Translate Docs
     runs-on: ubuntu-latest
     steps:
