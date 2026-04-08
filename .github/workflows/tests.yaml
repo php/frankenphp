@@ -64,13 +64,13 @@ jobs:
       - name: Build testcli binary
         working-directory: internal/testcli/
         run: go build
-      - name: Install gotestsum
-        run: go install gotest.tools/gotestsum@latest
+      - name: Compile library tests
+        run: go test -race -v -x -c
       - name: Run library tests
-        run: gotestsum -- -race ./...
+        run: ./frankenphp.test -test.v
       - name: Run Caddy module tests
         working-directory: caddy/
-        run: gotestsum -- -race ./...
+        run: go test -race -v ./...
       - name: Run Fuzzing Tests
         working-directory: caddy/
         run: go test -fuzz FuzzRequest -fuzztime 20s
@@ -136,11 +136,9 @@ jobs:
         run: |
           echo "CGO_CFLAGS=$(php-config --includes)" >> "${GITHUB_ENV}"
           echo "CGO_LDFLAGS=$(php-config --ldflags) $(php-config --libs)" >> "${GITHUB_ENV}"
-      - name: Install gotestsum
-        run: go install gotest.tools/gotestsum@latest
       - name: Run integration tests
         working-directory: internal/extgen/
-        run: gotestsum -- -tags integration -timeout 30m
+        run: go test -tags integration -v -timeout 30m
   tests-mac:
     name: Tests (macOS, PHP 8.5)
     runs-on: macos-latest
@@ -166,9 +164,7 @@ jobs:
         env:
           phpts: ts
           debug: true
-      - name: Install gotestsum
-        run: go install gotest.tools/gotestsum@latest
-      - name: Set CGO flags
+      - name: Set Set CGO flags
         run: |
           {
            echo "CGO_CFLAGS=-I/opt/homebrew/include/ $(php-config --includes)"
@@ -177,7 +173,7 @@ jobs:
       - name: Build
         run: go build -tags nowatcher
       - name: Run library tests
-        run: gotestsum -- -tags nowatcher -race ./...
+        run: go test -tags nowatcher -race -v ./...
       - name: Run Caddy module tests
         working-directory: caddy/
-        run: gotestsum -- -race ./...
+        run: go test -race -v ./...
