@@ -184,3 +184,4 @@ $handler = static function () use ($workerServer) {
 };
 
 // ...
+```

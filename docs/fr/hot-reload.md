@@ -57,7 +57,7 @@ php_server {
 }
 ```
 
-Utilisez la forme longue de `hot_reload` pour spécifier le *topic* Mercure à utiliser ainsi que les répertoires ou fichiers à surveiller :
+Utilisez la forme longue de `hot_reload` pour spécifier le _topic_ Mercure à utiliser ainsi que les répertoires ou fichiers à surveiller :
 
 ```caddyfile
 localhost
@@ -84,7 +84,7 @@ Le serveur détecte les modifications et publie les modifications automatiquemen
 FrankenPHP expose l'URL du Hub Mercure à utiliser pour s'abonner aux modifications de fichiers via la variable d'environnement `$_SERVER['FRANKENPHP_HOT_RELOAD']`.
 
 La bibliothèque JavaScript [frankenphp-hot-reload](https://www.npmjs.com/package/frankenphp-hot-reload) gére la logique côté client.
-Pour l'utiliser, ajoutez le code suivant à votre gabarit (*layout*) principal :
+Pour l'utiliser, ajoutez le code suivant à votre gabarit (_layout_) principal :
 
 ```php
 <!DOCTYPE html>
@@ -103,12 +103,14 @@ Alternativement, vous pouvez implémenter votre propre logique côté client en 
 
 ### Conserver les nœuds DOM existants
 
-Dans de rares cas, comme lors de l'utilisation d'outils de développement tels que [la *web debug toolbar* de Symfony](https://github.com/symfony/symfony/pull/62970),
+Dans de rares cas, comme lors de l'utilisation d'outils de développement tels que [la _web debug toolbar_ de Symfony](https://github.com/symfony/symfony/pull/62970),
 vous pouvez souhaiter conserver des nœuds DOM spécifiques.
 Pour ce faire, ajoutez l'attribut `data-frankenphp-hot-reload-preserve` à l'élément HTML concerné :
 
 ```html
-<div data-frankenphp-hot-reload-preserve><!-- Ma barre de développement --></div>
+<div data-frankenphp-hot-reload-preserve>
+  <!-- Ma barre de développement -->
+</div>
 ```
 
 ## Mode Worker

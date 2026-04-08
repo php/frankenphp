@@ -4,17 +4,17 @@
 
 Las siguientes extensiones se sabe que no son compatibles con FrankenPHP:
 
-| Nombre                                                                                                        | Razón               | Alternativas                                                                                                         |
-| ----------------------------------------------------------------------------------------------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| [imap](https://www.php.net/manual/es/imap.installation.php)                                                 | No es thread-safe   | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap) |
-| [newrelic](https://docs.newrelic.com/docs/apm/agents/php-agent/getting-started/introduction-new-relic-php/) | No es thread-safe   | -                                                                                                                    |
+| Nombre                                                                                                      | Razón             | Alternativas                                                                                                         |
+| ----------------------------------------------------------------------------------------------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------- |
+| [imap](https://www.php.net/manual/es/imap.installation.php)                                                 | No es thread-safe | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap) |
+| [newrelic](https://docs.newrelic.com/docs/apm/agents/php-agent/getting-started/introduction-new-relic-php/) | No es thread-safe | -                                                                                                                    |
 
 ## Extensiones PHP con Errores
 
 Las siguientes extensiones tienen errores conocidos y comportamientos inesperados cuando se usan con FrankenPHP:
 
-| Nombre                                                          | Problema                                                                                                                                                                                                                   |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Nombre                                                        | Problema                                                                                                                                                                                                                              |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [ext-openssl](https://www.php.net/manual/es/book.openssl.php) | Cuando se usa musl libc, la extensión OpenSSL puede fallar bajo cargas pesadas. El problema no ocurre cuando se usa la más popular GNU libc. Este error está [siendo rastreado por PHP](https://github.com/php/php-src/issues/13648). |
 
 ## get_browser

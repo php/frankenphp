@@ -135,12 +135,12 @@ while (frankenphp_handle_request($handler)) {
 
 FrankenPHP fournit des hooks pour exécuter du code Go à des points spécifiques du cycle de vie.
 
-| Type de Hook | Nom de l'Option                  | Signature            | Contexte et Cas d'Utilisation                                          |
-| :--------- | :--------------------------- | :------------------- | :--------------------------------------------------------------------- |
-| **Serveur** | `WithWorkerOnServerStartup`  | `func()`             | Configuration globale. Exécuté **Une fois**. Exemple : Connexion à NATS/Redis. |
-| **Serveur** | `WithWorkerOnServerShutdown` | `func()`             | Nettoyage global. Exécuté **Une fois**. Exemple : Fermeture des connexions partagées. |
-| **Thread** | `WithWorkerOnReady`          | `func(threadID int)` | Configuration par thread. Appelé lorsqu'un thread démarre. Reçoit l'ID du Thread. |
-| **Thread** | `WithWorkerOnShutdown`       | `func(threadID int)` | Nettoyage par thread. Reçoit l'ID du Thread.                           |
+| Type de Hook | Nom de l'Option              | Signature            | Contexte et Cas d'Utilisation                                                         |
+| :----------- | :--------------------------- | :------------------- | :------------------------------------------------------------------------------------ |
+| **Serveur**  | `WithWorkerOnServerStartup`  | `func()`             | Configuration globale. Exécuté **Une fois**. Exemple : Connexion à NATS/Redis.        |
+| **Serveur**  | `WithWorkerOnServerShutdown` | `func()`             | Nettoyage global. Exécuté **Une fois**. Exemple : Fermeture des connexions partagées. |
+| **Thread**   | `WithWorkerOnReady`          | `func(threadID int)` | Configuration par thread. Appelé lorsqu'un thread démarre. Reçoit l'ID du Thread.     |
+| **Thread**   | `WithWorkerOnShutdown`       | `func(threadID int)` | Nettoyage par thread. Reçoit l'ID du Thread.                                          |
 
 ### Exemple
 

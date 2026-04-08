@@ -26,7 +26,7 @@ To enable hot reloading, enable Mercure, then add the `hot_reload` sub-directive
 >
 > This feature is intended for **development environments only**.
 > Do not enable `hot_reload` in production, as this feature is not secure (exposes sensitive internal details) and slows down the application.
->
+
 ```caddyfile
 localhost
 

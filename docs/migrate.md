@@ -5,14 +5,14 @@ This guide covers a basic migration for a typical PHP application.
 
 ## Key Differences
 
-| PHP-FPM setup | FrankenPHP equivalent |
-|---|---|
-| Nginx/Apache + PHP-FPM | Single `frankenphp` binary |
-| `php-fpm.conf` pool settings | [`frankenphp` global option](config.md#caddyfile-config) |
-| Nginx `server {}` block | `Caddyfile` site block |
-| `php_value` / `php_admin_value` | [`php_ini` Caddyfile directive](config.md#php-config) |
-| `pm = static` / `pm.max_children` | `num_threads` |
-| `pm = dynamic` | [`max_threads auto`](performance.md#max_threads) |
+| PHP-FPM setup                     | FrankenPHP equivalent                                    |
+| --------------------------------- | -------------------------------------------------------- |
+| Nginx/Apache + PHP-FPM            | Single `frankenphp` binary                               |
+| `php-fpm.conf` pool settings      | [`frankenphp` global option](config.md#caddyfile-config) |
+| Nginx `server {}` block           | `Caddyfile` site block                                   |
+| `php_value` / `php_admin_value`   | [`php_ini` Caddyfile directive](config.md#php-config)    |
+| `pm = static` / `pm.max_children` | `num_threads`                                            |
+| `pm = dynamic`                    | [`max_threads auto`](performance.md#max_threads)         |
 
 ## Step 1: Replace Your Web Server Config
 

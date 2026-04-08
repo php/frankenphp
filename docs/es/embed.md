@@ -66,7 +66,7 @@ La forma más fácil de crear un binario para Linux es usar el constructor basad
    RUN EMBED=dist/app/ ./build-static.sh
    ```
 
-    > [!CAUTION]
+   > [!CAUTION]
    >
    > Algunos archivos `.dockerignore` (por ejemplo, el [`.dockerignore` predeterminado de Symfony Docker](https://github.com/dunglas/symfony-docker/blob/main/.dockerignore))
    > ignorarán el directorio `vendor/` y los archivos `.env`. Asegúrese de ajustar o eliminar el archivo `.dockerignore` antes de la construcción.

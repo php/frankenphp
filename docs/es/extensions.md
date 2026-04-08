@@ -87,21 +87,21 @@ Mientras que el primer punto se explica por sí mismo, el segundo puede ser más
 Aunque algunos tipos de variables tienen la misma representación en memoria entre C/PHP y Go, algunos tipos requieren más lógica para ser usados directamente. Esta es quizá la parte más difícil cuando se trata de escribir extensiones porque requiere entender los internos del motor Zend y cómo se almacenan las variables internamente en PHP.
 Esta tabla resume lo que necesitas saber:
 
-| Tipo PHP            | Tipo Go                        | Conversión directa | Helper de C a Go                     | Helper de Go a C                      | Soporte para Métodos de Clase |
-|---------------------|--------------------------------|---------------------|---------------------------------------|----------------------------------------|-------------------------------|
-| `int`               | `int64`                        | ✅                   | -                                     | -                                      | ✅                             |
-| `?int`              | `*int64`                       | ✅                   | -                                     | -                                      | ✅                             |
-| `float`             | `float64`                      | ✅                   | -                                     | -                                      | ✅                             |
-| `?float`            | `*float64`                     | ✅                   | -                                     | -                                      | ✅                             |
-| `bool`              | `bool`                         | ✅                   | -                                     | -                                      | ✅                             |
-| `?bool`             | `*bool`                        | ✅                   | -                                     | -                                      | ✅                             |
-| `string`/`?string` | `*C.zend_string`              | ❌                   | `frankenphp.GoString()`              | `frankenphp.PHPString()`              | ✅                             |
-| `array`             | `frankenphp.AssociativeArray`  | ❌                   | `frankenphp.GoAssociativeArray()`    | `frankenphp.PHPAssociativeArray()`    | ✅                             |
-| `array`             | `map[string]any`               | ❌                   | `frankenphp.GoMap()`                 | `frankenphp.PHPMap()`                 | ✅                             |
-| `array`             | `[]any`                        | ❌                   | `frankenphp.GoPackedArray()`         | `frankenphp.PHPPackedArray()`         | ✅                             |
-| `mixed`             | `any`                          | ❌                   | `GoValue()`                          | `PHPValue()`                          | ❌                             |
-| `callable`          | `*C.zval`                      | ❌                   | -                                     | frankenphp.CallPHPCallable()          | ❌                             |
-| `object`            | `struct`                       | ❌                   | _Aún no implementado_                | _Aún no implementado_                 | ❌                             |
+| Tipo PHP           | Tipo Go                       | Conversión directa | Helper de C a Go                  | Helper de Go a C                   | Soporte para Métodos de Clase |
+| ------------------ | ----------------------------- | ------------------ | --------------------------------- | ---------------------------------- | ----------------------------- |
+| `int`              | `int64`                       | ✅                 | -                                 | -                                  | ✅                            |
+| `?int`             | `*int64`                      | ✅                 | -                                 | -                                  | ✅                            |
+| `float`            | `float64`                     | ✅                 | -                                 | -                                  | ✅                            |
+| `?float`           | `*float64`                    | ✅                 | -                                 | -                                  | ✅                            |
+| `bool`             | `bool`                        | ✅                 | -                                 | -                                  | ✅                            |
+| `?bool`            | `*bool`                       | ✅                 | -                                 | -                                  | ✅                            |
+| `string`/`?string` | `*C.zend_string`              | ❌                 | `frankenphp.GoString()`           | `frankenphp.PHPString()`           | ✅                            |
+| `array`            | `frankenphp.AssociativeArray` | ❌                 | `frankenphp.GoAssociativeArray()` | `frankenphp.PHPAssociativeArray()` | ✅                            |
+| `array`            | `map[string]any`              | ❌                 | `frankenphp.GoMap()`              | `frankenphp.PHPMap()`              | ✅                            |
+| `array`            | `[]any`                       | ❌                 | `frankenphp.GoPackedArray()`      | `frankenphp.PHPPackedArray()`      | ✅                            |
+| `mixed`            | `any`                         | ❌                 | `GoValue()`                       | `PHPValue()`                       | ❌                            |
+| `callable`         | `*C.zval`                     | ❌                 | -                                 | frankenphp.CallPHPCallable()       | ❌                            |
+| `object`           | `struct`                      | ❌                 | _Aún no implementado_             | _Aún no implementado_              | ❌                            |
 
 > [!NOTE]
 >

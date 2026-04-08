@@ -135,12 +135,12 @@ while (frankenphp_handle_request($handler)) {
 
 FrankenPHP proporciona hooks para ejecutar código Go en puntos específicos del ciclo de vida.
 
-| Tipo de Hook | Nombre de Opción             | Firma                | Contexto y Caso de Uso                                                      |
-| :----------- | :--------------------------- | :------------------- | :-------------------------------------------------------------------------- |
-| **Server**   | `WithWorkerOnServerStartup`  | `func()`             | Configuración global. Se ejecuta **Una vez**. Ejemplo: Conectar a NATS/Redis. |
+| Tipo de Hook | Nombre de Opción             | Firma                | Contexto y Caso de Uso                                                           |
+| :----------- | :--------------------------- | :------------------- | :------------------------------------------------------------------------------- |
+| **Server**   | `WithWorkerOnServerStartup`  | `func()`             | Configuración global. Se ejecuta **Una vez**. Ejemplo: Conectar a NATS/Redis.    |
 | **Server**   | `WithWorkerOnServerShutdown` | `func()`             | Limpieza global. Se ejecuta **Una vez**. Ejemplo: Cerrar conexiones compartidas. |
-| **Thread**   | `WithWorkerOnReady`          | `func(threadID int)` | Configuración por hilo. Llamado cuando un hilo inicia. Recibe el ID del hilo. |
-| **Thread**   | `WithWorkerOnShutdown`       | `func(threadID int)` | Limpieza por hilo. Recibe el ID del hilo.                                   |
+| **Thread**   | `WithWorkerOnReady`          | `func(threadID int)` | Configuración por hilo. Llamado cuando un hilo inicia. Recibe el ID del hilo.    |
+| **Thread**   | `WithWorkerOnShutdown`       | `func(threadID int)` | Limpieza por hilo. Recibe el ID del hilo.                                        |
 
 ### Ejemplo
 

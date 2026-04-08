@@ -103,8 +103,7 @@ If everything went well, your project directory should contain the following fil
 - **`my_extension.c`** - C implementation file
 - **`README.md`** - Documentation
 
-> [!IMPORTANT]
-> **Your source file (`my_extension.go`) is never modified.** The generator creates a separate `_generated.go` file containing CGO wrappers that call your original functions. This means you can safely version control your source file without worrying about generated code polluting it.
+> [!IMPORTANT] > **Your source file (`my_extension.go`) is never modified.** The generator creates a separate `_generated.go` file containing CGO wrappers that call your original functions. This means you can safely version control your source file without worrying about generated code polluting it.
 
 ### Integrating the Generated Extension into FrankenPHP
 

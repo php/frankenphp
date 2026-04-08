@@ -64,23 +64,24 @@ Restart:                                      Restarting → Yielding → Ready
 Handler transition:                       TransitionRequested → TransitionInProgress → TransitionComplete
 ```
 
-| State | Description |
-|-------|-------------|
-| `Reserved` | Thread slot allocated but not booted. Can be booted on demand. |
-| `Booting` | Underlying POSIX thread is starting up. |
-| `Inactive` | Thread is alive but has no handler assigned. Minimal memory footprint. |
-| `Ready` | Thread has a handler and is ready to accept work. |
-| `ShuttingDown` | Thread is shutting down. |
-| `Done` | Thread has completely shut down. Transitions back to `Reserved` for potential reuse. |
-| `Restarting` | Worker thread is being restarted (e.g., via admin API or file watcher). |
-| `Yielding` | Worker thread has yielded control and is waiting to be re-activated. |
-| `TransitionRequested` | A handler change has been requested from the Go side. |
-| `TransitionInProgress` | The C thread has acknowledged the transition request. |
-| `TransitionComplete` | The Go side has installed the new handler. |
+| State                  | Description                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------ |
+| `Reserved`             | Thread slot allocated but not booted. Can be booted on demand.                       |
+| `Booting`              | Underlying POSIX thread is starting up.                                              |
+| `Inactive`             | Thread is alive but has no handler assigned. Minimal memory footprint.               |
+| `Ready`                | Thread has a handler and is ready to accept work.                                    |
+| `ShuttingDown`         | Thread is shutting down.                                                             |
+| `Done`                 | Thread has completely shut down. Transitions back to `Reserved` for potential reuse. |
+| `Restarting`           | Worker thread is being restarted (e.g., via admin API or file watcher).              |
+| `Yielding`             | Worker thread has yielded control and is waiting to be re-activated.                 |
+| `TransitionRequested`  | A handler change has been requested from the Go side.                                |
+| `TransitionInProgress` | The C thread has acknowledged the transition request.                                |
+| `TransitionComplete`   | The Go side has installed the new handler.                                           |
 
 ### Key Operations
 
 **`RequestSafeStateChange(nextState)`**: The primary way external goroutines request state changes. It:
+
 - Atomically succeeds from `Ready` or `Inactive` (under mutex)
 - Returns `false` immediately from `ShuttingDown`, `Done`, or `Reserved`
 - Blocks and retries from any other state, waiting for `Ready`, `Inactive`, or `ShuttingDown`
@@ -100,16 +101,16 @@ When a thread needs to change its handler (e.g., from inactive to worker):
 ```
 Go side (setHandler)           C side (PHP thread)
 ─────────────────              ─────────────────
-RequestSafeStateChange(        
-  TransitionRequested)         
-close(drainChan)               
+RequestSafeStateChange(
+  TransitionRequested)
+close(drainChan)
                                detects drain
                                Set(TransitionInProgress)
-WaitFor(TransitionInProgress)  
+WaitFor(TransitionInProgress)
   → unblocked                  WaitFor(TransitionComplete)
-handler = newHandler           
+handler = newHandler
 drainChan = make(chan struct{})
-Set(TransitionComplete)        
+Set(TransitionComplete)
                                  → unblocked
                                newHandler.beforeScriptExecution()
 ```
@@ -123,18 +124,18 @@ When workers are restarted (e.g., via admin API):
 ```
 Go side (RestartWorkers)       C side (worker thread)
 ─────────────────              ─────────────────
-RequestSafeStateChange(        
-  Restarting)                  
-close(drainChan)               
+RequestSafeStateChange(
+  Restarting)
+close(drainChan)
                                detects drain in waitForWorkerRequest()
                                returns false → PHP script exits
                                beforeScriptExecution():
                                  state is Restarting →
                                  Set(Yielding)
-WaitFor(Yielding)              
+WaitFor(Yielding)
   → unblocked                    WaitFor(Ready, ShuttingDown)
 drainChan = make(chan struct{})
-Set(Ready)                     
+Set(Ready)
                                  → unblocked
                                beforeScriptExecution() recurse:
                                  state is Ready → normal execution
@@ -146,18 +147,18 @@ Set(Ready)
 
 C code calls Go functions via CGO exports. The main callbacks are:
 
-| Function | Called when |
-|----------|-----------|
-| `go_frankenphp_before_script_execution` | C loop needs the next script to execute |
-| `go_frankenphp_after_script_execution` | PHP script has finished executing |
+| Function                                    | Called when                                      |
+| ------------------------------------------- | ------------------------------------------------ |
+| `go_frankenphp_before_script_execution`     | C loop needs the next script to execute          |
+| `go_frankenphp_after_script_execution`      | PHP script has finished executing                |
 | `go_frankenphp_worker_handle_request_start` | Worker's `frankenphp_handle_request()` is called |
-| `go_frankenphp_finish_worker_request` | Worker request handler has returned |
-| `go_ub_write` | PHP produces output (`echo`, etc.) |
-| `go_read_post` | PHP reads POST body (`php://input`) |
-| `go_read_cookies` | PHP reads cookies |
-| `go_write_headers` | PHP sends response headers |
-| `go_sapi_flush` | PHP flushes output |
-| `go_log_attrs` | PHP logs a structured message |
+| `go_frankenphp_finish_worker_request`       | Worker request handler has returned              |
+| `go_ub_write`                               | PHP produces output (`echo`, etc.)               |
+| `go_read_post`                              | PHP reads POST body (`php://input`)              |
+| `go_read_cookies`                           | PHP reads cookies                                |
+| `go_write_headers`                          | PHP sends response headers                       |
+| `go_sapi_flush`                             | PHP flushes output                               |
+| `go_log_attrs`                              | PHP logs a structured message                    |
 
 All these functions receive a `threadIndex` parameter identifying the calling thread. This is a thread-local variable in C (`__thread uintptr_t thread_index`) set during thread initialization.
 
