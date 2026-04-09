@@ -91,6 +91,7 @@ GEN_STUB_SCRIPT=php-src/build/gen_stub.php frankenphp extension-init my_extensio
 ```
 
 > [!NOTE]
+>
 > Don't forget to set the `GEN_STUB_SCRIPT` environment variable to the path of the `gen_stub.php` file in the PHP sources you downloaded earlier. This is the same `gen_stub.php` script mentioned in the manual implementation section.
 
 If everything went well, your project directory should contain the following files for your extension:
@@ -103,7 +104,9 @@ If everything went well, your project directory should contain the following fil
 - **`my_extension.c`** - C implementation file
 - **`README.md`** - Documentation
 
-> [!IMPORTANT] > **Your source file (`my_extension.go`) is never modified.** The generator creates a separate `_generated.go` file containing CGO wrappers that call your original functions. This means you can safely version control your source file without worrying about generated code polluting it.
+> [!IMPORTANT]
+>
+> **Your source file (`my_extension.go`) is never modified.** The generator creates a separate `_generated.go` file containing CGO wrappers that call your original functions. This means you can safely version control your source file without worrying about generated code polluting it.
 
 ### Integrating the Generated Extension into FrankenPHP
 
@@ -470,6 +473,7 @@ const (
 ```
 
 > [!NOTE]
+>
 > PHP constants will take the name of the Go constant, thus using upper case letters is recommended.
 
 #### Class Constants
@@ -497,6 +501,7 @@ const (
 ```
 
 > [!NOTE]
+>
 > Just like global constants, the class constants will take the name of the Go constant.
 
 Class constants are accessible using the class name scope in PHP:
