@@ -17,10 +17,10 @@ We'll start with the generator approach as it's the easiest way to get started, 
 
 ## Using the Extension Generator
 
-FrankenPHP is bundled with a tool that allows you **to create a PHP extension** only using Go. **No need to write C code** or use CGO directly: FrankenPHP also includes a **public types API** to help you write your extensions in Go without having to worry about **the type juggling between PHP/C and Go**.
+FrankenPHP is bundled with a tool that lets you **create a PHP extension** using only Go. **No need to write C code** or use CGO directly: FrankenPHP also includes a **public types API** to help you write your extensions in Go without having to worry about **the type juggling between PHP/C and Go**.
 
 > [!TIP]
-> If you want to understand how extensions can be written in Go from scratch, you can read the manual implementation section below demonstrating how to write a PHP extension in Go without using the generator.
+> If you want to understand how extensions can be written in Go from scratch, you can read the manual implementation section below, demonstrating how to write a PHP extension in Go without using the generator.
 
 Keep in mind that this tool is **not a full-fledged extension generator**. It is meant to help you write simple extensions in Go, but it does not provide the most advanced features of PHP extensions. If you need to write a more **complex and optimized** extension, you may need to write some C code or use CGO directly.
 
@@ -44,7 +44,7 @@ tar xf php-*
 
 ### Writing the Extension
 
-Everything is now setup to write your native function in Go. Create a new file named `stringext.go`. Our first function will take a string as an argument, the number of times to repeat it, a boolean to indicate whether to reverse the string, and return the resulting string. This should look like this:
+Everything is now set up to write your native function in Go. Create a new file named `stringext.go`. Our first function will take a string as an argument, the number of times to repeat it, a boolean to indicate whether to reverse the string, and return the resulting string. This should look like this:
 
 ```go
 package example
@@ -77,7 +77,7 @@ func repeat_this(s *C.zend_string, count int64, reverse bool) unsafe.Pointer {
 
 There are two important things to note here:
 
-- A directive comment `//export_php:function` defines the function signature in PHP. This is how the generator knows how to generate the PHP function with the right parameters and return type;
+- A directive comment `//export_php:function` defines the function signature in PHP. This is how the generator knows how to generate the PHP function with the right parameters and return type.
 - The function must return an `unsafe.Pointer`. FrankenPHP provides an API to help you with type juggling between C and Go.
 
 While the first point speaks for itself, the second may be harder to apprehend. Let's take a deeper dive to type juggling later in this guide.
@@ -144,7 +144,7 @@ Once you've integrated your extension into FrankenPHP as demonstrated in the pre
 
 ### Type Juggling
 
-While some variable types have the same memory representation between C/PHP and Go, some types require more logic to be directly used. This is maybe the hardest part when it comes to writing extensions because it requires understanding internals of the Zend Engine and how variables are stored internally in PHP.
+While some variable types have the same memory representation between C/PHP and Go, some types require more logic to be directly used. This is maybe the hardest part when it comes to writing extensions because it requires understanding the internals of the Zend Engine and how variables are stored internally in PHP.
 This table summarizes what you need to know:
 
 | PHP type           | Go type                       | Direct conversion | C to Go helper                    | Go to C helper                     | Class Methods Support |
@@ -169,7 +169,7 @@ This table summarizes what you need to know:
 >
 > For class methods specifically, primitive types and arrays are currently supported. Objects cannot be used as method parameters or return types yet.
 
-If you refer to the code snippet of the previous section, you can see that helpers are used to convert the first parameter and the return value. The second and third parameter of our `repeat_this()` function don't need to be converted as memory representation of the underlying types are the same for both C and Go.
+If you refer to the code snippet of the previous section, you can see that helpers are used to convert the first parameter and the return value. The second and third parameters of our `repeat_this()` function don't need to be converted, as the memory representation of the underlying types is the same for both C and Go.
 
 #### Working with Arrays
 
@@ -260,8 +260,8 @@ func process_data_packed(arr *C.zend_array) unsafe.Pointer {
 
 - **Ordered key-value pairs** - Option to keep the order of the associative array
 - **Optimized for multiple cases** - Option to ditch the order for better performance or convert straight to a slice
-- **Automatic list detection** - When converting to PHP, automatically detects if array should be a packed list or hashmap
-- **Nested Arrays** - Arrays can be nested and will convert all support types automatically (`int64`,`float64`,`string`,`bool`,`nil`,`AssociativeArray`,`map[string]any`,`[]any`)
+- **Automatic list detection** - When converting to PHP, automatically detects if the array should be a packed list or a hashmap
+- **Nested Arrays** - Arrays can be nested and will convert all support types automatically (`int64`, `float64`, `string`, `bool`, `nil`, `AssociativeArray`, `map[string]any`, `[]any`)
 - **Objects are not supported** - Currently, only scalar types and arrays can be used as values. Providing an object will result in a `null` value in the PHP array.
 
 ##### Available methods: Packed and Associative
@@ -519,7 +519,7 @@ echo User::ROLE_ADMIN;       // "admin"
 echo Order::STATE_PENDING;   // 0
 ```
 
-The directive supports various value types including strings, integers, booleans, floats, and iota constants. When using `iota`, the generator automatically assigns sequential values (0, 1, 2, etc.). Global constants become available in your PHP code as global constants, while class constants are scoped to their respective classes using the public visibility. When using integers, different possible notation (binary, hex, octal) are supported and dumped as is in the PHP stub file.
+The directive supports various value types, including strings, integers, booleans, floats, and iota constants. When using `iota`, the generator automatically assigns sequential values (0, 1, 2, etc.). Global constants become available in your PHP code as global constants, while class constants are scoped to their respective classes using the public visibility. When using integers, different possible notations (binary, hex, octal) are supported and dumped as is in the PHP stub file.
 
 You can use constants just like you are used to in the Go code. For example, let's take the `repeat_this()` function we declared earlier and change the last argument to an integer:
 
