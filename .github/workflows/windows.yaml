@@ -33,6 +33,7 @@ permissions:
 
 env:
   GOTOOLCHAIN: local
+  GOTESTSUM_FORMAT: github-actions
   GOFLAGS: "-ldflags=-extldflags=-fuse-ld=lld -tags=nobadger,nomysql,nopgx"
   PHP_DOWNLOAD_BASE: "https://downloads.php.net/~windows/releases/"
   CC: clang
