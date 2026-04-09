@@ -19,7 +19,7 @@ permissions:
 env:
   GOTOOLCHAIN: local
   GOEXPERIMENT: cgocheck2
-  GOTESTSUM_FORMAT: github-actions
+  GOTESTSUM_FORMAT: pkgname-and-test-fails
 jobs:
   tests-linux:
     name: Tests (Linux, PHP ${{ matrix.php-versions }})

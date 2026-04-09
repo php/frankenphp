@@ -18,7 +18,7 @@ permissions:
   contents: read
 env:
   GOTOOLCHAIN: local
-  GOTESTSUM_FORMAT: github-actions
+  GOTESTSUM_FORMAT: pkgname-and-test-fails
 jobs:
   # Adapted from https://github.com/beberlei/hdrhistogram-php
   sanitizers:
