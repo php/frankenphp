@@ -18,6 +18,7 @@ permissions:
   contents: read
 env:
   GOTOOLCHAIN: local
+  GOTESTSUM_FORMAT: pkgname-and-test-fails
 jobs:
   # Adapted from https://github.com/beberlei/hdrhistogram-php
   sanitizers:
@@ -102,13 +103,13 @@ jobs:
         run: echo "$(pwd)/php/target/bin" >> "$GITHUB_PATH"
       - name: Install e-dant/watcher
         uses: ./.github/actions/watcher
-      - name: Set Set CGO flags
+      - name: Install gotestsum
+        run: go install gotest.tools/gotestsum@latest
+      - name: Set CGO flags
         run: |
           {
             echo "CGO_CFLAGS=$CFLAGS -I${PWD}/watcher/target/include $(php-config --includes)"
             echo "CGO_LDFLAGS=$LDFLAGS $(php-config --ldflags) $(php-config --libs)"
           } >> "$GITHUB_ENV"
-      - name: Compile tests
-        run: go test ${{ matrix.sanitizer == 'msan' && '-tags=nowatcher' || '' }} -${{ matrix.sanitizer }} -v -x -c
       - name: Run tests
-        run: ./frankenphp.test -test.v
+        run: gotestsum -- ${{ matrix.sanitizer == 'msan' && '-tags=nowatcher' || '' }} -${{ matrix.sanitizer }} ./...

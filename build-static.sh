@@ -158,7 +158,6 @@ fi
 if [ -z "${PHP_EXTENSIONS}" ]; then
 	# enable EMBED mode, first check if project has dumped extensions
 	if [ -n "${EMBED}" ] && [ -f "${EMBED}/composer.json" ] && [ -f "${EMBED}/composer.lock" ] && [ -f "${EMBED}/vendor/composer/installed.json" ]; then
-		cd "${EMBED}"
 		# read the extensions using spc dump-extensions
 		PHP_EXTENSIONS=$(${spcCommand} dump-extensions "${EMBED}" --format=text --no-dev --no-ext-output="${defaultExtensions}")
 	else
