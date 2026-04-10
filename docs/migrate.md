@@ -122,6 +122,7 @@ services:
     image: dunglas/frankenphp:1-php8.5
     volumes:
       - .:/var/www/app
+      - ./Caddyfile:/etc/frankenphp/Caddyfile
       - caddy_data:/data
       - caddy_config:/config
     ports:
