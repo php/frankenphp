@@ -217,6 +217,7 @@ func splitCgiPath(fc *frankenPHPContext) {
 		if strings.HasPrefix(fc.worker.fileName, docRootWithSep) {
 			fc.scriptName = filepath.ToSlash(strings.TrimPrefix(fc.worker.fileName, fc.documentRoot))
 		} else {
+			fc.docURI = ""
 			fc.pathInfo = ""
 		}
 		return

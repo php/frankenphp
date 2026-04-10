@@ -512,12 +512,14 @@ func TestPHPServerGlobals(t *testing.T) {
 	tester.AssertGetResponse(
 		"http://localhost:"+testPort+"/en",
 		http.StatusOK,
-		"SCRIPT_NAME: /server-globals.php<br>"+
-			"SCRIPT_FILENAME: "+scriptFilename+"<br>"+
-			"PHP_SELF: /server-globals.php<br>"+
-			"PATH_INFO: <br>"+
-			"DOCUMENT_ROOT: "+documentRoot+"<br>"+
-			"REQUEST_URI: /en<br>",
+		fmt.Sprintf(`SCRIPT_NAME: /server-globals.php
+SCRIPT_FILENAME: %s
+PHP_SELF: /server-globals.php
+PATH_INFO:
+DOCUMENT_ROOT: %s
+DOCUMENT_URI: /server-globals.php
+REQUEST_URI: /en
+`, scriptFilename, documentRoot),
 	)
 
 	// Request to /server-globals.php/en: explicit PHP file with path info
@@ -525,12 +527,14 @@ func TestPHPServerGlobals(t *testing.T) {
 	tester.AssertGetResponse(
 		"http://localhost:"+testPort+"/server-globals.php/en",
 		http.StatusOK,
-		"SCRIPT_NAME: /server-globals.php<br>"+
-			"SCRIPT_FILENAME: "+scriptFilename+"<br>"+
-			"PHP_SELF: /server-globals.php/en<br>"+
-			"PATH_INFO: /en<br>"+
-			"DOCUMENT_ROOT: "+documentRoot+"<br>"+
-			"REQUEST_URI: /server-globals.php/en<br>",
+		fmt.Sprintf(`SCRIPT_NAME: /server-globals.php
+SCRIPT_FILENAME: %s
+PHP_SELF: /server-globals.php/en
+PATH_INFO: /en
+DOCUMENT_ROOT: %s
+DOCUMENT_URI: /server-globals.php
+REQUEST_URI: /server-globals.php/en
+`, scriptFilename, documentRoot),
 	)
 }
 
@@ -592,23 +596,27 @@ func TestWorkerPHPServerGlobals(t *testing.T) {
 	tester.AssertGetResponse(
 		"http://localhost:"+testPort+"/en",
 		http.StatusOK,
-		"SCRIPT_NAME: /server-globals.php<br>"+
-			"SCRIPT_FILENAME: "+scriptFilename+"<br>"+
-			"PHP_SELF: /server-globals.php<br>"+
-			"PATH_INFO: <br>"+
-			"DOCUMENT_ROOT: "+documentRoot+"<br>"+
-			"REQUEST_URI: /en<br>",
+		fmt.Sprintf(`SCRIPT_NAME: /server-globals.php
+SCRIPT_FILENAME: %s
+PHP_SELF: /server-globals.php
+PATH_INFO:
+DOCUMENT_ROOT: %s
+DOCUMENT_URI: /server-globals.php
+REQUEST_URI: /en
+`, scriptFilename, documentRoot),
 	)
 
 	tester.AssertGetResponse(
 		"http://localhost:"+testPort+"/server-globals.php/en",
 		http.StatusOK,
-		"SCRIPT_NAME: /server-globals.php<br>"+
-			"SCRIPT_FILENAME: "+scriptFilename+"<br>"+
-			"PHP_SELF: /server-globals.php/en<br>"+
-			"PATH_INFO: /en<br>"+
-			"DOCUMENT_ROOT: "+documentRoot+"<br>"+
-			"REQUEST_URI: /server-globals.php/en<br>",
+		fmt.Sprintf(`SCRIPT_NAME: /server-globals.php
+SCRIPT_FILENAME: %s
+PHP_SELF: /server-globals.php/en
+PATH_INFO: /en
+DOCUMENT_ROOT: %s
+DOCUMENT_URI: /server-globals.php
+REQUEST_URI: /server-globals.php/en
+`, scriptFilename, documentRoot),
 	)
 
 	// === Site 2: php_server with its own worker ===
@@ -616,46 +624,54 @@ func TestWorkerPHPServerGlobals(t *testing.T) {
 	tester.AssertGetResponse(
 		"http://localhost:"+testPortTwo+"/en",
 		http.StatusOK,
-		"SCRIPT_NAME: /server-globals.php<br>"+
-			"SCRIPT_FILENAME: "+scriptFilename+"<br>"+
-			"PHP_SELF: /server-globals.php<br>"+
-			"PATH_INFO: <br>"+
-			"DOCUMENT_ROOT: "+documentRoot+"<br>"+
-			"REQUEST_URI: /en<br>",
+		fmt.Sprintf(`SCRIPT_NAME: /server-globals.php
+SCRIPT_FILENAME: %s
+PHP_SELF: /server-globals.php
+PATH_INFO:
+DOCUMENT_ROOT: %s
+DOCUMENT_URI: /server-globals.php
+REQUEST_URI: /en
+`, scriptFilename, documentRoot),
 	)
 
 	tester.AssertGetResponse(
 		"http://localhost:"+testPortTwo+"/server-globals.php/en",
 		http.StatusOK,
-		"SCRIPT_NAME: /server-globals.php<br>"+
-			"SCRIPT_FILENAME: "+scriptFilename+"<br>"+
-			"PHP_SELF: /server-globals.php/en<br>"+
-			"PATH_INFO: /en<br>"+
-			"DOCUMENT_ROOT: "+documentRoot+"<br>"+
-			"REQUEST_URI: /server-globals.php/en<br>",
+		fmt.Sprintf(`SCRIPT_NAME: /server-globals.php
+SCRIPT_FILENAME: %s
+PHP_SELF: /server-globals.php/en
+PATH_INFO: /en
+DOCUMENT_ROOT: %s
+DOCUMENT_URI: /server-globals.php
+REQUEST_URI: /server-globals.php/en
+`, scriptFilename, documentRoot),
 	)
 
 	// === Site 3: php_server with its own match worker ===
 	tester.AssertGetResponse(
 		"http://localhost:"+testPortThree+"/en",
 		http.StatusOK,
-		"SCRIPT_NAME: <br>"+
-			"SCRIPT_FILENAME: "+scriptFilename+"<br>"+
-			"PHP_SELF: <br>"+
-			"PATH_INFO: <br>"+
-			"DOCUMENT_ROOT: "+documentRoot2+"<br>"+
-			"REQUEST_URI: /en<br>",
+		fmt.Sprintf(`SCRIPT_NAME:
+SCRIPT_FILENAME: %s
+PHP_SELF:
+PATH_INFO:
+DOCUMENT_ROOT: %s
+DOCUMENT_URI:
+REQUEST_URI: /en
+`, scriptFilename, documentRoot2),
 	)
 
 	tester.AssertGetResponse(
 		"http://localhost:"+testPortThree+"/server-globals.php/en",
 		http.StatusOK,
-		"SCRIPT_NAME: <br>"+
-			"SCRIPT_FILENAME: "+scriptFilename+"<br>"+
-			"PHP_SELF: <br>"+
-			"PATH_INFO: <br>"+
-			"DOCUMENT_ROOT: "+documentRoot2+"<br>"+
-			"REQUEST_URI: /server-globals.php/en<br>",
+		fmt.Sprintf(`SCRIPT_NAME:
+SCRIPT_FILENAME: %s
+PHP_SELF:
+PATH_INFO:
+DOCUMENT_ROOT: %s
+DOCUMENT_URI:
+REQUEST_URI: /server-globals.php/en
+`, scriptFilename, documentRoot2),
 	)
 }
 
