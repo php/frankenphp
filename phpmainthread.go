@@ -56,6 +56,9 @@ func initPHPThreads(numThreads int, numMaxThreads int, phpIni map[string]string)
 
 	C.frankenphp_init_thread_metrics(C.int(mainThread.maxThreads))
 
+	// initialize force-kill support for stuck background workers
+	C.frankenphp_init_force_kill(C.int(mainThread.maxThreads))
+
 	// initialize all other threads
 	phpThreads = make([]*phpThread, mainThread.maxThreads)
 	phpThreads[0] = initialThread
@@ -97,6 +100,7 @@ func drainPHPThreads() {
 	}
 
 	doneWG.Wait()
+	C.frankenphp_destroy_force_kill()
 	mainThread.state.Set(state.Done)
 	mainThread.state.WaitFor(state.Reserved)
 	C.frankenphp_destroy_thread_metrics()

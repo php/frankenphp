@@ -51,6 +51,7 @@ type FrankenPHPModule struct {
 	preparedEnvNeedsReplacement bool
 	logger                      *slog.Logger
 	requestOptions              []frankenphp.RequestOption
+	backgroundScope             string
 }
 
 // CaddyModule returns the Caddy module information.
@@ -78,6 +79,12 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 
 	f.assignMercureHub(ctx)
 
+	// Each php_server block gets its own scope for background worker isolation.
+	// Only set once - Caddy may call Provision multiple times.
+	if f.backgroundScope == "" {
+		f.backgroundScope = frankenphp.NextBackgroundWorkerScope()
+	}
+
 	loggerOpt := frankenphp.WithRequestLogger(f.logger)
 	for i, wc := range f.Workers {
 		// make the file path absolute from the public directory
@@ -92,6 +99,7 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		}
 
 		wc.requestOptions = append(wc.requestOptions, loggerOpt)
+		wc.options = append(wc.options, frankenphp.WithWorkerBackgroundScope(f.backgroundScope))
 		f.Workers[i] = wc
 	}
 
@@ -241,6 +249,7 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 			opts,
 			frankenphp.WithOriginalRequest(new(ctx.Value(caddyhttp.OriginalRequestCtxKey).(http.Request))),
 			frankenphp.WithWorkerName(workerName),
+			frankenphp.WithRequestBackgroundScope(f.backgroundScope),
 		)...,
 	)
 
@@ -317,8 +326,12 @@ func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	}
 
 	// Check if a worker with this filename already exists in this module
+	// Background workers are excluded (they share filenames by design)
 	fileNames := make(map[string]struct{}, len(f.Workers))
 	for _, w := range f.Workers {
+		if w.Background {
+			continue
+		}
 		if _, ok := fileNames[w.FileName]; ok {
 			return fmt.Errorf(`workers in a single "php" or "php_server" block must not have duplicate filenames: %q`, w.FileName)
 		}

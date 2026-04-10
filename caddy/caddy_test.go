@@ -166,6 +166,31 @@ func TestWorker(t *testing.T) {
 	wg.Wait()
 }
 
+func TestBackgroundWorkerCaddy(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+			http_port `+testPort+`
+			https_port 9443
+		}
+
+		localhost:`+testPort+` {
+			root ../testdata
+			php_server {
+				worker ../testdata/background-worker-caddy-entrypoint.php {
+					background
+					name caddy-bg-worker
+					num 1
+				}
+			}
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/background-worker-caddy-reader.php", http.StatusOK, "hello from background worker")
+}
+
 func TestGlobalAndModuleWorker(t *testing.T) {
 	var wg sync.WaitGroup
 	testPortNum, _ := strconv.Atoi(testPort)

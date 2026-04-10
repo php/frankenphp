@@ -34,6 +34,7 @@ type threadHandler interface {
 	afterScriptExecution(exitStatus int)
 	context() context.Context
 	frankenPHPContext() *frankenPHPContext
+	drain()
 }
 
 func newPHPThread(threadIndex int) *phpThread {
@@ -74,6 +75,7 @@ func (thread *phpThread) shutdown() {
 		return
 	}
 
+	thread.handler.drain()
 	close(thread.drainChan)
 	thread.state.WaitFor(state.Done)
 	thread.drainChan = make(chan struct{})

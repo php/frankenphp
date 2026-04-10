@@ -164,3 +164,13 @@ func WithWorkerName(name string) RequestOption {
 		return nil
 	}
 }
+
+// WithRequestBackgroundScope sets the background worker scope for this request.
+// Requests in the same scope can access the same background workers.
+func WithRequestBackgroundScope(scope string) RequestOption {
+	return func(o *frankenPHPContext) error {
+		o.backgroundScope = scope
+
+		return nil
+	}
+}
