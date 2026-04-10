@@ -103,10 +103,12 @@ services:
   nginx:
     image: nginx:1
     volumes:
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+      # mount Nginx config into the container
+      - ./config:/etc/nginx/conf.d
       - .:/var/www/app
     ports:
       - "80:80"
+      - "443:443"
 
   php:
     image: php:8.5-fpm
@@ -122,7 +124,8 @@ services:
     image: dunglas/frankenphp:1-php8.5
     volumes:
       - .:/var/www/app
-      - ./Caddyfile:/etc/frankenphp/Caddyfile
+      # mount the Caddyfile into the container
+      - ./config:/etc/frankenphp
       - caddy_data:/data
       - caddy_config:/config
     ports:
