@@ -607,7 +607,7 @@ PHP_FUNCTION(frankenphp_handle_request) {
   }
 
 #ifndef PHP_WIN32
-  if (is_forked_child) {
+  if (UNEXPECTED(is_forked_child)) {
     _exit(0);
   }
 #endif
