@@ -1101,7 +1101,7 @@ static void *php_thread(void *arg) {
       /* Execute the PHP script, potential bailout to zend_catch */
       php_execute_script(&file_handle);
 #ifndef PHP_WIN32
-      if (is_forked_child) {
+      if (UNEXPECTED(is_forked_child)) {
         _exit(EG(exit_status));
       }
 #endif
@@ -1122,7 +1122,7 @@ static void *php_thread(void *arg) {
   }
   zend_catch {
 #ifndef PHP_WIN32
-    if (is_forked_child) {
+    if (UNEXPECTED(is_forked_child)) {
       _exit(EG(exit_status));
     }
 #endif
