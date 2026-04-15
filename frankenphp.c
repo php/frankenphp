@@ -1381,7 +1381,18 @@ static void *execute_script_cli(void *arg) {
   php_embed_module.pretty_name = "PHP CLI embedded in FrankenPHP";
   php_embed_module.register_server_variables = sapi_cli_register_variables;
 
-  php_embed_init(cli_argc, cli_argv);
+#ifdef ZTS
+  (void)ts_resource(0);          // Attache thread to existing  TSRM.
+#ifdef PHP_WIN32
+  ZEND_TSRMLS_CACHE_UPDATE();
+#endif
+#endif
+
+  // php_request_startup instead of php_embed_init.
+  if (php_request_startup() == FAILURE) {
+    ts_free_thread();
+    return (void *)(intptr_t)1;
+  }
 
   cli_register_file_handles();
   zend_first_try {
@@ -1400,7 +1411,11 @@ static void *execute_script_cli(void *arg) {
 
   exit_status = (void *)(intptr_t)EG(exit_status);
 
-  php_embed_shutdown();
+  php_request_shutdown(NULL);    // Instead of php_embed_shutdown.
+
+#ifdef ZTS
+  ts_free_thread();              // Cleanly detach.
+#endif
 
   return exit_status;
 }
