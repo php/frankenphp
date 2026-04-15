@@ -28,8 +28,7 @@ on:
   schedule:
     - cron: "0 8 * * *"
 
-permissions:
-  contents: read
+permissions: {}
 
 env:
   GOTOOLCHAIN: local

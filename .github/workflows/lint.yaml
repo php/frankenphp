@@ -10,14 +10,15 @@ on:
   push:
     branches:
       - main
-permissions:
-  contents: read
-  packages: read
-  statuses: write
+permissions: {}
 jobs:
   build:
     name: Lint Code Base
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+      statuses: write
     steps:
       - name: Checkout Code
         uses: actions/checkout@v6

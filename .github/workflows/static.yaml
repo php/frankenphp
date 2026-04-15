@@ -32,8 +32,7 @@ on:
   schedule:
     - cron: "0 0 * * *"
 
-permissions:
-  contents: read
+permissions: {}
 
 env:
   IMAGE_NAME: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.version) || startsWith(github.ref, 'refs/tags/')) && 'dunglas/frankenphp' || 'dunglas/frankenphp-dev' }}
@@ -43,6 +42,8 @@ env:
 jobs:
   prepare:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     outputs:
       push: ${{ toJson((steps.check.outputs.ref || (github.event_name == 'workflow_dispatch' && inputs.version) || startsWith(github.ref, 'refs/tags/') || (github.ref == 'refs/heads/main' && github.event_name != 'pull_request')) && true || false) }}
       platforms: ${{ steps.matrix.outputs.platforms }}
@@ -381,6 +382,8 @@ jobs:
   push:
     environment: dockerhub
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     needs:
       - prepare
       - build-linux-musl

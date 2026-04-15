@@ -14,8 +14,7 @@ on:
       - main
     paths-ignore:
       - "docs/**"
-permissions:
-  contents: read
+permissions: {}
 env:
   GOTOOLCHAIN: local
   GOTESTSUM_FORMAT: pkgname-and-test-fails
@@ -24,6 +23,8 @@ jobs:
   sanitizers:
     name: ${{ matrix.sanitizer }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:

@@ -14,8 +14,7 @@ on:
       - main
     paths-ignore:
       - "docs/**"
-permissions:
-  contents: read
+permissions: {}
 env:
   GOTOOLCHAIN: local
   GOEXPERIMENT: cgocheck2
@@ -25,6 +24,8 @@ jobs:
     name: Tests (Linux, PHP ${{ matrix.php-versions }})
     runs-on: ubuntu-latest
     continue-on-error: false
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -98,6 +99,8 @@ jobs:
   integration-tests:
     name: Integration Tests (Linux, PHP ${{ matrix.php-versions }})
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -145,6 +148,8 @@ jobs:
   tests-mac:
     name: Tests (macOS, PHP 8.5)
     runs-on: macos-latest
+    permissions:
+      contents: read
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
       GOFLAGS: "-tags=nowatcher,nobadger,nomysql,nopgx"

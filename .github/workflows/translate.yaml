@@ -8,14 +8,15 @@ on:
       - main
     paths:
       - "docs/*"
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
 jobs:
   build:
     environment: translate
     name: Translate Docs
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - name: Checkout Code
         uses: actions/checkout@v6
