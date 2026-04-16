@@ -35,8 +35,22 @@ if [[ ! $1 =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]
 	exit 1
 fi
 
-git checkout main
-git pull
+# Pre-flight checks
+if [[ "$(git branch --show-current)" != "main" ]]; then
+	echo "You must be on the main branch to release." >&2
+	exit 1
+fi
+
+if [[ -n "$(git status --porcelain)" ]]; then
+	echo "Working tree is not clean. Commit or stash your changes first." >&2
+	exit 1
+fi
+
+git fetch origin
+if [[ -n "$(git diff HEAD origin/main)" ]]; then
+	echo "Local main is not up to date with origin/main. Pull first." >&2
+	exit 1
+fi
 
 cd caddy/
 go get "github.com/dunglas/frankenphp@v$1"
