@@ -1,6 +1,0 @@
----
-rules:
-  unpinned-uses:
-    config:
-      policies:
-        "*": hash-pin
