@@ -19,31 +19,26 @@ Flaws affecting components used by FrankenPHP (PHP, Caddy, Go...) or using Frank
 
 ## Supply-chain hardening
 
-FrankenPHP follows the open-source security practices documented in
-[Astral's "Open source security at Astral" post](https://astral.sh/blog/open-source-security-at-astral):
+FrankenPHP follows the open-source security practices from
+[Astral's security guide](https://astral.sh/blog/open-source-security-at-astral):
 
-- **Workflow auditing.** Every push and pull request that touches CI
-  is audited by [zizmor](https://docs.zizmor.sh/) as a hard gate. The
-  `unpinned-uses` rule in `zizmor.yaml` requires, at a minimum, a tag
-  pin on every action.
-- **Least-privilege permissions.** Every workflow starts with
-  `permissions: {}` and only broadens access on a per-job basis, so a
-  newly added job inherits no permissions by default.
-- **Environment-scoped secrets.** Secrets that publish artifacts
-  (Docker Hub credentials, the website deploy token, the translation
-  API key) live in dedicated GitHub Environments (`dockerhub`,
-  `website`, `translate`) instead of repository-wide secrets,
-  limiting the blast radius of a compromised job.
-- **Build provenance.** Release binaries are attested with
-  [`actions/attest-build-provenance`](https://github.com/actions/attest-build-provenance)
-  so downstream consumers can verify they were produced by this
-  repository's CI.
-- **Continuous dependency updates.** Dependabot tracks Go modules,
-  GitHub Actions and Docker base images; new versions land through
-  reviewable pull requests rather than implicit `latest` upgrades.
-- **No `pull_request_target`.** Workflows never use the
-  `pull_request_target` trigger, which would expose write tokens to
-  fork pull requests.
-- **Checkout without persisted credentials.** All `actions/checkout`
-  steps set `persist-credentials: false` unless they specifically
-  need to push back to the repository.
+- **Workflow auditing** --
+  [Super Linter](https://github.com/super-linter/super-linter) runs
+  [zizmor](https://docs.zizmor.sh/) on every pull request.
+  The `unpinned-uses` rule in `zizmor.yaml` requires a tag pin on every action.
+- **Least-privilege permissions** --
+  Every workflow starts with `permissions: {}` and only grants access per job.
+- **Environment-scoped secrets** --
+  Secrets for publishing (Docker Hub, website deploy, translation API)
+  live in dedicated GitHub Environments (`dockerhub`, `website`, `translate`).
+- **Build provenance** --
+  Release binaries carry
+  [`attest-build-provenance`](https://github.com/actions/attest-build-provenance)
+  attestations.
+- **Dependency updates** --
+  Dependabot tracks Go modules, GitHub Actions, and Docker base images.
+- **Safe triggers** --
+  Workflows never use `pull_request_target`.
+- **No persisted credentials** --
+  All `actions/checkout` steps set `persist-credentials: false`
+  unless the job needs to push.
