@@ -37,21 +37,3 @@ updates:
           - "*"
     cooldown:
       default-days: 7
-  # Docker base images. Astral recommends keeping the supply chain
-  # under continuous review; Dependabot opens a PR whenever a new base
-  # image becomes available so we never silently fall behind security
-  # patches.
-  - package-ecosystem: docker
-    directories:
-      - /
-      - /caddy
-    schedule:
-      interval: weekly
-    commit-message:
-      prefix: chore(docker)
-    groups:
-      docker:
-        patterns:
-          - "*"
-    cooldown:
-      default-days: 7

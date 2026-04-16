@@ -1,16 +1,6 @@
 ---
-# zizmor static-analysis configuration.
-#
-# See https://docs.zizmor.sh/configuration/ for the full reference.
-#
-# Inspired by Astral's open-source security guidance:
-# https://astral.sh/blog/open-source-security-at-astral
 rules:
   unpinned-uses:
     config:
       policies:
-        # Every action must be pinned to at least a tag (`@v6`).
-        # Hash-pinning to a commit SHA is the long-term goal recommended
-        # by Astral; once the migration is complete, switch this policy
-        # to `hash-pin` so that mutable tags can no longer reach CI.
         "*": ref-pin
