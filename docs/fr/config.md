@@ -19,7 +19,7 @@ php_server
 
 Un `Caddyfile` plus avancé, activant davantage de fonctionnalités et fournissant des variables d'environnement pratiques, est disponible [dans le dépôt FrankenPHP](https://github.com/php/frankenphp/blob/main/caddy/frankenphp/Caddyfile) et avec les images Docker.
 
-PHP lui-même peut être configuré [en utilisant un fichier `php.ini`](https://www.php.net/manual/fr/configuration.file.php).
+PHP lui-même peut être configuré [en utilisant un fichier `php.ini`](https://www.php.net/manual/en/configuration.file.php).
 
 Selon votre méthode d'installation, FrankenPHP et l'interpréteur PHP chercheront les fichiers de configuration aux emplacements décrits ci-dessous.
 
@@ -96,6 +96,7 @@ Vous pouvez également configurer explicitement FrankenPHP en utilisant l'[optio
 		max_threads <num_threads> # Limite le nombre de threads PHP supplémentaires qui peuvent être démarrés au moment de l'exécution. Valeur par défaut : num_threads. Peut être mis à 'auto'.
 		max_wait_time <duration> # Définit le temps maximum pendant lequel une requête peut attendre un thread PHP libre avant d'être interrompue. Valeur par défaut : désactivé.
 		max_idle_time <duration> # Définit le temps maximum pendant lequel un thread auto-dimensionné peut être inactif avant d'être désactivé. Par défaut : 5s.
+		max_requests <num> # (expérimental) Définit le nombre maximum de requêtes qu'un thread PHP traitera avant d'être redémarré, utile pour atténuer les fuites de mémoire. S'applique aux threads réguliers et aux threads worker. Par défaut : 0 (illimité).
 		php_ini <key> <value> # Définit une directive php.ini. Peut être utilisé plusieurs fois pour définir plusieurs directives.
 		worker {
 			file <path> # Définit le chemin vers le script worker.
@@ -146,7 +147,7 @@ other.example.com {
 ```
 
 L'utilisation de la directive `php_server` est généralement ce dont vous avez besoin,
-mais si vous avez besoin d'un contrôle total, vous pouvez utiliser la sous-directive `php`.
+mais si vous avez besoin d'un contrôle total, vous pouvez utiliser la directive de niveau inférieur `php`.
 La directive `php` transmet toutes les entrées à PHP, au lieu de vérifier d'abord si
 c'est un fichier PHP ou pas. En savoir plus à ce sujet dans la [documentation liée aux performances](performance.md#try_files).
 
@@ -261,6 +262,25 @@ et transmettra sinon la requête au worker correspondant au modèle de chemin.
 }
 ```
 
+## Redémarrage des Threads après un certain nombre de requêtes (Expérimental)
+
+FrankenPHP peut redémarrer automatiquement les threads PHP après qu'ils aient géré un certain nombre de requêtes.
+Lorsqu'un thread atteint la limite, il est entièrement redémarré,
+nettoyant toute la mémoire et l'état. Les autres threads continuent de servir les requêtes pendant le redémarrage.
+
+Si vous constatez que la mémoire augmente au fil du temps, la solution idéale est de signaler la fuite
+au mainteneur de l'extension ou de la bibliothèque responsable.
+Mais lorsque la solution dépend d'un tiers que vous ne contrôlez pas,
+`max_requests` offre une solution pragmatique et, espérons-le, temporaire pour la production :
+
+```caddyfile
+{
+	frankenphp {
+		max_requests 500
+	}
+}
+```
+
 ## Variables d'environnement
 
 Les variables d'environnement suivantes peuvent être utilisées pour insérer des directives Caddy dans le `Caddyfile` sans le modifier :
@@ -272,11 +292,11 @@ Les variables d'environnement suivantes peuvent être utilisées pour insérer d
 
 Comme pour les SAPI FPM et CLI, les variables d'environnement sont exposées par défaut dans la superglobale `$_SERVER`.
 
-La valeur `S` de [la directive `variables_order` de PHP](https://www.php.net/manual/fr/ini.core.php#ini.variables-order) est toujours équivalente à `ES`, que `E` soit défini ailleurs dans cette directive ou non.
+La valeur `S` de [la directive `variables_order` de PHP](https://www.php.net/manual/en/ini.core.php#ini.variables-order) est toujours équivalente à `ES`, que `E` soit défini ailleurs dans cette directive ou non.
 
 ## Configuration PHP
 
-Pour charger [des fichiers de configuration PHP supplémentaires](https://www.php.net/manual/fr/configuration.file.php#configuration.file.scan),
+Pour charger [des fichiers de configuration PHP supplémentaires](https://www.php.net/manual/en/configuration.file.php#configuration.file.scan),
 la variable d'environnement `PHP_INI_SCAN_DIR` peut être utilisée.
 Lorsqu'elle est définie, PHP chargera tous les fichiers avec l'extension `.ini` présents dans les répertoires donnés.
 
@@ -287,7 +307,7 @@ Vous pouvez également modifier la configuration de PHP en utilisant la directiv
     frankenphp {
         php_ini memory_limit 256M
 
-        # or
+        # ou
 
         php_ini {
             memory_limit 256M
@@ -417,4 +437,4 @@ Add-Content -Path $PROFILE -Value '. (Join-Path (Split-Path $PROFILE) "frankenph
 
 Vous devrez démarrer un nouveau shell pour que cette configuration prenne effet.
 
-Vous devrez ensuite démarrer un nouveau shell pour que cette configuration prenne effet.
+Vous devrez démarrer un nouveau shell pour que cette configuration prenne effet.
