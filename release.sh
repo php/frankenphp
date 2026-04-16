@@ -47,7 +47,7 @@ if [[ -n "$(git status --porcelain)" ]]; then
 fi
 
 git fetch origin
-if [[ -n "$(git diff HEAD origin/main)" ]]; then
+if [[ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]]; then
 	echo "Local main is not up to date with origin/main. Pull first." >&2
 	exit 1
 fi
