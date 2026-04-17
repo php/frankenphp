@@ -118,6 +118,26 @@ func SetUserAge(u *UserStruct, age int) {
 	}
 }
 
+func TestClassParserOrphanMethodDirective(t *testing.T) {
+	input := `package main
+
+//export_php:class User
+type UserStruct struct {
+	name string
+}
+
+//export_php:method User::getName(): string
+`
+	tmpDir := t.TempDir()
+	fileName := filepath.Join(tmpDir, "orphan.go")
+	require.NoError(t, os.WriteFile(fileName, []byte(input), 0644))
+
+	parser := classParser{}
+	_, err := parser.parse(fileName)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "is not followed by a function declaration")
+}
+
 func TestClassMethods(t *testing.T) {
 	var input = []byte(`package main
 
