@@ -117,11 +117,11 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		f.SplitPath = []string{".php"}
 	}
 
-	if opt, err := frankenphp.WithRequestSplitPath(f.SplitPath); err == nil {
-		f.requestOptions = append(f.requestOptions, opt)
-	} else {
-		f.requestOptions = append(f.requestOptions, opt)
+	opt, err := frankenphp.WithRequestSplitPath(f.SplitPath)
+	if err != nil {
+		return fmt.Errorf("invalid split_path: %w", err)
 	}
+	f.requestOptions = append(f.requestOptions, opt)
 
 	if f.ResolveRootSymlink == nil {
 		f.ResolveRootSymlink = new(true)
