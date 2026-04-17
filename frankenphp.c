@@ -1,5 +1,6 @@
 #include "frankenphp.h"
 #include <SAPI.h>
+#include <Zend/zend.h>
 #include <Zend/zend_alloc.h>
 #include <Zend/zend_exceptions.h>
 #include <Zend/zend_interfaces.h>
@@ -82,6 +83,38 @@ bool should_filter_var = 0;
 bool original_user_abort_setting = 0;
 frankenphp_interned_strings_t frankenphp_strings = {0};
 HashTable *main_thread_env = NULL;
+
+/* Opcache restart safety — prevents zend_mm_heap corrupted crashes under ZTS.
+ *
+ * PHP's opcache activity tracking uses fcntl() file locks, which are
+ * per-process, not per-thread. In FrankenPHP's threaded model, one thread
+ * releasing the lock releases it for ALL threads, allowing opcache to reset
+ * shared memory (interned strings, hash table) while other threads are still
+ * reading from it. See: https://github.com/php/frankenphp/issues/1737
+ *
+ * Fix: use a pthread read-write lock around the request lifecycle.
+ * - Normal operation: all threads hold a read lock from before
+ *   php_request_startup() through php_request_shutdown() (concurrent).
+ * - When the opcache restart hook fires (from a thread mid-request that
+ *   triggered an OOM/hash overflow), it sets a flag. After the triggering
+ *   thread finishes its request and releases its read lock, the NEXT
+ *   php_request_startup() call from ANY thread will acquire a write lock
+ *   instead — blocking until all other threads' current requests complete.
+ *   Inside that exclusive startup, opcache performs the actual reset
+ *   (accel_is_inactive() returns true because no other threads hold the
+ *   fcntl read lock). After startup completes, the write lock is downgraded
+ *   to a read lock and all other threads resume.
+ */
+static pthread_rwlock_t frankenphp_opcache_rwlock = PTHREAD_RWLOCK_INITIALIZER;
+static volatile int frankenphp_opcache_restart_pending = 0;
+
+static void frankenphp_opcache_restart_hook(int reason) {
+  (void)reason;
+  /* Signal that the next php_request_startup() should acquire exclusive
+   * access. The calling thread is still mid-request (holding a read lock),
+   * so the exclusive lock will only be acquired after it finishes. */
+  __atomic_store_n(&frankenphp_opcache_restart_pending, 1, __ATOMIC_RELEASE);
+}
 
 __thread uintptr_t thread_index;
 __thread bool is_worker_thread = false;
@@ -1071,7 +1104,22 @@ static void *php_thread(void *arg) {
 
       frankenphp_update_request_context();
 
+      /* Opcache restart safety: if a restart was scheduled, ONE thread must
+       * execute php_request_startup() exclusively (write lock) so the
+       * opcache reset proceeds while no other thread touches shared memory.
+       * All other threads take a read lock (concurrent). */
+      if (__atomic_load_n(&frankenphp_opcache_restart_pending, __ATOMIC_ACQUIRE)) {
+        /* Try to become the exclusive restart thread. If another thread
+         * already took the write lock, this blocks until it finishes. */
+        pthread_rwlock_wrlock(&frankenphp_opcache_rwlock);
+        /* Clear the flag — the reset will happen inside our startup. */
+        __atomic_store_n(&frankenphp_opcache_restart_pending, 0, __ATOMIC_RELEASE);
+      } else {
+        pthread_rwlock_rdlock(&frankenphp_opcache_rwlock);
+      }
+
       if (UNEXPECTED(php_request_startup() == FAILURE)) {
+        pthread_rwlock_unlock(&frankenphp_opcache_rwlock);
         /* Request startup failed, bail out to zend_catch */
         frankenphp_log_message("Request startup failed, thread is unhealthy",
                                LOG_ERR);
@@ -1097,6 +1145,7 @@ static void *php_thread(void *arg) {
 
       /* shutdown the request, potential bailout to zend_catch */
       php_request_shutdown((void *)0);
+      pthread_rwlock_unlock(&frankenphp_opcache_rwlock);
       frankenphp_free_request_context();
       go_frankenphp_after_script_execution(thread_index, EG(exit_status));
     }
@@ -1112,6 +1161,7 @@ static void *php_thread(void *arg) {
       zend_catch {}
       zend_end_try();
     }
+    pthread_rwlock_unlock(&frankenphp_opcache_rwlock);
 
     /* Log the last error message, it must be cleared to prevent a crash when
      * freeing execution globals */
@@ -1230,6 +1280,17 @@ static void *php_main(void *arg) {
   }
 
   frankenphp_sapi_module.startup(&frankenphp_sapi_module);
+
+#ifdef ZTS
+  /* Register the opcache restart drain hook.
+   * zend_accel_schedule_restart_hook is a global function pointer declared in
+   * Zend/zend.h that opcache calls when a restart is scheduled. By hooking it,
+   * we drain all PHP threads to a safe inter-request boundary before the
+   * destructive shared memory reset (interned strings, hash table) proceeds.
+   * This prevents the zend_mm_heap corrupted crashes caused by fcntl file locks
+   * being per-process rather than per-thread. */
+  zend_accel_schedule_restart_hook = frankenphp_opcache_restart_hook;
+#endif
 
   /* check if a default filter is set in php.ini and only filter if
    * it is, this is deprecated and will be removed in PHP 9 */
