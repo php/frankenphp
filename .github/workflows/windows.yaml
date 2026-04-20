@@ -28,8 +28,7 @@ on:
   schedule:
     - cron: "0 8 * * *"
 
-permissions:
-  contents: read
+permissions: {}
 
 env:
   GOTOOLCHAIN: local
@@ -63,7 +62,7 @@ jobs:
           git config --global core.eol lf
 
       - name: Checkout Code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: ${{ env.REF || '' }}
           path: frankenphp
@@ -88,7 +87,7 @@ jobs:
           "FRANKENPHP_VERSION=$frankenphpVersion" >> $env:GITHUB_ENV
 
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with: # zizmor: ignore[cache-poisoning]
           go-version: "1.26"
           cache-dependency-path: |
@@ -208,7 +207,7 @@ jobs:
 
       - name: Upload Artifact
         if: ${{ !env.REF }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ${{ env.DIR_NAME }}
           path: ${{ env.DIR_NAME }}

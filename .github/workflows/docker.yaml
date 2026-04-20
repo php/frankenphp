@@ -30,13 +30,14 @@ on:
         type: string
   schedule:
     - cron: "0 4 * * *"
-permissions:
-  contents: read
+permissions: {}
 env:
   IMAGE_NAME: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.version) || startsWith(github.ref, 'refs/tags/')) && 'dunglas/frankenphp' || 'dunglas/frankenphp-dev' }}
 jobs:
   prepare:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     outputs:
       # Push if it's a scheduled job, a tag, or if we're committing to the main branch
       push: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.version) || startsWith(github.ref, 'refs/tags/') || (github.ref == 'refs/heads/main' && github.event_name != 'pull_request')) && true || false }}
@@ -52,12 +53,12 @@ jobs:
       ref: ${{ steps.check.outputs.ref || (github.event_name == 'workflow_dispatch' && inputs.version) || '' }}
       base_fingerprint: ${{ steps.check.outputs.base_fingerprint }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0
           persist-credentials: false
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
       - name: Check PHP versions and base image fingerprint
         id: check
         env:
@@ -82,6 +83,8 @@ jobs:
   build:
     environment: dockerhub
     runs-on: ${{ startsWith(matrix.platform, 'linux/arm') && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    permissions:
+      contents: read
     needs:
       - prepare
     if: ${{ !fromJson(needs.prepare.outputs.skip) }}
@@ -118,23 +121,23 @@ jobs:
         run: echo "sanitized_platform=${PLATFORM//\//-}" >> "${GITHUB_OUTPUT}"
         env:
           PLATFORM: ${{ matrix.platform }}
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: ${{ needs.prepare.outputs.ref }}
           persist-credentials: false
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
         with:
           platforms: ${{ matrix.platform }}
       - name: Login to DockerHub
-        uses: docker/login-action@v4
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Build
         id: build
-        uses: docker/bake-action@v7
+        uses: docker/bake-action@a66e1c87e2eca0503c343edf1d208c716d54b8a8 # v7
         with:
           pull: true
           load: ${{ !fromJson(needs.prepare.outputs.push) }}
@@ -175,7 +178,7 @@ jobs:
           VARIANT: ${{ matrix.variant }}
       - name: Upload builder metadata
         if: fromJson(needs.prepare.outputs.push)
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: metadata-builder-${{ matrix.variant }}-${{ steps.prepare.outputs.sanitized_platform }}
           path: /tmp/metadata/builder/*
@@ -183,7 +186,7 @@ jobs:
           retention-days: 1
       - name: Upload runner metadata
         if: fromJson(needs.prepare.outputs.push)
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: metadata-runner-${{ matrix.variant }}-${{ steps.prepare.outputs.sanitized_platform }}
           path: /tmp/metadata/runner/*
@@ -207,6 +210,8 @@ jobs:
   push:
     environment: dockerhub
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     needs:
       - prepare
       - build
@@ -218,15 +223,15 @@ jobs:
         target: ["builder", "runner"]
     steps:
       - name: Download metadata
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: metadata-${{ matrix.target }}-${{ matrix.variant }}-*
           path: /tmp/metadata
           merge-multiple: true
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
       - name: Login to DockerHub
-        uses: docker/login-action@v4
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}

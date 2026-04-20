@@ -14,8 +14,7 @@ on:
       - main
     paths-ignore:
       - "docs/**"
-permissions:
-  contents: read
+permissions: {}
 env:
   GOTOOLCHAIN: local
   GOEXPERIMENT: cgocheck2
@@ -25,6 +24,8 @@ jobs:
     name: Tests (Linux, PHP ${{ matrix.php-versions }})
     runs-on: ubuntu-latest
     continue-on-error: false
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -38,16 +39,16 @@ jobs:
       LIBRARY_PATH: ${{ github.workspace }}/watcher/target/lib
       GOFLAGS: "-tags=nobadger,nomysql,nopgx"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           persist-credentials: false
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: "1.26"
           cache-dependency-path: |
             go.sum 
             caddy/go.sum
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@728c6c6b8cf02c2e48117716a91ee48313958a19 # v2
         with:
           php-version: ${{ matrix.php-versions }}
           ini-file: development
@@ -84,7 +85,7 @@ jobs:
       - name: Run integrations tests
         run: ./reload_test.sh
       - name: Lint Go code
-        uses: golangci/golangci-lint-action@v9
+        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9
         if: matrix.php-versions == '8.5'
         with:
           version: latest
@@ -98,6 +99,8 @@ jobs:
   integration-tests:
     name: Integration Tests (Linux, PHP ${{ matrix.php-versions }})
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -105,16 +108,16 @@ jobs:
     env:
       XCADDY_GO_BUILD_FLAGS: "-tags=nobadger,nomysql,nopgx"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           persist-credentials: false
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: "1.26"
           cache-dependency-path: |
             go.sum
             caddy/go.sum
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@728c6c6b8cf02c2e48117716a91ee48313958a19 # v2
         with:
           php-version: ${{ matrix.php-versions }}
           ini-file: development
@@ -145,20 +148,22 @@ jobs:
   tests-mac:
     name: Tests (macOS, PHP 8.5)
     runs-on: macos-latest
+    permissions:
+      contents: read
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
       GOFLAGS: "-tags=nowatcher,nobadger,nomysql,nopgx"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           persist-credentials: false
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: "1.26"
           cache-dependency-path: |
             go.sum
             caddy/go.sum
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@728c6c6b8cf02c2e48117716a91ee48313958a19 # v2
         with:
           php-version: 8.5
           ini-file: development
