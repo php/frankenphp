@@ -111,7 +111,7 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		requestURI = fc.requestURI
 	}
 
-	requestPath := ensureLeadingSlash(request.URL.Path)
+	phpSelf := fc.scriptName + fc.pathInfo
 
 	C.frankenphp_register_server_vars(trackVarsArray, C.frankenphp_server_vars{
 		// approximate total length to avoid array re-hashing:
@@ -129,8 +129,8 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		document_root_len:   C.size_t(len(fc.documentRoot)),
 		path_info:           toUnsafeChar(fc.pathInfo),
 		path_info_len:       C.size_t(len(fc.pathInfo)),
-		php_self:            toUnsafeChar(requestPath),
-		php_self_len:        C.size_t(len(requestPath)),
+		php_self:            toUnsafeChar(phpSelf),
+		php_self_len:        C.size_t(len(phpSelf)),
 		document_uri:        toUnsafeChar(fc.docURI),
 		document_uri_len:    C.size_t(len(fc.docURI)),
 		script_filename:     toUnsafeChar(fc.scriptFilename),
@@ -208,16 +208,25 @@ func splitCgiPath(fc *frankenPHPContext) {
 	if splitPos := splitPos(path, splitPath); splitPos > -1 {
 		fc.docURI = path[:splitPos]
 		fc.pathInfo = path[splitPos:]
-
-		// Strip PATH_INFO from SCRIPT_NAME
-		fc.scriptName = strings.TrimSuffix(path, fc.pathInfo)
-
-		// Ensure the SCRIPT_NAME has a leading slash for compliance with RFC3875
-		// Info: https://tools.ietf.org/html/rfc3875#section-4.1.13
-		if fc.scriptName != "" && !strings.HasPrefix(fc.scriptName, "/") {
-			fc.scriptName = "/" + fc.scriptName
-		}
 	}
+
+	// If a worker is already assigned explicitly, derive SCRIPT_NAME from its filename
+	if fc.worker != nil {
+		fc.scriptFilename = fc.worker.fileName
+		docRootWithSep := fc.documentRoot + string(filepath.Separator)
+		if strings.HasPrefix(fc.worker.fileName, docRootWithSep) {
+			fc.scriptName = filepath.ToSlash(strings.TrimPrefix(fc.worker.fileName, fc.documentRoot))
+		} else {
+			fc.docURI = ""
+			fc.pathInfo = ""
+		}
+		return
+	}
+
+	// Strip PATH_INFO from SCRIPT_NAME
+	// Ensure the SCRIPT_NAME has a leading slash for compliance with RFC3875
+	// Info: https://tools.ietf.org/html/rfc3875#section-4.1.13
+	fc.scriptName = ensureLeadingSlash(strings.TrimSuffix(path, fc.pathInfo))
 
 	// TODO: is it possible to delay this and avoid saving everything in the context?
 	// SCRIPT_FILENAME is the absolute path of SCRIPT_NAME
