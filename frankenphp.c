@@ -1503,16 +1503,6 @@ int frankenphp_execute_script_cli(char *script, int argc, char **argv,
   return (intptr_t)exit_status;
 }
 
-int frankenphp_reset_opcache(void) {
-  zend_execute_data execute_data;
-  zval retval;
-  memset(&execute_data, 0, sizeof(execute_data));
-  ZVAL_UNDEF(&retval);
-  orig_opcache_reset(&execute_data, &retval);
-  zval_ptr_dtor(&retval);
-  return 0;
-}
-
 int frankenphp_get_current_memory_limit() { return PG(memory_limit); }
 
 void frankenphp_init_thread_metrics(int max_threads) {

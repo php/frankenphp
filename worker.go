@@ -165,15 +165,10 @@ func newWorker(o workerOpt) (*worker, error) {
 	return w, nil
 }
 
-// EXPERIMENTAL: DrainWorkers finishes all worker scripts before a graceful shutdown
-func DrainWorkers() {
-	_ = drainThreads(false)
-}
-
 // RestartWorkers attempts to restart all workers gracefully
 // All workers must be restarted at the same time to prevent issues with opcache resetting.
 func RestartWorkers() {
-	restartThreadsAndOpcacheReset(true)
+	mainThread.rebootAllThreads()
 }
 
 func (worker *worker) attachThread(thread *phpThread) {

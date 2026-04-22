@@ -50,16 +50,10 @@ func (handler *regularThread) beforeScriptExecution() string {
 		handler.state.Set(state.Ready)
 
 		return handler.waitForRequest()
-	case state.Restarting:
-		handler.state.Set(state.Yielding)
-		handler.state.WaitFor(state.OpcacheResetting)
-		scheduleOpcacheReset(handler.thread)
-		handler.state.Set(state.OpcacheResettingDone)
-		handler.state.WaitFor(state.Ready, state.ShuttingDown)
-		return handler.beforeScriptExecution()
 	case state.Ready:
 		return handler.waitForRequest()
-
+	case state.Rebooting:
+		return ""
 	case state.RebootReady:
 		handler.requestCount = 0
 		handler.state.Set(state.Ready)
