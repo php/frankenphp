@@ -103,6 +103,8 @@ static void frankenphp_override_opcache_reset(void) {
   if (func != NULL && func->type == ZEND_INTERNAL_FUNCTION &&
       ((zend_internal_function *)func)->handler !=
           ZEND_FN(frankenphp_opcache_reset)) {
+    ((zend_internal_function *)func)->handler =
+        ZEND_FN(frankenphp_opcache_reset);
   }
 }
 
