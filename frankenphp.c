@@ -94,21 +94,15 @@ static void frankenphp_fork_child(void) { is_forked_child = true; }
 
 /* Forward declaration */
 PHP_FUNCTION(frankenphp_opcache_reset);
-zif_handler orig_opcache_reset;
 
 /* Try to override opcache_reset if opcache is loaded.
- * Safe to call multiple times - skips if already overridden in this function
- * table. Uses handler comparison instead of orig_opcache_reset check so that
- * a fresh function table after PHP module restart is always re-overridden. */
+ * instead of resetting opcache, reboot all threads */
 static void frankenphp_override_opcache_reset(void) {
   zend_function *func = zend_hash_str_find_ptr(
       CG(function_table), "opcache_reset", sizeof("opcache_reset") - 1);
   if (func != NULL && func->type == ZEND_INTERNAL_FUNCTION &&
       ((zend_internal_function *)func)->handler !=
           ZEND_FN(frankenphp_opcache_reset)) {
-    orig_opcache_reset = ((zend_internal_function *)func)->handler;
-    ((zend_internal_function *)func)->handler =
-        ZEND_FN(frankenphp_opcache_reset);
   }
 }
 
