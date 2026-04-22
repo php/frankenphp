@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"sync"
 	"sync/atomic"
+	"time"
 	"unsafe"
 
 	"github.com/dunglas/frankenphp/internal/state"
@@ -25,6 +26,12 @@ type phpThread struct {
 	contextMu    sync.RWMutex
 	state        *state.ThreadState
 	requestCount atomic.Int64
+	// forceKill holds &EG() pointers captured on the PHP thread itself.
+	// forceKillMu pairs with go_frankenphp_clear_force_kill_slot's write
+	// lock so a concurrent kill never dereferences pointers freed by
+	// ts_free_thread.
+	forceKillMu sync.RWMutex
+	forceKill   C.force_kill_slot
 }
 
 // threadHandler defines how the callbacks from the C thread should be handled
@@ -93,7 +100,27 @@ func (thread *phpThread) shutdown() {
 	}
 
 	close(thread.drainChan)
-	thread.state.WaitFor(state.Done)
+
+	// Arm force-kill after the grace period to wake any thread stuck in
+	// a blocking syscall (sleep, blocking I/O). The wait remains
+	// unbounded - on platforms where force-kill cannot interrupt the
+	// syscall (macOS, Windows non-alertable Sleep) the thread will exit
+	// when the syscall completes naturally; the operator's orchestrator
+	// is responsible for any harder timeout.
+	done := make(chan struct{})
+	go func() {
+		thread.state.WaitFor(state.Done)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(drainGracePeriod):
+		thread.forceKillMu.RLock()
+		C.frankenphp_force_kill_thread(thread.forceKill)
+		thread.forceKillMu.RUnlock()
+		<-done
+	}
+
 	thread.drainChan = make(chan struct{})
 
 	// threads go back to the reserved state from which they can be booted again
@@ -201,6 +228,29 @@ func go_frankenphp_after_script_execution(threadIndex C.uintptr_t, exitStatus C.
 
 	// unpin all memory used during script execution
 	thread.Unpin()
+}
+
+//export go_frankenphp_store_force_kill_slot
+func go_frankenphp_store_force_kill_slot(threadIndex C.uintptr_t, slot C.force_kill_slot) {
+	thread := phpThreads[threadIndex]
+	thread.forceKillMu.Lock()
+	// Release any prior slot's OS resource (Windows HANDLE) before
+	// overwriting; a phpThread can reboot and re-register.
+	C.frankenphp_release_thread_for_kill(thread.forceKill)
+	thread.forceKill = slot
+	thread.forceKillMu.Unlock()
+}
+
+//export go_frankenphp_clear_force_kill_slot
+func go_frankenphp_clear_force_kill_slot(threadIndex C.uintptr_t) {
+	// Called from C before ts_free_thread on both exit paths. Zeroing
+	// the slot under the write lock guarantees any concurrent kill
+	// either completed before we got the lock or sees a zero slot.
+	thread := phpThreads[threadIndex]
+	thread.forceKillMu.Lock()
+	C.frankenphp_release_thread_for_kill(thread.forceKill)
+	thread.forceKill = C.force_kill_slot{}
+	thread.forceKillMu.Unlock()
 }
 
 //export go_frankenphp_on_thread_shutdown

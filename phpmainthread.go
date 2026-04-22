@@ -54,6 +54,8 @@ func initPHPThreads(numThreads int, numMaxThreads int, phpIni map[string]string)
 		return nil, err
 	}
 
+	// Must follow start(): maxThreads is only final once
+	// setAutomaticMaxThreads runs on the main PHP thread (before Ready).
 	C.frankenphp_init_thread_metrics(C.int(mainThread.maxThreads))
 
 	// initialize all other threads
@@ -78,6 +80,11 @@ func initPHPThreads(numThreads int, numMaxThreads int, phpIni map[string]string)
 func drainPHPThreads() {
 	if mainThread == nil {
 		return // mainThread was never initialized
+	}
+	// Idempotent: post-drain state is Reserved; a re-entry (e.g. a
+	// failed-Init cleanup) must not double-close mainThread.done.
+	if mainThread.state.Is(state.Reserved) {
+		return
 	}
 	doneWG := sync.WaitGroup{}
 	doneWG.Add(len(phpThreads))

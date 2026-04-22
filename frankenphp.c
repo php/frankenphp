@@ -92,6 +92,111 @@ static bool is_forked_child = false;
 static void frankenphp_fork_child(void) { is_forked_child = true; }
 #endif
 
+/* Best-effort force-kill for stuck PHP threads.
+ *
+ * Each thread captures &EG(vm_interrupt) / &EG(timed_out) at boot and
+ * hands them to Go via go_frankenphp_store_force_kill_slot. To kill,
+ * Go passes the slot back to frankenphp_force_kill_thread, which stores
+ * true into both bools (the VM bails through zend_timeout() at the next
+ * opcode boundary) and then wakes any in-flight syscall:
+ *   - Linux/FreeBSD: pthread_kill(SIGRTMIN+3) -> EINTR.
+ *   - Windows: CancelSynchronousIo + QueueUserAPC for alertable I/O +
+ *     SleepEx. Non-alertable Sleep (including PHP's usleep) stays stuck.
+ *   - macOS: atomic-bool only; busy loops bail, blocking syscalls don't.
+ *
+ * Reserved signal: SIGRTMIN+3. PHP's pcntl_signal(SIGRTMIN+3, ...)
+ * clobbers it. glibc NPTL reserves SIGRTMIN..SIGRTMIN+2; embedders with
+ * their own Go signal usage may need to patch this constant.
+ *
+ * The slot lives Go-side on phpThread; the C side has no global table.
+ * The signal handler is installed once via pthread_once. */
+#ifdef PHP_WIN32
+static void CALLBACK frankenphp_noop_apc(ULONG_PTR param) { (void)param; }
+#endif
+
+#ifdef FRANKENPHP_HAS_KILL_SIGNAL
+/* No-op: delivery itself is what unblocks the syscall via EINTR. */
+static void frankenphp_kill_signal_handler(int sig) { (void)sig; }
+
+static pthread_once_t kill_signal_handler_installed = PTHREAD_ONCE_INIT;
+/* Set to true only after sigaction() succeeds. force_kill_thread skips
+ * pthread_kill when this is false, so a sigaction failure (invalid
+ * signal number, exhausted handler slots, etc.) can't deliver the
+ * signal with its default action (process termination). */
+static zend_atomic_bool kill_signal_handler_active;
+static void install_kill_signal_handler(void) {
+  /* No SA_RESTART so syscalls return EINTR rather than being restarted.
+   * SA_ONSTACK guards against an accidental process-level delivery to a
+   * Go-managed thread, where Go requires the alternate signal stack. */
+  struct sigaction sa;
+  memset(&sa, 0, sizeof(sa));
+  sa.sa_handler = frankenphp_kill_signal_handler;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = SA_ONSTACK;
+  if (sigaction(FRANKENPHP_KILL_SIGNAL, &sa, NULL) == 0) {
+    zend_atomic_bool_store(&kill_signal_handler_active, true);
+  }
+}
+#endif
+
+/* Must run on the PHP thread itself: EG() resolves to its own TSRM
+ * context and pthread_self() captures the right tid. */
+static void frankenphp_register_thread_for_kill(uintptr_t idx) {
+  force_kill_slot slot;
+  memset(&slot, 0, sizeof(slot));
+  slot.vm_interrupt = &EG(vm_interrupt);
+  slot.timed_out = &EG(timed_out);
+#ifdef FRANKENPHP_HAS_KILL_SIGNAL
+  slot.tid = pthread_self();
+  pthread_once(&kill_signal_handler_installed, install_kill_signal_handler);
+#elif defined(PHP_WIN32)
+  if (!DuplicateHandle(GetCurrentProcess(), GetCurrentThread(),
+                       GetCurrentProcess(), &slot.thread_handle, 0, FALSE,
+                       DUPLICATE_SAME_ACCESS)) {
+    /* On failure, force_kill falls back to atomic-bool only. */
+    slot.thread_handle = NULL;
+  }
+#endif
+  go_frankenphp_store_force_kill_slot(idx, slot);
+}
+
+void frankenphp_force_kill_thread(force_kill_slot slot) {
+  if (slot.vm_interrupt == NULL) {
+    /* Boot aborted before the slot was published. */
+    return;
+  }
+
+  /* Atomic stores first: by the time the thread wakes (signal-driven or
+   * natural) the VM sees them and bails through zend_timeout(). */
+  zend_atomic_bool_store(slot.timed_out, true);
+  zend_atomic_bool_store(slot.vm_interrupt, true);
+
+#ifdef FRANKENPHP_HAS_KILL_SIGNAL
+  /* ESRCH (thread already exited) / EINVAL are both benign here.
+   * Skip if sigaction() failed at install time: delivering an unhandled
+   * SIGRTMIN+3 would terminate the process. */
+  if (zend_atomic_bool_load(&kill_signal_handler_active)) {
+    pthread_kill(slot.tid, FRANKENPHP_KILL_SIGNAL);
+  }
+#elif defined(PHP_WIN32)
+  if (slot.thread_handle != NULL) {
+    CancelSynchronousIo(slot.thread_handle);
+    QueueUserAPC((PAPCFUNC)frankenphp_noop_apc, slot.thread_handle, 0);
+  }
+#endif
+}
+
+/* CloseHandle on Windows; no-op on POSIX. */
+void frankenphp_release_thread_for_kill(force_kill_slot slot) {
+#ifdef PHP_WIN32
+  if (slot.thread_handle != NULL) {
+    CloseHandle(slot.thread_handle);
+  }
+#else
+  (void)slot;
+#endif
+}
+
 void frankenphp_update_local_thread_context(bool is_worker) {
   is_worker_thread = is_worker;
 
@@ -1069,6 +1174,16 @@ static void *php_thread(void *arg) {
   snprintf(thread_name, 16, "php-%" PRIxPTR, thread_index);
   set_thread_name(thread_name);
 
+#ifdef FRANKENPHP_HAS_KILL_SIGNAL
+  /* The spawning Go-managed M may block realtime signals, which the
+   * new pthread inherits. Unblock FRANKENPHP_KILL_SIGNAL here so
+   * force-kill deliveries are not silently dropped. */
+  sigset_t unblock;
+  sigemptyset(&unblock);
+  sigaddset(&unblock, FRANKENPHP_KILL_SIGNAL);
+  pthread_sigmask(SIG_UNBLOCK, &unblock, NULL);
+#endif
+
   /* Initial allocation of all global PHP memory for this thread */
 #ifdef ZTS
   (void)ts_resource(0);
@@ -1076,6 +1191,10 @@ static void *php_thread(void *arg) {
   ZEND_TSRMLS_CACHE_UPDATE();
 #endif
 #endif
+
+  /* Publish this thread's force-kill slot to Go so the graceful-drain
+   * grace period can wake it from a busy PHP loop or blocking syscall. */
+  frankenphp_register_thread_for_kill(thread_index);
 
   bool thread_is_healthy = true;
   bool has_attempted_shutdown = false;
@@ -1154,6 +1273,11 @@ static void *php_thread(void *arg) {
   }
   zend_end_try();
 
+  /* Must precede ts_free_thread: that frees the TSRM storage backing
+   * the slot's &EG() pointers. Clearing first means any concurrent
+   * force-kill either ran before us or sees a zero slot. */
+  go_frankenphp_clear_force_kill_slot(thread_index);
+
   /* free all global PHP memory reserved for this thread */
 #ifdef ZTS
   ts_free_thread();
@@ -1162,12 +1286,9 @@ static void *php_thread(void *arg) {
   /* Thread is healthy, signal to Go that the thread has shut down */
   if (thread_is_healthy) {
     go_frankenphp_on_thread_shutdown(thread_index);
-
     return NULL;
   }
 
-  /* Thread is unhealthy, PHP globals might be in a bad state after a bailout,
-   * restart the entire thread */
   frankenphp_log_message("Restarting unhealthy thread", LOG_WARNING);
 
   if (!frankenphp_new_php_thread(thread_index)) {
@@ -1269,7 +1390,9 @@ static void *php_main(void *arg) {
 
   go_frankenphp_main_thread_is_ready();
 
-  /* channel closed, shutdown gracefully */
+  /* channel closed, shutdown gracefully. drainPHPThreads has already
+   * waited for every PHP thread to exit (state.Done), so SAPI/TSRM
+   * teardown here is safe. */
   frankenphp_sapi_module.shutdown(&frankenphp_sapi_module);
 
   sapi_shutdown();
