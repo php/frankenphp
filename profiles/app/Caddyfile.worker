@@ -1,0 +1,13 @@
+{
+	skip_install_trust
+	admin localhost:2019
+}
+
+:8080 {
+	root * .
+	encode zstd br gzip
+
+	php_server {
+        worker index.php
+    }
+}
