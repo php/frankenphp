@@ -123,8 +123,7 @@ func (mainThread *phpMainThread) start() error {
 	return nil
 }
 
-// reboot exits the C thread loop for full ZTS cleanup, then spawns a fresh C thread.
-// Returns false if the thread is no longer in Ready state (e.g. shutting down).
+// rebootAllThreads reboots all underlying C threads, but keeps the go side alive
 func (mainThread *phpMainThread) rebootAllThreads() bool {
 	if !mainThread.isRebooting.CompareAndSwap(false, true) {
 		return false

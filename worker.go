@@ -166,7 +166,7 @@ func newWorker(o workerOpt) (*worker, error) {
 }
 
 // RestartWorkers attempts to restart all workers gracefully
-// All workers must be restarted at the same time to prevent issues with opcache resetting.
+// All threads must be restarted at the same time to prevent issues with opcache resetting
 func RestartWorkers() {
 	mainThread.rebootAllThreads()
 }
