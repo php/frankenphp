@@ -34,6 +34,12 @@ type threadHandler interface {
 	afterScriptExecution(exitStatus int)
 	context() context.Context
 	frankenPHPContext() *frankenPHPContext
+	// drain is a hook called by drainWorkerThreads right before drainChan is
+	// closed. Handlers that need to wake up a thread parked in a blocking C
+	// call (e.g. by closing a stop pipe) plug their signal in here. All
+	// current handlers are no-ops; this is the seam later handler types use
+	// without having to modify drainWorkerThreads.
+	drain()
 }
 
 func newPHPThread(threadIndex int) *phpThread {

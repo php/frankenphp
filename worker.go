@@ -189,6 +189,7 @@ func drainWorkerThreads() []*phpThread {
 				continue
 			}
 
+			thread.handler.drain()
 			close(thread.drainChan)
 			drainedThreads = append(drainedThreads, thread)
 
