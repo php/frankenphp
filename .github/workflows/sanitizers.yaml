@@ -108,7 +108,7 @@ jobs:
       - name: Set CGO flags
         run: |
           {
-            echo "CGO_CFLAGS=$CFLAGS -I${PWD}/watcher/target/include $(php-config --includes)"
+            echo "CGO_CFLAGS=$CFLAGS -I${PWD}/watcher/target/include -DFRANKENPHP_TEST $(php-config --includes)"
             echo "CGO_LDFLAGS=$LDFLAGS $(php-config --ldflags) $(php-config --libs)"
           } >> "$GITHUB_ENV"
       - name: Run tests

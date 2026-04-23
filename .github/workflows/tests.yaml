@@ -62,7 +62,7 @@ jobs:
         # TODO: remove this workaround when fixed upstream
         run: sudo apt-get install --reinstall -y libbrotli-dev
       - name: Set CGO flags
-        run: echo "CGO_CFLAGS=-I${PWD}/watcher/target/include $(php-config --includes)" >> "${GITHUB_ENV}"
+        run: echo "CGO_CFLAGS=-I${PWD}/watcher/target/include -DFRANKENPHP_TEST $(php-config --includes)" >> "${GITHUB_ENV}"
       - name: Build
         run: go build
       - name: Build testcli binary
@@ -138,7 +138,7 @@ jobs:
           echo "GEN_STUB_SCRIPT=${PWD}/php-${PHP_VERSION}/build/gen_stub.php" >> "${GITHUB_ENV}"
       - name: Set CGO flags
         run: |
-          echo "CGO_CFLAGS=$(php-config --includes)" >> "${GITHUB_ENV}"
+          echo "CGO_CFLAGS=-DFRANKENPHP_TEST $(php-config --includes)" >> "${GITHUB_ENV}"
           echo "CGO_LDFLAGS=$(php-config --ldflags) $(php-config --libs)" >> "${GITHUB_ENV}"
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@latest
@@ -175,7 +175,7 @@ jobs:
       - name: Set CGO flags
         run: |
           {
-           echo "CGO_CFLAGS=-I/opt/homebrew/include/ $(php-config --includes)"
+           echo "CGO_CFLAGS=-I/opt/homebrew/include/ -DFRANKENPHP_TEST $(php-config --includes)"
            echo "CGO_LDFLAGS=-L/opt/homebrew/lib/ $(php-config --ldflags) $(php-config --libs)"
           } >> "${GITHUB_ENV}"
       - name: Build

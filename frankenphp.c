@@ -37,6 +37,12 @@
 
 #include "_cgo_export.h"
 #include "frankenphp_arginfo.h"
+#ifdef FRANKENPHP_TEST
+/* The persistent_zval helpers are only compiled in when a consumer needs
+ * them. The step that lands the first real caller (background workers)
+ * will drop this guard. */
+#include "zval.h"
+#endif
 
 #if defined(PHP_WIN32) && defined(ZTS)
 ZEND_TSRMLS_CACHE_DEFINE()
@@ -712,10 +718,53 @@ PHP_FUNCTION(frankenphp_log) {
   }
 }
 
+#ifdef FRANKENPHP_TEST
+/* Test-only entry point that exercises zval.h end-to-end:
+ * validate -> persist (request -> persistent memory) ->
+ * to_request (persistent -> fresh request memory) -> free persistent copy.
+ * Compiled only when FRANKENPHP_TEST is defined; never registered
+ * in production builds. */
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(
+    arginfo_frankenphp_test_persist_roundtrip, 0, 1, IS_MIXED, 0)
+ZEND_ARG_TYPE_INFO(0, value, IS_MIXED, 0)
+ZEND_END_ARG_INFO()
+
+PHP_FUNCTION(frankenphp_test_persist_roundtrip) {
+  zval *input;
+  ZEND_PARSE_PARAMETERS_START(1, 1)
+  Z_PARAM_ZVAL(input)
+  ZEND_PARSE_PARAMETERS_END();
+
+  if (!persistent_zval_validate(input)) {
+    zend_throw_exception(spl_ce_LogicException,
+                         "persistent_zval: value type not supported "
+                         "(only scalars, arrays, and enums are allowed)",
+                         0);
+    RETURN_THROWS();
+  }
+
+  zval persistent;
+  persistent_zval_persist(&persistent, input);
+  persistent_zval_to_request(return_value, &persistent);
+  persistent_zval_free(&persistent);
+}
+
+static const zend_function_entry frankenphp_test_hook_functions[] = {
+    PHP_FE(frankenphp_test_persist_roundtrip,
+           arginfo_frankenphp_test_persist_roundtrip) PHP_FE_END};
+#endif
+
 PHP_MINIT_FUNCTION(frankenphp) {
   register_frankenphp_symbols(module_number);
 #ifndef PHP_WIN32
   pthread_atfork(NULL, NULL, frankenphp_fork_child);
+#endif
+
+#ifdef FRANKENPHP_TEST
+  if (zend_register_functions(NULL, frankenphp_test_hook_functions, NULL,
+                              MODULE_PERSISTENT) == FAILURE) {
+    return FAILURE;
+  }
 #endif
 
   zend_function *func;
