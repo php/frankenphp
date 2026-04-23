@@ -381,7 +381,7 @@ jobs:
 
   # Adapted from https://docs.docker.com/build/ci/github-actions/multi-platform/
   push:
-    # TODO: re-enable the environment when the GitHub UI will supporting grouping or masking environment notifications (pollute the Pull Requests right now)
+    # TODO: re-enable the environment when the GitHub UI supports grouping or masking environment notifications (they pollute pull requests right now)
     #environment: dockerhub
     runs-on: ubuntu-24.04
     needs:

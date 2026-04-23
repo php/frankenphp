@@ -80,7 +80,7 @@ jobs:
           VERSION: ${{ (github.ref_type == 'tag' && github.ref_name) || steps.check.outputs.ref || 'dev' }}
           PHP_VERSION: ${{ steps.check.outputs.php_version }}
   build:
-    # TODO: re-enable the environment when the GitHub UI will supporting grouping or masking environment notifications (pollute the Pull Requests right now)
+    # TODO: re-enable the environment when the GitHub UI supports grouping or masking environment notifications (they pollute pull requests right now)
     #environment: dockerhub
     runs-on: ${{ startsWith(matrix.platform, 'linux/arm') && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     needs:
