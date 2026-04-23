@@ -1,9 +1,9 @@
 {
 	skip_install_trust
-	admin localhost:2019
+	admin localhost:22019
 }
 
-:8080 {
+:22080 {
 	root * .
 	encode zstd br gzip
 
