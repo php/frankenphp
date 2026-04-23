@@ -7,7 +7,10 @@ CADDYFILE="${1:-$APP/Caddyfile.regular}"
 PER=${BENCH_SEC:-8}
 FRANKENPHP_BIN="${FRANKENPHP_BIN:-$DIR/caddy/frankenphp/frankenphp${PGO:+-pgo}}"
 echo "$FRANKENPHP_BIN"
-[ -x "$FRANKENPHP_BIN" ] || { echo "FRANKENPHP_BIN not executable: $FRANKENPHP_BIN" >&2; exit 1; }
+[ -x "$FRANKENPHP_BIN" ] || {
+	echo "FRANKENPHP_BIN not executable: $FRANKENPHP_BIN" >&2
+	exit 1
+}
 
 SCRIPTS=()
 for f in "$APP"/*.php; do

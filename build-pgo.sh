@@ -17,7 +17,7 @@ collect() {
 }
 
 collect "$DIR/profiles/app/Caddyfile.regular" "$DIR/profiles/regular.pgo"
-collect "$DIR/profiles/app/Caddyfile.worker"  "$DIR/profiles/worker.pgo"
+collect "$DIR/profiles/app/Caddyfile.worker" "$DIR/profiles/worker.pgo"
 
 export CGO_CFLAGS="$CGO_CFLAGS -fno-sanitize=undefined"
 PPROF="$(go env GOPATH)/bin/pprof"
