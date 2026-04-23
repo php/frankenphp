@@ -3,8 +3,8 @@ set -euo pipefail
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
 APP="$DIR/profiles/app"
-CADDYFILE="${1:-$APP/Caddyfile.regular}"
-PER=${BENCH_SEC:-8}
+MODE=${WORKER:+worker}
+CADDYFILE="${1:-$APP/Caddyfile.${MODE:-regular}}"
 FRANKENPHP_BIN="${FRANKENPHP_BIN:-$DIR/caddy/frankenphp/frankenphp${PGO:+-pgo}}"
 echo "$FRANKENPHP_BIN"
 [ -x "$FRANKENPHP_BIN" ] || {
@@ -21,12 +21,19 @@ done
 (cd "$APP" && exec "$FRANKENPHP_BIN" run --config "$CADDYFILE" >/dev/null 2>&1) &
 SPID=$!
 trap 'kill $SPID 2>/dev/null || true; wait $SPID 2>/dev/null || true' EXIT
-until curl -fsS localhost:22019/config/ >/dev/null 2>&1; do sleep 0.2; done
+DEADLINE=$((SECONDS + 3))
+until curl -fsS localhost:22019/config/ >/dev/null 2>&1; do
+	[ "$SECONDS" -ge "$DEADLINE" ] && {
+		echo "admin :22019 did not respond within 3s" >&2
+		exit 1
+	}
+	sleep 0.2
+done
 
 printf "%-20s %12s %10s %10s %10s\n" "script" "req/s" "avg" "p50" "p99"
 sum=0
 for s in "${SCRIPTS[@]}"; do
-	out=$(wrk -t4 -c32 -d"${PER}s" --latency "http://localhost:22080/index.php?s=$s" 2>/dev/null || true)
+	out=$(wrk -t4 -c32 -d"${BENCH_SEC:-8}s" --latency "http://localhost:22080/index.php?s=$s" 2>/dev/null || true)
 	read -r rps avg p50 p99 < <(awk '
 		/Requests\/sec:/ { rps = $2 }
 		/^    Latency / && !avg { avg = $2 }
