@@ -93,6 +93,31 @@ __thread php_stream *worker_signaling_stream = NULL;
 __thread char *captured_last_php_error = NULL;
 __thread HashTable *sandboxed_env = NULL;
 
+/* Per-thread cache for frankenphp_get_vars results. Maps worker name to
+ * { version, cached_zval }. When the Go side reports the version hasn't
+ * changed, the cached zval is returned with a refcount bump, giving the
+ * PHP caller the same HashTable pointer so repeated reads within a
+ * request run at O(1) without walking persistent memory every time. */
+typedef struct {
+  uint64_t version;
+  zval value;
+} bg_vars_cache_entry;
+__thread HashTable *bg_vars_cache = NULL;
+
+static void bg_vars_cache_dtor(zval *zv) {
+  bg_vars_cache_entry *entry = Z_PTR_P(zv);
+  zval_ptr_dtor(&entry->value);
+  free(entry);
+}
+
+static void bg_vars_cache_reset(void) {
+  if (bg_vars_cache) {
+    zend_hash_destroy(bg_vars_cache);
+    free(bg_vars_cache);
+    bg_vars_cache = NULL;
+  }
+}
+
 #ifndef PHP_WIN32
 static bool is_forked_child = false;
 static void frankenphp_fork_child(void) { is_forked_child = true; }
@@ -993,13 +1018,48 @@ PHP_FUNCTION(frankenphp_get_vars) {
   Z_PARAM_STR(name);
   ZEND_PARSE_PARAMETERS_END();
 
-  char *error = go_frankenphp_get_vars(thread_index, (char *)ZSTR_VAL(name),
-                                       ZSTR_LEN(name), return_value);
+  /* Look up a cached entry first so Go can short-circuit the copy when
+   * the background worker has not changed its vars since we last read
+   * them. On a cache hit we reuse the same zval, so $vars === $prev_vars
+   * holds across repeated reads within one request. */
+  uint64_t caller_version = 0;
+  uint64_t out_version = 0;
+  bg_vars_cache_entry *cached = NULL;
+  if (bg_vars_cache) {
+    zval *entry_zv = zend_hash_find(bg_vars_cache, name);
+    if (entry_zv) {
+      cached = Z_PTR_P(entry_zv);
+      caller_version = cached->version;
+    }
+  }
+
+  char *error = go_frankenphp_get_vars(
+      thread_index, (char *)ZSTR_VAL(name), ZSTR_LEN(name), return_value,
+      cached ? &caller_version : NULL, &out_version);
   if (error) {
     zend_throw_exception(spl_ce_RuntimeException, error, 0);
     free(error);
     RETURN_THROWS();
   }
+
+  if (cached && out_version == caller_version) {
+    /* Cache hit: Go skipped the copy. Return the cached zval. */
+    ZVAL_COPY(return_value, &cached->value);
+    return;
+  }
+
+  /* Cache miss: store the fresh copy so subsequent reads within this
+   * request can be served without walking persistent memory. */
+  if (!bg_vars_cache) {
+    bg_vars_cache = malloc(sizeof(HashTable));
+    zend_hash_init(bg_vars_cache, 4, NULL, bg_vars_cache_dtor, 1);
+  }
+  bg_vars_cache_entry *entry = malloc(sizeof(*entry));
+  entry->version = out_version;
+  ZVAL_COPY(&entry->value, return_value);
+  zval entry_zv;
+  ZVAL_PTR(&entry_zv, entry);
+  zend_hash_update(bg_vars_cache, name, &entry_zv);
 }
 
 PHP_FUNCTION(frankenphp_ensure_background_worker) {
@@ -1652,6 +1712,11 @@ static void *php_thread(void *arg) {
        * so background-worker boot failures can surface the cause. */
       frankenphp_capture_last_php_error();
 
+      /* Invalidate the per-request get_vars cache before php_request_shutdown
+       * tears down request memory: the cached zvals live in request memory
+       * and can't be freed after shutdown runs. */
+      bg_vars_cache_reset();
+
       /* shutdown the request, potential bailout to zend_catch */
       php_request_shutdown((void *)0);
       frankenphp_free_request_context();
@@ -1671,6 +1736,7 @@ static void *php_thread(void *arg) {
     if (!has_attempted_shutdown) {
       /* php_request_shutdown() was not called, force a shutdown now */
       reset_sandboxed_environment();
+      bg_vars_cache_reset();
       zend_try { php_request_shutdown((void *)0); }
       zend_catch {}
       zend_end_try();

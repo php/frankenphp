@@ -513,12 +513,19 @@ func go_frankenphp_set_vars(threadIndex C.uintptr_t, varsPtr unsafe.Pointer, old
 }
 
 // go_frankenphp_get_vars resolves the named worker through the lookup
-// (named or catch-all), checks its sk.ready without starting the worker,
-// and copies its vars into the return value. If the caller hasn't called
+// (named or catch-all), checks sk.ready without starting the worker, and
+// copies its vars into the return value. If the caller hasn't called
 // ensure() first, this returns a "not ready" error.
 //
+// callerVersion / outVersion implement a per-request cache:
+//   - If callerVersion is non-nil and equals the current varsVersion,
+//     the copy is skipped; outVersion is still set so the C side can
+//     reuse its cached zval with pointer equality.
+//   - Otherwise returnValue receives a fresh deep copy and outVersion
+//     reports the version that copy corresponds to.
+//
 //export go_frankenphp_get_vars
-func go_frankenphp_get_vars(threadIndex C.uintptr_t, name *C.char, nameLen C.size_t, returnValue *C.zval) *C.char {
+func go_frankenphp_get_vars(threadIndex C.uintptr_t, name *C.char, nameLen C.size_t, returnValue *C.zval, callerVersion *C.uint64_t, outVersion *C.uint64_t) *C.char {
 	thread := phpThreads[threadIndex]
 	lookup := getLookup(thread)
 	if lookup == nil {
@@ -544,8 +551,21 @@ func go_frankenphp_get_vars(threadIndex C.uintptr_t, name *C.char, nameLen C.siz
 		return C.CString("background worker not ready: " + goName + " (no set_vars call yet)")
 	}
 
+	// Fast path: caller's cached version matches current. Skip the copy;
+	// the caller will reuse its cached zval.
+	if callerVersion != nil && outVersion != nil {
+		v := sk.varsVersion.Load()
+		*outVersion = C.uint64_t(v)
+		if uint64(*callerVersion) == v {
+			return nil
+		}
+	}
+
 	sk.mu.RLock()
 	C.frankenphp_copy_persistent_vars(returnValue, sk.varsPtr)
+	if outVersion != nil {
+		*outVersion = C.uint64_t(sk.varsVersion.Load())
+	}
 	sk.mu.RUnlock()
 
 	return nil
