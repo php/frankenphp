@@ -1,4 +1,4 @@
-# Migrating from PHP-FPM
+# Migrating from Nginx/PHP-FPM
 
 FrankenPHP replaces both your web server (Nginx, Apache) and PHP-FPM with a single binary.
 This guide covers a basic migration for a typical PHP application.

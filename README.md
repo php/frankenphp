@@ -155,6 +155,7 @@ Go to `https://localhost`, and enjoy!
 
 - [Classic mode](https://frankenphp.dev/docs/classic/)
 - [Worker mode](https://frankenphp.dev/docs/worker/)
+- [Migrating from Nginx/PHP-FPM](https://frankenphp.dev/docs/migrate/)
 - [Early Hints support (103 HTTP status code)](https://frankenphp.dev/docs/early-hints/)
 - [Real-time](https://frankenphp.dev/docs/mercure/)
 - [Logging](https://frankenphp.dev/docs/logging/)
