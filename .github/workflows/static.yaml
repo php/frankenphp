@@ -84,8 +84,6 @@ jobs:
           VERSION: ${{ steps.check.outputs.ref || 'dev' }}
 
   build-linux-musl:
-    # TODO: re-enable the environment when the GitHub UI supports grouping or masking environment notifications (they pollute Pull Requests right now)
-    #environment: dockerhub
     permissions:
       contents: write
       id-token: write
@@ -221,8 +219,6 @@ jobs:
           BINARY: ./frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }}
 
   build-linux-gnu:
-    # TODO: re-enable the environment when the GitHub UI supports grouping or masking environment notifications, because they pollute pull requests right now
-    #environment: dockerhub
     permissions:
       contents: write
       id-token: write
@@ -381,8 +377,6 @@ jobs:
 
   # Adapted from https://docs.docker.com/build/ci/github-actions/multi-platform/
   push:
-    # TODO: re-enable the environment when the GitHub UI supports grouping or masking environment notifications (they pollute pull requests right now)
-    #environment: dockerhub
     runs-on: ubuntu-24.04
     needs:
       - prepare
