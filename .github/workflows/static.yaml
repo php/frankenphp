@@ -84,7 +84,7 @@ jobs:
           VERSION: ${{ steps.check.outputs.ref || 'dev' }}
 
   build-linux-musl:
-    # TODO: re-enable the environment when the GitHub UI will supporting grouping or masking environment notifications (pollute the Pull Requests right now)
+    # TODO: re-enable the environment when the GitHub UI supports grouping or masking environment notifications (they pollute Pull Requests right now)
     #environment: dockerhub
     permissions:
       contents: write
