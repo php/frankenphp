@@ -2,6 +2,7 @@ package extgen
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"regexp"
@@ -17,10 +18,9 @@ func (np *NamespaceParser) parse(filename string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	defer func() {
-		if err := file.Close(); err != nil {
-			fmt.Printf("Error closing file %s: %v\n", filename, err)
-		}
+		err = errors.Join(err, file.Close())
 	}()
 
 	var foundNamespace string

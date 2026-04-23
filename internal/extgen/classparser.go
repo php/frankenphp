@@ -2,6 +2,7 @@ package extgen
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -211,10 +212,7 @@ func (cp *classParser) parseMethods(filename string) (methods []phpClassMethod, 
 	}
 
 	defer func() {
-		e := file.Close()
-		if err != nil {
-			err = e
-		}
+		err = errors.Join(err, file.Close())
 	}()
 
 	scanner := bufio.NewScanner(file)

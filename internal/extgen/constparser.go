@@ -2,6 +2,7 @@ package extgen
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"regexp"
@@ -20,11 +21,9 @@ func (cp *ConstantParser) parse(filename string) (constants []phpConstant, err e
 	if err != nil {
 		return nil, err
 	}
+
 	defer func() {
-		e := file.Close()
-		if err == nil {
-			err = e
-		}
+		err = errors.Join(err, file.Close())
 	}()
 
 	scanner := bufio.NewScanner(file)
