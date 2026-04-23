@@ -106,7 +106,7 @@ your-domain-name.example.com.  IN  A     207.154.233.113
 
 DigitalOcean 域服务示例（“Networking” > “Domains”）：
 
-![在 DigitalOcean 上配置 DNS](digitalocean-dns.png)
+![在 DigitalOcean 上配置 DNS](../digitalocean-dns.png)
 
 > [!NOTE]
 >

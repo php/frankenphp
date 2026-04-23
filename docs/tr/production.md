@@ -104,7 +104,7 @@ your-domain-name.example.com.  IN  A     207.154.233.113
 
 DigitalOcean Alan Adları hizmetiyle ilgili örnek ("Networking" > "Domains"):
 
-![DigitalOcean'da DNS Yapılandırma](digitalocean-dns.png)
+![DigitalOcean'da DNS Yapılandırma](../digitalocean-dns.png)
 
 > [!NOTE]
 >

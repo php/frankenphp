@@ -98,7 +98,7 @@ your-domain-name.example.com.  IN  A     207.154.233.113
 
 Пример настройки через сервис DigitalOcean Domains ("Networking" > "Domains"):
 
-![Настройка DNS в DigitalOcean](digitalocean-dns.png)
+![Настройка DNS в DigitalOcean](../digitalocean-dns.png)
 
 > [!NOTE]
 >
