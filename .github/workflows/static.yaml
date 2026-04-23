@@ -221,7 +221,7 @@ jobs:
           BINARY: ./frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }}
 
   build-linux-gnu:
-    # TODO: re-enable the environment when the GitHub UI will supporting grouping or masking environment notifications (pollute the Pull Requests right now)
+    # TODO: re-enable the environment when the GitHub UI supports grouping or masking environment notifications, because they pollute pull requests right now
     #environment: dockerhub
     permissions:
       contents: write
