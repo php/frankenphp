@@ -13,8 +13,6 @@ import (
 
 var phpClassRegex = regexp.MustCompile(`//\s*export_php:class\s+(\w+)`)
 var phpMethodRegex = regexp.MustCompile(`//\s*export_php:method\s+(\w+)::([^{}\n]+)(?:\s*{\s*})?`)
-var methodSignatureRegex = regexp.MustCompile(`(\w+)\s*\(([^)]*)\)\s*:\s*(\??[\w|]+)`)
-var methodParamTypeNameRegex = regexp.MustCompile(`(\??[\w|]+)\s+\$?(\w+)`)
 
 type exportDirective struct {
 	line      int
@@ -292,77 +290,20 @@ func (cp *classParser) parseMethods(filename string) (methods []phpClassMethod, 
 }
 
 func (cp *classParser) parseMethodSignature(className, signature string) (*phpClassMethod, error) {
-	matches := methodSignatureRegex.FindStringSubmatch(signature)
-
-	if len(matches) != 4 {
-		return nil, fmt.Errorf("invalid method signature format")
-	}
-
-	methodName := matches[1]
-	paramsStr := strings.TrimSpace(matches[2])
-	returnTypeStr := strings.TrimSpace(matches[3])
-
-	isReturnNullable := strings.HasPrefix(returnTypeStr, "?")
-	returnType := strings.TrimPrefix(returnTypeStr, "?")
-
-	var params []phpParameter
-	if paramsStr != "" {
-		paramParts := strings.SplitSeq(paramsStr, ",")
-		for part := range paramParts {
-			param, err := cp.parseMethodParameter(strings.TrimSpace(part))
-			if err != nil {
-				return nil, fmt.Errorf("parsing parameter '%s': %w", part, err)
-			}
-
-			params = append(params, param)
-		}
+	name, params, returnType, nullable, err := parseSignatureParams(signature)
+	if err != nil {
+		return nil, err
 	}
 
 	return &phpClassMethod{
-		Name:             methodName,
-		PhpName:          methodName,
+		Name:             name,
+		PhpName:          name,
 		ClassName:        className,
 		Signature:        signature,
 		Params:           params,
 		ReturnType:       phpType(returnType),
-		isReturnNullable: isReturnNullable,
+		isReturnNullable: nullable,
 	}, nil
-}
-
-func (cp *classParser) parseMethodParameter(paramStr string) (phpParameter, error) {
-	parts := strings.Split(paramStr, "=")
-	typePart := strings.TrimSpace(parts[0])
-
-	param := phpParameter{HasDefault: len(parts) > 1}
-
-	if param.HasDefault {
-		param.DefaultValue = cp.sanitizeDefaultValue(strings.TrimSpace(parts[1]))
-	}
-
-	matches := methodParamTypeNameRegex.FindStringSubmatch(typePart)
-
-	if len(matches) < 3 {
-		return phpParameter{}, fmt.Errorf("invalid parameter format: %s", paramStr)
-	}
-
-	typeStr := strings.TrimSpace(matches[1])
-	param.Name = strings.TrimSpace(matches[2])
-	param.IsNullable = strings.HasPrefix(typeStr, "?")
-	param.PhpType = phpType(strings.TrimPrefix(typeStr, "?"))
-
-	return param, nil
-}
-
-func (cp *classParser) sanitizeDefaultValue(value string) string {
-	if strings.HasPrefix(value, "[") && strings.HasSuffix(value, "]") {
-		return value
-	}
-
-	if strings.ToLower(value) == "null" {
-		return "null"
-	}
-
-	return strings.Trim(value, `'"`)
 }
 
 func (cp *classParser) extractGoMethodFunction(scanner *bufio.Scanner, firstLine string) (string, error) {

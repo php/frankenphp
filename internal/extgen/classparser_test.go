@@ -244,10 +244,9 @@ func TestMethodParameterParsing(t *testing.T) {
 		},
 	}
 
-	parser := classParser{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			param, err := parser.parseMethodParameter(tt.paramStr)
+			param, err := parseParameter(tt.paramStr)
 
 			if tt.expectError {
 				assert.Error(t, err, "Expected error for parameter '%s', but got none", tt.paramStr)
