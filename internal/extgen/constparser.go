@@ -61,6 +61,7 @@ func (cp *ConstantParser) parse(filename string) (constants []phpConstant, err e
 
 		if strings.HasPrefix(line, "const (") {
 			inConstBlock = true
+			currentConstantValue = 0
 			if expectConstDecl || expectClassConstDecl {
 				exportAllInBlock = true
 			}
