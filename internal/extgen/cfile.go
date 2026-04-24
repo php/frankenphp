@@ -76,7 +76,25 @@ func (cg *cFileGenerator) getTemplateContent() (string, error) {
 	return buf.String(), nil
 }
 
-// escapeCString escapes backslashes for C string literals
+// escapeCString escapes characters that would break a C double-quoted string literal.
 func escapeCString(s string) string {
-	return strings.ReplaceAll(s, `\`, `\\`)
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch r {
+		case '\\':
+			b.WriteString(`\\`)
+		case '"':
+			b.WriteString(`\"`)
+		case '\n':
+			b.WriteString(`\n`)
+		case '\r':
+			b.WriteString(`\r`)
+		case '\t':
+			b.WriteString(`\t`)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
