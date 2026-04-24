@@ -1,0 +1,92 @@
+name: Refresh PGO profile
+# Regenerates caddy/frankenphp/default.pgo by hammering frankenphp with wrk in
+# both regular and worker mode (see build-pgo.sh) and opens a PR with the
+# new merged profile. Direct `go build` and the Dockerfile auto-detect it;
+# xcaddy users still need an explicit --pgo flag.
+concurrency:
+  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.ref }}
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "**/*.go"
+      - "frankenphp.c"
+      - "profiles/**"
+      - ".github/workflows/pgo-profile.yaml"
+  workflow_dispatch:
+    inputs:
+      bench_seconds:
+        description: "Seconds to run wrk per script"
+        default: "30"
+        required: false
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  refresh:
+    environment: pgo
+    name: Generate PGO profile
+    runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: local
+      GOFLAGS: "-tags=nobadger,nomysql,nopgx"
+      LIBRARY_PATH: ${{ github.workspace }}/watcher/target/lib
+      BENCH_SEC: ${{ github.event.inputs.bench_seconds || '30' }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          # zizmor: ignore[artipacked]
+          # persist-credentials is intentionally left enabled because this
+          # workflow needs to push a branch via git push (mirrors translate.yaml).
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+          cache-dependency-path: |
+            go.sum
+            caddy/go.sum
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          ini-file: development
+          coverage: none
+          tools: none
+        env:
+          phpts: ts
+          debug: true
+      - name: Install e-dant/watcher
+        uses: ./.github/actions/watcher
+      - name: Set CGO flags
+        run: echo "CGO_CFLAGS=-I${PWD}/watcher/target/include $(php-config --includes)" >> "${GITHUB_ENV}"
+      - name: Install wrk
+        run: sudo apt-get update && sudo apt-get install -y wrk
+      - name: Generate profile
+        run: ./profiles/build-pgo.sh
+      - name: Show pprof summary
+        run: |
+          go install github.com/google/pprof@latest
+          "$(go env GOPATH)/bin/pprof" -top -cum -nodecount=25 caddy/frankenphp/default.pgo || true
+      - name: Open PR with refreshed profile
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+          ACTOR_ID: ${{ github.actor_id }}
+          RUN_ID: ${{ github.run_id }}
+          SOURCE_SHA: ${{ github.sha }}
+          BENCH_SEC: ${{ env.BENCH_SEC }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          BRANCH="pgo/refresh-$RUN_ID"
+          git checkout -b "$BRANCH"
+          git add caddy/frankenphp/default.pgo
+          git diff --cached --quiet && exit 0
+          git commit -m "perf(pgo): refresh PGO profile" --author="$ACTOR <$ACTOR_ID+$ACTOR@users.noreply.github.com>"
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "perf(pgo): refresh PGO profile" \
+            --body "Automated refresh of \`caddy/frankenphp/default.pgo\` from \`$SOURCE_SHA\`, generated with \`BENCH_SEC=$BENCH_SEC\` across every script in \`profiles/app/\` in both regular and worker mode." \
+            --label "perf" \
+            --label "bot"

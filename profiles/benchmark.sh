@@ -1,11 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
-DIR="$(cd "$(dirname "$0")" && pwd)"
-APP="$DIR/profiles/app"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+APP="$ROOT/profiles/app"
 MODE=${WORKER:+worker}
 CADDYFILE="${1:-$APP/Caddyfile.${MODE:-regular}}"
-FRANKENPHP_BIN="${FRANKENPHP_BIN:-$DIR/caddy/frankenphp/frankenphp${PGO:+-pgo}}"
+FRANKENPHP_BIN="${FRANKENPHP_BIN:-$ROOT/caddy/frankenphp/frankenphp${PGO:+-pgo}}"
 echo "$FRANKENPHP_BIN"
 [ -x "$FRANKENPHP_BIN" ] || {
 	echo "FRANKENPHP_BIN not executable: $FRANKENPHP_BIN" >&2
