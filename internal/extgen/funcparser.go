@@ -1,112 +1,78 @@
 package extgen
 
 import (
-	"bufio"
-	"errors"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"regexp"
-	"strings"
 )
 
 var phpFuncRegex = regexp.MustCompile(`//\s*export_php:function\s+([^{}\n]+)(?:\s*{\s*})?`)
 
 type FuncParser struct{}
 
-func (fp *FuncParser) parse(filename string) (functions []phpFunction, err error) {
-	file, err := os.Open(filename)
+func (fp *FuncParser) parse(filename string) ([]phpFunction, error) {
+	src, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, err
 	}
 
-	defer func() {
-		err = errors.Join(err, file.Close())
-	}()
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, filename, src, parser.ParseComments)
+	if err != nil {
+		return nil, fmt.Errorf("parsing file: %w", err)
+	}
 
-	scanner := bufio.NewScanner(file)
-	var currentPHPFunc *phpFunction
 	validator := Validator{}
+	var functions []phpFunction
+	consumed := make(map[int]bool)
 
-	lineNumber := 0
-	for scanner.Scan() {
-		lineNumber++
-		line := strings.TrimSpace(scanner.Text())
-
-		if matches := phpFuncRegex.FindStringSubmatch(line); matches != nil {
-			signature := strings.TrimSpace(matches[1])
-			phpFunc, err := fp.parseSignature(signature)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: Error parsing signature '%s': %v\n", signature, err)
-
-				continue
-			}
-
-			if err := validator.validateFunction(*phpFunc); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: Invalid function '%s': %v\n", phpFunc.Name, err)
-
-				continue
-			}
-
-			if err := validator.validateTypes(*phpFunc); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: Function '%s' uses unsupported types: %v\n", phpFunc.Name, err)
-
-				continue
-			}
-
-			phpFunc.lineNumber = lineNumber
-			currentPHPFunc = phpFunc
+	for _, decl := range file.Decls {
+		funcDecl, ok := decl.(*ast.FuncDecl)
+		if !ok || funcDecl.Recv != nil {
+			continue
 		}
 
-		if currentPHPFunc != nil && strings.HasPrefix(line, "func ") {
-			goFunc, err := fp.extractGoFunction(scanner, line)
-			if err != nil {
-				return nil, fmt.Errorf("extracting Go function: %w", err)
-			}
-
-			currentPHPFunc.GoFunction = goFunc
-
-			if err := validator.validateGoFunctionSignatureWithOptions(*currentPHPFunc, false); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: Go function signature mismatch for %q: %v\n", currentPHPFunc.Name, err)
-				currentPHPFunc = nil
-
-				continue
-			}
-
-			functions = append(functions, *currentPHPFunc)
-			currentPHPFunc = nil
+		directive, directiveLine := findDirective(funcDecl.Doc, fset, phpFuncRegex)
+		if directive == "" {
+			continue
 		}
+		consumed[directiveLine] = true
+
+		phpFunc, err := fp.parseSignature(directive)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Error parsing signature '%s': %v\n", directive, err)
+			continue
+		}
+
+		if err := validator.validateFunction(*phpFunc); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Invalid function '%s': %v\n", phpFunc.Name, err)
+			continue
+		}
+
+		if err := validator.validateTypes(*phpFunc); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Function '%s' uses unsupported types: %v\n", phpFunc.Name, err)
+			continue
+		}
+
+		phpFunc.lineNumber = directiveLine
+		phpFunc.GoFunction = extractNodeSource(src, fset, funcDecl)
+
+		if err := validator.validateGoFunctionSignatureWithOptions(*phpFunc, false); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Go function signature mismatch for %q: %v\n", phpFunc.Name, err)
+			continue
+		}
+
+		functions = append(functions, *phpFunc)
 	}
 
-	if currentPHPFunc != nil {
-		return nil, fmt.Errorf("//export_php function directive at line %d is not followed by a function declaration", currentPHPFunc.lineNumber)
+	if err := checkOrphanDirectives(file, fset, phpFuncRegex, consumed, "//export_php:function"); err != nil {
+		return nil, err
 	}
 
-	return functions, scanner.Err()
-}
-
-func (fp *FuncParser) extractGoFunction(scanner *bufio.Scanner, firstLine string) (string, error) {
-	goFunc := firstLine + "\n"
-	braceCount := 1
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		goFunc += line + "\n"
-
-		for _, char := range line {
-			switch char {
-			case '{':
-				braceCount++
-			case '}':
-				braceCount--
-			}
-		}
-
-		if braceCount == 0 {
-			break
-		}
-	}
-
-	return goFunc, nil
+	return functions, nil
 }
 
 func (fp *FuncParser) parseSignature(signature string) (*phpFunction, error) {
