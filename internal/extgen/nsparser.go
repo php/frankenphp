@@ -13,7 +13,7 @@ type NamespaceParser struct{}
 
 var namespaceRegex = regexp.MustCompile(`//\s*export_php:namespace\s+(.+)`)
 
-func (np *NamespaceParser) parse(filename string) (string, error) {
+func (np *NamespaceParser) parse(filename string) (foundNamespace string, err error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		return "", err
@@ -23,9 +23,7 @@ func (np *NamespaceParser) parse(filename string) (string, error) {
 		err = errors.Join(err, file.Close())
 	}()
 
-	var foundNamespace string
-	var lineNumber int
-	var foundLineNumber int
+	var lineNumber, foundLineNumber int
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -36,6 +34,7 @@ func (np *NamespaceParser) parse(filename string) (string, error) {
 			if foundNamespace != "" {
 				return "", fmt.Errorf("multiple namespace declarations found: first at line %d, second at line %d", foundLineNumber, lineNumber)
 			}
+
 			foundNamespace = namespace
 			foundLineNumber = lineNumber
 		}
