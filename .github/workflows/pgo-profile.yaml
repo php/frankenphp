@@ -16,11 +16,6 @@ on:
       - "profiles/**"
       - ".github/workflows/pgo-profile.yaml"
   workflow_dispatch:
-    inputs:
-      bench_seconds:
-        description: "Seconds to run wrk per script"
-        default: "30"
-        required: false
 permissions:
   contents: write
   pull-requests: write
@@ -33,7 +28,7 @@ jobs:
       GOTOOLCHAIN: local
       GOFLAGS: "-tags=nobadger,nomysql,nopgx"
       LIBRARY_PATH: ${{ github.workspace }}/watcher/target/lib
-      BENCH_SEC: ${{ github.event.inputs.bench_seconds || '30' }}
+      BENCH_SEC: "30"
     steps:
       - uses: actions/checkout@v6
         with:
