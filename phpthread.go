@@ -68,7 +68,8 @@ func (thread *phpThread) boot() {
 // reboot exits the C thread loop for full ZTS cleanup, then spawns a fresh C thread.
 // Returns false if the thread is no longer in Ready state (e.g. shutting down).
 func (thread *phpThread) reboot() bool {
-	if !thread.state.CompareAndSwap(state.Ready, state.Rebooting) {
+	if !thread.state.RequestSafeStateChange(state.Rebooting) {
+		// thread already shutting down or done
 		return false
 	}
 
