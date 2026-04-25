@@ -40,6 +40,9 @@ type Metrics interface {
 	DequeuedWorkerRequest(name string)
 	QueuedRequest()
 	DequeuedRequest()
+	// WorkerStalled reports the rolling 1/3/5-second fraction of time
+	// the worker's request queue was non-empty. Each value is in [0,1].
+	WorkerStalled(name string, win1s, win3s, win5s float64)
 }
 
 type nullMetrics struct{}
@@ -81,6 +84,8 @@ func (n nullMetrics) DequeuedWorkerRequest(string) {}
 func (n nullMetrics) QueuedRequest()   {}
 func (n nullMetrics) DequeuedRequest() {}
 
+func (n nullMetrics) WorkerStalled(string, float64, float64, float64) {}
+
 type PrometheusMetrics struct {
 	registry           prometheus.Registerer
 	totalThreads       prometheus.Counter
@@ -93,6 +98,9 @@ type PrometheusMetrics struct {
 	workerRequestTime  *prometheus.CounterVec
 	workerRequestCount *prometheus.CounterVec
 	workerQueueDepth   *prometheus.GaugeVec
+	workerStalled1s    *prometheus.GaugeVec
+	workerStalled3s    *prometheus.GaugeVec
+	workerStalled5s    *prometheus.GaugeVec
 	queueDepth         prometheus.Gauge
 	mu                 sync.Mutex
 }
@@ -243,6 +251,45 @@ func (m *PrometheusMetrics) TotalWorkers(string, int) {
 			panic(err)
 		}
 	}
+
+	if m.workerStalled1s == nil {
+		m.workerStalled1s = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Namespace: ns,
+			Subsystem: sub,
+			Name:      "stalled_1s",
+			Help:      "Fraction of the last 1 second the worker's request queue was non-empty (0..1)",
+		}, basicLabels)
+		if err := m.registry.Register(m.workerStalled1s); err != nil &&
+			!errors.As(err, &prometheus.AlreadyRegisteredError{}) {
+			panic(err)
+		}
+	}
+
+	if m.workerStalled3s == nil {
+		m.workerStalled3s = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Namespace: ns,
+			Subsystem: sub,
+			Name:      "stalled_3s",
+			Help:      "Fraction of the last 3 seconds the worker's request queue was non-empty (0..1)",
+		}, basicLabels)
+		if err := m.registry.Register(m.workerStalled3s); err != nil &&
+			!errors.As(err, &prometheus.AlreadyRegisteredError{}) {
+			panic(err)
+		}
+	}
+
+	if m.workerStalled5s == nil {
+		m.workerStalled5s = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Namespace: ns,
+			Subsystem: sub,
+			Name:      "stalled_5s",
+			Help:      "Fraction of the last 5 seconds the worker's request queue was non-empty (0..1)",
+		}, basicLabels)
+		if err := m.registry.Register(m.workerStalled5s); err != nil &&
+			!errors.As(err, &prometheus.AlreadyRegisteredError{}) {
+			panic(err)
+		}
+	}
 }
 
 func (m *PrometheusMetrics) TotalThreads(num int) {
@@ -286,6 +333,15 @@ func (m *PrometheusMetrics) DequeuedWorkerRequest(name string) {
 		return
 	}
 	m.workerQueueDepth.WithLabelValues(name).Dec()
+}
+
+func (m *PrometheusMetrics) WorkerStalled(name string, win1s, win3s, win5s float64) {
+	if m.workerStalled1s == nil {
+		return
+	}
+	m.workerStalled1s.WithLabelValues(name).Set(win1s)
+	m.workerStalled3s.WithLabelValues(name).Set(win3s)
+	m.workerStalled5s.WithLabelValues(name).Set(win5s)
 }
 
 func (m *PrometheusMetrics) QueuedRequest() {
@@ -339,6 +395,21 @@ func (m *PrometheusMetrics) Shutdown() {
 	if m.workerQueueDepth != nil {
 		m.registry.Unregister(m.workerQueueDepth)
 		m.workerQueueDepth = nil
+	}
+
+	if m.workerStalled1s != nil {
+		m.registry.Unregister(m.workerStalled1s)
+		m.workerStalled1s = nil
+	}
+
+	if m.workerStalled3s != nil {
+		m.registry.Unregister(m.workerStalled3s)
+		m.workerStalled3s = nil
+	}
+
+	if m.workerStalled5s != nil {
+		m.registry.Unregister(m.workerStalled5s)
+		m.workerStalled5s = nil
 	}
 
 	m.totalThreads = prometheus.NewCounter(prometheus.CounterOpts{
@@ -397,6 +468,9 @@ func NewPrometheusMetrics(registry prometheus.Registerer) *PrometheusMetrics {
 		workerCrashes:      nil,
 		readyWorkers:       nil,
 		workerQueueDepth:   nil,
+		workerStalled1s:    nil,
+		workerStalled3s:    nil,
+		workerStalled5s:    nil,
 	}
 
 	if err := m.registry.Register(m.totalThreads); err != nil &&
