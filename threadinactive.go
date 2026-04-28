@@ -25,14 +25,19 @@ func (handler *inactiveThread) beforeScriptExecution() string {
 	case state.TransitionRequested:
 		return thread.transitionToNewHandler()
 
-	case state.Booting, state.TransitionComplete:
+	case state.Booting, state.TransitionComplete, state.Inactive:
 		thread.state.Set(state.Inactive)
 
 		// wait for external signal to start or shut down
 		thread.state.MarkAsWaiting(true)
-		thread.state.WaitFor(state.TransitionRequested, state.ShuttingDown)
+		thread.state.WaitFor(state.TransitionRequested, state.ShuttingDown, state.Rebooting)
 		thread.state.MarkAsWaiting(false)
 
+		return handler.beforeScriptExecution()
+	case state.Rebooting:
+		return ""
+	case state.RebootReady:
+		thread.state.Set(state.Inactive)
 		return handler.beforeScriptExecution()
 
 	case state.ShuttingDown:
