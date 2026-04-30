@@ -570,7 +570,11 @@ PHP_FUNCTION(frankenphp_handle_request) {
    * Reset default timeout
    */
   if (PG(max_input_time) != -1) {
+#if PHP_VERSION_ID < 80600
     zend_set_timeout(INI_INT("max_execution_time"), 0);
+#else
+    zend_set_timeout(zend_ini_long_literal("max_execution_time"), 0);
+#endif
   }
 #endif
 
