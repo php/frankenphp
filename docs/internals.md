@@ -55,18 +55,23 @@ Each thread has a `ThreadState` (defined in `internal/state/state.go`) that gove
 ### States
 
 ```text
-Lifecycle:        Reserved → Booting → Inactive → Ready ⇄ (processing)
-                                                    ↓
-Shutdown:                                     ShuttingDown → Done → Reserved
-                                                    ↑
-Restart:                                      Restarting → Yielding → Ready
-                                                    ↑
-Handler transition:                       TransitionRequested → TransitionInProgress → TransitionComplete
+Lifecycle:        Reserved → BootRequested → Booting → Inactive → Ready ⇄ (processing)
+                                                                    ↓
+Shutdown:                                                     ShuttingDown → Done → Reserved
+                                                                    ↑
+Restart (admin/watcher):                                      Restarting → Yielding → Ready
+                                                                    ↑
+ZTS reboot (max_requests):                                    Rebooting → RebootReady → Ready
+                                                                    ↑
+Handler transition:                                       TransitionRequested → TransitionInProgress → TransitionComplete
 ```
+
+The full set of states is defined in `internal/state/state.go`:
 
 | State                  | Description                                                                          |
 | ---------------------- | ------------------------------------------------------------------------------------ |
 | `Reserved`             | Thread slot allocated but not booted. Can be booted on demand.                       |
+| `BootRequested`        | Boot has been queued (e.g., by the main thread) but the POSIX thread hasn't started. |
 | `Booting`              | Underlying POSIX thread is starting up.                                              |
 | `Inactive`             | Thread is alive but has no handler assigned. Minimal memory footprint.               |
 | `Ready`                | Thread has a handler and is ready to accept work.                                    |
@@ -74,6 +79,8 @@ Handler transition:                       TransitionRequested → TransitionInPr
 | `Done`                 | Thread has completely shut down. Transitions back to `Reserved` for potential reuse. |
 | `Restarting`           | Worker thread is being restarted (e.g., via admin API or file watcher).              |
 | `Yielding`             | Worker thread has yielded control and is waiting to be re-activated.                 |
+| `Rebooting`            | Worker thread is exiting the C loop for a full ZTS restart (e.g., `max_requests`).   |
+| `RebootReady`          | The C thread has exited and ZTS state is cleaned up, ready to spawn a new C thread.  |
 | `TransitionRequested`  | A handler change has been requested from the Go side.                                |
 | `TransitionInProgress` | The C thread has acknowledged the transition request.                                |
 | `TransitionComplete`   | The Go side has installed the new handler.                                           |
@@ -213,9 +220,9 @@ A separate goroutine (`startDownScalingThreads`) periodically checks (every 5s) 
 FrankenPHP sandboxes environment variables per-thread:
 
 1. At startup, the main thread snapshots `os.Environ()` into `main_thread_env` (a PHP `HashTable`)
-2. Each request copies `main_thread_env` into `$_SERVER`
-3. `frankenphp_putenv()` / `frankenphp_getenv()` use a thread-local `sandboxed_env` copy, preventing race conditions on the global environment
-4. The sandboxed environment is reset between requests via `reset_sandboxed_environment()`
+2. For each request, `$_SERVER` is built from a copy of `main_thread_env` plus request-specific variables (in `frankenphp_register_server_vars`); `$_ENV` is populated from the same snapshot through PHP's `php_import_environment_variables` hook
+3. `frankenphp_putenv()` / `frankenphp_getenv()` operate on a thread-local `sandboxed_env` initialized lazily from `main_thread_env`, preventing race conditions on the global C environment
+4. After each script execution, `reset_sandboxed_environment()` releases `sandboxed_env`; the next call re-initializes it from `main_thread_env`
 
 ## Request Flow (Regular Mode)
 
