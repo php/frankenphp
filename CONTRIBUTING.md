@@ -1,5 +1,7 @@
 # Contributing
 
+For an overview of FrankenPHP's architecture (thread types, state machine, CGO boundary, request flow), see the [Internals documentation](docs/internals.md).
+
 ## Compiling PHP
 
 ### With Docker (Linux)
