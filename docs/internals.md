@@ -219,10 +219,11 @@ A separate goroutine (`startDownScalingThreads`) periodically checks (every 5s) 
 
 FrankenPHP sandboxes environment variables per-thread:
 
-1. At startup, the main thread snapshots `os.Environ()` into `main_thread_env` (a PHP `HashTable`)
-2. For each request, `$_SERVER` is built from a copy of `main_thread_env` plus request-specific variables (in `frankenphp_register_server_vars`); `$_ENV` is populated from the same snapshot through PHP's `php_import_environment_variables` hook
-3. `frankenphp_putenv()` / `frankenphp_getenv()` operate on a thread-local `sandboxed_env` initialized lazily from `main_thread_env`, preventing race conditions on the global C environment
-4. After each script execution, `reset_sandboxed_environment()` releases `sandboxed_env`; the next call re-initializes it from `main_thread_env`
+1. At startup, the main thread snapshots `os.Environ()` into `main_thread_env` (a PHP `HashTable`).
+2. `$_SERVER` is built from a copy of `main_thread_env` plus request-specific variables (in `frankenphp_register_server_vars`). It is rebuilt for every request, including each iteration of a worker script.
+3. `$_ENV` is populated from the same snapshot through PHP's `php_import_environment_variables` hook. In regular mode this happens once per script execution; in worker mode it happens once when the worker script starts and is **not** rebuilt between worker requests, which is why writes to `$_ENV` leak across requests (see [Worker Mode](worker.md)).
+4. `frankenphp_putenv()` / `frankenphp_getenv()` operate on a thread-local `sandboxed_env` initialized lazily from `main_thread_env`, preventing race conditions on the global C environment.
+5. `reset_sandboxed_environment()` releases `sandboxed_env` after each PHP script execution. In regular mode that's per request; in worker mode it only runs when the worker script itself exits, so `putenv()` writes are visible to subsequent worker requests on the same thread until the script restarts.
 
 ## Request Flow (Regular Mode)
 

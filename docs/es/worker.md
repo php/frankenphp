@@ -152,7 +152,7 @@ curl -X POST http://localhost:2019/frankenphp/workers/restart
 ### Fallos en Workers
 
 Si un script de worker falla con un código de salida distinto de cero, FrankenPHP lo reiniciará con una estrategia de retroceso exponencial.
-Si el script de worker permanece activo más tiempo que el último retroceso \* 2,
+Si el script de worker permanece activo más tiempo que `último retroceso * 2`,
 no penalizará al script de worker y lo reiniciará nuevamente.
 Sin embargo, si el script de worker continúa fallando con un código de salida distinto de cero en un corto período de tiempo
 (por ejemplo, tener un error tipográfico en un script), FrankenPHP fallará con el error: `too many consecutive failures`.
