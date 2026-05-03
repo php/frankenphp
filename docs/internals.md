@@ -201,7 +201,7 @@ FrankenPHP can automatically scale the number of PHP threads based on demand (`s
 
 ### Upscaling
 
-A single goroutine (`startUpscalingThreads`) reads from an unbuffered `scaleChan`:
+A dedicated goroutine reads from an unbuffered `scaleChan`:
 
 1. A request handler can't find an available thread
 2. It sends the request context to `scaleChan`
@@ -213,7 +213,7 @@ A single goroutine (`startUpscalingThreads`) reads from an unbuffered `scaleChan
 
 ### Downscaling
 
-A separate goroutine (`startDownScalingThreads`) periodically checks (every 5s) for idle auto-scaled threads. Threads in `Ready` state idle longer than `maxIdleTime` (default 5s) are converted to `Inactive` via `convertToInactiveThread()` (up to 10 per cycle). They are not fully stopped: a code path exists for that, but it is currently disabled because some PECL extensions leak memory and prevent threads from cleanly shutting down.
+A separate goroutine periodically checks (every 5s) for idle auto-scaled threads. Threads in `Ready` state idle longer than `maxIdleTime` (default 5s) are converted to `Inactive` (up to 10 per cycle). They are not fully stopped: a code path exists for that, but it is currently disabled because some PECL extensions leak memory and prevent threads from cleanly shutting down.
 
 ## Environment Sandboxing
 

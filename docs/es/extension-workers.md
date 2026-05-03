@@ -137,10 +137,10 @@ FrankenPHP proporciona hooks para ejecutar código Go en puntos específicos del
 
 | Tipo de Hook | Nombre de Opción             | Firma                | Contexto y Caso de Uso                                                           |
 | :----------- | :--------------------------- | :------------------- | :------------------------------------------------------------------------------- |
-| **Server**   | `WithWorkerOnServerStartup`  | `func()`             | Configuración global. Se ejecuta **Una vez**. Ejemplo: Conectar a NATS/Redis.    |
-| **Server**   | `WithWorkerOnServerShutdown` | `func()`             | Limpieza global. Se ejecuta **Una vez**. Ejemplo: Cerrar conexiones compartidas. |
-| **Thread**   | `WithWorkerOnReady`          | `func(threadID int)` | Configuración por hilo. Llamado cuando un hilo inicia. Recibe el ID del hilo.    |
-| **Thread**   | `WithWorkerOnShutdown`       | `func(threadID int)` | Limpieza por hilo. Recibe el ID del hilo.                                        |
+| **Servidor** | `WithWorkerOnServerStartup`  | `func()`             | Configuración global. Se ejecuta **Una vez**. Ejemplo: Conectar a NATS/Redis.    |
+| **Servidor** | `WithWorkerOnServerShutdown` | `func()`             | Limpieza global. Se ejecuta **Una vez**. Ejemplo: Cerrar conexiones compartidas. |
+| **Hilo**     | `WithWorkerOnReady`          | `func(threadID int)` | Configuración por hilo. Llamado cuando un hilo inicia. Recibe el ID del hilo.    |
+| **Hilo**     | `WithWorkerOnShutdown`       | `func(threadID int)` | Limpieza por hilo. Recibe el ID del hilo.                                        |
 
 ### Ejemplo
 
