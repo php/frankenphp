@@ -259,7 +259,7 @@ func process_data_packed(arr *C.zend_array) unsafe.Pointer {
 - **Ordered key-value pairs** - Option to keep the order of the associative array
 - **Optimized for multiple cases** - Option to ditch the order for better performance or convert straight to a slice
 - **Automatic list detection** - When converting to PHP, automatically detects if the array should be a packed list or a hashmap
-- **Nested Arrays** - Arrays can be nested and will convert all support types automatically (`int64`, `float64`, `string`, `bool`, `nil`, `AssociativeArray`, `map[string]any`, `[]any`)
+- **Nested Arrays** - Arrays can be nested and will convert all supported types automatically (`int64`, `float64`, `string`, `bool`, `nil`, `AssociativeArray`, `map[string]any`, `[]any`)
 - **Objects are not supported** - Currently, only scalar types and arrays can be used as values. Providing an object will result in a `null` value in the PHP array.
 
 ##### Available methods: Packed and Associative

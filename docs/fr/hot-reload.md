@@ -83,7 +83,7 @@ php_server {
 Le serveur détecte les modifications et publie les modifications automatiquement. Le navigateur doit s'abonner à ces événements pour mettre à jour la page.
 FrankenPHP expose l'URL du Hub Mercure à utiliser pour s'abonner aux modifications de fichiers via la variable d'environnement `$_SERVER['FRANKENPHP_HOT_RELOAD']`.
 
-La bibliothèque JavaScript [frankenphp-hot-reload](https://www.npmjs.com/package/frankenphp-hot-reload) gére la logique côté client.
+La bibliothèque JavaScript [frankenphp-hot-reload](https://www.npmjs.com/package/frankenphp-hot-reload) gère la logique côté client.
 Pour l'utiliser, ajoutez le code suivant à votre gabarit (_layout_) principal :
 
 ```php
