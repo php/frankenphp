@@ -177,6 +177,7 @@ Go to `https://localhost`, and enjoy!
 - [Demo app (Symfony) and benchmarks](https://github.com/dunglas/frankenphp-demo)
 - [Go library documentation](https://pkg.go.dev/github.com/dunglas/frankenphp)
 - [Contributing and debugging](https://frankenphp.dev/docs/contributing/)
+- [Internals (architecture overview)](docs/internals.md)
 
 ## Examples and Skeletons
 
