@@ -147,7 +147,7 @@ curl -X POST http://localhost:2019/frankenphp/workers/restart
 ### Falhas de Worker
 
 Se um worker script travar com um código de saída diferente de zero, o FrankenPHP o reiniciará com uma estratégia de backoff exponencial.
-Se o worker script permanecer ativo por mais tempo do que `último backoff * 2`, ele não irá penalizar o worker script e reiniciá-lo novamente.
+Se o worker script permanecer ativo por mais tempo do que o último backoff × 2, ele não irá penalizar o worker script e reiniciá-lo novamente.
 No entanto, se o worker script continuar a falhar com um código de saída diferente de zero em um curto período de tempo (por exemplo, com um erro de digitação em um script), o FrankenPHP travará com o erro: `too many consecutive failures`.
 
 O número de falhas consecutivas pode ser configurado no seu [Caddyfile](config.md#caddyfile-config) com a opção `max_consecutive_failures`:

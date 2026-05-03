@@ -150,7 +150,7 @@ curl -X POST http://localhost:2019/frankenphp/workers/restart
 ### Échecs des workers
 
 Si un script de worker se plante avec un code de sortie non nul, FrankenPHP le redémarre avec une stratégie de backoff exponentielle.
-Si le script worker reste en place plus longtemps que `dernier backoff * 2`, FrankenPHP ne pénalisera pas le script et le redémarrera à nouveau.
+Si le script worker reste en place plus longtemps que le dernier backoff × 2, FrankenPHP ne pénalisera pas le script et le redémarrera à nouveau.
 Toutefois, si le script de worker continue d'échouer avec un code de sortie non nul dans un court laps de temps
 (par exemple, une faute de frappe dans un script), FrankenPHP plantera avec l'erreur : `too many consecutive failures` (trop d'échecs consécutifs).
 

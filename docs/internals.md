@@ -8,8 +8,8 @@ FrankenPHP embeds the PHP interpreter directly into Go via CGO. Each PHP executi
 
 The main layers are:
 
-1. **Go layer** (`frankenphp.go`, `phpthread.go`, `threadworker.go`, `threadregular.go`, `scaling.go`): Thread pool management, request routing, auto-scaling
-2. **C layer** (`frankenphp.c`): PHP SAPI implementation, script execution loop, superglobal management
+1. **Go layer** (top-level `*.go` files such as `frankenphp.go`, `phpthread.go`, `thread*.go`, `scaling.go`): Thread pool management, request routing, auto-scaling
+2. **C layer** (`frankenphp.c`, `frankenphp.h`): PHP SAPI implementation, script execution loop, superglobal management
 3. **State machine** (`internal/state/`): Synchronization between Go goroutines and C threads
 
 ## Thread Types
