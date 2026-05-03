@@ -187,7 +187,7 @@ Bailouts (fatal PHP errors) are caught by `zend_catch`, which marks the thread a
 ### Memory Management
 
 - **Go → C strings**: `C.CString()` allocates with `malloc()`. The C side is responsible for freeing (e.g., `frankenphp_free_request_context()` frees cookie data).
-- **Go string pinning**: `thread.Pin()` / `thread.Unpin()` pins Go memory so C can safely reference it during script execution without copying. Unpinned after each script execution.
+- **Go string pinning**: `phpThread` (in `phpthread.go`) embeds Go's [`runtime.Pinner`](https://pkg.go.dev/runtime#Pinner). `thread.Pin()` / `thread.Unpin()` keep Go memory referenced from C alive without copying it. The thread is unpinned after each script execution.
 - **PHP memory**: Managed by Zend's memory manager (`emalloc`/`efree`). Automatically freed at request shutdown.
 
 ## Auto-Scaling
