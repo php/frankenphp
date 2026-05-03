@@ -49,6 +49,15 @@ docker run \
 
 Learn more about [the worker mode](worker.md).
 
+### Auditing Worker Compatibility
+
+[Igor PHP](https://github.com/igor-php/igor-php) is a static linter that scans Symfony projects for state leaks before they bite in production: services missing `ResetInterface`, stateful properties that aren't reset, mutable local statics, `exit()`/`die()` calls, and superglobal writes. It audits your application code as well as services declared in `vendor/`.
+
+```console
+composer require --dev igor-php/igor-php
+vendor/bin/igor-php .
+```
+
 ## Hot Reload
 
 Hot reloading is enabled by default in [Symfony Docker](https://github.com/dunglas/symfony-docker).
