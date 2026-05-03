@@ -170,7 +170,7 @@ $handler = static function () use ($workerServer) {
 ```
 
 Most superglobals (`$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, `$_SERVER`, `$_REQUEST`) are automatically reset between requests.
-However, **`$_ENV` is not reset between requests** for performance reasons.
+However, **`$_ENV` is currently not reset between requests**.
 This means that any modifications made to `$_ENV` during a request will persist and be visible to subsequent requests handled by the same worker thread.
 Avoid storing request-specific or sensitive data in `$_ENV`.
 
@@ -196,10 +196,10 @@ $handler = static function () {
     echo getCounter(); // 1, 2, 3, ... for each request on this thread
 };
 
-for ($nbRequests = 0; ; ++$nbRequests) {
-    if (!\frankenphp_handle_request($handler)) break;
+while (\frankenphp_handle_request($handler)) {
+    // ...
 }
 ```
 
-When writing worker scripts, make sure to reset any request-specific state at the beginning of each request handler.
-Frameworks like [Symfony](symfony.md) and [Laravel Octane](laravel.md) handle this automatically.
+When writing worker scripts, make sure to reset any request-specific state between requests.
+Frameworks like [Symfony](symfony.md) and [Laravel Octane](laravel.md) take care of resetting most state for you, but you may still need to reset your own services. With Symfony, services that hold request-specific state should implement [`Symfony\Contracts\Service\ResetInterface`](https://github.com/symfony/contracts/blob/main/Service/ResetInterface.php) so they're reset by the kernel between requests.

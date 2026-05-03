@@ -54,7 +54,7 @@ Each thread has a `ThreadState` (defined in `internal/state/state.go`) that gove
 
 ### States
 
-```
+```text
 Lifecycle:        Reserved → Booting → Inactive → Ready ⇄ (processing)
                                                     ↓
 Shutdown:                                     ShuttingDown → Done → Reserved
@@ -98,7 +98,7 @@ This guarantees mutual exclusion: only one of `shutdown()`, `setHandler()`, or `
 
 When a thread needs to change its handler (e.g., from inactive to worker):
 
-```
+```text
 Go side (setHandler)           C side (PHP thread)
 ─────────────────              ─────────────────
 RequestSafeStateChange(
@@ -121,7 +121,7 @@ This protocol ensures the handler pointer is never read and written concurrently
 
 When workers are restarted (e.g., via admin API):
 
-```
+```text
 Go side (RestartWorkers)       C side (worker thread)
 ─────────────────              ─────────────────
 RequestSafeStateChange(
