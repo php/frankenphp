@@ -46,7 +46,7 @@ Keep a PHP script alive across multiple requests. The PHP script calls `frankenp
 6. `go_frankenphp_finish_worker_request()` cleans up the request context
 7. The PHP script loops back to step 3
 
-Worker threads are restarted when the script exits (exit code 0), with exponential backoff on failure.
+After the script exits, the worker is restarted immediately if it had reached `frankenphp_handle_request()` at least once (whether the exit was clean or the result of a fatal error). Exponential backoff is only applied to consecutive startup failures, where the script exits before ever reaching `frankenphp_handle_request()`.
 
 ## Thread State Machine
 
@@ -213,7 +213,7 @@ A single goroutine (`startUpscalingThreads`) reads from an unbuffered `scaleChan
 
 ### Downscaling
 
-A separate goroutine (`startDownScalingThreads`) periodically checks (every 5s) for idle auto-scaled threads. Threads idle longer than `maxIdleTime` (default 5s) are shut down, up to 10 per cycle.
+A separate goroutine (`startDownScalingThreads`) periodically checks (every 5s) for idle auto-scaled threads. Threads in `Ready` state idle longer than `maxIdleTime` (default 5s) are converted to `Inactive` via `convertToInactiveThread()` (up to 10 per cycle). They are not fully stopped: a code path exists for that, but it is currently disabled because some PECL extensions leak memory and prevent threads from cleanly shutting down.
 
 ## Environment Sandboxing
 
