@@ -58,8 +58,20 @@ jobs:
           debug: true
       - name: Install e-dant/watcher
         uses: ./.github/actions/watcher
-      - name: Install libbrotli-dev
-        run: sudo apt-get update && sudo apt-get install -y libbrotli-dev
+      - name: Diagnose brotli state on runner
+        run: |
+          echo "=== dpkg -l brotli ==="
+          dpkg -l | grep -iE '(^ii|^un).*brotli' || echo "(no brotli rows)"
+          echo "=== /usr/include/brotli/ ==="
+          ls -la /usr/include/brotli/ 2>&1 || true
+          echo "=== brotli .pc files ==="
+          find /usr -name 'libbrotli*.pc' 2>/dev/null || true
+          echo "=== pkg-config --cflags ==="
+          pkg-config --cflags libbrotlicommon libbrotlidec libbrotlienc 2>&1 || true
+          echo "=== pkg-config --libs ==="
+          pkg-config --libs libbrotlicommon libbrotlidec libbrotlienc 2>&1 || true
+          echo "=== gcc default include search ==="
+          echo | gcc -E -v - 2>&1 | sed -n '/search starts here/,/End of search list/p' || true
       - name: Set CGO flags
         run: echo "CGO_CFLAGS=-I${PWD}/watcher/target/include $(php-config --includes)" >> "${GITHUB_ENV}"
       - name: Build
