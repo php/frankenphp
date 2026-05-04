@@ -59,10 +59,7 @@ jobs:
       - name: Install e-dant/watcher
         uses: ./.github/actions/watcher
       - name: Reinstall libbrotli-dev
-        # The runner image (ubuntu-latest, noble) lists libbrotli-dev as installed
-        # in dpkg, but the headers and pkg-config files are missing on disk, so
-        # the cbrotli cgo build cannot find brotli/decode.h. --reinstall forces
-        # apt to re-extract the package even though dpkg thinks it's current.
+        # TODO: remove this workaround when fixed upstream
         run: sudo apt-get install --reinstall -y libbrotli-dev
       - name: Set CGO flags
         run: echo "CGO_CFLAGS=-I${PWD}/watcher/target/include $(php-config --includes)" >> "${GITHUB_ENV}"
