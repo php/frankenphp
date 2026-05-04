@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/dunglas/frankenphp/internal/memory"
 	"github.com/dunglas/frankenphp/internal/phpheaders"
@@ -18,11 +19,12 @@ import (
 // represents the main PHP thread
 // the thread needs to keep running as long as all other threads are running
 type phpMainThread struct {
-	state      *state.ThreadState
-	done       chan struct{}
-	numThreads int
-	maxThreads int
-	phpIni     map[string]string
+	state       *state.ThreadState
+	done        chan struct{}
+	numThreads  int
+	maxThreads  int
+	phpIni      map[string]string
+	isRebooting atomic.Bool
 }
 
 var (
@@ -121,6 +123,47 @@ func (mainThread *phpMainThread) start() error {
 	return nil
 }
 
+// rebootAllThreads reboots all underlying C threads, but keeps the go side alive
+func (mainThread *phpMainThread) rebootAllThreads() bool {
+	if !mainThread.isRebooting.CompareAndSwap(false, true) {
+		return false
+	}
+
+	scalingMu.Lock()
+	defer scalingMu.Unlock()
+	globalLogger.Info("rebooting all threads")
+
+	wg := sync.WaitGroup{}
+	rebootingThreads := []*phpThread{}
+	for _, thread := range phpThreads {
+		if thread.reboot() {
+			rebootingThreads = append(rebootingThreads, thread)
+			wg.Go(func() {
+				close(thread.drainChan)
+				thread.state.WaitFor(state.YieldingForReboot)
+			})
+		}
+	}
+	wg.Wait()
+
+	mainThread.state.Set(state.Rebooting)
+	mainThread.state.WaitFor(state.YieldingForReboot)
+	if C.frankenphp_new_main_thread(C.int(mainThread.numThreads)) != 0 {
+		panic("unable to recreate main thread after reboot")
+	}
+	mainThread.state.WaitFor(state.Ready)
+
+	for _, thread := range rebootingThreads {
+		thread.drainChan = make(chan struct{})
+		thread.state.Set(state.RebootReady)
+		thread.state.WaitFor(state.Ready, state.ShuttingDown)
+	}
+
+	mainThread.isRebooting.Store(false)
+
+	return true
+}
+
 func getInactivePHPThread() *phpThread {
 	for _, thread := range phpThreads {
 		if thread.state.Is(state.Inactive) {
@@ -146,7 +189,7 @@ func go_frankenphp_main_thread_is_ready() {
 	}
 
 	mainThread.state.Set(state.Ready)
-	mainThread.state.WaitFor(state.Done)
+	mainThread.state.WaitFor(state.Done, state.Rebooting)
 }
 
 // max_threads = auto
@@ -172,6 +215,9 @@ func (mainThread *phpMainThread) setAutomaticMaxThreads() {
 
 //export go_frankenphp_shutdown_main_thread
 func go_frankenphp_shutdown_main_thread() {
+	if mainThread.state.CompareAndSwap(state.Rebooting, state.YieldingForReboot) {
+		return
+	}
 	mainThread.state.Set(state.Reserved)
 }
 

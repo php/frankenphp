@@ -47,13 +47,6 @@ func (handler *workerThread) beforeScriptExecution() string {
 		}
 		handler.worker.detachThread(handler.thread)
 		return handler.thread.transitionToNewHandler()
-	case state.Restarting:
-		if handler.worker.onThreadShutdown != nil {
-			handler.worker.onThreadShutdown(handler.thread.threadIndex)
-		}
-		handler.state.Set(state.Yielding)
-		handler.state.WaitFor(state.Ready, state.ShuttingDown)
-		return handler.beforeScriptExecution()
 	case state.Ready, state.TransitionComplete:
 		handler.thread.updateContext(true)
 		if handler.worker.onThreadReady != nil {
@@ -77,9 +70,9 @@ func (handler *workerThread) beforeScriptExecution() string {
 
 		// signal to stop
 		return ""
+	default:
+		panic("unexpected state: " + handler.state.Name())
 	}
-
-	panic("unexpected state: " + handler.state.Name())
 }
 
 func (handler *workerThread) afterScriptExecution(exitStatus int) {
@@ -247,12 +240,6 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 	case <-handler.thread.drainChan:
 		if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
 			globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "shutting down", slog.String("worker", handler.worker.name), slog.Int("thread", handler.thread.threadIndex))
-		}
-
-		// flush the opcache when restarting due to watcher or admin api
-		// note: this is done right before frankenphp_handle_request() returns 'false'
-		if handler.state.Is(state.Restarting) {
-			C.frankenphp_reset_opcache()
 		}
 
 		return false, nil

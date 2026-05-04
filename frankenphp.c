@@ -92,6 +92,22 @@ static bool is_forked_child = false;
 static void frankenphp_fork_child(void) { is_forked_child = true; }
 #endif
 
+/* Forward declaration */
+PHP_FUNCTION(frankenphp_opcache_reset);
+
+/* Try to override opcache_reset if opcache is loaded.
+ * instead of resetting opcache, reboot all threads */
+static void frankenphp_override_opcache_reset(void) {
+  zend_function *func = zend_hash_str_find_ptr(
+      CG(function_table), "opcache_reset", sizeof("opcache_reset") - 1);
+  if (func != NULL && func->type == ZEND_INTERNAL_FUNCTION &&
+      ((zend_internal_function *)func)->handler !=
+          ZEND_FN(frankenphp_opcache_reset)) {
+    ((zend_internal_function *)func)->handler =
+        ZEND_FN(frankenphp_opcache_reset);
+  }
+}
+
 void frankenphp_update_local_thread_context(bool is_worker) {
   is_worker_thread = is_worker;
 
@@ -467,6 +483,13 @@ PHP_FUNCTION(frankenphp_getenv) {
   }
 } /* }}} */
 
+/* {{{ thread-safe opcache reset */
+PHP_FUNCTION(frankenphp_opcache_reset) {
+  go_schedule_opcache_reset(thread_index);
+
+  RETVAL_TRUE;
+} /* }}} */
+
 /* {{{ Fetch all HTTP request headers */
 PHP_FUNCTION(frankenphp_request_headers) {
   ZEND_PARSE_PARAMETERS_NONE();
@@ -738,6 +761,10 @@ PHP_MINIT_FUNCTION(frankenphp) {
     php_error(E_WARNING, "Failed to find built-in getenv function");
   }
 
+  // Override opcache_reset (may not be available yet if opcache loads as a
+  // shared extension in PHP 8.4 and below)
+  frankenphp_override_opcache_reset();
+
   return SUCCESS;
 }
 
@@ -756,7 +783,16 @@ static zend_module_entry frankenphp_module = {
 static int frankenphp_startup(sapi_module_struct *sapi_module) {
   php_import_environment_variables = get_full_env;
 
-  return php_module_startup(sapi_module, &frankenphp_module);
+  int result = php_module_startup(sapi_module, &frankenphp_module);
+#if PHP_VERSION_ID < 80500
+  if (result == SUCCESS) {
+    /* Override opcache here again if loaded as a shared extension
+     * (php 8.4 and under) */
+    frankenphp_override_opcache_reset();
+  }
+#endif
+
+  return result;
 }
 
 static int frankenphp_deactivate(void) { return SUCCESS; }
@@ -1095,6 +1131,12 @@ static void *php_thread(void *arg) {
                                LOG_ERR);
         zend_bailout();
       }
+
+#if PHP_VERSION_ID < 80500
+      /* Override opcache here again if loaded as a shared extension
+       * (php 8.4 and under) */
+      frankenphp_override_opcache_reset();
+#endif
 
       zend_file_handle file_handle;
       zend_stream_init_filename(&file_handle, scriptName);
@@ -1459,16 +1501,6 @@ int frankenphp_execute_script_cli(char *script, int argc, char **argv,
   }
 
   return (intptr_t)exit_status;
-}
-
-int frankenphp_reset_opcache(void) {
-  zend_function *opcache_reset =
-      zend_hash_str_find_ptr(CG(function_table), ZEND_STRL("opcache_reset"));
-  if (opcache_reset) {
-    zend_call_known_function(opcache_reset, NULL, NULL, NULL, 0, NULL, NULL);
-  }
-
-  return 0;
 }
 
 int frankenphp_get_current_memory_limit() { return PG(memory_limit); }

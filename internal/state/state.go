@@ -22,10 +22,6 @@ const (
 	Inactive
 	Ready
 
-	// States necessary for restarting workers
-	Restarting
-	Yielding
-
 	// States necessary for transitioning between different handlers
 	TransitionRequested
 	TransitionInProgress
@@ -35,6 +31,8 @@ const (
 	Rebooting
 	// C thread has exited and ZTS state is cleaned up, ready to spawn a new C thread
 	RebootReady
+	// all threads are yielding for main thread reboot
+	YieldingForReboot
 )
 
 func (s State) String() string {
@@ -53,10 +51,6 @@ func (s State) String() string {
 		return "inactive"
 	case Ready:
 		return "ready"
-	case Restarting:
-		return "restarting"
-	case Yielding:
-		return "yielding"
 	case TransitionRequested:
 		return "transition requested"
 	case TransitionInProgress:
@@ -67,6 +61,8 @@ func (s State) String() string {
 		return "rebooting"
 	case RebootReady:
 		return "reboot ready"
+	case YieldingForReboot:
+		return "yielding for reboot"
 	default:
 		return "unknown"
 	}
