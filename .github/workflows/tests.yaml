@@ -58,20 +58,12 @@ jobs:
           debug: true
       - name: Install e-dant/watcher
         uses: ./.github/actions/watcher
-      - name: Diagnose brotli state on runner
-        run: |
-          echo "=== dpkg -l brotli ==="
-          dpkg -l | grep -iE '(^ii|^un).*brotli' || echo "(no brotli rows)"
-          echo "=== /usr/include/brotli/ ==="
-          ls -la /usr/include/brotli/ 2>&1 || true
-          echo "=== brotli .pc files ==="
-          find /usr -name 'libbrotli*.pc' 2>/dev/null || true
-          echo "=== pkg-config --cflags ==="
-          pkg-config --cflags libbrotlicommon libbrotlidec libbrotlienc 2>&1 || true
-          echo "=== pkg-config --libs ==="
-          pkg-config --libs libbrotlicommon libbrotlidec libbrotlienc 2>&1 || true
-          echo "=== gcc default include search ==="
-          echo | gcc -E -v - 2>&1 | sed -n '/search starts here/,/End of search list/p' || true
+      - name: Reinstall libbrotli-dev
+        # The runner image (ubuntu-latest, noble) lists libbrotli-dev as installed
+        # in dpkg, but the headers and pkg-config files are missing on disk, so
+        # the cbrotli cgo build cannot find brotli/decode.h. --reinstall forces
+        # apt to re-extract the package even though dpkg thinks it's current.
+        run: sudo apt-get install --reinstall -y libbrotli-dev
       - name: Set CGO flags
         run: echo "CGO_CFLAGS=-I${PWD}/watcher/target/include $(php-config --includes)" >> "${GITHUB_ENV}"
       - name: Build
