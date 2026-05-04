@@ -58,6 +58,8 @@ jobs:
           debug: true
       - name: Install e-dant/watcher
         uses: ./.github/actions/watcher
+      - name: Install libbrotli-dev
+        run: sudo apt-get update && sudo apt-get install -y libbrotli-dev
       - name: Set CGO flags
         run: echo "CGO_CFLAGS=-I${PWD}/watcher/target/include $(php-config --includes)" >> "${GITHUB_ENV}"
       - name: Build
