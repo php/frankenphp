@@ -262,9 +262,8 @@ func WithWorkerOnServerShutdown(f func()) WorkerOption {
 
 // EXPERIMENTAL: WithWorkerBackground marks this worker as a background
 // (non-HTTP) worker. Background workers run outside the request cycle and
-// share the PHP runtime with HTTP threads but don't serve HTTP requests.
-// They expose a stop pipe via frankenphp_get_worker_handle() so PHP scripts
-// can park on stream_select and exit gracefully when FrankenPHP drains.
+// publish shared variables via frankenphp_set_vars for HTTP threads to read
+// via frankenphp_get_vars.
 func WithWorkerBackground() WorkerOption {
 	return func(w *workerOpt) error {
 		w.isBackgroundWorker = true

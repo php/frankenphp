@@ -6,12 +6,14 @@
 // builds where that path does not fully disarm the timer.
 set_time_limit(0);
 
-// Minimal background worker: publishes a small vars set then parks on the
-// stop stream until FrankenPHP drains it.
+// Binary-safe fixture: publishes values with embedded NULs, multibyte
+// UTF-8, and an empty string so the reader can confirm the deep-copy
+// path preserves bytes verbatim (not truncated at the first \0, not
+// mangled through C string conversions).
 frankenphp_set_vars([
-    'message' => 'hello from background worker',
-    'count' => 42,
-    'ready_at' => microtime(true),
+    'BINARY' => "hello\x00world",
+    'UTF8' => "héllo wörld 🚀",
+    'EMPTY' => "",
 ]);
 
 $stream = frankenphp_get_worker_handle();

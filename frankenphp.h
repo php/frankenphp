@@ -235,6 +235,8 @@ void frankenphp_release_thread_for_kill(force_kill_slot slot);
 /* Background worker primitives. */
 int frankenphp_set_background_worker_and_get_stop_fd_write(void);
 void frankenphp_worker_close_fd(int fd);
+void frankenphp_copy_persistent_vars(zval *dst, void *persistent_ht);
+char *frankenphp_get_last_php_error(void);
 
 void register_extensions(zend_module_entry **m, int len);
 

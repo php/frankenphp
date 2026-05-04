@@ -3,6 +3,7 @@ package caddy_test
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -70,6 +71,57 @@ func TestMain(m *testing.M) {
 	}
 
 	os.Exit(m.Run())
+}
+
+// TestBackgroundWorker wires a named background worker through the
+// Caddyfile `worker { background; name ...; file ... }` syntax and reads
+// its vars from an HTTP request, proving the parser + app.Start wiring +
+// PHP API all cooperate.
+func TestBackgroundWorker(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+			http_port `+testPort+`
+			https_port 9443
+			frankenphp {
+				worker {
+					name bg-basic
+					num 1
+					file ../testdata/bgworker/basic.php
+					background
+				}
+			}
+		}
+
+		localhost:`+testPort+` {
+			route {
+				php {
+					root ../testdata
+				}
+			}
+		}
+		`, "caddyfile")
+
+	// Background workers boot asynchronously with Init. Poll briefly for a
+	// non-MISSING response so we don't race against the first set_vars.
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		resp, err := http.Get("http://localhost:" + testPort + "/bgworker/reader.php")
+		require.NoError(t, err)
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if !strings.Contains(string(body), "MISSING") {
+			require.Contains(t, string(body), "message=hello from background worker")
+			require.Contains(t, string(body), "count=42")
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("background worker never published vars; last body: %q", body)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }
 
 func TestPHP(t *testing.T) {

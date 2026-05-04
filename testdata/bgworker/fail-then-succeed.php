@@ -22,6 +22,9 @@ if ($attempt <= $failUntil) {
 }
 
 @touch($markerDir . '/ready');
+// set_vars + get_worker_handle together close the readiness channel on
+// sidekicks; either alone is not sufficient.
+frankenphp_set_vars([]);
 $stream = frankenphp_get_worker_handle();
 $read = [$stream];
 $write = null;

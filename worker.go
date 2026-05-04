@@ -190,6 +190,10 @@ func newWorker(o workerOpt) (*worker, error) {
 		w.bg = &backgroundWorkerExtras{ready: newBackgroundWorkerState()}
 	}
 
+	// backgroundWorker state is reserved lazily via the registry at
+	// thread-setup time, not here; lazy-start callers set it directly
+	// and eager inits go through setupScript's sync.Once.
+
 	w.configureMercure(&o)
 
 	// o.env is shared by reference across instances; treat it as

@@ -1,5 +1,6 @@
 package frankenphp
 
+// #include <stdint.h>
 // #include "frankenphp.h"
 import "C"
 import (
@@ -44,53 +45,12 @@ type backgroundWorkerExtras struct {
 	lazyStarted bool
 }
 
-// backgroundWorkerState is the per-instance readiness signal ensure()
-// blocks on. ready closes once the worker calls
-// frankenphp_get_worker_handle(); aborted closes on max_consecutive_failures
-// before that.
-type backgroundWorkerState struct {
-	ready     chan struct{}
-	readyOnce sync.Once
-
-	aborted   chan struct{}
-	abortOnce sync.Once
-	abortErr  error
-
-	// bootFailure carries the most recent pre-readiness crash so a
-	// timing-out ensure() can report it.
-	bootFailure atomic.Pointer[bootFailureInfo]
-}
-
 // bootFailureInfo is the boot-phase crash metadata surfaced by ensure().
 type bootFailureInfo struct {
 	entrypoint   string
 	exitStatus   int
 	failureCount int
-	// TODO(sidekicks): capture PG(last_error_message) once the C-side
-	// helper lands in the set_vars/get_vars step.
-	phpError string
-}
-
-func newBackgroundWorkerState() *backgroundWorkerState {
-	return &backgroundWorkerState{
-		ready:   make(chan struct{}),
-		aborted: make(chan struct{}),
-	}
-}
-
-// markReady fires on the first frankenphp_get_worker_handle() call after
-// each (re)boot. Idempotent: the channel only closes once.
-func (r *backgroundWorkerState) markReady() {
-	r.readyOnce.Do(func() { close(r.ready) })
-}
-
-// abort unblocks ensure() waiters when the boot sequence is abandoned
-// (max_consecutive_failures hit before readiness). Idempotent.
-func (r *backgroundWorkerState) abort(err error) {
-	r.abortOnce.Do(func() {
-		r.abortErr = err
-		close(r.aborted)
-	})
+	phpError     string
 }
 
 // Scope isolates background workers between php_server blocks; the
@@ -300,30 +260,30 @@ func getLookup(thread *phpThread) *backgroundWorkerLookup {
 	return backgroundLookups[0]
 }
 
-// ensureBackgroundWorker lazy-starts the named worker if needed and blocks
-// until it reaches readiness, aborts (max_consecutive_failures during boot),
-// or times out. Safe to call concurrently.
-func ensureBackgroundWorker(thread *phpThread, bgWorkerName string, timeout time.Duration) error {
+// startBackgroundWorker resolves `name` via lookup.byName / lookup.catchAll,
+// lazy-starting the thread if needed, and returns the per-instance state
+// slot the caller should wait on. Safe to call concurrently.
+func startBackgroundWorker(thread *phpThread, bgWorkerName string) (*backgroundWorkerState, error) {
 	if bgWorkerName == "" {
-		return fmt.Errorf("background worker name must not be empty")
+		return nil, fmt.Errorf("background worker name must not be empty")
 	}
 	lookup := getLookup(thread)
 	if lookup == nil {
-		return fmt.Errorf("no background worker configured")
+		return nil, fmt.Errorf("no background worker configured")
 	}
 
 	// byName is keyed by the user-facing (m#-stripped) name.
 	if w, ok := lookup.byName[bgWorkerName]; ok {
-		r, err := lazyStartNamedWorker(w)
+		sk, err := lazyStartNamedWorker(w)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		return waitForBackgroundWorkerReady(bgWorkerName, r, timeout)
+		return sk, nil
 	}
 
 	catchAll := lookup.catchAll
 	if catchAll == nil {
-		return fmt.Errorf("no background worker configured for name %q", bgWorkerName)
+		return nil, fmt.Errorf("no background worker configured for name %q", bgWorkerName)
 	}
 
 	// Reject so behavior doesn't silently split-brain across the eager
@@ -331,7 +291,7 @@ func ensureBackgroundWorker(thread *phpThread, bgWorkerName string, timeout time
 	// buildBackgroundWorkerLookups: module catch-alls carry the prefix,
 	// bgWorkerName from PHP never does.
 	if bgWorkerName == strings.TrimPrefix(catchAll.name, "m#") {
-		return fmt.Errorf(`cannot ensure() against "%s": it matches the catch-all's own name; use a distinct user-facing name`, bgWorkerName)
+		return nil, fmt.Errorf(`cannot ensure() against "%s": it matches the catch-all's own name; use a distinct user-facing name`, bgWorkerName)
 	}
 
 	// Hold catchAllMu across thread reservation + entry publication so a
@@ -340,29 +300,29 @@ func ensureBackgroundWorker(thread *phpThread, bgWorkerName string, timeout time
 	bg := catchAll.bg
 	bg.catchAllMu.Lock()
 
-	if r, ok := bg.catchAllNames[bgWorkerName]; ok {
+	if sk, ok := bg.catchAllNames[bgWorkerName]; ok {
 		bg.catchAllMu.Unlock()
-		return waitForBackgroundWorkerReady(bgWorkerName, r, timeout)
+		return sk, nil
 	}
 
 	if bg.catchAllCap > 0 && len(bg.catchAllNames) >= bg.catchAllCap {
 		bg.catchAllMu.Unlock()
-		return fmt.Errorf("cannot start background worker %q: limit of %d reached (increase max threads or declare it as a named worker)", bgWorkerName, bg.catchAllCap)
+		return nil, fmt.Errorf("cannot start background worker %q: limit of %d reached (increase max threads or declare it as a named worker)", bgWorkerName, bg.catchAllCap)
 	}
 
-	r := newBackgroundWorkerState()
-	bg.catchAllNames[bgWorkerName] = r
+	sk := newBackgroundWorkerState()
+	bg.catchAllNames[bgWorkerName] = sk
 	bg.catchAllMu.Unlock()
 
-	if _, err := addBackgroundWorkerThread(catchAll, bgWorkerName, r); err != nil {
-		// Wake any concurrent waiter that picked up r from catchAllNames
+	if _, err := addBackgroundWorkerThread(catchAll, bgWorkerName, sk); err != nil {
+		// Wake any concurrent waiter that picked up sk from catchAllNames
 		// between our publish and this rollback so they see the start
 		// failure instead of timing out.
-		r.abort(err)
+		sk.abort(err)
 		bg.catchAllMu.Lock()
 		delete(bg.catchAllNames, bgWorkerName)
 		bg.catchAllMu.Unlock()
-		return fmt.Errorf("cannot start background worker %q: %w (increase max threads)", bgWorkerName, err)
+		return nil, fmt.Errorf("cannot start background worker %q: %w (increase max threads)", bgWorkerName, err)
 	}
 
 	if globalLogger.Enabled(globalCtx, slog.LevelInfo) {
@@ -370,7 +330,7 @@ func ensureBackgroundWorker(thread *phpThread, bgWorkerName string, timeout time
 			slog.String("name", bgWorkerName))
 	}
 
-	return waitForBackgroundWorkerReady(bgWorkerName, r, timeout)
+	return sk, nil
 }
 
 // lazyStartNamedWorker returns the readiness slot the caller should
@@ -394,66 +354,121 @@ func lazyStartNamedWorker(w *worker) (*backgroundWorkerState, error) {
 	return r, nil
 }
 
-// waitForBackgroundWorkerReady blocks until the worker reaches readiness,
-// aborts, or the timeout elapses. A nil state degrades to ready-immediately
-// to avoid a deadlock for workers declared without an allocated slot.
-func waitForBackgroundWorkerReady(name string, r *backgroundWorkerState, timeout time.Duration) error {
-	if r == nil {
-		return nil
-	}
-	if timeout <= 0 {
-		timeout = defaultEnsureTimeout
-	}
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-	select {
-	case <-r.ready:
-		return nil
-	case <-r.aborted:
-		return fmt.Errorf("background worker %q failed to start: %w", name, r.abortErr)
-	case <-timer.C:
-		return formatEnsureTimeoutError(name, r, timeout)
-	}
+// isBootstrapEnsure reports whether the calling thread is inside an HTTP
+// worker's boot phase. Bootstrap callers take the fail-fast path; runtime
+// callers (bg workers, classic requests) take the tolerant lazy-start path.
+func isBootstrapEnsure(thread *phpThread) bool {
+	handler, ok := thread.handler.(*workerThread)
+	return ok && handler.isBootingScript
 }
 
-func formatEnsureTimeoutError(name string, r *backgroundWorkerState, timeout time.Duration) error {
-	if bf := r.bootFailure.Load(); bf != nil {
+// formatBackgroundWorkerTimeoutError produces the timeout-error message
+// for an ensure() that didn't reach combined readiness in time. Mentions
+// the boot failure if one was recorded; otherwise reports which half of
+// the readiness signal the worker missed.
+func formatBackgroundWorkerTimeoutError(name string, sk *backgroundWorkerState, timeout time.Duration) string {
+	if info := sk.bootFailure.Load(); info != nil {
 		msg := fmt.Sprintf("background worker %q did not become ready within %s; last attempt %d failed (exit status %d, entrypoint %s)",
-			name, timeout, bf.failureCount, bf.exitStatus, bf.entrypoint)
-		if bf.phpError != "" {
-			msg += ": " + bf.phpError
+			name, timeout, info.failureCount, info.exitStatus, info.entrypoint)
+		if info.phpError != "" {
+			msg += ": " + info.phpError
 		}
-		return errors.New(msg)
+		return msg
 	}
-	return fmt.Errorf("background worker %q did not call frankenphp_get_worker_handle() within %s", name, timeout)
+	missing := []string{}
+	if !sk.hasHandle.Load() {
+		missing = append(missing, "frankenphp_get_worker_handle()")
+	}
+	if !sk.hasVars.Load() {
+		missing = append(missing, "frankenphp_set_vars()")
+	}
+	if len(missing) == 0 {
+		return fmt.Sprintf("background worker %q did not become ready within %s", name, timeout)
+	}
+	return fmt.Sprintf("background worker %q did not call %s within %s", name, strings.Join(missing, " and "), timeout)
 }
+
+// errBackgroundWorkerNotInsideBgThread is returned by set_vars when called
+// outside a bg-worker thread. Package-level so tests can match it.
+var errBackgroundWorkerNotInsideBgThread = errors.New("frankenphp_set_vars() can only be called from a background worker")
 
 // go_frankenphp_ensure_background_worker lazy-starts each named bg worker
-// (the C side has validated names are non-empty and unique) and blocks
-// until each signals readiness, aborts, or timeoutMs (ms; <=0 = default)
-// elapses.
+// (C side has validated names are non-empty + unique) and blocks until
+// each reaches combined readiness (get_worker_handle + set_vars), aborts,
+// or timeoutMs elapses (<=0 = default). Bootstrap callers (HTTP worker
+// pre-handle_request) fail fast on boot failures; runtime callers wait
+// out the restart/backoff cycle.
 //
 //export go_frankenphp_ensure_background_worker
 func go_frankenphp_ensure_background_worker(threadIndex C.uintptr_t, names **C.char, nameLens *C.size_t, nameCount C.int, timeoutMs C.int64_t) *C.char {
 	thread := phpThreads[threadIndex]
-	n := int(nameCount)
-	if n <= 0 {
-		return nil
-	}
 	timeout := time.Duration(int64(timeoutMs)) * time.Millisecond
+	if timeout <= 0 {
+		timeout = defaultEnsureTimeout
+	}
+
+	n := int(nameCount)
 	nameSlice := unsafe.Slice(names, n)
 	nameLenSlice := unsafe.Slice(nameLens, n)
+	bootstrap := isBootstrapEnsure(thread)
+
+	// Start each named worker first. Reserve their states so a shared
+	// deadline applies across the whole group (the caller gets one
+	// timeout value, not one per worker).
+	sks := make([]*backgroundWorkerState, n)
+	goNames := make([]string, n)
 	for i := 0; i < n; i++ {
-		goName := C.GoStringN(nameSlice[i], C.int(nameLenSlice[i]))
-		if err := ensureBackgroundWorker(thread, goName, timeout); err != nil {
+		goNames[i] = C.GoStringN(nameSlice[i], C.int(nameLenSlice[i]))
+		sk, err := startBackgroundWorker(thread, goNames[i])
+		if err != nil {
 			return C.CString(err.Error())
+		}
+		sks[i] = sk
+	}
+
+	deadline := time.After(timeout)
+	if bootstrap {
+		ticker := time.NewTicker(50 * time.Millisecond)
+		defer ticker.Stop()
+		for i, sk := range sks {
+		wait:
+			for {
+				select {
+				case <-sk.ready:
+					break wait
+				case <-sk.aborted:
+					return C.CString(sk.abortErr.Error())
+				case <-deadline:
+					return C.CString(formatBackgroundWorkerTimeoutError(goNames[i], sk, timeout))
+				case <-globalCtx.Done():
+					return C.CString("frankenphp is shutting down")
+				case <-ticker.C:
+					if sk.bootFailure.Load() != nil {
+						return C.CString(formatBackgroundWorkerTimeoutError(goNames[i], sk, timeout))
+					}
+				}
+			}
+		}
+		return nil
+	}
+
+	for i, sk := range sks {
+		select {
+		case <-sk.ready:
+		case <-sk.aborted:
+			return C.CString(sk.abortErr.Error())
+		case <-deadline:
+			return C.CString(formatBackgroundWorkerTimeoutError(goNames[i], sk, timeout))
+		case <-globalCtx.Done():
+			return C.CString("frankenphp is shutting down")
 		}
 	}
 	return nil
 }
 
-// go_frankenphp_worker_ready closes the per-thread readiness channel on
-// the first frankenphp_get_worker_handle() call. Idempotent.
+// go_frankenphp_worker_ready marks the handle half of the combined
+// readiness signal on the per-thread state slot. The slot's ready channel
+// closes only once both handle and set_vars have fired. Idempotent.
 //
 //export go_frankenphp_worker_ready
 func go_frankenphp_worker_ready(threadIndex C.uintptr_t) {
@@ -465,7 +480,73 @@ func go_frankenphp_worker_ready(threadIndex C.uintptr_t) {
 	if !ok || handler == nil {
 		return
 	}
-	if r := handler.backgroundReady; r != nil {
-		r.markReady()
+	if sk := handler.backgroundWorker; sk != nil {
+		sk.markHandle()
 	}
+}
+
+// go_frankenphp_set_vars is called from PHP when a background worker
+// publishes its shared vars. The caller has already deep-copied the vars
+// into persistent memory; here we swap the pointer under the state lock
+// and hand back the old pointer so the C side can free it after the call.
+//
+//export go_frankenphp_set_vars
+func go_frankenphp_set_vars(threadIndex C.uintptr_t, varsPtr unsafe.Pointer, oldPtr *unsafe.Pointer) *C.char {
+	thread := phpThreads[threadIndex]
+
+	bgHandler, ok := thread.handler.(*backgroundWorkerThread)
+	if !ok || bgHandler.backgroundWorker == nil {
+		return C.CString(errBackgroundWorkerNotInsideBgThread.Error())
+	}
+
+	sk := bgHandler.backgroundWorker
+
+	sk.mu.Lock()
+	*oldPtr = sk.varsPtr
+	sk.varsPtr = varsPtr
+	sk.varsVersion.Add(1)
+	sk.mu.Unlock()
+
+	bgHandler.markBackgroundReady()
+
+	return nil
+}
+
+// go_frankenphp_get_vars resolves the named worker through the lookup
+// (named or catch-all), checks its sk.ready without starting the worker,
+// and copies its vars into the return value. If the caller hasn't called
+// ensure() first, this returns a "not ready" error.
+//
+//export go_frankenphp_get_vars
+func go_frankenphp_get_vars(threadIndex C.uintptr_t, name *C.char, nameLen C.size_t, returnValue *C.zval) *C.char {
+	thread := phpThreads[threadIndex]
+	lookup := getLookup(thread)
+	if lookup == nil {
+		return C.CString("no background worker configured")
+	}
+
+	goName := C.GoStringN(name, C.int(nameLen))
+	var sk *backgroundWorkerState
+	if w, ok := lookup.byName[goName]; ok {
+		sk = w.bg.ready
+	} else if ca := lookup.catchAll; ca != nil {
+		ca.bg.catchAllMu.Lock()
+		sk = ca.bg.catchAllNames[goName]
+		ca.bg.catchAllMu.Unlock()
+	}
+	if sk == nil {
+		return C.CString("background worker not found: " + goName + " (call frankenphp_ensure_background_worker first)")
+	}
+
+	select {
+	case <-sk.ready:
+	default:
+		return C.CString("background worker not ready: " + goName + " (no set_vars call yet)")
+	}
+
+	sk.mu.RLock()
+	C.frankenphp_copy_persistent_vars(returnValue, sk.varsPtr)
+	sk.mu.RUnlock()
+
+	return nil
 }

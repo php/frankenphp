@@ -58,12 +58,12 @@ function frankenphp_log(string $message, int $level = 0, array $context = []): v
 /**
  * Declares a dependency on one or more background workers. Lazy-starts each
  * worker that isn't already running, then blocks until every named worker
- * has reached its main loop (signalled by its first call to
- * frankenphp_get_worker_handle()), aborts after exhausting its
- * max_consecutive_failures cap, or the timeout expires. Throws
- * RuntimeException if no background worker is configured for any given
- * name, if a worker fails to reach readiness within the timeout, or if a
- * worker aborts during boot.
+ * has reached combined readiness — meaning it has called both
+ * frankenphp_get_worker_handle() AND frankenphp_set_vars() at least once
+ * — aborts after exhausting its max_consecutive_failures cap, or the
+ * shared timeout expires. Throws RuntimeException if no background
+ * worker is configured for any given name, if a worker fails to reach
+ * readiness within the timeout, or if a worker aborts during boot.
  *
  * The array form rejects empty arrays (ValueError), non-string elements
  * (TypeError), empty strings, and duplicate names (ValueError) before
@@ -75,6 +75,19 @@ function frankenphp_log(string $message, int $level = 0, array $context = []): v
  *                            timeout. A value <= 0 raises ValueError.
  */
 function frankenphp_ensure_background_worker(string|array $name, ?float $timeout = null): void {}
+
+/**
+ * Publishes the given vars from a background worker. Only callable from a
+ * worker started with the `background` flag. Values must be null, scalars,
+ * arrays of allowed values, or enum cases.
+ */
+function frankenphp_set_vars(array $vars): void {}
+
+/**
+ * Reads the shared vars published by the named background worker. Throws if
+ * the worker is not declared, not running, or has not yet called set_vars.
+ */
+function frankenphp_get_vars(string $name): array {}
 
 /**
  * Returns the stop-signal stream for the current background worker. The

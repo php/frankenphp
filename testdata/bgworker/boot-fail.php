@@ -1,7 +1,6 @@
 <?php
 
-// Bg worker fixture that throws on its very first line. Used by
-// TestEnsureBackgroundWorkerBootFailure to prove ensure() surfaces the
-// crash metadata (entrypoint, exit status, attempt count) when a worker
-// keeps crashing during boot before reaching the readiness boundary.
-throw new RuntimeException('intentional boot failure for test');
+// Bootstrap-failure worker: throws before ever calling frankenphp_set_vars.
+// Used by ensure() bootstrap-mode tests to verify the captured PHP error
+// surfaces in the timeout message.
+throw new RuntimeException("intentional boot failure for test");

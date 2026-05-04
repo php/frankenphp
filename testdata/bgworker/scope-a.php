@@ -6,16 +6,14 @@
 // builds where that path does not fully disarm the timer.
 set_time_limit(0);
 
-// Minimal background worker: publishes a small vars set then parks on the
-// stop stream until FrankenPHP drains it.
 frankenphp_set_vars([
-    'message' => 'hello from background worker',
-    'count' => 42,
-    'ready_at' => microtime(true),
+    'scope' => 'A',
 ]);
 
 $stream = frankenphp_get_worker_handle();
-$read = [$stream];
-$write = null;
-$except = null;
-stream_select($read, $write, $except, null);
+if ($stream !== null) {
+    $read = [$stream];
+    $write = null;
+    $except = null;
+    stream_select($read, $write, $except, null);
+}

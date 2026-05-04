@@ -6,13 +6,16 @@
 // builds where that path does not fully disarm the timer.
 set_time_limit(0);
 
-// Minimal background worker: publishes a small vars set then parks on the
-// stop stream until FrankenPHP drains it.
-frankenphp_set_vars([
-    'message' => 'hello from background worker',
-    'count' => 42,
-    'ready_at' => microtime(true),
-]);
+// Enum-missing fixture: defines an enum that lives only in the bg worker
+// process image (the HTTP reader never loads this file), then publishes
+// a case. On the reader side the class is unknown, so the generational
+// deserializer must surface a LogicException instead of returning a
+// broken zval.
+enum WorkerOnlyEnum {
+    case Foo;
+}
+
+frankenphp_set_vars(['val' => WorkerOnlyEnum::Foo]);
 
 $stream = frankenphp_get_worker_handle();
 $read = [$stream];

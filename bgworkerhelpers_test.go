@@ -5,20 +5,21 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/dunglas/frankenphp"
 	"github.com/stretchr/testify/require"
 )
 
-// requireFileEventually asserts that `path` appears on disk before the
-// deadline. Wraps require.Eventually so call sites stay short.
-func requireFileEventually(t testing.TB, path string, msgAndArgs ...any) {
+// serveInlinePHP writes a small PHP fixture under testDataDir, serves it
+// via ServeHTTP, removes it on cleanup, and returns the response body.
+// The file name should not exist already; it is registered for
+// t.Cleanup-driven removal.
+func serveInlinePHP(t *testing.T, testDataDir, name, php string) string {
 	t.Helper()
-	require.Eventually(t, func() bool {
-		_, err := os.Stat(path)
-		return err == nil
-	}, 5*time.Second, 25*time.Millisecond, msgAndArgs...)
+	path := testDataDir + name
+	require.NoError(t, os.WriteFile(path, []byte(php), 0644))
+	t.Cleanup(func() { _ = os.Remove(path) })
+	return serveBody(t, testDataDir, name)
 }
 
 // setupFrankenPHP boots FrankenPHP with the given options, registers

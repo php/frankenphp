@@ -38,12 +38,7 @@
 
 #include "_cgo_export.h"
 #include "frankenphp_arginfo.h"
-#ifdef FRANKENPHP_TEST
-/* The persistent_zval helpers are only compiled in when a consumer needs
- * them. The step that lands the first real caller (background workers)
- * will drop this guard. */
 #include "zval.h"
-#endif
 
 #if defined(PHP_WIN32) && defined(ZTS)
 ZEND_TSRMLS_CACHE_DEFINE()
@@ -95,6 +90,7 @@ __thread bool is_worker_thread = false;
 __thread bool is_background_worker = false;
 __thread int worker_stop_fds[2] = {-1, -1};
 __thread php_stream *worker_signaling_stream = NULL;
+__thread char *captured_last_php_error = NULL;
 __thread HashTable *sandboxed_env = NULL;
 
 #ifndef PHP_WIN32
@@ -297,6 +293,45 @@ static int frankenphp_worker_dup_fd(int fd) {
 #else
   return dup(fd);
 #endif
+}
+
+void frankenphp_copy_persistent_vars(zval *dst, void *persistent_ht) {
+  zval src;
+  ZVAL_ARR(&src, (HashTable *)persistent_ht);
+  persistent_zval_to_request(dst, &src);
+}
+
+/* Capture PG(last_error_*) into the thread-local captured_last_php_error.
+ * Called before php_request_shutdown, which clears PG(last_error_*).
+ * Format: "<message> in <file> on line <line>". */
+static void frankenphp_capture_last_php_error(void) {
+  if (captured_last_php_error != NULL) {
+    free(captured_last_php_error);
+    captured_last_php_error = NULL;
+  }
+  if (PG(last_error_message) == NULL) {
+    return;
+  }
+  const char *msg = ZSTR_VAL(PG(last_error_message));
+  size_t msg_len = ZSTR_LEN(PG(last_error_message));
+  const char *file =
+      PG(last_error_file) ? ZSTR_VAL(PG(last_error_file)) : "unknown";
+  size_t file_len = PG(last_error_file) ? ZSTR_LEN(PG(last_error_file)) : 7;
+  int line = PG(last_error_lineno);
+  size_t buf_len = msg_len + file_len + 32;
+  captured_last_php_error = malloc(buf_len);
+  if (captured_last_php_error != NULL) {
+    snprintf(captured_last_php_error, buf_len, "%.*s in %.*s on line %d",
+             (int)msg_len, msg, (int)file_len, file, line);
+  }
+}
+
+/* Return and take ownership of the captured error; caller frees with
+ * C.free. NULL if nothing was captured. */
+char *frankenphp_get_last_php_error(void) {
+  char *s = captured_last_php_error;
+  captured_last_php_error = NULL;
+  return s;
 }
 
 static void frankenphp_update_request_context() {
@@ -912,6 +947,61 @@ PHP_FUNCTION(frankenphp_log) {
   }
 }
 
+PHP_FUNCTION(frankenphp_set_vars) {
+  zval *vars = NULL;
+
+  ZEND_PARSE_PARAMETERS_START(1, 1);
+  Z_PARAM_ARRAY(vars);
+  ZEND_PARSE_PARAMETERS_END();
+
+  /* Validate every value up front so allocation only happens for a tree
+   * we can fully round-trip. */
+  zval *val;
+  ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(vars), val) {
+    if (!persistent_zval_validate(val)) {
+      zend_value_error(
+          "frankenphp_set_vars(): values must be null, scalars, arrays, or "
+          "enums; objects (other than enums) and resources are not allowed");
+      RETURN_THROWS();
+    }
+  }
+  ZEND_HASH_FOREACH_END();
+
+  zval persistent;
+  persistent_zval_persist(&persistent, vars);
+
+  void *old = NULL;
+  char *error =
+      go_frankenphp_set_vars(thread_index, Z_ARRVAL(persistent), &old);
+  if (error) {
+    persistent_zval_free(&persistent);
+    zend_throw_exception(spl_ce_RuntimeException, error, 0);
+    free(error);
+    RETURN_THROWS();
+  }
+  if (old != NULL) {
+    zval old_zv;
+    ZVAL_ARR(&old_zv, (HashTable *)old);
+    persistent_zval_free(&old_zv);
+  }
+}
+
+PHP_FUNCTION(frankenphp_get_vars) {
+  zend_string *name = NULL;
+
+  ZEND_PARSE_PARAMETERS_START(1, 1);
+  Z_PARAM_STR(name);
+  ZEND_PARSE_PARAMETERS_END();
+
+  char *error = go_frankenphp_get_vars(thread_index, (char *)ZSTR_VAL(name),
+                                       ZSTR_LEN(name), return_value);
+  if (error) {
+    zend_throw_exception(spl_ce_RuntimeException, error, 0);
+    free(error);
+    RETURN_THROWS();
+  }
+}
+
 PHP_FUNCTION(frankenphp_ensure_background_worker) {
   zval *names_zv;
   double timeout = 0.0;
@@ -1097,53 +1187,10 @@ PHP_FUNCTION(frankenphp_get_worker_handle) {
   go_frankenphp_worker_ready(thread_index);
 }
 
-#ifdef FRANKENPHP_TEST
-/* Test-only entry point that exercises zval.h end-to-end:
- * validate -> persist (request -> persistent memory) ->
- * to_request (persistent -> fresh request memory) -> free persistent copy.
- * Compiled only when FRANKENPHP_TEST is defined; never registered
- * in production builds. */
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(
-    arginfo_frankenphp_test_persist_roundtrip, 0, 1, IS_MIXED, 0)
-ZEND_ARG_TYPE_INFO(0, value, IS_MIXED, 0)
-ZEND_END_ARG_INFO()
-
-PHP_FUNCTION(frankenphp_test_persist_roundtrip) {
-  zval *input;
-  ZEND_PARSE_PARAMETERS_START(1, 1)
-  Z_PARAM_ZVAL(input)
-  ZEND_PARSE_PARAMETERS_END();
-
-  if (!persistent_zval_validate(input)) {
-    zend_throw_exception(spl_ce_LogicException,
-                         "persistent_zval: value type not supported "
-                         "(only scalars, arrays, and enums are allowed)",
-                         0);
-    RETURN_THROWS();
-  }
-
-  zval persistent;
-  persistent_zval_persist(&persistent, input);
-  persistent_zval_to_request(return_value, &persistent);
-  persistent_zval_free(&persistent);
-}
-
-static const zend_function_entry frankenphp_test_hook_functions[] = {
-    PHP_FE(frankenphp_test_persist_roundtrip,
-           arginfo_frankenphp_test_persist_roundtrip) PHP_FE_END};
-#endif
-
 PHP_MINIT_FUNCTION(frankenphp) {
   register_frankenphp_symbols(module_number);
 #ifndef PHP_WIN32
   pthread_atfork(NULL, NULL, frankenphp_fork_child);
-#endif
-
-#ifdef FRANKENPHP_TEST
-  if (zend_register_functions(NULL, frankenphp_test_hook_functions, NULL,
-                              MODULE_PERSISTENT) == FAILURE) {
-    return FAILURE;
-  }
 #endif
 
   zend_function *func;
@@ -1324,6 +1371,25 @@ void frankenphp_register_server_vars(zval *track_vars_array,
     ZVAL_TRUE(&bg_zv);
     zend_hash_str_update(ht, "FRANKENPHP_WORKER_BACKGROUND",
                          sizeof("FRANKENPHP_WORKER_BACKGROUND") - 1, &bg_zv);
+
+    /* Bg workers have no real CLI argv; emulate one of the form
+     * [script_filename, worker_name] so user code can read the worker
+     * name via $argv[1] like a CLI script. Skipped when worker_name is
+     * empty (declared catch-all template threads with no identity). */
+    if (vars.worker_name && vars.worker_name_len > 0 && vars.script_filename) {
+      zval argv_array;
+      array_init(&argv_array);
+      add_next_index_stringl(&argv_array, vars.script_filename,
+                             vars.script_filename_len);
+      add_next_index_stringl(&argv_array, vars.worker_name,
+                             vars.worker_name_len);
+
+      zval argc_zv;
+      ZVAL_LONG(&argc_zv, 2);
+
+      zend_hash_str_update(ht, "argv", sizeof("argv") - 1, &argv_array);
+      zend_hash_str_update(ht, "argc", sizeof("argc") - 1, &argc_zv);
+    }
   }
 }
 
@@ -1581,6 +1647,10 @@ static void *php_thread(void *arg) {
                        zend_memory_usage(0), __ATOMIC_RELAXED);
 
       has_attempted_shutdown = true;
+
+      /* Capture the last PHP error before php_request_shutdown clears it,
+       * so background-worker boot failures can surface the cause. */
+      frankenphp_capture_last_php_error();
 
       /* shutdown the request, potential bailout to zend_catch */
       php_request_shutdown((void *)0);

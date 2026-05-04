@@ -39,7 +39,7 @@ type frankenPHPContext struct {
 	handlerReturn      any
 
 	// scope selects the per-php_server isolation boundary used by ensure()
-	// calls made from this request. Zero is the global scope.
+	// / get_vars calls made from this request. Zero is the global scope.
 	scope Scope
 
 	done      chan any

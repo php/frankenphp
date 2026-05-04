@@ -6,15 +6,16 @@
 // builds where that path does not fully disarm the timer.
 set_time_limit(0);
 
-// Minimal background worker: publishes a small vars set then parks on the
-// stop stream until FrankenPHP drains it.
+// Probes the signaling stream returned by frankenphp_get_worker_handle():
+// publishes its resource type and a basic metadata snapshot so the reader
+// can confirm it is a real PHP stream resource, not a bogus zval.
+$stream = frankenphp_get_worker_handle();
+
 frankenphp_set_vars([
-    'message' => 'hello from background worker',
-    'count' => 42,
-    'ready_at' => microtime(true),
+    'stream_type' => get_resource_type($stream),
+    'is_resource' => is_resource($stream),
 ]);
 
-$stream = frankenphp_get_worker_handle();
 $read = [$stream];
 $write = null;
 $except = null;

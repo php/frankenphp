@@ -802,7 +802,6 @@ func resetGlobals() {
 	workers = nil
 	workersByName = nil
 	workersByPath = nil
-	backgroundLookups = nil
 	watcherIsEnabled = false
 	maxIdleTime = defaultMaxIdleTime
 	maxRequestsPerThread = 0

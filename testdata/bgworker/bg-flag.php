@@ -6,12 +6,12 @@
 // builds where that path does not fully disarm the timer.
 set_time_limit(0);
 
-// Write a sentinel containing var_export() of FRANKENPHP_WORKER_BACKGROUND
-// so the test can assert the exact value injected by C ($_SERVER flag).
-if (!empty($_SERVER['BG_SENTINEL'])) {
-    $value = $_SERVER['FRANKENPHP_WORKER_BACKGROUND'] ?? 'MISSING';
-    @file_put_contents($_SERVER['BG_SENTINEL'], var_export($value, true));
-}
+// Records both FRANKENPHP_WORKER_BACKGROUND and FRANKENPHP_WORKER
+// from $_SERVER so the test can confirm both are populated.
+frankenphp_set_vars([
+    'name' => $_SERVER['FRANKENPHP_WORKER'] ?? 'MISSING',
+    'is_background' => $_SERVER['FRANKENPHP_WORKER_BACKGROUND'] ?? 'MISSING',
+]);
 
 $stream = frankenphp_get_worker_handle();
 $read = [$stream];

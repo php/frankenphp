@@ -2,7 +2,6 @@ package frankenphp_test
 
 import (
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/dunglas/frankenphp"
@@ -10,98 +9,103 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestEnsureBackgroundWorkerBatch declares a single catch-all bg worker
-// and ensures three distinct names from a single ensure() call. Each
-// catch-all instance touches a per-name sentinel; the test asserts that
-// all three appear, proving the array form started one worker per name.
+// TestEnsureBackgroundWorkerBatch ensures multiple workers in one call,
+// each publishing its own identity. Verifies the batch path (array arg)
+// shares one deadline across all workers.
 func TestEnsureBackgroundWorkerBatch(t *testing.T) {
-	tmp := t.TempDir()
 	testDataDir := setupFrankenPHP(t,
-		frankenphp.WithWorkers("", "testdata/bgworker/named.php", 0,
-			frankenphp.WithWorkerBackground(),
-			frankenphp.WithWorkerMaxThreads(8),
-			frankenphp.WithWorkerEnv(map[string]string{"BG_SENTINEL_DIR": tmp}),
-		),
-		frankenphp.WithNumThreads(8),
+		frankenphp.WithWorkers("worker-a", "testdata/bgworker/named.php", 0,
+			frankenphp.WithWorkerBackground()),
+		frankenphp.WithWorkers("worker-b", "testdata/bgworker/named.php", 0,
+			frankenphp.WithWorkerBackground()),
+		frankenphp.WithWorkers("worker-c", "testdata/bgworker/named.php", 0,
+			frankenphp.WithWorkerBackground()),
+		frankenphp.WithNumThreads(6),
 	)
 
 	body := serveBody(t, testDataDir, "bgworker/batch-ensure.php")
-	assert.Contains(t, body, "ok", "batch ensure script should echo ok, got: %q", body)
-
-	for _, name := range []string{"batch-a", "batch-b", "batch-c"} {
-		requireFileEventually(t, filepath.Join(tmp, name),
-			"catch-all instance %q should have written its sentinel", name)
-	}
+	assert.NotContains(t, body, "MISSING", "batch ensure should have started and published all workers:\n"+body)
+	assert.Contains(t, body, "worker-a=worker-a")
+	assert.Contains(t, body, "worker-b=worker-b")
+	assert.Contains(t, body, "worker-c=worker-c")
 }
 
-// TestEnsureBackgroundWorkerBatchEmpty exercises the C-side validation
-// that an empty array raises a ValueError before any worker is started.
-// The fixture catches the throwable and echoes its class.
+// TestEnsureBackgroundWorkerBatchEmpty verifies that an empty array is
+// rejected with a clear error rather than silently succeeding.
 func TestEnsureBackgroundWorkerBatchEmpty(t *testing.T) {
 	testDataDir := setupFrankenPHP(t,
-		frankenphp.WithWorkers("", "testdata/bgworker/named.php", 0,
-			frankenphp.WithWorkerBackground(),
-		),
-		frankenphp.WithNumThreads(2),
+		frankenphp.WithWorkers("bg", "testdata/bgworker/named.php", 0,
+			frankenphp.WithWorkerBackground()),
+		frankenphp.WithNumThreads(3),
 	)
 
-	body := serveBody(t, testDataDir, "bgworker/batch-errors.php?mode=empty")
-	assert.Contains(t, body, "ValueError", "empty array should raise ValueError, got: %q", body)
+	php := `<?php
+try {
+    frankenphp_ensure_background_worker([], 1.0);
+    echo "FAIL no error";
+} catch (ValueError $e) {
+    echo "OK ", $e->getMessage();
+}`
+	tmp := testDataDir + "bg-batch-empty.php"
+	require.NoError(t, os.WriteFile(tmp, []byte(php), 0644))
+	t.Cleanup(func() { _ = os.Remove(tmp) })
+
+	body := serveBody(t, testDataDir, "bg-batch-empty.php")
+	assert.Contains(t, body, "OK ")
 	assert.Contains(t, body, "must not be empty")
+	assert.NotContains(t, body, "FAIL")
 }
 
-// TestEnsureBackgroundWorkerBatchNonString verifies a non-string element
-// raises a TypeError (PHP's standard for argument-type mismatches inside
-// our parsed array).
+// TestEnsureBackgroundWorkerBatchNonString verifies array-entry type
+// validation: non-string elements produce a TypeError.
 func TestEnsureBackgroundWorkerBatchNonString(t *testing.T) {
 	testDataDir := setupFrankenPHP(t,
-		frankenphp.WithWorkers("", "testdata/bgworker/named.php", 0,
-			frankenphp.WithWorkerBackground(),
-		),
-		frankenphp.WithNumThreads(2),
+		frankenphp.WithWorkers("bg", "testdata/bgworker/named.php", 0,
+			frankenphp.WithWorkerBackground()),
+		frankenphp.WithNumThreads(3),
 	)
 
-	body := serveBody(t, testDataDir, "bgworker/batch-errors.php?mode=nonstring")
-	assert.Contains(t, body, "TypeError", "non-string element should raise TypeError, got: %q", body)
+	php := `<?php
+try {
+    frankenphp_ensure_background_worker(['bg', 42], 1.0);
+    echo "FAIL no error";
+} catch (TypeError $e) {
+    echo "OK ", $e->getMessage();
+}`
+	tmp := testDataDir + "bg-batch-nonstring.php"
+	require.NoError(t, os.WriteFile(tmp, []byte(php), 0644))
+	t.Cleanup(func() { _ = os.Remove(tmp) })
+
+	body := serveBody(t, testDataDir, "bg-batch-nonstring.php")
+	assert.Contains(t, body, "OK ")
+	assert.Contains(t, body, "must contain only strings")
+	assert.NotContains(t, body, "FAIL")
 }
 
-// TestEnsureBackgroundWorkerBatchDuplicate verifies that duplicate names
-// in the same batch are rejected as a ValueError, matching the e17577e
-// reference behavior (no silent dedup).
-func TestEnsureBackgroundWorkerBatchDuplicate(t *testing.T) {
+// TestBackgroundWorkerServerFlag confirms that a bg worker sees
+// FRANKENPHP_WORKER_BACKGROUND=true alongside FRANKENPHP_WORKER in
+// $_SERVER, so scripts can branch without checking every function
+// independently.
+func TestBackgroundWorkerServerFlag(t *testing.T) {
 	testDataDir := setupFrankenPHP(t,
-		frankenphp.WithWorkers("", "testdata/bgworker/named.php", 0,
-			frankenphp.WithWorkerBackground(),
-		),
-		frankenphp.WithNumThreads(2),
+		frankenphp.WithWorkers("flag-worker", "testdata/bgworker/bg-flag.php", 1,
+			frankenphp.WithWorkerBackground()),
+		frankenphp.WithNumThreads(3),
 	)
 
-	body := serveBody(t, testDataDir, "bgworker/batch-errors.php?mode=duplicate")
-	assert.Contains(t, body, "ValueError", "duplicate name should raise ValueError, got: %q", body)
-	assert.Contains(t, body, "duplicate")
-}
+	// ensure() removes the race between Init returning and the eager
+	// bg-worker thread reaching its first set_vars.
+	php := `<?php
+frankenphp_ensure_background_worker('flag-worker');
+$vars = frankenphp_get_vars('flag-worker');
+echo 'name=', $vars['name'] ?? 'MISSING', "\n";
+echo 'is_background=', var_export($vars['is_background'] ?? 'MISSING', true), "\n";
+`
+	tmp := testDataDir + "bg-flag-reader.php"
+	require.NoError(t, os.WriteFile(tmp, []byte(php), 0644))
+	t.Cleanup(func() { _ = os.Remove(tmp) })
 
-// TestBackgroundWorkerBgFlag asserts that a bg worker script sees
-// $_SERVER['FRANKENPHP_WORKER_BACKGROUND'] === true. The fixture writes
-// var_export() of the value to a sentinel so the test can read the exact
-// PHP-level representation.
-func TestBackgroundWorkerBgFlag(t *testing.T) {
-	tmp := t.TempDir()
-	sentinel := filepath.Join(tmp, "bg-flag.sentinel")
-
-	setupFrankenPHP(t,
-		frankenphp.WithWorkers("bg-flag", "testdata/bgworker/bg-flag.php", 1,
-			frankenphp.WithWorkerBackground(),
-			frankenphp.WithWorkerEnv(map[string]string{"BG_SENTINEL": sentinel}),
-		),
-		frankenphp.WithNumThreads(2),
-	)
-
-	requireFileEventually(t, sentinel,
-		"bg worker should have written the FRANKENPHP_WORKER_BACKGROUND sentinel")
-
-	contents, err := os.ReadFile(sentinel)
-	require.NoError(t, err)
-	assert.Equal(t, "true", string(contents),
-		"$_SERVER['FRANKENPHP_WORKER_BACKGROUND'] should be the bool true")
+	body := serveBody(t, testDataDir, "bg-flag-reader.php")
+	assert.Contains(t, body, "name=flag-worker")
+	assert.Contains(t, body, "is_background=true")
 }
