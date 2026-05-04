@@ -89,7 +89,12 @@ __thread HashTable *sandboxed_env = NULL;
 
 #ifndef PHP_WIN32
 static bool is_forked_child = false;
-static void frankenphp_fork_child(void) { is_forked_child = true; }
+static void frankenphp_fork_child(void) {
+  is_forked_child = true;
+#ifdef __linux__
+  prctl(PR_SET_PDEATHSIG, SIGKILL, 0, 0, 0);
+#endif
+}
 #endif
 
 void frankenphp_update_local_thread_context(bool is_worker) {
@@ -762,6 +767,12 @@ static int frankenphp_startup(sapi_module_struct *sapi_module) {
 static int frankenphp_deactivate(void) { return SUCCESS; }
 
 static size_t frankenphp_ub_write(const char *str, size_t str_length) {
+#ifndef PHP_WIN32
+  if (UNEXPECTED(is_forked_child)) {
+    return 0;
+  }
+#endif
+
   struct go_ub_write_return result =
       go_ub_write(thread_index, (char *)str, str_length);
 
@@ -773,6 +784,12 @@ static size_t frankenphp_ub_write(const char *str, size_t str_length) {
 }
 
 static int frankenphp_send_headers(sapi_headers_struct *sapi_headers) {
+#ifndef PHP_WIN32
+  if (UNEXPECTED(is_forked_child)) {
+    return SAPI_HEADER_SEND_FAILED;
+  }
+#endif
+
   if (SG(request_info).no_headers == 1) {
     return SAPI_HEADER_SENT_SUCCESSFULLY;
   }
@@ -798,6 +815,12 @@ static int frankenphp_send_headers(sapi_headers_struct *sapi_headers) {
 }
 
 static void frankenphp_sapi_flush(void *server_context) {
+#ifndef PHP_WIN32
+  if (UNEXPECTED(is_forked_child)) {
+    return;
+  }
+#endif
+
   sapi_send_headers();
   if (go_sapi_flush(thread_index)) {
     php_handle_aborted_connection();
