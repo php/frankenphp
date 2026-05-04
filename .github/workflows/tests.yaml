@@ -56,6 +56,8 @@ jobs:
         env:
           phpts: ts
           debug: true
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install --reinstall -y libbrotli-dev
       - name: Install e-dant/watcher
         uses: ./.github/actions/watcher
       - name: Set CGO flags
