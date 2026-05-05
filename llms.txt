@@ -4,14 +4,14 @@
 
 This index points AI agents and crawlers at the canonical English documentation. All URLs are absolute. Each Markdown source file carries SEO and LLM-friendly YAML frontmatter (`title`, `description`).
 
-## Core Concepts
+## Core concepts
 
 - [FrankenPHP Classic Mode](https://frankenphp.dev/docs/classic/): drop-in replacement for PHP-FPM and Apache mod_php using a fixed or autoscaling thread pool.
 - [FrankenPHP Worker Mode](https://frankenphp.dev/docs/worker/): keep your PHP application bootstrapped in memory between requests for lower latency.
 - [Configuring FrankenPHP](https://frankenphp.dev/docs/config/): Caddyfile, JSON, environment variables, and `php.ini` configuration.
 - [FrankenPHP Internals](https://frankenphp.dev/docs/internals/): thread types, the state machine, the Go/C/PHP CGO boundary, auto-scaling, and per-thread environment sandboxing.
 
-## Setup and Build
+## Setup and build
 
 - [FrankenPHP Docker Image](https://frankenphp.dev/docs/docker/): build custom images, install PHP extensions and Caddy modules, run as non-root, harden with distroless.
 - [Compile FrankenPHP From Sources](https://frankenphp.dev/docs/compile/): build on Linux, macOS and FreeBSD with PHP linked as a dynamic library.
@@ -19,7 +19,7 @@ This index points AI agents and crawlers at the canonical English documentation.
 - [Embedding PHP Apps as Standalone Binaries](https://frankenphp.dev/docs/embed/): ship a pure-PHP, Symfony or Laravel app as one static executable.
 - [Building Images with GitHub Actions](https://frankenphp.dev/docs/github-actions/): automate Docker image builds and publication.
 
-## Worker Mode and Extensions
+## Worker mode and extensions
 
 - [FrankenPHP Worker Mode](https://frankenphp.dev/docs/worker/): supervisor configuration, restart policies, and integration with Symfony Runtime and Laravel Octane.
 - [Extension Workers](https://frankenphp.dev/docs/extension-workers/): dedicated PHP thread pool from a Go extension for queues, schedulers, and event listeners.
@@ -32,7 +32,7 @@ This index points AI agents and crawlers at the canonical English documentation.
 - [WordPress with FrankenPHP](https://frankenphp.dev/docs/wordpress/): minimal install, production Caddyfile, hot reload via Mercure.
 - [Migrating from Nginx and PHP-FPM](https://frankenphp.dev/docs/migrate/): step-by-step migration of an existing PHP stack.
 
-## Real-Time and Performance Features
+## Real-time and performance features
 
 - [Mercure Real-Time Hub](https://frankenphp.dev/docs/mercure/): built-in Mercure hub for pushing real-time events to browsers over HTTP.
 - [HTTP 103 Early Hints](https://frankenphp.dev/docs/early-hints/): preload critical assets before the final response.
@@ -40,7 +40,7 @@ This index points AI agents and crawlers at the canonical English documentation.
 - [X-Sendfile and X-Accel-Redirect](https://frankenphp.dev/docs/x-sendfile/): delegate large file delivery to the web server after running PHP.
 - [Performance Tuning](https://frankenphp.dev/docs/performance/): thread count, worker mode, glibc vs musl, Go runtime, OPcache, Caddyfile options.
 
-## Production and Observability
+## Production and observability
 
 - [Deploying FrankenPHP in Production](https://frankenphp.dev/docs/production/): Docker Compose deployments with TLS, reverse proxy, and multi-node setups.
 - [Known Issues](https://frankenphp.dev/docs/known-issues/): unsupported PHP extensions, musl caveats, Docker TLS gotchas.

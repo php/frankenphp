@@ -1,9 +1,9 @@
 ---
-title: Deploying FrankenPHP in Production with Docker Compose
+title: Deploying FrankenPHP in production with Docker Compose
 description: Deploy a PHP application to production with FrankenPHP and Docker Compose on a single Linux server, including TLS, reverse proxy, and multi-node setups.
 ---
 
-# Deploying in Production
+# Deploying in production
 
 In this tutorial, we will learn how to deploy a PHP application on a single server using Docker Compose.
 
@@ -11,7 +11,7 @@ If you're using Symfony, prefer reading the "[Deploy in production](https://gith
 
 If you're using API Platform (which also uses FrankenPHP), refer to [the deployment documentation of the framework](https://api-platform.com/docs/deployment/).
 
-## Preparing Your App
+## Preparing your app
 
 First, create a `Dockerfile` in the root directory of your PHP project:
 
@@ -74,7 +74,7 @@ volumes:
 
 Finally, if you use Git, commit these files and push.
 
-## Preparing a Server
+## Preparing a server
 
 To deploy your application in production, you need a server.
 In this tutorial, we will use a virtual machine provided by DigitalOcean, but any Linux server can work.
@@ -99,7 +99,7 @@ When your Droplet is ready, use SSH to connect:
 ssh root@<droplet-ip>
 ```
 
-## Configuring a Domain Name
+## Configuring a domain name
 
 In most cases, you'll want to associate a domain name with your site.
 If you don't own a domain name yet, you'll have to buy one through a registrar.
@@ -143,7 +143,7 @@ Go to `https://your-domain-name.example.com` and enjoy!
 >
 > Docker can have a cache layer, make sure you have the right build for each deployment or rebuild your project with `--no-cache` option to avoid cache issue.
 
-## Running Behind a Reverse Proxy
+## Running behind a reverse proxy
 
 If FrankenPHP is running behind a reverse proxy or a load balancer (e.g., Nginx, AWS ELB, Google Cloud LB),
 you must configure the [`trusted_proxies` global option](https://caddyserver.com/docs/caddyfile/options#trusted-proxies) in your Caddyfile
@@ -166,7 +166,7 @@ or the [`trustedproxies` middleware](https://laravel.com/docs/trustedproxy) for 
 Without both configurations, headers such as `X-Forwarded-For` and `X-Forwarded-Proto` will be ignored,
 which can cause issues like incorrect HTTPS detection or wrong client IP addresses.
 
-## Deploying on Multiple Nodes
+## Deploying on multiple nodes
 
 If you want to deploy your app on a cluster of machines, you can use [Docker Swarm](https://docs.docker.com/engine/swarm/stack-deploy/),
 which is compatible with the provided Compose files.

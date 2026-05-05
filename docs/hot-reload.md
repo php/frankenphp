@@ -1,9 +1,9 @@
 ---
-title: FrankenPHP Hot Reload for PHP, Templates, and Assets
+title: FrankenPHP hot reload for PHP, templates, and assets
 description: Use FrankenPHP hot reload to update PHP code, templates, and frontend assets in the browser without manual refresh, with optional DOM morphing via Idiomorph.
 ---
 
-# Hot Reload
+# Hot reload
 
 FrankenPHP includes a built-in **hot reload** feature designed to vastly improve the developer experience.
 
@@ -23,7 +23,7 @@ Depending on your setup, the browser will either:
 - **Morph the DOM** (preserving scroll position and input state) if [Idiomorph](https://github.com/bigskysoftware/idiomorph) is loaded.
 - **Reload the page** (standard live reload) if Idiomorph is not present.
 
-## Enabling FrankenPHP Hot Reload
+## Enabling FrankenPHP hot reload
 
 To enable hot reloading, enable Mercure, then add the `hot_reload` sub-directive to the `php_server` directive in your `Caddyfile`.
 
@@ -83,7 +83,7 @@ php_server {
 }
 ```
 
-## Client-Side Integration for FrankenPHP Hot Reload
+## Client-side integration for FrankenPHP hot reload
 
 While the server detects changes, the browser needs to subscribe to these events to update the page.
 FrankenPHP exposes the Mercure Hub URL to use for subscribing to file changes via the `$_SERVER['FRANKENPHP_HOT_RELOAD']` environment variable.
@@ -106,7 +106,7 @@ It is available as an [npm](https://www.npmjs.com/package/frankenphp-hot-reload)
 
 Alternatively, you can implement your own client-side logic by subscribing directly to the Mercure hub using the `EventSource` native JavaScript class.
 
-### Preserving Existing DOM Nodes
+### Preserving existing DOM nodes
 
 In rare cases, such as when using development tools [like the Symfony web debug toolbar](https://github.com/symfony/symfony/pull/62970),
 you may want to preserve specific DOM nodes.
@@ -116,7 +116,7 @@ To do so, add the `data-frankenphp-hot-reload-preserve` attribute to the relevan
 <div data-frankenphp-hot-reload-preserve><!-- My debug bar --></div>
 ```
 
-## Hot Reload with FrankenPHP Worker Mode
+## Hot reload with FrankenPHP worker mode
 
 If you are running your application in [Worker Mode](https://frankenphp.dev/docs/worker/), your application script remains in memory.
 This means changes to your PHP code will not be reflected immediately, even if the browser reloads.
@@ -144,7 +144,7 @@ php_server {
 }
 ```
 
-## How FrankenPHP Hot Reload Works
+## How FrankenPHP hot reload works
 
 1. **Watch**: FrankenPHP monitors the filesystem for modifications using [the `e-dant/watcher` library](https://github.com/e-dant/watcher) under the hood (we contributed the Go binding).
 2. **Restart (Worker Mode)**: if `watch` is enabled in the worker config, the PHP worker is restarted to load the new code.

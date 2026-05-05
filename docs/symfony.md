@@ -1,15 +1,15 @@
 ---
-title: Running Symfony with FrankenPHP (Docker, Worker Mode, Hot Reload)
+title: Running Symfony with FrankenPHP (Docker, worker mode, hot reload)
 description: How to run a Symfony application with FrankenPHP using Symfony Docker, a local install, worker mode, hot reload, AssetMapper, and X-Sendfile.
 ---
 
 # Symfony
 
-## Running Symfony with the Symfony Docker Image
+## Running Symfony with Symfony Docker
 
 For [Symfony](https://symfony.com) projects, we recommend using [Symfony Docker](https://github.com/dunglas/symfony-docker), the official Symfony Docker setup maintained by FrankenPHP's author. It provides a complete Docker-based environment with FrankenPHP, automatic HTTPS, HTTP/2, HTTP/3, and worker mode support out of the box.
 
-## Installing Symfony with FrankenPHP Locally
+## Installing Symfony with FrankenPHP locally
 
 Alternatively, you can run your Symfony projects with FrankenPHP from your local machine:
 
@@ -32,7 +32,7 @@ Alternatively, you can run your Symfony projects with FrankenPHP from your local
 
 3. Start FrankenPHP from the root directory of your Symfony project: `frankenphp run`
 
-## Symfony Worker Mode with FrankenPHP
+## Symfony worker mode with FrankenPHP
 
 Since Symfony 7.4, FrankenPHP worker mode is natively supported.
 
@@ -55,7 +55,7 @@ docker run \
 
 Learn more about [the worker mode](worker.md).
 
-### Auditing Worker Compatibility
+### Auditing worker compatibility
 
 [Igor PHP](https://github.com/igor-php/igor-php) is a static linter that scans Symfony projects for state leaks before they bite in production: services missing `ResetInterface`, stateful properties that aren't reset, mutable local statics, `exit()`/`die()` calls, and superglobal writes. It audits your application code as well as services declared in `vendor/`.
 
@@ -64,7 +64,7 @@ composer require --dev igor-php/igor-php
 vendor/bin/igor-php .
 ```
 
-## Hot Reload for Symfony
+## Hot reload for Symfony
 
 Hot reloading is enabled by default in [Symfony Docker](https://github.com/dunglas/symfony-docker).
 
@@ -97,7 +97,7 @@ Then, add the following code to your `templates/base.html.twig` file:
 
 Finally, run `frankenphp run` from the root directory of your Symfony project.
 
-## Pre-Compressing Assets
+## Pre-compressing assets
 
 Symfony's [AssetMapper component](https://symfony.com/doc/current/frontend/asset_mapper.html) can pre-compress assets with Brotli and Zstandard during deployment. FrankenPHP (through Caddy's `file_server`) can serve these pre-compressed files directly, avoiding on-the-fly compression overhead.
 
@@ -126,7 +126,7 @@ Symfony's [AssetMapper component](https://symfony.com/doc/current/frontend/asset
 
 The `precompressed` directive tells Caddy to look for pre-compressed versions of the requested file (e.g., `app.css.zst`, `app.css.br`) and serve them directly if the client supports it.
 
-## Serving Large Static Files (`X-Sendfile`)
+## Serving large static files (`X-Sendfile`)
 
 FrankenPHP supports [efficiently serving large static files](x-sendfile.md) after executing PHP code (for access control, statistics, etc.).
 
@@ -142,7 +142,7 @@ $response = new BinaryFileResponse(__DIR__.'/../private-files/file.txt');
 // ...
 ```
 
-## Symfony Apps as Standalone Binaries
+## Symfony apps as standalone binaries
 
 Using [FrankenPHP's application embedding feature](embed.md), it's possible to distribute Symfony
 apps as standalone binaries.

@@ -1,5 +1,5 @@
 ---
-title: Configuring FrankenPHP with Caddyfile, php.ini, and Env Vars
+title: Configuring FrankenPHP with Caddyfile, php.ini, and env vars
 description: Configure FrankenPHP and Caddy via Caddyfile, JSON, or environment variables, including PHP runtime tuning, worker mode, file watching, and module options.
 ---
 
@@ -53,7 +53,7 @@ RUN cp $PHP_INI_DIR/php.ini-production $PHP_INI_DIR/php.ini
 RUN cp $PHP_INI_DIR/php.ini-development $PHP_INI_DIR/php.ini
 ```
 
-## RPM and Debian Packages
+## RPM and Debian packages
 
 FrankenPHP:
 
@@ -65,7 +65,7 @@ PHP:
 - `php.ini`: `/etc/php-zts/php.ini` (a `php.ini` file with production presets is provided by default)
 - additional configuration files: `/etc/php-zts/conf.d/*.ini`
 
-## Static Binary
+## Static binary
 
 FrankenPHP:
 
@@ -78,7 +78,7 @@ PHP:
 - PHP extensions: cannot be loaded, bundle them in the binary itself
 - copy one of `php.ini-production` or `php.ini-development` provided [in the PHP sources](https://github.com/php/php-src/).
 
-## Caddyfile Config
+## Caddyfile config
 
 The `php_server` or the `php` [HTTP directives](https://caddyserver.com/docs/caddyfile/concepts#directives) may be used within the site blocks to serve your PHP app.
 
@@ -201,7 +201,7 @@ php_server [<matcher>] {
 }
 ```
 
-### Watching for File Changes
+### Watching for file changes
 
 Since workers only boot your application once and keep it in memory, any changes
 to your PHP files will not be reflected immediately.
@@ -248,7 +248,7 @@ where the FrankenPHP process was started. You can instead also specify one or mo
 
 The file watcher is based on [e-dant/watcher](https://github.com/e-dant/watcher).
 
-## Matching the Worker to a Path
+## Matching the worker to a path
 
 In traditional PHP applications, scripts are always placed in the public directory.
 This is also true for worker scripts, which are treated like any other PHP script.
@@ -271,7 +271,7 @@ and otherwise forward the request to the worker matching the path pattern.
 }
 ```
 
-## Restarting Threads after a Number of Requests (Experimental)
+## Restarting threads after a number of requests (experimental)
 
 FrankenPHP can automatically restart PHP threads after they have handled a given number of requests.
 When a thread reaches the limit, it is fully restarted,
@@ -290,7 +290,7 @@ But when the fix depends on a third party you don't control,
 }
 ```
 
-## Environment Variables
+## Environment variables
 
 The following environment variables can be used to inject Caddy directives in the `Caddyfile` without modifying it:
 
@@ -303,7 +303,7 @@ As for FPM and CLI SAPIs, environment variables are exposed by default in the `$
 
 The `S` value of [the `variables_order` PHP directive](https://www.php.net/manual/en/ini.core.php#ini.variables-order) is always equivalent to `ES` regardless of the placement of `E` elsewhere in this directive.
 
-## PHP Config
+## PHP config
 
 To load [additional PHP configuration files](https://www.php.net/manual/en/configuration.file.php#configuration.file.scan),
 the `PHP_INI_SCAN_DIR` environment variable can be used.
@@ -335,7 +335,7 @@ Alternatively, you can use all other methods described in the [Caddy documentati
 
 If you want to use HTTPS with the `127.0.0.1` IP address instead of the `localhost` hostname, please read the [known issues](known-issues.md#using-https127001-with-docker) section.
 
-### Full Duplex (HTTP/1)
+### Full duplex (HTTP/1)
 
 When using HTTP/1.x, it may be desirable to enable full-duplex mode to allow writing a response before the entire body
 has been read. (for example: [Mercure](mercure.md), WebSocket, Server-Sent Events, etc.)
@@ -363,7 +363,7 @@ CADDY_GLOBAL_OPTIONS="servers {
 
 You can find more information about this setting in the [Caddy documentation](https://caddyserver.com/docs/caddyfile/options#enable-full-duplex).
 
-## Enable the Debug Mode
+## Enable the debug mode
 
 When using the Docker image, set the `CADDY_GLOBAL_OPTIONS` environment variable to `debug` to enable the debug mode:
 
@@ -374,7 +374,7 @@ docker run -v $PWD:/app/public \
     dunglas/frankenphp
 ```
 
-## Shell Completion
+## Shell completion
 
 FrankenPHP provides built-in shell completion support for Bash, Zsh, Fish, and PowerShell. This enables autocompletion for all commands (including custom commands like `php-server`, `php-cli`, and `extension-init`) and their flags.
 

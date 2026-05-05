@@ -1,9 +1,9 @@
 ---
-title: Serving Large Files with X-Sendfile and X-Accel-Redirect in FrankenPHP
+title: Serving large files with X-Sendfile and X-Accel-Redirect in FrankenPHP
 description: Configure FrankenPHP to delegate large static file delivery to the web server after running PHP code, using X-Sendfile or X-Accel-Redirect headers.
 ---
 
-# Efficiently Serving Large Static Files (`X-Sendfile`/`X-Accel-Redirect`)
+# Efficiently serving large static files (`X-Sendfile`/`X-Accel-Redirect`)
 
 Usually, static files can be served directly by the web server,
 but sometimes it's necessary to execute some PHP code before sending them:
@@ -61,6 +61,6 @@ Set the relative file path (from `private-files/`) as the value of the `X-Accel-
 header('X-Accel-Redirect: file.txt');
 ```
 
-## Projects Using the Symfony HttpFoundation Component (Symfony, Laravel, Drupal...)
+## Projects using the Symfony HttpFoundation component (Symfony, Laravel, Drupal...)
 
 See [the Symfony documentation](symfony.md#serving-large-static-files-x-sendfile) for details on using this feature with Symfony HttpFoundation.

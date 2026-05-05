@@ -1,11 +1,11 @@
 ---
-title: FrankenPHP Known Issues, Incompatible Extensions, and Workarounds
+title: FrankenPHP known issues, incompatible extensions, and workarounds
 description: Reference of FrankenPHP limitations, including unsupported PHP extensions, musl libc caveats, Docker TLS setup with 127.0.0.1, and Composer @php scripts.
 ---
 
-# Known Issues
+# Known issues
 
-## Unsupported PHP Extensions
+## Unsupported PHP extensions
 
 The following extensions are known not to be compatible with FrankenPHP:
 
@@ -14,7 +14,7 @@ The following extensions are known not to be compatible with FrankenPHP:
 | [imap](https://www.php.net/manual/en/imap.installation.php)                                                 | Not thread-safe | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap) |
 | [newrelic](https://docs.newrelic.com/docs/apm/agents/php-agent/getting-started/introduction-new-relic-php/) | Not thread-safe | -                                                                                                                    |
 
-## Buggy PHP Extensions
+## Buggy PHP extensions
 
 The following extensions have known bugs and unexpected behaviors when used with FrankenPHP:
 
@@ -26,7 +26,7 @@ The following extensions have known bugs and unexpected behaviors when used with
 
 The [get_browser()](https://www.php.net/manual/en/function.get-browser.php) function seems to perform badly after a while. A workaround is to cache (e.g. with [APCu](https://www.php.net/manual/en/book.apcu.php)) the results per User Agent, as they are static.
 
-## Standalone Binary and Alpine-based Docker Images
+## Standalone binary and Alpine-based Docker images
 
 The fully static binary and Alpine-based Docker images (`dunglas/frankenphp:*-alpine`) use [musl libc](https://musl.libc.org/) instead of [glibc and friends](https://www.etalabs.net/compare_libcs.html), to keep a smaller binary size.
 This may lead to some compatibility issues.
@@ -85,7 +85,7 @@ docker run \
     dunglas/frankenphp
 ```
 
-## Composer Scripts Referencing `@php`
+## Composer scripts referencing `@php`
 
 [Composer scripts](https://getcomposer.org/doc/articles/scripts.md) may want to execute a PHP binary for some tasks, e.g. in [a Laravel project](laravel.md) to run `@php artisan package:discover --ansi`. This [currently fails](https://github.com/php/frankenphp/issues/483#issuecomment-1899890915) for two reasons:
 
@@ -118,7 +118,7 @@ export PHP_BINARY=/usr/local/bin/php
 composer install
 ```
 
-## Troubleshooting TLS/SSL Issues with Static Binaries
+## Troubleshooting TLS/SSL issues with static binaries
 
 When using the static binaries, you may encounter the following TLS-related errors, for instance when sending emails using STARTTLS:
 

@@ -1,5 +1,5 @@
 ---
-title: Running WordPress with FrankenPHP (HTTPS, HTTP/3, Hot Reload)
+title: Running WordPress with FrankenPHP (HTTPS, HTTP/3, hot reload)
 description: How to run WordPress with FrankenPHP, including a minimal install, a production Caddyfile, and enabling hot reload via Mercure.
 ---
 
@@ -30,7 +30,7 @@ encode zstd br gzip
 log
 ```
 
-## Hot Reload for WordPress
+## Hot reload for WordPress
 
 To use the [hot reload](hot-reload.md) feature with WordPress, enable [Mercure](mercure.md) and add the `hot_reload` sub-directive to the `php_server` directive in your `Caddyfile`:
 

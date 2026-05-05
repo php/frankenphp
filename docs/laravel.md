@@ -1,11 +1,11 @@
 ---
-title: Running Laravel with FrankenPHP (Docker, Octane, Standalone Binary)
+title: Running Laravel with FrankenPHP (Docker, Octane, standalone binary)
 description: How to run a Laravel application with FrankenPHP using the Docker image, a local install, Laravel Octane, or as an embedded standalone binary.
 ---
 
 # Laravel
 
-## Running Laravel with the FrankenPHP Docker Image
+## Running Laravel with the FrankenPHP Docker image
 
 Serving a [Laravel](https://laravel.com) web application with FrankenPHP is as easy as mounting the project in the `/app` directory of the official Docker image.
 
@@ -17,7 +17,7 @@ docker run -p 80:80 -p 443:443 -p 443:443/udp -v $PWD:/app dunglas/frankenphp
 
 And enjoy!
 
-## Installing Laravel with FrankenPHP Locally
+## Installing Laravel with FrankenPHP locally
 
 Alternatively, you can run your Laravel projects with FrankenPHP from your local machine:
 
@@ -86,7 +86,7 @@ See also [how to use Mercure with Octane](#mercure-support).
 
 Learn more about [Laravel Octane in its official documentation](https://laravel.com/docs/octane).
 
-## Laravel Apps as Standalone Binaries
+## Laravel apps as standalone binaries
 
 Using [FrankenPHP's application embedding feature](embed.md), it's possible to distribute Laravel
 apps as standalone binaries.
@@ -169,14 +169,14 @@ Your app is now ready!
 Learn more about the options available and how to build binaries for other OSes in the [applications embedding](embed.md)
 documentation.
 
-### Changing the Storage Path
+### Changing the storage path
 
 By default, Laravel stores uploaded files, caches, logs, etc. in the application's `storage/` directory.
 This is not suitable for embedded applications, as each new version will be extracted into a different temporary directory.
 
 Set the `LARAVEL_STORAGE_PATH` environment variable (for example, in your `.env` file) or call the `Illuminate\Foundation\Application::useStoragePath()` method to use a directory outside the temporary directory.
 
-### Mercure Support
+### Mercure support
 
 [Mercure](https://mercure.rocks) is a great way to add real-time capabilities to your Laravel apps.
 FrankenPHP includes [Mercure support out of the box](mercure.md).
@@ -205,7 +205,7 @@ You can use [all directives supported by Mercure](https://mercure.rocks/docs/hub
 To publish and subscribe to updates, we recommend using the [Laravel Mercure Broadcaster](https://github.com/mvanduijker/laravel-mercure-broadcaster) library.
 Alternatively, see [the Mercure documentation](mercure.md) to do it in pure PHP and JavaScript.
 
-### Running Octane with Standalone Binaries
+### Running Octane with standalone binaries
 
 It's even possible to package Laravel Octane apps as standalone binaries!
 

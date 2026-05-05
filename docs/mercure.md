@@ -1,9 +1,9 @@
 ---
-title: Real-Time Updates with the FrankenPHP Mercure Hub
+title: Real-time updates with the FrankenPHP Mercure hub
 description: FrankenPHP ships with a built-in Mercure hub for pushing real-time events to browsers over HTTP, as a simpler alternative to WebSockets.
 ---
 
-# Real-Time
+# Real-time
 
 FrankenPHP comes with a built-in [Mercure](https://mercure.rocks) hub!
 Mercure allows you to push real-time events to all the connected devices: they will receive a JavaScript event instantly.
@@ -42,7 +42,7 @@ php_server
 >
 > Uncomment the Mercure section in `/etc/frankenphp/Caddyfile` to enable it.
 
-## Subscribing to Updates
+## Subscribing to updates
 
 By default, the Mercure hub is available on the `/.well-known/mercure` path of your FrankenPHP server.
 To subscribe to updates, use the native [`EventSource`](https://developer.mozilla.org/docs/Web/API/EventSource) JavaScript class:
@@ -59,7 +59,7 @@ To subscribe to updates, use the native [`EventSource`](https://developer.mozill
 </script>
 ```
 
-## Publishing Updates
+## Publishing updates
 
 ### Using `mercure_publish()`
 

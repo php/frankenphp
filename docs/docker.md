@@ -1,9 +1,9 @@
 ---
-title: FrankenPHP Docker Image: Build, Configure, Extend
+title: FrankenPHP Docker image: build, configure, extend
 description: Build custom FrankenPHP Docker images, install PHP extensions and Caddy modules, run as non-root, harden with distroless, and enable worker mode by default.
 ---
 
-# Building Custom Docker Image
+# Building a custom Docker image
 
 [FrankenPHP Docker images](https://hub.docker.com/r/dunglas/frankenphp) are based on [official PHP images](https://hub.docker.com/_/php/).
 Debian and Alpine Linux variants are provided for popular architectures.
@@ -18,7 +18,7 @@ The tags follow this pattern: `dunglas/frankenphp:<frankenphp-version>-php<php-v
 
 [Browse tags](https://hub.docker.com/r/dunglas/frankenphp/tags).
 
-## How to Use the FrankenPHP Docker Images
+## How to use the FrankenPHP Docker images
 
 Create a `Dockerfile` in your project:
 
@@ -35,12 +35,12 @@ docker build -t my-php-app .
 docker run -it --rm --name my-running-app my-php-app
 ```
 
-## How to Tweak the FrankenPHP Docker Configuration
+## How to tweak the FrankenPHP Docker configuration
 
 For convenience, [a default `Caddyfile`](https://github.com/php/frankenphp/blob/main/caddy/frankenphp/Caddyfile) containing
 useful environment variables is provided in the image.
 
-## How to Install More PHP Extensions
+## How to install more PHP extensions
 
 The [`docker-php-extension-installer`](https://github.com/mlocati/docker-php-extension-installer) script is provided in the base image.
 Adding additional PHP extensions is straightforward:
@@ -57,7 +57,7 @@ RUN install-php-extensions \
 	opcache
 ```
 
-## How to Install More Caddy Modules
+## How to install more Caddy modules
 
 FrankenPHP is built on top of Caddy, and all [Caddy modules](https://caddyserver.com/docs/modules/) can be used with FrankenPHP.
 
@@ -99,7 +99,7 @@ The `builder` image provided by FrankenPHP contains a compiled version of `libph
 > If you're using Alpine Linux and Symfony,
 > you may need to [increase the default stack size](compile.md#using-xcaddy).
 
-## Enabling the Worker Mode by Default
+## Enabling the worker mode by default
 
 Set the `FRANKENPHP_CONFIG` environment variable to start FrankenPHP with a worker script:
 
@@ -111,7 +111,7 @@ FROM dunglas/frankenphp
 ENV FRANKENPHP_CONFIG="worker ./public/index.php"
 ```
 
-## Using a Volume in Development
+## Using a volume in development
 
 To develop easily with FrankenPHP, mount the directory from your host containing the source code of the app as a volume in the Docker container:
 
@@ -152,7 +152,7 @@ volumes:
   caddy_config:
 ```
 
-## Running as a Non-Root User
+## Running as a non-root user
 
 FrankenPHP can run as a non-root user in Docker.
 
@@ -175,7 +175,7 @@ EOF
 USER ${USER}
 ```
 
-### Running with No Capabilities
+### Running with no capabilities
 
 Even when running rootless, FrankenPHP needs the `CAP_NET_BIND_SERVICE` capability to bind the
 web server on privileged ports (80 and 443).
@@ -203,14 +203,14 @@ USER ${USER}
 Next, set the `SERVER_NAME` environment variable to use an unprivileged port.
 Example: `:8000`
 
-## FrankenPHP Docker Image Updates
+## FrankenPHP Docker image updates
 
 The Docker images are built:
 
 - when a new release is tagged
 - daily at 4 am UTC, if new versions of the official PHP images are available
 
-## Hardening Images
+## Hardening images
 
 To further reduce the attack surface and size of your FrankenPHP Docker images, it's also possible to build them on top of a
 [Google distroless](https://github.com/GoogleContainerTools/distroless) or
@@ -270,7 +270,7 @@ WORKDIR /app
 ENTRYPOINT ["/usr/local/bin/frankenphp", "run", "--config", "/etc/caddy/Caddyfile"]
 ```
 
-## Development Versions
+## Development versions
 
 Development versions are available in the [`dunglas/frankenphp-dev`](https://hub.docker.com/repository/docker/dunglas/frankenphp-dev) Docker repository.
 A new build is triggered every time a commit is pushed to the main branch of the GitHub repository.

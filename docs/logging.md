@@ -1,5 +1,5 @@
 ---
-title: FrankenPHP Logging with frankenphp_log() and Caddy
+title: FrankenPHP logging with frankenphp_log() and Caddy
 description: Emit structured logs from PHP with frankenphp_log() or error_log() in FrankenPHP, routed through Caddy's logging system as JSON for Datadog, Loki, or Elastic.
 ---
 

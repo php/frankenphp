@@ -1,9 +1,9 @@
 ---
-title: Writing PHP Extensions in Go with FrankenPHP
+title: Writing PHP extensions in Go with FrankenPHP
 description: Build PHP extensions in Go using FrankenPHP, with an extension generator for boilerplate, a types API for PHP/Go conversion, and support for goroutines.
 ---
 
-# Writing PHP Extensions in Go
+# Writing PHP extensions in Go
 
 With FrankenPHP, you can **write PHP extensions in Go**, which allows you to create **high-performance native functions** that can be called directly from PHP. Your applications can leverage any existing or new Go library, as well as the famous concurrency model of **goroutines right from your PHP code**.
 
@@ -11,7 +11,7 @@ Writing PHP extensions is typically done in C, but it's also possible to write t
 
 Thanks to Caddy modules, you can write PHP extensions in Go and integrate them very quickly into FrankenPHP.
 
-## Two Approaches
+## Two approaches
 
 FrankenPHP provides two ways to create PHP extensions in Go:
 
@@ -20,7 +20,7 @@ FrankenPHP provides two ways to create PHP extensions in Go:
 
 We'll start with the generator approach as it's the easiest way to get started, then show the manual implementation for those who need complete control.
 
-## Using the Extension Generator
+## Using the extension generator
 
 FrankenPHP is bundled with a tool that lets you **create a PHP extension** using only Go. **No need to write C code** or use CGO directly: FrankenPHP also includes a **public types API** to help you write your extensions in Go without having to worry about **the type juggling between PHP/C and Go**.
 
@@ -33,7 +33,7 @@ Keep in mind that this tool is **not a full-fledged extension generator**. It is
 
 As covered in the manual implementation section below as well, you need to [get the PHP sources](https://www.php.net/downloads.php) and create a new Go module.
 
-#### Create a New Module and Get PHP Sources
+#### Create a new module and get PHP sources
 
 The first step to writing a PHP extension in Go is to create a new Go module. You can use the following command for this:
 
@@ -47,7 +47,7 @@ The second step is to [get the PHP sources](https://www.php.net/downloads.php) f
 tar xf php-*
 ```
 
-### Writing the Extension
+### Writing the extension
 
 Everything is now set up to write your native function in Go. Create a new file named `stringext.go`. Our first function will take a string as an argument, the number of times to repeat it, a boolean to indicate whether to reverse the string, and return the resulting string. This should look like this:
 
@@ -88,7 +88,7 @@ There are two important things to note here:
 
 While the first point speaks for itself, the second may be harder to apprehend. Let's take a deeper dive into type juggling later in this guide.
 
-### Generating the Extension
+### Generating the extension
 
 This is where the magic happens, and your extension can now be generated. You can run the generator with the following command:
 
@@ -112,7 +112,7 @@ If everything went well, your project directory should contain the following fil
 > [!IMPORTANT]
 > **Your source file (`my_extension.go`) is never modified.** The generator creates a separate `_generated.go` file containing CGO wrappers that call your original functions. This means you can safely version control your source file without worrying about generated code polluting it.
 
-### Integrating the Generated Extension into FrankenPHP
+### Integrating the generated extension into FrankenPHP
 
 Our extension is now ready to be compiled and integrated into FrankenPHP. To do this, refer to the FrankenPHP [compilation documentation](compile.md) to learn how to compile FrankenPHP. Add the module using the `--with` flag, pointing to the path of your module:
 
@@ -128,7 +128,7 @@ xcaddy build \
 
 Note that you point to the `/build` subdirectory that was created during the generation step. However, this is not mandatory: you can also copy the generated files to your module directory and point to it directly.
 
-### Testing Your Generated Extension
+### Testing your generated extension
 
 You can create a PHP file to test the functions and classes you've created. For example, create an `index.php` file with the following content:
 
@@ -146,7 +146,7 @@ echo $processor->process('Hello World', StringProcessor::MODE_UPPERCASE);  // "H
 
 Once you've integrated your extension into FrankenPHP as demonstrated in the previous section, you can run this test file using `./frankenphp php-server`, and you should see your extension working.
 
-### Type Juggling
+### Type juggling
 
 While some variable types have the same memory representation between C/PHP and Go, some types require more logic to be directly used. This is maybe the hardest part when it comes to writing extensions because it requires understanding the internals of the Zend Engine and how variables are stored internally in PHP.
 This table summarizes what you need to know:
@@ -279,7 +279,7 @@ func process_data_packed(arr *C.zend_array) unsafe.Pointer {
 - `frankenphp.GoPackedArray(arr unsafe.Pointer) []any` - Convert a PHP array to a Go slice
 - `frankenphp.IsPacked(zval *C.zend_array) bool` - Check if a PHP array is packed (indexed only) or associative (key-value pairs)
 
-### Working with Callables
+### Working with callables
 
 FrankenPHP provides a way to work with PHP callables using the `frankenphp.CallPHPCallable` helper. This allows you to call PHP functions or methods from Go code.
 
@@ -316,7 +316,7 @@ $result = my_array_map(['hello', 'world'], 'strtoupper');
 // $result will be ['HELLO', 'WORLD']
 ```
 
-### Declaring a Native PHP Class
+### Declaring a native PHP class
 
 The generator supports declaring **opaque classes** as Go structs, which can be used to create PHP objects. You can use the `//export_php:class` directive comment to define a PHP class. For example:
 
@@ -331,7 +331,7 @@ type UserStruct struct {
 }
 ```
 
-#### What are Opaque Classes?
+#### What are opaque classes?
 
 **Opaque classes** are classes where the internal structure (properties) is hidden from PHP code. This means:
 
@@ -343,7 +343,7 @@ type UserStruct struct {
 
 This approach provides better encapsulation and prevents PHP code from accidentally corrupting the internal state of your Go objects. All interactions with the object must go through the methods you explicitly define.
 
-#### Adding Methods to Classes
+#### Adding methods to classes
 
 Since properties are not directly accessible, you **must define methods** to interact with your opaque classes. Use the `//export_php:method` directive to define behavior:
 
@@ -386,7 +386,7 @@ func (us *UserStruct) SetNamePrefix(prefix *C.zend_string) {
 }
 ```
 
-#### Nullable Parameters
+#### Nullable parameters
 
 The generator supports nullable parameters using the `?` prefix in PHP signatures. When a parameter is nullable, it becomes a pointer in your Go function, allowing you to check if the value was `null` in PHP:
 
@@ -457,11 +457,11 @@ $user->updateInfo(null, 25, null);          // Name and active are null
 
 This design ensures that your Go code has complete control over how the object's state is accessed and modified, providing better encapsulation and type safety.
 
-### Declaring Constants
+### Declaring constants
 
 The generator supports exporting Go constants to PHP using two directives: `//export_php:const` for global constants and `//export_php:classconst` for class constants. This allows you to share configuration values, status codes, and other constants between Go and PHP code.
 
-#### Global Constants
+#### Global constants
 
 Use the `//export_php:const` directive to create global PHP constants:
 
@@ -486,7 +486,7 @@ const (
 >
 > PHP constants will take the name of the Go constant, thus using upper case letters is recommended.
 
-#### Class Constants
+#### Class constants
 
 Use the `//export_php:classconst ClassName` directive to create constants that belong to a specific PHP class:
 
@@ -595,7 +595,7 @@ func (sp *StringProcessorStruct) Process(input *C.zend_string, mode int64) unsaf
 }
 ```
 
-### Using Namespaces
+### Using namespaces
 
 The generator supports organizing your PHP extension's functions, classes, and constants under a namespace using the `//export_php:namespace` directive. This helps avoid naming conflicts and provides better organization for your extension's API.
 
@@ -633,7 +633,7 @@ func (u *UserStruct) GetName() unsafe.Pointer {
 const STATUS_ACTIVE = 1
 ```
 
-#### Using Namespaced Extension in PHP
+#### Using namespaced extension in PHP
 
 When a namespace is declared, all functions, classes, and constants are placed under that namespace in PHP:
 
@@ -648,22 +648,22 @@ echo $user->getName(); // "John Doe"
 echo My\Extension\STATUS_ACTIVE; // 1
 ```
 
-#### Important Notes
+#### Important notes
 
 - Only **one** namespace directive is allowed per file. If multiple namespace directives are found, the generator will return an error.
 - The namespace applies to **all** exported symbols in the file: functions, classes, methods, and constants.
 - Namespace names follow PHP namespace conventions using backslashes (`\`) as separators.
 - If no namespace is declared, symbols are exported to the global namespace as usual.
 
-## Manual Implementation
+## Manual implementation
 
 If you want to understand how extensions work or need full control over your extension, you can write them manually. This approach gives you complete control but requires more boilerplate code.
 
-### Basic Function
+### Basic function
 
 We'll see how to write a simple PHP extension in Go that defines a new native function. This function will be called from PHP and will trigger a goroutine that logs a message in Caddy's logs. This function doesn't take any parameters and returns nothing.
 
-#### Define the Go Function
+#### Define the Go function
 
 In your module, you need to define a new native function that will be called from PHP. To do this, create a file with the name you want, for example, `extension.go`, and add the following code:
 
@@ -719,7 +719,7 @@ php ../php-src/build/gen_stub.php extension.stub.php
 
 This script will generate a file named `extension_arginfo.h` that contains the necessary information for PHP to know how to define and call our function.
 
-#### Write the Bridge Between Go and C
+#### Write the bridge between Go and C
 
 Now, we need to write the bridge between Go and C. Create a file named `extension.h` in your module directory with the following content:
 
@@ -783,11 +783,11 @@ Finally, we define the extension's metadata in a `zend_module_entry` structure, 
 
 The extension registration is automatically handled by FrankenPHP's `RegisterExtension()` function that we call in our Go code.
 
-### Advanced Usage
+### Advanced usage
 
 Now that we know how to create a basic PHP extension in Go, let's complexify our example. We will now create a PHP function that takes a string as a parameter and returns its uppercase version.
 
-#### Define the PHP Function Stub
+#### Define the PHP function stub
 
 To define the new PHP function, we will modify our `extension.stub.php` file to include the new function signature:
 
@@ -827,7 +827,7 @@ static const zend_function_entry ext_functions[] = {
 
 We can see that the `go_upper` function is defined with a parameter of type `string` and a return type of `string`.
 
-#### Type Juggling Between Go and PHP/C
+#### Type juggling between Go and PHP/C
 
 Your Go function cannot directly accept a PHP string as a parameter. You need to convert it to a Go string. Fortunately, FrankenPHP provides helper functions to handle the conversion between PHP strings and Go strings, similar to what we saw in the generator approach.
 
@@ -865,7 +865,7 @@ You can learn more about the `ZEND_PARSE_PARAMETERS_START` and parameters parsin
 
 There's only one thing left to do: implement the `go_upper` function in Go.
 
-#### Implement the Go Function
+#### Implement the Go function
 
 Our Go function will take a `*C.zend_string` as a parameter, convert it to a Go string using FrankenPHP's helper function, process it, and return the result as a new `*C.zend_string`. The helper functions handle all the memory management and conversion complexity for us.
 
@@ -900,7 +900,7 @@ The `false` parameter in `PHPString()` indicates that we want to create a new no
 >
 > In this example, we don't perform any error handling, but you should always check that pointers are not `nil` and that the data is valid before using it in your Go functions.
 
-### Integrating the Extension into FrankenPHP
+### Integrating the extension into FrankenPHP
 
 Our extension is now ready to be compiled and integrated into FrankenPHP. To do this, refer to the FrankenPHP [compilation documentation](compile.md) to learn how to compile FrankenPHP. Add the module using the `--with` flag, pointing to the path of your module:
 
@@ -916,7 +916,7 @@ xcaddy build \
 
 That's it! Your extension is now integrated into FrankenPHP and can be used in your PHP code.
 
-### Testing Your Extension
+### Testing your extension
 
 After integrating your extension into FrankenPHP, you can create an `index.php` file with examples for the functions you've implemented:
 

@@ -1,5 +1,5 @@
 ---
-title: FrankenPHP Performance Tuning Guide
+title: FrankenPHP performance tuning guide
 description: Tune FrankenPHP for higher throughput and lower latency: thread count, worker mode, glibc vs musl, Go runtime, OPcache, and Caddyfile options.
 ---
 
@@ -8,7 +8,7 @@ description: Tune FrankenPHP for higher throughput and lower latency: thread cou
 By default, FrankenPHP tries to offer a good compromise between performance and ease of use.
 However, it is possible to substantially improve performance using an appropriate configuration.
 
-## Tuning FrankenPHP Threads and Workers
+## Tuning FrankenPHP threads and workers
 
 By default, FrankenPHP starts 2 times more threads and workers (in worker mode) than the available number of CPU cores.
 
@@ -31,13 +31,13 @@ If set to `auto`, the limit will be estimated based on the `memory_limit` in you
 `max_threads` is similar to PHP FPM's [pm.max_children](https://www.php.net/manual/en/install.fpm.configuration.php#pm.max-children). The main difference is that FrankenPHP uses threads instead of
 processes and automatically delegates them across different worker scripts and 'classic mode' as needed.
 
-## Worker Mode for Higher Throughput
+## Worker mode for higher throughput
 
 Enabling [the FrankenPHP worker mode](worker.md) dramatically improves performance,
 but your app must be adapted to be compatible with this mode:
 you need to create a worker script and to be sure that the app is not leaking memory.
 
-## Avoid musl in Production: Prefer glibc Builds
+## Avoid musl in production: prefer glibc builds
 
 The Alpine Linux variant of the official Docker images and the default binaries we provide are using [the musl libc](https://musl.libc.org).
 
@@ -52,7 +52,7 @@ This can be achieved by using the Debian Docker images, using [our maintainers .
 
 For leaner or more secure containers, you may want to consider [a hardened Debian image](docker.md#hardening-images) rather than Alpine.
 
-## Go Runtime Configuration for FrankenPHP
+## Go runtime configuration for FrankenPHP
 
 FrankenPHP is written in Go.
 
@@ -131,7 +131,7 @@ route {
 }
 ```
 
-## Avoid Caddyfile Placeholders in Hot Paths
+## Avoid Caddyfile placeholders in hot paths
 
 You can use [placeholders](https://caddyserver.com/docs/conventions#placeholders) in the `root` and `env` directives.
 However, this prevents caching these values, and comes with a significant performance cost.
@@ -152,14 +152,14 @@ php_server {
 This will improve performance if the `root` directive contains [placeholders](https://caddyserver.com/docs/conventions#placeholders).
 The gain will be negligible in other cases.
 
-## FrankenPHP Logging Performance
+## FrankenPHP logging performance
 
 Logging is obviously very useful, but, by definition,
 it requires I/O operations and memory allocations, which considerably reduces performance.
 Make sure you [set the logging level](https://caddyserver.com/docs/caddyfile/options#log) correctly,
 and only log what's necessary.
 
-## PHP Performance Tuning for FrankenPHP
+## PHP performance tuning for FrankenPHP
 
 FrankenPHP uses the official PHP interpreter.
 All usual PHP-related performance optimizations apply with FrankenPHP.
@@ -174,7 +174,7 @@ In particular:
 For more details, read [the Symfony performance tuning documentation](https://symfony.com/doc/current/performance.html)
 (most tips are useful even if you don't use Symfony).
 
-## Splitting the FrankenPHP Thread Pool for Slow Endpoints
+## Splitting the FrankenPHP thread pool for slow endpoints
 
 It is common for applications to interact with slow external services, like an
 API that tends to be unreliable under high load or consistently takes 10+ seconds to respond.
