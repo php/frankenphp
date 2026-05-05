@@ -71,7 +71,6 @@ Hot reloading is enabled by default in [Symfony Docker](https://github.com/dungl
 To use the [hot reload](hot-reload.md) feature without Symfony Docker, enable [Mercure](mercure.md) and add the `hot_reload` sub-directive to the `php_server` directive in your `Caddyfile`:
 
 ```caddyfile
-# Caddyfile
 localhost
 
 mercure {

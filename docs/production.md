@@ -16,7 +16,6 @@ If you're using API Platform (which also uses FrankenPHP), refer to [the deploym
 First, create a `Dockerfile` in the root directory of your PHP project:
 
 ```dockerfile
-# Dockerfile
 FROM dunglas/frankenphp
 
 # Be sure to replace "your-domain-name.example.com" by your domain name
@@ -151,7 +150,6 @@ you must configure the [`trusted_proxies` global option](https://caddyserver.com
 so that Caddy trusts incoming `X-Forwarded-*` headers:
 
 ```caddyfile
-# Caddyfile
 {
 	servers {
 		trusted_proxies static <your-IPs>

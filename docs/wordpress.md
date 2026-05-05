@@ -23,7 +23,6 @@ Run [WordPress](https://wordpress.org/) with FrankenPHP to enjoy a modern, high-
 For a production-ready setup, prefer using `frankenphp run` with a `Caddyfile` like this one:
 
 ```caddyfile
-# Caddyfile
 example.com
 
 php_server
@@ -36,7 +35,6 @@ log
 To use the [hot reload](hot-reload.md) feature with WordPress, enable [Mercure](mercure.md) and add the `hot_reload` sub-directive to the `php_server` directive in your `Caddyfile`:
 
 ```caddyfile
-# Caddyfile
 localhost
 
 mercure {

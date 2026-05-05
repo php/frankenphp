@@ -46,7 +46,6 @@ server {
 Becomes a single `Caddyfile`:
 
 ```caddyfile
-# Caddyfile
 example.com {
     root /var/www/app/public
     php_server
@@ -62,7 +61,6 @@ Your existing `php.ini` works as-is. See [Configuration](config.md) for where to
 You can also set directives directly in the `Caddyfile`:
 
 ```caddyfile
-# Caddyfile
 {
     frankenphp {
         php_ini memory_limit 256M
@@ -82,7 +80,6 @@ In PHP-FPM, you tune `pm.max_children` to control the number of worker processes
 In FrankenPHP, the equivalent is `num_threads`:
 
 ```caddyfile
-# Caddyfile
 {
     frankenphp {
         num_threads 16
@@ -93,7 +90,6 @@ In FrankenPHP, the equivalent is `num_threads`:
 By default, FrankenPHP starts 2 threads per CPU. For dynamic scaling similar to PHP-FPM's `pm = dynamic`:
 
 ```caddyfile
-# Caddyfile
 {
     frankenphp {
         num_threads 4
@@ -161,7 +157,6 @@ In [classic mode](classic.md), FrankenPHP works like PHP-FPM: each request boots
 For better performance, you can switch to [worker mode](worker.md), which boots your application once and keeps it in memory:
 
 ```caddyfile
-# Caddyfile
 example.com {
     root /var/www/app/public
     php_server {
