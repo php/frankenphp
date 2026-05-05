@@ -1,3 +1,8 @@
+---
+title: Writing PHP Extensions in Go with FrankenPHP
+description: Build PHP extensions in Go using FrankenPHP, with an extension generator for boilerplate, a types API for PHP/Go conversion, and support for goroutines.
+---
+
 # Writing PHP Extensions in Go
 
 With FrankenPHP, you can **write PHP extensions in Go**, which allows you to create **high-performance native functions** that can be called directly from PHP. Your applications can leverage any existing or new Go library, as well as the famous concurrency model of **goroutines right from your PHP code**.
@@ -47,6 +52,7 @@ tar xf php-*
 Everything is now set up to write your native function in Go. Create a new file named `stringext.go`. Our first function will take a string as an argument, the number of times to repeat it, a boolean to indicate whether to reverse the string, and return the resulting string. This should look like this:
 
 ```go
+// stringext.go
 package example
 
 // #include <Zend/zend_types.h>
@@ -180,6 +186,7 @@ If order or association are not needed, it's also possible to directly convert t
 **Creating and manipulating arrays in Go:**
 
 ```go
+// Converting between PHP arrays and Go maps/slices
 package example
 
 // #include <Zend/zend_types.h>
@@ -279,6 +286,7 @@ FrankenPHP provides a way to work with PHP callables using the `frankenphp.CallP
 To showcase this, let's create our own `array_map()` function that takes a callable and an array, applies the callable to each element of the array, and returns a new array with the results:
 
 ```go
+// Calling a PHP callable from a Go-defined extension function
 // export_php:function my_array_map(array $data, callable $callback): array
 func my_array_map(arr *C.zend_array, callback *C.zval) unsafe.Pointer {
 	goSlice, err := frankenphp.GoPackedArray[any](unsafe.Pointer(arr))
@@ -313,6 +321,7 @@ $result = my_array_map(['hello', 'world'], 'strtoupper');
 The generator supports declaring **opaque classes** as Go structs, which can be used to create PHP objects. You can use the `//export_php:class` directive comment to define a PHP class. For example:
 
 ```go
+// Declaring a PHP class backed by a Go struct
 package example
 
 //export_php:class User
@@ -339,6 +348,7 @@ This approach provides better encapsulation and prevents PHP code from accidenta
 Since properties are not directly accessible, you **must define methods** to interact with your opaque classes. Use the `//export_php:method` directive to define behavior:
 
 ```go
+// Defining methods on a Go-backed PHP class
 package example
 
 // #include <Zend/zend_types.h>
@@ -381,6 +391,7 @@ func (us *UserStruct) SetNamePrefix(prefix *C.zend_string) {
 The generator supports nullable parameters using the `?` prefix in PHP signatures. When a parameter is nullable, it becomes a pointer in your Go function, allowing you to check if the value was `null` in PHP:
 
 ```go
+// Handling nullable PHP parameters in a Go method
 package example
 
 // #include <Zend/zend_types.h>
@@ -455,6 +466,7 @@ The generator supports exporting Go constants to PHP using two directives: `//ex
 Use the `//export_php:const` directive to create global PHP constants:
 
 ```go
+// Exporting global PHP constants from Go
 package example
 
 //export_php:const
@@ -479,6 +491,7 @@ const (
 Use the `//export_php:classconst ClassName` directive to create constants that belong to a specific PHP class:
 
 ```go
+// Exporting PHP class constants from Go
 package example
 
 //export_php:classconst User
@@ -522,6 +535,7 @@ The directive supports various value types, including strings, integers, boolean
 You can use constants just like you are used to in the Go code. For example, let's take the `repeat_this()` function we declared earlier and change the last argument to an integer:
 
 ```go
+// Combining functions, classes, methods, and constants in one extension
 package example
 
 // #include <Zend/zend_types.h>
@@ -590,6 +604,7 @@ The generator supports organizing your PHP extension's functions, classes, and c
 Use the `//export_php:namespace` directive at the top of your Go file to place all exported symbols under a specific namespace:
 
 ```go
+// Placing exported symbols under a PHP namespace
 //export_php:namespace My\Extension
 package example
 
@@ -653,6 +668,7 @@ We'll see how to write a simple PHP extension in Go that defines a new native fu
 In your module, you need to define a new native function that will be called from PHP. To do this, create a file with the name you want, for example, `extension.go`, and add the following code:
 
 ```go
+// extension.go
 package example
 
 // #include "extension.h"
@@ -686,6 +702,7 @@ To allow PHP to call our function, we need to define a corresponding PHP functio
 
 ```php
 <?php
+// extension.stub.php
 
 /** @generate-class-entries */
 
@@ -707,6 +724,7 @@ This script will generate a file named `extension_arginfo.h` that contains the n
 Now, we need to write the bridge between Go and C. Create a file named `extension.h` in your module directory with the following content:
 
 ```c
+// extension.h
 #ifndef _EXTENSION_H
 #define _EXTENSION_H
 
@@ -726,6 +744,7 @@ Next, create a file named `extension.c` that will perform the following steps:
 Let's start by including the required headers:
 
 ```c
+// extension.c
 #include <php.h>
 #include "extension.h"
 #include "extension_arginfo.h"
@@ -774,6 +793,7 @@ To define the new PHP function, we will modify our `extension.stub.php` file to 
 
 ```php
 <?php
+// extension.stub.php
 
 /** @generate-class-entries */
 
@@ -792,6 +812,7 @@ function go_upper(string $string): string {}
 By regenerating the stub file with the `gen_stub.php` script, the `extension_arginfo.h` file should look like this:
 
 ```c
+// extension_arginfo.h (generated)
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_go_upper, 0, 1, IS_STRING, 0)
     ZEND_ARG_TYPE_INFO(0, string, IS_STRING, 0)
 ZEND_END_ARG_INFO()
@@ -813,6 +834,7 @@ Your Go function cannot directly accept a PHP string as a parameter. You need to
 The header file remains simple:
 
 ```c
+// extension.h
 #ifndef _EXTENSION_H
 #define _EXTENSION_H
 
@@ -848,6 +870,7 @@ There's only one thing left to do: implement the `go_upper` function in Go.
 Our Go function will take a `*C.zend_string` as a parameter, convert it to a Go string using FrankenPHP's helper function, process it, and return the result as a new `*C.zend_string`. The helper functions handle all the memory management and conversion complexity for us.
 
 ```go
+// extension.go
 package example
 
 // #include <Zend/zend_types.h>

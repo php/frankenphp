@@ -1,3 +1,8 @@
+---
+title: Configuring FrankenPHP With Caddyfile, php.ini, and Env Vars
+description: Configure FrankenPHP and Caddy via Caddyfile, JSON, or environment variables, including PHP runtime tuning, worker mode, file watching, and module options.
+---
+
 # Configuration
 
 FrankenPHP, Caddy as well as the [Mercure](mercure.md) and [Vulcain](https://vulcain.rocks) modules can be configured using [the formats supported by Caddy](https://caddyserver.com/docs/getting-started#your-first-config).
@@ -9,6 +14,7 @@ You can specify a custom path with the `-c` or `--config` option.
 A minimal `Caddyfile` to serve a PHP application is shown below:
 
 ```caddyfile
+# Caddyfile
 # The hostname to respond to
 localhost
 
@@ -39,6 +45,7 @@ PHP:
 - You should copy an official template provided by the PHP project:
 
 ```dockerfile
+# Dockerfile
 FROM dunglas/frankenphp
 
 # Production:
@@ -80,6 +87,7 @@ The `php_server` or the `php` [HTTP directives](https://caddyserver.com/docs/cad
 Minimal example:
 
 ```caddyfile
+# Caddyfile
 localhost {
 	# Enable compression (optional)
 	encode zstd br gzip
@@ -91,6 +99,7 @@ localhost {
 You can also explicitly configure FrankenPHP using the [global option](https://caddyserver.com/docs/caddyfile/concepts#global-options) `frankenphp`:
 
 ```caddyfile
+# Caddyfile
 {
 	frankenphp {
 		num_threads <num_threads> # Sets the number of PHP threads to start. Default: 2x the number of available CPUs.
@@ -116,6 +125,7 @@ You can also explicitly configure FrankenPHP using the [global option](https://c
 Alternatively, you may use the one-line short form of the `worker` option:
 
 ```caddyfile
+# Caddyfile
 {
 	frankenphp {
 		worker <file> <num>
@@ -128,6 +138,7 @@ Alternatively, you may use the one-line short form of the `worker` option:
 You can also define multiple workers if you serve multiple apps on the same server:
 
 ```caddyfile
+# Caddyfile
 app.example.com {
     root /path/to/app/public
 	php_server {
@@ -155,6 +166,7 @@ it's a PHP file or not. Read more about it in the [performance page](performance
 Using the `php_server` directive is equivalent to this configuration:
 
 ```caddyfile
+# Caddyfile
 route {
 	# Add trailing slash for directory requests
 	@canonicalPath {
@@ -178,6 +190,7 @@ route {
 The `php_server` and the `php` directives have the following options:
 
 ```caddyfile
+# Caddyfile
 php_server [<matcher>] {
 	root <directory> # Sets the root folder to the site. Default: `root` directive.
 	split_path <delim...> # Sets the substrings for splitting the URI into two parts. The first matching substring will be used to split the "path info" from the path. The first piece is suffixed with the matching substring and will be assumed as the actual resource (CGI script) name. The second piece will be set to PATH_INFO for the script to use. Default: `.php`
@@ -205,6 +218,7 @@ Workers can instead be restarted on file changes via the `watch` directive.
 This is useful for development environments.
 
 ```caddyfile
+# Caddyfile
 {
 	frankenphp {
 		worker {
@@ -223,6 +237,7 @@ where the FrankenPHP process was started. You can instead also specify one or mo
 [shell filename pattern](https://pkg.go.dev/path/filepath#Match):
 
 ```caddyfile
+# Caddyfile
 {
 	frankenphp {
 		worker {
@@ -254,6 +269,7 @@ The following example will always serve a file in the public directory if presen
 and otherwise forward the request to the worker matching the path pattern.
 
 ```caddyfile
+# Caddyfile
 {
 	frankenphp {
 		php_server {
@@ -278,6 +294,7 @@ But when the fix depends on a third party you don't control,
 `max_requests` provides a pragmatic and hopefully temporary workaround for production:
 
 ```caddyfile
+# Caddyfile
 {
 	frankenphp {
 		max_requests 500
@@ -285,7 +302,7 @@ But when the fix depends on a third party you don't control,
 }
 ```
 
-## Environment Variables
+## FrankenPHP Environment Variables
 
 The following environment variables can be used to inject Caddy directives in the `Caddyfile` without modifying it:
 
@@ -298,7 +315,7 @@ As for FPM and CLI SAPIs, environment variables are exposed by default in the `$
 
 The `S` value of [the `variables_order` PHP directive](https://www.php.net/manual/en/ini.core.php#ini.variables-order) is always equivalent to `ES` regardless of the placement of `E` elsewhere in this directive.
 
-## PHP config
+## PHP Configuration in FrankenPHP
 
 To load [additional PHP configuration files](https://www.php.net/manual/en/configuration.file.php#configuration.file.scan),
 the `PHP_INI_SCAN_DIR` environment variable can be used.
@@ -307,6 +324,7 @@ When set, PHP will load all the file with the `.ini` extension present in the gi
 You can also change the PHP configuration using the `php_ini` directive in the `Caddyfile`:
 
 ```caddyfile
+# Caddyfile
 {
     frankenphp {
         php_ini memory_limit 256M
@@ -338,6 +356,7 @@ has been read. (for example: [Mercure](mercure.md), WebSocket, Server-Sent Event
 This is an opt-in configuration that needs to be added to the global options in the `Caddyfile`:
 
 ```caddyfile
+# Caddyfile
 {
   servers {
     enable_full_duplex

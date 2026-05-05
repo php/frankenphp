@@ -1,3 +1,8 @@
+---
+title: FrankenPHP Prometheus Metrics for Threads and Workers
+description: List of Prometheus-compatible metrics exposed by FrankenPHP via Caddy, covering PHP threads, workers, request times, queue depth, crashes, and restarts.
+---
+
 # Metrics
 
 > [!TIP]

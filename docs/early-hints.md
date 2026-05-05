@@ -1,6 +1,11 @@
+---
+title: Sending HTTP 103 Early Hints from PHP with FrankenPHP
+description: FrankenPHP natively supports the HTTP 103 Early Hints status code, letting PHP applications preload assets before the final response is ready.
+---
+
 # Early Hints
 
-FrankenPHP natively supports the [103 Early Hints status code](https://developer.chrome.com/blog/early-hints/).
+FrankenPHP natively supports the [103 Early Hints status code](https://developer.mozilla.org/docs/Web/HTTP/Reference/Status/103).
 Using Early Hints can improve the load time of your web pages by 30%.
 
 ```php

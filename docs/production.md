@@ -1,3 +1,8 @@
+---
+title: Deploying FrankenPHP in Production with Docker Compose
+description: Deploy a PHP application to production with FrankenPHP and Docker Compose on a single Linux server, including TLS, reverse proxy, and multi-node setups.
+---
+
 # Deploying in Production
 
 In this tutorial, we will learn how to deploy a PHP application on a single server using Docker Compose.
@@ -11,6 +16,7 @@ If you're using API Platform (which also uses FrankenPHP), refer to [the deploym
 First, create a `Dockerfile` in the root directory of your PHP project:
 
 ```dockerfile
+# Dockerfile
 FROM dunglas/frankenphp
 
 # Be sure to replace "your-domain-name.example.com" by your domain name
@@ -39,6 +45,7 @@ be sure to include it in the Docker image and to install your dependencies.
 Then, add a `compose.yaml` file:
 
 ```yaml
+# compose.yaml
 services:
   php:
     image: dunglas/frankenphp
@@ -72,9 +79,9 @@ Finally, if you use Git, commit these files and push.
 
 To deploy your application in production, you need a server.
 In this tutorial, we will use a virtual machine provided by DigitalOcean, but any Linux server can work.
-If you already have a Linux server with Docker installed, you can skip straight to [the next section](#configuring-a-domain-name).
+If you already have a Linux server with Docker installed, you can skip straight to [Configuring a Domain Name](#configuring-a-domain-name).
 
-Otherwise, use [this affiliate link](https://m.do.co/c/5d8aabe3ab80) to get $200 of free credit, create an account, then click on "Create a Droplet".
+Otherwise, use [this DigitalOcean affiliate link](https://m.do.co/c/5d8aabe3ab80) to get $200 of free credit, create an account, then click on "Create a Droplet".
 Then, click on the "Marketplace" tab under the "Choose an image" section and search for the app named "Docker".
 This will provision an Ubuntu server with the latest versions of Docker and Docker Compose already installed!
 
@@ -112,7 +119,7 @@ Example with the DigitalOcean Domains service ("Networking" > "Domains"):
 >
 > Let's Encrypt, the service used by default by FrankenPHP to automatically generate a TLS certificate doesn't support using bare IP addresses. Using a domain name is mandatory to use Let's Encrypt.
 
-## Deploying
+## Deploying FrankenPHP with Docker Compose
 
 Copy your project on the server using `git clone`, `scp`, or any other tool that may fit your need.
 If you use GitHub, you may want to use [a deploy key](https://docs.github.com/en/free-pro-team@latest/developers/overview/managing-deploy-keys#deploy-keys).
@@ -144,6 +151,7 @@ you must configure the [`trusted_proxies` global option](https://caddyserver.com
 so that Caddy trusts incoming `X-Forwarded-*` headers:
 
 ```caddyfile
+# Caddyfile
 {
 	servers {
 		trusted_proxies static <your-IPs>

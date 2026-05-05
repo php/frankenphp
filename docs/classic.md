@@ -1,3 +1,8 @@
+---
+title: FrankenPHP Classic Mode: Drop-in PHP-FPM Replacement
+description: Run FrankenPHP in classic mode as a drop-in replacement for PHP-FPM or Apache mod_php, with a fixed or autoscaling thread pool serving PHP files directly.
+---
+
 # Using Classic Mode
 
 Without any additional configuration, FrankenPHP operates in classic mode. In this mode, FrankenPHP functions like a traditional PHP server, directly serving PHP files. This makes it a seamless drop-in replacement for PHP-FPM or Apache with mod_php.

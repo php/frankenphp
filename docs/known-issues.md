@@ -1,3 +1,8 @@
+---
+title: FrankenPHP Known Issues, Incompatible Extensions, and Workarounds
+description: Reference of FrankenPHP limitations, including unsupported PHP extensions, musl libc caveats, Docker TLS setup with 127.0.0.1, and Composer @php scripts.
+---
+
 # Known Issues
 
 ## Unsupported PHP Extensions
@@ -91,6 +96,7 @@ As a workaround, we can create a shell script in `/usr/local/bin/php` which stri
 
 ```bash
 #!/usr/bin/env bash
+# /usr/local/bin/php
 args=("$@")
 index=0
 for i in "$@"

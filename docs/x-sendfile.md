@@ -1,3 +1,8 @@
+---
+title: Serving Large Files with X-Sendfile and X-Accel-Redirect in FrankenPHP
+description: Configure FrankenPHP to delegate large static file delivery to the web server after running PHP code, using X-Sendfile or X-Accel-Redirect headers.
+---
+
 # Efficiently Serving Large Static Files (`X-Sendfile`/`X-Accel-Redirect`)
 
 Usually, static files can be served directly by the web server,
@@ -19,7 +24,7 @@ In the following examples, we assume that the document root of the project is th
 and that we want to use PHP to serve files stored outside the `public/` directory,
 from a directory named `private-files/`.
 
-## Configuration
+## Configuring X-Accel-Redirect in the FrankenPHP Caddyfile
 
 First, add the following configuration to your `Caddyfile` to enable this feature:
 

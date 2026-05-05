@@ -1,10 +1,15 @@
+---
+title: Running Symfony with FrankenPHP (Docker, Worker Mode, Hot Reload)
+description: How to run a Symfony application with FrankenPHP using Symfony Docker, a local install, worker mode, hot reload, AssetMapper, and X-Sendfile.
+---
+
 # Symfony
 
-## Docker
+## Running Symfony with the Symfony Docker Image
 
 For [Symfony](https://symfony.com) projects, we recommend using [Symfony Docker](https://github.com/dunglas/symfony-docker), the official Symfony Docker setup maintained by FrankenPHP's author. It provides a complete Docker-based environment with FrankenPHP, automatic HTTPS, HTTP/2, HTTP/3, and worker mode support out of the box.
 
-## Local Installation
+## Installing Symfony with FrankenPHP Locally
 
 Alternatively, you can run your Symfony projects with FrankenPHP from your local machine:
 
@@ -12,6 +17,7 @@ Alternatively, you can run your Symfony projects with FrankenPHP from your local
 2. Add the following configuration to a file named `Caddyfile` in the root directory of your Symfony project:
 
    ```caddyfile
+   # Caddyfile
    # The domain name of your server
    localhost
 
@@ -26,7 +32,7 @@ Alternatively, you can run your Symfony projects with FrankenPHP from your local
 
 3. Start FrankenPHP from the root directory of your Symfony project: `frankenphp run`
 
-## Worker Mode
+## Symfony Worker Mode with FrankenPHP
 
 Since Symfony 7.4, FrankenPHP worker mode is natively supported.
 
@@ -58,13 +64,14 @@ composer require --dev igor-php/igor-php
 vendor/bin/igor-php .
 ```
 
-## Hot Reload
+## Hot Reload for Symfony
 
 Hot reloading is enabled by default in [Symfony Docker](https://github.com/dunglas/symfony-docker).
 
 To use the [hot reload](hot-reload.md) feature without Symfony Docker, enable [Mercure](mercure.md) and add the `hot_reload` sub-directive to the `php_server` directive in your `Caddyfile`:
 
 ```caddyfile
+# Caddyfile
 localhost
 
 mercure {
@@ -81,6 +88,7 @@ php_server {
 Then, add the following code to your `templates/base.html.twig` file:
 
 ```twig
+{# templates/base.html.twig #}
 {% if app.request.server.has('FRANKENPHP_HOT_RELOAD') %}
     <meta name="frankenphp-hot-reload:url" content="{{ app.request.server.get('FRANKENPHP_HOT_RELOAD') }}">
     <script src="https://cdn.jsdelivr.net/npm/idiomorph"></script>
@@ -103,6 +111,7 @@ Symfony's [AssetMapper component](https://symfony.com/doc/current/frontend/asset
 2. Update your `Caddyfile` to serve pre-compressed assets:
 
    ```caddyfile
+   # Caddyfile
    localhost
 
    @assets path /assets/*
@@ -167,6 +176,7 @@ Follow these steps to prepare and package your Symfony app:
 2. Create a file named `static-build.Dockerfile` in the repository of your app:
 
    ```dockerfile
+   # static-build.Dockerfile
    FROM --platform=linux/amd64 dunglas/frankenphp:static-builder-gnu
    # If you intend to run the binary on musl-libc systems, use static-builder-musl instead
 

@@ -1,14 +1,20 @@
+---
+title: FrankenPHP Extension Workers: Background PHP Thread Pools
+description: Use FrankenPHP Extension Workers to run a dedicated PHP thread pool from a Go extension for queues, schedulers, event listeners, and custom protocols.
+---
+
 # Extension Workers
 
 Extension Workers enable your [FrankenPHP extension](https://frankenphp.dev/docs/extensions/) to manage a dedicated pool of PHP threads for executing background tasks, handling asynchronous events, or implementing custom protocols. Useful for queue systems, event listeners, schedulers, etc.
 
-## Registering the Worker
+## Registering a FrankenPHP Extension Worker
 
-### Static Registration
+### Static Worker Registration
 
 If you don't need to make the worker configurable by the user (fixed script path, fixed number of threads), you can simply register the worker in the `init()` function.
 
 ```go
+// FrankenPHP extension worker static registration
 package myextension
 
 import (
@@ -35,13 +41,13 @@ func init() {
 
 ### In a Caddy Module (Configurable by the user)
 
-If you plan to share your extension (like a generic queue or event listener), you should wrap it in a Caddy module. This allows users to configure the script path and thread count via their `Caddyfile`. This requires implementing the `caddy.Provisioner` interface and parsing the Caddyfile ([see an example](https://github.com/dunglas/frankenphp-queue/blob/989120d394d66dd6c8e2101cac73dd622fade334/caddy.go)).
+If you plan to share your extension (like a generic queue or event listener), you should wrap it in a Caddy module. This allows users to configure the script path and thread count via their `Caddyfile`. This requires implementing the `caddy.Provisioner` interface and parsing the Caddyfile ([see the frankenphp-queue Caddy module example](https://github.com/dunglas/frankenphp-queue/blob/main/caddy.go)).
 
 ### In a Pure Go Application (Embedding)
 
 If you are [embedding FrankenPHP in a standard Go application without caddy](https://pkg.go.dev/github.com/dunglas/frankenphp#example-ServeHTTP), you can register extension workers using `frankenphp.WithExtensionWorkers` when initializing options.
 
-## Interacting with Workers
+## Dispatching Tasks to FrankenPHP Extension Workers
 
 Once the worker pool is active, you can dispatch tasks to it. This can be done inside [native functions exported to PHP](https://frankenphp.dev/docs/extensions/#writing-the-extension), or from any Go logic such as a cron scheduler, an event listener (MQTT, Kafka), or a any other goroutine.
 
@@ -49,9 +55,10 @@ Once the worker pool is active, you can dispatch tasks to it. This can be done i
 
 Use `SendMessage` to pass raw data directly to your worker script. This is ideal for queues or simple commands.
 
-#### Example: An Async Queue Extension
+#### Async Queue Extension Example
 
 ```go
+// FrankenPHP extension: dispatch raw messages to a worker via SendMessage
 // #include <Zend/zend_types.h>
 import "C"
 import (
@@ -83,6 +90,7 @@ func my_queue_push(data *C.zval) bool {
 Use `SendRequest` if your extension needs to invoke a PHP script that expects a standard web environment (populating `$_SERVER`, `$_GET`, etc.).
 
 ```go
+// FrankenPHP extension: invoke a worker PHP script via SendRequest (HTTP emulation)
 // #include <Zend/zend_types.h>
 import "C"
 import (
@@ -109,13 +117,13 @@ func my_worker_http_request(path *C.zend_string) unsafe.Pointer {
 }
 ```
 
-## Worker Script
+## FrankenPHP Extension Worker PHP Script
 
 The PHP worker script runs in a loop and can handle both raw messages and HTTP requests.
 
 ```php
 <?php
-// Handle both raw messages and HTTP requests in the same loop
+// FrankenPHP extension worker script: handles raw messages and HTTP requests
 $handler = function ($payload = null) {
     // Case 1: Message Mode
     if ($payload !== null) {
@@ -131,7 +139,7 @@ while (frankenphp_handle_request($handler)) {
 }
 ```
 
-## Lifecycle Hooks
+## FrankenPHP Extension Worker Lifecycle Hooks
 
 FrankenPHP provides hooks to execute Go code at specific points in the lifecycle.
 
@@ -142,9 +150,10 @@ FrankenPHP provides hooks to execute Go code at specific points in the lifecycle
 | **Thread** | `WithWorkerOnReady`          | `func(threadID int)` | Per-thread setup. Called when a thread starts. Receives the Thread ID. |
 | **Thread** | `WithWorkerOnShutdown`       | `func(threadID int)` | Per-thread cleanup. Receives the Thread ID.                            |
 
-### Example
+### Lifecycle Hooks Example
 
 ```go
+// FrankenPHP extension worker with lifecycle hooks
 package myextension
 
 import (

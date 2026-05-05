@@ -1,3 +1,8 @@
+---
+title: Building FrankenPHP Docker Images with GitHub Actions
+description: Use GitHub Actions to automatically build and publish FrankenPHP Docker images to a registry on pull requests, merges to main, and tagged releases.
+---
+
 # Using GitHub Actions
 
 This repository builds and deploys the Docker image to [Docker Hub](https://hub.docker.com/r/dunglas/frankenphp) on

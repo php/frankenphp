@@ -1,6 +1,11 @@
+---
+title: Running Laravel with FrankenPHP (Docker, Octane, Standalone Binary)
+description: How to run a Laravel application with FrankenPHP using the Docker image, a local install, Laravel Octane, or as an embedded standalone binary.
+---
+
 # Laravel
 
-## Docker
+## Running Laravel with the FrankenPHP Docker Image
 
 Serving a [Laravel](https://laravel.com) web application with FrankenPHP is as easy as mounting the project in the `/app` directory of the official Docker image.
 
@@ -12,7 +17,7 @@ docker run -p 80:80 -p 443:443 -p 443:443/udp -v $PWD:/app dunglas/frankenphp
 
 And enjoy!
 
-## Local Installation
+## Installing Laravel with FrankenPHP Locally
 
 Alternatively, you can run your Laravel projects with FrankenPHP from your local machine:
 
@@ -20,6 +25,7 @@ Alternatively, you can run your Laravel projects with FrankenPHP from your local
 2. Add the following configuration to a file named `Caddyfile` in the root directory of your Laravel project:
 
    ```caddyfile
+   # Caddyfile
    {
    	frankenphp
    }
@@ -90,6 +96,7 @@ Follow these steps to package your Laravel app as a standalone binary for Linux:
 1. Create a file named `static-build.Dockerfile` in the repository of your app:
 
    ```dockerfile
+   # static-build.Dockerfile
    FROM --platform=linux/amd64 dunglas/frankenphp:static-builder-gnu
    # If you intend to run the binary on musl-libc systems, use static-builder-musl instead
 
@@ -179,6 +186,7 @@ If you are not using [Octane](#laravel-octane), see [the Mercure documentation e
 If you are using Octane, you can use enable Mercure support by adding the following lines to your `config/octane.php` file:
 
 ```php
+// config/octane.php
 // ...
 
 return [
@@ -201,7 +209,7 @@ Alternatively, see [the Mercure documentation](mercure.md) to do it in pure PHP 
 
 It's even possible to package Laravel Octane apps as standalone binaries!
 
-To do so, [install Octane properly](#laravel-octane) and follow the steps described in [the previous section](#laravel-apps-as-standalone-binaries).
+To do so, [install Octane properly](#laravel-octane) and follow the steps described in [the section on Laravel apps as standalone binaries](#laravel-apps-as-standalone-binaries).
 
 Then, to start FrankenPHP in worker mode through Octane, run:
 

@@ -1,3 +1,8 @@
+---
+title: Compile FrankenPHP From Sources With PHP as a Library
+description: Build FrankenPHP from source on Linux, macOS and FreeBSD, link PHP as a dynamic library via xcaddy or go build, and add custom Caddy modules and extensions.
+---
+
 # Compile From Sources
 
 This document explains how to create a FrankenPHP binary that will load PHP as a dynamic library.
@@ -36,7 +41,7 @@ cd php-*/
 Then, run the `configure` script with the options needed for your platform.
 The following `./configure` flags are mandatory, but you can add others, for example, to compile extensions or additional features.
 
-#### Linux
+#### Linux and FreeBSD
 
 ```console
 ./configure \

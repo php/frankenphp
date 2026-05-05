@@ -1,3 +1,8 @@
+---
+title: FrankenPHP Observability with Metrics, Logs, and Ember TUI
+description: Monitor FrankenPHP in development and production using Prometheus metrics, structured logs, the Ember TUI dashboard, and custom Grafana scraping setups.
+---
+
 # Observability
 
 FrankenPHP provides built-in observability features: [Prometheus-compatible metrics](metrics.md) and [structured logging](logging.md).

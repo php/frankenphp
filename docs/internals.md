@@ -1,8 +1,13 @@
+---
+title: FrankenPHP Internals: Threads, State Machine, and CGO
+description: How FrankenPHP works inside: PHP ZTS thread pool, Go state machine, CGO boundary with the PHP SAPI, auto-scaling, and per-thread environment sandboxing.
+---
+
 # Internals
 
 This document explains FrankenPHP's internal architecture, focusing on thread management, the state machine, and the CGO boundary between Go and C/PHP.
 
-## Overview
+## FrankenPHP Architecture Overview
 
 FrankenPHP embeds the PHP interpreter directly into Go via CGO. Each PHP execution runs on a real POSIX thread (not a goroutine) because PHP's ZTS (Zend Thread Safety) model requires it. Go orchestrates these threads through a state machine, while C handles the PHP SAPI lifecycle.
 
@@ -12,7 +17,7 @@ The main layers are:
 2. **C layer** (`frankenphp.c`, `frankenphp.h`): PHP SAPI implementation, script execution loop, superglobal management
 3. **State machine** (`internal/state/`): Synchronization between Go goroutines and C threads
 
-## Thread Types
+## FrankenPHP Thread Types
 
 ### Main Thread (`phpmainthread.go`)
 
@@ -48,11 +53,11 @@ Keep a PHP script alive across multiple requests. The PHP script calls `frankenp
 
 After the script exits, the worker is restarted immediately if it had reached `frankenphp_handle_request()` at least once (whether the exit was clean or the result of a fatal error). Exponential backoff is only applied to consecutive startup failures, where the script exits before ever reaching `frankenphp_handle_request()`.
 
-## Thread State Machine
+## FrankenPHP Thread State Machine
 
 Each thread has a `ThreadState` (defined in `internal/state/state.go`) that governs its lifecycle. The state machine uses a `sync.RWMutex` for all state transitions and a channel-based subscriber pattern for blocking waits.
 
-### States
+### FrankenPHP Thread States
 
 ```text
 Lifecycle:        Reserved → BootRequested → Booting → Inactive → Ready ⇄ (processing)
@@ -85,7 +90,7 @@ The full set of states is defined in `internal/state/state.go`:
 | `TransitionInProgress` | The C thread has acknowledged the transition request.                                |
 | `TransitionComplete`   | The Go side has installed the new handler.                                           |
 
-### Key Operations
+### Key State Machine Operations
 
 **`RequestSafeStateChange(nextState)`**: The primary way external goroutines request state changes. It:
 
@@ -148,7 +153,7 @@ Set(Ready)
                                  state is Ready → normal execution
 ```
 
-## CGO Boundary
+## CGO Boundary Between Go and PHP
 
 ### Exported Go Functions
 
@@ -174,6 +179,7 @@ All these functions receive a `threadIndex` parameter identifying the calling th
 Each PHP thread runs `php_thread()` in `frankenphp.c`:
 
 ```c
+// frankenphp.c: php_thread() main script execution loop
 while ((scriptName = go_frankenphp_before_script_execution(thread_index))) {
     php_request_startup();
     php_execute_script(&file_handle);
@@ -184,17 +190,17 @@ while ((scriptName = go_frankenphp_before_script_execution(thread_index))) {
 
 Bailouts (fatal PHP errors) are caught by `zend_catch`, which marks the thread as unhealthy and forces cleanup.
 
-### Memory Management
+### Memory Management Across the CGO Boundary
 
 - **Go → C strings**: `C.CString()` allocates with `malloc()`. The C side is responsible for freeing (e.g., `frankenphp_free_request_context()` frees cookie data).
 - **Go string pinning**: `phpThread` (in `phpthread.go`) embeds Go's [`runtime.Pinner`](https://pkg.go.dev/runtime#Pinner). `thread.Pin()` / `thread.Unpin()` keep Go memory referenced from C alive without copying it. The thread is unpinned after each script execution.
 - **PHP memory**: Managed by Zend's memory manager (`emalloc`/`efree`). Automatically freed at request shutdown.
 
-## Auto-Scaling
+## FrankenPHP Thread Auto-Scaling
 
 FrankenPHP can automatically scale the number of PHP threads based on demand (`scaling.go`).
 
-### Configuration
+### Auto-Scaling Configuration
 
 - `num_threads`: Initial number of threads started at boot
 - `max_threads`: Maximum number of threads allowed (includes auto-scaled)
@@ -215,7 +221,7 @@ A dedicated goroutine reads from an unbuffered `scaleChan`:
 
 A separate goroutine periodically checks (every 5s) for idle auto-scaled threads. Threads in `Ready` state idle longer than `maxIdleTime` (default 5s) are converted to `Inactive` (up to 10 per cycle). They are not fully stopped: a code path exists for that, but it is currently disabled because some PECL extensions leak memory and prevent threads from cleanly shutting down.
 
-## Environment Sandboxing
+## Per-Thread Environment Sandboxing
 
 FrankenPHP sandboxes environment variables per-thread:
 

@@ -1,3 +1,8 @@
+---
+title: FrankenPHP Docker Image: Build, Configure, Extend
+description: Build custom FrankenPHP Docker images, install PHP extensions and Caddy modules, run as non-root, harden with distroless, and enable worker mode by default.
+---
+
 # Building Custom Docker Image
 
 [FrankenPHP Docker images](https://hub.docker.com/r/dunglas/frankenphp) are based on [official PHP images](https://hub.docker.com/_/php/).
@@ -13,11 +18,12 @@ The tags follow this pattern: `dunglas/frankenphp:<frankenphp-version>-php<php-v
 
 [Browse tags](https://hub.docker.com/r/dunglas/frankenphp/tags).
 
-## How to Use The Images
+## How to Use the FrankenPHP Docker Images
 
 Create a `Dockerfile` in your project:
 
 ```dockerfile
+# Dockerfile
 FROM dunglas/frankenphp
 
 COPY . /app/public
@@ -30,7 +36,7 @@ docker build -t my-php-app .
 docker run -it --rm --name my-running-app my-php-app
 ```
 
-## How to Tweak the Configuration
+## How to Tweak the FrankenPHP Docker Configuration
 
 For convenience, [a default `Caddyfile`](https://github.com/php/frankenphp/blob/main/caddy/frankenphp/Caddyfile) containing
 useful environment variables is provided in the image.
@@ -41,6 +47,7 @@ The [`docker-php-extension-installer`](https://github.com/mlocati/docker-php-ext
 Adding additional PHP extensions is straightforward:
 
 ```dockerfile
+# Dockerfile
 FROM dunglas/frankenphp
 
 # add additional extensions here:
@@ -59,6 +66,7 @@ FrankenPHP is built on top of Caddy, and all [Caddy modules](https://caddyserver
 The easiest way to install custom Caddy modules is to use [xcaddy](https://github.com/caddyserver/xcaddy):
 
 ```dockerfile
+# Dockerfile
 FROM dunglas/frankenphp:builder AS builder
 
 # Copy xcaddy in the builder image
@@ -99,6 +107,7 @@ The `builder` image provided by FrankenPHP contains a compiled version of `libph
 Set the `FRANKENPHP_CONFIG` environment variable to start FrankenPHP with a worker script:
 
 ```dockerfile
+# Dockerfile
 FROM dunglas/frankenphp
 
 # ...
@@ -154,6 +163,7 @@ FrankenPHP can run as non-root user in Docker.
 Here is a sample `Dockerfile` doing this:
 
 ```dockerfile
+# Dockerfile
 FROM dunglas/frankenphp
 
 ARG USER=appuser
@@ -179,6 +189,7 @@ If you expose FrankenPHP on a non-privileged port (1024 and above), it's possibl
 the webserver as a non-root user, and without the need for any capability:
 
 ```dockerfile
+# Dockerfile
 FROM dunglas/frankenphp
 
 ARG USER=appuser
@@ -198,14 +209,14 @@ USER ${USER}
 Next, set the `SERVER_NAME` environment variable to use an unprivileged port.
 Example: `:8000`
 
-## Updates
+## FrankenPHP Docker Image Updates
 
 The Docker images are built:
 
 - when a new release is tagged
 - daily at 4 am UTC, if new versions of the official PHP images are available
 
-## Hardening Images
+## Hardening FrankenPHP Docker Images
 
 To further reduce the attack surface and size of your FrankenPHP Docker images, it's also possible to build them on top of a
 [Google distroless](https://github.com/GoogleContainerTools/distroless) or
@@ -218,6 +229,7 @@ To further reduce the attack surface and size of your FrankenPHP Docker images, 
 When adding additional PHP extensions, you will need an intermediate build stage:
 
 ```dockerfile
+# Dockerfile
 FROM dunglas/frankenphp AS builder
 
 # Add additional PHP extensions here

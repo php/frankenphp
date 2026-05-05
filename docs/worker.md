@@ -1,15 +1,20 @@
+---
+title: FrankenPHP Worker Mode: Keep Your PHP App in Memory
+description: Run FrankenPHP in worker mode to keep your PHP application bootstrapped between requests, cut bootstrap overhead, and serve responses in milliseconds.
+---
+
 # Using FrankenPHP Workers
 
 Boot your application once and keep it in memory.
 FrankenPHP will handle incoming requests in a few milliseconds.
 
-## Starting Worker Scripts
+## Starting FrankenPHP Worker Scripts
 
-### Docker
+### Running a FrankenPHP Worker with Docker
 
 Set the value of the `FRANKENPHP_CONFIG` environment variable to `worker /path/to/your/worker/script.php`:
 
-```console
+```bash
 docker run \
     -e FRANKENPHP_CONFIG="worker /app/path/to/your/worker/script.php" \
     -v $PWD:/app \
@@ -17,11 +22,11 @@ docker run \
     dunglas/frankenphp
 ```
 
-### Standalone Binary
+### Running a FrankenPHP Worker with the Standalone Binary
 
 Use the `--worker` option of the `php-server` command to serve the content of the current directory using a worker:
 
-```console
+```bash
 frankenphp php-server --worker /path/to/your/worker/script.php
 ```
 
@@ -31,21 +36,21 @@ It will be used automatically.
 It's also possible to [restart the worker on file changes](config.md#watching-for-file-changes) with the `--watch` option.
 The following command will trigger a restart if any file ending in `.php` in the `/path/to/your/app/` directory or subdirectories is modified:
 
-```console
+```bash
 frankenphp php-server --worker /path/to/your/worker/script.php --watch="/path/to/your/app/**/*.php"
 ```
 
 This feature is often used in combination with [hot reloading](hot-reload.md).
 
-## Symfony
+## Worker Mode for Symfony
 
-See [the dedicated documentation](symfony.md#worker-mode).
+See [the FrankenPHP Symfony worker mode documentation](symfony.md#worker-mode).
 
-## Laravel Octane
+## Worker Mode for Laravel Octane
 
-See [the dedicated documentation](laravel.md#laravel-octane).
+See [the FrankenPHP Laravel Octane documentation](laravel.md#laravel-octane).
 
-## Custom Apps
+## Writing a Custom FrankenPHP Worker Script
 
 The following example shows how to create your own worker script without relying on a third-party library:
 
@@ -91,7 +96,7 @@ $myApp->shutdown();
 
 Then, start your app and use the `FRANKENPHP_CONFIG` environment variable to configure your worker:
 
-```console
+```bash
 docker run \
     -e FRANKENPHP_CONFIG="worker ./public/index.php" \
     -v $PWD:/app \
@@ -102,7 +107,7 @@ docker run \
 By default, 2 workers per CPU are started.
 You can also configure the number of workers to start:
 
-```console
+```bash
 docker run \
     -e FRANKENPHP_CONFIG="worker ./public/index.php 42" \
     -v $PWD:/app \
@@ -123,7 +128,7 @@ While it's possible to restart workers [on file changes](config.md#watching-for-
 gracefully via the [Caddy admin API](https://caddyserver.com/docs/api). If the admin is enabled in your
 [Caddyfile](config.md#caddyfile-config), you can ping the restart endpoint with a simple POST request like this:
 
-```console
+```bash
 curl -X POST http://localhost:2019/frankenphp/workers/restart
 ```
 

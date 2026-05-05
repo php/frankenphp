@@ -1,3 +1,8 @@
+---
+title: Migrating from Nginx and PHP-FPM to FrankenPHP
+description: Step-by-step guide to migrate a PHP application from an Nginx plus PHP-FPM stack to FrankenPHP, covering Caddyfile, php.ini, threads, and Docker.
+---
+
 # Migrating from Nginx/PHP-FPM
 
 FrankenPHP replaces both your web server (Nginx, Apache) and PHP-FPM with a single binary.
@@ -19,6 +24,7 @@ This guide covers a basic migration for a typical PHP application.
 A typical Nginx + PHP-FPM configuration:
 
 ```nginx
+# /etc/nginx/sites-available/example.com
 server {
     listen 80;
     server_name example.com;
@@ -40,6 +46,7 @@ server {
 Becomes a single `Caddyfile`:
 
 ```caddyfile
+# Caddyfile
 example.com {
     root /var/www/app/public
     php_server
@@ -55,6 +62,7 @@ Your existing `php.ini` works as-is. See [Configuration](config.md) for where to
 You can also set directives directly in the `Caddyfile`:
 
 ```caddyfile
+# Caddyfile
 {
     frankenphp {
         php_ini memory_limit 256M
@@ -74,6 +82,7 @@ In PHP-FPM, you tune `pm.max_children` to control the number of worker processes
 In FrankenPHP, the equivalent is `num_threads`:
 
 ```caddyfile
+# Caddyfile
 {
     frankenphp {
         num_threads 16
@@ -84,6 +93,7 @@ In FrankenPHP, the equivalent is `num_threads`:
 By default, FrankenPHP starts 2 threads per CPU. For dynamic scaling similar to PHP-FPM's `pm = dynamic`:
 
 ```caddyfile
+# Caddyfile
 {
     frankenphp {
         num_threads 4
@@ -99,6 +109,7 @@ A typical PHP-FPM Docker setup using two containers (Nginx + PHP-FPM) can be rep
 **Before:**
 
 ```yaml
+# compose.yaml
 services:
   nginx:
     image: nginx:1
@@ -119,6 +130,7 @@ services:
 **After:**
 
 ```yaml
+# compose.yaml
 services:
   php:
     image: dunglas/frankenphp:1-php8.5
@@ -140,7 +152,7 @@ volumes:
 
 If you need additional PHP extensions, see [Building Custom Docker Image](docker.md#how-to-install-more-php-extensions).
 
-For framework-specific Docker setups, see [Symfony Docker](https://github.com/dunglas/symfony-docker) and [Laravel](laravel.md#docker).
+For framework-specific Docker setups, see [Symfony Docker](https://github.com/dunglas/symfony-docker) and [running Laravel with the FrankenPHP Docker image](laravel.md#running-laravel-with-the-frankenphp-docker-image).
 
 ## Step 5: Consider Worker Mode (Optional)
 
@@ -149,6 +161,7 @@ In [classic mode](classic.md), FrankenPHP works like PHP-FPM: each request boots
 For better performance, you can switch to [worker mode](worker.md), which boots your application once and keeps it in memory:
 
 ```caddyfile
+# Caddyfile
 example.com {
     root /var/www/app/public
     php_server {
