@@ -49,7 +49,7 @@ If you are [embedding FrankenPHP in a standard Go application without caddy](htt
 
 ## Dispatching Tasks to FrankenPHP Extension Workers
 
-Once the worker pool is active, you can dispatch tasks to it. This can be done inside [native functions exported to PHP](https://frankenphp.dev/docs/extensions/#writing-the-extension), or from any Go logic such as a cron scheduler, an event listener (MQTT, Kafka), or a any other goroutine.
+Once the worker pool is active, you can dispatch tasks to it. This can be done inside [native functions exported to PHP](https://frankenphp.dev/docs/extensions/#writing-the-extension), or from any Go logic such as a cron scheduler, an event listener (MQTT, Kafka), or any other goroutine.
 
 ### Headless Mode : `SendMessage`
 

@@ -132,7 +132,7 @@ The `precompressed` directive tells Caddy to look for pre-compressed versions of
 FrankenPHP supports [efficiently serving large static files](x-sendfile.md) after executing PHP code (for access control, statistics, etc.).
 
 Symfony HttpFoundation [natively supports this feature](https://symfony.com/doc/current/components/http_foundation.html#serving-files).
-After [configuring your `Caddyfile`](x-sendfile.md#configuration), it will automatically determine the correct value for the `X-Accel-Redirect` header and add it to the response:
+After [configuring your `Caddyfile`](x-sendfile.md#configuring-x-accel-redirect-in-the-frankenphp-caddyfile), it will automatically determine the correct value for the `X-Accel-Redirect` header and add it to the response:
 
 ```php
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
