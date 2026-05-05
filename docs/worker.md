@@ -44,7 +44,7 @@ This feature is often used in combination with [hot reloading](hot-reload.md).
 
 ## Worker Mode for Symfony
 
-See [the FrankenPHP Symfony worker mode documentation](symfony.md#worker-mode).
+See [the FrankenPHP Symfony worker mode documentation](symfony.md#symfony-worker-mode-with-frankenphp).
 
 ## Worker Mode for Laravel Octane
 

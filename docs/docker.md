@@ -210,7 +210,7 @@ The Docker images are built:
 - when a new release is tagged
 - daily at 4 am UTC, if new versions of the official PHP images are available
 
-## Hardening FrankenPHP Docker Images
+## Hardening Images
 
 To further reduce the attack surface and size of your FrankenPHP Docker images, it's also possible to build them on top of a
 [Google distroless](https://github.com/GoogleContainerTools/distroless) or

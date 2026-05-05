@@ -290,7 +290,7 @@ But when the fix depends on a third party you don't control,
 }
 ```
 
-## FrankenPHP Environment Variables
+## Environment Variables
 
 The following environment variables can be used to inject Caddy directives in the `Caddyfile` without modifying it:
 
@@ -303,7 +303,7 @@ As for FPM and CLI SAPIs, environment variables are exposed by default in the `$
 
 The `S` value of [the `variables_order` PHP directive](https://www.php.net/manual/en/ini.core.php#ini.variables-order) is always equivalent to `ES` regardless of the placement of `E` elsewhere in this directive.
 
-## PHP Configuration in FrankenPHP
+## PHP config
 
 To load [additional PHP configuration files](https://www.php.net/manual/en/configuration.file.php#configuration.file.scan),
 the `PHP_INI_SCAN_DIR` environment variable can be used.
