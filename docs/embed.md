@@ -11,7 +11,7 @@ Thanks to this feature, PHP applications can be distributed as standalone binari
 
 Learn more about this feature [in the presentation made by Kévin at SymfonyCon 2023](https://dunglas.dev/2023/12/php-and-symfony-apps-as-standalone-binaries/).
 
-For embedding Laravel applications, see [the Laravel-specific embedding instructions](laravel.md#laravel-apps-as-standalone-binaries).
+For embedding Laravel applications, [read this specific documentation entry](laravel.md#laravel-apps-as-standalone-binaries).
 
 ## Preparing Your App
 
@@ -47,7 +47,7 @@ composer install --ignore-platform-reqs --no-dev -a
 composer dump-env prod
 ```
 
-### Customizing the Embedded FrankenPHP Configuration
+### Customizing the Configuration
 
 To customize [the configuration](config.md), you can put a `Caddyfile` as well as a `php.ini` file
 in the main directory of the app to be embedded (`$TMPDIR/my-prepared-app` in the previous example).

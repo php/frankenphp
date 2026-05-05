@@ -1,6 +1,6 @@
 ---
-title: Compile FrankenPHP From Sources With PHP as a Library
-description: Build FrankenPHP from source on Linux, macOS and FreeBSD, link PHP as a dynamic library via xcaddy or go build, and add custom Caddy modules and extensions.
+title: Compile FrankenPHP from sources with libphp.so
+description: Build FrankenPHP from source on Linux, macOS and FreeBSD, linking PHP as a shared library via xcaddy or go build, and add custom Caddy modules and extensions.
 ---
 
 # Compile From Sources
