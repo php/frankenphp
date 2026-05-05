@@ -103,7 +103,7 @@ EMBED=/path/to/your/app ./build-static.sh
 
 The resulting binary is the file named `frankenphp-<os>-<arch>` in the `dist/` directory.
 
-## Using the Embedded Binary
+## Using The Binary
 
 This is it! The `my-app` file (or `dist/frankenphp-<os>-<arch>` on other OSes) contains your self-contained app!
 
@@ -131,18 +131,18 @@ You can also run the PHP CLI scripts embedded in your binary:
 ./my-app php-cli bin/console
 ```
 
-## PHP Extensions in the Embedded Binary
+## PHP Extensions
 
 By default, the script will build extensions required by the `composer.json` file of your project, if any.
 If the `composer.json` file doesn't exist, the default extensions are built, as documented in [the static builds entry](static.md).
 
 To customize the extensions, use the `PHP_EXTENSIONS` environment variable.
 
-## Customizing the Embedded Binary Build
+## Customizing The Build
 
 [Read the static build documentation](static.md) to see how to customize the binary (extensions, PHP version...).
 
-## Distributing the Embedded Binary
+## Distributing The Binary
 
 On Linux, the created binary is compressed using [UPX](https://upx.github.io).
 

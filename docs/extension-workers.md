@@ -7,9 +7,9 @@ description: Use FrankenPHP Extension Workers to run a dedicated PHP thread pool
 
 Extension Workers enable your [FrankenPHP extension](https://frankenphp.dev/docs/extensions/) to manage a dedicated pool of PHP threads for executing background tasks, handling asynchronous events, or implementing custom protocols. Useful for queue systems, event listeners, schedulers, etc.
 
-## Registering a FrankenPHP Extension Worker
+## Registering the Worker
 
-### Static Worker Registration
+### Static Registration
 
 If you don't need to make the worker configurable by the user (fixed script path, fixed number of threads), you can simply register the worker in the `init()` function.
 
@@ -47,7 +47,7 @@ If you plan to share your extension (like a generic queue or event listener), yo
 
 If you are [embedding FrankenPHP in a standard Go application without caddy](https://pkg.go.dev/github.com/dunglas/frankenphp#example-ServeHTTP), you can register extension workers using `frankenphp.WithExtensionWorkers` when initializing options.
 
-## Dispatching Tasks to FrankenPHP Extension Workers
+## Interacting with Workers
 
 Once the worker pool is active, you can dispatch tasks to it. This can be done inside [native functions exported to PHP](https://frankenphp.dev/docs/extensions/#writing-the-extension), or from any Go logic such as a cron scheduler, an event listener (MQTT, Kafka), or any other goroutine.
 
@@ -117,7 +117,7 @@ func my_worker_http_request(path *C.zend_string) unsafe.Pointer {
 }
 ```
 
-## FrankenPHP Extension Worker PHP Script
+## Worker Script
 
 The PHP worker script runs in a loop and can handle both raw messages and HTTP requests.
 
@@ -139,7 +139,7 @@ while (frankenphp_handle_request($handler)) {
 }
 ```
 
-## FrankenPHP Extension Worker Lifecycle Hooks
+## Lifecycle Hooks
 
 FrankenPHP provides hooks to execute Go code at specific points in the lifecycle.
 
@@ -150,7 +150,7 @@ FrankenPHP provides hooks to execute Go code at specific points in the lifecycle
 | **Thread** | `WithWorkerOnReady`          | `func(threadID int)` | Per-thread setup. Called when a thread starts. Receives the Thread ID. |
 | **Thread** | `WithWorkerOnShutdown`       | `func(threadID int)` | Per-thread cleanup. Receives the Thread ID.                            |
 
-### Lifecycle Hooks Example
+### Example
 
 ```go
 // FrankenPHP extension worker with lifecycle hooks
