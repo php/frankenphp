@@ -103,7 +103,7 @@ EMBED=/path/to/your/app ./build-static.sh
 
 The resulting binary is the file named `frankenphp-<os>-<arch>` in the `dist/` directory.
 
-## Using the Embedded FrankenPHP Binary
+## Using the Embedded Binary
 
 This is it! The `my-app` file (or `dist/frankenphp-<os>-<arch>` on other OSes) contains your self-contained app!
 
