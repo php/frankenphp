@@ -168,7 +168,7 @@ example.com {
 
 > [!CAUTION]
 >
-> Worker mode keeps your application in memory between requests. Make sure your code does not rely on global state being reset between requests. Frameworks like [Symfony](worker.md#symfony-runtime), [Laravel](laravel.md#laravel-octane), and [API Platform](https://api-platform.com) have native support for this mode.
+> Worker mode keeps your application in memory between requests. Make sure your code does not rely on global state being reset between requests. Frameworks like [Symfony](worker.md#worker-mode-for-symfony), [Laravel](laravel.md#laravel-octane), and [API Platform](https://api-platform.com) have native support for this mode.
 
 ## What You Can Remove
 
