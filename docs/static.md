@@ -38,7 +38,7 @@ For better performance in heavily concurrent scenarios, consider using the [mima
 docker buildx bake --load --set static-builder-musl.args.MIMALLOC=1 static-builder-musl
 ```
 
-### glibc-Based, Mostly Static Build (With Dynamic Extension Support)
+### glibc-Based, Mostly Static Build (with Dynamic Extension Support)
 
 For a binary that supports loading PHP extensions dynamically while still having the selected extensions compiled statically:
 

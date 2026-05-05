@@ -86,7 +86,7 @@ See also [how to use Mercure with Octane](#mercure-support).
 
 Learn more about [Laravel Octane in its official documentation](https://laravel.com/docs/octane).
 
-## Laravel Apps As Standalone Binaries
+## Laravel Apps as Standalone Binaries
 
 Using [FrankenPHP's application embedding feature](embed.md), it's possible to distribute Laravel
 apps as standalone binaries.
@@ -169,7 +169,7 @@ Your app is now ready!
 Learn more about the options available and how to build binaries for other OSes in the [applications embedding](embed.md)
 documentation.
 
-### Changing The Storage Path
+### Changing the Storage Path
 
 By default, Laravel stores uploaded files, caches, logs, etc. in the application's `storage/` directory.
 This is not suitable for embedded applications, as each new version will be extracted into a different temporary directory.
@@ -205,7 +205,7 @@ You can use [all directives supported by Mercure](https://mercure.rocks/docs/hub
 To publish and subscribe to updates, we recommend using the [Laravel Mercure Broadcaster](https://github.com/mvanduijker/laravel-mercure-broadcaster) library.
 Alternatively, see [the Mercure documentation](mercure.md) to do it in pure PHP and JavaScript.
 
-### Running Octane With Standalone Binaries
+### Running Octane with Standalone Binaries
 
 It's even possible to package Laravel Octane apps as standalone binaries!
 

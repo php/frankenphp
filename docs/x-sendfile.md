@@ -61,6 +61,6 @@ Set the relative file path (from `private-files/`) as the value of the `X-Accel-
 header('X-Accel-Redirect: file.txt');
 ```
 
-## Projects using the Symfony HttpFoundation component (Symfony, Laravel, Drupal...)
+## Projects Using the Symfony HttpFoundation Component (Symfony, Laravel, Drupal...)
 
 See [the Symfony documentation](symfony.md#serving-large-static-files-x-sendfile) for details on using this feature with Symfony HttpFoundation.

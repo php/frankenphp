@@ -3,7 +3,7 @@ title: Real-Time Updates with the FrankenPHP Mercure Hub
 description: FrankenPHP ships with a built-in Mercure hub for pushing real-time events to browsers over HTTP, as a simpler alternative to WebSockets.
 ---
 
-# Real-time
+# Real-Time
 
 FrankenPHP comes with a built-in [Mercure](https://mercure.rocks) hub!
 Mercure allows you to push real-time events to all the connected devices: they will receive a JavaScript event instantly.

@@ -153,7 +153,7 @@ Set(Ready)
                                  state is Ready → normal execution
 ```
 
-## CGO Boundary Between Go and PHP
+## CGO Boundary between Go and PHP
 
 ### Exported Go Functions
 
@@ -190,7 +190,7 @@ while ((scriptName = go_frankenphp_before_script_execution(thread_index))) {
 
 Bailouts (fatal PHP errors) are caught by `zend_catch`, which marks the thread as unhealthy and forces cleanup.
 
-### Memory Management Across the CGO Boundary
+### Memory Management across the CGO Boundary
 
 - **Go → C strings**: `C.CString()` allocates with `malloc()`. The C side is responsible for freeing (e.g., `frankenphp_free_request_context()` frees cookie data).
 - **Go string pinning**: `phpThread` (in `phpthread.go`) embeds Go's [`runtime.Pinner`](https://pkg.go.dev/runtime#Pinner). `thread.Pin()` / `thread.Unpin()` keep Go memory referenced from C alive without copying it. The thread is unpinned after each script execution.

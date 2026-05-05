@@ -39,7 +39,7 @@ func init() {
 }
 ```
 
-### In a Caddy Module (Configurable by the user)
+### In a Caddy Module (Configurable by the User)
 
 If you plan to share your extension (like a generic queue or event listener), you should wrap it in a Caddy module. This allows users to configure the script path and thread count via their `Caddyfile`. This requires implementing the `caddy.Provisioner` interface and parsing the Caddyfile ([see the frankenphp-queue Caddy module example](https://github.com/dunglas/frankenphp-queue/blob/main/caddy.go)).
 
@@ -51,7 +51,7 @@ If you are [embedding FrankenPHP in a standard Go application without caddy](htt
 
 Once the worker pool is active, you can dispatch tasks to it. This can be done inside [native functions exported to PHP](https://frankenphp.dev/docs/extensions/#writing-the-extension), or from any Go logic such as a cron scheduler, an event listener (MQTT, Kafka), or any other goroutine.
 
-### Headless Mode : `SendMessage`
+### Headless Mode: `SendMessage`
 
 Use `SendMessage` to pass raw data directly to your worker script. This is ideal for queues or simple commands.
 
@@ -85,7 +85,7 @@ func my_queue_push(data *C.zval) bool {
 }
 ```
 
-### HTTP Emulation :`SendRequest`
+### HTTP Emulation: `SendRequest`
 
 Use `SendRequest` if your extension needs to invoke a PHP script that expects a standard web environment (populating `$_SERVER`, `$_GET`, etc.).
 

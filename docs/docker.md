@@ -175,7 +175,7 @@ EOF
 USER ${USER}
 ```
 
-### Running With No Capabilities
+### Running with No Capabilities
 
 Even when running rootless, FrankenPHP needs the `CAP_NET_BIND_SERVICE` capability to bind the
 web server on privileged ports (80 and 443).

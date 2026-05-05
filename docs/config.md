@@ -1,5 +1,5 @@
 ---
-title: Configuring FrankenPHP With Caddyfile, php.ini, and Env Vars
+title: Configuring FrankenPHP with Caddyfile, php.ini, and Env Vars
 description: Configure FrankenPHP and Caddy via Caddyfile, JSON, or environment variables, including PHP runtime tuning, worker mode, file watching, and module options.
 ---
 
@@ -53,7 +53,7 @@ RUN cp $PHP_INI_DIR/php.ini-production $PHP_INI_DIR/php.ini
 RUN cp $PHP_INI_DIR/php.ini-development $PHP_INI_DIR/php.ini
 ```
 
-## RPM and Debian packages
+## RPM and Debian Packages
 
 FrankenPHP:
 
@@ -65,7 +65,7 @@ PHP:
 - `php.ini`: `/etc/php-zts/php.ini` (a `php.ini` file with production presets is provided by default)
 - additional configuration files: `/etc/php-zts/conf.d/*.ini`
 
-## Static binary
+## Static Binary
 
 FrankenPHP:
 
@@ -248,7 +248,7 @@ where the FrankenPHP process was started. You can instead also specify one or mo
 
 The file watcher is based on [e-dant/watcher](https://github.com/e-dant/watcher).
 
-## Matching the Worker To a Path
+## Matching the Worker to a Path
 
 In traditional PHP applications, scripts are always placed in the public directory.
 This is also true for worker scripts, which are treated like any other PHP script.
@@ -271,7 +271,7 @@ and otherwise forward the request to the worker matching the path pattern.
 }
 ```
 
-## Restarting Threads After a Number of Requests (Experimental)
+## Restarting Threads after a Number of Requests (Experimental)
 
 FrankenPHP can automatically restart PHP threads after they have handled a given number of requests.
 When a thread reaches the limit, it is fully restarted,
@@ -303,7 +303,7 @@ As for FPM and CLI SAPIs, environment variables are exposed by default in the `$
 
 The `S` value of [the `variables_order` PHP directive](https://www.php.net/manual/en/ini.core.php#ini.variables-order) is always equivalent to `ES` regardless of the placement of `E` elsewhere in this directive.
 
-## PHP config
+## PHP Config
 
 To load [additional PHP configuration files](https://www.php.net/manual/en/configuration.file.php#configuration.file.scan),
 the `PHP_INI_SCAN_DIR` environment variable can be used.

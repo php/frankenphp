@@ -115,7 +115,7 @@ docker run \
     dunglas/frankenphp
 ```
 
-### Restart the Worker After a Certain Number of Requests
+### Restart the Worker after a Certain Number of Requests
 
 As PHP was not originally designed for long-running processes, there are still many libraries and legacy codes that leak memory.
 A workaround to using this type of code in worker mode is to restart the worker script after processing a certain number of requests:

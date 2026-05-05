@@ -142,7 +142,7 @@ $response = new BinaryFileResponse(__DIR__.'/../private-files/file.txt');
 // ...
 ```
 
-## Symfony Apps As Standalone Binaries
+## Symfony Apps as Standalone Binaries
 
 Using [FrankenPHP's application embedding feature](embed.md), it's possible to distribute Symfony
 apps as standalone binaries.

@@ -3,7 +3,7 @@ title: Embedding PHP Apps as Standalone Binaries with FrankenPHP
 description: How to package a PHP application (including Symfony or Laravel) as a self-contained static binary with FrankenPHP, the PHP interpreter, PHP extensions and Caddy.
 ---
 
-# PHP Apps As Standalone Binaries
+# PHP Apps as Standalone Binaries
 
 FrankenPHP has the ability to embed the source code and assets of PHP applications in a static, self-contained binary.
 
