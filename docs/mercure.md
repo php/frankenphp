@@ -107,19 +107,19 @@ $updateID = file_get_contents('https://localhost/.well-known/mercure', context: 
 error_log("update $updateID published", 4);
 ```
 
-The key passed as parameter of the `mercure.publisher_jwt` option in the `Caddyfile` must used to sign the JWT token used in the `Authorization` header.
+The key passed as parameter of the `mercure.publisher_jwt` option in the `Caddyfile` must be used to sign the JWT token used in the `Authorization` header.
 
 The JWT must include a `mercure` claim with a `publish` permission for the topics you want to publish to.
 See [the Mercure documentation](https://mercure.rocks/spec#publishers) about authorization.
 
 To generate your own tokens, you can use [this jwt.io link](https://www.jwt.io/#token=eyJhbGciOiJIUzI1NiJ9.eyJtZXJjdXJlIjp7InB1Ymxpc2giOlsiKiJdfX0.PXwpfIGng6KObfZlcOXvcnWCJOWTFLtswGI5DZuWSK4),
-but for production apps, it's recommended to use short-lived tokens generated aerodynamically using with a trusted [JWT library](https://www.jwt.io/libraries?programming_language=php).
+but for production apps, it's recommended to use short-lived tokens generated dynamically using a trusted [JWT library](https://www.jwt.io/libraries?programming_language=php).
 
 ### Using Symfony Mercure
 
 Alternatively, you can use the [Symfony Mercure Component](https://symfony.com/components/Mercure), a standalone PHP library.
 
-This library handled the JWT generation, update publishing as well as cookie-based authorization for subscribers.
+This library handles the JWT generation, update publishing as well as cookie-based authorization for subscribers.
 
 First, install the library using Composer:
 

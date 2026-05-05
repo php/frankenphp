@@ -80,7 +80,7 @@ The `octane:frankenphp` command can take the following options:
 - `--log-level`: Log messages at or above the specified log level, using the native Caddy logger
 
 > [!TIP]
-> To get structured JSON logs (useful when using log analytics solutions), explicitly the pass `--log-level` option.
+> To get structured JSON logs (useful when using log analytics solutions), explicitly pass the `--log-level` option.
 
 See also [how to use Mercure with Octane](#mercure-support).
 
@@ -183,7 +183,7 @@ FrankenPHP includes [Mercure support out of the box](mercure.md).
 
 If you are not using [Octane](#laravel-octane), see [the Mercure documentation entry](mercure.md).
 
-If you are using Octane, you can use enable Mercure support by adding the following lines to your `config/octane.php` file:
+If you are using Octane, you can enable Mercure support by adding the following lines to your `config/octane.php` file:
 
 ```php
 // config/octane.php

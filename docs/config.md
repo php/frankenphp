@@ -307,7 +307,7 @@ The `S` value of [the `variables_order` PHP directive](https://www.php.net/manua
 
 To load [additional PHP configuration files](https://www.php.net/manual/en/configuration.file.php#configuration.file.scan),
 the `PHP_INI_SCAN_DIR` environment variable can be used.
-When set, PHP will load all the file with the `.ini` extension present in the given directories.
+When set, PHP will load all the files with the `.ini` extension present in the given directories.
 
 You can also change the PHP configuration using the `php_ini` directive in the `Caddyfile`:
 
@@ -328,7 +328,7 @@ You can also change the PHP configuration using the `php_ini` directive in the `
 
 ### Disabling HTTPS
 
-By default, FrankenPHP will automatically enable HTTPS using for all the hostnames, including `localhost`.
+By default, FrankenPHP will automatically enable HTTPS for all the hostnames, including `localhost`.
 If you want to disable HTTPS (for example in a development environment), you can set the `SERVER_NAME` environment variable to `http://` or `:80`:
 
 Alternatively, you can use all other methods described in the [Caddy documentation](https://caddyserver.com/docs/automatic-https#activation).
@@ -444,7 +444,5 @@ To load completions for every new session, execute once:
 frankenphp completion powershell | Out-File -FilePath (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")
 Add-Content -Path $PROFILE -Value '. (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")'
 ```
-
-You will need to start a new shell for this setup to take effect.
 
 You will need to start a new shell for this setup to take effect.

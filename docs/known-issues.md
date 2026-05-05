@@ -28,7 +28,7 @@ The [get_browser()](https://www.php.net/manual/en/function.get-browser.php) func
 
 ## Standalone Binary and Alpine-based Docker Images
 
-The fully binary and Alpine-based Docker images (`dunglas/frankenphp:*-alpine`) use [musl libc](https://musl.libc.org/) instead of [glibc and friends](https://www.etalabs.net/compare_libcs.html), to keep a smaller binary size.
+The fully static binary and Alpine-based Docker images (`dunglas/frankenphp:*-alpine`) use [musl libc](https://musl.libc.org/) instead of [glibc and friends](https://www.etalabs.net/compare_libcs.html), to keep a smaller binary size.
 This may lead to some compatibility issues.
 In particular, the glob flag `GLOB_BRACE` is [not available](https://www.php.net/manual/en/function.glob.php)
 

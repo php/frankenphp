@@ -86,7 +86,7 @@ There are two important things to note here:
 - A directive comment `//export_php:function` defines the function signature in PHP. This is how the generator knows how to generate the PHP function with the right parameters and return type.
 - The function must return an `unsafe.Pointer`. FrankenPHP provides an API to help you with type juggling between C and Go.
 
-While the first point speaks for itself, the second may be harder to apprehend. Let's take a deeper dive to type juggling later in this guide.
+While the first point speaks for itself, the second may be harder to apprehend. Let's take a deeper dive into type juggling later in this guide.
 
 ### Generating the Extension
 
@@ -339,7 +339,7 @@ type UserStruct struct {
 - **Method-only interface** - All interactions must go through methods you define
 - **Better encapsulation** - Internal data structure is completely controlled by Go code
 - **Type safety** - No risk of PHP code corrupting internal state with wrong types
-- **Cleaner API** - Forces to design a proper public interface
+- **Cleaner API** - Forces you to design a proper public interface
 
 This approach provides better encapsulation and prevents PHP code from accidentally corrupting the internal state of your Go objects. All interactions with the object must go through the methods you explicitly define.
 

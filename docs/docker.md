@@ -87,7 +87,7 @@ RUN CGO_ENABLED=1 \
 
 FROM dunglas/frankenphp AS runner
 
-# Replace the official binary by the one contained your custom modules
+# Replace the official binary with the one containing your custom modules
 COPY --from=builder /usr/local/bin/frankenphp /usr/local/bin/frankenphp
 ```
 
@@ -154,7 +154,7 @@ volumes:
 
 ## Running as a Non-Root User
 
-FrankenPHP can run as non-root user in Docker.
+FrankenPHP can run as a non-root user in Docker.
 
 Here is a sample `Dockerfile` doing this:
 

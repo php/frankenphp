@@ -10,7 +10,7 @@ it's possible to create a static or mostly static build of FrankenPHP thanks to 
 
 With this method, a single, portable, binary will contain the PHP interpreter, the Caddy web server, and FrankenPHP!
 
-Fully static native executables require no dependencies at all and can even be run on [`scratch` Docker image](https://docs.docker.com/build/building/base-images/#create-a-minimal-base-image-using-scratch).
+Fully static native executables require no dependencies at all and can even be run on a [`scratch` Docker image](https://docs.docker.com/build/building/base-images/#create-a-minimal-base-image-using-scratch).
 However, they can't load dynamic PHP extensions (such as Xdebug) and have some limitations because they are using the musl libc.
 
 Mostly static binaries only require `glibc` and can load dynamic extensions.

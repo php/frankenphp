@@ -20,7 +20,7 @@ containing the path of the file to be served. FrankenPHP takes care of the rest.
 
 This feature is known as **`X-Sendfile`** for Apache, and **`X-Accel-Redirect`** for NGINX.
 
-In the following examples, we assume that the document root of the project is the `public/` directory.
+In the following examples, we assume that the document root of the project is the `public/` directory,
 and that we want to use PHP to serve files stored outside the `public/` directory,
 from a directory named `private-files/`.
 
