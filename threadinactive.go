@@ -60,3 +60,5 @@ func (handler *inactiveThread) name() string {
 }
 
 func (handler *inactiveThread) drain() {}
+
+func (handler *inactiveThread) scopedWorker() *worker { return nil }

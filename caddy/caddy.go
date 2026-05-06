@@ -16,7 +16,7 @@ const (
 )
 
 func init() {
-	caddy.RegisterModule(FrankenPHPApp{})
+	caddy.RegisterModule(new(FrankenPHPApp))
 	caddy.RegisterModule(FrankenPHPModule{})
 	caddy.RegisterModule(FrankenPHPAdmin{})
 

@@ -1,7 +1,6 @@
 package caddy
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -62,17 +61,24 @@ type FrankenPHPApp struct {
 
 	opts    []frankenphp.Option
 	metrics frankenphp.Metrics
-	ctx     context.Context
+	ctx     caddy.Context
 	logger  *slog.Logger
+
+	// scopeOwners is the per-php_server module registry used by Start
+	// to resolve a human-readable scope label (via the cascade in
+	// scopelabel.go) before frankenphp.Init starts any bg worker, so
+	// the very first metric call already carries the right prefix.
+	scopeOwnersMu sync.Mutex
+	scopeOwners   map[frankenphp.Scope]*FrankenPHPModule
 }
 
 var iniError = errors.New(`"php_ini" must be in the format: php_ini "<key>" "<value>"`)
 
 // CaddyModule returns the Caddy module information.
-func (f FrankenPHPApp) CaddyModule() caddy.ModuleInfo {
+func (*FrankenPHPApp) CaddyModule() caddy.ModuleInfo {
 	return caddy.ModuleInfo{
 		ID:  "frankenphp",
-		New: func() caddy.Module { return &f },
+		New: func() caddy.Module { return new(FrankenPHPApp) },
 	}
 }
 
@@ -139,12 +145,49 @@ func (f *FrankenPHPApp) addModuleWorkers(workers ...workerConfig) ([]workerConfi
 	return workers, nil
 }
 
+// registerScopeOwner records the FrankenPHPModule that allocated the
+// given scope so Start() can resolve its label before frankenphp.Init.
+func (f *FrankenPHPApp) registerScopeOwner(scope frankenphp.Scope, mod *FrankenPHPModule) {
+	f.scopeOwnersMu.Lock()
+	defer f.scopeOwnersMu.Unlock()
+	if f.scopeOwners == nil {
+		f.scopeOwners = make(map[frankenphp.Scope]*FrankenPHPModule)
+	}
+	f.scopeOwners[scope] = mod
+}
+
+// resolveScopeLabels walks the http app's servers once per registered
+// module, picks the one whose route tree contains the module, runs the
+// scopelabel.go cascade, and stores the result via SetScopeLabel. Runs
+// before frankenphp.Init so the first metric emit on every bg worker
+// already carries the right "m#<label>:<name>" prefix.
+func (f *FrankenPHPApp) resolveScopeLabels() {
+	if len(f.scopeOwners) == 0 {
+		return
+	}
+	httpApp, err := f.ctx.AppIfConfigured("http")
+	if err != nil || httpApp == nil {
+		return
+	}
+	servers := httpApp.(*caddyhttp.App).Servers
+	for scope, mod := range f.scopeOwners {
+		for _, srv := range servers {
+			if label := mod.resolveScopeLabel(srv); label != "" {
+				frankenphp.SetScopeLabel(scope, label)
+				break
+			}
+		}
+	}
+}
+
 func (f *FrankenPHPApp) Start() error {
 	repl := caddy.NewReplacer()
 
 	optionsMU.RLock()
 	f.opts = append(f.opts, options...)
 	optionsMU.RUnlock()
+
+	f.resolveScopeLabels()
 
 	f.opts = append(f.opts,
 		frankenphp.WithContext(f.ctx),
@@ -166,6 +209,10 @@ func (f *FrankenPHPApp) Start() error {
 			frankenphp.WithWorkerMaxThreads(w.MaxThreads),
 			frankenphp.WithWorkerRequestOptions(w.requestOptions...),
 		)
+
+		if w.Background {
+			w.options = append(w.options, frankenphp.WithWorkerBackground())
+		}
 
 		f.opts = append(f.opts, frankenphp.WithWorkers(w.Name, repl.ReplaceKnown(w.FileName, ""), w.Num, w.options...))
 	}
