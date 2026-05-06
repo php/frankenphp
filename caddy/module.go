@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig"
@@ -51,6 +52,8 @@ type FrankenPHPModule struct {
 	preparedEnvNeedsReplacement bool
 	logger                      *slog.Logger
 	requestOptions              []frankenphp.RequestOption
+	scope                       frankenphp.Scope
+	scopeLabelOnce              sync.Once
 }
 
 // CaddyModule returns the Caddy module information.
@@ -78,6 +81,14 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 
 	f.assignMercureHub(ctx)
 
+	// Each php_server block gets its own scope so its workers' metric
+	// series stay distinct from any other block's workers (the "server"
+	// label). Provision can be called more than once for the same module;
+	// only assign once.
+	if f.scope == 0 {
+		f.scope = frankenphp.NextScope()
+	}
+
 	loggerOpt := frankenphp.WithRequestLogger(f.logger)
 	for i, wc := range f.Workers {
 		// make the file path absolute from the public directory
@@ -92,6 +103,7 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		}
 
 		wc.requestOptions = append(wc.requestOptions, loggerOpt)
+		wc.options = append(wc.options, frankenphp.WithWorkerScope(f.scope))
 		f.Workers[i] = wc
 	}
 
@@ -234,6 +246,16 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 			break
 		}
 	}
+
+	f.scopeLabelOnce.Do(func() {
+		srv, _ := ctx.Value(caddyhttp.ServerCtxKey).(*caddyhttp.Server)
+		if srv == nil {
+			return
+		}
+		if label := f.resolveScopeLabel(srv); label != "" {
+			frankenphp.SetScopeLabel(f.scope, label)
+		}
+	})
 
 	fr, err := frankenphp.NewRequestWithContext(
 		r,

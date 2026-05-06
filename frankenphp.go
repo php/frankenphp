@@ -163,7 +163,7 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 			// https://github.com/php/frankenphp/issues/126
 			opt.workers[i].num = maxProcs
 		}
-		metrics.TotalWorkers(w.name, w.num)
+		metrics.TotalWorkers(ScopeLabel(w.scope), w.name, w.num)
 
 		numWorkers += opt.workers[i].num
 

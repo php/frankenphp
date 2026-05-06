@@ -33,6 +33,7 @@ type worker struct {
 	onThreadReady          func(int)
 	onThreadShutdown       func(int)
 	queuedRequests         atomic.Int32
+	scope                  Scope
 }
 
 var (
@@ -148,6 +149,7 @@ func newWorker(o workerOpt) (*worker, error) {
 		maxConsecutiveFailures: o.maxConsecutiveFailures,
 		onThreadReady:          o.onThreadReady,
 		onThreadShutdown:       o.onThreadShutdown,
+		scope:                  o.scope,
 	}
 
 	w.configureMercure(&o)
@@ -288,7 +290,8 @@ func (worker *worker) isAtThreadLimit() bool {
 }
 
 func (worker *worker) handleRequest(ch contextHolder) error {
-	metrics.StartWorkerRequest(worker.name)
+	server := ScopeLabel(worker.scope)
+	metrics.StartWorkerRequest(server, worker.name)
 
 	runtime.Gosched()
 
@@ -300,7 +303,7 @@ func (worker *worker) handleRequest(ch contextHolder) error {
 			case thread.requestChan <- ch:
 				worker.threadMutex.RUnlock()
 				<-ch.frankenPHPContext.done
-				metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
+				metrics.StopWorkerRequest(server, worker.name, time.Since(ch.frankenPHPContext.startedAt))
 
 				return nil
 			default:
@@ -312,7 +315,7 @@ func (worker *worker) handleRequest(ch contextHolder) error {
 
 	// if no thread was available, mark the request as queued and apply the scaling strategy
 	worker.queuedRequests.Add(1)
-	metrics.QueuedWorkerRequest(worker.name)
+	metrics.QueuedWorkerRequest(server, worker.name)
 
 	for {
 		workerScaleChan := scaleChan
@@ -323,9 +326,9 @@ func (worker *worker) handleRequest(ch contextHolder) error {
 		select {
 		case worker.requestChan <- ch:
 			worker.queuedRequests.Add(-1)
-			metrics.DequeuedWorkerRequest(worker.name)
+			metrics.DequeuedWorkerRequest(server, worker.name)
 			<-ch.frankenPHPContext.done
-			metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
+			metrics.StopWorkerRequest(server, worker.name, time.Since(ch.frankenPHPContext.startedAt))
 
 			return nil
 		case workerScaleChan <- ch.frankenPHPContext:
@@ -333,8 +336,8 @@ func (worker *worker) handleRequest(ch contextHolder) error {
 		case <-timeoutChan(maxWaitTime):
 			// the request has timed out stalling
 			worker.queuedRequests.Add(-1)
-			metrics.DequeuedWorkerRequest(worker.name)
-			metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
+			metrics.DequeuedWorkerRequest(server, worker.name)
+			metrics.StopWorkerRequest(server, worker.name, time.Since(ch.frankenPHPContext.startedAt))
 
 			ch.frankenPHPContext.reject(ErrMaxWaitTimeExceeded)
 

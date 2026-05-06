@@ -32,7 +32,7 @@ func TestPrometheusMetrics_TotalWorkers(t *testing.T) {
 	require.Nil(t, m.workerRequestTime)
 	require.Nil(t, m.workerRequestCount)
 
-	m.TotalWorkers("test_worker", 2)
+	m.TotalWorkers("test_server", "test_worker", 2)
 
 	require.NotNil(t, m.totalWorkers)
 	require.NotNil(t, m.busyWorkers)
@@ -45,8 +45,8 @@ func TestPrometheusMetrics_TotalWorkers(t *testing.T) {
 
 func TestPrometheusMetrics_StopWorkerRequest(t *testing.T) {
 	m := createPrometheusMetrics()
-	m.TotalWorkers("test_worker", 2)
-	m.StopWorkerRequest("test_worker", 2*time.Second)
+	m.TotalWorkers("test_server", "test_worker", 2)
+	m.StopWorkerRequest("test_server", "test_worker", 2*time.Second)
 
 	inputs := []struct {
 		name     string
@@ -62,7 +62,7 @@ func TestPrometheusMetrics_StopWorkerRequest(t *testing.T) {
 				# TYPE frankenphp_worker_request_count counter
 			`,
 			expect: `
-				frankenphp_worker_request_count{worker="test_worker"} 1
+				frankenphp_worker_request_count{server="test_server",worker="test_worker"} 1
 			`,
 		},
 		{
@@ -73,7 +73,7 @@ func TestPrometheusMetrics_StopWorkerRequest(t *testing.T) {
 				# TYPE frankenphp_busy_workers gauge
 			`,
 			expect: `
-				frankenphp_busy_workers{worker="test_worker"} -1
+				frankenphp_busy_workers{server="test_server",worker="test_worker"} -1
 			`,
 		},
 		{
@@ -84,7 +84,7 @@ func TestPrometheusMetrics_StopWorkerRequest(t *testing.T) {
 				# TYPE frankenphp_worker_request_time counter
 			`,
 			expect: `
-				frankenphp_worker_request_time{worker="test_worker"} 2
+				frankenphp_worker_request_time{server="test_server",worker="test_worker"} 2
 			`,
 		},
 	}
@@ -99,8 +99,8 @@ func TestPrometheusMetrics_StopWorkerRequest(t *testing.T) {
 
 func TestPrometheusMetrics_StartWorkerRequest(t *testing.T) {
 	m := createPrometheusMetrics()
-	m.TotalWorkers("test_worker", 2)
-	m.StartWorkerRequest("test_worker")
+	m.TotalWorkers("test_server", "test_worker", 2)
+	m.StartWorkerRequest("test_server", "test_worker")
 
 	inputs := []struct {
 		name     string
@@ -116,7 +116,7 @@ func TestPrometheusMetrics_StartWorkerRequest(t *testing.T) {
 				# TYPE frankenphp_busy_workers gauge
 			`,
 			expect: `
-				frankenphp_busy_workers{worker="test_worker"} 1
+				frankenphp_busy_workers{server="test_server",worker="test_worker"} 1
 			`,
 		},
 	}
@@ -131,8 +131,8 @@ func TestPrometheusMetrics_StartWorkerRequest(t *testing.T) {
 
 func TestPrometheusMetrics_TestStopReasonCrash(t *testing.T) {
 	m := createPrometheusMetrics()
-	m.TotalWorkers("test_worker", 2)
-	m.StopWorker("test_worker", StopReasonCrash)
+	m.TotalWorkers("test_server", "test_worker", 2)
+	m.StopWorker("test_server", "test_worker", StopReasonCrash)
 
 	inputs := []struct {
 		name     string
@@ -159,7 +159,7 @@ func TestPrometheusMetrics_TestStopReasonCrash(t *testing.T) {
 				# TYPE frankenphp_total_workers gauge
 			`,
 			expect: `
-				frankenphp_total_workers{worker="test_worker"} -1
+				frankenphp_total_workers{server="test_server",worker="test_worker"} -1
 			`,
 		},
 		{
@@ -170,7 +170,7 @@ func TestPrometheusMetrics_TestStopReasonCrash(t *testing.T) {
 				# TYPE frankenphp_ready_workers gauge
 			`,
 			expect: `
-				frankenphp_ready_workers{worker="test_worker"} -1
+				frankenphp_ready_workers{server="test_server",worker="test_worker"} -1
 			`,
 		},
 		{
@@ -181,7 +181,7 @@ func TestPrometheusMetrics_TestStopReasonCrash(t *testing.T) {
 				# TYPE frankenphp_worker_crashes counter
 			`,
 			expect: `
-				frankenphp_worker_crashes{worker="test_worker"} 1
+				frankenphp_worker_crashes{server="test_server",worker="test_worker"} 1
 			`,
 		},
 	}

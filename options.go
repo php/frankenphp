@@ -50,6 +50,7 @@ type workerOpt struct {
 	onThreadShutdown       func(int)
 	onServerStartup        func()
 	onServerShutdown       func()
+	scope                  Scope
 }
 
 // WithContext sets the main context to use.
@@ -253,6 +254,18 @@ func WithWorkerOnServerStartup(f func()) WorkerOption {
 func WithWorkerOnServerShutdown(f func()) WorkerOption {
 	return func(w *workerOpt) error {
 		w.onServerShutdown = f
+
+		return nil
+	}
+}
+
+// EXPERIMENTAL: WithWorkerScope assigns this worker to a given scope.
+// The scope is exposed as the "server" label on the worker's Prometheus
+// metrics so workers declared in distinct php_server blocks stay on
+// distinct series. The zero value is the global/embed scope.
+func WithWorkerScope(scope Scope) WorkerOption {
+	return func(w *workerOpt) error {
+		w.scope = scope
 
 		return nil
 	}

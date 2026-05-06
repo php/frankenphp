@@ -828,19 +828,19 @@ func TestWorkerMetrics(t *testing.T) {
 
 	# HELP frankenphp_busy_workers Number of busy PHP workers for this worker
 	# TYPE frankenphp_busy_workers gauge
-	frankenphp_busy_workers{worker="` + workerName + `"} 0
+	frankenphp_busy_workers{server="0",worker="` + workerName + `"} 0
 
 	# HELP frankenphp_total_workers Total number of PHP workers for this worker
 	# TYPE frankenphp_total_workers gauge
-	frankenphp_total_workers{worker="` + workerName + `"} 2
+	frankenphp_total_workers{server="0",worker="` + workerName + `"} 2
 
 	# HELP frankenphp_worker_request_count
 	# TYPE frankenphp_worker_request_count counter
-	frankenphp_worker_request_count{worker="` + workerName + `"} 10
+	frankenphp_worker_request_count{server="0",worker="` + workerName + `"} 10
 
 	# HELP frankenphp_ready_workers Running workers that have successfully called frankenphp_handle_request at least once
 	# TYPE frankenphp_ready_workers gauge
-	frankenphp_ready_workers{worker="` + workerName + `"} 2
+	frankenphp_ready_workers{server="0",worker="` + workerName + `"} 2
 	`
 
 	ctx := caddy.ActiveContext()
@@ -922,19 +922,19 @@ func TestNamedWorkerMetrics(t *testing.T) {
 
 	# HELP frankenphp_busy_workers Number of busy PHP workers for this worker
         # TYPE frankenphp_busy_workers gauge
-        frankenphp_busy_workers{worker="my_app"} 0
+        frankenphp_busy_workers{server="0",worker="my_app"} 0
 
 	# HELP frankenphp_total_workers Total number of PHP workers for this worker
 	# TYPE frankenphp_total_workers gauge
-	frankenphp_total_workers{worker="my_app"} 2
+	frankenphp_total_workers{server="0",worker="my_app"} 2
 
 	# HELP frankenphp_worker_request_count
 	# TYPE frankenphp_worker_request_count counter
-	frankenphp_worker_request_count{worker="my_app"} 10
+	frankenphp_worker_request_count{server="0",worker="my_app"} 10
 
 	# HELP frankenphp_ready_workers Running workers that have successfully called frankenphp_handle_request at least once
 	# TYPE frankenphp_ready_workers gauge
-	frankenphp_ready_workers{worker="my_app"} 2
+	frankenphp_ready_workers{server="0",worker="my_app"} 2
 	`
 
 	ctx := caddy.ActiveContext()
@@ -1018,19 +1018,19 @@ func TestAutoWorkerConfig(t *testing.T) {
 
 	# HELP frankenphp_busy_workers Number of busy PHP workers for this worker
 	# TYPE frankenphp_busy_workers gauge
-	frankenphp_busy_workers{worker="` + workerName + `"} 0
+	frankenphp_busy_workers{server="0",worker="` + workerName + `"} 0
 
 	# HELP frankenphp_total_workers Total number of PHP workers for this worker
 	# TYPE frankenphp_total_workers gauge
-	frankenphp_total_workers{worker="` + workerName + `"} ` + workers + `
+	frankenphp_total_workers{server="0",worker="` + workerName + `"} ` + workers + `
 
 	# HELP frankenphp_worker_request_count
 	# TYPE frankenphp_worker_request_count counter
-	frankenphp_worker_request_count{worker="` + workerName + `"} 10
+	frankenphp_worker_request_count{server="0",worker="` + workerName + `"} 10
 
 	# HELP frankenphp_ready_workers Running workers that have successfully called frankenphp_handle_request at least once
 	# TYPE frankenphp_ready_workers gauge
-	frankenphp_ready_workers{worker="` + workerName + `"} ` + workers + `
+	frankenphp_ready_workers{server="0",worker="` + workerName + `"} ` + workers + `
 	`
 
 	ctx := caddy.ActiveContext()
@@ -1284,7 +1284,7 @@ func TestMaxWaitTimeWorker(t *testing.T) {
 
 	expectedMetrics := `
 	# TYPE frankenphp_worker_queue_depth gauge
-	frankenphp_worker_queue_depth{worker="service"} 0
+	frankenphp_worker_queue_depth{server="0",worker="service"} 0
 	`
 
 	ctx := caddy.ActiveContext()
@@ -1385,21 +1385,21 @@ func TestMultiWorkersMetrics(t *testing.T) {
 
 	# HELP frankenphp_busy_workers Number of busy PHP workers for this worker
 	# TYPE frankenphp_busy_workers gauge
-	frankenphp_busy_workers{worker="service1"} 0
+	frankenphp_busy_workers{server="0",worker="service1"} 0
 
 	# HELP frankenphp_total_workers Total number of PHP workers for this worker
 	# TYPE frankenphp_total_workers gauge
-	frankenphp_total_workers{worker="service1"} 2
-	frankenphp_total_workers{worker="service2"} 3
+	frankenphp_total_workers{server="0",worker="service1"} 2
+	frankenphp_total_workers{server="0",worker="service2"} 3
 
 	# HELP frankenphp_worker_request_count
 	# TYPE frankenphp_worker_request_count counter
-	frankenphp_worker_request_count{worker="service1"} 10
+	frankenphp_worker_request_count{server="0",worker="service1"} 10
 
 	# HELP frankenphp_ready_workers Running workers that have successfully called frankenphp_handle_request at least once
 	# TYPE frankenphp_ready_workers gauge
-	frankenphp_ready_workers{worker="service1"} 2
-	frankenphp_ready_workers{worker="service2"} 3
+	frankenphp_ready_workers{server="0",worker="service1"} 2
+	frankenphp_ready_workers{server="0",worker="service2"} 3
 	`
 
 	ctx := caddy.ActiveContext()
@@ -1552,10 +1552,10 @@ func TestWorkerRestart(t *testing.T) {
 	expectedMetrics := `
 	# HELP frankenphp_ready_workers Running workers that have successfully called frankenphp_handle_request at least once
 	# TYPE frankenphp_ready_workers gauge
-	frankenphp_ready_workers{worker="service"} 1
+	frankenphp_ready_workers{server="0",worker="service"} 1
 	# HELP frankenphp_total_workers Total number of PHP workers for this worker
 	# TYPE frankenphp_total_workers gauge
-	frankenphp_total_workers{worker="service"} 1
+	frankenphp_total_workers{server="0",worker="service"} 1
 	`
 
 	require.NoError(t,
@@ -1580,13 +1580,13 @@ func TestWorkerRestart(t *testing.T) {
 	expectedMetrics = `
 	# HELP frankenphp_ready_workers Running workers that have successfully called frankenphp_handle_request at least once
 	# TYPE frankenphp_ready_workers gauge
-	frankenphp_ready_workers{worker="service"} 1
+	frankenphp_ready_workers{server="0",worker="service"} 1
 	# HELP frankenphp_total_workers Total number of PHP workers for this worker
 	# TYPE frankenphp_total_workers gauge
-	frankenphp_total_workers{worker="service"} 1
+	frankenphp_total_workers{server="0",worker="service"} 1
 	# HELP frankenphp_worker_restarts Number of PHP worker restarts for this worker
 	# TYPE frankenphp_worker_restarts counter
-	frankenphp_worker_restarts{worker="service"} 3
+	frankenphp_worker_restarts{server="0",worker="service"} 3
 	`
 
 	require.NoError(t,
