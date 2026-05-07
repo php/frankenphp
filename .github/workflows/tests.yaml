@@ -96,7 +96,7 @@ jobs:
         if: matrix.php-versions == '8.5'
         with:
           version: latest
-          working-directory: caddy
+          working-directory: caddy/
       - name: Ensure go.mod is tidy
         if: matrix.php-versions == '8.5'
         run: go mod tidy -diff
