@@ -50,6 +50,8 @@ type workerOpt struct {
 	onThreadShutdown       func(int)
 	onServerStartup        func()
 	onServerShutdown       func()
+	isBackgroundWorker     bool
+	scope                  Scope
 }
 
 // WithContext sets the main context to use.
@@ -253,6 +255,32 @@ func WithWorkerOnServerStartup(f func()) WorkerOption {
 func WithWorkerOnServerShutdown(f func()) WorkerOption {
 	return func(w *workerOpt) error {
 		w.onServerShutdown = f
+
+		return nil
+	}
+}
+
+// EXPERIMENTAL: WithWorkerBackground marks this worker as a background
+// (non-HTTP) worker. Background workers run outside the request cycle and
+// share the PHP runtime with HTTP threads but don't serve HTTP requests.
+// They expose a stop pipe via frankenphp_get_worker_handle() so PHP scripts
+// can park on stream_select and exit gracefully when FrankenPHP drains.
+func WithWorkerBackground() WorkerOption {
+	return func(w *workerOpt) error {
+		w.isBackgroundWorker = true
+
+		return nil
+	}
+}
+
+// EXPERIMENTAL: WithWorkerScope assigns this worker to a given scope.
+// Workers in the same scope share a background lookup; each php_server
+// block gets its own scope so workers with the same name in different
+// blocks don't collide. The zero value is the global/embed scope and is
+// the default.
+func WithWorkerScope(scope Scope) WorkerOption {
+	return func(w *workerOpt) error {
+		w.scope = scope
 
 		return nil
 	}

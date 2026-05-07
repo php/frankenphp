@@ -154,11 +154,30 @@ func Config() PHPConfig {
 	}
 }
 
-func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
+func calculateMaxThreads(opt *opt) (numWorkers int, err error) {
 	maxProcs := runtime.GOMAXPROCS(0) * 2
 	maxThreadsFromWorkers := 0
+	// Bg workers reserve their thread budget separately from HTTP
+	// workers so they don't double-count against the HTTP-worker
+	// admission check below; the bump is applied at the end.
+	reservedThreads, reserveErr := reserveBackgroundWorkerThreads(opt)
+	if reserveErr != nil {
+		return 0, reserveErr
+	}
+	defer func() {
+		if err != nil {
+			return
+		}
+		opt.numThreads += reservedThreads
+		opt.maxThreads += reservedThreads
+		numWorkers += reservedThreads
+	}()
 
 	for i, w := range opt.workers {
+		if w.isBackgroundWorker {
+			continue
+		}
+
 		if w.num <= 0 {
 			// https://github.com/php/frankenphp/issues/126
 			opt.workers[i].num = maxProcs
@@ -786,6 +805,7 @@ func resetGlobals() {
 	workers = nil
 	workersByName = nil
 	workersByPath = nil
+	backgroundLookups = nil
 	watcherIsEnabled = false
 	maxIdleTime = defaultMaxIdleTime
 	maxRequestsPerThread = 0
