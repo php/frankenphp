@@ -91,6 +91,12 @@ jobs:
         if: matrix.php-versions == '8.5'
         with:
           version: latest
+      - name: Lint Caddy module Go code
+        uses: golangci/golangci-lint-action@v9
+        if: matrix.php-versions == '8.5'
+        with:
+          version: latest
+          working-directory: caddy/
       - name: Ensure go.mod is tidy
         if: matrix.php-versions == '8.5'
         run: go mod tidy -diff

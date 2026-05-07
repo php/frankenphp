@@ -15,6 +15,7 @@ import (
 	"github.com/caddyserver/caddy/v2/caddytest"
 	"github.com/dunglas/frankenphp"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRestartWorkerViaAdminApi(t *testing.T) {
@@ -245,7 +246,7 @@ func getAdminResponseBody(t *testing.T, tester *caddytest.Tester, method string,
 	r, err := http.NewRequest(method, adminUrl+path, nil)
 	assert.NoError(t, err)
 	resp := tester.AssertResponseCode(r, http.StatusOK)
-	defer resp.Body.Close()
+	defer func() { require.NoError(t, resp.Body.Close()) }()
 	bytes, err := io.ReadAll(resp.Body)
 	assert.NoError(t, err)
 
@@ -319,7 +320,7 @@ func TestAddModuleWorkerViaAdminApi(t *testing.T) {
 	assert.NoError(t, err)
 	r.Header.Set("Content-Type", "text/caddyfile")
 	resp := tester.AssertResponseCode(r, http.StatusOK)
-	defer resp.Body.Close()
+	defer func() { require.NoError(t, resp.Body.Close()) }()
 
 	// Get the updated debug state to check if the worker was added
 	updatedDebugState := getDebugState(t, tester)
