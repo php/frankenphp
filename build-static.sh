@@ -28,57 +28,24 @@ os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 # - SPC_REL_TYPE: Release type to download (accept "source" and "binary", default: "source")
 # - SPC_OPT_BUILD_ARGS: Additional arguments to pass to spc build
 # - SPC_OPT_DOWNLOAD_ARGS: Additional arguments to pass to spc download
-# - SPC_LIBC: Set to glibc to build with GNU toolchain (default: musl)
+# - SPC_TARGET: Set to glibc to build with GNU toolchain (default: native-native-musl)
 
-# init spc command, if we use spc binary, just use it instead of fetching source
-if [ -z "${SPC_REL_TYPE}" ]; then
-	SPC_REL_TYPE="source"
-fi
-# init spc libc
-if [ -z "${SPC_LIBC}" ]; then
-	if [ "${os}" = "linux" ]; then
-		SPC_LIBC="musl"
-	fi
-fi
-# init spc build additional args
-if [ -z "${SPC_OPT_BUILD_ARGS}" ]; then
-	SPC_OPT_BUILD_ARGS=""
-fi
-if [ "${SPC_LIBC}" = "musl" ] && [[ "${SPC_OPT_BUILD_ARGS}" != *"--disable-opcache-jit"* ]]; then
-	SPC_OPT_BUILD_ARGS="${SPC_OPT_BUILD_ARGS} --disable-opcache-jit"
-fi
-# init spc download additional args
-if [ -z "${SPC_OPT_DOWNLOAD_ARGS}" ]; then
-	SPC_OPT_DOWNLOAD_ARGS="--ignore-cache-sources=php-src --retry 5"
-	if [ "${SPC_LIBC}" = "musl" ]; then
-		SPC_OPT_DOWNLOAD_ARGS="${SPC_OPT_DOWNLOAD_ARGS} --prefer-pre-built"
-	fi
-fi
-# if we need debug symbols, disable strip
-if [ -n "${DEBUG_SYMBOLS}" ]; then
-	SPC_OPT_BUILD_ARGS="${SPC_OPT_BUILD_ARGS} --no-strip"
-fi
-# php version to build
-if [ -z "${PHP_VERSION}" ]; then
-	get_latest_php_version() {
-		input="$1"
-		json=$(curl -fsSL "https://www.php.net/releases/index.php?json&version=$input" 2>/dev/null || curl -fsSL "https://phpmirror.static-php.dev/releases/index.php?json&version=$input")
-		latest=$(echo "$json" | jq -r '.version')
-
-		if [[ "$latest" == "$input"* ]]; then
-			echo "$latest"
-		else
-			echo "$input"
-		fi
-	}
-
-	PHP_VERSION="$(get_latest_php_version "8.5")"
-	export PHP_VERSION
-fi
-# default extension set
+# [init] spc command, if we use spc binary, just use it instead of fetching source
+SPC_REL_TYPE="${SPC_REL_TYPE:-source}"
+# [init] spc download args (default: --dl-retry 5 --dl-parallel 10 --dl-ignore-cache php-src --dl-custom-local frankenphp:${CURRENT_DIR})
+SPC_OPT_DOWNLOAD_ARGS="${SPC_OPT_DOWNLOAD_ARGS:---dl-retry 5 --dl-ignore-cache php-src --dl-custom-local frankenphp:${CURRENT_DIR}}"
+# [init] spc build args (default: empty)
+SPC_OPT_BUILD_ARGS="${SPC_OPT_BUILD_ARGS:-}"
+# [init] default PHP version (default: 8.5)
+PHP_VERSION="${PHP_VERSION:-8.5}"
+# [init] default extensions and libs
 defaultExtensions="amqp,apcu,ast,bcmath,brotli,bz2,calendar,ctype,curl,dba,dom,exif,fileinfo,filter,ftp,gd,gmp,gettext,iconv,igbinary,imagick,intl,ldap,lz4,mbregex,mbstring,memcached,mysqli,mysqlnd,opcache,openssl,password-argon2,parallel,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,protobuf,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,ssh2,sysvmsg,sysvsem,sysvshm,tidy,tokenizer,xlswriter,xml,xmlreader,xmlwriter,xsl,xz,zip,zlib,yaml,zstd"
 defaultExtensionLibs="libavif,nghttp2,nghttp3,ngtcp2,watcher"
 
+# [process] if DEBUG_SYMBOLS is set, add --no-strip to build args
+SPC_OPT_BUILD_ARGS="${SPC_OPT_BUILD_ARGS}${DEBUG_SYMBOLS:+ --no-strip}"
+
+# [process] parse frankenphp version, if not set, may use git commit, tag, or branch
 if [ -z "${FRANKENPHP_VERSION}" ]; then
 	FRANKENPHP_VERSION="$(git rev-parse --verify HEAD)"
 	export FRANKENPHP_VERSION
@@ -132,7 +99,7 @@ if [ "${SPC_REL_TYPE}" = "binary" ]; then
 	else
 		dl_arch="${arch}"
 	fi
-	curl -o spc -fsSL "https://dl.static-php.dev/static-php-cli/spc-bin/nightly/spc-linux-${dl_arch}"
+	curl -o spc -fsSL "https://dl.static-php.dev/v3/spc-bin/nightly/spc-linux-${dl_arch}"
 	chmod +x spc
 	spcCommand="./spc"
 elif [ -d "static-php-cli/src" ]; then
@@ -141,7 +108,7 @@ elif [ -d "static-php-cli/src" ]; then
 	composer install --no-dev -a --no-interaction
 	spcCommand="./bin/spc"
 else
-	git clone --depth 1 https://github.com/crazywhalecc/static-php-cli --branch main
+	git clone --depth 1 https://github.com/crazywhalecc/static-php-cli --branch v3-docs/readme
 	cd static-php-cli/
 	composer install --no-dev -a --no-interaction
 	spcCommand="./bin/spc"
@@ -188,13 +155,12 @@ if [ -n "${EMBED}" ] && [ -d "${EMBED}" ]; then
 	SPC_OPT_BUILD_ARGS="${SPC_OPT_BUILD_ARGS} --with-frankenphp-app='${EMBED}'"
 fi
 
-SPC_OPT_INSTALL_ARGS="go-xcaddy"
+SPC_OPT_INSTALL_ARGS=""
 if [ -z "${DEBUG_SYMBOLS}" ] && [ -z "${NO_COMPRESS}" ] && [ "${os}" = "linux" ]; then
 	SPC_OPT_BUILD_ARGS="${SPC_OPT_BUILD_ARGS} --with-upx-pack"
 	SPC_OPT_INSTALL_ARGS="${SPC_OPT_INSTALL_ARGS} upx"
 fi
 
-export SPC_DEFAULT_C_FLAGS="-fPIC -O2"
 if [ -n "${DEBUG_SYMBOLS}" ]; then
 	SPC_CMD_VAR_PHP_MAKE_EXTRA_CFLAGS="${SPC_CMD_VAR_PHP_MAKE_EXTRA_CFLAGS} -fPIE -g"
 else
@@ -210,11 +176,8 @@ ${spcCommand} doctor --auto-fix
 for pkg in ${SPC_OPT_INSTALL_ARGS}; do
 	${spcCommand} install-pkg "${pkg}"
 done
-# shellcheck disable=SC2086
-${spcCommand} download --with-php="${PHP_VERSION}" --for-extensions="${PHP_EXTENSIONS}" --for-libs="${PHP_EXTENSION_LIBS}" ${SPC_OPT_DOWNLOAD_ARGS}
-export FRANKENPHP_SOURCE_PATH="${CURRENT_DIR}"
 # shellcheck disable=SC2086,SC2090
-${spcCommand} build --enable-zts --build-embed --build-frankenphp ${SPC_OPT_BUILD_ARGS} "${PHP_EXTENSIONS}" --with-libs="${PHP_EXTENSION_LIBS}"
+${spcCommand} build:frankenphp --enable-zts ${SPC_OPT_DOWNLOAD_ARGS} ${SPC_OPT_BUILD_ARGS} "${PHP_EXTENSIONS}" --with-libs="${PHP_EXTENSION_LIBS}"
 
 if [ -n "$CI" ]; then
 	rm -rf ./downloads
