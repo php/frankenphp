@@ -315,7 +315,7 @@ Se você quiser usar HTTPS com o endereço IP `127.0.0.1` em vez do nome de host
 Ao usar HTTP/1.x, pode ser desejável habilitar o modo full-duplex para permitir a gravação de uma resposta antes que o corpo inteiro
 tenha sido lido. (por exemplo: [Mercure](mercure.md), WebSocket, Server-Sent Events, etc.)
 
-Esta é uma configuração de adesão que precisa ser adicionada às opções globais no `Caddyfile`:
+Esta é uma configuração opcional que precisa ser adicionada às opções globais no `Caddyfile`:
 
 ```caddyfile
 {

@@ -1,4 +1,4 @@
-# Usando el Modo Clásico
+# Usando el modo clásico
 
 Sin ninguna configuración adicional, FrankenPHP opera en modo clásico. En este modo, FrankenPHP funciona como un servidor PHP tradicional, sirviendo directamente archivos PHP. Esto lo convierte en un reemplazo directo para PHP-FPM o Apache con mod_php.
 

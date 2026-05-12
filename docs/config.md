@@ -5,7 +5,7 @@ description: Configure FrankenPHP and Caddy via Caddyfile, JSON, or environment 
 
 # Configuration
 
-FrankenPHP, Caddy as well as the [Mercure](mercure.md) and [Vulcain](https://vulcain.rocks) modules can be configured using [the formats supported by Caddy](https://caddyserver.com/docs/getting-started#your-first-config).
+FrankenPHP, Caddy, as well as the [Mercure](mercure.md) and [Vulcain](https://vulcain.rocks) modules, can be configured using [the formats supported by Caddy](https://caddyserver.com/docs/getting-started#your-first-config).
 
 The most common format is the `Caddyfile`, which is a simple, human-readable text format.
 By default, FrankenPHP will look for a `Caddyfile` in the current directory.
@@ -338,7 +338,7 @@ If you want to use HTTPS with the `127.0.0.1` IP address instead of the `localho
 ### Full duplex (HTTP/1)
 
 When using HTTP/1.x, it may be desirable to enable full-duplex mode to allow writing a response before the entire body
-has been read. (for example: [Mercure](mercure.md), WebSocket, Server-Sent Events, etc.)
+has been read (for example: [Mercure](mercure.md), WebSocket, Server-Sent Events, etc.).
 
 This is an opt-in configuration that needs to be added to the global options in the `Caddyfile`:
 

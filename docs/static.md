@@ -47,7 +47,7 @@ docker buildx bake --load static-builder-gnu
 docker cp $(docker create --name static-builder-gnu dunglas/frankenphp:static-builder-gnu):/go/src/app/dist/frankenphp-linux-$(uname -m) frankenphp ; docker rm static-builder-gnu
 ```
 
-This binary supports all glibc versions 2.17 and superior but does not run on musl-based systems (like Alpine Linux).
+This binary supports all glibc versions 2.17 and higher but does not run on musl-based systems (like Alpine Linux).
 
 The resulting mostly static (except `glibc`) binary is named `frankenphp` and is available in the current directory.
 

@@ -92,7 +92,7 @@ COPY --from=builder /usr/local/bin/frankenphp /usr/local/bin/frankenphp
 ```
 
 The `builder` image provided by FrankenPHP contains a compiled version of `libphp`.
-[Builders images](https://hub.docker.com/r/dunglas/frankenphp/tags?name=builder) are provided for all versions of FrankenPHP and PHP, both for Debian and Alpine.
+[Builder images](https://hub.docker.com/r/dunglas/frankenphp/tags?name=builder) are provided for all versions of FrankenPHP and PHP, both for Debian and Alpine.
 
 > [!TIP]
 >
@@ -121,7 +121,7 @@ docker run -v $PWD:/app/public -p 80:80 -p 443:443 -p 443:443/udp --tty my-php-a
 
 > [!TIP]
 >
-> The `--tty` option allows to have nice human-readable logs instead of JSON logs.
+> The `--tty` option provides nice human-readable logs instead of JSON logs.
 
 With Docker Compose:
 
@@ -143,7 +143,7 @@ services:
       - ./:/app/public
       - caddy_data:/data
       - caddy_config:/config
-    # comment the following line in production, it allows to have nice human-readable logs in dev
+    # comment the following line in production, it provides nice human-readable logs in dev
     tty: true
 
 # Volumes needed for Caddy certificates and configuration

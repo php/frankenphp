@@ -24,13 +24,13 @@ The following extensions have known bugs and unexpected behaviors when used with
 
 ## get_browser
 
-The [get_browser()](https://www.php.net/manual/function.get-browser.php) function seems to perform badly after a while. A workaround is to cache (e.g. with [APCu](https://www.php.net/manual/book.apcu.php)) the results per User Agent, as they are static.
+The [get_browser()](https://www.php.net/manual/function.get-browser.php) function seems to perform badly after a while. A workaround is to cache (e.g. with [APCu](https://www.php.net/manual/book.apcu.php)) the results per user agent, as they are static.
 
 ## Standalone binary and Alpine-based Docker images
 
 The fully static binary and Alpine-based Docker images (`dunglas/frankenphp:*-alpine`) use [musl libc](https://musl.libc.org/) instead of [glibc and friends](https://www.etalabs.net/compare_libcs.html), to keep a smaller binary size.
 This may lead to some compatibility issues.
-In particular, the glob flag `GLOB_BRACE` is [not available](https://www.php.net/manual/function.glob.php)
+In particular, the glob flag `GLOB_BRACE` is [not available](https://www.php.net/manual/function.glob.php).
 
 Prefer using the GNU variant of the static binary and Debian-based Docker images if you encounter issues.
 

@@ -3,7 +3,7 @@
 Por defecto, FrankenPHP intenta ofrecer un buen compromiso entre rendimiento y facilidad de uso.
 Sin embargo, es posible mejorar sustancialmente el rendimiento usando una configuración adecuada.
 
-## Número de Hilos y Workers
+## Número de hilos y workers
 
 Por defecto, FrankenPHP inicia 2 veces más hilos y workers (en modo worker) que el número de CPUs disponibles.
 
@@ -19,19 +19,19 @@ Para cambiar el número de workers, usa la opción `num` de la sección `worker`
 ### `max_threads`
 
 Aunque siempre es mejor saber exactamente cómo será tu tráfico, las aplicaciones reales tienden a ser más impredecibles.
-La configuración `max_threads` [configuración](config.md#caddyfile-config) permite a FrankenPHP generar automáticamente hilos adicionales en tiempo de ejecución hasta el límite especificado.
+La [configuración `max_threads`](config.md#caddyfile-config) permite a FrankenPHP generar automáticamente hilos adicionales en tiempo de ejecución hasta el límite especificado.
 `max_threads` puede ayudarte a determinar cuántos hilos necesitas para manejar tu tráfico y puede hacer que el servidor sea más resiliente a picos de latencia.
 Si se establece en `auto`, el límite se estimará en función del `memory_limit` en tu `php.ini`. Si no puede hacerlo,
 `auto` se establecerá por defecto en 2x `num_threads`. Ten en cuenta que `auto` puede subestimar fuertemente el número de hilos necesarios.
 `max_threads` es similar a [pm.max_children](https://www.php.net/manual/install.fpm.configuration.php#pm.max-children) de PHP FPM. La principal diferencia es que FrankenPHP usa hilos en lugar de procesos y los delega automáticamente entre diferentes scripts de worker y el 'modo clásico' según sea necesario.
 
-## Modo Worker
+## Modo worker
 
 Habilitar [el modo worker](worker.md) mejora drásticamente el rendimiento,
 pero tu aplicación debe adaptarse para ser compatible con este modo:
 debes crear un script de worker y asegurarte de que la aplicación no tenga fugas de memoria.
 
-## No Usar musl
+## No usar musl
 
 La variante Alpine Linux de las imágenes Docker oficiales y los binarios predeterminados que proporcionamos usan [la libc musl](https://musl.libc.org).
 
@@ -44,7 +44,7 @@ En entornos de producción, recomendamos usar FrankenPHP vinculado a glibc, comp
 
 Esto se puede lograr usando las imágenes Docker de Debian, usando los paquetes de nuestros mantenedores [.deb](https://debs.henderkes.com) o [.rpm](https://rpms.henderkes.com), o [compilando FrankenPHP desde las fuentes](compile.md).
 
-## Configuración del Runtime de Go
+## Configuración del runtime de Go
 
 FrankenPHP está escrito en Go.
 
@@ -110,7 +110,7 @@ route {
 }
 ```
 
-## Marcadores de Posición (Placeholders)
+## Marcadores de posición (placeholders)
 
 Puedes usar [marcadores de posición](https://caddyserver.com/docs/conventions#placeholders) en las directivas `root` y `env`.
 Sin embargo, esto evita el almacenamiento en caché de estos valores y conlleva un costo significativo de rendimiento.
@@ -131,7 +131,7 @@ php_server {
 Esto mejorará el rendimiento si la directiva `root` contiene [marcadores de posición](https://caddyserver.com/docs/conventions#placeholders).
 La ganancia será negligible en otros casos.
 
-## Registros (Logs)
+## Registros (logs)
 
 El registro es obviamente muy útil, pero, por definición,
 requiere operaciones de E/S y asignaciones de memoria, lo que reduce considerablemente el rendimiento.
@@ -153,7 +153,7 @@ En particular:
 Para más detalles, lee [la entrada de documentación dedicada de Symfony](https://symfony.com/doc/current/performance.html)
 (la mayoría de los consejos son útiles incluso si no usas Symfony).
 
-## Dividiendo el Pool de Hilos
+## Dividiendo el pool de hilos
 
 Es común que las aplicaciones interactúen con servicios externos lentos, como una
 API que tiende a ser poco confiable bajo alta carga o que consistentemente tarda 10+ segundos en responder.

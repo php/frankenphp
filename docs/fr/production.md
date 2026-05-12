@@ -1,4 +1,4 @@
-# Déploiement en Production
+# Déploiement en production
 
 Dans ce tutoriel, nous apprendrons comment déployer une application PHP sur un serveur unique en utilisant Docker Compose.
 
@@ -73,7 +73,7 @@ Pour déployer votre application en production, vous avez besoin d'un serveur.
 Dans ce tutoriel, nous utiliserons une machine virtuelle fournie par DigitalOcean, mais n'importe quel serveur Linux peut fonctionner.
 Si vous avez déjà un serveur Linux avec Docker installé, vous pouvez passer directement à [la section suivante](#configurer-un-nom-de-domaine).
 
-Sinon, utilisez [ce lien affilié](https://m.do.co/c/5d8aabe3ab80) pour obtenir 200$ de crédit gratuit, créez un compte, puis cliquez sur "Créer un Droplet".
+Sinon, utilisez [ce lien affilié](https://m.do.co/c/5d8aabe3ab80) pour obtenir 200 $ de crédit gratuit, créez un compte, puis cliquez sur "Créer un Droplet".
 Ensuite, cliquez sur l'onglet "Marketplace" sous la section "Choisir une image" et recherchez l'application nommée "Docker".
 Cela provisionnera un serveur Ubuntu avec les dernières versions de Docker et Docker Compose déjà installées !
 
@@ -159,7 +159,7 @@ ou le [middleware `trustedproxies`](https://laravel.com/docs/trustedproxy) pour 
 Sans ces deux configurations, les en-têtes tels que `X-Forwarded-For` et `X-Forwarded-Proto` seront ignorés,
 ce qui peut entraîner des problèmes tels qu'une détection HTTPS incorrecte ou des adresses IP client erronées.
 
-## Déploiement sur Plusieurs Nœuds
+## Déploiement sur plusieurs nœuds
 
 Si vous souhaitez déployer votre application sur un cluster de machines, vous pouvez utiliser [Docker Swarm](https://docs.docker.com/engine/swarm/stack-deploy/), qui est compatible avec les fichiers Compose fournis.
 Pour un déploiement sur Kubernetes, jetez un œil au [Helm chart fourni avec API Platform](https://api-platform.com/docs/deployment/kubernetes/), qui utilise FrankenPHP.

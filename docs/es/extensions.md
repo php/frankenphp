@@ -1,4 +1,4 @@
-# Escribir Extensiones PHP en Go
+# Escribir extensiones PHP en Go
 
 Con FrankenPHP, puedes **escribir extensiones PHP en Go**, lo que te permite crear **funciones nativas de alto rendimiento** que pueden ser llamadas directamente desde PHP. Tus aplicaciones pueden aprovechar cualquier biblioteca Go existente o nueva, así como el famoso modelo de concurrencia de **goroutines directamente desde tu código PHP**.
 
@@ -6,16 +6,16 @@ Escribir extensiones PHP típicamente se hace en C, pero también es posible esc
 
 Gracias a los módulos de Caddy, puedes escribir extensiones PHP en Go e integrarlas muy rápidamente en FrankenPHP.
 
-## Dos Enfoques
+## Dos enfoques
 
 FrankenPHP proporciona dos formas de crear extensiones PHP en Go:
 
-1. **Usando el Generador de Extensiones** - El enfoque recomendado que genera todo el código repetitivo necesario para la mayoría de los casos de uso, permitiéndote enfocarte en escribir tu código Go.
-2. **Implementación Manual** - Control total sobre la estructura de la extensión para casos de uso avanzados.
+1. **Usando el generador de extensiones**: el enfoque recomendado que genera todo el código repetitivo necesario para la mayoría de los casos de uso, permitiéndote enfocarte en escribir tu código Go.
+2. **Implementación manual**: control total sobre la estructura de la extensión para casos de uso avanzados.
 
 Comenzaremos con el enfoque del generador ya que es la forma más fácil de empezar, luego mostraremos la implementación manual para aquellos que necesitan un control completo.
 
-## Usando el Generador de Extensiones
+## Usando el generador de extensiones
 
 FrankenPHP incluye una herramienta que te permite **crear una extensión PHP** usando solo Go. **No necesitas escribir código C** ni usar CGO directamente: FrankenPHP también incluye una **API de tipos públicos** para ayudarte a escribir tus extensiones en Go sin tener que preocuparte por **la manipulación de tipos entre PHP/C y Go**.
 
@@ -24,11 +24,11 @@ FrankenPHP incluye una herramienta que te permite **crear una extensión PHP** u
 
 Ten en cuenta que esta herramienta **no es un generador de extensiones completo**. Está diseñada para ayudarte a escribir extensiones simples en Go, pero no proporciona las características más avanzadas de las extensiones PHP. Si necesitas escribir una extensión más **compleja y optimizada**, es posible que necesites escribir algo de código C o usar CGO directamente.
 
-### Requisitos Previos
+### Requisitos previos
 
 Como se cubre en la sección de implementación manual a continuación, necesitas [obtener las fuentes de PHP](https://www.php.net/downloads.php) y crear un nuevo módulo Go.
 
-#### Crear un Nuevo Módulo y Obtener las Fuentes de PHP
+#### Crear un nuevo módulo y obtener las fuentes de PHP
 
 El primer paso para escribir una extensión PHP en Go es crear un nuevo módulo Go. Puedes usar el siguiente comando para esto:
 
@@ -42,7 +42,7 @@ El segundo paso es [obtener las fuentes de PHP](https://www.php.net/downloads.ph
 tar xf php-*
 ```
 
-### Escribiendo la Extensión
+### Escribiendo la extensión
 
 Todo está listo para escribir tu función nativa en Go. Crea un nuevo archivo llamado `stringext.go`. Nuestra primera función tomará una cadena como argumento, el número de veces para repetirla, un booleano para indicar si invertir la cadena, y devolverá la cadena resultante. Esto debería verse así:
 
@@ -82,12 +82,12 @@ Hay dos cosas importantes a tener en cuenta aquí:
 
 Mientras que el primer punto se explica por sí mismo, el segundo puede ser más difícil de entender. Profundicemos en la manipulación de tipos en la siguiente sección.
 
-### Manipulación de Tipos
+### Manipulación de tipos
 
 Aunque algunos tipos de variables tienen la misma representación en memoria entre C/PHP y Go, algunos tipos requieren más lógica para ser usados directamente. Esta es quizá la parte más difícil cuando se trata de escribir extensiones porque requiere entender los internos del motor Zend y cómo se almacenan las variables internamente en PHP.
 Esta tabla resume lo que necesitas saber:
 
-| Tipo PHP           | Tipo Go                       | Conversión directa | Helper de C a Go                  | Helper de Go a C                   | Soporte para Métodos de Clase |
+| Tipo PHP           | Tipo Go                       | Conversión directa | Helper de C a Go                  | Helper de Go a C                   | Soporte para métodos de clase |
 | ------------------ | ----------------------------- | ------------------ | --------------------------------- | ---------------------------------- | ----------------------------- |
 | `int`              | `int64`                       | ✅                 | -                                 | -                                  | ✅                            |
 | `?int`             | `*int64`                      | ✅                 | -                                 | -                                  | ✅                            |
@@ -111,7 +111,7 @@ Esta tabla resume lo que necesitas saber:
 
 Si te refieres al fragmento de código de la sección anterior, puedes ver que se usan helpers para convertir el primer parámetro y el valor de retorno. El segundo y tercer parámetro de nuestra función `repeat_this()` no necesitan ser convertidos ya que la representación en memoria de los tipos subyacentes es la misma para C y Go.
 
-#### Trabajando con Arrays
+#### Trabajando con arrays
 
 FrankenPHP proporciona soporte nativo para arrays PHP a través de `frankenphp.AssociativeArray` o conversión directa a un mapa o slice.
 
@@ -201,10 +201,10 @@ func process_data_packed(arr *C.zend_array) unsafe.Pointer {
 - **Pares clave-valor ordenados** - Opción para mantener el orden del array asociativo
 - **Optimizado para múltiples casos** - Opción para prescindir del orden para un mejor rendimiento o convertir directamente a un slice
 - **Detección automática de listas** - Al convertir a PHP, detecta automáticamente si el array debe ser una lista empaquetada o un mapa hash
-- **Arrays Anidados** - Los arrays pueden estar anidados y convertirán automáticamente todos los tipos soportados (`int64`, `float64`, `string`, `bool`, `nil`, `AssociativeArray`, `map[string]any`, `[]any`)
-- **Objetos no soportados** - Actualmente, solo se pueden usar tipos escalares y arrays como valores. Proporcionar un objeto resultará en un valor `null` en el array PHP.
+- **Arrays anidados**: los arrays pueden estar anidados y convertirán automáticamente todos los tipos soportados (`int64`, `float64`, `string`, `bool`, `nil`, `AssociativeArray`, `map[string]any`, `[]any`)
+- **Objetos no soportados**: actualmente, solo se pueden usar tipos escalares y arrays como valores. Proporcionar un objeto resultará en un valor `null` en el array PHP.
 
-##### Métodos Disponibles: Empaquetados y Asociativos
+##### Métodos disponibles: empaquetados y asociativos
 
 - `frankenphp.PHPAssociativeArray(arr frankenphp.AssociativeArray) unsafe.Pointer` - Convertir a un array PHP ordenado con pares clave-valor
 - `frankenphp.PHPMap(arr map[string]any) unsafe.Pointer` - Convertir un mapa a un array PHP no ordenado con pares clave-valor
@@ -214,7 +214,7 @@ func process_data_packed(arr *C.zend_array) unsafe.Pointer {
 - `frankenphp.GoPackedArray(arr unsafe.Pointer) []any` - Convertir un array PHP a un slice Go
 - `frankenphp.IsPacked(zval *C.zend_array) bool` - Verificar si un array PHP está empaquetado (solo indexado) o es asociativo (pares clave-valor)
 
-### Trabajando con Callables
+### Trabajando con callables
 
 FrankenPHP proporciona una forma de trabajar con callables de PHP usando el helper `frankenphp.CallPHPCallable`. Esto te permite llamar a funciones o métodos de PHP desde código Go.
 
@@ -250,7 +250,7 @@ $result = my_array_map(['hola', 'mundo'], 'strtoupper');
 // $result será ['HOLA', 'MUNDO']
 ```
 
-### Declarando una Clase Nativa de PHP
+### Declarando una clase nativa de PHP
 
 El generador soporta la declaración de **clases opacas** como estructuras Go, que pueden usarse para crear objetos PHP. Puedes usar el comentario de directiva `//export_php:class` para definir una clase PHP. Por ejemplo:
 
@@ -264,19 +264,19 @@ type UserStruct struct {
 }
 ```
 
-#### ¿Qué son las Clases Opaque?
+#### ¿Qué son las clases opacas?
 
 Las **clases opacas** son clases donde la estructura interna (propiedades) está oculta del código PHP. Esto significa:
 
-- **Sin acceso directo a propiedades**: No puedes leer o escribir propiedades directamente desde PHP (`$user->name` no funcionará)
-- **Interfaz solo de métodos** - Todas las interacciones deben pasar a través de los métodos que defines
-- **Mejor encapsulación** - La estructura de datos interna está completamente controlada por el código Go
-- **Seguridad de tipos** - Sin riesgo de que el código PHP corrompa el estado interno con tipos incorrectos
-- **API más limpia** - Obliga a diseñar una interfaz pública adecuada
+- **Sin acceso directo a propiedades**: no puedes leer o escribir propiedades directamente desde PHP (`$user->name` no funcionará)
+- **Interfaz solo de métodos**: todas las interacciones deben pasar a través de los métodos que defines
+- **Mejor encapsulación**: la estructura de datos interna está completamente controlada por el código Go
+- **Seguridad de tipos**: sin riesgo de que el código PHP corrompa el estado interno con tipos incorrectos
+- **API más limpia**: obliga a diseñar una interfaz pública adecuada
 
 Este enfoque proporciona una mejor encapsulación y evita que el código PHP corrompa accidentalmente el estado interno de tus objetos Go. Todas las interacciones con el objeto deben pasar a través de los métodos que defines explícitamente.
 
-#### Añadiendo Métodos a las Clases
+#### Añadiendo métodos a las clases
 
 Dado que las propiedades no son directamente accesibles, **debes definir métodos** para interactuar con tus clases opacas. Usa la directiva `//export_php:method` para definir el comportamiento:
 
@@ -318,7 +318,7 @@ func (us *UserStruct) SetNamePrefix(prefix *C.zend_string) {
 }
 ```
 
-#### Parámetros Nulos
+#### Parámetros nulos
 
 El generador soporta parámetros nulos usando el prefijo `?` en las firmas de PHP. Cuando un parámetro es nulo, se convierte en un puntero en tu función Go, permitiéndote verificar si el valor era `null` en PHP:
 
@@ -354,10 +354,10 @@ func (us *UserStruct) UpdateInfo(name *C.zend_string, age *int64, active *bool) 
 
 **Puntos clave sobre parámetros nulos:**
 
-- **Tipos primitivos nulos** (`?int`, `?float`, `?bool`) se convierten en punteros (`*int64`, `*float64`, `*bool`) en Go
-- **Strings nulos** (`?string`) permanecen como `*C.zend_string` pero pueden ser `nil`
+- **Tipos primitivos nulos** (`?int`, `?float`, `?bool`): se convierten en punteros (`*int64`, `*float64`, `*bool`) en Go
+- **Strings nulos** (`?string`): permanecen como `*C.zend_string` pero pueden ser `nil`
 - **Verificar `nil`** antes de desreferenciar valores de puntero
-- **`null` de PHP se convierte en `nil` de Go** - cuando PHP pasa `null`, tu función Go recibe un puntero `nil`
+- **`null` de PHP se convierte en `nil` de Go**: cuando PHP pasa `null`, tu función Go recibe un puntero `nil`
 
 > [!CAUTION]
 >
@@ -388,11 +388,11 @@ $user->updateInfo(null, 25, null);          // Name y active son null
 
 Este diseño asegura que tu código Go tenga control completo sobre cómo se accede y modifica el estado del objeto, proporcionando una mejor encapsulación y seguridad de tipos.
 
-### Declarando Constantes
+### Declarando constantes
 
 El generador soporta exportar constantes Go a PHP usando dos directivas: `//export_php:const` para constantes globales y `//export_php:classconst` para constantes de clase. Esto te permite compartir valores de configuración, códigos de estado y otras constantes entre código Go y PHP.
 
-#### Constantes Globales
+#### Constantes globales
 
 Usa la directiva `//export_php:const` para crear constantes globales de PHP:
 
@@ -412,7 +412,7 @@ const STATUS_OK = iota
 const STATUS_ERROR = iota
 ```
 
-#### Constantes de Clase
+#### Constantes de clase
 
 Usa la directiva `//export_php:classconst ClassName` para crear constantes que pertenecen a una clase PHP específica:
 
@@ -517,11 +517,11 @@ func (sp *StringProcessorStruct) Process(input *C.zend_string, mode int64) unsaf
 }
 ```
 
-### Usando Espacios de Nombres
+### Usando espacios de nombres
 
 El generador soporta organizar las funciones, clases y constantes de tu extensión PHP bajo un espacio de nombres usando la directiva `//export_php:namespace`. Esto ayuda a evitar conflictos de nombres y proporciona una mejor organización para la API de tu extensión.
 
-#### Declarando un Espacio de Nombres
+#### Declarando un espacio de nombres
 
 Usa la directiva `//export_php:namespace` al inicio de tu archivo Go para colocar todos los símbolos exportados bajo un espacio de nombres específico:
 
@@ -537,7 +537,7 @@ import (
 
 //export_php:function hello(): string
 func hello() string {
-    return "Hola desde el espacio de nombres Mi\\Extensión!"
+    return "¡Hola desde el espacio de nombres Mi\\Extensión!"
 }
 
 //export_php:class User
@@ -554,14 +554,14 @@ func (u *UserStruct) GetName() unsafe.Pointer {
 const STATUS_ACTIVE = 1
 ```
 
-#### Usando la Extensión con Espacio de Nombres en PHP
+#### Usando la extensión con espacio de nombres en PHP
 
 Cuando se declara un espacio de nombres, todas las funciones, clases y constantes se colocan bajo ese espacio de nombres en PHP:
 
 ```php
 <?php
 
-echo Mi\Extensión\hello(); // "Hola desde el espacio de nombres Mi\Extensión!"
+echo Mi\Extensión\hello(); // "¡Hola desde el espacio de nombres Mi\Extensión!"
 
 $user = new Mi\Extensión\User();
 echo $user->getName(); // "John Doe"
@@ -569,14 +569,14 @@ echo $user->getName(); // "John Doe"
 echo Mi\Extensión\STATUS_ACTIVE; // 1
 ```
 
-#### Notas Importantes
+#### Notas importantes
 
 - Solo se permite **una** directiva de espacio de nombres por archivo. Si se encuentran múltiples directivas de espacio de nombres, el generador devolverá un error.
 - El espacio de nombres se aplica a **todos** los símbolos exportados en el archivo: funciones, clases, métodos y constantes.
 - Los nombres de espacios de nombres siguen las convenciones de espacios de nombres de PHP usando barras invertidas (`\`) como separadores.
 - Si no se declara un espacio de nombres, los símbolos se exportan al espacio de nombres global como de costumbre.
 
-### Generando la Extensión
+### Generando la extensión
 
 Aquí es donde ocurre la magia, y tu extensión ahora puede ser generada. Puedes ejecutar el generador con el siguiente comando:
 
@@ -589,7 +589,7 @@ GEN_STUB_SCRIPT=php-src/build/gen_stub.php frankenphp extension-init mi_extensi�
 
 Si todo salió bien, se debería haber creado un nuevo directorio llamado `build`. Este directorio contiene los archivos generados para tu extensión, incluyendo el archivo `mi_extensión.go` con los stubs de funciones PHP generadas.
 
-### Integrando la Extensión Generada en FrankenPHP
+### Integrando la extensión generada en FrankenPHP
 
 Nuestra extensión ahora está lista para ser compilada e integrada en FrankenPHP. Para hacerlo, consulta la documentación de [compilación de FrankenPHP](compile.md) para aprender cómo compilar FrankenPHP. Agrega el módulo usando la bandera `--with`, apuntando a la ruta de tu módulo:
 
@@ -605,7 +605,7 @@ xcaddy build \
 
 Ten en cuenta que apuntas al subdirectorio `/build` que se creó durante el paso de generación. Sin embargo, esto no es obligatorio: también puedes copiar los archivos generados a tu directorio de módulo y apuntar a él directamente.
 
-### Probando tu Extensión Generada
+### Probando tu extensión generada
 
 Puedes crear un archivo PHP para probar las funciones y clases que has creado. Por ejemplo, crea un archivo `index.php` con el siguiente contenido:
 
@@ -623,15 +623,15 @@ echo $processor->process('Hola Mundo', StringProcessor::MODE_UPPERCASE);  // "HO
 
 Una vez que hayas integrado tu extensión en FrankenPHP como se demostró en la sección anterior, puedes ejecutar este archivo de prueba usando `./frankenphp php-server`, y deberías ver tu extensión funcionando.
 
-## Implementación Manual
+## Implementación manual
 
 Si quieres entender cómo funcionan las extensiones o necesitas un control total sobre tu extensión, puedes escribirlas manualmente. Este enfoque te da control completo pero requiere más código repetitivo.
 
-### Función Básica
+### Función básica
 
 Veremos cómo escribir una extensión PHP simple en Go que define una nueva función nativa. Esta función será llamada desde PHP y desencadenará una goroutine que registra un mensaje en los logs de Caddy. Esta función no toma ningún parámetro y no devuelve nada.
 
-#### Definir la Función Go
+#### Definir la función Go
 
 En tu módulo, necesitas definir una nueva función nativa que será llamada desde PHP. Para esto, crea un archivo con el nombre que desees, por ejemplo, `extension.go`, y agrega el siguiente código:
 
@@ -663,7 +663,7 @@ La función `frankenphp.RegisterExtension()` simplifica el proceso de registro d
 
 En este ejemplo, nuestra nueva función desencadenará una goroutine que registra un mensaje en los logs de Caddy.
 
-#### Definir la Función PHP
+#### Definir la función PHP
 
 Para permitir que PHP llame a nuestra función, necesitamos definir una función PHP correspondiente. Para esto, crearemos un archivo stub, por ejemplo, `extension.stub.php`, que contendrá el siguiente código:
 
@@ -685,7 +685,7 @@ php ../php-src/build/gen_stub.php extension.stub.php
 
 Este script generará un archivo llamado `extension_arginfo.h` que contiene la información necesaria para que PHP sepa cómo definir y llamar a nuestra función.
 
-#### Escribir el Puente entre Go y C
+#### Escribir el puente entre Go y C
 
 Ahora, necesitamos escribir el puente entre Go y C. Crea un archivo llamado `extension.h` en el directorio de tu módulo con el siguiente contenido:
 
@@ -747,11 +747,11 @@ Finalmente, definimos los metadatos de la extensión en una estructura `zend_mod
 
 El registro de la extensión es manejado automáticamente por la función `RegisterExtension()` de FrankenPHP que llamamos en nuestro código Go.
 
-### Uso Avanzado
+### Uso avanzado
 
 Ahora que sabemos cómo crear una extensión PHP básica en Go, compliquemos nuestro ejemplo. Ahora crearemos una función PHP que tome una cadena como parámetro y devuelva su versión en mayúsculas.
 
-#### Definir el Stub de la Función PHP
+#### Definir el stub de la función PHP
 
 Para definir la nueva función PHP, modificaremos nuestro archivo `extension.stub.php` para incluir la nueva firma de la función:
 
@@ -789,7 +789,7 @@ static const zend_function_entry ext_functions[] = {
 
 Podemos ver que la función `go_upper` está definida con un parámetro de tipo `string` y un tipo de retorno `string`.
 
-#### Manipulación de Tipos entre Go y PHP/C
+#### Manipulación de tipos entre Go y PHP/C
 
 Tu función Go no puede aceptar directamente una cadena PHP como parámetro. Necesitas convertirla a una cadena Go. Afortunadamente, FrankenPHP proporciona funciones helper para manejar la conversión entre cadenas PHP y cadenas Go, similar a lo que vimos en el enfoque del generador.
 
@@ -826,7 +826,7 @@ Puedes aprender más sobre `ZEND_PARSE_PARAMETERS_START` y el análisis de pará
 
 Solo queda una cosa por hacer: implementar la función `go_upper` en Go.
 
-#### Implementar la Función Go
+#### Implementar la función Go
 
 Nuestra función Go tomará un `*C.zend_string` como parámetro, lo convertirá a una cadena Go usando la función helper de FrankenPHP, lo procesará y devolverá el resultado como un nuevo `*C.zend_string`. Las funciones helper manejan toda la complejidad de gestión de memoria y conversión por nosotros.
 
@@ -860,7 +860,7 @@ El parámetro `false` en `PHPString()` indica que queremos crear una nueva caden
 >
 > En este ejemplo, no realizamos ningún manejo de errores, pero siempre debes verificar que los punteros no sean `nil` y que los datos sean válidos antes de usarlos en tus funciones Go.
 
-### Integrando la Extensión en FrankenPHP
+### Integrando la extensión en FrankenPHP
 
 Nuestra extensión ahora está lista para ser compilada e integrada en FrankenPHP. Para hacerlo, consulta la documentación de [compilación de FrankenPHP](compile.md) para aprender cómo compilar FrankenPHP. Agrega el módulo usando la bandera `--with`, apuntando a la ruta de tu módulo:
 
@@ -876,7 +876,7 @@ xcaddy build \
 
 ¡Eso es todo! Tu extensión ahora está integrada en FrankenPHP y puede ser usada en tu código PHP.
 
-### Probando tu Extensión
+### Probando tu extensión
 
 Después de integrar tu extensión en FrankenPHP, puedes crear un archivo `index.php` con ejemplos para las funciones que has implementado:
 

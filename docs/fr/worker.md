@@ -42,7 +42,7 @@ Cette fonctionnalité se combine très bien avec le [rechargement à chaud](hot-
 > [!TIP]
 > La section suivante est nécessaire uniquement avant Symfony 7.4, où le support natif du mode worker de FrankenPHP a été introduit.
 
-Le mode worker de FrankenPHP est pris en charge par le [Composant Runtime de Symfony](https://symfony.com/doc/current/components/runtime.html).
+Le mode worker de FrankenPHP est pris en charge par le [composant Runtime de Symfony](https://symfony.com/doc/current/components/runtime.html).
 Pour démarrer une application Symfony dans un worker, installez le package FrankenPHP de [PHP Runtime](https://github.com/php-runtime/runtime) :
 
 ```console
@@ -64,7 +64,7 @@ docker run \
 
 Voir [la documentation dédiée](laravel.md#laravel-octane).
 
-## Applications Personnalisées
+## Applications personnalisées
 
 L'exemple suivant montre comment créer votre propre script worker sans dépendre d'une bibliothèque tierce :
 

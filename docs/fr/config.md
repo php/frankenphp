@@ -241,7 +241,7 @@ où le processus FrankenPHP a été lancé. Vous pouvez également spécifier un
 
 La surveillance des fichiers est basée sur [e-dant/watcher](https://github.com/e-dant/watcher).
 
-## Faire correspondre le Worker à un chemin
+## Faire correspondre le worker à un chemin
 
 Dans les applications PHP traditionnelles, les scripts sont toujours placés dans le répertoire public. C'est également vrai pour les scripts worker, qui sont traités comme n'importe quel autre script PHP. Si vous souhaitez plutôt placer le script worker en dehors du répertoire public, vous pouvez le faire via la directive `match`.
 
@@ -287,7 +287,7 @@ Vous pouvez également modifier la configuration de PHP en utilisant la directiv
     frankenphp {
         php_ini memory_limit 256M
 
-        # or
+        # ou
 
         php_ini {
             memory_limit 256M
@@ -333,7 +333,7 @@ CADDY_GLOBAL_OPTIONS="servers {
 
 Vous trouverez plus d'informations sur ce paramètre dans la [documentation Caddy](https://caddyserver.com/docs/caddyfile/options#enable-full-duplex).
 
-## Activer le mode Debug
+## Activer le mode debug
 
 Lors de l'utilisation de l'image Docker, définissez la variable d'environnement `CADDY_GLOBAL_OPTIONS` sur `debug` pour activer le mode debug :
 

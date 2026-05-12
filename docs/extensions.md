@@ -86,7 +86,7 @@ There are two important things to note here:
 - A directive comment `//export_php:function` defines the function signature in PHP. This is how the generator knows how to generate the PHP function with the right parameters and return type.
 - The function must return an `unsafe.Pointer`. FrankenPHP provides an API to help you with type juggling between C and Go.
 
-While the first point speaks for itself, the second may be harder to apprehend. Let's take a deeper dive into type juggling later in this guide.
+While the first point speaks for itself, the second may be harder to grasp. We take a deeper dive into type juggling later in this guide.
 
 ### Generating the extension
 
@@ -148,7 +148,7 @@ Once you've integrated your extension into FrankenPHP as demonstrated in the pre
 
 ### Type juggling
 
-While some variable types have the same memory representation between C/PHP and Go, some types require more logic to be directly used. This is maybe the hardest part when it comes to writing extensions because it requires understanding the internals of the Zend Engine and how variables are stored internally in PHP.
+While some variable types have the same memory representation between C/PHP and Go, some types require more logic to be directly used. This is probably the hardest part when it comes to writing extensions because it requires understanding the internals of the Zend Engine and how variables are stored internally in PHP.
 This table summarizes what you need to know:
 
 | PHP type           | Go type                       | Direct conversion | C to Go helper                    | Go to C helper                     | Class Methods Support |
@@ -179,7 +179,7 @@ If you refer to the code snippet of the previous section, you can see that helpe
 
 FrankenPHP provides native support for PHP arrays through `frankenphp.AssociativeArray` or direct conversion to a map or slice.
 
-`AssociativeArray` represents a [hash map](https://en.wikipedia.org/wiki/Hash_table) composed of a `Map: map[string]any`field and an optional `Order: []string` field (unlike PHP "associative arrays", Go maps aren't ordered).
+`AssociativeArray` represents a [hash map](https://en.wikipedia.org/wiki/Hash_table) composed of a `Map: map[string]any` field and an optional `Order: []string` field (unlike PHP "associative arrays", Go maps aren't ordered).
 
 If order or association are not needed, it's also possible to directly convert to a slice `[]any` or unordered map `map[string]any`.
 
@@ -283,7 +283,7 @@ func process_data_packed(arr *C.zend_array) unsafe.Pointer {
 
 FrankenPHP provides a way to work with PHP callables using the `frankenphp.CallPHPCallable` helper. This allows you to call PHP functions or methods from Go code.
 
-To showcase this, let's create our own `array_map()` function that takes a callable and an array, applies the callable to each element of the array, and returns a new array with the results:
+To showcase this, we'll create our own `array_map()` function that takes a callable and an array, applies the callable to each element of the array, and returns a new array with the results:
 
 ```go
 // Calling a PHP callable from a Go-defined extension function
@@ -532,7 +532,7 @@ echo Order::STATE_PENDING;   // 0
 
 The directive supports various value types, including strings, integers, booleans, floats, and iota constants. When using `iota`, the generator automatically assigns sequential values (0, 1, 2, etc.). Global constants become available in your PHP code as global constants, while class constants are scoped to their respective classes using the public visibility. When using integers, different possible notations (binary, hex, octal) are supported and dumped as is in the PHP stub file.
 
-You can use constants just like you are used to in the Go code. For example, let's take the `repeat_this()` function we declared earlier and change the last argument to an integer:
+You can use constants just like you are used to in the Go code. For example, we'll take the `repeat_this()` function we declared earlier and change the last argument to an integer:
 
 ```go
 // Combining functions, classes, methods, and constants in one extension
@@ -741,7 +741,7 @@ Next, create a file named `extension.c` that will perform the following steps:
 - Declare our new native PHP function `go_print()`;
 - Declare the extension metadata.
 
-Let's start by including the required headers:
+We start by including the required headers:
 
 ```c
 // extension.c
@@ -785,7 +785,7 @@ The extension registration is automatically handled by FrankenPHP's `RegisterExt
 
 ### Advanced usage
 
-Now that we know how to create a basic PHP extension in Go, let's complexify our example. We will now create a PHP function that takes a string as a parameter and returns its uppercase version.
+Now that we know how to create a basic PHP extension in Go, we will make our example more complex. We will now create a PHP function that takes a string as a parameter and returns its uppercase version.
 
 #### Define the PHP function stub
 

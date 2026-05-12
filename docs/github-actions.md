@@ -6,7 +6,7 @@ description: Use GitHub Actions to automatically build and publish FrankenPHP Do
 # Using GitHub Actions
 
 This repository builds and deploys the Docker image to [Docker Hub](https://hub.docker.com/r/dunglas/frankenphp) on
-every approved pull request or on your own fork once setup.
+every approved pull request or on your own fork once set up.
 
 ## Setting up GitHub Actions
 

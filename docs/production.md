@@ -68,7 +68,7 @@ volumes:
 > The previous examples are intended for production usage.
 > In development, you may want to use a volume, a different PHP configuration and a different value for the `SERVER_NAME` environment variable.
 >
-> Take a look to the [Symfony Docker](https://github.com/dunglas/symfony-docker) project
+> Take a look at the [Symfony Docker](https://github.com/dunglas/symfony-docker) project
 > (which uses FrankenPHP) for a more advanced example using multi-stage images,
 > Composer, extra PHP extensions, etc.
 
@@ -116,7 +116,7 @@ Example with the DigitalOcean Domains service ("Networking" > "Domains"):
 
 > [!NOTE]
 >
-> Let's Encrypt, the service used by default by FrankenPHP to automatically generate a TLS certificate doesn't support using bare IP addresses. Using a domain name is mandatory to use Let's Encrypt.
+> Let's Encrypt, the service used by default by FrankenPHP to automatically generate a TLS certificate, doesn't support using bare IP addresses. Using a domain name is mandatory to use Let's Encrypt.
 
 ## Deploying FrankenPHP with Docker Compose
 
@@ -141,7 +141,7 @@ Go to `https://your-domain-name.example.com` and enjoy!
 
 > [!CAUTION]
 >
-> Docker can have a cache layer, make sure you have the right build for each deployment or rebuild your project with `--no-cache` option to avoid cache issue.
+> Docker can have a cache layer, make sure you have the right build for each deployment or rebuild your project with the `--no-cache` option to avoid cache issues.
 
 ## Running behind a reverse proxy
 
