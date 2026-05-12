@@ -1,8 +1,8 @@
 <?php
 
-# update all translations to match the english docs
+# update all translations to match the English docs
 # usage: php docs/translate.php [specific-file.md]
-# needs: php with openssl and Gemini api key
+# needs: php with openssl and Gemini API key
 
 const MODEL = 'gemini-2.5-flash';
 const SLEEP_SECONDS_BETWEEN_REQUESTS = 10;
@@ -33,7 +33,7 @@ You will receive the English version (authoritative) and a translation (possibly
 * **Output:** You must not include any explanations or notes, only the translated document.
 MD;
 
-function makeGeminiRequest(string $systemPrompt, string $userPrompt, string $model, string $apiKey, int $reties = 2): string
+function makeGeminiRequest(string $systemPrompt, string $userPrompt, string $model, string $apiKey, int $retries = 2): string
 {
     $url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent";
     $body = json_encode([
@@ -57,11 +57,11 @@ function makeGeminiRequest(string $systemPrompt, string $userPrompt, string $mod
         print_r(error_get_last());
         print_r($response);
 
-        if ($reties > 0) {
-            echo "Retrying... ($reties retries left)\n";
+        if ($retries > 0) {
+            echo "Retrying... ($retries retries left)\n";
             sleep(SLEEP_SECONDS_BETWEEN_REQUESTS);
 
-            return makeGeminiRequest($systemPrompt, $userPrompt, $model, $apiKey, $reties - 1);
+            return makeGeminiRequest($systemPrompt, $userPrompt, $model, $apiKey, $retries - 1);
         }
 
         exit(1);
@@ -99,7 +99,7 @@ array_shift($fileToTranslate);
 $fileToTranslate = array_map(fn($filename) => trim($filename), $fileToTranslate);
 $apiKey = $_SERVER['GEMINI_API_KEY'] ?? $_ENV['GEMINI_API_KEY'] ?? '';
 if (!$apiKey) {
-    echo 'Enter gemini api key ($GEMINI_API_KEY): ';
+    echo 'Enter Gemini API key ($GEMINI_API_KEY): ';
     $apiKey = trim(fgets(STDIN));
 }
 
