@@ -5,11 +5,18 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io"
 	"os"
 	"regexp"
 )
 
 var phpFuncRegex = regexp.MustCompile(`//\s*export_php:function\s+([^{}\n]+)(?:\s*{\s*})?`)
+
+var warnOut io.Writer = os.Stdout
+
+func warnf(format string, args ...any) {
+	_, _ = fmt.Fprintf(warnOut, format, args...)
+}
 
 type FuncParser struct{}
 
@@ -43,17 +50,17 @@ func (fp *FuncParser) parse(filename string) ([]phpFunction, error) {
 
 		phpFunc, err := fp.parseSignature(directive)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Error parsing signature '%s': %v\n", directive, err)
+			warnf("Warning: Error parsing signature '%s': %v\n", directive, err)
 			continue
 		}
 
 		if err := validator.validateFunction(*phpFunc); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Invalid function '%s': %v\n", phpFunc.Name, err)
+			warnf("Warning: Invalid function '%s': %v\n", phpFunc.Name, err)
 			continue
 		}
 
 		if err := validator.validateTypes(*phpFunc); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Function '%s' uses unsupported types: %v\n", phpFunc.Name, err)
+			warnf("Warning: Function '%s' uses unsupported types: %v\n", phpFunc.Name, err)
 			continue
 		}
 
@@ -61,7 +68,7 @@ func (fp *FuncParser) parse(filename string) ([]phpFunction, error) {
 		phpFunc.GoFunction = extractNodeSource(src, fset, funcDecl)
 
 		if err := validator.validateGoFunctionSignatureWithOptions(*phpFunc, false); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Go function signature mismatch for %q: %v\n", phpFunc.Name, err)
+			warnf("Warning: Go function signature mismatch for %q: %v\n", phpFunc.Name, err)
 			continue
 		}
 
