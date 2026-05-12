@@ -19,7 +19,7 @@ php_server
 
 Un `Caddyfile` plus avancé, activant davantage de fonctionnalités et fournissant des variables d'environnement pratiques, est disponible [dans le dépôt FrankenPHP](https://github.com/php/frankenphp/blob/main/caddy/frankenphp/Caddyfile) et avec les images Docker.
 
-PHP lui-même peut être configuré [en utilisant un fichier `php.ini`](https://www.php.net/manual/en/configuration.file.php).
+PHP lui-même peut être configuré [en utilisant un fichier `php.ini`](https://www.php.net/manual/fr/configuration.file.php).
 
 Selon votre méthode d'installation, FrankenPHP et l'interpréteur PHP chercheront les fichiers de configuration aux emplacements décrits ci-dessous.
 
@@ -292,11 +292,11 @@ Les variables d'environnement suivantes peuvent être utilisées pour insérer d
 
 Comme pour les SAPI FPM et CLI, les variables d'environnement sont exposées par défaut dans la superglobale `$_SERVER`.
 
-La valeur `S` de [la directive `variables_order` de PHP](https://www.php.net/manual/en/ini.core.php#ini.variables-order) est toujours équivalente à `ES`, que `E` soit défini ailleurs dans cette directive ou non.
+La valeur `S` de [la directive `variables_order` de PHP](https://www.php.net/manual/fr/ini.core.php#ini.variables-order) est toujours équivalente à `ES`, que `E` soit défini ailleurs dans cette directive ou non.
 
 ## Configuration PHP
 
-Pour charger [des fichiers de configuration PHP supplémentaires](https://www.php.net/manual/en/configuration.file.php#configuration.file.scan),
+Pour charger [des fichiers de configuration PHP supplémentaires](https://www.php.net/manual/fr/configuration.file.php#configuration.file.scan),
 la variable d'environnement `PHP_INI_SCAN_DIR` peut être utilisée.
 Lorsqu'elle est définie, PHP chargera tous les fichiers avec l'extension `.ini` présents dans les répertoires donnés.
 
