@@ -73,34 +73,23 @@ function makeGeminiRequest(string $systemPrompt, string $userPrompt, string $mod
 function createPrompt(string $language, string $englishFile, string $currentTranslation): array
 {
     $languageName = LANGUAGES[$language];
-    $userPrompt = <<<MD
-Here is the english version of the document:
 
-```markdown
-$englishFile
-```
+    $userPrompt = "Here is the English version of the document:\n\n```markdown\n$englishFile\n```\n\n";
 
-Here is the current translation in $languageName:
-
-```markdown
-$currentTranslation
-```
-
-Here is the corrected and completed translation in $languageName:
-
-```markdown
-MD;
+    if ($currentTranslation === '') {
+        $userPrompt .= "This file has no existing translation. Please provide a complete translation in $languageName from scratch:\n\n```markdown\n";
+    } else {
+        $userPrompt .= "Here is the current translation in $languageName (possibly incomplete or outdated):\n\n```markdown\n$currentTranslation\n```\n\nHere is the corrected and completed translation in $languageName:\n\n```markdown\n";
+    }
 
     return [SYSTEM_PROMPT, $userPrompt];
 }
 
 function sanitizeMarkdown(string $markdown): string
 {
-    if (str_starts_with($markdown, '```markdown')) {
-        $markdown = substr($markdown, strlen('```markdown'));
-    }
-
-    $markdown = rtrim($markdown, '`');
+    $markdown = trim($markdown);
+    $markdown = preg_replace('/^\s*```(?:markdown)?\s*\n?/', '', $markdown);
+    $markdown = preg_replace('/\n?\s*```\s*$/', '', $markdown);
 
     return trim($markdown) . "\n";
 }
@@ -123,12 +112,13 @@ foreach ($files as $file) {
 
     foreach (LANGUAGES as $language => $languageName) {
         echo "Translating $file to $languageName\n";
-        $currentTranslation = file_get_contents(__DIR__ . "/$language/$file") ?: '';
+        $translationPath = __DIR__ . "/$language/$file";
+        $currentTranslation = file_exists($translationPath) ? file_get_contents($translationPath) : '';
         [$systemPrompt, $userPrompt] = createPrompt($language, $englishFile, $currentTranslation);
         $markdown = makeGeminiRequest($systemPrompt, $userPrompt, MODEL, $apiKey);
 
         echo "Writing translated file to $language/$file\n";
-        file_put_contents(__DIR__ . "/$language/$file", sanitizeMarkdown($markdown));
+        file_put_contents($translationPath, sanitizeMarkdown($markdown));
 
         echo "sleeping to avoid rate limiting...\n";
         sleep(SLEEP_SECONDS_BETWEEN_REQUESTS);
