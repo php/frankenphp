@@ -1,11 +1,16 @@
-# Create a Static Build
+---
+title: FrankenPHP static build: single-binary PHP app server
+description: Create static or mostly static FrankenPHP binaries with embedded PHP and Caddy on Linux and macOS, customize extensions, and load dynamic modules with glibc.
+---
+
+# Create a static build
 
 Instead of using a local installation of the PHP library,
 it's possible to create a static or mostly static build of FrankenPHP thanks to the great [static-php-cli project](https://github.com/crazywhalecc/static-php-cli) (despite its name, this project supports all SAPIs, not only CLI).
 
 With this method, a single, portable, binary will contain the PHP interpreter, the Caddy web server, and FrankenPHP!
 
-Fully static native executables require no dependencies at all and can even be run on [`scratch` Docker image](https://docs.docker.com/build/building/base-images/#create-a-minimal-base-image-using-scratch).
+Fully static native executables require no dependencies at all and can even be run on a [`scratch` Docker image](https://docs.docker.com/build/building/base-images/#create-a-minimal-base-image-using-scratch).
 However, they can't load dynamic PHP extensions (such as Xdebug) and have some limitations because they are using the musl libc.
 
 Mostly static binaries only require `glibc` and can load dynamic extensions.
@@ -18,7 +23,7 @@ FrankenPHP also supports [embedding the PHP app in the static binary](embed.md).
 
 We provide Docker images to build static Linux binaries:
 
-### musl-Based, Fully Static Build
+### musl-based, fully static build
 
 For a fully-static binary that runs on any Linux distribution without dependencies but doesn't support dynamic loading of extensions:
 
@@ -33,7 +38,7 @@ For better performance in heavily concurrent scenarios, consider using the [mima
 docker buildx bake --load --set static-builder-musl.args.MIMALLOC=1 static-builder-musl
 ```
 
-### glibc-Based, Mostly Static Build (With Dynamic Extension Support)
+### glibc-based, mostly static build (with dynamic extension support)
 
 For a binary that supports loading PHP extensions dynamically while still having the selected extensions compiled statically:
 
@@ -48,7 +53,7 @@ The resulting mostly static (except `glibc`) binary is named `frankenphp` and is
 
 If you want to build the static binary without Docker, take a look at the macOS instructions, which also work for Linux.
 
-### Custom Extensions
+### Custom PHP extensions in the static build
 
 By default, the most popular PHP extensions are compiled.
 
@@ -71,7 +76,7 @@ docker buildx bake \
   static-builder-musl
 ```
 
-### Extra Caddy Modules
+### Extra Caddy modules
 
 To add extra Caddy modules or pass other arguments to [xcaddy](https://github.com/caddyserver/xcaddy), use the `XCADDY_ARGS` Docker ARG:
 
@@ -89,9 +94,9 @@ In this example, we add the [Souin](https://souin.io) HTTP cache module for Cadd
 > The cbrotli, Mercure, and Vulcain modules are included by default if `XCADDY_ARGS` is empty or not set.
 > If you customize the value of `XCADDY_ARGS`, you must include them explicitly if you want them to be included.
 
-See also how to [customize the build](#customizing-the-build)
+See also how to [customize the FrankenPHP static build](#customizing-the-frankenphp-static-build)
 
-### GitHub Token
+### GitHub token
 
 If you hit the GitHub API rate limit, set a GitHub Personal Access Token in an environment variable named `GITHUB_TOKEN`:
 
@@ -112,7 +117,7 @@ cd frankenphp
 
 Note: this script also works on Linux (and probably on other Unixes), and is used internally by the Docker images we provide.
 
-## Customizing The Build
+## Customizing the FrankenPHP static build
 
 The following environment variables can be passed to `docker build` and to the `build-static.sh`
 script to customize the static build:
@@ -129,7 +134,7 @@ script to customize the static build:
 - `MIMALLOC`: (experimental, Linux-only) replace musl's mallocng by [mimalloc](https://github.com/microsoft/mimalloc) for improved performance. We only recommend using this for musl targeting builds, for glibc prefer disabling this option and using [`LD_PRELOAD`](https://microsoft.github.io/mimalloc/overrides.html) when you run your binary instead.
 - `RELEASE`: (maintainers only) when set, the resulting binary will be uploaded on GitHub
 
-## Extensions
+## Loading PHP extensions dynamically in the static binary
 
 With the glibc or macOS-based binaries, you can load PHP extensions dynamically. However, these extensions will have to be compiled with ZTS support.
 Since most package managers do not currently offer ZTS versions of their extensions, you will have to compile them yourself.

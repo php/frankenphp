@@ -83,6 +83,8 @@ func (handler *regularThread) name() string {
 	return "Regular PHP Thread"
 }
 
+func (handler *regularThread) drain() {}
+
 func (handler *regularThread) waitForRequest() string {
 	// max_requests reached: restart the thread to clean up all ZTS state
 	if maxRequestsPerThread > 0 && handler.requestCount >= maxRequestsPerThread {

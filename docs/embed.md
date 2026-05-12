@@ -1,4 +1,9 @@
-# PHP Apps As Standalone Binaries
+---
+title: Embedding PHP apps as standalone binaries with FrankenPHP
+description: How to package a PHP application (including Symfony or Laravel) as a self-contained static binary with FrankenPHP, the PHP interpreter, PHP extensions and Caddy.
+---
+
+# PHP apps as standalone binaries
 
 FrankenPHP has the ability to embed the source code and assets of PHP applications in a static, self-contained binary.
 
@@ -8,7 +13,7 @@ Learn more about this feature [in the presentation made by Kévin at SymfonyCon 
 
 For embedding Laravel applications, [read this specific documentation entry](laravel.md#laravel-apps-as-standalone-binaries).
 
-## Preparing Your App
+## Preparing your app
 
 Before creating the self-contained binary be sure that your app is ready for embedding.
 
@@ -42,18 +47,19 @@ composer install --ignore-platform-reqs --no-dev -a
 composer dump-env prod
 ```
 
-### Customizing the Configuration
+### Customizing the configuration
 
 To customize [the configuration](config.md), you can put a `Caddyfile` as well as a `php.ini` file
 in the main directory of the app to be embedded (`$TMPDIR/my-prepared-app` in the previous example).
 
-## Creating a Linux Binary
+## Creating a Linux binary
 
 The easiest way to create a Linux binary is to use the Docker-based builder we provide.
 
 1. Create a file named `static-build.Dockerfile` in the repository of your app:
 
    ```dockerfile
+   # static-build.Dockerfile
    FROM --platform=linux/amd64 dunglas/frankenphp:static-builder-gnu
    # If you intend to run the binary on musl-libc systems, use static-builder-musl instead
 
@@ -85,7 +91,7 @@ The easiest way to create a Linux binary is to use the Docker-based builder we p
 
 The resulting binary is the file named `my-app` in the current directory.
 
-## Creating a Binary for Other OSes
+## Creating a binary for other OSes
 
 If you don't want to use Docker, or want to build a macOS binary, use the shell script we provide:
 
@@ -97,7 +103,7 @@ EMBED=/path/to/your/app ./build-static.sh
 
 The resulting binary is the file named `frankenphp-<os>-<arch>` in the `dist/` directory.
 
-## Using The Binary
+## Using the binary
 
 This is it! The `my-app` file (or `dist/frankenphp-<os>-<arch>` on other OSes) contains your self-contained app!
 
@@ -125,18 +131,18 @@ You can also run the PHP CLI scripts embedded in your binary:
 ./my-app php-cli bin/console
 ```
 
-## PHP Extensions
+## PHP extensions
 
 By default, the script will build extensions required by the `composer.json` file of your project, if any.
 If the `composer.json` file doesn't exist, the default extensions are built, as documented in [the static builds entry](static.md).
 
 To customize the extensions, use the `PHP_EXTENSIONS` environment variable.
 
-## Customizing The Build
+## Customizing the build
 
 [Read the static build documentation](static.md) to see how to customize the binary (extensions, PHP version...).
 
-## Distributing The Binary
+## Distributing the binary
 
 On Linux, the created binary is compressed using [UPX](https://upx.github.io).
 

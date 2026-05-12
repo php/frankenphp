@@ -105,6 +105,8 @@ func (handler *workerThread) name() string {
 	return "Worker PHP Thread - " + handler.worker.fileName
 }
 
+func (handler *workerThread) drain() {}
+
 func setupWorkerScript(handler *workerThread, worker *worker) {
 	metrics.StartWorker(worker.name)
 

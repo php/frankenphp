@@ -1,4 +1,9 @@
-# Deploying in Production
+---
+title: Deploying FrankenPHP in production with Docker Compose
+description: Deploy a PHP application to production with FrankenPHP and Docker Compose on a single Linux server, including TLS, reverse proxy, and multi-node setups.
+---
+
+# Deploying in production
 
 In this tutorial, we will learn how to deploy a PHP application on a single server using Docker Compose.
 
@@ -6,7 +11,7 @@ If you're using Symfony, prefer reading the "[Deploy in production](https://gith
 
 If you're using API Platform (which also uses FrankenPHP), refer to [the deployment documentation of the framework](https://api-platform.com/docs/deployment/).
 
-## Preparing Your App
+## Preparing your app
 
 First, create a `Dockerfile` in the root directory of your PHP project:
 
@@ -39,6 +44,7 @@ be sure to include it in the Docker image and to install your dependencies.
 Then, add a `compose.yaml` file:
 
 ```yaml
+# compose.yaml
 services:
   php:
     image: dunglas/frankenphp
@@ -68,13 +74,13 @@ volumes:
 
 Finally, if you use Git, commit these files and push.
 
-## Preparing a Server
+## Preparing a server
 
 To deploy your application in production, you need a server.
 In this tutorial, we will use a virtual machine provided by DigitalOcean, but any Linux server can work.
-If you already have a Linux server with Docker installed, you can skip straight to [the next section](#configuring-a-domain-name).
+If you already have a Linux server with Docker installed, you can skip straight to [Configuring a Domain Name](#configuring-a-domain-name).
 
-Otherwise, use [this affiliate link](https://m.do.co/c/5d8aabe3ab80) to get $200 of free credit, create an account, then click on "Create a Droplet".
+Otherwise, use [this DigitalOcean affiliate link](https://m.do.co/c/5d8aabe3ab80) to get $200 of free credit, create an account, then click on "Create a Droplet".
 Then, click on the "Marketplace" tab under the "Choose an image" section and search for the app named "Docker".
 This will provision an Ubuntu server with the latest versions of Docker and Docker Compose already installed!
 
@@ -93,7 +99,7 @@ When your Droplet is ready, use SSH to connect:
 ssh root@<droplet-ip>
 ```
 
-## Configuring a Domain Name
+## Configuring a domain name
 
 In most cases, you'll want to associate a domain name with your site.
 If you don't own a domain name yet, you'll have to buy one through a registrar.
@@ -112,7 +118,7 @@ Example with the DigitalOcean Domains service ("Networking" > "Domains"):
 >
 > Let's Encrypt, the service used by default by FrankenPHP to automatically generate a TLS certificate doesn't support using bare IP addresses. Using a domain name is mandatory to use Let's Encrypt.
 
-## Deploying
+## Deploying FrankenPHP with Docker Compose
 
 Copy your project on the server using `git clone`, `scp`, or any other tool that may fit your need.
 If you use GitHub, you may want to use [a deploy key](https://docs.github.com/en/free-pro-team@latest/developers/overview/managing-deploy-keys#deploy-keys).
@@ -137,7 +143,7 @@ Go to `https://your-domain-name.example.com` and enjoy!
 >
 > Docker can have a cache layer, make sure you have the right build for each deployment or rebuild your project with `--no-cache` option to avoid cache issue.
 
-## Running Behind a Reverse Proxy
+## Running behind a reverse proxy
 
 If FrankenPHP is running behind a reverse proxy or a load balancer (e.g., Nginx, AWS ELB, Google Cloud LB),
 you must configure the [`trusted_proxies` global option](https://caddyserver.com/docs/caddyfile/options#trusted-proxies) in your Caddyfile
@@ -160,7 +166,7 @@ or the [`trustedproxies` middleware](https://laravel.com/docs/trustedproxy) for 
 Without both configurations, headers such as `X-Forwarded-For` and `X-Forwarded-Proto` will be ignored,
 which can cause issues like incorrect HTTPS detection or wrong client IP addresses.
 
-## Deploying on Multiple Nodes
+## Deploying on multiple nodes
 
 If you want to deploy your app on a cluster of machines, you can use [Docker Swarm](https://docs.docker.com/engine/swarm/stack-deploy/),
 which is compatible with the provided Compose files.

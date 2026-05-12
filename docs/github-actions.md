@@ -1,3 +1,8 @@
+---
+title: Building FrankenPHP Docker images with GitHub Actions
+description: Use GitHub Actions to automatically build and publish FrankenPHP Docker images to a registry on pull requests, merges to main, and tagged releases.
+---
+
 # Using GitHub Actions
 
 This repository builds and deploys the Docker image to [Docker Hub](https://hub.docker.com/r/dunglas/frankenphp) on
@@ -12,13 +17,13 @@ In the repository settings, under secrets, add the following secrets:
 - `REGISTRY_PASSWORD`: The password to use to log in to the registry (e.g. an access key).
 - `IMAGE_NAME`: The name of the image (e.g. `dunglas/frankenphp`).
 
-## Building and Pushing the Image
+## Building and pushing the image
 
 1. Create a Pull Request or push to your fork.
 2. GitHub Actions will build the image and run any tests.
 3. If the build is successful, the image will be pushed to the registry using the `pr-x`, where `x` is the PR number, as the tag.
 
-## Deploying the Image
+## Deploying the image
 
 1. Once the Pull Request is merged, GitHub Actions will again run the tests and build a new image.
 2. If the build is successful, the `main` tag will be updated in the Docker registry.

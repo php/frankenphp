@@ -1,3 +1,8 @@
+---
+title: FrankenPHP Prometheus metrics for threads and workers
+description: List of Prometheus-compatible metrics exposed by FrankenPHP via Caddy, covering PHP threads, workers, request times, queue depth, crashes, and restarts.
+---
+
 # Metrics
 
 > [!TIP]
@@ -17,4 +22,4 @@ When [Caddy metrics](https://caddyserver.com/docs/metrics) are enabled, FrankenP
 - `frankenphp_worker_restarts{worker="[worker_name]"}`: The number of times a worker has been deliberately restarted.
 - `frankenphp_worker_queue_depth{worker="[worker_name]"}`: The number of queued requests.
 
-For worker metrics, the `[worker_name]` placeholder is replaced by the worker name in the Caddyfile, otherwise absolute path of worker file will be used.
+For worker metrics, the `[worker_name]` placeholder is replaced by the worker name in the Caddyfile, otherwise the absolute path of the worker file will be used.

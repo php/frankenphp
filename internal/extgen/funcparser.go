@@ -38,19 +38,19 @@ func (fp *FuncParser) parse(filename string) (functions []phpFunction, err error
 			signature := strings.TrimSpace(matches[1])
 			phpFunc, err := fp.parseSignature(signature)
 			if err != nil {
-				fmt.Printf("Warning: Error parsing signature '%s': %v\n", signature, err)
+				fmt.Fprintf(os.Stderr, "Warning: Error parsing signature '%s': %v\n", signature, err)
 
 				continue
 			}
 
 			if err := validator.validateFunction(*phpFunc); err != nil {
-				fmt.Printf("Warning: Invalid function '%s': %v\n", phpFunc.Name, err)
+				fmt.Fprintf(os.Stderr, "Warning: Invalid function '%s': %v\n", phpFunc.Name, err)
 
 				continue
 			}
 
 			if err := validator.validateTypes(*phpFunc); err != nil {
-				fmt.Printf("Warning: Function '%s' uses unsupported types: %v\n", phpFunc.Name, err)
+				fmt.Fprintf(os.Stderr, "Warning: Function '%s' uses unsupported types: %v\n", phpFunc.Name, err)
 
 				continue
 			}
@@ -68,7 +68,7 @@ func (fp *FuncParser) parse(filename string) (functions []phpFunction, err error
 			currentPHPFunc.GoFunction = goFunc
 
 			if err := validator.validateGoFunctionSignatureWithOptions(*currentPHPFunc, false); err != nil {
-				fmt.Printf("Warning: Go function signature mismatch for %q: %v\n", currentPHPFunc.Name, err)
+				fmt.Fprintf(os.Stderr, "Warning: Go function signature mismatch for %q: %v\n", currentPHPFunc.Name, err)
 				currentPHPFunc = nil
 
 				continue

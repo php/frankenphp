@@ -1,9 +1,14 @@
+---
+title: FrankenPHP performance tuning guide
+description: Tune FrankenPHP for higher throughput and lower latency: thread count, worker mode, glibc vs musl, Go runtime, OPcache, and Caddyfile options.
+---
+
 # Performance
 
 By default, FrankenPHP tries to offer a good compromise between performance and ease of use.
 However, it is possible to substantially improve performance using an appropriate configuration.
 
-## Number of Threads and Workers
+## Tuning FrankenPHP threads and workers
 
 By default, FrankenPHP starts 2 times more threads and workers (in worker mode) than the available number of CPU cores.
 
@@ -26,13 +31,13 @@ If set to `auto`, the limit will be estimated based on the `memory_limit` in you
 `max_threads` is similar to PHP FPM's [pm.max_children](https://www.php.net/manual/en/install.fpm.configuration.php#pm.max-children). The main difference is that FrankenPHP uses threads instead of
 processes and automatically delegates them across different worker scripts and 'classic mode' as needed.
 
-## Worker Mode
+## Worker mode for higher throughput
 
-Enabling [the worker mode](worker.md) dramatically improves performance,
+Enabling [the FrankenPHP worker mode](worker.md) dramatically improves performance,
 but your app must be adapted to be compatible with this mode:
 you need to create a worker script and to be sure that the app is not leaking memory.
 
-## Don't Use musl
+## Avoid musl in production: prefer glibc builds
 
 The Alpine Linux variant of the official Docker images and the default binaries we provide are using [the musl libc](https://musl.libc.org).
 
@@ -47,7 +52,7 @@ This can be achieved by using the Debian Docker images, using [our maintainers .
 
 For leaner or more secure containers, you may want to consider [a hardened Debian image](docker.md#hardening-images) rather than Alpine.
 
-## Go Runtime Configuration
+## Go runtime configuration for FrankenPHP
 
 FrankenPHP is written in Go.
 
@@ -59,7 +64,7 @@ You likely want to set the `GODEBUG` environment variable to `cgocheck=0` (the d
 If you run FrankenPHP in containers (Docker, Kubernetes, LXC...) and limit the memory available for the containers,
 set the `GOMEMLIMIT` environment variable to the available amount of memory.
 
-For more details, [the Go documentation page dedicated to this subject](https://pkg.go.dev/runtime#hdr-Environment_Variables) is a must-read to get the most out of the runtime.
+For more details, [read the Go runtime environment variables reference](https://pkg.go.dev/runtime#hdr-Environment_Variables) to get the most out of the runtime.
 
 ## `file_server`
 
@@ -107,6 +112,7 @@ files from PHP by path. This approach works well if your entire application is s
 An example [configuration](config.md#caddyfile-config) that serves static files behind an `/assets` folder could look like this:
 
 ```caddyfile
+# Caddyfile: split static assets and PHP requests to skip filesystem lookups
 route {
     @assets {
         path /assets/*
@@ -125,7 +131,7 @@ route {
 }
 ```
 
-## Placeholders
+## Avoid Caddyfile placeholders in hot paths
 
 You can use [placeholders](https://caddyserver.com/docs/conventions#placeholders) in the `root` and `env` directives.
 However, this prevents caching these values, and comes with a significant performance cost.
@@ -146,14 +152,14 @@ php_server {
 This will improve performance if the `root` directive contains [placeholders](https://caddyserver.com/docs/conventions#placeholders).
 The gain will be negligible in other cases.
 
-## Logs
+## FrankenPHP logging performance
 
 Logging is obviously very useful, but, by definition,
 it requires I/O operations and memory allocations, which considerably reduces performance.
 Make sure you [set the logging level](https://caddyserver.com/docs/caddyfile/options#log) correctly,
 and only log what's necessary.
 
-## PHP Performance
+## PHP performance tuning for FrankenPHP
 
 FrankenPHP uses the official PHP interpreter.
 All usual PHP-related performance optimizations apply with FrankenPHP.
@@ -165,10 +171,10 @@ In particular:
 - ensure that the `realpath` cache is big enough for the needs of your application
 - use [preloading](https://www.php.net/manual/en/opcache.preloading.php)
 
-For more details, read [the dedicated Symfony documentation entry](https://symfony.com/doc/current/performance.html)
+For more details, read [the Symfony performance tuning documentation](https://symfony.com/doc/current/performance.html)
 (most tips are useful even if you don't use Symfony).
 
-## Splitting The Thread Pool
+## Splitting the FrankenPHP thread pool for slow endpoints
 
 It is common for applications to interact with slow external services, like an
 API that tends to be unreliable under high load or consistently takes 10+ seconds to respond.
@@ -178,6 +184,7 @@ limits the concurrency of requests going towards the slow endpoint, similar to a
 connection pool.
 
 ```caddyfile
+# Caddyfile: dedicated FrankenPHP thread pool for slow endpoints
 example.com {
     php_server {
         root /app/public # the root of your application

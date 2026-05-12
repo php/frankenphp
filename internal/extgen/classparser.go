@@ -87,7 +87,7 @@ func (cp *classParser) parse(filename string) (classes []phpClass, err error) {
 			}
 
 			if err := validator.validateClass(class); err != nil {
-				fmt.Printf("Warning: Invalid class '%s': %v\n", class.Name, err)
+				fmt.Fprintf(os.Stderr, "Warning: Invalid class '%s': %v\n", class.Name, err)
 				continue
 			}
 
@@ -229,7 +229,7 @@ func (cp *classParser) parseMethods(filename string) (methods []phpClassMethod, 
 
 			method, err := cp.parseMethodSignature(className, signature)
 			if err != nil {
-				fmt.Printf("Warning: Error parsing method signature %q: %v\n", signature, err)
+				fmt.Fprintf(os.Stderr, "Warning: Error parsing method signature %q: %v\n", signature, err)
 
 				continue
 			}
@@ -244,7 +244,7 @@ func (cp *classParser) parseMethods(filename string) (methods []phpClassMethod, 
 			}
 
 			if err := validator.validateTypes(phpFunc); err != nil {
-				fmt.Printf("Warning: Method \"%s::%s\" uses unsupported types: %v\n", className, method.Name, err)
+				fmt.Fprintf(os.Stderr, "Warning: Method \"%s::%s\" uses unsupported types: %v\n", className, method.Name, err)
 
 				continue
 			}
@@ -272,7 +272,7 @@ func (cp *classParser) parseMethods(filename string) (methods []phpClassMethod, 
 			}
 
 			if err := validator.validateGoFunctionSignatureWithOptions(phpFunc, true); err != nil {
-				fmt.Printf("Warning: Go method signature mismatch for '%s::%s': %v\n", currentMethod.ClassName, currentMethod.Name, err)
+				fmt.Fprintf(os.Stderr, "Warning: Go method signature mismatch for '%s::%s': %v\n", currentMethod.ClassName, currentMethod.Name, err)
 				currentMethod = nil
 				continue
 			}
