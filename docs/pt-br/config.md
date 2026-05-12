@@ -97,6 +97,7 @@ Você também pode configurar explicitamente o FrankenPHP usando a [opção glob
 		max_threads <num_threads> # Limita o número de threads PHP adicionais que podem ser iniciadas em tempo de execução. Padrão: num_threads. Pode ser definido como 'auto'.
 		max_wait_time <duration> # Define o tempo máximo que uma requisição pode esperar por uma thread PHP livre antes de atingir o tempo limite. Padrão: desabilitado.
 		max_idle_time <duration> # Define o tempo máximo que uma thread autoescalada pode ficar ociosa antes de ser desativada. Padrão: 5s.
+		max_requests <num> # (experimental) Define o número máximo de requisições que uma thread PHP irá processar antes de ser reiniciada, útil para mitigar vazamentos de memória. Aplica-se a threads regulares e de worker. Padrão: 0 (ilimitado).
 		php_ini <key> <value> # Define uma diretiva php.ini. Pode ser usada várias vezes para definir múltiplas diretivas.
 		worker {
 			file <path> # Define o caminho para o script do worker.
@@ -265,6 +266,25 @@ e, caso contrário, encaminhará a requisição para o worker que corresponde ao
 }
 ```
 
+## Reiniciando Threads Após Um Número de Requisições (Experimental)
+
+FrankenPHP pode reiniciar automaticamente as threads PHP depois que elas tiverem manipulado um determinado número de requisições.
+Quando uma thread atinge o limite, ela é totalmente reiniciada,
+limpando toda a memória e estado. Outras threads continuam a servir requisições durante o reinício.
+
+Se você notar o consumo de memória aumentando com o tempo, a correção ideal é reportar o vazamento
+ao mantenedor da extensão ou biblioteca responsável.
+Mas quando a correção depende de um terceiro que você não controla,
+`max_requests` oferece uma solução pragmática e, esperançosamente, temporária para produção:
+
+```caddyfile
+{
+	frankenphp {
+		max_requests 500
+	}
+}
+```
+
 ## Variáveis de ambiente
 
 As seguintes variáveis de ambiente podem ser usadas para injetar diretivas Caddy no `Caddyfile` sem modificá-lo:
@@ -419,7 +439,5 @@ Para carregar o autocompletar para cada nova sessão, execute uma vez:
 frankenphp completion powershell | Out-File -FilePath (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")
 Add-Content -Path $PROFILE -Value '. (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")'
 ```
-
-Você precisará iniciar um novo shell para que esta configuração tenha efeito.
 
 Você precisará iniciar um novo shell para que esta configuração tenha efeito.
