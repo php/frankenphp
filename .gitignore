@@ -1,6 +1,7 @@
 /caddy/frankenphp/Build
 /caddy/frankenphp/Caddyfile.test
 /caddy/frankenphp/frankenphp
+/caddy/frankenphp/frankenphp-pgo
 /caddy/frankenphp/frankenphp.exe
 /caddy/frankenphp/public
 /dist
