@@ -35,7 +35,7 @@ type FrankenPHPModule struct {
 	mercureContext
 	hotReloadContext
 
-	// Root sets the root folder to the site. Default: `root` directive, or the path of the public directory of the embed app it exists.
+	// Root sets the root folder to the site. Default: site `root` directive, or the path of the public directory of the embed app it exists.
 	Root string `json:"root,omitempty"`
 	// SplitPath sets the substrings for splitting the URI into two parts. The first matching substring will be used to split the "path info" from the path. The first piece is suffixed with the matching substring and will be assumed as the actual resource (CGI script) name. The second piece will be set to PATH_INFO for the CGI script to use. Default: `.php`.
 	SplitPath []string `json:"split_path,omitempty"`
@@ -261,6 +261,7 @@ func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 		for d.NextBlock(0) {
 			switch d.Val() {
 			case "root":
+				caddy.Log().Named("caddyfile").Warn("DEPRECATED: the 'root' subdirective of 'php'/'php_server' is deprecated, use the 'root' directive in the site block instead")
 				if !d.NextArg() {
 					return d.ArgErr()
 				}
@@ -418,6 +419,7 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 			// parse the php_server subdirectives
 			switch dispenser.Val() {
 			case "root":
+				caddy.Log().Named("caddyfile").Warn("DEPRECATED: the 'root' subdirective of 'php_server' is deprecated, use the 'root' directive in the site block instead")
 				if !dispenser.NextArg() {
 					return nil, dispenser.ArgErr()
 				}
@@ -468,6 +470,16 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 	dispenser.Next() // consume the directive name
 	if err := phpsrv.UnmarshalCaddyfile(dispenser); err != nil {
 		return nil, err
+	}
+
+	// If no root was specified inside php_server, inherit it from the site-level root directive.
+	// Skip roots containing placeholders (e.g. {env.APP_ROOT}).
+	// We can check for `{` here because {$ENV} vars are already resolved earlier
+	if phpsrv.Root == "" {
+		if siteRoot := extractSiteRoot(h); siteRoot != "" && !strings.Contains(siteRoot, "{") {
+			phpsrv.Root = siteRoot
+			fsrv.Root = siteRoot
+		}
 	}
 
 	if frankenphp.EmbeddedAppPath != "" {
@@ -673,6 +685,14 @@ func prependWorkerRoutes(routes caddyhttp.RouteList, h httpcaddyfile.Helper, f F
 	})
 
 	return routes
+}
+
+func extractSiteRoot(h httpcaddyfile.Helper) string {
+	// Caddy stores only unmatched or wildcard matcher roots
+	if root, ok := h.BlockState["root"].(string); ok {
+		return root
+	}
+	return ""
 }
 
 // Interface guards

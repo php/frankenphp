@@ -462,6 +462,43 @@ func TestPHPServerDirective(t *testing.T) {
 	tester.AssertGetResponse("http://localhost:"+testPort+"/not-found.txt", http.StatusOK, "I am by birth a Genevese (i not set)")
 }
 
+func TestPHPServerDirectiveWorkers(t *testing.T) {
+	t.Setenv("ONE", "one")
+	t.Setenv("TWO", "two")
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+			http_port `+testPort+`
+			https_port 9443
+			frankenphp {
+				php_ini variables_order "EGPCS" # populate $_ENV
+			}
+		}
+
+		localhost:`+testPort+` {
+			@env path /env.php*
+			php_server @env {
+				root ../testdata/env # self defined root
+				worker env.php
+			}
+			root ../testdata
+			handle /index.php {
+				root ../testdata/dirindex
+				php_server # inherits from root ../testdata/dirindex 
+			}
+			php_server {
+				worker worker-with-counter.php # inherits from root ../testdata
+			}
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/worker-with-counter.php", http.StatusOK, "requests:1")
+	tester.AssertGetResponse("http://localhost:"+testPort+"/index.php", http.StatusOK, "Hello from directory index.php")
+	tester.AssertGetResponse("http://localhost:"+testPort+"/env.php?keys[]=ONE&keys[]=TWO", http.StatusOK, "ONE=one,TWO=two")
+}
+
 func TestPHPServerDirectiveDisableFileServer(t *testing.T) {
 	tester := caddytest.NewTester(t)
 	initServer(t, tester, `

@@ -214,8 +214,8 @@ func TestAutoScaleRegularThreadsOnAutomaticThreadLimit(t *testing.T) {
 		wg.Add(requestsPerTry)
 		for range requestsPerTry {
 			go func() {
+				defer wg.Done()
 				tester.AssertGetResponse(endpoint, http.StatusOK, "slept for 2 ms and worked for 1000 iterations")
-				wg.Done()
 			}()
 		}
 		wg.Wait()
