@@ -223,21 +223,19 @@ func (v *Validator) phpTypeToGoType(t phpType, isNullable bool) string {
 }
 
 // isCompatibleGoType checks if the actual Go type is compatible with the expected type.
+// PHP int maps to Go int64: we also accept plain int for ergonomics on 64-bit platforms
+// (where they share the same layout). The relation is symmetric so the direction in which
+// the check is written does not matter.
 func (v *Validator) isCompatibleGoType(expectedType, actualType string) bool {
 	if expectedType == actualType {
 		return true
 	}
 
-	switch expectedType {
-	case "int64":
-		return actualType == "int"
-	case "*int64":
-		return actualType == "*int"
-	case "*float64":
-		return actualType == "*float32"
-	}
+	return isIntAlias(expectedType, actualType) || isIntAlias(actualType, expectedType)
+}
 
-	return false
+func isIntAlias(a, b string) bool {
+	return (a == "int64" && b == "int") || (a == "*int64" && b == "*int")
 }
 
 func (v *Validator) phpReturnTypeToGoType(phpReturnType phpType) string {
