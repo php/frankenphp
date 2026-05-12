@@ -23,7 +23,7 @@ La configuración `max_threads` [configuración](config.md#caddyfile-config) per
 `max_threads` puede ayudarte a determinar cuántos hilos necesitas para manejar tu tráfico y puede hacer que el servidor sea más resiliente a picos de latencia.
 Si se establece en `auto`, el límite se estimará en función del `memory_limit` en tu `php.ini`. Si no puede hacerlo,
 `auto` se establecerá por defecto en 2x `num_threads`. Ten en cuenta que `auto` puede subestimar fuertemente el número de hilos necesarios.
-`max_threads` es similar a [pm.max_children](https://www.php.net/manual/es/install.fpm.configuration.php#pm.max-children) de PHP FPM. La principal diferencia es que FrankenPHP usa hilos en lugar de procesos y los delega automáticamente entre diferentes scripts de worker y el 'modo clásico' según sea necesario.
+`max_threads` es similar a [pm.max_children](https://www.php.net/manual/install.fpm.configuration.php#pm.max-children) de PHP FPM. La principal diferencia es que FrankenPHP usa hilos en lugar de procesos y los delega automáticamente entre diferentes scripts de worker y el 'modo clásico' según sea necesario.
 
 ## Modo Worker
 
@@ -145,10 +145,10 @@ Todas las optimizaciones de rendimiento habituales relacionadas con PHP se aplic
 
 En particular:
 
-- verifica que [OPcache](https://www.php.net/manual/es/book.opcache.php) esté instalado, habilitado y correctamente configurado
+- verifica que [OPcache](https://www.php.net/manual/book.opcache.php) esté instalado, habilitado y correctamente configurado
 - habilita [optimizaciones del autoload de Composer](https://getcomposer.org/doc/articles/autoloader-optimization.md)
 - asegúrate de que la caché `realpath` sea lo suficientemente grande para las necesidades de tu aplicación
-- usa [preloading](https://www.php.net/manual/es/opcache.preloading.php)
+- usa [preloading](https://www.php.net/manual/opcache.preloading.php)
 
 Para más detalles, lee [la entrada de documentación dedicada de Symfony](https://symfony.com/doc/current/performance.html)
 (la mayoría de los consejos son útiles incluso si no usas Symfony).

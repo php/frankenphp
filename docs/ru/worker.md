@@ -163,7 +163,7 @@ frankenphp {
 
 ## Поведение суперглобальных переменных
 
-[PHP суперглобальные переменные](https://www.php.net/manual/en/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...) ведут себя следующим образом:
+[PHP суперглобальные переменные](https://www.php.net/manual/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...) ведут себя следующим образом:
 
 - до первого вызова `frankenphp_handle_request()`, суперглобальные переменные содержат значения, связанные с самим worker-скриптом
 - во время и после вызова `frankenphp_handle_request()`, суперглобальные переменные содержат значения, сгенерированные на основе обработанного HTTP-запроса, каждый вызов `frankenphp_handle_request()` изменяет значения суперглобальных переменных

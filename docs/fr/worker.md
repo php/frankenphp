@@ -167,7 +167,7 @@ frankenphp {
 
 ## Comportement des superglobales
 
-[Les superglobales PHP](https://www.php.net/manual/fr/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...)
+[Les superglobales PHP](https://www.php.net/manual/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...)
 se comportent comme suit :
 
 - avant le premier appel à `frankenphp_handle_request()`, les superglobales contiennent des valeurs liées au script worker lui-même

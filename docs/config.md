@@ -25,7 +25,7 @@ php_server
 A more advanced `Caddyfile` enabling more features and providing convenient environment variables is provided [in the FrankenPHP repository](https://github.com/php/frankenphp/blob/main/caddy/frankenphp/Caddyfile),
 and with Docker images.
 
-PHP itself can be configured [using a `php.ini` file](https://www.php.net/manual/en/configuration.file.php).
+PHP itself can be configured [using a `php.ini` file](https://www.php.net/manual/configuration.file.php).
 
 Depending on your installation method, FrankenPHP and the PHP interpreter will look for configuration files in locations described below.
 
@@ -301,11 +301,11 @@ The following environment variables can be used to inject Caddy directives in th
 
 As for FPM and CLI SAPIs, environment variables are exposed by default in the `$_SERVER` superglobal.
 
-The `S` value of [the `variables_order` PHP directive](https://www.php.net/manual/en/ini.core.php#ini.variables-order) is always equivalent to `ES` regardless of the placement of `E` elsewhere in this directive.
+The `S` value of [the `variables_order` PHP directive](https://www.php.net/manual/ini.core.php#ini.variables-order) is always equivalent to `ES` regardless of the placement of `E` elsewhere in this directive.
 
 ## PHP config
 
-To load [additional PHP configuration files](https://www.php.net/manual/en/configuration.file.php#configuration.file.scan),
+To load [additional PHP configuration files](https://www.php.net/manual/configuration.file.php#configuration.file.scan),
 the `PHP_INI_SCAN_DIR` environment variable can be used.
 When set, PHP will load all the files with the `.ini` extension present in the given directories.
 

@@ -23,7 +23,7 @@ ont tendance à être plus imprévisibles. La [configuration](config.md#configur
 `max_threads` peut vous aider à déterminer le nombre de threads dont vous avez besoin pour gérer votre trafic et peut rendre le serveur plus résistant aux pics de latence.
 Si elle est fixée à `auto`, la limite sera estimée en fonction de la valeur de `memory_limit` dans votre `php.ini`. Si ce n'est pas possible,
 `auto` prendra par défaut 2x `num_threads`. Gardez à l'esprit que `auto` peut fortement sous-estimer le nombre de threads nécessaires.
-`max_threads` est similaire à [pm.max_children](https://www.php.net/manual/en/install.fpm.configuration.php#pm.max-children) de PHP FPM. La principale différence est que FrankenPHP utilise des threads au lieu de
+`max_threads` est similaire à [pm.max_children](https://www.php.net/manual/install.fpm.configuration.php#pm.max-children) de PHP FPM. La principale différence est que FrankenPHP utilise des threads au lieu de
 processus et les délègue automatiquement à différents scripts worker et au 'mode classique' selon les besoins.
 
 ## Mode worker
@@ -160,10 +160,10 @@ Toutes les optimisations de performances habituelles liées à PHP s'appliquent 
 
 En particulier :
 
-- vérifiez que [OPcache](https://www.php.net/manual/en/book.opcache.php) est installé, activé et correctement configuré
+- vérifiez que [OPcache](https://www.php.net/manual/book.opcache.php) est installé, activé et correctement configuré
 - activez [les optimisations de l'autoloader de Composer](https://getcomposer.org/doc/articles/autoloader-optimization.md)
 - assurez-vous que le cache `realpath` est suffisamment grand pour les besoins de votre application
-- utilisez le [pré-chargement](https://www.php.net/manual/en/opcache.preloading.php)
+- utilisez le [pré-chargement](https://www.php.net/manual/opcache.preloading.php)
 
 Pour plus de détails, lisez [l'entrée de la documentation dédiée de Symfony](https://symfony.com/doc/current/performance.html)
 (la plupart des conseils sont utiles même si vous n'utilisez pas Symfony).
