@@ -9,6 +9,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestFunctionParserHandlesBracesInStringsAndComments(t *testing.T) {
+	input := "package main\n\n" +
+		"//export_php:function tricky(int $a): int\n" +
+		"func tricky(a int64) int64 {\n" +
+		"\ts := \"}\" + \"{\" // comment with braces } {\n" +
+		"\t_ = s\n" +
+		"\treturn a\n" +
+		"}\n"
+
+	tmpDir := t.TempDir()
+	fileName := filepath.Join(tmpDir, "tricky.go")
+	require.NoError(t, os.WriteFile(fileName, []byte(input), 0644))
+
+	parser := &FuncParser{}
+	functions, err := parser.parse(fileName)
+	require.NoError(t, err)
+	require.Len(t, functions, 1)
+
+	assert.Equal(t, "tricky", functions[0].Name)
+	assert.Contains(t, functions[0].GoFunction, `s := "}" + "{"`)
+	assert.Contains(t, functions[0].GoFunction, "return a")
+}
+
 func TestFunctionParser(t *testing.T) {
 	tests := []struct {
 		name     string
