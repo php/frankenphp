@@ -354,6 +354,38 @@ const ANOTHER_INDIVIDUAL = "test"`
 	assert.Equal(t, phpString, constants[3].PhpType)
 }
 
+func TestConstantParserIotaRestartsBetweenBlocks(t *testing.T) {
+	input := `package main
+
+// export_php:const
+const (
+	A = iota
+	B
+	C
+)
+
+// export_php:const
+const (
+	X = iota
+	Y
+)`
+
+	tmpDir := t.TempDir()
+	fileName := filepath.Join(tmpDir, "test.go")
+	require.NoError(t, os.WriteFile(fileName, []byte(input), 0644))
+
+	parser := &ConstantParser{}
+	constants, err := parser.parse(fileName)
+	assert.NoError(t, err)
+
+	require.Len(t, constants, 5)
+	assert.Equal(t, "0", constants[0].Value, "A should be 0")
+	assert.Equal(t, "1", constants[1].Value, "B should be 1")
+	assert.Equal(t, "2", constants[2].Value, "C should be 2")
+	assert.Equal(t, "0", constants[3].Value, "X should restart at 0 in new block")
+	assert.Equal(t, "1", constants[4].Value, "Y should be 1")
+}
+
 func TestConstantParserClassConstBlock(t *testing.T) {
 	input := `package main
 
