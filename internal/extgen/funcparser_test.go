@@ -270,10 +270,9 @@ func TestParameterParsing(t *testing.T) {
 		},
 	}
 
-	parser := &FuncParser{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			param, err := parser.parseParameter(tt.paramStr)
+			param, err := parseParameter(tt.paramStr)
 
 			if tt.expectError {
 				assert.Error(t, err, "parseParameter() expected error but got none")
