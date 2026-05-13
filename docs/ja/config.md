@@ -19,7 +19,7 @@ php_server
 
 より多くの機能を有効にし、便利な環境変数を提供するより高度な`Caddyfile`は、[FrankenPHPリポジトリ](https://github.com/php/frankenphp/blob/main/caddy/frankenphp/Caddyfile)およびDockerイメージに同梱されています。
 
-PHP自体は、[`php.ini` ファイルを使用](https://www.php.net/manual/en/configuration.file.php)して設定できます。
+PHP自体は、[`php.ini` ファイルを使用](https://www.php.net/manual/configuration.file.php)して設定できます。
 
 インストール方法に応じて、FrankenPHPとPHPインタープリターは以下の場所に記載された設定ファイルを探します。
 
@@ -275,11 +275,11 @@ PHPファイルに変更を加えても即座には反映されません。
 
 FPM や CLI SAPI と同様に、環境変数はデフォルトで`$_SERVER`スーパーグローバルで公開されます。
 
-[`variables_order` PHPディレクティブ](https://www.php.net/manual/en/ini.core.php#ini.variables-order)の`S`値は、このディレクティブ内での`E`の位置にかかわらず常に`ES`と同等です。
+[`variables_order` PHPディレクティブ](https://www.php.net/manual/ini.core.php#ini.variables-order)の`S`値は、このディレクティブ内での`E`の位置にかかわらず常に`ES`と同等です。
 
 ## PHP設定
 
-[追加のPHP設定ファイル](https://www.php.net/manual/en/configuration.file.php#configuration.file.scan)を読み込むには、
+[追加のPHP設定ファイル](https://www.php.net/manual/configuration.file.php#configuration.file.scan)を読み込むには、
 `PHP_INI_SCAN_DIR`環境変数を使用できます。
 設定されると、PHPは指定されたディレクトリに存在する`.ini`拡張子を持つすべてのファイルを読み込みます。
 

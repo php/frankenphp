@@ -1,4 +1,4 @@
-# Crear una Compilación Estática
+# Crear una compilación estática
 
 En lugar de usar una instalación local de la biblioteca PHP,
 es posible crear una compilación estática o mayormente estática de FrankenPHP gracias al excelente [proyecto static-php-cli](https://github.com/crazywhalecc/static-php-cli) (a pesar de su nombre, este proyecto soporta todas las SAPI, no solo CLI).
@@ -18,7 +18,7 @@ FrankenPHP también soporta [incrustar la aplicación PHP en el binario estátic
 
 Proporcionamos imágenes Docker para compilar binarios Linux estáticos:
 
-### Compilación Completamente Estática Basada en musl
+### Compilación completamente estática basada en musl
 
 Para un binario completamente estático que se ejecuta en cualquier distribución Linux sin dependencias pero que no soporta carga dinámica de extensiones:
 
@@ -33,7 +33,7 @@ Para un mejor rendimiento en escenarios altamente concurrentes, considera usar e
 docker buildx bake --load --set static-builder-musl.args.MIMALLOC=1 static-builder-musl
 ```
 
-### Compilación Mayormente Estática Basada en glibc (Con Soporte para Extensiones Dinámicas)
+### Compilación mayormente estática basada en glibc (con soporte para extensiones dinámicas)
 
 Para un binario que soporta la carga dinámica de extensiones PHP mientras tiene las extensiones seleccionadas compiladas estáticamente:
 
@@ -48,7 +48,7 @@ El binario resultante (mayormente estático excepto por `glibc`) se llama `frank
 
 Si deseas compilar el binario estático sin Docker, consulta las instrucciones para macOS, que también funcionan para Linux.
 
-### Extensiones Personalizadas
+### Extensiones personalizadas
 
 Por omisión, se compilan las extensiones PHP más populares.
 
@@ -71,7 +71,7 @@ docker buildx bake \
   static-builder-musl
 ```
 
-### Módulos Adicionales de Caddy
+### Módulos adicionales de Caddy
 
 Para agregar módulos adicionales de Caddy o pasar otros argumentos a [xcaddy](https://github.com/caddyserver/xcaddy), usa el ARG de Docker `XCADDY_ARGS`:
 
@@ -93,7 +93,7 @@ Consulta también cómo [personalizar la compilación](#personalizando-la-compil
 
 ### Token de GitHub
 
-Si alcanzas el límite de tasa de la API de GitHub, establece un Token de Acceso Personal de GitHub en una variable de entorno llamada `GITHUB_TOKEN`:
+Si alcanzas el límite de tasa de la API de GitHub, establece un token de acceso personal de GitHub en una variable de entorno llamada `GITHUB_TOKEN`:
 
 ```console
 GITHUB_TOKEN="xxx" docker --load buildx bake static-builder-musl
@@ -112,7 +112,7 @@ cd frankenphp
 
 Nota: este script también funciona en Linux (y probablemente en otros Unix) y es usado internamente por las imágenes Docker que proporcionamos.
 
-## Personalizando la Compilación
+## Personalizando la compilación
 
 Las siguientes variables de entorno pueden pasarse a `docker build` y al script `build-static.sh` para personalizar la compilación estática:
 

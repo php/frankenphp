@@ -146,5 +146,5 @@ To customize the extensions, use the `PHP_EXTENSIONS` environment variable.
 
 On Linux, the created binary is compressed using [UPX](https://upx.github.io).
 
-On Mac, to reduce the size of the file before sending it, you can compress it.
+On macOS, to reduce the size of the file before sending it, you can compress it.
 We recommend `xz`.

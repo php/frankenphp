@@ -81,7 +81,7 @@ O comando `octane:frankenphp` pode receber as seguintes opções:
 - `--https`: Habilita HTTPS, HTTP/2 e HTTP/3 e gera e renova certificados
   automaticamente;
 - `--http-redirect`: Habilita o redirecionamento de HTTP para HTTPS (somente
-- habilitado se `--https` for passada);
+  habilitado se `--https` for passada);
 - `--watch`: Recarrega o servidor automaticamente quando a aplicação é
   modificada;
 - `--poll`: Usa o polling do sistema de arquivos durante a verificação para

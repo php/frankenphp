@@ -117,7 +117,7 @@ docker run \
 
 ### Restart the worker after a certain number of requests
 
-As PHP was not originally designed for long-running processes, there are still many libraries and legacy codes that leak memory.
+As PHP was not originally designed for long-running processes, many libraries and legacy code still leak memory.
 A workaround to using this type of code in worker mode is to restart the worker script after processing a certain number of requests:
 
 The previous worker snippet allows configuring a maximum number of requests to handle by setting an environment variable named `MAX_REQUESTS`.
@@ -153,7 +153,7 @@ frankenphp {
 
 ## Superglobals behavior
 
-[PHP superglobals](https://www.php.net/manual/en/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...)
+[PHP superglobals](https://www.php.net/manual/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...)
 behave as follows:
 
 - before the first call to `frankenphp_handle_request()`, superglobals contain values bound to the worker script itself

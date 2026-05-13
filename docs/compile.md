@@ -12,7 +12,7 @@ Alternatively, [fully and mostly static builds](static.md) can also be created.
 
 ## Install PHP
 
-FrankenPHP is compatible with PHP 8.2 and superior.
+FrankenPHP is compatible with PHP 8.2 and higher.
 
 ### With Homebrew (Linux and Mac)
 
@@ -97,7 +97,7 @@ You can now build the final binary.
 ### Using xcaddy
 
 The recommended way is to use [xcaddy](https://github.com/caddyserver/xcaddy) to compile FrankenPHP.
-`xcaddy` also allows to easily add [custom Caddy modules](https://caddyserver.com/docs/modules/) and FrankenPHP extensions:
+`xcaddy` also makes it easy to add [custom Caddy modules](https://caddyserver.com/docs/modules/) and FrankenPHP extensions:
 
 ```console
 CGO_ENABLED=1 \

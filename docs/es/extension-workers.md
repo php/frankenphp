@@ -2,9 +2,9 @@
 
 Los Extension Workers permiten que tu [extensión FrankenPHP](https://frankenphp.dev/docs/extensions/) gestione un pool dedicado de hilos PHP para ejecutar tareas en segundo plano, manejar eventos asíncronos o implementar protocolos personalizados. Útil para sistemas de colas, listeners de eventos, programadores, etc.
 
-## Registrando el Worker
+## Registrando el worker
 
-### Registro Estático
+### Registro estático
 
 Si no necesitas hacer que el worker sea configurable por el usuario (ruta de script fija, número fijo de hilos), simplemente puedes registrar el worker en la función `init()`.
 
@@ -33,23 +33,23 @@ func init() {
 }
 ```
 
-### En un Módulo Caddy (Configurable por el usuario)
+### En un módulo Caddy (configurable por el usuario)
 
 Si planeas compartir tu extensión (como una cola genérica o listener de eventos), deberías envolverla en un módulo Caddy. Esto permite a los usuarios configurar la ruta del script y el número de hilos a través de su `Caddyfile`. Esto requiere implementar la interfaz `caddy.Provisioner` y analizar el Caddyfile ([ver un ejemplo](https://github.com/dunglas/frankenphp-queue/blob/989120d394d66dd6c8e2101cac73dd622fade334/caddy.go)).
 
-### En una Aplicación Go Pura (Embedding)
+### En una aplicación Go pura (embedding)
 
 Si estás [embebiendo FrankenPHP en una aplicación Go estándar sin caddy](https://pkg.go.dev/github.com/dunglas/frankenphp#example-ServeHTTP), puedes registrar extension workers usando `frankenphp.WithExtensionWorkers` al inicializar las opciones.
 
-## Interactuando con Workers
+## Interactuando con workers
 
 Una vez que el pool de workers está activo, puedes enviar tareas a él. Esto se puede hacer dentro de [funciones nativas exportadas a PHP](https://frankenphp.dev/docs/extensions/#writing-the-extension), o desde cualquier lógica Go como un programador cron, un listener de eventos (MQTT, Kafka), o cualquier otra goroutine.
 
-### Modo Sin Cabeza: `SendMessage`
+### Modo sin cabeza: `SendMessage`
 
 Usa `SendMessage` para pasar datos sin procesar directamente a tu script worker. Esto es ideal para colas o comandos simples.
 
-#### Ejemplo: Una Extensión de Cola Asíncrona
+#### Ejemplo: una extensión de cola asíncrona
 
 ```go
 // #include <Zend/zend_types.h>
@@ -109,7 +109,7 @@ func my_worker_http_request(path *C.zend_string) unsafe.Pointer {
 }
 ```
 
-## Script Worker
+## Script worker
 
 El script worker PHP se ejecuta en un bucle y puede manejar tanto mensajes sin procesar como solicitudes HTTP.
 
@@ -117,12 +117,12 @@ El script worker PHP se ejecuta en un bucle y puede manejar tanto mensajes sin p
 <?php
 // Manejar tanto mensajes sin procesar como solicitudes HTTP en el mismo bucle
 $handler = function ($payload = null) {
-    // Caso 1: Modo Mensaje
+    // Caso 1: modo mensaje
     if ($payload !== null) {
         return "Payload recibido: " . $payload;
     }
 
-    // Caso 2: Modo HTTP (las superglobales estándar de PHP están pobladas)
+    // Caso 2: modo HTTP (las superglobales estándar de PHP están pobladas)
     echo "Hola desde la página: " . $_SERVER['REQUEST_URI'];
 };
 
@@ -131,14 +131,14 @@ while (frankenphp_handle_request($handler)) {
 }
 ```
 
-## Hooks de Ciclo de Vida
+## Hooks de ciclo de vida
 
 FrankenPHP proporciona hooks para ejecutar código Go en puntos específicos del ciclo de vida.
 
-| Tipo de Hook | Nombre de Opción             | Firma                | Contexto y Caso de Uso                                                           |
+| Tipo de hook | Nombre de opción             | Firma                | Contexto y caso de uso                                                           |
 | :----------- | :--------------------------- | :------------------- | :------------------------------------------------------------------------------- |
-| **Servidor** | `WithWorkerOnServerStartup`  | `func()`             | Configuración global. Se ejecuta **Una vez**. Ejemplo: Conectar a NATS/Redis.    |
-| **Servidor** | `WithWorkerOnServerShutdown` | `func()`             | Limpieza global. Se ejecuta **Una vez**. Ejemplo: Cerrar conexiones compartidas. |
+| **Servidor** | `WithWorkerOnServerStartup`  | `func()`             | Configuración global. Se ejecuta **una vez**. Ejemplo: conectar a NATS/Redis.    |
+| **Servidor** | `WithWorkerOnServerShutdown` | `func()`             | Limpieza global. Se ejecuta **una vez**. Ejemplo: cerrar conexiones compartidas. |
 | **Hilo**     | `WithWorkerOnReady`          | `func(threadID int)` | Configuración por hilo. Llamado cuando un hilo inicia. Recibe el ID del hilo.    |
 | **Hilo**     | `WithWorkerOnShutdown`       | `func(threadID int)` | Limpieza por hilo. Recibe el ID del hilo.                                        |
 
@@ -157,13 +157,13 @@ func init() {
     workerHandle = frankenphpCaddy.RegisterWorkers(
         "my-worker", "worker.php", 2,
 
-        // Inicio del Servidor (Global)
+        // Inicio del servidor (global)
         frankenphp.WithWorkerOnServerStartup(func() {
             fmt.Println("Extension: Servidor iniciando...")
         }),
 
-        // Hilo Listo (Por Hilo)
-        // Nota: La función acepta un entero que representa el ID del hilo
+        // Hilo listo (por hilo)
+        // Nota: la función acepta un entero que representa el ID del hilo
         frankenphp.WithWorkerOnReady(func(id int) {
             fmt.Printf("Extension: Hilo worker #%d está listo.\n", id)
         }),
