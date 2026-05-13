@@ -69,9 +69,15 @@ jobs:
           path: frankenphp
           persist-credentials: false
 
-      - uses: ./frankenphp/.github/actions/version
+      - id: version
+        uses: ./frankenphp/.github/actions/version
         with:
           ref: ${{ env.REF }}
+      - name: Set FRANKENPHP_VERSION
+        shell: bash
+        run: echo "FRANKENPHP_VERSION=${VERSION}" >> "${GITHUB_ENV}"
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
 
       - name: Setup Go
         uses: ./frankenphp/.github/actions/setup-go

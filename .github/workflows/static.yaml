@@ -453,9 +453,14 @@ jobs:
           ref: ${{ needs.prepare.outputs.ref }}
           persist-credentials: false
       - uses: ./.github/actions/setup-go
-      - uses: ./.github/actions/version
+      - id: version
+        uses: ./.github/actions/version
         with:
           ref: ${{ needs.prepare.outputs.ref }}
+      - name: Set FRANKENPHP_VERSION
+        run: echo "FRANKENPHP_VERSION=${VERSION}" >> "${GITHUB_ENV}"
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
       - name: Build FrankenPHP
         run: ./build-static.sh
         env:
