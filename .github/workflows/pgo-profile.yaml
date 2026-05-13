@@ -35,21 +35,8 @@ jobs:
           # zizmor: ignore[artipacked]
           # persist-credentials is intentionally left enabled because this
           # workflow needs to push a branch via git push (mirrors translate.yaml).
-      - uses: actions/setup-go@v6
-        with:
-          go-version: "1.26"
-          cache-dependency-path: |
-            go.sum
-            caddy/go.sum
-      - uses: shivammathur/setup-php@v2
-        with:
-          php-version: "8.5"
-          ini-file: development
-          coverage: none
-          tools: none
-        env:
-          phpts: ts
-          debug: true
+      - uses: ./.github/actions/setup-go
+      - uses: ./.github/actions/setup-php
       - name: Install e-dant/watcher
         uses: ./.github/actions/watcher
       - name: Set CGO flags

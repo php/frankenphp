@@ -69,33 +69,15 @@ jobs:
           path: frankenphp
           persist-credentials: false
 
-      - name: Set FRANKENPHP_VERSION
-        run: |
-          $ref = $env:REF
-
-          if ($env:GITHUB_REF_TYPE -eq "tag") {
-            $frankenphpVersion = $env:GITHUB_REF_NAME.Substring(1)
-          } elseif ($ref) {
-            if ($ref.StartsWith("v")) {
-              $frankenphpVersion = $ref.Substring(1)
-            } else {
-              $frankenphpVersion = $ref
-            }
-          } else {
-            $frankenphpVersion = $env:GITHUB_SHA
-          }
-
-          "FRANKENPHP_VERSION=$frankenphpVersion" >> $env:GITHUB_ENV
+      - id: version
+        uses: ./frankenphp/.github/actions/version
+        with:
+          ref: ${{ env.REF }}
 
       - name: Setup Go
-        uses: actions/setup-go@v6
-        with: # zizmor: ignore[cache-poisoning]
-          go-version: "1.26"
-          cache-dependency-path: |
-            frankenphp/go.sum
-            frankenphp/caddy/go.sum
-          cache: ${{ !startsWith(github.ref, 'refs/tags/') }}
-          check-latest: true
+        uses: ./frankenphp/.github/actions/setup-go
+        with:
+          working-directory: frankenphp
 
       - name: Install Vcpkg Libraries
         working-directory: frankenphp
@@ -154,6 +136,8 @@ jobs:
 
           "CGO_CFLAGS=-DFRANKENPHP_VERSION=$env:FRANKENPHP_VERSION -I$vcpkgRoot\include -I$watcherRoot -I$phpDevel\include -I$phpDevel\include\main -I$phpDevel\include\TSRM -I$phpDevel\include\Zend -I$phpDevel\include\ext" >> $env:GITHUB_ENV
           "CGO_LDFLAGS=-L$vcpkgRoot\lib -lbrotlienc -L$watcherRoot -llibwatcher-c -L$phpBin -L$phpDevel\lib -lphp8ts -lphp8embed" >> $env:GITHUB_ENV
+        env:
+          FRANKENPHP_VERSION: ${{ steps.version.outputs.version }}
 
       - name: Embed Windows icon and metadata
         working-directory: frankenphp\caddy\frankenphp
@@ -190,12 +174,16 @@ jobs:
           $json | Set-Content "versioninfo.json"
 
           goversioninfo -64 -icon ..\..\frankenphp.ico versioninfo.json -o resource.syso
+        env:
+          FRANKENPHP_VERSION: ${{ steps.version.outputs.version }}
 
       - name: Build FrankenPHP
         run: |
           $customVersion = "FrankenPHP $env:FRANKENPHP_VERSION PHP $env:PHP_VERSION Caddy"
           go build -ldflags="-extldflags=-fuse-ld=lld -X 'github.com/caddyserver/caddy/v2.CustomVersion=$customVersion' -X 'github.com/caddyserver/caddy/v2.CustomBinaryName=frankenphp' -X 'github.com/caddyserver/caddy/v2/modules/caddyhttp.ServerHeader=FrankenPHP Caddy'"
         working-directory: frankenphp\caddy\frankenphp
+        env:
+          FRANKENPHP_VERSION: ${{ steps.version.outputs.version }}
 
       - name: Create Directory
         run: |
