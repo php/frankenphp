@@ -453,8 +453,6 @@ jobs:
           ref: ${{ needs.prepare.outputs.ref }}
           persist-credentials: false
       - uses: ./.github/actions/setup-go
-        with:
-          cache: ${{ github.event_name != 'release' }}
       - name: Set FRANKENPHP_VERSION
         run: |
           if [ "${GITHUB_REF_TYPE}" == "tag" ]; then

@@ -91,7 +91,6 @@ jobs:
         uses: ./frankenphp/.github/actions/setup-go
         with:
           working-directory: frankenphp
-          cache: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
       - name: Install Vcpkg Libraries
         working-directory: frankenphp
