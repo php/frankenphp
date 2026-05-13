@@ -141,8 +141,6 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-go
       - uses: ./.github/actions/setup-php
-        with:
-          php-version: "8.5"
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@latest
       - name: Set CGO flags

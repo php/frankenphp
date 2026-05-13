@@ -37,8 +37,6 @@ jobs:
           # workflow needs to push a branch via git push (mirrors translate.yaml).
       - uses: ./.github/actions/setup-go
       - uses: ./.github/actions/setup-php
-        with:
-          php-version: "8.5"
       - name: Install e-dant/watcher
         uses: ./.github/actions/watcher
       - name: Set CGO flags
