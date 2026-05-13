@@ -139,3 +139,8 @@ EMBED=/path/to/your/app ./build-static.sh
 На Linux созданный бинарный файл сжимается с помощью [UPX](https://upx.github.io).
 
 На Mac для уменьшения размера файла перед отправкой его можно сжать. Рекомендуется использовать `xz`.
+
+## Отключение UPX
+```console
+RUN NO_COMPRESS=1 ./build-static.sh
+```
