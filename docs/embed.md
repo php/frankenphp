@@ -150,6 +150,7 @@ On macOS, to reduce the size of the file before sending it, you can compress it.
 We recommend `xz`.
 
 ### Disable UPX
+
 ```console
 RUN NO_COMPRESS=1 ./build-static.sh
 ```
