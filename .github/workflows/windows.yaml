@@ -69,23 +69,9 @@ jobs:
           path: frankenphp
           persist-credentials: false
 
-      - name: Set FRANKENPHP_VERSION
-        run: |
-          $ref = $env:REF
-
-          if ($env:GITHUB_REF_TYPE -eq "tag") {
-            $frankenphpVersion = $env:GITHUB_REF_NAME.Substring(1)
-          } elseif ($ref) {
-            if ($ref.StartsWith("v")) {
-              $frankenphpVersion = $ref.Substring(1)
-            } else {
-              $frankenphpVersion = $ref
-            }
-          } else {
-            $frankenphpVersion = $env:GITHUB_SHA
-          }
-
-          "FRANKENPHP_VERSION=$frankenphpVersion" >> $env:GITHUB_ENV
+      - uses: ./frankenphp/.github/actions/version
+        with:
+          ref: ${{ env.REF }}
 
       - name: Setup Go
         uses: ./frankenphp/.github/actions/setup-go

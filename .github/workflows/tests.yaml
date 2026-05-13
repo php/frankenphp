@@ -42,15 +42,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-go
-      - uses: shivammathur/setup-php@v2
+      - uses: ./.github/actions/setup-php
         with:
           php-version: ${{ matrix.php-versions }}
-          ini-file: development
-          coverage: none
-          tools: none
-        env:
-          phpts: ts
-          debug: true
       - name: Install e-dant/watcher
         uses: ./.github/actions/watcher
       - name: Reinstall libbrotli-dev
@@ -113,15 +107,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-go
-      - uses: shivammathur/setup-php@v2
+      - uses: ./.github/actions/setup-php
         with:
           php-version: ${{ matrix.php-versions }}
-          ini-file: development
-          coverage: none
-          tools: none
-        env:
-          phpts: ts
-          debug: true
       - name: Install PHP development libraries
         run: sudo apt-get update && sudo apt-get install -y libkrb5-dev libsodium-dev libargon2-dev
       - name: Install xcaddy
@@ -152,15 +140,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-go
-      - uses: shivammathur/setup-php@v2
+      - uses: ./.github/actions/setup-php
         with:
-          php-version: 8.5
-          ini-file: development
-          coverage: none
-          tools: none
-        env:
-          phpts: ts
-          debug: true
+          php-version: "8.5"
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@latest
       - name: Set CGO flags

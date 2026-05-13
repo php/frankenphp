@@ -453,19 +453,9 @@ jobs:
           ref: ${{ needs.prepare.outputs.ref }}
           persist-credentials: false
       - uses: ./.github/actions/setup-go
-      - name: Set FRANKENPHP_VERSION
-        run: |
-          if [ "${GITHUB_REF_TYPE}" == "tag" ]; then
-            export FRANKENPHP_VERSION=${GITHUB_REF_NAME:1}
-          elif [ "${GITHUB_EVENT_NAME}" == "schedule" ]; then
-            export FRANKENPHP_VERSION="${REF}"
-          else
-            export FRANKENPHP_VERSION=${GITHUB_SHA}
-          fi
-
-          echo "FRANKENPHP_VERSION=${FRANKENPHP_VERSION}" >> "${GITHUB_ENV}"
-        env:
-          REF: ${{ needs.prepare.outputs.ref }}
+      - uses: ./.github/actions/version
+        with:
+          ref: ${{ needs.prepare.outputs.ref }}
       - name: Build FrankenPHP
         run: ./build-static.sh
         env:

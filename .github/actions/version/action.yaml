@@ -1,0 +1,26 @@
+name: version
+description: Resolve FRANKENPHP_VERSION from the current ref (stripped tag name, with commit SHA fallback)
+inputs:
+  ref:
+    description: Optional ref override (e.g. tag name resolved by a prepare job for schedule/dispatch flows)
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        REF: ${{ inputs.ref }}
+      run: | # zizmor: ignore[github-env]
+        if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+          version="${GITHUB_REF_NAME#v}"
+        elif [ -n "${REF}" ]; then
+          version="${REF#v}"
+        else
+          version="${GITHUB_SHA}"
+        fi
+        if [[ ! "${version}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+          echo "::error::invalid FRANKENPHP_VERSION value: ${version}" >&2
+          exit 1
+        fi
+        echo "FRANKENPHP_VERSION=${version}" >> "${GITHUB_ENV}"
