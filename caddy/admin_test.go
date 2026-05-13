@@ -162,14 +162,15 @@ func TestAutoScaleWorkerThreads(t *testing.T) {
 		wg.Add(requestsPerTry)
 		for range requestsPerTry {
 			go func() {
+				// deferred so a t.Fatalf from a failed request doesn't leak the WaitGroup
+				defer wg.Done()
 				tester.AssertGetResponse(endpoint, http.StatusOK, "slept for 2 ms and worked for 1000 iterations")
-				wg.Done()
 			}()
 		}
 		wg.Wait()
 
 		amountOfThreads = getNumThreads(t, tester)
-		if amountOfThreads > 2 {
+		if amountOfThreads > 2 || t.Failed() {
 			break
 		}
 	}
@@ -214,14 +215,15 @@ func TestAutoScaleRegularThreadsOnAutomaticThreadLimit(t *testing.T) {
 		wg.Add(requestsPerTry)
 		for range requestsPerTry {
 			go func() {
+				// deferred so a t.Fatalf from a failed request doesn't leak the WaitGroup
+				defer wg.Done()
 				tester.AssertGetResponse(endpoint, http.StatusOK, "slept for 2 ms and worked for 1000 iterations")
-				wg.Done()
 			}()
 		}
 		wg.Wait()
 
 		amountOfThreads = getNumThreads(t, tester)
-		if amountOfThreads > 1 {
+		if amountOfThreads > 1 || t.Failed() {
 			break
 		}
 	}
