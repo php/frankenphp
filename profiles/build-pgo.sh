@@ -30,6 +30,10 @@ collect "$HERE/app/Caddyfile.worker" "$HERE/worker.pgo"
 export CGO_CFLAGS="${CGO_CFLAGS:-} -fno-sanitize=undefined"
 PPROF="$(go env GOPATH)/bin/pprof"
 [ -x "$PPROF" ] || go install github.com/google/pprof@latest
-"$PPROF" -proto "$HERE/regular.pgo" "$HERE/worker.pgo" >"$ROOT/caddy/frankenphp/default.pgo"
+# Input profiles from net/http/pprof already carry Function.start_line.
+# pprof's addr2line symbolizer doesn't set it, so re-symbolizing here
+# overwrites the existing records with start_line=0 and Go PGO's
+# preprofile then rejects the merged profile.
+"$PPROF" -symbolize=none -proto "$HERE/regular.pgo" "$HERE/worker.pgo" >"$ROOT/caddy/frankenphp/default.pgo"
 
 (cd "$ROOT/caddy/frankenphp" && go build -o frankenphp-pgo)
