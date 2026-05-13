@@ -11,9 +11,10 @@ import (
 
 func TestConstantParser(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
-		expected int
+		name   string
+		input  string
+		expect int
+		assert func(t *testing.T, constants []phpConstant)
 	}{
 		{
 			name: "single constant",
@@ -21,7 +22,14 @@ func TestConstantParser(t *testing.T) {
 
 //export_php:const
 const MyConstant = "test_value"`,
-			expected: 1,
+			expect: 1,
+			assert: func(t *testing.T, cs []phpConstant) {
+				c := cs[0]
+				assert.Equal(t, "MyConstant", c.Name)
+				assert.Equal(t, `"test_value"`, c.Value)
+				assert.Equal(t, phpString, c.PhpType)
+				assert.False(t, c.IsIota)
+			},
 		},
 		{
 			name: "multiple constants",
@@ -35,7 +43,17 @@ const SecondConstant = 42
 
 //export_php:const
 const ThirdConstant = true`,
-			expected: 3,
+			expect: 3,
+			assert: func(t *testing.T, cs []phpConstant) {
+				names := []string{"FirstConstant", "SecondConstant", "ThirdConstant"}
+				values := []string{`"first"`, "42", "true"}
+				types := []phpType{phpString, phpInt, phpBool}
+				for i, c := range cs {
+					assert.Equal(t, names[i], c.Name)
+					assert.Equal(t, values[i], c.Value)
+					assert.Equal(t, types[i], c.PhpType)
+				}
+			},
 		},
 		{
 			name: "iota constant",
@@ -43,7 +61,13 @@ const ThirdConstant = true`,
 
 //export_php:const
 const IotaConstant = iota`,
-			expected: 1,
+			expect: 1,
+			assert: func(t *testing.T, cs []phpConstant) {
+				c := cs[0]
+				assert.Equal(t, "IotaConstant", c.Name)
+				assert.True(t, c.IsIota)
+				assert.Equal(t, "0", c.Value)
+			},
 		},
 		{
 			name: "mixed constants and iota",
@@ -57,7 +81,7 @@ const IotaConst = iota
 
 //export_php:const
 const IntConst = 123`,
-			expected: 3,
+			expect: 3,
 		},
 		{
 			name: "no php constants",
@@ -68,7 +92,7 @@ const RegularConstant = "not exported"
 func someFunction() {
 	// Just regular code
 }`,
-			expected: 0,
+			expect: 0,
 		},
 		{
 			name: "constant with complex value",
@@ -76,7 +100,7 @@ func someFunction() {
 
 //export_php:const
 const ComplexConstant = "string with spaces and symbols !@#$%"`,
-			expected: 1,
+			expect: 1,
 		},
 		{
 			name: "directive without constant",
@@ -84,7 +108,7 @@ const ComplexConstant = "string with spaces and symbols !@#$%"`,
 
 //export_php:const
 var notAConstant = "this is a variable"`,
-			expected: 0,
+			expect: 0,
 		},
 		{
 			name: "mixed export and non-export constants",
@@ -99,7 +123,7 @@ const AnotherRegular = 456
 
 //export_php:const
 const AnotherExported = 789`,
-			expected: 2,
+			expect: 2,
 		},
 		{
 			name: "numeric constants",
@@ -113,7 +137,7 @@ const FloatConstant = 3.14
 
 //export_php:const
 const HexConstant = 0xFF`,
-			expected: 3,
+			expect: 3,
 		},
 		{
 			name: "boolean constants",
@@ -124,7 +148,7 @@ const TrueConstant = true
 
 //export_php:const
 const FalseConstant = false`,
-			expected: 2,
+			expect: 2,
 		},
 	}
 
@@ -136,35 +160,11 @@ const FalseConstant = false`,
 
 			parser := &ConstantParser{}
 			constants, err := parser.parse(tmpFile)
-			assert.NoError(t, err, "parse() error")
+			require.NoError(t, err)
+			require.Len(t, constants, tt.expect)
 
-			assert.Len(t, constants, tt.expected, "parse() got wrong number of constants")
-
-			if tt.name == "single constant" && len(constants) > 0 {
-				c := constants[0]
-				assert.Equal(t, "MyConstant", c.Name, "Expected constant name 'MyConstant'")
-				assert.Equal(t, `"test_value"`, c.Value, `Expected constant value '"test_value"'`)
-				assert.Equal(t, phpString, c.PhpType, "Expected constant type 'string'")
-				assert.False(t, c.IsIota, "Expected isIota to be false for string constant")
-			}
-
-			if tt.name == "iota constant" && len(constants) > 0 {
-				c := constants[0]
-				assert.Equal(t, "IotaConstant", c.Name, "Expected constant name 'IotaConstant'")
-				assert.True(t, c.IsIota, "Expected isIota to be true")
-				assert.Equal(t, "0", c.Value, "Expected iota constant value to be '0'")
-			}
-
-			if tt.name == "multiple constants" && len(constants) == 3 {
-				expectedNames := []string{"FirstConstant", "SecondConstant", "ThirdConstant"}
-				expectedValues := []string{`"first"`, "42", "true"}
-				expectedTypes := []phpType{phpString, phpInt, phpBool}
-
-				for i, c := range constants {
-					assert.Equal(t, expectedNames[i], c.Name, "Expected constant name '%s'", expectedNames[i])
-					assert.Equal(t, expectedValues[i], c.Value, "Expected constant value '%s'", expectedValues[i])
-					assert.Equal(t, expectedTypes[i], c.PhpType, "Expected constant type '%s'", expectedTypes[i])
-				}
+			if tt.assert != nil {
+				tt.assert(t, constants)
 			}
 		})
 	}
@@ -172,9 +172,8 @@ const FalseConstant = false`,
 
 func TestConstantParserErrors(t *testing.T) {
 	tests := []struct {
-		name        string
-		input       string
-		expectError bool
+		name  string
+		input string
 	}{
 		{
 			name: "invalid constant declaration",
@@ -182,7 +181,6 @@ func TestConstantParserErrors(t *testing.T) {
 
 //export_php:const
 const = "missing name"`,
-			expectError: true,
 		},
 		{
 			name: "malformed constant",
@@ -190,7 +188,6 @@ const = "missing name"`,
 
 //export_php:const
 const InvalidSyntax`,
-			expectError: true,
 		},
 	}
 
@@ -202,15 +199,7 @@ const InvalidSyntax`,
 
 			parser := &ConstantParser{}
 			_, err := parser.parse(tmpFile)
-			require.NotNil(t, err)
-
-			if tt.expectError {
-				assert.Error(t, err, "Expected error but got none")
-
-				return
-			}
-
-			assert.NoError(t, err)
+			assert.Error(t, err, "Expected error but got none")
 		})
 	}
 }
@@ -354,6 +343,38 @@ const ANOTHER_INDIVIDUAL = "test"`
 	assert.Equal(t, phpString, constants[3].PhpType)
 }
 
+func TestConstantParserIotaRestartsBetweenBlocks(t *testing.T) {
+	input := `package main
+
+// export_php:const
+const (
+	A = iota
+	B
+	C
+)
+
+// export_php:const
+const (
+	X = iota
+	Y
+)`
+
+	tmpDir := t.TempDir()
+	fileName := filepath.Join(tmpDir, "test.go")
+	require.NoError(t, os.WriteFile(fileName, []byte(input), 0644))
+
+	parser := &ConstantParser{}
+	constants, err := parser.parse(fileName)
+	assert.NoError(t, err)
+
+	require.Len(t, constants, 5)
+	assert.Equal(t, "0", constants[0].Value, "A should be 0")
+	assert.Equal(t, "1", constants[1].Value, "B should be 1")
+	assert.Equal(t, "2", constants[2].Value, "C should be 2")
+	assert.Equal(t, "0", constants[3].Value, "X should restart at 0 in new block")
+	assert.Equal(t, "1", constants[4].Value, "Y should be 1")
+}
+
 func TestConstantParserClassConstBlock(t *testing.T) {
 	input := `package main
 
@@ -449,9 +470,10 @@ func TestConstantParserTypeDetection(t *testing.T) {
 
 func TestConstantParserClassConstants(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
-		expected int
+		name   string
+		input  string
+		expect int
+		assert func(t *testing.T, constants []phpConstant)
 	}{
 		{
 			name: "single class constant",
@@ -459,7 +481,14 @@ func TestConstantParserClassConstants(t *testing.T) {
 
 //export_php:classconst MyClass
 const STATUS_ACTIVE = 1`,
-			expected: 1,
+			expect: 1,
+			assert: func(t *testing.T, cs []phpConstant) {
+				c := cs[0]
+				assert.Equal(t, "STATUS_ACTIVE", c.Name)
+				assert.Equal(t, "MyClass", c.ClassName)
+				assert.Equal(t, "1", c.Value)
+				assert.Equal(t, phpInt, c.PhpType)
+			},
 		},
 		{
 			name: "multiple class constants",
@@ -473,7 +502,17 @@ const STATUS_INACTIVE = "inactive"
 
 //export_php:classconst Order
 const STATE_PENDING = 0`,
-			expected: 3,
+			expect: 3,
+			assert: func(t *testing.T, cs []phpConstant) {
+				classes := []string{"User", "User", "Order"}
+				names := []string{"STATUS_ACTIVE", "STATUS_INACTIVE", "STATE_PENDING"}
+				values := []string{`"active"`, `"inactive"`, "0"}
+				for i, c := range cs {
+					assert.Equal(t, classes[i], c.ClassName)
+					assert.Equal(t, names[i], c.Name)
+					assert.Equal(t, values[i], c.Value)
+				}
+			},
 		},
 		{
 			name: "mixed global and class constants",
@@ -487,7 +526,12 @@ const CLASS_CONST = 42
 
 //export_php:const
 const ANOTHER_GLOBAL = true`,
-			expected: 3,
+			expect: 3,
+			assert: func(t *testing.T, cs []phpConstant) {
+				assert.Empty(t, cs[0].ClassName, "First constant should be global")
+				assert.Equal(t, "MyClass", cs[1].ClassName)
+				assert.Empty(t, cs[2].ClassName, "Third constant should be global")
+			},
 		},
 		{
 			name: "class constant with iota",
@@ -498,7 +542,7 @@ const FIRST = iota
 
 //export_php:classconst Status
 const SECOND = iota`,
-			expected: 2,
+			expect: 2,
 		},
 		{
 			name: "invalid class constant directive",
@@ -506,7 +550,7 @@ const SECOND = iota`,
 
 //export_php:classconst
 const INVALID = "missing class name"`,
-			expected: 0,
+			expect: 0,
 		},
 	}
 
@@ -518,34 +562,11 @@ const INVALID = "missing class name"`,
 
 			parser := &ConstantParser{}
 			constants, err := parser.parse(tmpFile)
-			assert.NoError(t, err, "parse() error")
+			require.NoError(t, err)
+			require.Len(t, constants, tt.expect)
 
-			assert.Len(t, constants, tt.expected, "parse() got wrong number of constants")
-
-			if tt.name == "single class constant" && len(constants) > 0 {
-				c := constants[0]
-				assert.Equal(t, "STATUS_ACTIVE", c.Name, "Expected constant name 'STATUS_ACTIVE'")
-				assert.Equal(t, "MyClass", c.ClassName, "Expected class name 'MyClass'")
-				assert.Equal(t, "1", c.Value, "Expected constant value '1'")
-				assert.Equal(t, phpInt, c.PhpType, "Expected constant type 'int'")
-			}
-
-			if tt.name == "multiple class constants" && len(constants) == 3 {
-				expectedClasses := []string{"User", "User", "Order"}
-				expectedNames := []string{"STATUS_ACTIVE", "STATUS_INACTIVE", "STATE_PENDING"}
-				expectedValues := []string{`"active"`, `"inactive"`, "0"}
-
-				for i, c := range constants {
-					assert.Equal(t, expectedClasses[i], c.ClassName, "Expected class name '%s'", expectedClasses[i])
-					assert.Equal(t, expectedNames[i], c.Name, "Expected constant name '%s'", expectedNames[i])
-					assert.Equal(t, expectedValues[i], c.Value, "Expected constant value '%s'", expectedValues[i])
-				}
-			}
-
-			if tt.name == "mixed global and class constants" && len(constants) == 3 {
-				assert.Empty(t, constants[0].ClassName, "First constant should be global")
-				assert.Equal(t, "MyClass", constants[1].ClassName, "Second constant should belong to MyClass")
-				assert.Empty(t, constants[2].ClassName, "Third constant should be global")
+			if tt.assert != nil {
+				tt.assert(t, constants)
 			}
 		})
 	}

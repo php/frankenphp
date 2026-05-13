@@ -161,7 +161,7 @@ Replace `<your-IPs>` with the actual IP ranges of your proxy if needed.
 
 Additionally, your PHP framework must also be configured to trust the proxy.
 For example, set the [`TRUSTED_PROXIES` environment variable](https://symfony.com/doc/current/deployment/proxies.html) for Symfony,
-or the [`trustedproxies` middleware](https://laravel.com/docs/trustedproxy) for Laravel.
+or the [`trustedproxies` middleware](https://laravel.com/docs/requests#configuring-trusted-proxies) for Laravel.
 
 Without both configurations, headers such as `X-Forwarded-For` and `X-Forwarded-Proto` will be ignored,
 which can cause issues like incorrect HTTPS detection or wrong client IP addresses.

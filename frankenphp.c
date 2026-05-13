@@ -927,7 +927,7 @@ static const zend_function_entry frankenphp_test_hook_functions[] = {
 
 PHP_MINIT_FUNCTION(frankenphp) {
   register_frankenphp_symbols(module_number);
-#ifndef PHP_WIN32
+#ifndef
   pthread_atfork(frankenphp_fork_prepare, NULL, frankenphp_fork_child);
 #endif
 

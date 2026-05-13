@@ -9,11 +9,35 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestFunctionParserHandlesBracesInStringsAndComments(t *testing.T) {
+	input := "package main\n\n" +
+		"//export_php:function tricky(int $a): int\n" +
+		"func tricky(a int64) int64 {\n" +
+		"\ts := \"}\" + \"{\" // comment with braces } {\n" +
+		"\t_ = s\n" +
+		"\treturn a\n" +
+		"}\n"
+
+	tmpDir := t.TempDir()
+	fileName := filepath.Join(tmpDir, "tricky.go")
+	require.NoError(t, os.WriteFile(fileName, []byte(input), 0644))
+
+	parser := &FuncParser{}
+	functions, err := parser.parse(fileName)
+	require.NoError(t, err)
+	require.Len(t, functions, 1)
+
+	assert.Equal(t, "tricky", functions[0].Name)
+	assert.Contains(t, functions[0].GoFunction, `s := "}" + "{"`)
+	assert.Contains(t, functions[0].GoFunction, "return a")
+}
+
 func TestFunctionParser(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
-		expected int
+		name   string
+		input  string
+		expect int
+		assert func(t *testing.T, functions []phpFunction)
 	}{
 		{
 			name: "single function",
@@ -23,7 +47,14 @@ func TestFunctionParser(t *testing.T) {
 func testFunc(name *C.zend_string) unsafe.Pointer {
 	return String("Hello " + CStringToGoString(name))
 }`,
-			expected: 1,
+			expect: 1,
+			assert: func(t *testing.T, fns []phpFunction) {
+				fn := fns[0]
+				assert.Equal(t, "testFunc", fn.Name)
+				assert.Equal(t, phpString, fn.ReturnType)
+				require.Len(t, fn.Params, 1)
+				assert.Equal(t, "name", fn.Params[0].Name)
+			},
 		},
 		{
 			name: "multiple functions",
@@ -34,11 +65,11 @@ func func1(a int64) int64 {
 	return a * 2
 }
 
-//export_php:function func2(string $b): string  
+//export_php:function func2(string $b): string
 func func2(b *C.zend_string) unsafe.Pointer {
 	return String("processed: " + CStringToGoString(b))
 }`,
-			expected: 2,
+			expect: 2,
 		},
 		{
 			name: "no php functions",
@@ -47,7 +78,7 @@ func func2(b *C.zend_string) unsafe.Pointer {
 func regularFunc() {
 	// Just a regular Go function
 }`,
-			expected: 0,
+			expect: 0,
 		},
 		{
 			name: "mixed functions",
@@ -66,7 +97,7 @@ func internalFunc() {
 func anotherPhpFunc(num int64) int64 {
 	return num * 10
 }`,
-			expected: 2,
+			expect: 2,
 		},
 		{
 			name: "wrong args syntax",
@@ -76,7 +107,7 @@ func anotherPhpFunc(num int64) int64 {
 func phpFunc(data *C.zend_string) unsafe.Pointer {
 	return String("PHP: " + CStringToGoString(data))
 }`,
-			expected: 0,
+			expect: 0,
 		},
 		{
 			name: "decoupled function names",
@@ -91,7 +122,11 @@ func myGoFunction(name *C.zend_string) unsafe.Pointer {
 func someOtherGoName(num int64) int64 {
 	return num * 5
 }`,
-			expected: 2,
+			expect: 2,
+			assert: func(t *testing.T, fns []phpFunction) {
+				assert.Equal(t, "my_php_function", fns[0].Name)
+				assert.Equal(t, "another_php_func", fns[1].Name)
+			},
 		},
 	}
 
@@ -104,23 +139,10 @@ func someOtherGoName(num int64) int64 {
 			parser := &FuncParser{}
 			functions, err := parser.parse(fileName)
 			require.NoError(t, err)
-			assert.Len(t, functions, tt.expected, "parse() got wrong number of functions")
+			require.Len(t, functions, tt.expect)
 
-			if tt.name == "single function" && len(functions) > 0 {
-				fn := functions[0]
-				assert.Equal(t, "testFunc", fn.Name, "Expected function name 'testFunc'")
-				assert.Equal(t, phpString, fn.ReturnType, "Expected return type 'string'")
-				assert.Len(t, fn.Params, 1, "Expected 1 parameter")
-				if len(fn.Params) > 0 {
-					assert.Equal(t, "name", fn.Params[0].Name, "Expected parameter name 'name'")
-				}
-			}
-
-			if tt.name == "decoupled function names" && len(functions) >= 2 {
-				fn1 := functions[0]
-				assert.Equal(t, "my_php_function", fn1.Name, "Expected PHP function name 'my_php_function'")
-				fn2 := functions[1]
-				assert.Equal(t, "another_php_func", fn2.Name, "Expected PHP function name 'another_php_func'")
+			if tt.assert != nil {
+				tt.assert(t, functions)
 			}
 		})
 	}
@@ -128,13 +150,14 @@ func someOtherGoName(num int64) int64 {
 
 func TestSignatureParsing(t *testing.T) {
 	tests := []struct {
-		name        string
-		signature   string
-		expectError bool
-		funcName    string
-		paramCount  int
-		returnType  phpType
-		nullable    bool
+		name           string
+		signature      string
+		expectError    bool
+		funcName       string
+		paramCount     int
+		returnType     phpType
+		nullable       bool
+		paramsNullable []bool
 	}{
 		{
 			name:       "simple function",
@@ -169,12 +192,13 @@ func TestSignatureParsing(t *testing.T) {
 			nullable:   false,
 		},
 		{
-			name:       "nullable parameters",
-			signature:  "process(?string data, ?int count): bool",
-			funcName:   "process",
-			paramCount: 2,
-			returnType: phpBool,
-			nullable:   false,
+			name:           "nullable parameters",
+			signature:      "process(?string data, ?int count): bool",
+			funcName:       "process",
+			paramCount:     2,
+			returnType:     phpBool,
+			nullable:       false,
+			paramsNullable: []bool{true, true},
 		},
 		{
 			name:        "invalid signature",
@@ -198,17 +222,14 @@ func TestSignatureParsing(t *testing.T) {
 				return
 			}
 
-			assert.NoError(t, err, "parseSignature() unexpected error")
-			assert.Equal(t, tt.funcName, fn.Name, "parseSignature() name mismatch")
-			assert.Len(t, fn.Params, tt.paramCount, "parseSignature() param count mismatch")
-			assert.Equal(t, tt.returnType, fn.ReturnType, "parseSignature() return type mismatch")
-			assert.Equal(t, tt.nullable, fn.IsReturnNullable, "parseSignature() nullable mismatch")
+			require.NoError(t, err)
+			assert.Equal(t, tt.funcName, fn.Name)
+			require.Len(t, fn.Params, tt.paramCount)
+			assert.Equal(t, tt.returnType, fn.ReturnType)
+			assert.Equal(t, tt.nullable, fn.IsReturnNullable)
 
-			if tt.name == "nullable parameters" {
-				if len(fn.Params) >= 2 {
-					assert.True(t, fn.Params[0].IsNullable, "First parameter should be nullable")
-					assert.True(t, fn.Params[1].IsNullable, "Second parameter should be nullable")
-				}
+			for i, nullable := range tt.paramsNullable {
+				assert.Equal(t, nullable, fn.Params[i].IsNullable, "param %d nullable mismatch", i)
 			}
 		})
 	}
@@ -270,10 +291,9 @@ func TestParameterParsing(t *testing.T) {
 		},
 	}
 
-	parser := &FuncParser{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			param, err := parser.parseParameter(tt.paramStr)
+			param, err := parseParameter(tt.paramStr)
 
 			if tt.expectError {
 				assert.Error(t, err, "parseParameter() expected error but got none")
@@ -292,6 +312,41 @@ func TestParameterParsing(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestFunctionParserRejectsInvalidSignature(t *testing.T) {
+	// signature without parentheses cannot be parsed; the function must be silently dropped.
+	input := `package main
+
+//export_php:function brokenSignatureNoParens
+func brokenSignatureNoParens() {}
+`
+	tmpDir := t.TempDir()
+	fileName := filepath.Join(tmpDir, "test.go")
+	require.NoError(t, os.WriteFile(fileName, []byte(input), 0644))
+
+	parser := &FuncParser{}
+	functions, err := parser.parse(fileName)
+	require.NoError(t, err)
+	assert.Empty(t, functions, "function with invalid signature should be dropped")
+}
+
+func TestFunctionParserOrphanDirectiveIsError(t *testing.T) {
+	// directive not followed by a func must return an error, otherwise the author
+	// silently loses an export.
+	input := `package main
+
+//export_php:function orphan(string $x): string
+var notAFunction = 42
+`
+	tmpDir := t.TempDir()
+	fileName := filepath.Join(tmpDir, "test.go")
+	require.NoError(t, os.WriteFile(fileName, []byte(input), 0644))
+
+	parser := &FuncParser{}
+	_, err := parser.parse(fileName)
+	require.Error(t, err, "orphan directive must surface as an error")
+	assert.Contains(t, err.Error(), "not followed by a function declaration")
 }
 
 func TestFunctionParserUnsupportedTypes(t *testing.T) {
@@ -387,10 +442,17 @@ func voidFunc(message *C.zend_string) {
 			require.NoError(t, os.WriteFile(tmpFile, []byte(tt.input), 0644))
 
 			parser := &FuncParser{}
+			warnings := captureWarnings(t)
 			functions, err := parser.parse(tmpFile)
 			require.NoError(t, err)
 
 			assert.Len(t, functions, tt.expected, "parse() got wrong number of functions")
+
+			if tt.hasWarning {
+				assert.Contains(t, warnings.String(), "Warning:", "expected a warning to be emitted")
+			} else {
+				assert.NotContains(t, warnings.String(), "Warning:", "no warning expected")
+			}
 		})
 	}
 }
@@ -477,10 +539,17 @@ func validFloat(value float64) float64 {
 			require.NoError(t, os.WriteFile(fileName, []byte(tt.input), 0644))
 
 			parser := &FuncParser{}
+			warnings := captureWarnings(t)
 			functions, err := parser.parse(fileName)
 			require.NoError(t, err)
 
 			assert.Len(t, functions, tt.expected, "parse() got wrong number of functions")
+
+			if tt.hasWarning {
+				assert.Contains(t, warnings.String(), "Warning:", "expected a warning to be emitted")
+			} else {
+				assert.NotContains(t, warnings.String(), "Warning:", "no warning expected")
+			}
 		})
 	}
 }
