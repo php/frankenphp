@@ -26,13 +26,23 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#ifndef ZEND_WIN32
-#include <unistd.h>
-#endif
 #if defined(__linux__)
+#include <unistd.h>
 #include <sys/prctl.h>
-#elif defined(__FreeBSD__) || defined(__OpenBSD__)
+#elif defined(__FreeBSD__)
+#include <unistd.h>
 #include <pthread_np.h>
+#include <sys/procctl.h>
+#elif defined(__OpenBSD__)
+#include <unistd.h>
+#include <pthread_np.h>
+#endif
+#if defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__) ||       \
+    defined(__DragonFly__)
+#define FRANKENPHP_KQUEUE_PARENT_DEATH 1
+#include <unistd.h>
+#include <sys/event.h>
+#include <sys/types.h>
 #endif
 
 #include "_cgo_export.h"
@@ -95,10 +105,61 @@ __thread HashTable *sandboxed_env = NULL;
 
 #ifndef PHP_WIN32
 static bool is_forked_child = false;
+static pid_t fork_parent_pid = 0;
+
+static void frankenphp_fork_prepare(void) { fork_parent_pid = getpid(); }
+
+#if defined(FRANKENPHP_KQUEUE_PARENT_DEATH)
+/* Watcher thread for platforms without a kernel parent-death signal.
+ * Blocks in kevent() until the parent exit, then force-kills this child. */
+static void *frankenphp_parent_death_watcher(void *arg) {
+  pid_t ppid = (pid_t)(intptr_t)arg;
+  int kq = kqueue();
+  if (kq < 0) {
+    _exit(1);
+  }
+  struct kevent kev;
+  EV_SET(&kev, ppid, EVFILT_PROC, EV_ADD | EV_ONESHOT, NOTE_EXIT, 0, NULL);
+  if (kevent(kq, &kev, 1, NULL, 0, NULL) < 0) {
+    _exit(1);
+  }
+  struct kevent triggered;
+  if (kevent(kq, NULL, 0, &triggered, 1, NULL) > 0) {
+    _exit(1);
+  }
+  close(kq);
+  return NULL;
+}
+#endif
+
 static void frankenphp_fork_child(void) {
   is_forked_child = true;
-#ifdef __linux__
-  prctl(PR_SET_PDEATHSIG, SIGKILL, 0, 0, 0);
+#if defined(__linux__)
+  // if the parent process dies between fork() and this prctl()
+  if (prctl(PR_SET_PDEATHSIG, SIGKILL, 0, 0, 0) != 0 ||
+      getppid() != fork_parent_pid) {
+    _exit(1);
+  }
+#elif defined(__FreeBSD__)
+  /* FreeBSD analogue of PR_SET_PDEATHSIG - except with
+   * parent process death, rather than parent thread death. */
+  int sig = SIGKILL;
+  if (procctl(P_PID, 0, PROC_PDEATHSIG_CTL, &sig) != 0 ||
+      getppid() != fork_parent_pid) {
+    _exit(1);
+  }
+#elif defined(FRANKENPHP_KQUEUE_PARENT_DEATH)
+  /* No kernel parent-death signal available; spawn a watcher that
+   * blocks on EVFILT_PROC/NOTE_EXIT. */
+  if (getppid() != fork_parent_pid) {
+    _exit(1);
+  }
+  pthread_t watcher;
+  if (pthread_create(&watcher, NULL, frankenphp_parent_death_watcher,
+                     (void *)(intptr_t)fork_parent_pid) != 0) {
+    _exit(1);
+  }
+  pthread_detach(watcher);
 #endif
 }
 #endif
@@ -867,7 +928,7 @@ static const zend_function_entry frankenphp_test_hook_functions[] = {
 PHP_MINIT_FUNCTION(frankenphp) {
   register_frankenphp_symbols(module_number);
 #ifndef PHP_WIN32
-  pthread_atfork(NULL, NULL, frankenphp_fork_child);
+  pthread_atfork(frankenphp_fork_prepare, NULL, frankenphp_fork_child);
 #endif
 
 #ifdef FRANKENPHP_TEST
