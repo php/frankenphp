@@ -162,6 +162,10 @@ static void frankenphp_fork_child(void) {
   pthread_detach(watcher);
 #endif
 }
+
+static void frankenphp_register_atfork(void) {
+  pthread_atfork(frankenphp_fork_prepare, NULL, frankenphp_fork_child);
+}
 #endif
 
 /* Best-effort force-kill for stuck PHP threads.
@@ -927,8 +931,10 @@ static const zend_function_entry frankenphp_test_hook_functions[] = {
 
 PHP_MINIT_FUNCTION(frankenphp) {
   register_frankenphp_symbols(module_number);
-#ifndef
-  pthread_atfork(frankenphp_fork_prepare, NULL, frankenphp_fork_child);
+#ifndef PHP_WIN32
+  /* MINIT runs once per ZTS thread — guard the atfork registration */
+  static pthread_once_t atfork_once = PTHREAD_ONCE_INIT;
+  pthread_once(&atfork_once, frankenphp_register_atfork);
 #endif
 
 #ifdef FRANKENPHP_TEST
