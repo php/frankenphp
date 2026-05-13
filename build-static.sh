@@ -14,6 +14,13 @@ arch="$(uname -m)"
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 [ "$os" = "darwin" ] && os="mac"
 
+# Parse command line arguments
+for arg in "$@"; do
+    if [ "$arg" = "--no-upx" ] || [ "$arg" = "--no-compress" ]; then
+        NO_COMPRESS=1
+    fi
+don
+
 # Supported variables:
 # - PHP_VERSION: PHP version to build (default: "8.4")
 # - PHP_EXTENSIONS: PHP extensions to build (default: ${defaultExtensions} set below)
