@@ -1,0 +1,22 @@
+name: setup-go
+description: Setup Go with FrankenPHP's pinned version and standard cache configuration
+inputs:
+  working-directory:
+    description: Path prefix for go.sum files (used when the repo is checked out into a subdirectory)
+    required: false
+    default: "."
+  cache:
+    description: Whether to enable the Go modules cache
+    required: false
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v6
+      with: # zizmor: ignore[cache-poisoning]
+        go-version: "1.26"
+        cache-dependency-path: |
+          ${{ inputs.working-directory }}/go.sum
+          ${{ inputs.working-directory }}/caddy/go.sum
+        cache: ${{ inputs.cache }}
+        check-latest: true
