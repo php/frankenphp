@@ -9,7 +9,7 @@ runs:
   using: composite
   steps:
     - uses: actions/setup-go@v6
-      with: # zizmor: ignore[cache-poisoning]
+      with:
         go-version-file: ${{ inputs.working-directory }}/go.mod
         cache-dependency-path: |
           ${{ inputs.working-directory }}/go.sum
