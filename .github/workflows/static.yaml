@@ -457,14 +457,11 @@ jobs:
         uses: ./.github/actions/version
         with:
           ref: ${{ needs.prepare.outputs.ref }}
-      - name: Set FRANKENPHP_VERSION
-        run: echo "FRANKENPHP_VERSION=${VERSION}" >> "${GITHUB_ENV}"
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
       - name: Build FrankenPHP
         run: ./build-static.sh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FRANKENPHP_VERSION: ${{ steps.version.outputs.version }}
           RELEASE: ${{ (needs.prepare.outputs.ref || github.ref_type == 'tag') && '1' || '' }}
           NO_COMPRESS: ${{ github.event_name == 'pull_request' && '1' || '' }}
       - name: Upload logs

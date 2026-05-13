@@ -73,11 +73,6 @@ jobs:
         uses: ./frankenphp/.github/actions/version
         with:
           ref: ${{ env.REF }}
-      - name: Set FRANKENPHP_VERSION
-        shell: bash
-        run: echo "FRANKENPHP_VERSION=${VERSION}" >> "${GITHUB_ENV}"
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
 
       - name: Setup Go
         uses: ./frankenphp/.github/actions/setup-go
@@ -141,6 +136,8 @@ jobs:
 
           "CGO_CFLAGS=-DFRANKENPHP_VERSION=$env:FRANKENPHP_VERSION -I$vcpkgRoot\include -I$watcherRoot -I$phpDevel\include -I$phpDevel\include\main -I$phpDevel\include\TSRM -I$phpDevel\include\Zend -I$phpDevel\include\ext" >> $env:GITHUB_ENV
           "CGO_LDFLAGS=-L$vcpkgRoot\lib -lbrotlienc -L$watcherRoot -llibwatcher-c -L$phpBin -L$phpDevel\lib -lphp8ts -lphp8embed" >> $env:GITHUB_ENV
+        env:
+          FRANKENPHP_VERSION: ${{ steps.version.outputs.version }}
 
       - name: Embed Windows icon and metadata
         working-directory: frankenphp\caddy\frankenphp
@@ -177,12 +174,16 @@ jobs:
           $json | Set-Content "versioninfo.json"
 
           goversioninfo -64 -icon ..\..\frankenphp.ico versioninfo.json -o resource.syso
+        env:
+          FRANKENPHP_VERSION: ${{ steps.version.outputs.version }}
 
       - name: Build FrankenPHP
         run: |
           $customVersion = "FrankenPHP $env:FRANKENPHP_VERSION PHP $env:PHP_VERSION Caddy"
           go build -ldflags="-extldflags=-fuse-ld=lld -X 'github.com/caddyserver/caddy/v2.CustomVersion=$customVersion' -X 'github.com/caddyserver/caddy/v2.CustomBinaryName=frankenphp' -X 'github.com/caddyserver/caddy/v2/modules/caddyhttp.ServerHeader=FrankenPHP Caddy'"
         working-directory: frankenphp\caddy\frankenphp
+        env:
+          FRANKENPHP_VERSION: ${{ steps.version.outputs.version }}
 
       - name: Create Directory
         run: |
