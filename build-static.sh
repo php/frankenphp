@@ -19,7 +19,7 @@ for arg in "$@"; do
     if [ "$arg" = "--no-upx" ] || [ "$arg" = "--no-compress" ]; then
         NO_COMPRESS=1
     fi
-don
+done
 
 # Supported variables:
 # - PHP_VERSION: PHP version to build (default: "8.4")
