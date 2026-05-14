@@ -5,6 +5,8 @@ name: Release
 # GitHub release, and opens a Homebrew formula bump PR.
 # Dispatched by release.sh.
 on:
+  # checkov:skip=CKV_GHA_7: the version input is the release identifier; it is
+  # not user-controlled build configuration.
   workflow_dispatch:
     inputs:
       version:
@@ -19,6 +21,9 @@ concurrency:
 jobs:
   release:
     name: Release ${{ inputs.version }}
+    # Only allow dispatching against the default branch; the workflow pushes
+    # commits and tags to main and must not be triggered from a feature branch.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: release
     env:
@@ -33,14 +38,28 @@ jobs:
           # zizmor: ignore[artipacked]
           # persist-credentials is intentionally left enabled because this
           # workflow needs to push commits and tags via git push.
-      - name: Fail if tag already exists
+      - name: Fail if tags already exist
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ inputs.version }}
         run: |
-          if gh api "repos/${GITHUB_REPOSITORY}/git/refs/tags/v${VERSION}" --silent 2>/dev/null; then
-            echo "Tag v${VERSION} already exists." >&2
-            exit 1
+          for tag in "v${VERSION}" "caddy/v${VERSION}"; do
+            if gh api "repos/${GITHUB_REPOSITORY}/git/refs/tags/${tag}" --silent 2>/dev/null; then
+              echo "Tag ${tag} already exists." >&2
+              exit 1
+            fi
+          done
+      - name: Classify release
+        id: classify
+        env:
+          VERSION: ${{ inputs.version }}
+        # Pre-release versions (those carrying a "-" suffix per SemVer) must
+        # not be marked --latest nor bump the stable Homebrew formula.
+        run: |
+          if [[ "${VERSION}" == *-* ]]; then
+            echo "prerelease=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "prerelease=false" >> "${GITHUB_OUTPUT}"
           fi
       - uses: ./.github/actions/setup-go
       - uses: ./.github/actions/setup-php
@@ -127,15 +146,24 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ inputs.version }}
+          PRERELEASE: ${{ steps.classify.outputs.prerelease }}
+        # Use the parent commit of the new tag to pick the previous tag so
+        # back-port releases (e.g. v1.4.3 after v1.5.0) get correct notes.
         run: |
-          previous_tag=$(git tag --list --sort=-version:refname 'v*' | awk 'NR==2 {print;exit}')
-          gh release create \
-            --draft --generate-notes --latest \
-            --notes-start-tag "${previous_tag}" \
-            --verify-tag "v${VERSION}"
-      - uses: Homebrew/actions/setup-homebrew@master
+          previous_tag=$(git describe --tags --abbrev=0 --match 'v*' --exclude "v${VERSION}" "v${VERSION}^")
+          args=(--draft --generate-notes --notes-start-tag "${previous_tag}" --verify-tag "v${VERSION}")
+          if [[ "${PRERELEASE}" == "true" ]]; then
+            args+=(--prerelease)
+          else
+            args+=(--latest)
+          fi
+          gh release create "v${VERSION}" "${args[@]}"
       - name: Bump Homebrew formula
+        if: steps.classify.outputs.prerelease != 'true'
+        uses: mislav/bump-homebrew-formula-action@v3
+        with:
+          formula-name: frankenphp
+          tap: dunglas/frankenphp
+          tag-name: v${{ inputs.version }}
         env:
-          HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.HOMEBREW_TOKEN }}
-          VERSION: ${{ inputs.version }}
-        run: brew bump-formula-pr dunglas/frankenphp/frankenphp --version "${VERSION}" --no-browse
+          COMMITTER_TOKEN: ${{ secrets.HOMEBREW_TOKEN }}
