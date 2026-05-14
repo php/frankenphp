@@ -168,15 +168,23 @@ jobs:
           gh release create "v${VERSION}" "${args[@]}"
       - name: Trigger downstream release builds
         # GITHUB_TOKEN-driven API writes don't trigger workflows that listen
-        # on tag/push events, so dispatch each downstream explicitly.
+        # on tag/push events, so dispatch each downstream explicitly. Keep
+        # going on partial failure so the operator only needs to re-run the
+        # specific dispatches that didn't go through.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           VERSION: ${{ inputs.version }}
         run: |
+          failed=()
           for wf in static.yaml docker.yaml windows.yaml; do
-            gh workflow run "${wf}" --repo "${REPO}" --ref "v${VERSION}" -f version="${VERSION}"
+            if ! gh workflow run "${wf}" --repo "${REPO}" --ref "v${VERSION}" -f version="${VERSION}"; then
+              failed+=("${wf}")
+            fi
           done
+          if [[ ${#failed[@]} -gt 0 ]]; then
+            echo "::warning::Failed to dispatch: ${failed[*]}. Re-run those workflows manually."
+          fi
       - name: Bump Homebrew formula
         if: steps.classify.outputs.prerelease != 'true'
         uses: mislav/bump-homebrew-formula-action@v3

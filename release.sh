@@ -36,6 +36,12 @@ if [[ -n "$(git status --porcelain)" ]]; then
 	exit 1
 fi
 
+git fetch --quiet origin main
+if [[ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]]; then
+	echo "Local main does not match origin/main. Pull/sync first; the workflow runs against origin/main." >&2
+	exit 1
+fi
+
 gh workflow run release.yaml --ref main -f version="$1"
 echo "Release workflow dispatched for v$1."
-echo "Follow progress with: gh run watch \$(gh run list --workflow=release.yaml --event=workflow_dispatch --user=@me --limit=1 --json databaseId -q '.[0].databaseId')"
+echo "Watch runs: gh run list --workflow=release.yaml --event=workflow_dispatch"
