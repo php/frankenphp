@@ -43,6 +43,9 @@ jobs:
   build:
     permissions:
       contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     runs-on: windows-latest
     steps:
       - name: Determine ref
@@ -211,6 +214,11 @@ jobs:
         run: gh release upload "$env:REF" "$env:DIR_NAME.zip" --repo php/frankenphp --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - if: ${{ env.REF }}
+        uses: actions/attest@v4
+        with:
+          subject-path: ${{ github.workspace }}\${{ env.DIR_NAME }}.zip
 
       - name: Run Tests
         run: |

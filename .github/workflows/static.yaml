@@ -88,6 +88,7 @@ jobs:
       contents: write
       id-token: write
       attestations: write
+      artifact-metadata: write
     strategy:
       fail-fast: false
       matrix:
@@ -202,7 +203,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REF: ${{ (github.ref_type == 'tag' && github.ref_name) || needs.prepare.outputs.ref }}
       - if: fromJson(needs.prepare.outputs.push) && (needs.prepare.outputs.ref || github.ref_type == 'tag')
-        uses: actions/attest-build-provenance@v4
+        uses: actions/attest@v4
         with:
           subject-path: ${{ github.workspace }}/frankenphp-linux-*
       - name: Run sanity checks
@@ -223,6 +224,7 @@ jobs:
       contents: write
       id-token: write
       attestations: write
+      artifact-metadata: write
     strategy:
       fail-fast: false
       matrix:
@@ -360,7 +362,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REF: ${{ (github.ref_type == 'tag' && github.ref_name) || needs.prepare.outputs.ref }}
       - if: fromJson(needs.prepare.outputs.push) && (needs.prepare.outputs.ref || github.ref_type == 'tag')
-        uses: actions/attest-build-provenance@v4
+        uses: actions/attest@v4
         with:
           subject-path: ${{ github.workspace }}/gh-output/frankenphp-linux-*-gnu
       - name: Run sanity checks
@@ -438,6 +440,7 @@ jobs:
       contents: write
       id-token: write
       attestations: write
+      artifact-metadata: write
     strategy:
       fail-fast: false
       matrix:
@@ -471,7 +474,7 @@ jobs:
           path: dist/static-php-cli/log
           name: static-php-cli-log-${{ matrix.platform }}-${{ github.sha }}
       - if: needs.prepare.outputs.ref || github.ref_type == 'tag'
-        uses: actions/attest-build-provenance@v4
+        uses: actions/attest@v4
         with:
           subject-path: ${{ github.workspace }}/dist/frankenphp-mac-*
       - name: Upload artifact
