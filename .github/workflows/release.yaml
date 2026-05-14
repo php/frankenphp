@@ -5,10 +5,9 @@ name: Release
 # GitHub release, and opens a Homebrew formula bump PR.
 # Dispatched by release.sh.
 on:
-  # checkov:skip=CKV_GHA_7: the version input is the release identifier; it is
-  # not user-controlled build configuration.
   workflow_dispatch:
     inputs:
+      #checkov:skip=CKV_GHA_7
       version:
         description: "Version to release (e.g. 1.5.0, no v prefix)"
         required: true
