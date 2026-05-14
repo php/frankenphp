@@ -14,6 +14,8 @@ on:
         type: string
 permissions:
   contents: write
+  # Needed to dispatch the downstream binary build workflows from this run.
+  actions: write
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
@@ -39,9 +41,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          # zizmor: ignore[artipacked]
-          # persist-credentials is intentionally left enabled because this
-          # workflow needs to push commits and tags via git push.
+          persist-credentials: false
       - name: Fail if tags already exist
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -79,7 +79,9 @@ jobs:
         working-directory: caddy
         env:
           VERSION: ${{ inputs.version }}
-        run: go get "github.com/dunglas/frankenphp@v${VERSION}"
+        run: |
+          go get "github.com/dunglas/frankenphp@v${VERSION}"
+          go mod tidy
       - name: Commit and tag via GitHub API
         # API-created commits/tags are signed server-side with GitHub's key
         # and show as "Verified" under the github-actions[bot] identity.
@@ -151,14 +153,28 @@ jobs:
         # Use the parent commit of the new tag to pick the previous tag so
         # back-port releases (e.g. v1.4.3 after v1.5.0) get correct notes.
         run: |
-          previous_tag=$(git describe --tags --abbrev=0 --match 'v*' --exclude "v${VERSION}" "v${VERSION}^")
-          args=(--draft --generate-notes --notes-start-tag "${previous_tag}" --verify-tag "v${VERSION}")
+          previous_tag=$(git describe --tags --abbrev=0 --match 'v*' --exclude "v${VERSION}" "v${VERSION}^" 2>/dev/null || true)
+          args=(--draft --generate-notes --verify-tag "v${VERSION}")
+          if [[ -n "${previous_tag}" ]]; then
+            args+=(--notes-start-tag "${previous_tag}")
+          fi
           if [[ "${PRERELEASE}" == "true" ]]; then
             args+=(--prerelease)
           else
             args+=(--latest)
           fi
           gh release create "v${VERSION}" "${args[@]}"
+      - name: Trigger downstream release builds
+        # GITHUB_TOKEN-driven API writes don't trigger workflows that listen
+        # on tag/push events, so dispatch each downstream explicitly.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          for wf in static.yaml docker.yaml windows.yaml; do
+            gh workflow run "${wf}" --repo "${REPO}" --ref "v${VERSION}" -f version="${VERSION}"
+          done
       - name: Bump Homebrew formula
         if: steps.classify.outputs.prerelease != 'true'
         uses: mislav/bump-homebrew-formula-action@v3

@@ -36,11 +36,6 @@ if [[ -n "$(git status --porcelain)" ]]; then
 	exit 1
 fi
 
-if gh api "repos/{owner}/{repo}/git/refs/tags/v$1" --silent 2>/dev/null; then
-	echo "Tag v$1 already exists on origin." >&2
-	exit 1
-fi
-
 gh workflow run release.yaml --ref main -f version="$1"
 echo "Release workflow dispatched for v$1."
-echo "Follow progress with: gh run watch \$(gh run list --workflow=release.yaml --limit=1 --json databaseId -q '.[0].databaseId')"
+echo "Follow progress with: gh run watch \$(gh run list --workflow=release.yaml --event=workflow_dispatch --user=@me --limit=1 --json databaseId -q '.[0].databaseId')"
