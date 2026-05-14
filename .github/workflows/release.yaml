@@ -61,17 +61,68 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
         run: go get "github.com/dunglas/frankenphp@v${VERSION}"
-      - name: Commit, tag, push
+      - name: Commit and tag via GitHub API
+        # API-created commits/tags are signed server-side with GitHub's key
+        # and show as "Verified" under the github-actions[bot] identity.
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
           VERSION: ${{ inputs.version }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add caddy/frankenphp/default.pgo caddy/go.mod caddy/go.sum
-          git commit -m "chore: prepare release ${VERSION}"
-          git tag -a -m "Version ${VERSION}" "v${VERSION}"
-          git tag -a -m "Version ${VERSION}" "caddy/v${VERSION}"
-          git push --follow-tags origin HEAD:main
+          set -euo pipefail
+
+          make_blob() {
+            jq -nc --arg content "$(base64 -w0 <"$1")" \
+              '{content: $content, encoding: "base64"}' \
+              | gh api "repos/${REPO}/git/blobs" --input - -q .sha
+          }
+
+          parent_sha=$(gh api "repos/${REPO}/git/refs/heads/main" -q .object.sha)
+          base_tree=$(gh api "repos/${REPO}/git/commits/${parent_sha}" -q .tree.sha)
+
+          pgo_sha=$(make_blob caddy/frankenphp/default.pgo)
+          gomod_sha=$(make_blob caddy/go.mod)
+          gosum_sha=$(make_blob caddy/go.sum)
+
+          tree_sha=$(jq -nc \
+            --arg base_tree "$base_tree" \
+            --arg pgo "$pgo_sha" \
+            --arg gomod "$gomod_sha" \
+            --arg gosum "$gosum_sha" \
+            '{
+              base_tree: $base_tree,
+              tree: [
+                {path: "caddy/frankenphp/default.pgo", mode: "100644", type: "blob", sha: $pgo},
+                {path: "caddy/go.mod", mode: "100644", type: "blob", sha: $gomod},
+                {path: "caddy/go.sum", mode: "100644", type: "blob", sha: $gosum}
+              ]
+            }' | gh api "repos/${REPO}/git/trees" --input - -q .sha)
+
+          commit_sha=$(jq -nc \
+            --arg message "chore: prepare release ${VERSION}" \
+            --arg tree "$tree_sha" \
+            --arg parent "$parent_sha" \
+            '{message: $message, tree: $tree, parents: [$parent]}' \
+            | gh api "repos/${REPO}/git/commits" --input - -q .sha)
+
+          gh api "repos/${REPO}/git/refs/heads/main" -X PATCH -f sha="$commit_sha" --silent
+
+          create_tag() {
+            local tag_sha
+            tag_sha=$(jq -nc \
+              --arg tag "$1" \
+              --arg message "Version ${VERSION}" \
+              --arg object "$commit_sha" \
+              '{tag: $tag, message: $message, object: $object, type: "commit"}' \
+              | gh api "repos/${REPO}/git/tags" --input - -q .sha)
+            gh api "repos/${REPO}/git/refs" -f ref="refs/tags/$1" -f sha="$tag_sha" --silent
+          }
+
+          create_tag "v${VERSION}"
+          create_tag "caddy/v${VERSION}"
+
+          # Sync local tags so the release-draft step can compute the previous tag.
+          git fetch --tags origin
       - name: Draft GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
