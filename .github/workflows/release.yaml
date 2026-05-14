@@ -20,9 +20,6 @@ concurrency:
 jobs:
   release:
     name: Release ${{ inputs.version }}
-    # Only allow dispatching against the default branch; the workflow pushes
-    # commits and tags to main and must not be triggered from a feature branch.
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: release
     env:
@@ -31,6 +28,14 @@ jobs:
       LIBRARY_PATH: ${{ github.workspace }}/watcher/target/lib
       BENCH_SEC: "30"
     steps:
+      - name: Refuse non-main dispatch
+        # workflow_dispatch can target any ref; reject anything but main so a
+        # mis-dispatched run fails loudly instead of being silently skipped.
+        run: |
+          if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+            echo "::error::release.yaml must be dispatched against refs/heads/main, got ${GITHUB_REF}"
+            exit 1
+          fi
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
@@ -70,10 +75,6 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y wrk && sudo apt-get install --reinstall -y libbrotli-dev
       - name: Refresh PGO profile
         run: ./profiles/build-pgo.sh
-      - name: Show pprof summary
-        run: |
-          go install github.com/google/pprof@latest
-          "$(go env GOPATH)/bin/pprof" -top -cum -nodecount=25 caddy/frankenphp/default.pgo || true
       - name: Bump Caddy module
         working-directory: caddy
         env:
@@ -139,8 +140,9 @@ jobs:
           create_tag "v${VERSION}"
           create_tag "caddy/v${VERSION}"
 
-          # Sync local tags so the release-draft step can compute the previous tag.
-          git fetch --tags origin
+          # Pull the new commit + tags so the release-draft step's git
+          # describe can resolve v${VERSION}^.
+          git fetch origin main --tags
       - name: Draft GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
