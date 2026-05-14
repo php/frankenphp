@@ -1,0 +1,90 @@
+name: Release
+# Cuts a FrankenPHP release end-to-end: refreshes the PGO profile, bumps the
+# Caddy module's frankenphp dependency, commits the result as
+# github-actions[bot], tags v<version> and caddy/v<version>, pushes, drafts a
+# GitHub release, and opens a Homebrew formula bump PR.
+# Dispatched by release.sh.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g. 1.5.0, no v prefix)"
+        required: true
+        type: string
+permissions:
+  contents: write
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+jobs:
+  release:
+    name: Release ${{ inputs.version }}
+    runs-on: ubuntu-latest
+    environment: release
+    env:
+      GOTOOLCHAIN: local
+      GOFLAGS: "-tags=nobadger,nomysql,nopgx"
+      LIBRARY_PATH: ${{ github.workspace }}/watcher/target/lib
+      BENCH_SEC: "30"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          # zizmor: ignore[artipacked]
+          # persist-credentials is intentionally left enabled because this
+          # workflow needs to push commits and tags via git push.
+      - name: Fail if tag already exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          if gh api "repos/${GITHUB_REPOSITORY}/git/refs/tags/v${VERSION}" --silent 2>/dev/null; then
+            echo "Tag v${VERSION} already exists." >&2
+            exit 1
+          fi
+      - uses: ./.github/actions/setup-go
+      - uses: ./.github/actions/setup-php
+      - name: Install e-dant/watcher
+        uses: ./.github/actions/watcher
+      - name: Set CGO flags
+        run: echo "CGO_CFLAGS=-I${PWD}/watcher/target/include $(php-config --includes)" >> "${GITHUB_ENV}"
+      - name: Install wrk
+        run: sudo apt-get update && sudo apt-get install -y wrk && sudo apt-get install --reinstall -y libbrotli-dev
+      - name: Refresh PGO profile
+        run: ./profiles/build-pgo.sh
+      - name: Show pprof summary
+        run: |
+          go install github.com/google/pprof@latest
+          "$(go env GOPATH)/bin/pprof" -top -cum -nodecount=25 caddy/frankenphp/default.pgo || true
+      - name: Bump Caddy module
+        working-directory: caddy
+        env:
+          VERSION: ${{ inputs.version }}
+        run: go get "github.com/dunglas/frankenphp@v${VERSION}"
+      - name: Commit, tag, push
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add caddy/frankenphp/default.pgo caddy/go.mod caddy/go.sum
+          git commit -m "chore: prepare release ${VERSION}"
+          git tag -a -m "Version ${VERSION}" "v${VERSION}"
+          git tag -a -m "Version ${VERSION}" "caddy/v${VERSION}"
+          git push --follow-tags origin HEAD:main
+      - name: Draft GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          previous_tag=$(git tag --list --sort=-version:refname 'v*' | awk 'NR==2 {print;exit}')
+          gh release create \
+            --draft --generate-notes --latest \
+            --notes-start-tag "${previous_tag}" \
+            --verify-tag "v${VERSION}"
+      - uses: Homebrew/actions/setup-homebrew@master
+      - name: Bump Homebrew formula
+        env:
+          HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.HOMEBREW_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: brew bump-formula-pr dunglas/frankenphp/frankenphp --version "${VERSION}" --no-browse
