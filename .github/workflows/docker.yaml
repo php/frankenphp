@@ -209,6 +209,11 @@ jobs:
       - prepare
       - build
     if: fromJson(needs.prepare.outputs.push)
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     strategy:
       fail-fast: false
       matrix:
@@ -241,10 +246,22 @@ jobs:
           TARGET: ${{ matrix.target }}
           VARIANT: ${{ matrix.variant }}
       - name: Inspect image
+        id: inspect
         run: |
           # shellcheck disable=SC2046,SC2086
-          docker buildx imagetools inspect $(jq -cr ".target.\"${TARGET}-${VARIANT}\".tags | first" <<< ${METADATA})
+          tag=$(jq -cr ".target.\"${TARGET}-${VARIANT}\".tags | first" <<< ${METADATA})
+          docker buildx imagetools inspect "${tag}"
+          digest=$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "${tag}")
+          {
+            echo "name=${tag%%:*}"
+            echo "digest=${digest}"
+          } >> "${GITHUB_OUTPUT}"
         env:
           METADATA: ${{ needs.prepare.outputs.metadata }}
           TARGET: ${{ matrix.target }}
           VARIANT: ${{ matrix.variant }}
+      - uses: actions/attest@v4
+        with:
+          subject-name: ${{ steps.inspect.outputs.name }}
+          subject-digest: ${{ steps.inspect.outputs.digest }}
+          push-to-registry: true
