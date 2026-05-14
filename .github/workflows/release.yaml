@@ -119,8 +119,10 @@ jobs:
               ]
             }' | gh api "repos/${REPO}/git/trees" --input - -q .sha)
 
+          # [skip ci] keeps push-triggered workflows from firing on top of
+          # the explicit downstream dispatches below.
           commit_sha=$(jq -nc \
-            --arg message "chore: prepare release ${VERSION}" \
+            --arg message "chore: prepare release ${VERSION} [skip ci]" \
             --arg tree "$tree_sha" \
             --arg parent "$parent_sha" \
             '{message: $message, tree: $tree, parents: [$parent]}' \
