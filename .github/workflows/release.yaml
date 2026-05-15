@@ -220,28 +220,35 @@ jobs:
           # describe can resolve v${VERSION}^.
           git fetch origin main --tags
       - name: Draft GitHub release
+        # `gh release create` validates the tag through GraphQL, which can
+        # lag minutes behind the Git Data API we just used to create the
+        # tag — leading to "no matches found" or `untagged-*` placeholder
+        # releases. Use the REST releases endpoints directly: they see the
+        # tag immediately and behave deterministically.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
           VERSION: ${{ inputs.version }}
           PRERELEASE: ${{ steps.classify.outputs.prerelease }}
-        # Use the parent commit of the new tag to pick the previous tag so
-        # back-port releases (e.g. v1.4.3 after v1.5.0) get correct notes.
         run: |
-          if gh release view "v${VERSION}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+          set -euo pipefail
+          if gh release view "v${VERSION}" --repo "${REPO}" >/dev/null 2>&1; then
             echo "Release v${VERSION} already exists; skipping draft creation."
             exit 0
           fi
           previous_tag=$(git describe --tags --abbrev=0 --match 'v*' --exclude "v${VERSION}" "v${VERSION}^" 2>/dev/null || true)
-          args=(--draft --generate-notes --verify-tag "v${VERSION}")
+          notes_args=(-X POST -f tag_name="v${VERSION}")
           if [[ -n "${previous_tag}" ]]; then
-            args+=(--notes-start-tag "${previous_tag}")
+            notes_args+=(-f previous_tag_name="${previous_tag}")
           fi
+          notes=$(gh api "repos/${REPO}/releases/generate-notes" "${notes_args[@]}" --jq .body)
+          create_args=(-X POST -f tag_name="v${VERSION}" -f name="v${VERSION}" -F draft=true -f body="${notes}")
           if [[ "${PRERELEASE}" == "true" ]]; then
-            args+=(--prerelease)
+            create_args+=(-F prerelease=true)
           else
-            args+=(--latest)
+            create_args+=(-f make_latest=true)
           fi
-          gh release create "v${VERSION}" "${args[@]}"
+          gh api "repos/${REPO}/releases" "${create_args[@]}" --silent
       - name: Trigger downstream release builds
         # GITHUB_TOKEN-driven API writes don't trigger workflows that listen
         # on tag/push events, so dispatch each downstream explicitly. Keep
