@@ -63,16 +63,20 @@ func TestHotReload(t *testing.T) {
 
 		buf := make([]byte, 1024)
 		for {
-			_, err := resp.Body.Read(buf)
-			require.NoError(t, err)
-
-			receivedBody.Write(buf)
-
+			n, err := resp.Body.Read(buf)
+			if n > 0 {
+				receivedBody.Write(buf[:n])
+			}
 			if strings.Contains(receivedBody.String(), "index.php") {
 				cancel()
 
 				break
 			}
+			// Surface the read error only after checking the buffer: on
+			// Windows the SSE server sometimes flushes the event and closes
+			// the connection in the same syscall, so Read returns (n>0, EOF)
+			// and we'd otherwise fail despite having the data we wanted.
+			require.NoError(t, err)
 		}
 
 		require.NoError(t, resp.Body.Close())
