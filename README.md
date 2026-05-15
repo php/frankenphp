@@ -190,3 +190,4 @@ Go to `https://localhost`, and enjoy!
 - [Joomla](https://github.com/alexandreelise/frankenphp-joomla)
 - [TYPO3](https://github.com/ochorocho/franken-typo3)
 - [Magento2](https://github.com/ekino/frankenphp-magento2)
+- [WoltLab Suite](https://github.com/SoftCreatRMedia/frankenphp-woltlab-suite)
