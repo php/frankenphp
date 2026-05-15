@@ -137,10 +137,17 @@ jobs:
             commit_sha="${RELEASE_COMMIT}"
             echo "Reusing existing release commit ${commit_sha}"
           else
+            # Stage the base64 in a temp file and feed it to jq via
+            # --rawfile: passing big blobs (the PGO profile is ~2 MB encoded)
+            # through --arg exceeds ARG_MAX on the runner.
             make_blob() {
-              jq -nc --arg content "$(base64 -w0 <"$1")" \
+              local tmp
+              tmp=$(mktemp)
+              base64 -w0 <"$1" >"$tmp"
+              jq -nc --rawfile content "$tmp" \
                 '{content: $content, encoding: "base64"}' \
                 | gh api "repos/${REPO}/git/blobs" --input - -q .sha
+              rm -f "$tmp"
             }
 
             parent_sha=$(gh api "repos/${REPO}/git/refs/heads/main" -q .object.sha)
