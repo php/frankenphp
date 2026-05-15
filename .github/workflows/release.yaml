@@ -1,9 +1,13 @@
 name: Release
 # Cuts a FrankenPHP release end-to-end: refreshes the PGO profile, bumps the
 # Caddy module's frankenphp dependency, commits the result as
-# github-actions[bot], tags v<version> and caddy/v<version>, pushes, drafts a
-# GitHub release, and opens a Homebrew formula bump PR.
-# Dispatched by release.sh.
+# github-actions[bot], tags v<version> and caddy/v<version>, drafts a GitHub
+# release, dispatches the downstream binary builds, and opens a Homebrew
+# formula bump PR. Dispatched by release.sh.
+#
+# The workflow is idempotent: re-dispatching after a partial failure (flaky
+# test, network blip, registry hiccup) detects which steps already completed
+# and skips them, so the release can be resumed without manual cleanup.
 on:
   workflow_dispatch:
     inputs:
@@ -42,17 +46,6 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Fail if tags already exist
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ inputs.version }}
-        run: |
-          for tag in "v${VERSION}" "caddy/v${VERSION}"; do
-            if gh api "repos/${GITHUB_REPOSITORY}/git/refs/tags/${tag}" --silent 2>/dev/null; then
-              echo "Tag ${tag} already exists." >&2
-              exit 1
-            fi
-          done
       - name: Classify release
         id: classify
         env:
@@ -65,17 +58,52 @@ jobs:
           else
             echo "prerelease=false" >> "${GITHUB_OUTPUT}"
           fi
-      - uses: ./.github/actions/setup-go
-      - uses: ./.github/actions/setup-php
-      - name: Install e-dant/watcher
+      - name: Determine release state
+        id: state
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        # Detect whether main already carries the release commit (we're
+        # resuming after a mid-flight failure) or whether this is a fresh
+        # release attempt. The downstream steps gate themselves on `resume`.
+        run: |
+          set -euo pipefail
+          main_sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/refs/heads/main" -q .object.sha)
+          first_line=$(gh api "repos/${GITHUB_REPOSITORY}/git/commits/${main_sha}" -q .message | head -n1)
+          expected="chore: prepare release ${VERSION} [skip ci]"
+          if [[ "${first_line}" == "${expected}" ]]; then
+            echo "Resuming: release commit already at ${main_sha}"
+            {
+              echo "resume=true"
+              echo "release_commit=${main_sha}"
+            } >> "${GITHUB_OUTPUT}"
+          else
+            echo "resume=false" >> "${GITHUB_OUTPUT}"
+            for tag in "v${VERSION}" "caddy/v${VERSION}"; do
+              if gh api "repos/${GITHUB_REPOSITORY}/git/refs/tags/${tag}" --silent 2>/dev/null; then
+                echo "::error::Tag ${tag} exists but main HEAD is not the release commit; refusing to release."
+                exit 1
+              fi
+            done
+          fi
+      - if: steps.state.outputs.resume != 'true'
+        uses: ./.github/actions/setup-go
+      - if: steps.state.outputs.resume != 'true'
+        uses: ./.github/actions/setup-php
+      - if: steps.state.outputs.resume != 'true'
+        name: Install e-dant/watcher
         uses: ./.github/actions/watcher
-      - name: Set CGO flags
+      - if: steps.state.outputs.resume != 'true'
+        name: Set CGO flags
         run: echo "CGO_CFLAGS=-I${PWD}/watcher/target/include $(php-config --includes)" >> "${GITHUB_ENV}"
-      - name: Install wrk
+      - if: steps.state.outputs.resume != 'true'
+        name: Install wrk
         run: sudo apt-get update && sudo apt-get install -y wrk && sudo apt-get install --reinstall -y libbrotli-dev
-      - name: Refresh PGO profile
+      - if: steps.state.outputs.resume != 'true'
+        name: Refresh PGO profile
         run: ./profiles/build-pgo.sh
-      - name: Sanity-check PGO profile
+      - if: steps.state.outputs.resume != 'true'
+        name: Sanity-check PGO profile
         # Catch the degenerate case where wrk silently failed to drive load
         # and we ended up shipping a near-empty profile.
         run: |
@@ -85,7 +113,8 @@ jobs:
             echo "::error::PGO profile is suspiciously small; aborting release."
             exit 1
           fi
-      - name: Bump Caddy module
+      - if: steps.state.outputs.resume != 'true'
+        name: Bump Caddy module
         working-directory: caddy
         env:
           VERSION: ${{ inputs.version }}
@@ -99,56 +128,81 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           VERSION: ${{ inputs.version }}
+          RESUME: ${{ steps.state.outputs.resume }}
+          RELEASE_COMMIT: ${{ steps.state.outputs.release_commit }}
         run: |
           set -euo pipefail
 
-          make_blob() {
-            jq -nc --arg content "$(base64 -w0 <"$1")" \
-              '{content: $content, encoding: "base64"}' \
-              | gh api "repos/${REPO}/git/blobs" --input - -q .sha
-          }
+          if [[ "${RESUME}" == "true" ]]; then
+            commit_sha="${RELEASE_COMMIT}"
+            echo "Reusing existing release commit ${commit_sha}"
+          else
+            make_blob() {
+              jq -nc --arg content "$(base64 -w0 <"$1")" \
+                '{content: $content, encoding: "base64"}' \
+                | gh api "repos/${REPO}/git/blobs" --input - -q .sha
+            }
 
-          parent_sha=$(gh api "repos/${REPO}/git/refs/heads/main" -q .object.sha)
-          base_tree=$(gh api "repos/${REPO}/git/commits/${parent_sha}" -q .tree.sha)
+            parent_sha=$(gh api "repos/${REPO}/git/refs/heads/main" -q .object.sha)
+            base_tree=$(gh api "repos/${REPO}/git/commits/${parent_sha}" -q .tree.sha)
 
-          pgo_sha=$(make_blob caddy/frankenphp/default.pgo)
-          gomod_sha=$(make_blob caddy/go.mod)
-          gosum_sha=$(make_blob caddy/go.sum)
+            pgo_sha=$(make_blob caddy/frankenphp/default.pgo)
+            gomod_sha=$(make_blob caddy/go.mod)
+            gosum_sha=$(make_blob caddy/go.sum)
 
-          tree_sha=$(jq -nc \
-            --arg base_tree "$base_tree" \
-            --arg pgo "$pgo_sha" \
-            --arg gomod "$gomod_sha" \
-            --arg gosum "$gosum_sha" \
-            '{
-              base_tree: $base_tree,
-              tree: [
-                {path: "caddy/frankenphp/default.pgo", mode: "100644", type: "blob", sha: $pgo},
-                {path: "caddy/go.mod", mode: "100644", type: "blob", sha: $gomod},
-                {path: "caddy/go.sum", mode: "100644", type: "blob", sha: $gosum}
-              ]
-            }' | gh api "repos/${REPO}/git/trees" --input - -q .sha)
+            tree_sha=$(jq -nc \
+              --arg base_tree "$base_tree" \
+              --arg pgo "$pgo_sha" \
+              --arg gomod "$gomod_sha" \
+              --arg gosum "$gosum_sha" \
+              '{
+                base_tree: $base_tree,
+                tree: [
+                  {path: "caddy/frankenphp/default.pgo", mode: "100644", type: "blob", sha: $pgo},
+                  {path: "caddy/go.mod", mode: "100644", type: "blob", sha: $gomod},
+                  {path: "caddy/go.sum", mode: "100644", type: "blob", sha: $gosum}
+                ]
+              }' | gh api "repos/${REPO}/git/trees" --input - -q .sha)
 
-          # [skip ci] keeps push-triggered workflows from firing on top of
-          # the explicit downstream dispatches below.
-          commit_sha=$(jq -nc \
-            --arg message "chore: prepare release ${VERSION} [skip ci]" \
-            --arg tree "$tree_sha" \
-            --arg parent "$parent_sha" \
-            '{message: $message, tree: $tree, parents: [$parent]}' \
-            | gh api "repos/${REPO}/git/commits" --input - -q .sha)
+            # [skip ci] keeps push-triggered workflows from firing on top of
+            # the explicit downstream dispatches below.
+            commit_sha=$(jq -nc \
+              --arg message "chore: prepare release ${VERSION} [skip ci]" \
+              --arg tree "$tree_sha" \
+              --arg parent "$parent_sha" \
+              '{message: $message, tree: $tree, parents: [$parent]}' \
+              | gh api "repos/${REPO}/git/commits" --input - -q .sha)
 
-          gh api "repos/${REPO}/git/refs/heads/main" -X PATCH -f sha="$commit_sha" --silent
+            gh api "repos/${REPO}/git/refs/heads/main" -X PATCH -f sha="$commit_sha" --silent
+          fi
 
+          # Idempotent tag creation: if the tag already exists and points at
+          # the release commit, leave it alone; if it points elsewhere, fail.
           create_tag() {
+            local tag="$1"
+            local existing
+            if existing=$(gh api "repos/${REPO}/git/refs/tags/${tag}" 2>/dev/null); then
+              local obj_sha obj_type
+              obj_sha=$(jq -r .object.sha <<<"${existing}")
+              obj_type=$(jq -r .object.type <<<"${existing}")
+              if [[ "${obj_type}" == "tag" ]]; then
+                obj_sha=$(gh api "repos/${REPO}/git/tags/${obj_sha}" -q .object.sha)
+              fi
+              if [[ "${obj_sha}" == "${commit_sha}" ]]; then
+                echo "Tag ${tag} already points at ${commit_sha}; skipping."
+                return 0
+              fi
+              echo "::error::Tag ${tag} exists at ${obj_sha}, expected ${commit_sha}"
+              return 1
+            fi
             local tag_sha
             tag_sha=$(jq -nc \
-              --arg tag "$1" \
+              --arg tag "${tag}" \
               --arg message "Version ${VERSION}" \
-              --arg object "$commit_sha" \
+              --arg object "${commit_sha}" \
               '{tag: $tag, message: $message, object: $object, type: "commit"}' \
               | gh api "repos/${REPO}/git/tags" --input - -q .sha)
-            gh api "repos/${REPO}/git/refs" -f ref="refs/tags/$1" -f sha="$tag_sha" --silent
+            gh api "repos/${REPO}/git/refs" -f ref="refs/tags/${tag}" -f sha="${tag_sha}" --silent
           }
 
           create_tag "v${VERSION}"
@@ -165,6 +219,10 @@ jobs:
         # Use the parent commit of the new tag to pick the previous tag so
         # back-port releases (e.g. v1.4.3 after v1.5.0) get correct notes.
         run: |
+          if gh release view "v${VERSION}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "Release v${VERSION} already exists; skipping draft creation."
+            exit 0
+          fi
           previous_tag=$(git describe --tags --abbrev=0 --match 'v*' --exclude "v${VERSION}" "v${VERSION}^" 2>/dev/null || true)
           args=(--draft --generate-notes --verify-tag "v${VERSION}")
           if [[ -n "${previous_tag}" ]]; then
@@ -180,7 +238,8 @@ jobs:
         # GITHUB_TOKEN-driven API writes don't trigger workflows that listen
         # on tag/push events, so dispatch each downstream explicitly. Keep
         # going on partial failure so the operator only needs to re-run the
-        # specific dispatches that didn't go through.
+        # specific dispatches that didn't go through. Re-dispatch on resume
+        # is harmless: it just queues another build run.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
