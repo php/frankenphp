@@ -252,25 +252,15 @@ jobs:
           tag=$(jq -cr ".target.\"${TARGET}-${VARIANT}\".tags | first" <<< ${METADATA})
           docker buildx imagetools inspect "${tag}"
           digest=$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "${tag}")
-          # Qualify the image with the registry hostname so actions/attest
-          # can resolve the docker login from the previous step: it splits
-          # subject-name on the first '/', and an unqualified "dunglas/foo"
-          # makes it look for credentials under a registry literally named
-          # "dunglas".
-          name="${tag%%:*}"
-          if [[ "${name}" != *.*/* && "${name}" != *:*/* ]]; then
-            name="docker.io/${name}"
-          fi
-          {
-            echo "name=${name}"
-            echo "digest=${digest}"
-          } >> "${GITHUB_OUTPUT}"
+          echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
         env:
           METADATA: ${{ needs.prepare.outputs.metadata }}
           TARGET: ${{ matrix.target }}
           VARIANT: ${{ matrix.variant }}
       - uses: actions/attest@v4
         with:
-          subject-name: ${{ steps.inspect.outputs.name }}
+          # docker.io/ prefix is required: actions/attest splits subject-name
+          # on the first '/' to find the registry. We only push to Docker Hub.
+          subject-name: docker.io/${{ env.IMAGE_NAME }}
           subject-digest: ${{ steps.inspect.outputs.digest }}
           push-to-registry: true
