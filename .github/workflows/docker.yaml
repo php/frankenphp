@@ -252,8 +252,17 @@ jobs:
           tag=$(jq -cr ".target.\"${TARGET}-${VARIANT}\".tags | first" <<< ${METADATA})
           docker buildx imagetools inspect "${tag}"
           digest=$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "${tag}")
+          # Qualify the image with the registry hostname so actions/attest
+          # can resolve the docker login from the previous step: it splits
+          # subject-name on the first '/', and an unqualified "dunglas/foo"
+          # makes it look for credentials under a registry literally named
+          # "dunglas".
+          name="${tag%%:*}"
+          if [[ "${name}" != *.*/* && "${name}" != *:*/* ]]; then
+            name="docker.io/${name}"
+          fi
           {
-            echo "name=${tag%%:*}"
+            echo "name=${name}"
             echo "digest=${digest}"
           } >> "${GITHUB_OUTPUT}"
         env:
