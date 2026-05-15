@@ -76,6 +76,12 @@ jobs:
             if [[ "${type}" == "tag" ]]; then
               sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${sha}" -q .object.sha)
             fi
+            # Refuse to resume against a tag that isn't reachable from main:
+            # protects against an orphan tag created on a side branch.
+            if ! git merge-base --is-ancestor "${sha}" HEAD; then
+              echo "::error::Tag v${VERSION} (${sha}) is not reachable from main; refusing to resume."
+              exit 1
+            fi
             echo "Resuming: v${VERSION} exists at ${sha}"
             {
               echo "resume=true"
