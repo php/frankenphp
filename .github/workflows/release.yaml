@@ -63,28 +63,30 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ inputs.version }}
-        # Detect whether main already carries the release commit (we're
-        # resuming after a mid-flight failure) or whether this is a fresh
-        # release attempt. The downstream steps gate themselves on `resume`.
+        # Tag existence is the source of truth for "release in progress":
+        # main HEAD may have moved past the release commit (a follow-up fix
+        # merged on top), so the commit-message check on HEAD is too narrow.
+        # If v<version> exists, resume from the commit it points at;
+        # otherwise it's a fresh attempt and tags must not exist.
         run: |
           set -euo pipefail
-          main_sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/refs/heads/main" -q .object.sha)
-          first_line=$(gh api "repos/${GITHUB_REPOSITORY}/git/commits/${main_sha}" -q .message | head -n1)
-          expected="chore: prepare release ${VERSION} [skip ci]"
-          if [[ "${first_line}" == "${expected}" ]]; then
-            echo "Resuming: release commit already at ${main_sha}"
+          if ref=$(gh api "repos/${GITHUB_REPOSITORY}/git/refs/tags/v${VERSION}" 2>/dev/null); then
+            sha=$(jq -r .object.sha <<<"${ref}")
+            type=$(jq -r .object.type <<<"${ref}")
+            if [[ "${type}" == "tag" ]]; then
+              sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${sha}" -q .object.sha)
+            fi
+            echo "Resuming: v${VERSION} exists at ${sha}"
             {
               echo "resume=true"
-              echo "release_commit=${main_sha}"
+              echo "release_commit=${sha}"
             } >> "${GITHUB_OUTPUT}"
           else
             echo "resume=false" >> "${GITHUB_OUTPUT}"
-            for tag in "v${VERSION}" "caddy/v${VERSION}"; do
-              if gh api "repos/${GITHUB_REPOSITORY}/git/refs/tags/${tag}" --silent 2>/dev/null; then
-                echo "::error::Tag ${tag} exists but main HEAD is not the release commit; refusing to release."
-                exit 1
-              fi
-            done
+            if gh api "repos/${GITHUB_REPOSITORY}/git/refs/tags/caddy/v${VERSION}" --silent 2>/dev/null; then
+              echo "::error::caddy/v${VERSION} exists but v${VERSION} does not; refusing to release into a split state."
+              exit 1
+            fi
           fi
       - if: steps.state.outputs.resume != 'true'
         uses: ./.github/actions/setup-go
