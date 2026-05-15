@@ -70,7 +70,12 @@ jobs:
         # otherwise it's a fresh attempt and tags must not exist.
         run: |
           set -euo pipefail
-          if ref=$(gh api "repos/${GITHUB_REPOSITORY}/git/refs/tags/v${VERSION}" 2>/dev/null); then
+          err=$(mktemp)
+          trap 'rm -f "${err}"' EXIT
+          # Capture stderr so we can distinguish a real 404 (tag absent → fresh
+          # attempt) from any other failure (rate limit, 5xx, auth) which must
+          # not be silently treated as "tag missing".
+          if ref=$(gh api "repos/${GITHUB_REPOSITORY}/git/refs/tags/v${VERSION}" 2>"${err}"); then
             sha=$(jq -r .object.sha <<<"${ref}")
             type=$(jq -r .object.type <<<"${ref}")
             if [[ "${type}" == "tag" ]]; then
@@ -87,12 +92,16 @@ jobs:
               echo "resume=true"
               echo "release_commit=${sha}"
             } >> "${GITHUB_OUTPUT}"
-          else
+          elif grep -qF "(HTTP 404)" "${err}"; then
             echo "resume=false" >> "${GITHUB_OUTPUT}"
             if gh api "repos/${GITHUB_REPOSITORY}/git/refs/tags/caddy/v${VERSION}" --silent 2>/dev/null; then
               echo "::error::caddy/v${VERSION} exists but v${VERSION} does not; refusing to release into a split state."
               exit 1
             fi
+          else
+            echo "::error::GitHub API call for tag v${VERSION} failed:"
+            cat "${err}" >&2
+            exit 1
           fi
       - if: steps.state.outputs.resume != 'true'
         uses: ./.github/actions/setup-go
