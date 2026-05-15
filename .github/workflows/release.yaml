@@ -291,7 +291,7 @@ jobs:
         uses: mislav/bump-homebrew-formula-action@v3
         with:
           formula-name: frankenphp
-          tap: dunglas/frankenphp
+          homebrew-tap: dunglas/homebrew-frankenphp
           tag-name: v${{ inputs.version }}
         env:
           COMMITTER_TOKEN: ${{ secrets.HOMEBREW_TOKEN }}
