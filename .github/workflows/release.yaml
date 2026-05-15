@@ -75,6 +75,16 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y wrk && sudo apt-get install --reinstall -y libbrotli-dev
       - name: Refresh PGO profile
         run: ./profiles/build-pgo.sh
+      - name: Sanity-check PGO profile
+        # Catch the degenerate case where wrk silently failed to drive load
+        # and we ended up shipping a near-empty profile.
+        run: |
+          size=$(wc -c <caddy/frankenphp/default.pgo)
+          echo "PGO profile: ${size} bytes"
+          if [[ "${size}" -lt 1024 ]]; then
+            echo "::error::PGO profile is suspiciously small; aborting release."
+            exit 1
+          fi
       - name: Bump Caddy module
         working-directory: caddy
         env:
