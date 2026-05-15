@@ -49,7 +49,7 @@ jobs:
       php84_version: ${{ steps.check.outputs.php84_version }}
       php85_version: ${{ steps.check.outputs.php85_version }}
       skip: ${{ steps.check.outputs.skip }}
-      ref: ${{ steps.check.outputs.ref || (github.event_name == 'workflow_dispatch' && inputs.version) || '' }}
+      ref: ${{ steps.check.outputs.ref || (github.ref_type == 'tag' && github.ref_name) || (github.event_name == 'workflow_dispatch' && inputs.version) || '' }}
       base_fingerprint: ${{ steps.check.outputs.base_fingerprint }}
     steps:
       - uses: actions/checkout@v6
