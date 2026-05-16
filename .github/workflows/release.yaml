@@ -31,12 +31,21 @@ jobs:
       LIBRARY_PATH: ${{ github.workspace }}/watcher/target/lib
       BENCH_SEC: "30"
     steps:
-      - name: Refuse non-main dispatch
-        # workflow_dispatch can target any ref; reject anything but main so a
-        # mis-dispatched run fails loudly instead of being silently skipped.
+      - name: Validate inputs
+        # UI-triggered dispatches bypass release.sh's preflight regex, so
+        # re-validate the version string here. Any payload that would not
+        # produce a clean semver tag is rejected before it propagates into
+        # go get / sed / tag refs and breaks the release in mid-flight.
+        env:
+          VERSION: ${{ inputs.version }}
+        # Adapted from https://semver.org/#is-there-a-suggested-regular-expression-regex-to-check-a-semver-string
         run: |
           if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
             echo "::error::release.yaml must be dispatched against refs/heads/main, got ${GITHUB_REF}"
+            exit 1
+          fi
+          if [[ ! ${VERSION} =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?$ ]]; then
+            echo "::error::Invalid version: '${VERSION}' (must be SemVer, no v prefix)"
             exit 1
           fi
       - uses: actions/create-github-app-token@v3
@@ -73,38 +82,57 @@ jobs:
         # otherwise it's a fresh attempt and tags must not exist.
         run: |
           set -euo pipefail
-          err=$(mktemp)
-          trap 'rm -f "${err}"' EXIT
-          # Capture stderr so we can distinguish a real 404 (tag absent → fresh
-          # attempt) from any other failure (rate limit, 5xx, auth) which must
-          # not be silently treated as "tag missing".
-          if ref=$(gh api "repos/${GITHUB_REPOSITORY}/git/refs/tags/v${VERSION}" 2>"${err}"); then
-            sha=$(jq -r .object.sha <<<"${ref}")
-            type=$(jq -r .object.type <<<"${ref}")
+          # matching-refs returns an empty array (still HTTP 200) when the ref
+          # is absent — no need to parse error wording to distinguish 404
+          # from rate-limit/5xx/auth failures, which `gh` still surfaces as a
+          # non-zero exit through `set -e`.
+          lookup_tag() {
+            gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/$1" \
+              --jq ".[] | select(.ref == \"refs/tags/$1\") | {sha: .object.sha, type: .object.type}"
+          }
+          resolve_commit() {
+            local entry="$1"
+            local sha type
+            sha=$(jq -r .sha <<<"${entry}")
+            type=$(jq -r .type <<<"${entry}")
             if [[ "${type}" == "tag" ]]; then
-              sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${sha}" -q .object.sha)
+              gh api "repos/${GITHUB_REPOSITORY}/git/tags/${sha}" -q .object.sha
+            else
+              printf '%s\n' "${sha}"
             fi
+          }
+          main_entry=$(lookup_tag "v${VERSION}")
+          caddy_entry=$(lookup_tag "caddy/v${VERSION}")
+          if [[ -n "${main_entry}" ]]; then
+            sha=$(resolve_commit "${main_entry}")
             # Refuse to resume against a tag that isn't reachable from main:
             # protects against an orphan tag created on a side branch.
             if ! git merge-base --is-ancestor "${sha}" HEAD; then
               echo "::error::Tag v${VERSION} (${sha}) is not reachable from main; refusing to resume."
               exit 1
             fi
+            # Symmetric split-state guard: the create_tag step further down
+            # also fails if caddy/v${VERSION} points to a different commit,
+            # but flagging the inconsistency here surfaces it before any
+            # writes happen.
+            if [[ -n "${caddy_entry}" ]]; then
+              caddy_sha=$(resolve_commit "${caddy_entry}")
+              if [[ "${caddy_sha}" != "${sha}" ]]; then
+                echo "::error::caddy/v${VERSION} (${caddy_sha}) does not match v${VERSION} (${sha})."
+                exit 1
+              fi
+            fi
             echo "Resuming: v${VERSION} exists at ${sha}"
             {
               echo "resume=true"
               echo "release_commit=${sha}"
             } >> "${GITHUB_OUTPUT}"
-          elif grep -qF "(HTTP 404)" "${err}"; then
-            echo "resume=false" >> "${GITHUB_OUTPUT}"
-            if gh api "repos/${GITHUB_REPOSITORY}/git/refs/tags/caddy/v${VERSION}" --silent 2>/dev/null; then
+          else
+            if [[ -n "${caddy_entry}" ]]; then
               echo "::error::caddy/v${VERSION} exists but v${VERSION} does not; refusing to release into a split state."
               exit 1
             fi
-          else
-            echo "::error::GitHub API call for tag v${VERSION} failed:"
-            cat "${err}" >&2
-            exit 1
+            echo "resume=false" >> "${GITHUB_OUTPUT}"
           fi
       - if: steps.state.outputs.resume != 'true'
         uses: ./.github/actions/setup-go
@@ -174,23 +202,30 @@ jobs:
             parent_sha=$(gh api "repos/${REPO}/git/refs/heads/main" -q .object.sha)
             base_tree=$(gh api "repos/${REPO}/git/commits/${parent_sha}" -q .tree.sha)
 
-            pgo_sha=$(make_blob caddy/frankenphp/default.pgo)
-            gomod_sha=$(make_blob caddy/go.mod)
-            gosum_sha=$(make_blob caddy/go.sum)
+            # Collect every tracked file modified by the PGO/bump steps so
+            # that, e.g., a transitive update to a go.sum entry doesn't get
+            # silently dropped from the release commit. Matches the
+            # `git commit -a` behavior the script used to rely on.
+            mapfile -t changed < <(git diff --name-only HEAD)
+            if [[ ${#changed[@]} -eq 0 ]]; then
+              echo "::error::No file changes detected after PGO/bump steps."
+              exit 1
+            fi
+            printf 'Including in release tree: %s\n' "${changed[@]}"
+
+            tree_entries=$(
+              for path in "${changed[@]}"; do
+                sha=$(make_blob "${path}")
+                jq -nc --arg path "${path}" --arg sha "${sha}" \
+                  '{path: $path, mode: "100644", type: "blob", sha: $sha}'
+              done | jq -sc .
+            )
 
             tree_sha=$(jq -nc \
               --arg base_tree "$base_tree" \
-              --arg pgo "$pgo_sha" \
-              --arg gomod "$gomod_sha" \
-              --arg gosum "$gosum_sha" \
-              '{
-                base_tree: $base_tree,
-                tree: [
-                  {path: "caddy/frankenphp/default.pgo", mode: "100644", type: "blob", sha: $pgo},
-                  {path: "caddy/go.mod", mode: "100644", type: "blob", sha: $gomod},
-                  {path: "caddy/go.sum", mode: "100644", type: "blob", sha: $gosum}
-                ]
-              }' | gh api "repos/${REPO}/git/trees" --input - -q .sha)
+              --argjson entries "${tree_entries}" \
+              '{base_tree: $base_tree, tree: $entries}' \
+              | gh api "repos/${REPO}/git/trees" --input - -q .sha)
 
             # [skip ci] keeps push-triggered workflows from firing on top of
             # the explicit downstream dispatches below.
