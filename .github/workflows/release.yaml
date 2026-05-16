@@ -13,7 +13,10 @@ on:
         type: string
 permissions: {}
 concurrency:
-  group: ${{ github.workflow }}
+  # Per-version: different versions race safely (the API parent_sha
+  # check rejects a stale main HEAD update); same-version dispatches
+  # serialize so resume logic isn't blocked by a pending approval.
+  group: ${{ github.workflow }}-${{ inputs.version }}
   cancel-in-progress: false
 jobs:
   release:
@@ -104,6 +107,20 @@ jobs:
                 exit 1
               fi
             fi
+            # Verify the tagged commit actually contains the expected
+            # bump — protects against a tag created manually or by an
+            # earlier run on stale code.
+            git fetch --quiet origin "refs/tags/v${VERSION}:refs/tags/v${VERSION}"
+            if ! git show "v${VERSION}:caddy/go.mod" \
+              | grep -qE "^[[:space:]]+github\\.com/dunglas/frankenphp v${VERSION//./\\.}\$"; then
+              echo "::error::v${VERSION} (${sha}) caddy/go.mod does not require frankenphp v${VERSION}."
+              exit 1
+            fi
+            pgo_size=$(git cat-file -s "v${VERSION}:caddy/frankenphp/default.pgo" 2>/dev/null || echo 0)
+            if [[ "${pgo_size}" -lt 1024 ]]; then
+              echo "::error::v${VERSION} (${sha}) PGO profile is missing or suspiciously small (${pgo_size} bytes)."
+              exit 1
+            fi
             echo "Resuming: v${VERSION} exists at ${sha}"
             {
               echo "resume=true"
@@ -183,10 +200,11 @@ jobs:
 
             # Capture every touched file (modifications, additions,
             # deletions) so transitive go.sum or PGO side effects aren't
-            # dropped from the release commit. Deletions are represented
-            # with a null sha in the tree.
-            mapfile -t modified < <(git diff --name-only --diff-filter=ACMR HEAD)
-            mapfile -t deleted < <(git diff --name-only --diff-filter=D HEAD)
+            # dropped from the release commit. --no-renames decomposes
+            # renames into add+delete so both halves land in the tree
+            # mutation.
+            mapfile -t modified < <(git diff --no-renames --name-only --diff-filter=ACM HEAD)
+            mapfile -t deleted < <(git diff --no-renames --name-only --diff-filter=D HEAD)
             mapfile -t untracked < <(git ls-files --others --exclude-standard)
             if [[ ${#modified[@]} -eq 0 && ${#deleted[@]} -eq 0 && ${#untracked[@]} -eq 0 ]]; then
               echo "::error::No file changes after PGO/bump. Is v${VERSION} already on main? Delete the local tags and pick a different version, or recreate the tags manually."
@@ -196,16 +214,31 @@ jobs:
             [[ ${#present[@]} -gt 0 ]] && printf 'Including (added/modified): %s\n' "${present[@]}"
             [[ ${#deleted[@]} -gt 0 ]] && printf 'Including (deleted): %s\n' "${deleted[@]}"
 
+            # Preserve the existing file mode (executable bit) when
+            # modifying tracked files; default to 100644 for new files
+            # unless the path is executable on disk.
+            mode_for() {
+              local path="$1" mode
+              mode=$(git ls-tree HEAD -- "$path" | awk '{print $1; exit}')
+              if [[ -n "$mode" ]]; then
+                printf '%s\n' "$mode"
+              elif [[ -x "$path" ]]; then
+                printf '100755\n'
+              else
+                printf '100644\n'
+              fi
+            }
+
             tree_entries=$(
               {
                 for path in "${modified[@]}" "${untracked[@]}"; do
                   sha=$(make_blob "${path}")
-                  jq -nc --arg path "${path}" --arg sha "${sha}" \
-                    '{path: $path, mode: "100644", type: "blob", sha: $sha}'
+                  jq -nc --arg path "${path}" --arg sha "${sha}" --arg mode "$(mode_for "${path}")" \
+                    '{path: $path, mode: $mode, type: "blob", sha: $sha}'
                 done
                 for path in "${deleted[@]}"; do
-                  jq -nc --arg path "${path}" \
-                    '{path: $path, mode: "100644", type: "blob", sha: null}'
+                  jq -nc --arg path "${path}" --arg mode "$(mode_for "${path}")" \
+                    '{path: $path, mode: $mode, type: "blob", sha: null}'
                 done
               } | jq -sc .
             )
