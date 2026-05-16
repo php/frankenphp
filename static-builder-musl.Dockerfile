@@ -40,51 +40,53 @@ LABEL org.opencontainers.image.source=https://github.com/php/frankenphp
 LABEL org.opencontainers.image.licenses=MIT
 LABEL org.opencontainers.image.vendor="Kévin Dunglas"
 
-RUN apk update; \
-	apk add --no-cache \
-		alpine-sdk \
-		autoconf \
-		automake \
-		bash \
-		binutils \
-		bison \
-		build-base \
-		cmake \
-		curl \
-		file \
-		flex \
-		g++ \
-		gcc \
-		git \
-		jq \
-		libgcc \
-		libstdc++ \
-		libtool \
-		linux-headers \
-		m4 \
-		make \
-		pkgconfig \
-		php84 \
-		php84-common \
-		php84-ctype \
-		php84-curl \
-		php84-dom \
-		php84-iconv \
-		php84-mbstring \
-		php84-openssl \
-		php84-pcntl \
-		php84-phar \
-		php84-posix \
-		php84-session \
-		php84-sodium \
-		php84-tokenizer \
-		php84-xml \
-		php84-xmlwriter \
-		upx \
-		wget \
-		xz ; \
-	ln -sf /usr/bin/php84 /usr/bin/php && \
-	go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+RUN <<EOF
+apk update
+apk add --no-cache \
+	alpine-sdk \
+	autoconf \
+	automake \
+	bash \
+	binutils \
+	bison \
+	build-base \
+	cmake \
+	curl \
+	file \
+	flex \
+	g++ \
+	gcc \
+	git \
+	jq \
+	libgcc \
+	libstdc++ \
+	libtool \
+	linux-headers \
+	m4 \
+	make \
+	pkgconfig \
+	php84 \
+	php84-common \
+	php84-ctype \
+	php84-curl \
+	php84-dom \
+	php84-iconv \
+	php84-mbstring \
+	php84-openssl \
+	php84-pcntl \
+	php84-phar \
+	php84-posix \
+	php84-session \
+	php84-sodium \
+	php84-tokenizer \
+	php84-xml \
+	php84-xmlwriter \
+	upx \
+	wget \
+	xz
+ln -sf /usr/bin/php84 /usr/bin/php
+go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+EOF
 
 # https://getcomposer.org/doc/03-cli.md#composer-allow-superuser
 ENV COMPOSER_ALLOW_SUPERUSER=1
