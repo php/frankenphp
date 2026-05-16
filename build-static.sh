@@ -21,6 +21,7 @@ os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 # - FRANKENPHP_VERSION: FrankenPHP version (default: current Git commit)
 # - EMBED: Path to the PHP app to embed (default: none)
 # - DEBUG_SYMBOLS: Enable debug symbols if set to 1 (default: none)
+# - COMPRESS: Pack the resulting Linux binary with UPX if set to 1; ignored when DEBUG_SYMBOLS is set (default: none)
 # - MIMALLOC: Use mimalloc as the allocator if set to 1 (default: none)
 # - XCADDY_ARGS: Additional arguments to pass to xcaddy
 # - RELEASE: [maintainer only] Create a GitHub release if set to 1 (default: none)

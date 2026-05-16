@@ -124,7 +124,7 @@ cd frankenphp
 - `XCADDY_ARGS`: 追加のCaddyモジュールを導入するなど[xcaddy](https://github.com/caddyserver/xcaddy)に渡す引数
 - `EMBED`: バイナリに埋め込むPHPアプリケーションのパス
 - `CLEAN`: 指定するとlibphpおよびそのすべての依存関係がスクラッチからビルドされます（キャッシュなし）
-- `COMPRESS`: 指定すると UPX を使用して結果のバイナリを圧縮します（Linux のみ）
+- `COMPRESS`: `1` に設定すると UPX を使用して結果のバイナリを圧縮します（Linux のみ。`DEBUG_SYMBOLS` が設定されている場合は無視されます）
 - `DEBUG_SYMBOLS`: 指定すると、デバッグシンボルが除去されず、バイナリに含まれます
 - `MIMALLOC`: （実験的、Linuxのみ）パフォーマンス向上のためにmuslのmallocngを[mimalloc](https://github.com/microsoft/mimalloc)に置き換えます。muslをターゲットとするビルドにのみこれを使用することをお勧めします。glibcの場合は、このオプションを無効にして、代わりにバイナリを実行する際に[`LD_PRELOAD`](https://microsoft.github.io/mimalloc/overrides.html)を使用することをお勧めします。
 - `RELEASE`: （メンテナー用）指定すると、生成されたバイナリがGitHubにアップロードされます
