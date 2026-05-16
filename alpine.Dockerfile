@@ -93,13 +93,13 @@ RUN --mount=type=secret,id=github-token <<'EOF'
 set -e
 api=https://api.github.com/repos/e-dant/watcher/releases/latest
 if [ -s /run/secrets/github-token ]; then
-    tarball_url=$(curl -fsSL -H "Authorization: Bearer $(cat /run/secrets/github-token)" "${api}" | jq -r '.tarball_url // empty')
+	tarball_url=$(curl -fsSL -H "Authorization: Bearer $(cat /run/secrets/github-token)" "${api}" | jq -r '.tarball_url // empty')
 else
-    tarball_url=$(curl -fsSL "${api}" | jq -r '.tarball_url // empty')
+	tarball_url=$(curl -fsSL "${api}" | jq -r '.tarball_url // empty')
 fi
 if [ -z "${tarball_url}" ]; then
-    echo "failed to resolve e-dant/watcher tarball URL (rate limited?)" >&2
-    exit 1
+	echo "failed to resolve e-dant/watcher tarball URL (rate limited?)" >&2
+	exit 1
 fi
 curl -fsSL "${tarball_url}" | tar xz --strip-components 1
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
