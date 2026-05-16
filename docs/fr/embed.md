@@ -145,7 +145,7 @@ PHP_EXTENSIONS=ctype,iconv,pdo_sqlite \
 
 ## Distribuer le binaire
 
-Sous Linux, le binaire est compressé par défaut à l'aide de [UPX](https://upx.github.io).
+Sous Linux, le binaire peut être compressé à l'aide de [UPX](https://upx.github.io) en définissant la variable d'environnement `COMPRESS=1` au moment de la compilation.
 
 Sous Mac, pour réduire la taille du fichier avant de l'envoyer, vous pouvez le compresser.
 Nous recommandons `xz`.

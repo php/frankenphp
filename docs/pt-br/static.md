@@ -157,7 +157,7 @@ o script `build-static.sh` para personalizar a compilação estática:
 - `EMBED`: caminho da aplicação PHP a ser incorporada no binário;
 - `CLEAN`: quando definida, a `libphp` e todas as suas dependências são
   compiladas do zero (sem cache);
-- `NO_COMPRESS`: não compacta o binário resultante usando UPX;
+- `COMPRESS`: quando definida, compacta o binário resultante usando UPX (apenas Linux);
 - `DEBUG_SYMBOLS`: quando definida, os símbolos de depuração não serão removidos
   e serão adicionados ao binário;
 - `MIMALLOC`: (experimental, somente Linux) substitui `mallocng` da `musl` por

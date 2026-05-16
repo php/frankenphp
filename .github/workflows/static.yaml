@@ -148,7 +148,6 @@ jobs:
           set: |
             ${{ matrix.debug && 'static-builder-musl.args.DEBUG_SYMBOLS=1' || '' }}
             ${{ matrix.mimalloc && 'static-builder-musl.args.MIMALLOC=1' || '' }}
-            ${{ (github.event_name == 'pull_request' || matrix.platform == 'linux/arm64') && 'static-builder-musl.args.NO_COMPRESS=1' || '' }}
             *.tags=
             *.platform=${{ matrix.platform }}
             ${{ fromJson(needs.prepare.outputs.push) && '' || format('*.cache-from=type=gha,scope={0}-static-builder-musl{1}{2}', needs.prepare.outputs.ref || github.ref, matrix.debug && '-debug' || '', matrix.mimalloc && '-mimalloc' || '') }}
@@ -302,7 +301,6 @@ jobs:
           source: .
           targets: static-builder-gnu
           set: |
-            ${{ (github.event_name == 'pull_request' || matrix.platform == 'linux/arm64') && 'static-builder-gnu.args.NO_COMPRESS=1' || '' }}
             *.tags=
             *.platform=${{ matrix.platform }}
             ${{ fromJson(needs.prepare.outputs.push) && '' || format('*.cache-from=type=gha,scope={0}-static-builder-gnu', needs.prepare.outputs.ref || github.ref) }}
@@ -466,7 +464,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           FRANKENPHP_VERSION: ${{ steps.version.outputs.version }}
           RELEASE: ${{ (needs.prepare.outputs.ref || github.ref_type == 'tag') && '1' || '' }}
-          NO_COMPRESS: ${{ github.event_name == 'pull_request' && '1' || '' }}
       - name: Upload logs
         if: ${{ failure() }}
         uses: actions/upload-artifact@v7
