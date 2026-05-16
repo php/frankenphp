@@ -181,21 +181,33 @@ jobs:
             parent_sha=$(gh api "repos/${REPO}/git/refs/heads/main" -q .object.sha)
             base_tree=$(gh api "repos/${REPO}/git/commits/${parent_sha}" -q .tree.sha)
 
-            # Capture every touched file so transitive go.sum or PGO
-            # side effects aren't dropped from the release commit.
-            mapfile -t changed < <(git diff --name-only HEAD)
-            if [[ ${#changed[@]} -eq 0 ]]; then
-              echo "::error::No file changes detected after PGO/bump steps."
+            # Capture every touched file (modifications, additions,
+            # deletions) so transitive go.sum or PGO side effects aren't
+            # dropped from the release commit. Deletions are represented
+            # with a null sha in the tree.
+            mapfile -t modified < <(git diff --name-only --diff-filter=ACMR HEAD)
+            mapfile -t deleted < <(git diff --name-only --diff-filter=D HEAD)
+            mapfile -t untracked < <(git ls-files --others --exclude-standard)
+            if [[ ${#modified[@]} -eq 0 && ${#deleted[@]} -eq 0 && ${#untracked[@]} -eq 0 ]]; then
+              echo "::error::No file changes after PGO/bump. Is v${VERSION} already on main? Delete the local tags and pick a different version, or recreate the tags manually."
               exit 1
             fi
-            printf 'Including in release tree: %s\n' "${changed[@]}"
+            present=("${modified[@]}" "${untracked[@]}")
+            [[ ${#present[@]} -gt 0 ]] && printf 'Including (added/modified): %s\n' "${present[@]}"
+            [[ ${#deleted[@]} -gt 0 ]] && printf 'Including (deleted): %s\n' "${deleted[@]}"
 
             tree_entries=$(
-              for path in "${changed[@]}"; do
-                sha=$(make_blob "${path}")
-                jq -nc --arg path "${path}" --arg sha "${sha}" \
-                  '{path: $path, mode: "100644", type: "blob", sha: $sha}'
-              done | jq -sc .
+              {
+                for path in "${modified[@]}" "${untracked[@]}"; do
+                  sha=$(make_blob "${path}")
+                  jq -nc --arg path "${path}" --arg sha "${sha}" \
+                    '{path: $path, mode: "100644", type: "blob", sha: $sha}'
+                done
+                for path in "${deleted[@]}"; do
+                  jq -nc --arg path "${path}" \
+                    '{path: $path, mode: "100644", type: "blob", sha: null}'
+                done
+              } | jq -sc .
             )
 
             tree_sha=$(jq -nc \
@@ -217,14 +229,18 @@ jobs:
           fi
 
           # Idempotent: skip if tag already points at the release commit,
-          # fail if it points elsewhere.
+          # fail if it points elsewhere. matching-refs distinguishes
+          # "tag absent" (HTTP 200, empty array) from real failures, which
+          # still trip set -e.
           create_tag() {
             local tag="$1"
             local existing
-            if existing=$(gh api "repos/${REPO}/git/refs/tags/${tag}" 2>/dev/null); then
+            existing=$(gh api "repos/${REPO}/git/matching-refs/tags/${tag}" \
+              --jq ".[] | select(.ref == \"refs/tags/${tag}\") | {sha: .object.sha, type: .object.type}")
+            if [[ -n "${existing}" ]]; then
               local obj_sha obj_type
-              obj_sha=$(jq -r .object.sha <<<"${existing}")
-              obj_type=$(jq -r .object.type <<<"${existing}")
+              obj_sha=$(jq -r .sha <<<"${existing}")
+              obj_type=$(jq -r .type <<<"${existing}")
               if [[ "${obj_type}" == "tag" ]]; then
                 obj_sha=$(gh api "repos/${REPO}/git/tags/${obj_sha}" -q .object.sha)
               fi

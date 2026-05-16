@@ -9,10 +9,12 @@ set -o errexit
 set -o pipefail
 trap 'echo "Aborting on line $LINENO. Exit: $?" >&2' ERR
 
-if ! command -v gh >/dev/null; then
-	echo 'The "gh" command must be installed.' >&2
-	exit 1
-fi
+for cmd in git gh; do
+	if ! command -v "$cmd" >/dev/null; then
+		echo "The \"$cmd\" command must be installed." >&2
+		exit 1
+	fi
+done
 
 if [[ $# -ne 1 ]]; then
 	echo "Usage: ./release.sh version" >&2
