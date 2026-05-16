@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/caddyserver/caddy/v2/caddytest"
 	"github.com/stretchr/testify/require"
@@ -25,6 +26,10 @@ func TestHotReload(t *testing.T) {
 	indexFile := filepath.Join(tmpDir, "index.php")
 
 	tester := caddytest.NewTester(t)
+	// caddytest's default 5s http.Client.Timeout is too tight for the
+	// SSE roundtrip below on slow CI runners (notably emulated armv7).
+	// 30s keeps the test bounded so a real regression fails fast.
+	tester.Client.Timeout = 30 * time.Second
 	tester.InitServer(`
 		{
 			debug
