@@ -158,6 +158,7 @@ jobs:
           VERSION: ${{ (github.ref_type == 'tag' && github.ref_name) || needs.prepare.outputs.ref || 'dev' }}
           PHP_VERSION: ${{ needs.prepare.outputs.php_version }}
           BASE_FINGERPRINT: ${{ needs.prepare.outputs.base_fingerprint }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - # Workaround for https://github.com/actions/runner/pull/2477#issuecomment-1501003600
         name: Export metadata
         if: fromJson(needs.prepare.outputs.push)
