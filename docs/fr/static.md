@@ -124,7 +124,7 @@ Les variables d'environnement suivantes peuvent être transmises à `docker buil
 - `EMBED` : chemin de l'application PHP à intégrer dans le binaire
 - `CLEAN` : lorsque défini, `libphp` et toutes ses dépendances sont construites à partir de zéro (pas de cache)
 - `DEBUG_SYMBOLS` : lorsque défini, les symboles de débogage ne seront pas supprimés et seront ajoutés dans le binaire
-- `NO_COMPRESS` : ne pas compresser le binaire avec UPX
+- `COMPRESS` : lorsque défini à `1`, compresse le binaire résultant avec UPX (Linux uniquement ; ignoré lorsque `DEBUG_SYMBOLS` est défini)
 - `MIMALLOC` : (expérimental, Linux seulement) remplace l'allocateur mallocng de musl par [mimalloc](https://github.com/microsoft/mimalloc) pour des performances améliorées
 - `RELEASE` : (uniquement pour les mainteneurs) lorsque défini, le binaire résultant sera uploadé sur GitHub
 

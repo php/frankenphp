@@ -138,7 +138,7 @@ Para personalizar las extensiones, use la variable de entorno `PHP_EXTENSIONS`.
 
 ## Distribuir el binario
 
-En Linux, el binario creado se comprime usando [UPX](https://upx.github.io).
+En Linux, el binario creado puede comprimirse usando [UPX](https://upx.github.io) estableciendo la variable de entorno `COMPRESS=1` en el momento de la compilación.
 
 En Mac, para reducir el tamaño del archivo antes de enviarlo, puede comprimirlo.
 Recomendamos `xz`.

@@ -123,7 +123,7 @@ Las siguientes variables de entorno pueden pasarse a `docker build` y al script 
 - `XCADDY_ARGS`: argumentos a pasar a [xcaddy](https://github.com/caddyserver/xcaddy), por ejemplo para agregar módulos adicionales de Caddy
 - `EMBED`: ruta de la aplicación PHP a incrustar en el binario
 - `CLEAN`: cuando está establecido, libphp y todas sus dependencias se compilan desde cero (sin caché)
-- `NO_COMPRESS`: no comprimir el binario resultante usando UPX
+- `COMPRESS`: cuando se establece en `1`, comprime el binario resultante usando UPX (solo Linux; se ignora cuando `DEBUG_SYMBOLS` está establecido)
 - `DEBUG_SYMBOLS`: cuando está establecido, los símbolos de depuración no se eliminarán y se añadirán al binario
 - `MIMALLOC`: (experimental, solo Linux) reemplaza mallocng de musl por [mimalloc](https://github.com/microsoft/mimalloc) para mejorar el rendimiento. Solo recomendamos usar esto para compilaciones orientadas a musl; para glibc, preferimos deshabilitar esta opción y usar [`LD_PRELOAD`](https://microsoft.github.io/mimalloc/overrides.html) cuando ejecutes tu binario.
 - `RELEASE`: (solo para mantenedores) cuando está establecido, el binario resultante se subirá a GitHub
