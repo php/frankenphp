@@ -90,6 +90,22 @@ jobs:
               printf '%s\n' "${sha}"
             fi
           }
+          # Match the frankenphp require entry in both `require ( ... )`
+          # block form and single-line `require x v...` form.
+          verify_release_content() {
+            local ref="$1"
+            if ! git show "${ref}:caddy/go.mod" 2>/dev/null \
+              | grep -qE "(^|[[:space:]])github\\.com/dunglas/frankenphp v${VERSION//./\\.}([[:space:]]|\$)"; then
+              echo "${ref}: caddy/go.mod does not require frankenphp v${VERSION}" >&2
+              return 1
+            fi
+            local size
+            size=$(git cat-file -s "${ref}:caddy/frankenphp/default.pgo" 2>/dev/null || echo 0)
+            if [[ "${size}" -lt 1024 ]]; then
+              echo "${ref}: PGO profile missing or suspiciously small (${size} bytes)" >&2
+              return 1
+            fi
+          }
           main_entry=$(lookup_tag "v${VERSION}")
           caddy_entry=$(lookup_tag "caddy/v${VERSION}")
           if [[ -n "${main_entry}" ]]; then
@@ -107,21 +123,23 @@ jobs:
                 exit 1
               fi
             fi
-            # Verify the tagged commit actually contains the expected
-            # bump — protects against a tag created manually or by an
-            # earlier run on stale code.
             git fetch --quiet origin "refs/tags/v${VERSION}:refs/tags/v${VERSION}"
-            if ! git show "v${VERSION}:caddy/go.mod" \
-              | grep -qE "^[[:space:]]+github\\.com/dunglas/frankenphp v${VERSION//./\\.}\$"; then
-              echo "::error::v${VERSION} (${sha}) caddy/go.mod does not require frankenphp v${VERSION}."
-              exit 1
-            fi
-            pgo_size=$(git cat-file -s "v${VERSION}:caddy/frankenphp/default.pgo" 2>/dev/null || echo 0)
-            if [[ "${pgo_size}" -lt 1024 ]]; then
-              echo "::error::v${VERSION} (${sha}) PGO profile is missing or suspiciously small (${pgo_size} bytes)."
+            if ! verify_release_content "v${VERSION}"; then
+              echo "::error::v${VERSION} (${sha}) does not match expected release content."
               exit 1
             fi
             echo "Resuming: v${VERSION} exists at ${sha}"
+            {
+              echo "resume=true"
+              echo "release_commit=${sha}"
+            } >> "${GITHUB_OUTPUT}"
+          elif verify_release_content HEAD 2>/dev/null; then
+            if [[ -n "${caddy_entry}" ]]; then
+              echo "::error::caddy/v${VERSION} exists but v${VERSION} does not; refusing to release into a split state."
+              exit 1
+            fi
+            sha=$(git rev-parse HEAD)
+            echo "Resuming: main HEAD (${sha}) already matches v${VERSION}; tags will be created."
             {
               echo "resume=true"
               echo "release_commit=${sha}"
@@ -195,7 +213,15 @@ jobs:
                 | gh api "repos/${REPO}/git/blobs" --input - -q .sha
             )
 
+            # Concurrency is per-version, so a different version could
+            # land on main while this run is in flight. Abort rather than
+            # overlay our locally-bumped files on top of unseen commits.
+            checkout_sha=$(git rev-parse HEAD)
             parent_sha=$(gh api "repos/${REPO}/git/refs/heads/main" -q .object.sha)
+            if [[ "${checkout_sha}" != "${parent_sha}" ]]; then
+              echo "::error::main advanced from ${checkout_sha} to ${parent_sha} during the run; refusing to overlay locally-modified files on a newer base_tree."
+              exit 1
+            fi
             base_tree=$(gh api "repos/${REPO}/git/commits/${parent_sha}" -q .tree.sha)
 
             # Capture every touched file (modifications, additions,

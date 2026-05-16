@@ -6,6 +6,7 @@
 
 set -o nounset
 set -o errexit
+set -o errtrace # so the ERR trap fires inside functions/subshells too
 set -o pipefail
 trap 'echo "Aborting on line $LINENO. Exit: $?" >&2' ERR
 
@@ -32,7 +33,7 @@ if [[ -n "$(git status --porcelain)" ]]; then
 	exit 1
 fi
 
-git fetch --quiet origin main
+git fetch --quiet --tags origin main
 local_head="$(git rev-parse HEAD)"
 remote_head="$(git rev-parse origin/main)"
 if [[ "$local_head" != "$remote_head" ]]; then
