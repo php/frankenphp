@@ -1,13 +1,8 @@
 name: Release
-# Cuts a FrankenPHP release end-to-end: refreshes the PGO profile, bumps the
-# Caddy module's frankenphp dependency, commits the result as
-# github-actions[bot], tags v<version> and caddy/v<version>, drafts a GitHub
-# release, dispatches the downstream binary builds, and opens a Homebrew
-# formula bump PR. Dispatched by release.sh.
-#
-# The workflow is idempotent: re-dispatching after a partial failure (flaky
-# test, network blip, registry hiccup) detects which steps already completed
-# and skips them, so the release can be resumed without manual cleanup.
+# Refreshes PGO, bumps caddy/go.mod, commits as github-actions[bot],
+# tags v<version> and caddy/v<version>, drafts the GitHub release,
+# dispatches the binary build workflows, and bumps the Homebrew formula.
+# Idempotent: a re-dispatch after a partial failure resumes by tag.
 on:
   workflow_dispatch:
     inputs:
@@ -18,8 +13,7 @@ on:
         type: string
 permissions:
   contents: write
-  # Needed to dispatch the downstream binary build workflows from this run.
-  actions: write
+  actions: write # to dispatch downstream binary build workflows
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
@@ -35,13 +29,10 @@ jobs:
       BENCH_SEC: "30"
     steps:
       - name: Validate inputs
-        # UI-triggered dispatches bypass release.sh's preflight regex, so
-        # re-validate the version string here. Any payload that would not
-        # produce a clean semver tag is rejected before it propagates into
-        # go get / sed / tag refs and breaks the release in mid-flight.
+        # Reject non-main refs and non-semver versions before they reach
+        # go get / sed / tag refs. https://semver.org/#is-there-a-suggested-regular-expression-regex-to-check-a-semver-string
         env:
           VERSION: ${{ inputs.version }}
-        # Adapted from https://semver.org/#is-there-a-suggested-regular-expression-regex-to-check-a-semver-string
         run: |
           if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
             echo "::error::release.yaml must be dispatched against refs/heads/main, got ${GITHUB_REF}"
@@ -59,8 +50,7 @@ jobs:
         id: classify
         env:
           VERSION: ${{ inputs.version }}
-        # Pre-release versions (those carrying a "-" suffix per SemVer) must
-        # not be marked --latest nor bump the stable Homebrew formula.
+        # Pre-releases (SemVer "-" suffix) must not bump --latest or Homebrew.
         run: |
           if [[ "${VERSION}" == *-* ]]; then
             echo "prerelease=true" >> "${GITHUB_OUTPUT}"
@@ -72,17 +62,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ inputs.version }}
-        # Tag existence is the source of truth for "release in progress":
-        # main HEAD may have moved past the release commit (a follow-up fix
-        # merged on top), so the commit-message check on HEAD is too narrow.
-        # If v<version> exists, resume from the commit it points at;
-        # otherwise it's a fresh attempt and tags must not exist.
+        # Tag existence is the resume signal — main HEAD may have moved
+        # past the release commit, so a HEAD message check is too narrow.
         run: |
           set -euo pipefail
-          # matching-refs returns an empty array (still HTTP 200) when the ref
-          # is absent — no need to parse error wording to distinguish 404
-          # from rate-limit/5xx/auth failures, which `gh` still surfaces as a
-          # non-zero exit through `set -e`.
+          # matching-refs returns [] (HTTP 200) for absent tags; real
+          # failures still trip set -e.
           lookup_tag() {
             gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/$1" \
               --jq ".[] | select(.ref == \"refs/tags/$1\") | {sha: .object.sha, type: .object.type}"
@@ -102,16 +87,12 @@ jobs:
           caddy_entry=$(lookup_tag "caddy/v${VERSION}")
           if [[ -n "${main_entry}" ]]; then
             sha=$(resolve_commit "${main_entry}")
-            # Refuse to resume against a tag that isn't reachable from main:
-            # protects against an orphan tag created on a side branch.
+            # Reject orphan tags created on a side branch.
             if ! git merge-base --is-ancestor "${sha}" HEAD; then
               echo "::error::Tag v${VERSION} (${sha}) is not reachable from main; refusing to resume."
               exit 1
             fi
-            # Symmetric split-state guard: the create_tag step further down
-            # also fails if caddy/v${VERSION} points to a different commit,
-            # but flagging the inconsistency here surfaces it before any
-            # writes happen.
+            # Catch a mismatched caddy/v${VERSION} before any writes.
             if [[ -n "${caddy_entry}" ]]; then
               caddy_sha=$(resolve_commit "${caddy_entry}")
               if [[ "${caddy_sha}" != "${sha}" ]]; then
@@ -149,8 +130,7 @@ jobs:
         run: ./profiles/build-pgo.sh
       - if: steps.state.outputs.resume != 'true'
         name: Sanity-check PGO profile
-        # Catch the degenerate case where wrk silently failed to drive load
-        # and we ended up shipping a near-empty profile.
+        # Guard against wrk silently failing and producing a near-empty profile.
         run: |
           size=$(wc -c <caddy/frankenphp/default.pgo)
           echo "PGO profile: ${size} bytes"
@@ -167,8 +147,8 @@ jobs:
           go get "github.com/dunglas/frankenphp@v${VERSION}"
           go mod tidy
       - name: Commit and tag via GitHub API
-        # API-created commits/tags are signed server-side with GitHub's key
-        # and show as "Verified" under the github-actions[bot] identity.
+        # API-created commits/tags are signed server-side and show as
+        # Verified under github-actions[bot].
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
@@ -182,10 +162,8 @@ jobs:
             commit_sha="${RELEASE_COMMIT}"
             echo "Reusing existing release commit ${commit_sha}"
           else
-            # Stage the base64 in a temp file and feed it to jq via
-            # --rawfile: passing big blobs (the PGO profile is ~2 MB encoded)
-            # through --arg exceeds ARG_MAX on the runner. Subshell body +
-            # EXIT trap clean up the tmpfile even if base64/jq/gh aborts.
+            # Use --rawfile: the PGO blob (~2 MB encoded) exceeds ARG_MAX
+            # via --arg.
             make_blob() (
               local tmp
               tmp=$(mktemp)
@@ -199,10 +177,8 @@ jobs:
             parent_sha=$(gh api "repos/${REPO}/git/refs/heads/main" -q .object.sha)
             base_tree=$(gh api "repos/${REPO}/git/commits/${parent_sha}" -q .tree.sha)
 
-            # Collect every tracked file modified by the PGO/bump steps so
-            # that, e.g., a transitive update to a go.sum entry doesn't get
-            # silently dropped from the release commit. Matches the
-            # `git commit -a` behavior the script used to rely on.
+            # Capture every touched file so transitive go.sum or PGO
+            # side effects aren't dropped from the release commit.
             mapfile -t changed < <(git diff --name-only HEAD)
             if [[ ${#changed[@]} -eq 0 ]]; then
               echo "::error::No file changes detected after PGO/bump steps."
@@ -224,7 +200,7 @@ jobs:
               '{base_tree: $base_tree, tree: $entries}' \
               | gh api "repos/${REPO}/git/trees" --input - -q .sha)
 
-            # [skip ci] keeps push-triggered workflows from firing on top of
+            # [skip ci] avoids push-triggered workflows firing alongside
             # the explicit downstream dispatches below.
             commit_sha=$(jq -nc \
               --arg message "chore: prepare release ${VERSION} [skip ci]" \
@@ -236,8 +212,8 @@ jobs:
             gh api "repos/${REPO}/git/refs/heads/main" -X PATCH -f sha="$commit_sha" --silent
           fi
 
-          # Idempotent tag creation: if the tag already exists and points at
-          # the release commit, leave it alone; if it points elsewhere, fail.
+          # Idempotent: skip if tag already points at the release commit,
+          # fail if it points elsewhere.
           create_tag() {
             local tag="$1"
             local existing
@@ -268,15 +244,12 @@ jobs:
           create_tag "v${VERSION}"
           create_tag "caddy/v${VERSION}"
 
-          # Pull the new commit + tags so the release-draft step's git
-          # describe can resolve v${VERSION}^.
+          # So the release-draft step's `git describe v${VERSION}^` resolves.
           git fetch origin main --tags
       - name: Draft GitHub release
-        # `gh release create` validates the tag through GraphQL, which can
-        # lag minutes behind the Git Data API we just used to create the
-        # tag — leading to "no matches found" or `untagged-*` placeholder
-        # releases. Use the REST releases endpoints directly: they see the
-        # tag immediately and behave deterministically.
+        # `gh release create` goes through GraphQL which can lag minutes
+        # behind the Git Data API and yield "no matches" or `untagged-*`
+        # placeholder releases; the REST releases endpoint is consistent.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
@@ -302,11 +275,9 @@ jobs:
           fi
           gh api "repos/${REPO}/releases" "${create_args[@]}" --silent
       - name: Trigger downstream release builds
-        # GITHUB_TOKEN-driven API writes don't trigger workflows that listen
-        # on tag/push events, so dispatch each downstream explicitly. Keep
-        # going on partial failure so the operator only needs to re-run the
-        # specific dispatches that didn't go through. Re-dispatch on resume
-        # is harmless: it just queues another build run.
+        # GITHUB_TOKEN tag writes don't fire push triggers, so dispatch
+        # each downstream explicitly. Keep going on partial failure;
+        # re-dispatch on resume just queues another idempotent build.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
