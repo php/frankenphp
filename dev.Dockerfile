@@ -18,9 +18,11 @@ ENV PHPIZE_DEPS="\
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# hadolint ignore=DL3009
-RUN apt-get update && \
-	apt-get -y --no-install-recommends install \
+# hadolint ignore=DL3009,SC2086
+RUN <<EOF
+set -e
+apt-get update
+apt-get -y --no-install-recommends install \
 	$PHPIZE_DEPS \
 	libargon2-dev \
 	libbrotli-dev \
@@ -34,7 +36,6 @@ RUN apt-get update && \
 	zlib1g-dev \
 	bison \
 	libnss3-tools \
-	# Dev tools \
 	git \
 	clang \
 	cmake \
@@ -43,41 +44,47 @@ RUN apt-get update && \
 	valgrind \
 	neovim \
 	zsh \
-	libtool-bin && \
-	echo 'set auto-load safe-path /' > /root/.gdbinit && \
-	echo '* soft core unlimited' >> /etc/security/limits.conf \
-	&& \
-	apt-get clean
+	libtool-bin
+echo 'set auto-load safe-path /' > /root/.gdbinit
+echo '* soft core unlimited' >> /etc/security/limits.conf
+apt-get clean
+EOF
 
 WORKDIR /usr/local/src/php
-RUN git clone --branch=PHP-8.5 https://github.com/php/php-src.git . && \
-	# --enable-embed is only necessary to generate libphp.so, we don't use this SAPI directly
-	./buildconf --force && \
-	EXTENSION_DIR=/usr/lib/frankenphp/modules ./configure \
-		--enable-embed \
-		--enable-zts \
-		--disable-zend-signals \
-		--enable-zend-max-execution-timers \
-		--with-config-file-path=/etc/frankenphp/php.ini \
-		--with-config-file-scan-dir=/etc/frankenphp/php.d \
-		--enable-debug && \
-	make -j"$(nproc)" && \
-	make install && \
-	ldconfig && \
-		mkdir -p /etc/frankenphp/php.d && \
-			cp php.ini-development /etc/frankenphp/php.ini && \
-			echo "zend_extension=opcache.so" >> /etc/frankenphp/php.ini && \
-			echo "opcache.enable=1" >> /etc/frankenphp/php.ini && \
-	php --version
+RUN <<EOF
+set -e
+git clone --branch=PHP-8.5 https://github.com/php/php-src.git .
+# --enable-embed is only necessary to generate libphp.so, we don't use this SAPI directly
+./buildconf --force
+EXTENSION_DIR=/usr/lib/frankenphp/modules ./configure \
+	--enable-embed \
+	--enable-zts \
+	--disable-zend-signals \
+	--enable-zend-max-execution-timers \
+	--with-config-file-path=/etc/frankenphp/php.ini \
+	--with-config-file-scan-dir=/etc/frankenphp/php.d \
+	--enable-debug
+make -j"$(nproc)"
+make install
+ldconfig
+mkdir -p /etc/frankenphp/php.d
+cp php.ini-development /etc/frankenphp/php.ini
+echo "zend_extension=opcache.so" >> /etc/frankenphp/php.ini
+echo "opcache.enable=1" >> /etc/frankenphp/php.ini
+php --version
+EOF
 
 # Install e-dant/watcher (necessary for file watching)
 WORKDIR /usr/local/src/watcher
-RUN git clone https://github.com/e-dant/watcher . && \
-	cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && \
-	cmake --build build/ && \
-	cmake --install build && \
-	cp build/libwatcher-c.so /usr/local/lib/libwatcher-c.so && \
-	ldconfig
+RUN <<EOF
+set -e
+git clone https://github.com/e-dant/watcher .
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build/
+cmake --install build
+cp build/libwatcher-c.so /usr/local/lib/libwatcher-c.so
+ldconfig
+EOF
 
 WORKDIR /go/src/app
 COPY --link . ./

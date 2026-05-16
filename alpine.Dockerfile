@@ -8,28 +8,24 @@ ARG TARGETARCH
 
 WORKDIR /app
 
-RUN apk add --no-cache \
-	ca-certificates \
-	libcap \
-	mailcap
+RUN apk add --no-cache ca-certificates libcap mailcap
 
-RUN set -eux; \
-	mkdir -p \
-		/app/public \
-		/config/caddy \
-		/data/caddy \
-		/etc/caddy \
-		/etc/frankenphp; \
-	sed -i 's/php/frankenphp run/g' /usr/local/bin/docker-php-entrypoint; \
-	echo '<?php phpinfo();' > /app/public/index.php
+RUN <<EOF
+set -eux
+mkdir -p /app/public /config/caddy /data/caddy /etc/caddy /etc/frankenphp
+sed -i 's/php/frankenphp run/g' /usr/local/bin/docker-php-entrypoint
+echo '<?php phpinfo();' > /app/public/index.php
+EOF
 
 COPY --link caddy/frankenphp/Caddyfile /etc/caddy/Caddyfile
 
-RUN ln /etc/caddy/Caddyfile /etc/frankenphp/Caddyfile && \
-	curl -sSLf \
-		-o /usr/local/bin/install-php-extensions \
-		https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions && \
-	chmod +x /usr/local/bin/install-php-extensions
+RUN <<EOF
+set -e
+ln /etc/caddy/Caddyfile /etc/frankenphp/Caddyfile
+curl -sSLf -o /usr/local/bin/install-php-extensions \
+	https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions
+chmod +x /usr/local/bin/install-php-extensions
+EOF
 
 CMD ["--config", "/etc/frankenphp/Caddyfile", "--adapter", "caddyfile"]
 HEALTHCHECK CMD curl -f http://localhost:2019/metrics || exit 1
@@ -122,12 +118,13 @@ ENV CGO_CPPFLAGS=$PHP_CPPFLAGS
 ENV CGO_LDFLAGS="-lssl -lcrypto -lreadline -largon2 -lcurl -lonig -lz $PHP_LDFLAGS"
 
 WORKDIR /go/src/app/caddy/frankenphp
-RUN GOBIN=/usr/local/bin \
-		../../go.sh install -ldflags "-w -s -extldflags '-Wl,-z,stack-size=0x80000' -X 'github.com/caddyserver/caddy/v2.CustomVersion=FrankenPHP $FRANKENPHP_VERSION PHP $PHP_VERSION Caddy' -X 'github.com/caddyserver/caddy/v2.CustomBinaryName=frankenphp' -X 'github.com/caddyserver/caddy/v2/modules/caddyhttp.ServerHeader=FrankenPHP Caddy'" -buildvcs=true && \
-	setcap cap_net_bind_service=+ep /usr/local/bin/frankenphp && \
-	([ -z "${NO_COMPRESS}" ] && upx --best /usr/local/bin/frankenphp || true) && \
-	frankenphp version && \
-	frankenphp build-info
+RUN <<EOF
+GOBIN=/usr/local/bin ../../go.sh install -ldflags "-w -s -extldflags '-Wl,-z,stack-size=0x80000' -X 'github.com/caddyserver/caddy/v2.CustomVersion=FrankenPHP $FRANKENPHP_VERSION PHP $PHP_VERSION Caddy' -X 'github.com/caddyserver/caddy/v2.CustomBinaryName=frankenphp' -X 'github.com/caddyserver/caddy/v2/modules/caddyhttp.ServerHeader=FrankenPHP Caddy'" -buildvcs=true
+setcap cap_net_bind_service=+ep /usr/local/bin/frankenphp
+[ -z "${NO_COMPRESS}" ] && upx --best /usr/local/bin/frankenphp || true
+frankenphp version
+frankenphp build-info
+EOF
 
 WORKDIR /go/src/app
 
@@ -138,10 +135,16 @@ ENV GODEBUG=cgocheck=0
 
 # copy watcher shared library (libgcc and libstdc++ are needed for the watcher)
 COPY --from=builder /usr/local/lib/libwatcher* /usr/local/lib/
-RUN apk add --no-cache libstdc++ && \
-	ldconfig /usr/local/lib
+RUN <<EOF
+set -e
+apk add --no-cache libstdc++
+ldconfig /usr/local/lib
+EOF
 
 COPY --from=builder /usr/local/bin/frankenphp /usr/local/bin/frankenphp
-RUN setcap cap_net_bind_service=+ep /usr/local/bin/frankenphp && \
-	frankenphp version && \
-	frankenphp build-info
+RUN <<EOF
+set -e
+setcap cap_net_bind_service=+ep /usr/local/bin/frankenphp
+frankenphp version
+frankenphp build-info
+EOF
