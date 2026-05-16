@@ -19,13 +19,7 @@ if [[ $# -ne 1 ]]; then
 	exit 1
 fi
 
-# Adapted from https://semver.org/#is-there-a-suggested-regular-expression-regex-to-check-a-semver-string
-if [[ ! $1 =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?$ ]]; then
-	echo "Invalid version number: $1" >&2
-	exit 1
-fi
-
-# Cheap operator-side guards so the workflow dispatch matches local intent.
+# Cheap operator-side guards; release.yaml re-validates the version.
 if [[ "$(git branch --show-current 2>/dev/null)" != "main" ]]; then
 	echo "You must be on the main branch to dispatch a release." >&2
 	exit 1
