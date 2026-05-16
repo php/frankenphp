@@ -37,8 +37,16 @@ if [[ -n "$(git status --porcelain)" ]]; then
 fi
 
 git fetch --quiet origin main
-if [[ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]]; then
-	echo "Local main does not match origin/main. Pull/sync first; the workflow runs against origin/main." >&2
+local_head="$(git rev-parse HEAD)"
+remote_head="$(git rev-parse origin/main)"
+if [[ "$local_head" != "$remote_head" ]]; then
+	if git merge-base --is-ancestor HEAD origin/main; then
+		echo "Local main is behind origin/main. Pull first." >&2
+	elif git merge-base --is-ancestor origin/main HEAD; then
+		echo "Local main is ahead of origin/main. Push your commits or reset to origin/main before releasing." >&2
+	else
+		echo "Local main has diverged from origin/main. Reconcile with pull/rebase/reset before releasing." >&2
+	fi
 	exit 1
 fi
 
