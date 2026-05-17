@@ -97,6 +97,7 @@ You can also explicitly configure FrankenPHP using the [global option](https://c
 		max_threads <num_threads> # Limits the number of additional PHP threads that can be started at runtime. Default: num_threads. Can be set to 'auto'.
 		max_wait_time <duration> # Sets the maximum time a request may wait for a free PHP thread before timing out. Default: disabled.
 		max_idle_time <duration> # Sets the maximum time an autoscaled thread may be idle before being deactivated. Default: 5s.
+		max_requests <num> # (experimental) Sets the maximum number of requests a PHP thread will handle before being restarted, useful for mitigating memory leaks. Applies to both regular and worker threads. Default: 0 (unlimited).
 		php_ini <key> <value> # Set a php.ini directive. Can be used several times to set multiple directives.
 		worker {
 			file <path> # Sets the path to the worker script.
@@ -261,6 +262,25 @@ and otherwise forward the request to the worker matching the path pattern.
 				match /api/* # all requests starting with /api/ will be handled by this worker
 			}
 		}
+	}
+}
+```
+
+## Restarting Threads After a Number of Requests (Experimental)
+
+FrankenPHP can automatically restart PHP threads after they have handled a given number of requests.
+When a thread reaches the limit, it is fully restarted,
+cleaning up all memory and state. Other threads continue to serve requests during the restart.
+
+If you notice memory growing over time, the ideal fix is to report the leak
+to the responsible extension or library maintainer.
+But when the fix depends on a third party you don't control,
+`max_requests` provides a pragmatic and hopefully temporary workaround for production:
+
+```caddyfile
+{
+	frankenphp {
+		max_requests 500
 	}
 }
 ```

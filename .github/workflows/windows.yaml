@@ -33,6 +33,7 @@ permissions:
 
 env:
   GOTOOLCHAIN: local
+  GOTESTSUM_FORMAT: pkgname-and-test-fails
   GOFLAGS: "-ldflags=-extldflags=-fuse-ld=lld -tags=nobadger,nomysql,nopgx"
   PHP_DOWNLOAD_BASE: "https://downloads.php.net/~windows/releases/"
   CC: clang
@@ -228,9 +229,10 @@ jobs:
           "opcache.enable=0`r`nopcache.enable_cli=0" | Out-File php.ini
           $env:PHPRC = Get-Location
 
-          go test -race ./...
+          go install gotest.tools/gotestsum@latest
+          gotestsum -- -race ./...
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cd caddy
-          go test -race ./...
+          gotestsum -- -race ./...
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         working-directory: ${{ github.workspace }}\frankenphp

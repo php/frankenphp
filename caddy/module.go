@@ -117,11 +117,11 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		f.SplitPath = []string{".php"}
 	}
 
-	if opt, err := frankenphp.WithRequestSplitPath(f.SplitPath); err == nil {
-		f.requestOptions = append(f.requestOptions, opt)
-	} else {
-		f.requestOptions = append(f.requestOptions, opt)
+	opt, err := frankenphp.WithRequestSplitPath(f.SplitPath)
+	if err != nil {
+		return fmt.Errorf("invalid split_path: %w", err)
 	}
+	f.requestOptions = append(f.requestOptions, opt)
 
 	if f.ResolveRootSymlink == nil {
 		f.ResolveRootSymlink = new(true)
@@ -559,7 +559,7 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 			}),
 		}
 		rewriteHandler := rewrite.Rewrite{
-			URI: "{http.matchers.file.relative}",
+			URI: "{http.matchers.file.relative}{http.matchers.file.remainder}",
 		}
 		rewriteRoute := caddyhttp.Route{
 			MatcherSetsRaw: []caddy.ModuleMap{rewriteMatcherSet},
@@ -573,7 +573,7 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 	// match only requests that are for PHP files
 	var pathList []string
 	for _, ext := range extensions {
-		pathList = append(pathList, "*"+ext)
+		pathList = append(pathList, "*"+ext, "*"+ext+"/*")
 	}
 	phpMatcherSet := caddy.ModuleMap{
 		"path": h.JSON(pathList),

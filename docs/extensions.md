@@ -1,6 +1,6 @@
 # Writing PHP Extensions in Go
 
-With FrankenPHP, you can **write PHP extensions in Go**, which allows you to create **high-performance native functions** that can be called directly from PHP. Your applications can leverage any existing or new Go library, as well as the infamous concurrency model of **goroutines right from your PHP code**.
+With FrankenPHP, you can **write PHP extensions in Go**, which allows you to create **high-performance native functions** that can be called directly from PHP. Your applications can leverage any existing or new Go library, as well as the famous concurrency model of **goroutines right from your PHP code**.
 
 Writing PHP extensions is typically done in C, but it's also possible to write them in other languages with a bit of extra work. PHP extensions allow you to leverage the power of low-level languages to extend PHP's functionalities, for example, by adding native functions or optimizing specific operations.
 
