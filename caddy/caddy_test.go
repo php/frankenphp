@@ -1768,7 +1768,6 @@ func TestOpcacheReset(t *testing.T) {
 	numRequests := 500 // increase if test is flaky to get consistent failures
 	wg.Add(numRequests)
 	for i := 0; i < numRequests; i++ {
-
 		// introduce some random delay
 		if rand.IntN(10) > 8 {
 			time.Sleep(time.Millisecond * 10)
