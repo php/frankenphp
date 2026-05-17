@@ -86,26 +86,7 @@ HashTable *main_thread_env = NULL;
 __thread uintptr_t thread_index;
 __thread bool is_worker_thread = false;
 __thread HashTable *sandboxed_env = NULL;
-
-/* Forward declaration */
-PHP_FUNCTION(frankenphp_opcache_reset);
 zif_handler orig_opcache_reset;
-
-/* Try to override opcache_reset if opcache is loaded.
- * Safe to call multiple times - skips if already overridden in this function
- * table. Uses handler comparison instead of orig_opcache_reset check so that
- * a fresh function table after PHP module restart is always re-overridden. */
-static void frankenphp_override_opcache_reset(void) {
-  zend_function *func = zend_hash_str_find_ptr(
-      CG(function_table), "opcache_reset", sizeof("opcache_reset") - 1);
-  if (func != NULL && func->type == ZEND_INTERNAL_FUNCTION &&
-      ((zend_internal_function *)func)->handler !=
-          ZEND_FN(frankenphp_opcache_reset)) {
-    orig_opcache_reset = ((zend_internal_function *)func)->handler;
-    ((zend_internal_function *)func)->handler =
-        ZEND_FN(frankenphp_opcache_reset);
-  }
-}
 
 void frankenphp_update_local_thread_context(bool is_worker) {
   is_worker_thread = is_worker;
@@ -747,10 +728,6 @@ PHP_MINIT_FUNCTION(frankenphp) {
     php_error(E_WARNING, "Failed to find built-in getenv function");
   }
 
-  // Override opcache_reset (may not be available yet if opcache loads as a
-  // shared extension in PHP 8.4 and below)
-  frankenphp_override_opcache_reset();
-
   return SUCCESS;
 }
 
@@ -770,13 +747,6 @@ static int frankenphp_startup(sapi_module_struct *sapi_module) {
   php_import_environment_variables = get_full_env;
 
   int result = php_module_startup(sapi_module, &frankenphp_module);
-#if PHP_VERSION_ID < 80500
-  if (result == SUCCESS) {
-    /* Override opcache here again if loaded as a shared extension
-     * (php 8.4 and under) */
-    frankenphp_override_opcache_reset();
-  }
-#endif
 
   return result;
 }
@@ -1118,12 +1088,6 @@ static void *php_thread(void *arg) {
         zend_bailout();
       }
 
-#if PHP_VERSION_ID < 80500
-      /* Override opcache here again if loaded as a shared extension
-       * (php 8.4 and under) */
-      frankenphp_override_opcache_reset();
-#endif
-
       zend_file_handle file_handle;
       zend_stream_init_filename(&file_handle, scriptName);
 
@@ -1283,6 +1247,17 @@ static void *php_main(void *arg) {
   cfg_get_string("filter.default", &default_filter);
   should_filter_var = default_filter != NULL;
   original_user_abort_setting = PG(ignore_user_abort);
+
+  /* Override opcache_reset, needs to be here again if loaded as a shared extension (php 8.4 and under) */
+  zend_function *func = zend_hash_str_find_ptr(
+      CG(function_table), "opcache_reset", sizeof("opcache_reset") - 1);
+  if (func != NULL && func->type == ZEND_INTERNAL_FUNCTION &&
+      ((zend_internal_function *)func)->handler !=
+          ZEND_FN(frankenphp_opcache_reset)) {
+      orig_opcache_reset = ((zend_internal_function *)func)->handler;
+    ((zend_internal_function *)func)->handler =
+        ZEND_FN(frankenphp_opcache_reset);
+  }
 
   go_frankenphp_main_thread_is_ready();
 

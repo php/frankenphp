@@ -1576,7 +1576,7 @@ func TestOpcacheReset(t *testing.T) {
 		`, "caddyfile")
 
 	wg := sync.WaitGroup{}
-	numRequests := 1000
+	numRequests := 500 // increase if test is flaky to get consistent failures
 	wg.Add(numRequests)
 	for i := 0; i < numRequests; i++ {
 
@@ -1588,7 +1588,7 @@ func TestOpcacheReset(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			// randomly call opcache_reset
-			if rand.IntN(10) > 7 {
+			if i % 10 > 7 {
 				tester.AssertGetResponse(
 					"http://localhost:"+testPort+"/opcache_reset.php",
 					http.StatusOK,

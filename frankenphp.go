@@ -761,7 +761,10 @@ func go_is_context_done(threadIndex C.uintptr_t) C.bool {
 //export go_schedule_opcache_reset
 func go_schedule_opcache_reset(threadIndex C.uintptr_t) {
 	if threadsAreRestarting.CompareAndSwap(false, true) {
-		go restartThreadsAndOpcacheReset(true)
+		go func(){
+			restartThreadsAndOpcacheReset(true)
+			threadsAreRestarting.Store(false)
+		}()
 	}
 }
 
@@ -791,8 +794,6 @@ func restartThreadsAndOpcacheReset(withRegularThreads bool) {
 		thread.drainChan = make(chan struct{})
 		thread.state.Set(state.Ready)
 	}
-
-	threadsAreRestarting.Store(false)
 }
 
 func drainThreads(withRegularThreads bool) []*phpThread {
