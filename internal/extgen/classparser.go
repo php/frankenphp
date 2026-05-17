@@ -1,7 +1,6 @@
 package extgen
 
 import (
-	"bufio"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -13,8 +12,6 @@ import (
 
 var phpClassRegex = regexp.MustCompile(`//\s*export_php:class\s+(\w+)`)
 var phpMethodRegex = regexp.MustCompile(`//\s*export_php:method\s+(\w+)::([^{}\n]+)(?:\s*{\s*})?`)
-var methodSignatureRegex = regexp.MustCompile(`(\w+)\s*\(([^)]*)\)\s*:\s*(\??[\w|]+)`)
-var methodParamTypeNameRegex = regexp.MustCompile(`(\??[\w|]+)\s+\$?(\w+)`)
 
 type exportDirective struct {
 	line      int
@@ -86,7 +83,7 @@ func (cp *classParser) parse(filename string) (classes []phpClass, err error) {
 			}
 
 			if err := validator.validateClass(class); err != nil {
-				fmt.Printf("Warning: Invalid class '%s': %v\n", class.Name, err)
+				fmt.Fprintf(os.Stderr, "Warning: Invalid class '%s': %v\n", class.Name, err)
 				continue
 			}
 
@@ -204,188 +201,103 @@ func (cp *classParser) goTypeToPHPType(goType string) phpType {
 	return phpMixed
 }
 
-func (cp *classParser) parseMethods(filename string) (methods []phpClassMethod, err error) {
-	file, err := os.Open(filename)
+func (cp *classParser) parseMethods(filename string) ([]phpClassMethod, error) {
+	src, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, err
 	}
 
-	defer func() {
-		e := file.Close()
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, filename, src, parser.ParseComments)
+	if err != nil {
+		return nil, fmt.Errorf("parsing file: %w", err)
+	}
+
+	validator := Validator{}
+	var methods []phpClassMethod
+	consumed := make(map[int]bool)
+
+	for _, decl := range file.Decls {
+		funcDecl, ok := decl.(*ast.FuncDecl)
+		if !ok {
+			continue
+		}
+
+		directive, directiveLine := findDirective(funcDecl.Doc, fset, phpMethodRegex)
+		if directive == "" {
+			continue
+		}
+		rawMatch := phpMethodRegex.FindStringSubmatch(findMatchingComment(funcDecl.Doc, phpMethodRegex))
+		if len(rawMatch) != 3 {
+			continue
+		}
+		className := strings.TrimSpace(rawMatch[1])
+		signature := strings.TrimSpace(rawMatch[2])
+		consumed[directiveLine] = true
+
+		method, err := cp.parseMethodSignature(className, signature)
 		if err != nil {
-			err = e
-		}
-	}()
-
-	scanner := bufio.NewScanner(file)
-	var currentMethod *phpClassMethod
-
-	lineNumber := 0
-	for scanner.Scan() {
-		lineNumber++
-		line := strings.TrimSpace(scanner.Text())
-
-		if matches := phpMethodRegex.FindStringSubmatch(line); matches != nil {
-			className := strings.TrimSpace(matches[1])
-			signature := strings.TrimSpace(matches[2])
-
-			method, err := cp.parseMethodSignature(className, signature)
-			if err != nil {
-				fmt.Printf("Warning: Error parsing method signature %q: %v\n", signature, err)
-
-				continue
-			}
-
-			validator := Validator{}
-			phpFunc := phpFunction{
-				Name:             method.Name,
-				Signature:        method.Signature,
-				Params:           method.Params,
-				ReturnType:       method.ReturnType,
-				IsReturnNullable: method.isReturnNullable,
-			}
-
-			if err := validator.validateTypes(phpFunc); err != nil {
-				fmt.Printf("Warning: Method \"%s::%s\" uses unsupported types: %v\n", className, method.Name, err)
-
-				continue
-			}
-
-			method.lineNumber = lineNumber
-			currentMethod = method
+			fmt.Fprintf(os.Stderr, "Warning: Error parsing method signature %q: %v\n", signature, err)
+			continue
 		}
 
-		if currentMethod != nil && strings.HasPrefix(line, "func ") {
-			goFunc, err := cp.extractGoMethodFunction(scanner, line)
-			if err != nil {
-				return nil, fmt.Errorf("extracting Go method function: %w", err)
-			}
-
-			currentMethod.GoFunction = goFunc
-
-			validator := Validator{}
-			phpFunc := phpFunction{
-				Name:             currentMethod.Name,
-				Signature:        currentMethod.Signature,
-				GoFunction:       currentMethod.GoFunction,
-				Params:           currentMethod.Params,
-				ReturnType:       currentMethod.ReturnType,
-				IsReturnNullable: currentMethod.isReturnNullable,
-			}
-
-			if err := validator.validateGoFunctionSignatureWithOptions(phpFunc, true); err != nil {
-				fmt.Printf("Warning: Go method signature mismatch for '%s::%s': %v\n", currentMethod.ClassName, currentMethod.Name, err)
-				currentMethod = nil
-				continue
-			}
-
-			methods = append(methods, *currentMethod)
-			currentMethod = nil
+		phpFunc := phpFunction{
+			Name:             method.Name,
+			Signature:        method.Signature,
+			Params:           method.Params,
+			ReturnType:       method.ReturnType,
+			IsReturnNullable: method.isReturnNullable,
 		}
+		if err := validator.validateTypes(phpFunc); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Method \"%s::%s\" uses unsupported types: %v\n", className, method.Name, err)
+			continue
+		}
+
+		method.lineNumber = directiveLine
+		method.GoFunction = extractNodeSource(src, fset, funcDecl)
+
+		phpFunc.GoFunction = method.GoFunction
+		if err := validator.validateGoFunctionSignatureWithOptions(phpFunc, true); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Go method signature mismatch for '%s::%s': %v\n", method.ClassName, method.Name, err)
+			continue
+		}
+
+		methods = append(methods, *method)
 	}
 
-	if currentMethod != nil {
-		return nil, fmt.Errorf("//export_php:method directive at line %d is not followed by a function declaration", currentMethod.lineNumber)
+	if err := checkOrphanDirectives(file, fset, phpMethodRegex, consumed, "//export_php:method"); err != nil {
+		return nil, err
 	}
 
-	return methods, scanner.Err()
+	return methods, nil
+}
+
+// findMatchingComment returns the raw comment text whose line matches re.
+func findMatchingComment(group *ast.CommentGroup, re *regexp.Regexp) string {
+	if group == nil {
+		return ""
+	}
+	for _, comment := range group.List {
+		if re.MatchString(comment.Text) {
+			return comment.Text
+		}
+	}
+	return ""
 }
 
 func (cp *classParser) parseMethodSignature(className, signature string) (*phpClassMethod, error) {
-	matches := methodSignatureRegex.FindStringSubmatch(signature)
-
-	if len(matches) != 4 {
-		return nil, fmt.Errorf("invalid method signature format")
-	}
-
-	methodName := matches[1]
-	paramsStr := strings.TrimSpace(matches[2])
-	returnTypeStr := strings.TrimSpace(matches[3])
-
-	isReturnNullable := strings.HasPrefix(returnTypeStr, "?")
-	returnType := strings.TrimPrefix(returnTypeStr, "?")
-
-	var params []phpParameter
-	if paramsStr != "" {
-		paramParts := strings.SplitSeq(paramsStr, ",")
-		for part := range paramParts {
-			param, err := cp.parseMethodParameter(strings.TrimSpace(part))
-			if err != nil {
-				return nil, fmt.Errorf("parsing parameter '%s': %w", part, err)
-			}
-
-			params = append(params, param)
-		}
+	name, params, returnType, nullable, err := parseSignatureParams(signature)
+	if err != nil {
+		return nil, err
 	}
 
 	return &phpClassMethod{
-		Name:             methodName,
-		PhpName:          methodName,
+		Name:             name,
+		PhpName:          name,
 		ClassName:        className,
 		Signature:        signature,
 		Params:           params,
 		ReturnType:       phpType(returnType),
-		isReturnNullable: isReturnNullable,
+		isReturnNullable: nullable,
 	}, nil
-}
-
-func (cp *classParser) parseMethodParameter(paramStr string) (phpParameter, error) {
-	parts := strings.Split(paramStr, "=")
-	typePart := strings.TrimSpace(parts[0])
-
-	param := phpParameter{HasDefault: len(parts) > 1}
-
-	if param.HasDefault {
-		param.DefaultValue = cp.sanitizeDefaultValue(strings.TrimSpace(parts[1]))
-	}
-
-	matches := methodParamTypeNameRegex.FindStringSubmatch(typePart)
-
-	if len(matches) < 3 {
-		return phpParameter{}, fmt.Errorf("invalid parameter format: %s", paramStr)
-	}
-
-	typeStr := strings.TrimSpace(matches[1])
-	param.Name = strings.TrimSpace(matches[2])
-	param.IsNullable = strings.HasPrefix(typeStr, "?")
-	param.PhpType = phpType(strings.TrimPrefix(typeStr, "?"))
-
-	return param, nil
-}
-
-func (cp *classParser) sanitizeDefaultValue(value string) string {
-	if strings.HasPrefix(value, "[") && strings.HasSuffix(value, "]") {
-		return value
-	}
-
-	if strings.ToLower(value) == "null" {
-		return "null"
-	}
-
-	return strings.Trim(value, `'"`)
-}
-
-func (cp *classParser) extractGoMethodFunction(scanner *bufio.Scanner, firstLine string) (string, error) {
-	goFunc := firstLine + "\n"
-	braceCount := 1
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		goFunc += line + "\n"
-
-		for _, char := range line {
-			switch char {
-			case '{':
-				braceCount++
-			case '}':
-				braceCount--
-			}
-		}
-
-		if braceCount == 0 {
-			break
-		}
-	}
-
-	return goFunc, nil
 }

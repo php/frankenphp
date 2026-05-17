@@ -135,12 +135,12 @@ while (frankenphp_handle_request($handler)) {
 
 FrankenPHP 提供了钩子，用于在生命周期的特定点执行 Go 代码。
 
-| 钩子类型 | 选项名称                     | 签名                     | 上下文与用例                                         |
-| :------- | :--------------------------- | :----------------------- | :--------------------------------------------------- |
-| **服务器** | `WithWorkerOnServerStartup`  | `func()`                 | 全局设置。**只运行一次**。示例：连接到 NATS/Redis。  |
-| **服务器** | `WithWorkerOnServerShutdown` | `func()`                 | 全局清理。**只运行一次**。示例：关闭共享连接。       |
-| **线程** | `WithWorkerOnReady`          | `func(threadID int)`     | 每线程设置。在线程启动时调用。接收线程 ID。          |
-| **线程** | `WithWorkerOnShutdown`       | `func(threadID int)`     | 每线程清理。接收线程 ID。                            |
+| 钩子类型   | 选项名称                     | 签名                 | 上下文与用例                                        |
+| :--------- | :--------------------------- | :------------------- | :-------------------------------------------------- |
+| **服务器** | `WithWorkerOnServerStartup`  | `func()`             | 全局设置。**只运行一次**。示例：连接到 NATS/Redis。 |
+| **服务器** | `WithWorkerOnServerShutdown` | `func()`             | 全局清理。**只运行一次**。示例：关闭共享连接。      |
+| **线程**   | `WithWorkerOnReady`          | `func(threadID int)` | 每线程设置。在线程启动时调用。接收线程 ID。         |
+| **线程**   | `WithWorkerOnShutdown`       | `func(threadID int)` | 每线程清理。接收线程 ID。                           |
 
 ### 示例
 

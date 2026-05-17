@@ -6,7 +6,7 @@
 
 | Название                                                                                                    | Причина                            | Альтернативы                                                                                                         |
 | ----------------------------------------------------------------------------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| [imap](https://www.php.net/manual/en/imap.installation.php)                                                 | Не поддерживает потокобезопасность | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap) |
+| [imap](https://www.php.net/manual/imap.installation.php)                                                 | Не поддерживает потокобезопасность | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap) |
 | [newrelic](https://docs.newrelic.com/docs/apm/agents/php-agent/getting-started/introduction-new-relic-php/) | Не поддерживает потокобезопасность | -                                                                                                                    |
 
 ## Проблемные расширения PHP
@@ -15,15 +15,15 @@
 
 | Название                                                      | Проблема                                                                                                                                                                                                                                                                                                                            |
 | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [ext-openssl](https://www.php.net/manual/en/book.openssl.php) | При использовании статической сборки FrankenPHP (на базе musl libc) расширение OpenSSL может аварийно завершаться при высокой нагрузке. Решение — использовать динамически связанную сборку (например, ту, что используется в Docker-образах). Ошибка [отслеживается сообществом PHP](https://github.com/php/php-src/issues/13648). |
+| [ext-openssl](https://www.php.net/manual/book.openssl.php) | При использовании статической сборки FrankenPHP (на базе musl libc) расширение OpenSSL может аварийно завершаться при высокой нагрузке. Решение — использовать динамически связанную сборку (например, ту, что используется в Docker-образах). Ошибка [отслеживается сообществом PHP](https://github.com/php/php-src/issues/13648). |
 
 ## `get_browser`
 
-Функция [get_browser()](https://www.php.net/manual/en/function.get-browser.php) начинает работать медленно через некоторое время. Решение — кэшировать результаты для каждого User-Agent, например, с помощью [APCu](https://www.php.net/manual/en/book.apcu.php), так как они статичны.
+Функция [get_browser()](https://www.php.net/manual/function.get-browser.php) начинает работать медленно через некоторое время. Решение — кэшировать результаты для каждого User-Agent, например, с помощью [APCu](https://www.php.net/manual/book.apcu.php), так как они статичны.
 
 ## Автономные бинарные файлы и образы на базе Alpine
 
-Автономные бинарные файлы и образы на базе Alpine (`dunglas/frankenphp:*-alpine`) используют [musl libc](https://musl.libc.org/) вместо [glibc](https://www.etalabs.net/compare_libcs.html) для уменьшения размера бинарных файлов. Это может вызвать проблемы совместимости. В частности, флаг `GLOB_BRACE` в функции glob [не поддерживается](https://www.php.net/manual/en/function.glob.php).
+Автономные бинарные файлы и образы на базе Alpine (`dunglas/frankenphp:*-alpine`) используют [musl libc](https://musl.libc.org/) вместо [glibc](https://www.etalabs.net/compare_libcs.html) для уменьшения размера бинарных файлов. Это может вызвать проблемы совместимости. В частности, флаг `GLOB_BRACE` в функции glob [не поддерживается](https://www.php.net/manual/function.glob.php).
 
 ## Использование `https://127.0.0.1` с Docker
 
@@ -121,7 +121,7 @@ error:0A000086:SSL routines::certificate verify failed
 
 Статический бинарный файл не включает TLS-сертификаты, поэтому необходимо указать OpenSSL местоположение локальных сертификатов CA.
 
-Выполните [`openssl_get_cert_locations()`](https://www.php.net/manual/en/function.openssl-get-cert-locations.php), чтобы определить, где должны находиться сертификаты CA, и поместите их туда.
+Выполните [`openssl_get_cert_locations()`](https://www.php.net/manual/function.openssl-get-cert-locations.php), чтобы определить, где должны находиться сертификаты CA, и поместите их туда.
 
 > [!WARNING]
 > Веб и CLI контексты могут иметь разные настройки.  

@@ -138,7 +138,7 @@ EMBED=/path/to/your/app ./build-static.sh
 
 ## 分发二进制文件
 
-在Linux上，创建的二进制文件使用[UPX](https://upx.github.io)进行压缩。
+在 Linux 上，可以通过在构建时设置环境变量 `COMPRESS=1` 来使用 [UPX](https://upx.github.io) 压缩生成的二进制文件。
 
 在Mac上，您可以在发送文件之前压缩它以减小文件大小。
 我们推荐使用 `xz`。

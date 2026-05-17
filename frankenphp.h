@@ -46,6 +46,28 @@ static inline HRESULT LongLongSub(LONGLONG llMinuend, LONGLONG llSubtrahend,
 #include <stdbool.h>
 #include <stdint.h>
 
+#ifndef PHP_WIN32
+#include <pthread.h>
+#include <signal.h>
+#endif
+
+/* Platform capabilities for the force-kill primitive; declared in the
+ * header so Go (via CGo) gets the correct struct layout too. */
+#if !defined(PHP_WIN32) && defined(SIGRTMIN)
+#define FRANKENPHP_HAS_KILL_SIGNAL 1
+#define FRANKENPHP_KILL_SIGNAL (SIGRTMIN + 3)
+#endif
+
+typedef struct {
+  zend_atomic_bool *vm_interrupt;
+  zend_atomic_bool *timed_out;
+#ifdef FRANKENPHP_HAS_KILL_SIGNAL
+  pthread_t tid;
+#elif defined(PHP_WIN32)
+  HANDLE thread_handle;
+#endif
+} force_kill_slot;
+
 #ifndef FRANKENPHP_VERSION
 #define FRANKENPHP_VERSION dev
 #endif
@@ -192,6 +214,17 @@ typedef struct {
 void frankenphp_init_thread_metrics(int max_threads);
 void frankenphp_destroy_thread_metrics(void);
 size_t frankenphp_get_thread_memory_usage(uintptr_t thread_index);
+
+/* Best-effort force-kill primitives. The slot is populated by each PHP
+ * thread at boot (an internal helper calls back into Go via
+ * go_frankenphp_store_force_kill_slot) and lives in the Go-side phpThread.
+ * force_kill_thread interrupts the Zend VM at the next opcode boundary;
+ * on POSIX it also delivers SIGRTMIN+3 to the target thread, on Windows
+ * it calls CancelSynchronousIo + QueueUserAPC. release_thread drops any
+ * OS-owned resource tied to the slot (currently the Windows thread
+ * handle). */
+void frankenphp_force_kill_thread(force_kill_slot slot);
+void frankenphp_release_thread_for_kill(force_kill_slot slot);
 
 void register_extensions(zend_module_entry **m, int len);
 

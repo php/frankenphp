@@ -12,7 +12,7 @@ docker run -p 80:80 -p 443:443 -p 443:443/udp -v $PWD:/app dunglas/frankenphp
 
 Et profitez !
 
-## Installation Locale
+## Installation locale
 
 Vous pouvez également exécuter vos projets Laravel avec FrankenPHP depuis votre machine locale :
 
@@ -74,11 +74,11 @@ La commande `octane:frankenphp` peut prendre les options suivantes :
 - `--log-level` : Enregistrer les messages au niveau de journalisation spécifié ou au-dessus, en utilisant le logger natif de Caddy
 
 > [!TIP]
-> Pour obtenir des logs structurés en JSON logs (utile quand vous utilisez des solutions d'analyse de logs), passez explicitement l'option `--log-level`.
+> Pour obtenir des logs structurés en JSON (utile quand vous utilisez des solutions d'analyse de logs), passez explicitement l'option `--log-level`.
 
 En savoir plus sur Laravel Octane [dans sa documentation officielle](https://laravel.com/docs/octane).
 
-## Les Applications Laravel En Tant Que Binaires Autonomes
+## Les applications Laravel en tant que binaires autonomes
 
 En utilisant la [fonctionnalité d'intégration d'applications de FrankenPHP](embed.md), il est possible de distribuer
 les applications Laravel sous forme de binaires autonomes.
@@ -119,7 +119,7 @@ Suivez ces étapes pour empaqueter votre application Laravel en tant que binaire
    > Certains fichiers `.dockerignore` ignoreront le répertoire `vendor/`
    > et les fichiers `.env`. Assurez-vous d'ajuster ou de supprimer le fichier `.dockerignore` avant la construction.
 
-2. Build:
+2. Construisez :
 
    ```console
    docker build -t static-laravel-app -f static-build.Dockerfile .
@@ -149,7 +149,7 @@ Suivez ces étapes pour empaqueter votre application Laravel en tant que binaire
    frankenphp php-cli artisan key:generate
    ```
 
-7. Démarrez le serveur:
+7. Démarrez le serveur :
 
    ```console
    frankenphp php-server

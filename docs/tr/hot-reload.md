@@ -26,7 +26,7 @@ Sıcak yeniden yüklemeyi etkinleştirmek için Mercure'ü etkinleştirin, ardı
 >
 > Bu özellik **yalnızca geliştirme ortamları** içindir.
 > `hot_reload`'u üretimde etkinleştirmeyin, zira bu özellik güvenli değildir (hassas dahili ayrıntıları açığa çıkarır) ve uygulamanın yavaşlamasına neden olur.
->
+
 ```caddyfile
 localhost
 

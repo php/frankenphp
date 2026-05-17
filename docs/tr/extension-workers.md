@@ -135,12 +135,12 @@ while (frankenphp_handle_request($handler)) {
 
 FrankenPHP, yaşam döngüsünün belirli noktalarında Go kodunu yürütmek için kancalar sağlar.
 
-| Kanca Türü | Seçenek Adı | İmza | Bağlam ve Kullanım Durumu |
-| :--------- | :--------------------------- | :------------------- | :--------------------------------------------------------------------- |
-| **Sunucu** | `WithWorkerOnServerStartup`  | `func()`             | Genel kurulum. **Bir Kez** çalışır. Örnek: NATS/Redis'e bağlanma. |
-| **Sunucu** | `WithWorkerOnServerShutdown` | `func()`             | Genel temizleme. **Bir Kez** çalışır. Örnek: Paylaşılan bağlantıları kapatma. |
+| Kanca Türü       | Seçenek Adı                  | İmza                 | Bağlam ve Kullanım Durumu                                                                         |
+| :--------------- | :--------------------------- | :------------------- | :------------------------------------------------------------------------------------------------ |
+| **Sunucu**       | `WithWorkerOnServerStartup`  | `func()`             | Genel kurulum. **Bir Kez** çalışır. Örnek: NATS/Redis'e bağlanma.                                 |
+| **Sunucu**       | `WithWorkerOnServerShutdown` | `func()`             | Genel temizleme. **Bir Kez** çalışır. Örnek: Paylaşılan bağlantıları kapatma.                     |
 | **İş Parçacığı** | `WithWorkerOnReady`          | `func(threadID int)` | İş parçacığı başına kurulum. Bir iş parçacığı başladığında çağrılır. İş Parçacığı Kimliğini alır. |
-| **İş Parçacığı** | `WithWorkerOnShutdown`       | `func(threadID int)` | İş parçacığı başına temizleme. İş Parçacığı Kimliğini alır. |
+| **İş Parçacığı** | `WithWorkerOnShutdown`       | `func(threadID int)` | İş parçacığı başına temizleme. İş Parçacığı Kimliğini alır.                                       |
 
 ### Örnek
 
@@ -169,3 +169,4 @@ func init() {
         }),
     )
 }
+```

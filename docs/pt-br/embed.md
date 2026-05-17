@@ -160,7 +160,7 @@ personalizar o binário (extensões, versão do PHP...).
 
 ## Distribuindo o binário
 
-No Linux, o binário criado é compactado usando [UPX](https://upx.github.io).
+No Linux, o binário criado pode ser compactado usando [UPX](https://upx.github.io) definindo a variável de ambiente `COMPRESS=1` no momento da compilação.
 
 No Mac, para reduzir o tamanho do arquivo antes de enviá-lo, você pode
 compactá-lo.

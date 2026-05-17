@@ -2,6 +2,7 @@ package extgen
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"regexp"
@@ -12,6 +13,8 @@ import (
 var constRegex = regexp.MustCompile(`//\s*export_php:const$`)
 var classConstRegex = regexp.MustCompile(`//\s*export_php:classconst\s+(\w+)$`)
 var constDeclRegex = regexp.MustCompile(`const\s+(\w+)\s*=\s*(.+)`)
+var constBlockDeclRegex = regexp.MustCompile(`^(\w+)\s*=\s*(.+)$`)
+var constNameRegex = regexp.MustCompile(`^(\w+)$`)
 
 type ConstantParser struct{}
 
@@ -20,11 +23,9 @@ func (cp *ConstantParser) parse(filename string) (constants []phpConstant, err e
 	if err != nil {
 		return nil, err
 	}
+
 	defer func() {
-		e := file.Close()
-		if err == nil {
-			err = e
-		}
+		err = errors.Join(err, file.Close())
 	}()
 
 	scanner := bufio.NewScanner(file)
@@ -61,6 +62,7 @@ func (cp *ConstantParser) parse(filename string) (constants []phpConstant, err e
 
 		if strings.HasPrefix(line, "const (") {
 			inConstBlock = true
+			currentConstantValue = 0
 			if expectConstDecl || expectClassConstDecl {
 				exportAllInBlock = true
 			}
@@ -109,7 +111,6 @@ func (cp *ConstantParser) parse(filename string) (constants []phpConstant, err e
 			expectConstDecl = false
 			expectClassConstDecl = false
 		} else if inConstBlock && (expectConstDecl || expectClassConstDecl || exportAllInBlock) {
-			constBlockDeclRegex := regexp.MustCompile(`^(\w+)\s*=\s*(.+)$`)
 			if matches := constBlockDeclRegex.FindStringSubmatch(line); len(matches) == 3 {
 				name := matches[1]
 				value := strings.TrimSpace(matches[2])
@@ -139,7 +140,6 @@ func (cp *ConstantParser) parse(filename string) (constants []phpConstant, err e
 				expectConstDecl = false
 				expectClassConstDecl = false
 			} else {
-				constNameRegex := regexp.MustCompile(`^(\w+)$`)
 				if matches := constNameRegex.FindStringSubmatch(line); len(matches) == 2 {
 					name := matches[1]
 

@@ -23,7 +23,7 @@
 `max_threads`はトラフィックを処理するために必要なスレッド数を把握するのに役立ち、レイテンシのスパイクに対してサーバーをより回復力のあるものにできます。
 `auto`に設定すると、制限は`php.ini`の`memory_limit`に基づいて推定されます。推定できない場合、
 `auto`は代わりに`num_threads`の2倍がデフォルトになります。`auto`は必要なスレッド数を大幅に過小評価する可能性があることに留意してください。
-`max_threads`はPHP FPMの[pm.max_children](https://www.php.net/manual/en/install.fpm.configuration.php#pm.max-children)に似ています。主な違いは、FrankenPHPがプロセスではなくスレッドを使用し、
+`max_threads`はPHP FPMの[pm.max_children](https://www.php.net/manual/install.fpm.configuration.php#pm.max-children)に似ています。主な違いは、FrankenPHPがプロセスではなくスレッドを使用し、
 必要に応じて異なるワーカースクリプトと「クラシックモード」間で自動的に委譲することです。
 
 ## ワーカーモード
@@ -160,10 +160,10 @@ FrankenPHPは公式のPHPインタープリターを使用しています。
 
 特に以下の点を確認してください：
 
-- [OPcache](https://www.php.net/manual/en/book.opcache.php)がインストールされ、有効化され、適切に設定されていること
+- [OPcache](https://www.php.net/manual/book.opcache.php)がインストールされ、有効化され、適切に設定されていること
 - [Composer autoloader optimizations](https://getcomposer.org/doc/articles/autoloader-optimization.md)を有効にすること
 - `realpath`キャッシュがアプリケーションのニーズに合わせて十分な大きさであること
-- [preloading](https://www.php.net/manual/en/opcache.preloading.php)を使用すること
+- [preloading](https://www.php.net/manual/opcache.preloading.php)を使用すること
 
 詳細については、[Symfonyの専用ドキュメントエントリ](https://symfony.com/doc/current/performance.html)をお読みください
 （Symfonyを使用していなくても、多くのヒントが役立ちます）。

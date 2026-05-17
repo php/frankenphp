@@ -161,7 +161,7 @@ frankenphp {
 
 ## Süper Küresel Değişkenlerin Davranışı
 
-[PHP süper küresel değişkenleri](https://www.php.net/manual/en/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...) aşağıdaki gibi davranır:
+[PHP süper küresel değişkenleri](https://www.php.net/manual/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...) aşağıdaki gibi davranır:
 
 - `frankenphp_handle_request()`'e ilk çağrıdan önce, süper küresel değişkenler worker betiğinin kendisine bağlı değerleri içerir
 - `frankenphp_handle_request()` çağrısı sırasında ve sonrasında, süper küresel değişkenler işlenen HTTP isteğinden üretilen değerleri içerir, `frankenphp_handle_request()`'e yapılan her çağrı süper küresel değişken değerlerini değiştirir
@@ -179,3 +179,4 @@ $handler = static function () use ($workerServer) {
 };
 
 // ...
+```
