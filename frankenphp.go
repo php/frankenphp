@@ -763,7 +763,7 @@ func go_is_context_done(threadIndex C.uintptr_t) C.bool {
 //export go_schedule_opcache_reset
 func go_schedule_opcache_reset(threadIndex C.uintptr_t) {
 	if threadsAreRestarting.CompareAndSwap(false, true) {
-		go func(){
+		go func() {
 			restartThreadsAndOpcacheReset(true)
 			threadsAreRestarting.Store(false)
 		}()
@@ -852,7 +852,29 @@ func drainThreads(withRegularThreads bool) []*phpThread {
 		regularThreadMu.RUnlock()
 	}
 
-	ready.Wait()
+	// wait for all threads, force kill any thread still stuck in a blocking syscall
+	done := make(chan struct{})
+	go func() {
+		ready.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(drainGracePeriod):
+		// Force-kill any thread still stuck in a blocking syscall, then
+		// keep waiting unconditionally. On platforms where force-kill
+		// cannot interrupt the syscall (macOS, Windows non-alertable
+		// Sleep) the thread exits when the syscall completes naturally.
+		for _, thread := range drainedThreads {
+			if !thread.state.Is(state.Yielding) {
+				thread.forceKillMu.RLock()
+				C.frankenphp_force_kill_thread(thread.forceKill)
+				thread.forceKillMu.RUnlock()
+			}
+		}
+		<-done
+	}
 
 	return drainedThreads
 }

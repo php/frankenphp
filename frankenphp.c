@@ -1453,13 +1453,14 @@ static void *php_main(void *arg) {
   should_filter_var = default_filter != NULL;
   original_user_abort_setting = PG(ignore_user_abort);
 
-  /* Override opcache_reset, needs to be here again if loaded as a shared extension (php 8.4 and under) */
+  /* Override opcache_reset, needs to be here again if loaded as a shared
+   * extension (php 8.4 and under) */
   zend_function *func = zend_hash_str_find_ptr(
       CG(function_table), "opcache_reset", sizeof("opcache_reset") - 1);
   if (func != NULL && func->type == ZEND_INTERNAL_FUNCTION &&
       ((zend_internal_function *)func)->handler !=
           ZEND_FN(frankenphp_opcache_reset)) {
-      orig_opcache_reset = ((zend_internal_function *)func)->handler;
+    orig_opcache_reset = ((zend_internal_function *)func)->handler;
     ((zend_internal_function *)func)->handler =
         ZEND_FN(frankenphp_opcache_reset);
   }

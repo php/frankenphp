@@ -1776,7 +1776,7 @@ func TestOpcacheReset(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			// randomly call opcache_reset
-			if i % 10 > 7 {
+			if i%10 > 7 {
 				tester.AssertGetResponse(
 					"http://localhost:"+testPort+"/opcache_reset.php",
 					http.StatusOK,
