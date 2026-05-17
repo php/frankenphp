@@ -97,6 +97,7 @@ zif_handler orig_opcache_reset;
 
 #if PHP_VERSION_ID < 80300
 pthread_mutex_t opcache_reset_mutex_php_82;
+PHP_FUNCTION(frankenphp_opcache_reset);
 #endif
 
 #ifndef PHP_WIN32
@@ -236,17 +237,17 @@ static void frankenphp_update_request_context() {
 /* On PHP 8.2 and under opcache_reset needs to be reset on every request. TODO:
  * remove this once we drop support for PHP 8.2 */
 #if PHP_VERSION_ID < 80300
-  pthread_mutex_lock(&opcache_reset_mutex_php_82);
   zend_function *func = zend_hash_str_find_ptr(
       CG(function_table), "opcache_reset", sizeof("opcache_reset") - 1);
   if (func != NULL && func->type == ZEND_INTERNAL_FUNCTION &&
       ((zend_internal_function *)func)->handler !=
           ZEND_FN(frankenphp_opcache_reset)) {
+    pthread_mutex_lock(&opcache_reset_mutex_php_82);
     orig_opcache_reset = ((zend_internal_function *)func)->handler;
     ((zend_internal_function *)func)->handler =
         ZEND_FN(frankenphp_opcache_reset);
+    pthread_mutex_unlock(&opcache_reset_mutex_php_82);
   }
-  pthread_mutex_unlock(&opcache_reset_mutex_php_82);
 #endif
 }
 
