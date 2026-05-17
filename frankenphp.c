@@ -88,6 +88,11 @@ __thread bool is_worker_thread = false;
 __thread HashTable *sandboxed_env = NULL;
 zif_handler orig_opcache_reset;
 
+#ifndef PHP_WIN32
+static bool is_forked_child = false;
+static void frankenphp_fork_child(void) { is_forked_child = true; }
+#endif
+
 void frankenphp_update_local_thread_context(bool is_worker) {
   is_worker_thread = is_worker;
 
