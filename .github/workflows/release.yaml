@@ -37,6 +37,7 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
         run: |
+          set -euo pipefail
           if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
             echo "::error::release.yaml must be dispatched against refs/heads/main, got ${GITHUB_REF}"
             exit 1
@@ -86,8 +87,9 @@ jobs:
               printf '%s\n' "${sha}"
             fi
           }
-          # Match the frankenphp require entry in both `require ( ... )`
-          # block form and single-line `require x v...` form.
+          # The grep below deliberately omits the `require` keyword so
+          # it matches both `require ( ... )` block layout (where the
+          # entry is indented) and single-line `require x v...` layout.
           verify_release_content() {
             local ref="$1"
             if ! git show "${ref}:caddy/go.mod" 2>/dev/null \
@@ -259,8 +261,10 @@ jobs:
                     '{path: $path, mode: $mode, type: "blob", sha: $sha}'
                 done
                 for path in "${deleted[@]}"; do
-                  jq -nc --arg path "${path}" --arg mode "$(mode_for "${path}")" \
-                    '{path: $path, mode: $mode, type: "blob", sha: null}'
+                  # Deletions need a valid mode but it's purely formal —
+                  # the entry only removes the path from the tree.
+                  jq -nc --arg path "${path}" \
+                    '{path: $path, mode: "100644", type: "blob", sha: null}'
                 done
               } | jq -sc .
             )
