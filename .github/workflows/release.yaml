@@ -288,7 +288,7 @@ jobs:
           fi
       - name: Bump Homebrew formula
         if: steps.classify.outputs.prerelease != 'true'
-        uses: mislav/bump-homebrew-formula-action@v3
+        uses: mislav/bump-homebrew-formula-action@v4
         with:
           formula-name: frankenphp
           homebrew-tap: dunglas/homebrew-frankenphp
