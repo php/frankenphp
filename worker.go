@@ -33,6 +33,7 @@ type worker struct {
 	onThreadReady          func(int)
 	onThreadShutdown       func(int)
 	queuedRequests         atomic.Int32
+	stalls                 *stallSampler
 }
 
 var (
@@ -95,7 +96,32 @@ func initWorkers(opt []workerOpt) error {
 		startupFailChan = nil
 	}
 
+	// start a passive stall sampler per worker. It runs off the request
+	// hot path and updates the worker_stalled_{1s,3s,5s} metrics.
+	for _, w := range workers {
+		go w.runStallSampler(mainThread.done)
+	}
+
 	return nil
+}
+
+// runStallSampler ticks at stallSampleInterval and records whether the
+// worker's request queue is non-empty, then publishes the rolling 1/3/5s
+// fractions to the metrics backend. It exits when done is closed.
+func (worker *worker) runStallSampler(done <-chan struct{}) {
+	ticker := time.NewTicker(stallSampleInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-done:
+			return
+		case <-ticker.C:
+			worker.stalls.record(worker.queuedRequests.Load() > 0)
+			win1s, win3s, win5s := worker.stalls.snapshot()
+			metrics.WorkerStalled(worker.name, win1s, win3s, win5s)
+		}
+	}
 }
 
 func newWorker(o workerOpt) (*worker, error) {
@@ -148,6 +174,7 @@ func newWorker(o workerOpt) (*worker, error) {
 		maxConsecutiveFailures: o.maxConsecutiveFailures,
 		onThreadReady:          o.onThreadReady,
 		onThreadShutdown:       o.onThreadShutdown,
+		stalls:                 &stallSampler{},
 	}
 
 	w.configureMercure(&o)
