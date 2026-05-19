@@ -239,11 +239,16 @@ static void frankenphp_update_request_context() {
 #if PHP_VERSION_ID < 80300
   zend_function *func = zend_hash_str_find_ptr(
       CG(function_table), "opcache_reset", sizeof("opcache_reset") - 1);
-  if (func != NULL && func->type == ZEND_INTERNAL_FUNCTION) {
+  if (func != NULL && func->type == ZEND_INTERNAL_FUNCTION &&
+      ((zend_internal_function *)func)->handler !=
+          ZEND_FN(frankenphp_opcache_reset)) {
     pthread_mutex_lock(&opcache_reset_mutex_php_82);
-    orig_opcache_reset = ((zend_internal_function *)func)->handler;
-    ((zend_internal_function *)func)->handler =
-        ZEND_FN(frankenphp_opcache_reset);
+    if (((zend_internal_function *)func)->handler !=
+        ZEND_FN(frankenphp_opcache_reset)) {
+      orig_opcache_reset = ((zend_internal_function *)func)->handler;
+      ((zend_internal_function *)func)->handler =
+          ZEND_FN(frankenphp_opcache_reset);
+    }
     pthread_mutex_unlock(&opcache_reset_mutex_php_82);
   }
 #endif
@@ -1685,6 +1690,9 @@ int frankenphp_execute_script_cli(char *script, int argc, char **argv,
 }
 
 int frankenphp_reset_opcache(void) {
+  if (orig_opcache_reset == NULL) {
+    return 0; // perhaps raise a warning here and fall through to calling the original?
+  }
   zend_execute_data execute_data;
   zval retval;
   memset(&execute_data, 0, sizeof(execute_data));
