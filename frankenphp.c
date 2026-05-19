@@ -1691,7 +1691,8 @@ int frankenphp_execute_script_cli(char *script, int argc, char **argv,
 
 int frankenphp_reset_opcache(void) {
   if (orig_opcache_reset == NULL) {
-    return 0; // perhaps raise a warning here and fall through to calling the original?
+    return 0; // perhaps raise a warning here and
+              // fall through to calling the original?
   }
   zend_execute_data execute_data;
   zval retval;
