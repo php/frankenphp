@@ -1785,7 +1785,7 @@ func TestOpcacheReset(t *testing.T) {
 			}
 
 			// otherwise call sleep.php with sleep and work values
-			sleep := i % 100
+			sleep := i % 50
 			work := i % 100
 			tester.AssertGetResponse(
 				fmt.Sprintf("http://localhost:%s/sleep.php?sleep=%d&work=%d", testPort, sleep, work),
