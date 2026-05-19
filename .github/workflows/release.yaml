@@ -1,13 +1,8 @@
 name: Release
-# Cuts a FrankenPHP release end-to-end: refreshes the PGO profile, bumps the
-# Caddy module's frankenphp dependency, commits the result as
-# github-actions[bot], tags v<version> and caddy/v<version>, drafts a GitHub
-# release, dispatches the downstream binary builds, and opens a Homebrew
-# formula bump PR. Dispatched by release.sh.
-#
-# The workflow is idempotent: re-dispatching after a partial failure (flaky
-# test, network blip, registry hiccup) detects which steps already completed
-# and skips them, so the release can be resumed without manual cleanup.
+# Refreshes PGO, bumps caddy/go.mod, commits as github-actions[bot],
+# tags v<version> and caddy/v<version>, drafts the GitHub release,
+# dispatches the binary build workflows, and bumps the Homebrew formula.
+# Idempotent: a re-dispatch after a partial failure resumes by tag.
 on:
   workflow_dispatch:
     inputs:
@@ -18,10 +13,12 @@ on:
         type: string
 permissions:
   contents: write
-  # Needed to dispatch the downstream binary build workflows from this run.
-  actions: write
+  actions: write # to dispatch downstream binary build workflows
 concurrency:
-  group: ${{ github.workflow }}
+  # Per-version: different versions race safely (the API parent_sha
+  # check rejects a stale main HEAD update); same-version dispatches
+  # serialize so resume logic isn't blocked by a pending approval.
+  group: ${{ github.workflow }}-${{ inputs.version }}
   cancel-in-progress: false
 jobs:
   release:
@@ -34,12 +31,19 @@ jobs:
       LIBRARY_PATH: ${{ github.workspace }}/watcher/target/lib
       BENCH_SEC: "30"
     steps:
-      - name: Refuse non-main dispatch
-        # workflow_dispatch can target any ref; reject anything but main so a
-        # mis-dispatched run fails loudly instead of being silently skipped.
+      - name: Validate inputs
+        # Reject non-main refs and non-semver versions before they reach
+        # go get / sed / tag refs. https://semver.org/#is-there-a-suggested-regular-expression-regex-to-check-a-semver-string
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
+          set -euo pipefail
           if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
             echo "::error::release.yaml must be dispatched against refs/heads/main, got ${GITHUB_REF}"
+            exit 1
+          fi
+          if [[ ! ${VERSION} =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?$ ]]; then
+            echo "::error::Invalid version: '${VERSION}' (must be SemVer, no v prefix)"
             exit 1
           fi
       - uses: actions/checkout@v6
@@ -50,8 +54,7 @@ jobs:
         id: classify
         env:
           VERSION: ${{ inputs.version }}
-        # Pre-release versions (those carrying a "-" suffix per SemVer) must
-        # not be marked --latest nor bump the stable Homebrew formula.
+        # Pre-releases (SemVer "-" suffix) must not bump --latest or Homebrew.
         run: |
           if [[ "${VERSION}" == *-* ]]; then
             echo "prerelease=true" >> "${GITHUB_OUTPUT}"
@@ -63,28 +66,64 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ inputs.version }}
-        # Tag existence is the source of truth for "release in progress":
-        # main HEAD may have moved past the release commit (a follow-up fix
-        # merged on top), so the commit-message check on HEAD is too narrow.
-        # If v<version> exists, resume from the commit it points at;
-        # otherwise it's a fresh attempt and tags must not exist.
+        # Tag existence is the resume signal — main HEAD may have moved
+        # past the release commit, so a HEAD message check is too narrow.
         run: |
           set -euo pipefail
-          err=$(mktemp)
-          trap 'rm -f "${err}"' EXIT
-          # Capture stderr so we can distinguish a real 404 (tag absent → fresh
-          # attempt) from any other failure (rate limit, 5xx, auth) which must
-          # not be silently treated as "tag missing".
-          if ref=$(gh api "repos/${GITHUB_REPOSITORY}/git/refs/tags/v${VERSION}" 2>"${err}"); then
-            sha=$(jq -r .object.sha <<<"${ref}")
-            type=$(jq -r .object.type <<<"${ref}")
+          # matching-refs returns [] (HTTP 200) for absent tags; real
+          # failures still trip set -e.
+          lookup_tag() {
+            gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/$1" \
+              --jq ".[] | select(.ref == \"refs/tags/$1\") | {sha: .object.sha, type: .object.type}"
+          }
+          resolve_commit() {
+            local entry="$1"
+            local sha type
+            sha=$(jq -r .sha <<<"${entry}")
+            type=$(jq -r .type <<<"${entry}")
             if [[ "${type}" == "tag" ]]; then
-              sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${sha}" -q .object.sha)
+              gh api "repos/${GITHUB_REPOSITORY}/git/tags/${sha}" -q .object.sha
+            else
+              printf '%s\n' "${sha}"
             fi
-            # Refuse to resume against a tag that isn't reachable from main:
-            # protects against an orphan tag created on a side branch.
+          }
+          # The grep below deliberately omits the `require` keyword so
+          # it matches both `require ( ... )` block layout (where the
+          # entry is indented) and single-line `require x v...` layout.
+          verify_release_content() {
+            local ref="$1"
+            if ! git show "${ref}:caddy/go.mod" 2>/dev/null \
+              | grep -qE "(^|[[:space:]])github\\.com/dunglas/frankenphp v${VERSION//./\\.}([[:space:]]|\$)"; then
+              echo "${ref}: caddy/go.mod does not require frankenphp v${VERSION}" >&2
+              return 1
+            fi
+            local size
+            size=$(git cat-file -s "${ref}:caddy/frankenphp/default.pgo" 2>/dev/null || echo 0)
+            if [[ "${size}" -lt 1024 ]]; then
+              echo "${ref}: PGO profile missing or suspiciously small (${size} bytes)" >&2
+              return 1
+            fi
+          }
+          main_entry=$(lookup_tag "v${VERSION}")
+          caddy_entry=$(lookup_tag "caddy/v${VERSION}")
+          if [[ -n "${main_entry}" ]]; then
+            sha=$(resolve_commit "${main_entry}")
+            # Reject orphan tags created on a side branch.
             if ! git merge-base --is-ancestor "${sha}" HEAD; then
               echo "::error::Tag v${VERSION} (${sha}) is not reachable from main; refusing to resume."
+              exit 1
+            fi
+            # Catch a mismatched caddy/v${VERSION} before any writes.
+            if [[ -n "${caddy_entry}" ]]; then
+              caddy_sha=$(resolve_commit "${caddy_entry}")
+              if [[ "${caddy_sha}" != "${sha}" ]]; then
+                echo "::error::caddy/v${VERSION} (${caddy_sha}) does not match v${VERSION} (${sha})."
+                exit 1
+              fi
+            fi
+            git fetch --quiet origin "refs/tags/v${VERSION}:refs/tags/v${VERSION}"
+            if ! verify_release_content "v${VERSION}"; then
+              echo "::error::v${VERSION} (${sha}) does not match expected release content."
               exit 1
             fi
             echo "Resuming: v${VERSION} exists at ${sha}"
@@ -92,16 +131,23 @@ jobs:
               echo "resume=true"
               echo "release_commit=${sha}"
             } >> "${GITHUB_OUTPUT}"
-          elif grep -qF "(HTTP 404)" "${err}"; then
-            echo "resume=false" >> "${GITHUB_OUTPUT}"
-            if gh api "repos/${GITHUB_REPOSITORY}/git/refs/tags/caddy/v${VERSION}" --silent 2>/dev/null; then
+          elif verify_release_content HEAD 2>/dev/null; then
+            if [[ -n "${caddy_entry}" ]]; then
               echo "::error::caddy/v${VERSION} exists but v${VERSION} does not; refusing to release into a split state."
               exit 1
             fi
+            sha=$(git rev-parse HEAD)
+            echo "Resuming: main HEAD (${sha}) already matches v${VERSION}; tags will be created."
+            {
+              echo "resume=true"
+              echo "release_commit=${sha}"
+            } >> "${GITHUB_OUTPUT}"
           else
-            echo "::error::GitHub API call for tag v${VERSION} failed:"
-            cat "${err}" >&2
-            exit 1
+            if [[ -n "${caddy_entry}" ]]; then
+              echo "::error::caddy/v${VERSION} exists but v${VERSION} does not; refusing to release into a split state."
+              exit 1
+            fi
+            echo "resume=false" >> "${GITHUB_OUTPUT}"
           fi
       - if: steps.state.outputs.resume != 'true'
         uses: ./.github/actions/setup-go
@@ -121,8 +167,7 @@ jobs:
         run: ./profiles/build-pgo.sh
       - if: steps.state.outputs.resume != 'true'
         name: Sanity-check PGO profile
-        # Catch the degenerate case where wrk silently failed to drive load
-        # and we ended up shipping a near-empty profile.
+        # Guard against wrk silently failing and producing a near-empty profile.
         run: |
           size=$(wc -c <caddy/frankenphp/default.pgo)
           echo "PGO profile: ${size} bytes"
@@ -139,8 +184,8 @@ jobs:
           go get "github.com/dunglas/frankenphp@v${VERSION}"
           go mod tidy
       - name: Commit and tag via GitHub API
-        # API-created commits/tags are signed server-side with GitHub's key
-        # and show as "Verified" under the github-actions[bot] identity.
+        # API-created commits/tags are signed server-side and show as
+        # Verified under github-actions[bot].
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
@@ -154,10 +199,8 @@ jobs:
             commit_sha="${RELEASE_COMMIT}"
             echo "Reusing existing release commit ${commit_sha}"
           else
-            # Stage the base64 in a temp file and feed it to jq via
-            # --rawfile: passing big blobs (the PGO profile is ~2 MB encoded)
-            # through --arg exceeds ARG_MAX on the runner. Subshell body +
-            # EXIT trap clean up the tmpfile even if base64/jq/gh aborts.
+            # Use --rawfile: the PGO blob (~2 MB encoded) exceeds ARG_MAX
+            # via --arg.
             make_blob() (
               local tmp
               tmp=$(mktemp)
@@ -168,28 +211,71 @@ jobs:
                 | gh api "repos/${REPO}/git/blobs" --input - -q .sha
             )
 
+            # Concurrency is per-version, so a different version could
+            # land on main while this run is in flight. Abort rather than
+            # overlay our locally-bumped files on top of unseen commits.
+            checkout_sha=$(git rev-parse HEAD)
             parent_sha=$(gh api "repos/${REPO}/git/refs/heads/main" -q .object.sha)
+            if [[ "${checkout_sha}" != "${parent_sha}" ]]; then
+              echo "::error::main advanced from ${checkout_sha} to ${parent_sha} during the run; refusing to overlay locally-modified files on a newer base_tree."
+              exit 1
+            fi
             base_tree=$(gh api "repos/${REPO}/git/commits/${parent_sha}" -q .tree.sha)
 
-            pgo_sha=$(make_blob caddy/frankenphp/default.pgo)
-            gomod_sha=$(make_blob caddy/go.mod)
-            gosum_sha=$(make_blob caddy/go.sum)
+            # Capture every touched file (modifications, additions,
+            # deletions) so transitive go.sum or PGO side effects aren't
+            # dropped from the release commit. --no-renames decomposes
+            # renames into add+delete so both halves land in the tree
+            # mutation.
+            mapfile -t modified < <(git diff --no-renames --name-only --diff-filter=ACM HEAD)
+            mapfile -t deleted < <(git diff --no-renames --name-only --diff-filter=D HEAD)
+            mapfile -t untracked < <(git ls-files --others --exclude-standard)
+            if [[ ${#modified[@]} -eq 0 && ${#deleted[@]} -eq 0 && ${#untracked[@]} -eq 0 ]]; then
+              echo "::error::No file changes after PGO/bump. Is v${VERSION} already on main? Delete the local tags and pick a different version, or recreate the tags manually."
+              exit 1
+            fi
+            present=("${modified[@]}" "${untracked[@]}")
+            [[ ${#present[@]} -gt 0 ]] && printf 'Including (added/modified): %s\n' "${present[@]}"
+            [[ ${#deleted[@]} -gt 0 ]] && printf 'Including (deleted): %s\n' "${deleted[@]}"
+
+            # Preserve the existing file mode (executable bit) when
+            # modifying tracked files; default to 100644 for new files
+            # unless the path is executable on disk.
+            mode_for() {
+              local path="$1" mode
+              mode=$(git ls-tree HEAD -- "$path" | awk '{print $1; exit}')
+              if [[ -n "$mode" ]]; then
+                printf '%s\n' "$mode"
+              elif [[ -x "$path" ]]; then
+                printf '100755\n'
+              else
+                printf '100644\n'
+              fi
+            }
+
+            tree_entries=$(
+              {
+                for path in "${modified[@]}" "${untracked[@]}"; do
+                  sha=$(make_blob "${path}")
+                  jq -nc --arg path "${path}" --arg sha "${sha}" --arg mode "$(mode_for "${path}")" \
+                    '{path: $path, mode: $mode, type: "blob", sha: $sha}'
+                done
+                for path in "${deleted[@]}"; do
+                  # Deletions need a valid mode but it's purely formal —
+                  # the entry only removes the path from the tree.
+                  jq -nc --arg path "${path}" \
+                    '{path: $path, mode: "100644", type: "blob", sha: null}'
+                done
+              } | jq -sc .
+            )
 
             tree_sha=$(jq -nc \
               --arg base_tree "$base_tree" \
-              --arg pgo "$pgo_sha" \
-              --arg gomod "$gomod_sha" \
-              --arg gosum "$gosum_sha" \
-              '{
-                base_tree: $base_tree,
-                tree: [
-                  {path: "caddy/frankenphp/default.pgo", mode: "100644", type: "blob", sha: $pgo},
-                  {path: "caddy/go.mod", mode: "100644", type: "blob", sha: $gomod},
-                  {path: "caddy/go.sum", mode: "100644", type: "blob", sha: $gosum}
-                ]
-              }' | gh api "repos/${REPO}/git/trees" --input - -q .sha)
+              --argjson entries "${tree_entries}" \
+              '{base_tree: $base_tree, tree: $entries}' \
+              | gh api "repos/${REPO}/git/trees" --input - -q .sha)
 
-            # [skip ci] keeps push-triggered workflows from firing on top of
+            # [skip ci] avoids push-triggered workflows firing alongside
             # the explicit downstream dispatches below.
             commit_sha=$(jq -nc \
               --arg message "chore: prepare release ${VERSION} [skip ci]" \
@@ -201,15 +287,19 @@ jobs:
             gh api "repos/${REPO}/git/refs/heads/main" -X PATCH -f sha="$commit_sha" --silent
           fi
 
-          # Idempotent tag creation: if the tag already exists and points at
-          # the release commit, leave it alone; if it points elsewhere, fail.
+          # Idempotent: skip if tag already points at the release commit,
+          # fail if it points elsewhere. matching-refs distinguishes
+          # "tag absent" (HTTP 200, empty array) from real failures, which
+          # still trip set -e.
           create_tag() {
             local tag="$1"
             local existing
-            if existing=$(gh api "repos/${REPO}/git/refs/tags/${tag}" 2>/dev/null); then
+            existing=$(gh api "repos/${REPO}/git/matching-refs/tags/${tag}" \
+              --jq ".[] | select(.ref == \"refs/tags/${tag}\") | {sha: .object.sha, type: .object.type}")
+            if [[ -n "${existing}" ]]; then
               local obj_sha obj_type
-              obj_sha=$(jq -r .object.sha <<<"${existing}")
-              obj_type=$(jq -r .object.type <<<"${existing}")
+              obj_sha=$(jq -r .sha <<<"${existing}")
+              obj_type=$(jq -r .type <<<"${existing}")
               if [[ "${obj_type}" == "tag" ]]; then
                 obj_sha=$(gh api "repos/${REPO}/git/tags/${obj_sha}" -q .object.sha)
               fi
@@ -233,15 +323,12 @@ jobs:
           create_tag "v${VERSION}"
           create_tag "caddy/v${VERSION}"
 
-          # Pull the new commit + tags so the release-draft step's git
-          # describe can resolve v${VERSION}^.
+          # So the release-draft step's `git describe v${VERSION}^` resolves.
           git fetch origin main --tags
       - name: Draft GitHub release
-        # `gh release create` validates the tag through GraphQL, which can
-        # lag minutes behind the Git Data API we just used to create the
-        # tag — leading to "no matches found" or `untagged-*` placeholder
-        # releases. Use the REST releases endpoints directly: they see the
-        # tag immediately and behave deterministically.
+        # `gh release create` goes through GraphQL which can lag minutes
+        # behind the Git Data API and yield "no matches" or `untagged-*`
+        # placeholder releases; the REST releases endpoint is consistent.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
@@ -267,11 +354,9 @@ jobs:
           fi
           gh api "repos/${REPO}/releases" "${create_args[@]}" --silent
       - name: Trigger downstream release builds
-        # GITHUB_TOKEN-driven API writes don't trigger workflows that listen
-        # on tag/push events, so dispatch each downstream explicitly. Keep
-        # going on partial failure so the operator only needs to re-run the
-        # specific dispatches that didn't go through. Re-dispatch on resume
-        # is harmless: it just queues another build run.
+        # GITHUB_TOKEN tag writes don't fire push triggers, so dispatch
+        # each downstream explicitly. Keep going on partial failure;
+        # re-dispatch on resume just queues another idempotent build.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
