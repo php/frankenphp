@@ -226,6 +226,10 @@ size_t frankenphp_get_thread_memory_usage(uintptr_t thread_index);
 void frankenphp_force_kill_thread(force_kill_slot slot);
 void frankenphp_release_thread_for_kill(force_kill_slot slot);
 
+/* Background worker primitives. */
+int frankenphp_set_background_worker_and_get_stop_fd_write(void);
+void frankenphp_worker_close_fd(int fd);
+
 void register_extensions(zend_module_entry **m, int len);
 
 #endif
