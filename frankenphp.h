@@ -116,6 +116,12 @@ typedef struct frankenphp_server_vars {
   zend_string *request_scheme;
   zend_string *ssl_protocol;
   zend_string *https;
+
+  /* Worker identity for $_SERVER. worker_name is m#-stripped Go-side,
+   * empty for non-worker requests. */
+  char *worker_name;
+  size_t worker_name_len;
+  bool is_background_worker;
 } frankenphp_server_vars;
 
 /**
@@ -225,6 +231,12 @@ size_t frankenphp_get_thread_memory_usage(uintptr_t thread_index);
  * handle). */
 void frankenphp_force_kill_thread(force_kill_slot slot);
 void frankenphp_release_thread_for_kill(force_kill_slot slot);
+
+/* Background worker primitives. */
+int frankenphp_set_background_worker_and_get_stop_fd_write(void);
+void frankenphp_worker_close_fd(int fd);
+void frankenphp_copy_persistent_vars(zval *dst, void *persistent_ht);
+char *frankenphp_get_last_php_error(void);
 
 void register_extensions(zend_module_entry **m, int len);
 

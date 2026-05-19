@@ -16,6 +16,7 @@
 #else
 #include <php_config.h>
 #endif
+#include <main/php_streams.h>
 #include <php_ini.h>
 #include <php_main.h>
 #include <php_output.h>
@@ -37,12 +38,7 @@
 
 #include "_cgo_export.h"
 #include "frankenphp_arginfo.h"
-#ifdef FRANKENPHP_TEST
-/* The persistent_zval helpers are only compiled in when a consumer needs
- * them. The step that lands the first real caller (background workers)
- * will drop this guard. */
 #include "zval.h"
-#endif
 
 #if defined(PHP_WIN32) && defined(ZTS)
 ZEND_TSRMLS_CACHE_DEFINE()
@@ -91,7 +87,36 @@ HashTable *main_thread_env = NULL;
 
 __thread uintptr_t thread_index;
 __thread bool is_worker_thread = false;
+__thread bool is_background_worker = false;
+__thread int worker_stop_fds[2] = {-1, -1};
+__thread php_stream *worker_signaling_stream = NULL;
+__thread char *captured_last_php_error = NULL;
 __thread HashTable *sandboxed_env = NULL;
+
+/* Per-thread cache for frankenphp_get_vars results. Maps worker name to
+ * { version, cached_zval }. When the Go side reports the version hasn't
+ * changed, the cached zval is returned with a refcount bump, giving the
+ * PHP caller the same HashTable pointer so repeated reads within a
+ * request run at O(1) without walking persistent memory every time. */
+typedef struct {
+  uint64_t version;
+  zval value;
+} bg_vars_cache_entry;
+__thread HashTable *bg_vars_cache = NULL;
+
+static void bg_vars_cache_dtor(zval *zv) {
+  bg_vars_cache_entry *entry = Z_PTR_P(zv);
+  zval_ptr_dtor(&entry->value);
+  free(entry);
+}
+
+static void bg_vars_cache_reset(void) {
+  if (bg_vars_cache) {
+    zend_hash_destroy(bg_vars_cache);
+    free(bg_vars_cache);
+    bg_vars_cache = NULL;
+  }
+}
 
 #ifndef PHP_WIN32
 static bool is_forked_child = false;
@@ -207,11 +232,135 @@ void frankenphp_release_thread_for_kill(force_kill_slot slot) {
 #endif
 }
 
+static void frankenphp_worker_close_stop_fds(void);
+
 void frankenphp_update_local_thread_context(bool is_worker) {
+  /* A thread that previously ran as a bg worker can be recycled into an
+   * HTTP worker or a regular request thread; reset the bg-worker TLS so
+   * frankenphp_handle_request() and friends don't reject the caller. The
+   * cached worker_signaling_stream is already dangling here (its
+   * zend_resource was freed by php_request_shutdown's EG(regular_list)
+   * teardown), so just NULL it without dereferencing. */
+  bool was_background_worker = is_background_worker;
+
   is_worker_thread = is_worker;
+  is_background_worker = false;
+
+  if (was_background_worker) {
+    frankenphp_worker_close_stop_fds();
+    worker_signaling_stream = NULL;
+  }
 
   /* workers should keep running if the user aborts the connection */
   PG(ignore_user_abort) = is_worker ? 1 : original_user_abort_setting;
+}
+
+/* Background worker stop-pipe: anonymous pipe whose read end is exposed to
+ * the PHP script via frankenphp_get_worker_handle. When the Go side closes
+ * the write end (on drain), the read end reaches EOF so the script can
+ * return from stream_select and exit its loop. */
+static int frankenphp_worker_open_stop_pipe(void) {
+#ifdef PHP_WIN32
+  return _pipe(worker_stop_fds, 4096, _O_BINARY);
+#else
+  return pipe(worker_stop_fds);
+#endif
+}
+
+static void frankenphp_worker_close_stop_fds(void) {
+  for (int i = 0; i < 2; i++) {
+    if (worker_stop_fds[i] >= 0) {
+#ifdef PHP_WIN32
+      _close(worker_stop_fds[i]);
+#else
+      close(worker_stop_fds[i]);
+#endif
+      worker_stop_fds[i] = -1;
+    }
+  }
+}
+
+/* Marks the calling thread as a background worker, opens its stop pipe,
+ * transfers the write fd to the caller (clearing the TLS slot so later
+ * recycle won't double-close), and disarms max_execution_time. Returns
+ * -1 if the pipe could not be opened. */
+int frankenphp_set_background_worker_and_get_stop_fd_write(void) {
+  is_background_worker = true;
+  /* Drop the dangling stream pointer (see
+   * frankenphp_update_local_thread_context for why). */
+  worker_signaling_stream = NULL;
+  /* Bg workers don't enforce max_execution_time; disarm any lingering timer. */
+  zend_unset_timeout();
+
+  frankenphp_worker_close_stop_fds();
+  if (frankenphp_worker_open_stop_pipe() != 0) {
+    worker_stop_fds[0] = -1;
+    worker_stop_fds[1] = -1;
+    return -1;
+  }
+  int fd = worker_stop_fds[1];
+  worker_stop_fds[1] = -1;
+  return fd;
+}
+
+void frankenphp_worker_close_fd(int fd) {
+  if (fd < 0) {
+    return;
+  }
+  /* Closing the write end of the stop pipe lands as EOF on the read end,
+   * so the PHP side's stream_select returns promptly. */
+#ifdef PHP_WIN32
+  _close(fd);
+#else
+  close(fd);
+#endif
+}
+
+static int frankenphp_worker_dup_fd(int fd) {
+#ifdef PHP_WIN32
+  return _dup(fd);
+#else
+  return dup(fd);
+#endif
+}
+
+void frankenphp_copy_persistent_vars(zval *dst, void *persistent_ht) {
+  zval src;
+  ZVAL_ARR(&src, (HashTable *)persistent_ht);
+  persistent_zval_to_request(dst, &src);
+}
+
+/* Capture PG(last_error_*) into the thread-local captured_last_php_error.
+ * Called before php_request_shutdown, which clears PG(last_error_*).
+ * Format: "<message> in <file> on line <line>". */
+static void frankenphp_capture_last_php_error(void) {
+  if (captured_last_php_error != NULL) {
+    free(captured_last_php_error);
+    captured_last_php_error = NULL;
+  }
+  if (PG(last_error_message) == NULL) {
+    return;
+  }
+  const char *msg = ZSTR_VAL(PG(last_error_message));
+  size_t msg_len = ZSTR_LEN(PG(last_error_message));
+  const char *file =
+      PG(last_error_file) ? ZSTR_VAL(PG(last_error_file)) : "unknown";
+  size_t file_len = PG(last_error_file) ? ZSTR_LEN(PG(last_error_file)) : 7;
+  int line = PG(last_error_lineno);
+  size_t buf_len = msg_len + file_len + 32;
+  captured_last_php_error = malloc(buf_len);
+  if (captured_last_php_error != NULL) {
+    snprintf(captured_last_php_error, buf_len, "%.*s in %.*s on line %d",
+             (int)msg_len, msg, (int)file_len, file, line);
+  }
+}
+
+/* Return and take ownership of the captured error; caller frees with
+ * C.free. NULL if nothing was captured. */
+char *frankenphp_get_last_php_error(void) {
+  char *s = captured_last_php_error;
+  captured_last_php_error = NULL;
+  return s;
 }
 
 static void frankenphp_update_request_context() {
@@ -827,41 +976,280 @@ PHP_FUNCTION(frankenphp_log) {
   }
 }
 
-#ifdef FRANKENPHP_TEST
-/* Test-only entry point that exercises zval.h end-to-end:
- * validate -> persist (request -> persistent memory) ->
- * to_request (persistent -> fresh request memory) -> free persistent copy.
- * Compiled only when FRANKENPHP_TEST is defined; never registered
- * in production builds. */
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(
-    arginfo_frankenphp_test_persist_roundtrip, 0, 1, IS_MIXED, 0)
-ZEND_ARG_TYPE_INFO(0, value, IS_MIXED, 0)
-ZEND_END_ARG_INFO()
+PHP_FUNCTION(frankenphp_set_vars) {
+  zval *vars = NULL;
 
-PHP_FUNCTION(frankenphp_test_persist_roundtrip) {
-  zval *input;
-  ZEND_PARSE_PARAMETERS_START(1, 1)
-  Z_PARAM_ZVAL(input)
+  ZEND_PARSE_PARAMETERS_START(1, 1);
+  Z_PARAM_ARRAY(vars);
   ZEND_PARSE_PARAMETERS_END();
 
-  if (!persistent_zval_validate(input)) {
-    zend_throw_exception(spl_ce_LogicException,
-                         "persistent_zval: value type not supported "
-                         "(only scalars, arrays, and enums are allowed)",
+  /* Validate every value up front so allocation only happens for a tree
+   * we can fully round-trip. */
+  zval *val;
+  ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(vars), val) {
+    if (!persistent_zval_validate(val)) {
+      zend_value_error(
+          "frankenphp_set_vars(): values must be null, scalars, arrays, or "
+          "enums; objects (other than enums) and resources are not allowed");
+      RETURN_THROWS();
+    }
+  }
+  ZEND_HASH_FOREACH_END();
+
+  zval persistent;
+  persistent_zval_persist(&persistent, vars);
+
+  void *old = NULL;
+  char *error =
+      go_frankenphp_set_vars(thread_index, Z_ARRVAL(persistent), &old);
+  if (error) {
+    persistent_zval_free(&persistent);
+    zend_throw_exception(spl_ce_RuntimeException, error, 0);
+    free(error);
+    RETURN_THROWS();
+  }
+  if (old != NULL) {
+    zval old_zv;
+    ZVAL_ARR(&old_zv, (HashTable *)old);
+    persistent_zval_free(&old_zv);
+  }
+}
+
+PHP_FUNCTION(frankenphp_get_vars) {
+  zend_string *name = NULL;
+
+  ZEND_PARSE_PARAMETERS_START(1, 1);
+  Z_PARAM_STR(name);
+  ZEND_PARSE_PARAMETERS_END();
+
+  /* Look up a cached entry first so Go can short-circuit the copy when
+   * the background worker has not changed its vars since we last read
+   * them. On a cache hit we reuse the same zval, so $vars === $prev_vars
+   * holds across repeated reads within one request. */
+  uint64_t caller_version = 0;
+  uint64_t out_version = 0;
+  bg_vars_cache_entry *cached = NULL;
+  if (bg_vars_cache) {
+    zval *entry_zv = zend_hash_find(bg_vars_cache, name);
+    if (entry_zv) {
+      cached = Z_PTR_P(entry_zv);
+      caller_version = cached->version;
+    }
+  }
+
+  char *error = go_frankenphp_get_vars(
+      thread_index, (char *)ZSTR_VAL(name), ZSTR_LEN(name), return_value,
+      cached ? &caller_version : NULL, &out_version);
+  if (error) {
+    zend_throw_exception(spl_ce_RuntimeException, error, 0);
+    free(error);
+    RETURN_THROWS();
+  }
+
+  if (cached && out_version == caller_version) {
+    /* Cache hit: Go skipped the copy. Return the cached zval. */
+    ZVAL_COPY(return_value, &cached->value);
+    return;
+  }
+
+  /* Cache miss: store the fresh copy so subsequent reads within this
+   * request can be served without walking persistent memory. */
+  if (!bg_vars_cache) {
+    bg_vars_cache = malloc(sizeof(HashTable));
+    zend_hash_init(bg_vars_cache, 4, NULL, bg_vars_cache_dtor, 1);
+  }
+  bg_vars_cache_entry *entry = malloc(sizeof(*entry));
+  entry->version = out_version;
+  ZVAL_COPY(&entry->value, return_value);
+  zval entry_zv;
+  ZVAL_PTR(&entry_zv, entry);
+  zend_hash_update(bg_vars_cache, name, &entry_zv);
+}
+
+PHP_FUNCTION(frankenphp_ensure_background_worker) {
+  zval *names_zv;
+  double timeout = 0.0;
+  bool timeout_is_null = true;
+
+  ZEND_PARSE_PARAMETERS_START(1, 2);
+  Z_PARAM_ZVAL(names_zv);
+  Z_PARAM_OPTIONAL
+  Z_PARAM_DOUBLE_OR_NULL(timeout, timeout_is_null);
+  ZEND_PARSE_PARAMETERS_END();
+
+  if (!timeout_is_null && timeout <= 0.0) {
+    zend_value_error("frankenphp_ensure_background_worker(): timeout must "
+                     "be > 0 (pass null to use the default)");
+    RETURN_THROWS();
+  }
+
+  /* Accept either a single string or an array of strings. For a single
+   * string we avoid the heap allocation by pointing at ZSTR fields
+   * directly via the on-stack one-element arrays. */
+  char *single_name_ptr = NULL;
+  size_t single_name_len = 0;
+  char **name_ptrs = NULL;
+  size_t *name_lens = NULL;
+  int name_count = 0;
+  bool heap_allocated = false;
+
+  if (Z_TYPE_P(names_zv) == IS_STRING) {
+    if (Z_STRLEN_P(names_zv) == 0) {
+      zend_value_error("frankenphp_ensure_background_worker(): name "
+                       "must not be empty");
+      RETURN_THROWS();
+    }
+    /* Reject embedded NUL bytes: PHP's zend_string is length-tagged so
+     * arbitrary bytes are technically legal, but the bg-worker name flows
+     * through C-string-aware paths (logging, $_SERVER export) where an
+     * embedded NUL would silently truncate. Fail loudly instead. */
+    if (memchr(Z_STRVAL_P(names_zv), '\0', Z_STRLEN_P(names_zv)) != NULL) {
+      zend_value_error("frankenphp_ensure_background_worker(): name "
+                       "must not contain null bytes");
+      RETURN_THROWS();
+    }
+    single_name_ptr = Z_STRVAL_P(names_zv);
+    single_name_len = Z_STRLEN_P(names_zv);
+    name_ptrs = &single_name_ptr;
+    name_lens = &single_name_len;
+    name_count = 1;
+  } else if (Z_TYPE_P(names_zv) == IS_ARRAY) {
+    HashTable *ht = Z_ARRVAL_P(names_zv);
+    name_count = zend_hash_num_elements(ht);
+    if (name_count == 0) {
+      zend_value_error("frankenphp_ensure_background_worker(): names array "
+                       "must not be empty");
+      RETURN_THROWS();
+    }
+    name_ptrs = emalloc(name_count * sizeof(*name_ptrs));
+    name_lens = emalloc(name_count * sizeof(*name_lens));
+    heap_allocated = true;
+    int idx = 0;
+    zval *v;
+    ZEND_HASH_FOREACH_VAL(ht, v) {
+      if (Z_TYPE_P(v) != IS_STRING) {
+        efree(name_ptrs);
+        efree(name_lens);
+        zend_type_error("frankenphp_ensure_background_worker(): names array "
+                        "must contain only strings");
+        RETURN_THROWS();
+      }
+      if (Z_STRLEN_P(v) == 0) {
+        efree(name_ptrs);
+        efree(name_lens);
+        zend_value_error("frankenphp_ensure_background_worker(): names array "
+                         "must not contain empty strings");
+        RETURN_THROWS();
+      }
+      /* Reject embedded NUL bytes: see single-string form above for the
+       * reasoning. Apply per-element so a mixed array is fully validated
+       * before any worker is started. */
+      if (memchr(Z_STRVAL_P(v), '\0', Z_STRLEN_P(v)) != NULL) {
+        efree(name_ptrs);
+        efree(name_lens);
+        zend_value_error("frankenphp_ensure_background_worker(): names array "
+                         "must not contain names with null bytes");
+        RETURN_THROWS();
+      }
+      /* Reject duplicates: O(n^2) is fine for the small batch sizes we
+       * expect here. */
+      for (int j = 0; j < idx; j++) {
+        if (name_lens[j] == (size_t)Z_STRLEN_P(v) &&
+            memcmp(name_ptrs[j], Z_STRVAL_P(v), name_lens[j]) == 0) {
+          efree(name_ptrs);
+          efree(name_lens);
+          zend_value_error(
+              "frankenphp_ensure_background_worker(): duplicate name %s",
+              Z_STRVAL_P(v));
+          RETURN_THROWS();
+        }
+      }
+      name_ptrs[idx] = Z_STRVAL_P(v);
+      name_lens[idx] = Z_STRLEN_P(v);
+      idx++;
+    }
+    ZEND_HASH_FOREACH_END();
+  } else {
+    zend_type_error("frankenphp_ensure_background_worker(): name must be a "
+                    "string or an array of strings");
+    RETURN_THROWS();
+  }
+
+  /* Seconds (PHP) -> ms (Go time.Duration). null = use the Go-side
+   * default; <=0 was rejected upfront. */
+  int64_t timeout_ms = 0;
+  if (!timeout_is_null) {
+    timeout_ms = (int64_t)(timeout * 1000.0);
+  }
+  char *error = go_frankenphp_ensure_background_worker(
+      thread_index, name_ptrs, name_lens, name_count, timeout_ms);
+  if (heap_allocated) {
+    efree(name_ptrs);
+    efree(name_lens);
+  }
+
+  if (error) {
+    zend_throw_exception(spl_ce_RuntimeException, error, 0);
+    free(error);
+    RETURN_THROWS();
+  }
+}
+
+PHP_FUNCTION(frankenphp_get_worker_handle) {
+  ZEND_PARSE_PARAMETERS_NONE();
+
+  if (!is_background_worker) {
+    zend_throw_exception(spl_ce_RuntimeException,
+                         "frankenphp_get_worker_handle() can only be called "
+                         "from a background worker",
                          0);
     RETURN_THROWS();
   }
 
-  zval persistent;
-  persistent_zval_persist(&persistent, input);
-  persistent_zval_to_request(return_value, &persistent);
-  persistent_zval_free(&persistent);
-}
+  /* Return the cached stream on repeat calls. The first call (below) is
+   * the readiness boundary that ensure() blocks on; subsequent calls just
+   * hand back the same stream. */
+  if (worker_signaling_stream != NULL) {
+    php_stream_to_zval(worker_signaling_stream, return_value);
+    GC_ADDREF(Z_COUNTED_P(return_value));
+    return;
+  }
 
-static const zend_function_entry frankenphp_test_hook_functions[] = {
-    PHP_FE(frankenphp_test_persist_roundtrip,
-           arginfo_frankenphp_test_persist_roundtrip) PHP_FE_END};
-#endif
+  if (worker_stop_fds[0] < 0) {
+    zend_throw_exception(spl_ce_RuntimeException,
+                         "failed to create background worker stop pipe", 0);
+    RETURN_THROWS();
+  }
+
+  /* DUP so closing the PHP stream doesn't affect worker_stop_fds[0]; the
+   * original stays owned by the C side for cleanup at worker restart. */
+  int fd = frankenphp_worker_dup_fd(worker_stop_fds[0]);
+  if (fd < 0) {
+    zend_throw_exception(spl_ce_RuntimeException,
+                         "failed to dup background worker stop fd", 0);
+    RETURN_THROWS();
+  }
+
+  php_stream *stream = php_stream_fopen_from_fd(fd, "rb", NULL);
+  if (!stream) {
+    frankenphp_worker_close_fd(fd);
+    zend_throw_exception(spl_ce_RuntimeException,
+                         "failed to create stream from stop fd", 0);
+    RETURN_THROWS();
+  }
+
+  worker_signaling_stream = stream;
+  php_stream_to_zval(stream, return_value);
+
+  /* Extra ref so PHP can't destroy the stream while TLS caches the pointer. */
+  GC_ADDREF(Z_COUNTED_P(return_value));
+
+  /* Signal that this worker has reached its main loop. ensure() callers
+   * waiting on this worker unblock here. Idempotent on the Go side
+   * (sync.Once-guarded), so a worker that crashed and respawned signals
+   * again on each fresh boot without harm. */
+  go_frankenphp_worker_ready(thread_index);
+}
 
 PHP_MINIT_FUNCTION(frankenphp) {
   register_frankenphp_symbols(module_number);
@@ -869,13 +1257,6 @@ PHP_MINIT_FUNCTION(frankenphp) {
   /* MINIT runs once per ZTS thread — guard the atfork registration */
   static pthread_once_t atfork_once = PTHREAD_ONCE_INIT;
   pthread_once(&atfork_once, frankenphp_register_atfork);
-#endif
-
-#ifdef FRANKENPHP_TEST
-  if (zend_register_functions(NULL, frankenphp_test_hook_functions, NULL,
-                              MODULE_PERSISTENT) == FAILURE) {
-    return FAILURE;
-  }
 #endif
 
   zend_function *func;
@@ -1041,6 +1422,41 @@ void frankenphp_register_server_vars(zval *track_vars_array,
   ZVAL_EMPTY_STRING(&zv);
   zend_hash_update_ind(ht, frankenphp_strings.auth_type, &zv);
   zend_hash_update_ind(ht, frankenphp_strings.remote_ident, &zv);
+
+  /* Worker identity in $_SERVER (HTTP and bg workers alike). The value is
+   * the user-facing worker name; pre-existing user code that only checks
+   * isset($_SERVER['FRANKENPHP_WORKER']) keeps working. */
+  if (vars.worker_name && vars.worker_name_len > 0) {
+    zval name_zv;
+    ZVAL_STRINGL(&name_zv, vars.worker_name, vars.worker_name_len);
+    zend_hash_str_update(ht, "FRANKENPHP_WORKER",
+                         sizeof("FRANKENPHP_WORKER") - 1, &name_zv);
+  }
+  if (vars.is_background_worker) {
+    zval bg_zv;
+    ZVAL_TRUE(&bg_zv);
+    zend_hash_str_update(ht, "FRANKENPHP_WORKER_BACKGROUND",
+                         sizeof("FRANKENPHP_WORKER_BACKGROUND") - 1, &bg_zv);
+
+    /* Bg workers have no real CLI argv; emulate one of the form
+     * [script_filename, worker_name] so user code can read the worker
+     * name via $argv[1] like a CLI script. Skipped when worker_name is
+     * empty (declared catch-all template threads with no identity). */
+    if (vars.worker_name && vars.worker_name_len > 0 && vars.script_filename) {
+      zval argv_array;
+      array_init(&argv_array);
+      add_next_index_stringl(&argv_array, vars.script_filename,
+                             vars.script_filename_len);
+      add_next_index_stringl(&argv_array, vars.worker_name,
+                             vars.worker_name_len);
+
+      zval argc_zv;
+      ZVAL_LONG(&argc_zv, 2);
+
+      zend_hash_str_update(ht, "argv", sizeof("argv") - 1, &argv_array);
+      zend_hash_str_update(ht, "argc", sizeof("argc") - 1, &argc_zv);
+    }
+  }
 }
 
 /** Create an immutable zend_string that lasts for the whole process **/
@@ -1270,6 +1686,12 @@ static void *php_thread(void *arg) {
         zend_bailout();
       }
 
+      /* php_request_startup re-arms max_execution_time; bg workers
+       * never enforce it, disarm again. */
+      if (is_background_worker) {
+        zend_unset_timeout();
+      }
+
       zend_file_handle file_handle;
       zend_stream_init_filename(&file_handle, scriptName);
 
@@ -1292,6 +1714,15 @@ static void *php_thread(void *arg) {
 
       has_attempted_shutdown = true;
 
+      /* Capture the last PHP error before php_request_shutdown clears it,
+       * so background-worker boot failures can surface the cause. */
+      frankenphp_capture_last_php_error();
+
+      /* Invalidate the per-request get_vars cache before php_request_shutdown
+       * tears down request memory: the cached zvals live in request memory
+       * and can't be freed after shutdown runs. */
+      bg_vars_cache_reset();
+
       /* shutdown the request, potential bailout to zend_catch */
       php_request_shutdown((void *)0);
       frankenphp_free_request_context();
@@ -1311,6 +1742,7 @@ static void *php_thread(void *arg) {
     if (!has_attempted_shutdown) {
       /* php_request_shutdown() was not called, force a shutdown now */
       reset_sandboxed_environment();
+      bg_vars_cache_reset();
       zend_try { php_request_shutdown((void *)0); }
       zend_catch {}
       zend_end_try();

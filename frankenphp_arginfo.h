@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 60f0d27c04f94d7b24c052e91ef294595a2bc421 */
+ * Stub hash: bc8623068235bd40c5eb8a2675e59ad928fc6ea9 */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_handle_request, 0, 1, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, callback, IS_CALLABLE, 0)
@@ -41,6 +41,21 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_log, 0, 1, IS_VOID, 0
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, context, IS_ARRAY, 0, "[]")
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_ensure_background_worker, 0, 1, IS_VOID, 0)
+	ZEND_ARG_TYPE_MASK(0, name, MAY_BE_STRING|MAY_BE_ARRAY, NULL)
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, timeout, IS_DOUBLE, 1, "null")
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_set_vars, 0, 1, IS_VOID, 0)
+	ZEND_ARG_TYPE_INFO(0, vars, IS_ARRAY, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_get_vars, 0, 1, IS_ARRAY, 0)
+	ZEND_ARG_TYPE_INFO(0, name, IS_STRING, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_get_worker_handle, 0, 0, IS_MIXED, 0)
+ZEND_END_ARG_INFO()
 
 ZEND_FUNCTION(frankenphp_handle_request);
 ZEND_FUNCTION(headers_send);
@@ -49,7 +64,10 @@ ZEND_FUNCTION(frankenphp_request_headers);
 ZEND_FUNCTION(frankenphp_response_headers);
 ZEND_FUNCTION(mercure_publish);
 ZEND_FUNCTION(frankenphp_log);
-
+ZEND_FUNCTION(frankenphp_ensure_background_worker);
+ZEND_FUNCTION(frankenphp_set_vars);
+ZEND_FUNCTION(frankenphp_get_vars);
+ZEND_FUNCTION(frankenphp_get_worker_handle);
 
 static const zend_function_entry ext_functions[] = {
 	ZEND_FE(frankenphp_handle_request, arginfo_frankenphp_handle_request)
@@ -63,6 +81,10 @@ static const zend_function_entry ext_functions[] = {
 	ZEND_FALIAS(apache_response_headers, frankenphp_response_headers, arginfo_apache_response_headers)
 	ZEND_FE(mercure_publish, arginfo_mercure_publish)
 	ZEND_FE(frankenphp_log, arginfo_frankenphp_log)
+	ZEND_FE(frankenphp_ensure_background_worker, arginfo_frankenphp_ensure_background_worker)
+	ZEND_FE(frankenphp_set_vars, arginfo_frankenphp_set_vars)
+	ZEND_FE(frankenphp_get_vars, arginfo_frankenphp_get_vars)
+	ZEND_FE(frankenphp_get_worker_handle, arginfo_frankenphp_get_worker_handle)
 	ZEND_FE_END
 };
 
