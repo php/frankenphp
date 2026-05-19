@@ -41,6 +41,8 @@ type workerConfig struct {
 	MatchPath []string `json:"match_path,omitempty"`
 	// MaxConsecutiveFailures sets the maximum number of consecutive failures before panicking (defaults to 6, set to -1 to never panick)
 	MaxConsecutiveFailures int `json:"max_consecutive_failures,omitempty"`
+	// Background marks this worker as a background (non-HTTP) worker.
+	Background bool `json:"background,omitempty"`
 
 	options        []frankenphp.WorkerOption
 	requestOptions []frankenphp.RequestOption
@@ -145,13 +147,25 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 			}
 
 			wc.MaxConsecutiveFailures = v
+		case "background":
+			wc.Background = true
 		default:
-			return wc, wrongSubDirectiveError("worker", "name, file, num, env, watch, match, max_consecutive_failures, max_threads", v)
+			return wc, wrongSubDirectiveError("worker", "name, file, num, env, watch, match, max_consecutive_failures, max_threads, background", v)
 		}
 	}
 
 	if wc.FileName == "" {
 		return wc, d.Err(`the "file" argument must be specified`)
+	}
+
+	if wc.Background {
+		// Named bg workers: num is the pool size; max_threads currently has
+		// no effect (no auto-scaling for bg workers in this build). Catch-all
+		// bg workers: num is unused at the declaration level, max_threads
+		// caps how many distinct names can be lazy-started via ensure().
+		if len(wc.MatchPath) != 0 {
+			return wc, d.Err(`"match" is not supported for background workers`)
+		}
 	}
 
 	if frankenphp.EmbeddedAppPath != "" && filepath.IsLocal(wc.FileName) {

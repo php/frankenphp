@@ -154,6 +154,18 @@ func WithRequestLogger(logger *slog.Logger) RequestOption {
 	}
 }
 
+// WithRequestScope selects the scope for ensure() calls made from this
+// request. Web-server integrations (such as the Caddy module) can call
+// NextScope per independently-configured block to isolate its set of
+// background workers.
+func WithRequestScope(scope Scope) RequestOption {
+	return func(o *frankenPHPContext) error {
+		o.scope = scope
+
+		return nil
+	}
+}
+
 // WithWorkerName sets the worker that should handle the request
 func WithWorkerName(name string) RequestOption {
 	return func(o *frankenPHPContext) error {

@@ -81,6 +81,8 @@ func (handler *taskThread) name() string {
 
 func (handler *taskThread) drain() {}
 
+func (handler *taskThread) scopedWorker() *worker { return nil }
+
 func (handler *taskThread) waitForTasks() {
 	for {
 		select {
