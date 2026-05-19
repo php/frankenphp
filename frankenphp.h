@@ -190,6 +190,8 @@ frankenphp_config frankenphp_get_config();
 int frankenphp_new_main_thread(int num_threads);
 bool frankenphp_new_php_thread(uintptr_t thread_index);
 
+uintptr_t frankenphp_thread_index(void);
+
 bool frankenphp_shutdown_dummy_request(void);
 void frankenphp_update_local_thread_context(bool is_worker);
 
