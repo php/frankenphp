@@ -1686,6 +1686,7 @@ int frankenphp_execute_script_cli(char *script, int argc, char **argv,
 
 int frankenphp_reset_opcache(void) {
   if (orig_opcache_reset == NULL) {
+    // should not reach here
     frankenphp_log_message("unable to execute original opcache_reset", LOG_ERR);
     return 1;
   }
