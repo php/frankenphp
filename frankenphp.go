@@ -32,11 +32,14 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 	"unsafe"
 	// debug on Linux
 	//_ "github.com/ianlancetaylor/cgosymbolizer"
+
+	"github.com/dunglas/frankenphp/internal/state"
 )
 
 type contextKeyStruct struct{}
@@ -56,8 +59,9 @@ var (
 	contextKey   = contextKeyStruct{}
 	serverHeader = []string{"FrankenPHP"}
 
-	isRunning        bool
-	onServerShutdown []func()
+	isRunning            bool
+	threadsAreRestarting atomic.Bool
+	onServerShutdown     []func()
 
 	// Set default values to make Shutdown() idempotent
 	globalMu     sync.Mutex
@@ -754,6 +758,135 @@ func mapToAttr(input map[string]any) []slog.Attr {
 //export go_is_context_done
 func go_is_context_done(threadIndex C.uintptr_t) C.bool {
 	return C.bool(phpThreads[threadIndex].frankenPHPContext().isDone)
+}
+
+//export go_schedule_opcache_reset
+func go_schedule_opcache_reset(threadIndex C.uintptr_t) {
+	if threadsAreRestarting.CompareAndSwap(false, true) {
+		go func() {
+			defer threadsAreRestarting.Store(false)
+			restartThreadsAndOpcacheReset(true)
+		}()
+	}
+}
+
+// opcacheResetOnce ensures only one thread per restart generation calls
+// the actual opcache_reset; concurrent calls into opcache can corrupt SHM
+var opcacheResetOnce atomic.Pointer[sync.Once]
+
+func init() {
+	opcacheResetOnce.Store(&sync.Once{})
+}
+
+// restart all threads for an opcache_reset
+func restartThreadsAndOpcacheReset(withRegularThreads bool) {
+	// disallow scaling threads while restarting workers
+	scalingMu.Lock()
+	defer scalingMu.Unlock()
+
+	threadsToRestart := drainThreads(withRegularThreads)
+
+	opcacheResetOnce.Store(&sync.Once{})
+	opcacheResetWg := sync.WaitGroup{}
+	for _, thread := range threadsToRestart {
+		thread.state.Set(state.OpcacheResetting)
+		opcacheResetWg.Go(func() {
+			thread.state.WaitFor(state.OpcacheResettingDone)
+		})
+	}
+	opcacheResetWg.Wait()
+
+	for _, thread := range threadsToRestart {
+		thread.drainChan = make(chan struct{})
+		thread.state.Set(state.Ready)
+	}
+}
+
+func drainThreads(withRegularThreads bool) []*phpThread {
+	var (
+		ready          sync.WaitGroup
+		drainedThreads []*phpThread
+	)
+
+	for _, worker := range workers {
+		worker.threadMutex.RLock()
+		ready.Add(len(worker.threads))
+
+		for _, thread := range worker.threads {
+			if !thread.state.RequestSafeStateChange(state.Restarting) {
+				ready.Done()
+
+				// no state change allowed == thread is shutting down
+				// we'll proceed to restart all other threads anyway
+				continue
+			}
+			close(thread.drainChan)
+			drainedThreads = append(drainedThreads, thread)
+
+			go func(thread *phpThread) {
+				thread.state.WaitFor(state.Yielding)
+				ready.Done()
+			}(thread)
+		}
+
+		worker.threadMutex.RUnlock()
+	}
+
+	if withRegularThreads {
+		regularThreadMu.RLock()
+		ready.Add(len(regularThreads))
+
+		for _, thread := range regularThreads {
+			if !thread.state.RequestSafeStateChange(state.Restarting) {
+				ready.Done()
+
+				// no state change allowed == thread is shutting down
+				// we'll proceed to restart all other threads anyway
+				continue
+			}
+			close(thread.drainChan)
+			drainedThreads = append(drainedThreads, thread)
+
+			go func(thread *phpThread) {
+				thread.state.WaitFor(state.Yielding)
+				ready.Done()
+			}(thread)
+		}
+
+		regularThreadMu.RUnlock()
+	}
+
+	// wait for all threads, force kill any thread still stuck in a blocking syscall
+	done := make(chan struct{})
+	go func() {
+		ready.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(drainGracePeriod):
+		// Force-kill any thread still stuck in a blocking syscall, then
+		// keep waiting unconditionally. On platforms where force-kill
+		// cannot interrupt the syscall (macOS, Windows non-alertable
+		// Sleep) the thread exits when the syscall completes naturally.
+		for _, thread := range drainedThreads {
+			if !thread.state.Is(state.Yielding) {
+				thread.forceKillMu.RLock()
+				C.frankenphp_force_kill_thread(thread.forceKill)
+				thread.forceKillMu.RUnlock()
+			}
+		}
+		<-done
+	}
+
+	return drainedThreads
+}
+
+func scheduleOpcacheReset(thread *phpThread) {
+	opcacheResetOnce.Load().Do(func() {
+		C.frankenphp_reset_opcache()
+	})
 }
 
 func convertArgs(args []string) (C.int, []*C.char) {

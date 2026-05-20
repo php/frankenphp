@@ -93,6 +93,13 @@ __thread uintptr_t thread_index;
 __thread bool is_worker_thread = false;
 __thread HashTable *sandboxed_env = NULL;
 
+zif_handler orig_opcache_reset;
+
+#if PHP_VERSION_ID < 80300
+pthread_mutex_t opcache_reset_mutex_php_82;
+PHP_FUNCTION(frankenphp_opcache_reset);
+#endif
+
 #ifndef PHP_WIN32
 static bool is_forked_child = false;
 static void frankenphp_fork_child(void) { is_forked_child = true; }
@@ -226,6 +233,25 @@ static void frankenphp_update_request_context() {
 
   /* let PHP handle basic auth */
   php_handle_auth_data(authorization_header);
+
+/* On PHP 8.2 and under opcache_reset needs to be reset on every request. TODO:
+ * remove this once we drop support for PHP 8.2 */
+#if PHP_VERSION_ID < 80300
+  zend_function *func = zend_hash_str_find_ptr(
+      CG(function_table), "opcache_reset", sizeof("opcache_reset") - 1);
+  if (func != NULL && func->type == ZEND_INTERNAL_FUNCTION &&
+      ((zend_internal_function *)func)->handler !=
+          ZEND_FN(frankenphp_opcache_reset)) {
+    pthread_mutex_lock(&opcache_reset_mutex_php_82);
+    if (((zend_internal_function *)func)->handler !=
+        ZEND_FN(frankenphp_opcache_reset)) {
+      orig_opcache_reset = ((zend_internal_function *)func)->handler;
+      ((zend_internal_function *)func)->handler =
+          ZEND_FN(frankenphp_opcache_reset);
+    }
+    pthread_mutex_unlock(&opcache_reset_mutex_php_82);
+  }
+#endif
 }
 
 static void frankenphp_free_request_context() {
@@ -582,6 +608,13 @@ PHP_FUNCTION(frankenphp_getenv) {
   }
 } /* }}} */
 
+/* {{{ thread-safe opcache reset */
+PHP_FUNCTION(frankenphp_opcache_reset) {
+  go_schedule_opcache_reset(thread_index);
+
+  RETVAL_TRUE;
+} /* }}} */
+
 /* {{{ Fetch all HTTP request headers */
 PHP_FUNCTION(frankenphp_request_headers) {
   ZEND_PARSE_PARAMETERS_NONE();
@@ -916,7 +949,9 @@ static zend_module_entry frankenphp_module = {
 static int frankenphp_startup(sapi_module_struct *sapi_module) {
   php_import_environment_variables = get_full_env;
 
-  return php_module_startup(sapi_module, &frankenphp_module);
+  int result = php_module_startup(sapi_module, &frankenphp_module);
+
+  return result;
 }
 
 static int frankenphp_deactivate(void) { return SUCCESS; }
@@ -1443,6 +1478,21 @@ static void *php_main(void *arg) {
   should_filter_var = default_filter != NULL;
   original_user_abort_setting = PG(ignore_user_abort);
 
+  /* Override opcache_reset for a thread-safe reset */
+  zend_function *func = zend_hash_str_find_ptr(
+      CG(function_table), "opcache_reset", sizeof("opcache_reset") - 1);
+  if (func != NULL && func->type == ZEND_INTERNAL_FUNCTION &&
+      ((zend_internal_function *)func)->handler !=
+          ZEND_FN(frankenphp_opcache_reset)) {
+    orig_opcache_reset = ((zend_internal_function *)func)->handler;
+    ((zend_internal_function *)func)->handler =
+        ZEND_FN(frankenphp_opcache_reset);
+  }
+
+#if PHP_VERSION_ID < 80300
+  pthread_mutex_init(&opcache_reset_mutex_php_82, NULL);
+#endif
+
   go_frankenphp_main_thread_is_ready();
 
   /* channel closed, shutdown gracefully. drainPHPThreads has already
@@ -1640,12 +1690,17 @@ int frankenphp_execute_script_cli(char *script, int argc, char **argv,
 }
 
 int frankenphp_reset_opcache(void) {
-  zend_function *opcache_reset =
-      zend_hash_str_find_ptr(CG(function_table), ZEND_STRL("opcache_reset"));
-  if (opcache_reset) {
-    zend_call_known_function(opcache_reset, NULL, NULL, NULL, 0, NULL, NULL);
+  if (orig_opcache_reset == NULL) {
+    // should not reach here
+    frankenphp_log_message("unable to execute original opcache_reset", LOG_ERR);
+    return 1;
   }
-
+  zend_execute_data execute_data;
+  zval retval;
+  memset(&execute_data, 0, sizeof(execute_data));
+  ZVAL_UNDEF(&retval);
+  orig_opcache_reset(&execute_data, &retval);
+  zval_ptr_dtor(&retval);
   return 0;
 }
 

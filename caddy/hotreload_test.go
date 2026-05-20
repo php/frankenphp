@@ -94,4 +94,7 @@ func TestHotReload(t *testing.T) {
 	received.Wait()
 
 	tester.AssertGetResponse("http://localhost:"+testPort+"/index.php", http.StatusOK, u)
+
+	// make the test less flaky by writing to the file again
+	require.NoError(t, os.WriteFile(indexFile, []byte("<?=$_SERVER['FRANKENPHP_HOT_RELOAD'];"), 0644))
 }

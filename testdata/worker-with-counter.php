@@ -1,11 +1,11 @@
 <?php
 
-$numberOfRequests = 0;
+$numberOfRequests = 0; 
 $printNumberOfRequests = function () use (&$numberOfRequests) {
     $numberOfRequests++;
-    echo "requests:$numberOfRequests";
+    echo "requests:$numberOfRequests"; 
 };
 
-while (frankenphp_handle_request($printNumberOfRequests)) {
+while (frankenphp_handle_request($printNumberOfRequests)) { 
 
 }

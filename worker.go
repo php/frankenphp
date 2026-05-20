@@ -172,62 +172,7 @@ var drainGracePeriod = 30 * time.Second
 // Blocks until every drained thread yields. Force-kill is armed after a
 // grace period to wake threads parked in blocking syscalls (sleep, I/O).
 func DrainWorkers() {
-	_ = drainWorkerThreads()
-}
-
-func drainWorkerThreads() (drainedThreads []*phpThread) {
-	var ready sync.WaitGroup
-
-	for _, worker := range workers {
-		worker.threadMutex.RLock()
-		ready.Add(len(worker.threads))
-
-		for _, thread := range worker.threads {
-			if !thread.state.RequestSafeStateChange(state.Restarting) {
-				ready.Done()
-
-				// no state change allowed == thread is shutting down
-				// we'll proceed to restart all other threads anyway
-				continue
-			}
-
-			thread.handler.drain()
-			close(thread.drainChan)
-			drainedThreads = append(drainedThreads, thread)
-
-			go func(thread *phpThread) {
-				thread.state.WaitFor(state.Yielding, state.ShuttingDown, state.Done)
-				ready.Done()
-			}(thread)
-		}
-
-		worker.threadMutex.RUnlock()
-	}
-
-	done := make(chan struct{})
-	go func() {
-		ready.Wait()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-	case <-time.After(drainGracePeriod):
-		// Force-kill any thread still stuck in a blocking syscall, then
-		// keep waiting unconditionally. On platforms where force-kill
-		// cannot interrupt the syscall (macOS, Windows non-alertable
-		// Sleep) the thread exits when the syscall completes naturally.
-		for _, thread := range drainedThreads {
-			if !thread.state.Is(state.Yielding) {
-				thread.forceKillMu.RLock()
-				C.frankenphp_force_kill_thread(thread.forceKill)
-				thread.forceKillMu.RUnlock()
-			}
-		}
-		<-done
-	}
-
-	return drainedThreads
+	_ = drainThreads(false)
 }
 
 // RestartWorkers attempts to restart all workers gracefully.
@@ -237,16 +182,7 @@ func drainWorkerThreads() (drainedThreads []*phpThread) {
 // blocking syscalls so a stuck sleep doesn't make this hang for the
 // full duration of the syscall.
 func RestartWorkers() {
-	// disallow scaling threads while restarting workers
-	scalingMu.Lock()
-	defer scalingMu.Unlock()
-
-	threadsToRestart := drainWorkerThreads()
-
-	for _, thread := range threadsToRestart {
-		thread.drainChan = make(chan struct{})
-		thread.state.Set(state.Ready)
-	}
+	restartThreadsAndOpcacheReset(true)
 }
 
 func (worker *worker) attachThread(thread *phpThread) {
