@@ -61,6 +61,7 @@ var (
 
 	isRunning            bool
 	threadsAreRestarting atomic.Bool
+    opcacheResetOnce sync.Once // avoid race conditions on opcache_reset
 	onServerShutdown     []func()
 
 	// Set default values to make Shutdown() idempotent
@@ -770,11 +771,7 @@ func go_schedule_opcache_reset(threadIndex C.uintptr_t) {
 	}
 }
 
-// opcacheResetOnce ensures only one thread calls the actual opcache_reset.
-// Multiple threads calling it concurrently can race on shared memory.
-var opcacheResetOnce sync.Once
-
-// restart all threads for an opcache_reset
+// restart all threads for a safe opcache_reset
 func restartThreadsAndOpcacheReset(withRegularThreads bool) {
 	// disallow scaling threads while restarting workers
 	scalingMu.Lock()
