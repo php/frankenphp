@@ -3,7 +3,6 @@ package caddy_test
 import (
 	"bytes"
 	"fmt"
-	"math/rand/v2"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -1767,9 +1766,9 @@ func TestOpcacheReset(t *testing.T) {
 	wg := sync.WaitGroup{}
 	numRequests := 500 // increase if test is flaky to get consistent failures
 	wg.Add(numRequests)
+	// pseudo random sleep simulator
 	for i := 0; i < numRequests; i++ {
-		// introduce some random delay
-		if rand.IntN(10) > 8 {
+		if i%10 == 0 {
 			time.Sleep(time.Millisecond * 10)
 		}
 
@@ -1785,8 +1784,8 @@ func TestOpcacheReset(t *testing.T) {
 				return
 			}
 
-			// otherwise call sleep.php with random sleep and work values
-			sleep := i % 100
+			// otherwise call sleep.php with sleep and work values
+			sleep := i % 50
 			work := i % 100
 			tester.AssertGetResponse(
 				fmt.Sprintf("http://localhost:%s/sleep.php?sleep=%d&work=%d", testPort, sleep, work),

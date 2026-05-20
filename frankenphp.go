@@ -765,13 +765,21 @@ func go_is_context_done(threadIndex C.uintptr_t) C.bool {
 func go_schedule_opcache_reset(threadIndex C.uintptr_t) {
 	if threadsAreRestarting.CompareAndSwap(false, true) {
 		go func() {
+			defer threadsAreRestarting.Store(false)
 			restartThreadsAndOpcacheReset(true)
-			threadsAreRestarting.Store(false)
 		}()
 	}
 }
 
-// restart all threads for a safe opcache_reset
+// opcacheResetOnce ensures only one thread per restart generation calls
+// the actual opcache_reset; concurrent calls into opcache can corrupt SHM
+var opcacheResetOnce atomic.Pointer[sync.Once]
+
+func init() {
+	opcacheResetOnce.Store(&sync.Once{})
+}
+
+// restart all threads for an opcache_reset
 func restartThreadsAndOpcacheReset(withRegularThreads bool) {
 	// disallow scaling threads while restarting workers
 	scalingMu.Lock()
@@ -779,7 +787,7 @@ func restartThreadsAndOpcacheReset(withRegularThreads bool) {
 
 	threadsToRestart := drainThreads(withRegularThreads)
 
-	opcacheResetOnce = sync.Once{}
+	opcacheResetOnce.Store(&sync.Once{})
 	opcacheResetWg := sync.WaitGroup{}
 	for _, thread := range threadsToRestart {
 		thread.state.Set(state.OpcacheResetting)
@@ -877,7 +885,7 @@ func drainThreads(withRegularThreads bool) []*phpThread {
 }
 
 func scheduleOpcacheReset(thread *phpThread) {
-	opcacheResetOnce.Do(func() {
+	opcacheResetOnce.Load().Do(func() {
 		C.frankenphp_reset_opcache()
 	})
 }
