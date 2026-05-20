@@ -61,7 +61,6 @@ var (
 
 	isRunning            bool
 	threadsAreRestarting atomic.Bool
-    opcacheResetOnce sync.Once // avoid race conditions on opcache_reset
 	onServerShutdown     []func()
 
 	// Set default values to make Shutdown() idempotent
