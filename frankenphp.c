@@ -1685,6 +1685,10 @@ int frankenphp_execute_script_cli(char *script, int argc, char **argv,
 }
 
 int frankenphp_reset_opcache(void) {
+  if (orig_opcache_reset == NULL) {
+    frankenphp_log_message("unable to execute original opcache_reset", LOG_ERR);
+    return 1;
+  }
   zend_execute_data execute_data;
   zval retval;
   memset(&execute_data, 0, sizeof(execute_data));
