@@ -16,10 +16,7 @@ on:
         description: "Version to release (e.g. 1.5.0, no v prefix)"
         required: true
         type: string
-permissions:
-  contents: write
-  # Needed to dispatch the downstream binary build workflows from this run.
-  actions: write
+permissions: {}
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
@@ -28,6 +25,7 @@ jobs:
     name: Release ${{ inputs.version }}
     runs-on: ubuntu-latest
     environment: release
+    if: github.actor != 'dunglas-release[bot]'
     env:
       GOTOOLCHAIN: local
       GOFLAGS: "-tags=nobadger,nomysql,nopgx"
@@ -42,10 +40,16 @@ jobs:
             echo "::error::release.yaml must be dispatched against refs/heads/main, got ${GITHUB_REF}"
             exit 1
           fi
+      - uses: actions/create-github-app-token@v3
+        id: release-app-token
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
+          token: ${{ steps.release-app-token.outputs.token }}
       - name: Classify release
         id: classify
         env:
@@ -61,7 +65,7 @@ jobs:
       - name: Determine release state
         id: state
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.release-app-token.outputs.token }}
           VERSION: ${{ inputs.version }}
         # Tag existence is the source of truth for "release in progress":
         # main HEAD may have moved past the release commit (a follow-up fix
@@ -142,7 +146,7 @@ jobs:
         # API-created commits/tags are signed server-side with GitHub's key
         # and show as "Verified" under the github-actions[bot] identity.
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.release-app-token.outputs.token }}
           REPO: ${{ github.repository }}
           VERSION: ${{ inputs.version }}
           RESUME: ${{ steps.state.outputs.resume }}
@@ -243,7 +247,7 @@ jobs:
         # releases. Use the REST releases endpoints directly: they see the
         # tag immediately and behave deterministically.
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.release-app-token.outputs.token }}
           REPO: ${{ github.repository }}
           VERSION: ${{ inputs.version }}
           PRERELEASE: ${{ steps.classify.outputs.prerelease }}
@@ -273,7 +277,7 @@ jobs:
         # specific dispatches that didn't go through. Re-dispatch on resume
         # is harmless: it just queues another build run.
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.release-app-token.outputs.token }}
           REPO: ${{ github.repository }}
           VERSION: ${{ inputs.version }}
         run: |
