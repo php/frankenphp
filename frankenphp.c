@@ -93,20 +93,6 @@ __thread uintptr_t thread_index;
 __thread bool is_worker_thread = false;
 __thread HashTable *sandboxed_env = NULL;
 
-/* Published via SG(server_context) so ext-parallel children, which inherit
- * the parent's SG(server_context), can route SAPI callbacks back to the
- * parent's thread_index instead of their zero-initialized TLS. */
-typedef struct {
-  uintptr_t thread_index;
-} frankenphp_server_ctx;
-static __thread frankenphp_server_ctx frankenphp_local_server_ctx;
-
-static inline uintptr_t frankenphp_thread_index(void) {
-  frankenphp_server_ctx *ctx = (frankenphp_server_ctx *)SG(server_context);
-  /* Fall back to the OS thread's own TLS before frankenphp_update_request_context(). */
-  return ctx != NULL ? ctx->thread_index : thread_index;
-}
-
 #ifndef PHP_WIN32
 static bool is_forked_child = false;
 static void frankenphp_fork_child(void) { is_forked_child = true; }
@@ -231,8 +217,7 @@ void frankenphp_update_local_thread_context(bool is_worker) {
 static void frankenphp_update_request_context() {
   /* the server context is stored on the go side, still SG(server_context) needs
    * to not be NULL */
-  frankenphp_local_server_ctx.thread_index = thread_index;
-  SG(server_context) = &frankenphp_local_server_ctx;
+  SG(server_context) = (void *)1;
   /* status It is not reset by zend engine, set it to 200. */
   SG(sapi_headers).http_response_code = 200;
 
@@ -500,15 +485,14 @@ static int frankenphp_worker_request_startup() {
 PHP_FUNCTION(frankenphp_finish_request) { /* {{{ */
   ZEND_PARSE_PARAMETERS_NONE();
 
-  uintptr_t idx = frankenphp_thread_index();
-  if (go_is_context_done(idx)) {
+  if (go_is_context_done(thread_index)) {
     RETURN_FALSE;
   }
 
   php_output_end_all();
   php_header();
 
-  go_frankenphp_finish_php_request(idx);
+  go_frankenphp_finish_php_request(thread_index);
 
   RETURN_TRUE;
 } /* }}} */
@@ -603,7 +587,7 @@ PHP_FUNCTION(frankenphp_request_headers) {
   ZEND_PARSE_PARAMETERS_NONE();
 
   struct go_apache_request_headers_return headers =
-      go_apache_request_headers(frankenphp_thread_index());
+      go_apache_request_headers(thread_index);
 
   array_init_size(return_value, headers.r1);
 
@@ -802,8 +786,8 @@ PHP_FUNCTION(mercure_publish) {
     RETURN_THROWS();
   }
 
-  struct go_mercure_publish_return result = go_mercure_publish(
-      frankenphp_thread_index(), topics, data, private, id, type, retry);
+  struct go_mercure_publish_return result =
+      go_mercure_publish(thread_index, topics, data, private, id, type, retry);
 
   switch (result.r1) {
   case 0:
@@ -835,7 +819,7 @@ PHP_FUNCTION(frankenphp_log) {
   ZEND_PARSE_PARAMETERS_END();
 
   char *ret = NULL;
-  ret = go_log_attrs(frankenphp_thread_index(), message, level, context);
+  ret = go_log_attrs(thread_index, message, level, context);
   if (ret != NULL) {
     zend_throw_exception(spl_ce_RuntimeException, ret, 0);
     free(ret);
@@ -939,7 +923,7 @@ static int frankenphp_deactivate(void) { return SUCCESS; }
 
 static size_t frankenphp_ub_write(const char *str, size_t str_length) {
   struct go_ub_write_return result =
-      go_ub_write(frankenphp_thread_index(), (char *)str, str_length);
+      go_ub_write(thread_index, (char *)str, str_length);
 
   if (result.r1) {
     php_handle_aborted_connection();
@@ -965,8 +949,7 @@ static int frankenphp_send_headers(sapi_headers_struct *sapi_headers) {
     }
   }
 
-  bool success =
-      go_write_headers(frankenphp_thread_index(), status, &sapi_headers->headers);
+  bool success = go_write_headers(thread_index, status, &sapi_headers->headers);
   if (success) {
     return SAPI_HEADER_SENT_SUCCESSFULLY;
   }
@@ -976,17 +959,17 @@ static int frankenphp_send_headers(sapi_headers_struct *sapi_headers) {
 
 static void frankenphp_sapi_flush(void *server_context) {
   sapi_send_headers();
-  if (go_sapi_flush(frankenphp_thread_index())) {
+  if (go_sapi_flush(thread_index)) {
     php_handle_aborted_connection();
   }
 }
 
 static size_t frankenphp_read_post(char *buffer, size_t count_bytes) {
-  return go_read_post(frankenphp_thread_index(), buffer, count_bytes);
+  return go_read_post(thread_index, buffer, count_bytes);
 }
 
 static char *frankenphp_read_cookies(void) {
-  return go_read_cookies(frankenphp_thread_index());
+  return go_read_cookies(thread_index);
 }
 
 /* all variables with well defined keys can safely be registered like this */
@@ -1162,14 +1145,14 @@ static void frankenphp_register_variables(zval *track_vars_array) {
    * environment, not values added though putenv
    */
   /* import environment and CGI variables from the request context in go */
-  go_register_server_variables(frankenphp_thread_index(), track_vars_array);
+  go_register_server_variables(thread_index, track_vars_array);
 
   /* Some variables are already present in SG(request_info) */
   frankenphp_register_variables_from_request_info(track_vars_array);
 }
 
 static void frankenphp_log_message(const char *message, int syslog_type_int) {
-  go_log(frankenphp_thread_index(), (char *)message, syslog_type_int);
+  go_log(thread_index, (char *)message, syslog_type_int);
 }
 
 static char *frankenphp_getenv(const char *name, size_t name_len) {
