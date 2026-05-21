@@ -25,7 +25,6 @@ jobs:
     name: Release ${{ inputs.version }}
     runs-on: ubuntu-latest
     environment: release
-    if: github.actor != 'dunglas-release[bot]'
     env:
       GOTOOLCHAIN: local
       GOFLAGS: "-tags=nobadger,nomysql,nopgx"
@@ -144,7 +143,7 @@ jobs:
           go mod tidy
       - name: Commit and tag via GitHub API
         # API-created commits/tags are signed server-side with GitHub's key
-        # and show as "Verified" under the github-actions[bot] identity.
+        # and show as "Verified" under the dunglas-release[bot] identity.
         env:
           GH_TOKEN: ${{ steps.release-app-token.outputs.token }}
           REPO: ${{ github.repository }}
