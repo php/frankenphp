@@ -83,6 +83,19 @@ func addWorkerThread(worker *worker) (*phpThread, error) {
 	return thread, nil
 }
 
+// addBackgroundWorkerThread reserves an inactive thread and converts it
+// to a background worker thread bound to (worker, runtimeName, ready).
+// runtimeName is the worker's m#-prefixed identity for named workers and
+// pool members, or the user-facing name for catch-all instances.
+func addBackgroundWorkerThread(worker *worker, runtimeName string, ready *backgroundWorkerState) (*phpThread, error) {
+	thread := getInactivePHPThread()
+	if thread == nil {
+		return nil, ErrMaxThreadsReached
+	}
+	convertToBackgroundWorkerThread(thread, worker, runtimeName, ready)
+	return thread, nil
+}
+
 // scaleWorkerThread adds a worker PHP thread automatically
 func scaleWorkerThread(worker *worker, done chan struct{}, mstate *state.ThreadState) {
 	// probe CPU usage before acquiring the lock (avoids holding lock during 120ms sleep)
