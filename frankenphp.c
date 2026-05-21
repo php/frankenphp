@@ -103,7 +103,8 @@ static __thread frankenphp_server_ctx frankenphp_local_server_ctx;
 
 static inline uintptr_t frankenphp_thread_index(void) {
   frankenphp_server_ctx *ctx = (frankenphp_server_ctx *)SG(server_context);
-  /* Fall back to the OS thread's own TLS before frankenphp_update_request_context(). */
+  /* Fall back to the OS thread's own TLS before
+   * frankenphp_update_request_context(). */
   return ctx != NULL ? ctx->thread_index : thread_index;
 }
 
@@ -965,8 +966,8 @@ static int frankenphp_send_headers(sapi_headers_struct *sapi_headers) {
     }
   }
 
-  bool success =
-      go_write_headers(frankenphp_thread_index(), status, &sapi_headers->headers);
+  bool success = go_write_headers(frankenphp_thread_index(), status,
+                                  &sapi_headers->headers);
   if (success) {
     return SAPI_HEADER_SENT_SUCCESSFULLY;
   }
