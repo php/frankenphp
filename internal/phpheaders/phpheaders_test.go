@@ -33,11 +33,11 @@ func TestHeaderWithSpaceIsRejectedByNetHTTP(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Errorf("handler should not be reached, got headers: %v", r.Header)
 	}))
-	defer ts.Close()
+	t.Cleanup(ts.Close)
 
 	conn, err := net.Dial("tcp", strings.TrimPrefix(ts.URL, "http://"))
 	require.NoError(t, err)
-	defer func() { require.NoError(t, conn.Close()) }()
+	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
 	_, err = conn.Write([]byte("GET / HTTP/1.1\r\nHost: localhost\r\nBad Header: x\r\nConnection: close\r\n\r\n"))
 	require.NoError(t, err)
