@@ -105,7 +105,7 @@ static inline uintptr_t frankenphp_thread_index(void) {
   frankenphp_server_ctx *ctx = (frankenphp_server_ctx *)SG(server_context);
   /* Fall back to the OS thread's own TLS before
    * frankenphp_update_request_context(). */
-  return ctx != NULL ? ctx->thread_index : thread_index;
+  return ctx == NULL ? thread_index : ctx->thread_index;
 }
 
 #ifndef PHP_WIN32
