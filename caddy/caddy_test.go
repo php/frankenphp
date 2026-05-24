@@ -2049,9 +2049,12 @@ func TestSessionLockReleaseOnAbortInUserSaveHandler(t *testing.T) {
 		return resp.Body.Close()
 	}
 
-	go func() { _ = get() }() // R1: holder
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { defer wg.Done(); _ = get() }() // R1: holder
 	time.Sleep(300 * time.Millisecond)
-	go func() { _ = get() }() // R2: bails inside user save handler
+	go func() { defer wg.Done(); _ = get() }() // R2: bails inside user save handler
 	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, get(), "third request hung -- session lock leaked (issue #2368)")
+	wg.Wait()
 }
