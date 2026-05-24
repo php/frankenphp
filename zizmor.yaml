@@ -4,3 +4,8 @@ rules:
     config:
       policies:
         "*": ref-pin
+  secrets-outside-env:
+    config:
+      allow:
+        # TODO: re-enable the environment when the GitHub UI supports grouping or masking environment notifications (they pollute pull requests right now)
+        - DOCKERHUB_TOKEN

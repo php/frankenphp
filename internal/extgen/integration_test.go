@@ -38,18 +38,18 @@ func setupTest(t *testing.T) *IntegrationTestSuite {
 	}
 
 	if _, err := os.Stat(suite.genStubScript); os.IsNotExist(err) {
-		t.Error("GEN_STUB_SCRIPT not found. Integration tests require PHP sources. Set GEN_STUB_SCRIPT environment variable.")
+		t.Skipf("GEN_STUB_SCRIPT not found at %q. Integration tests require PHP sources. Set GEN_STUB_SCRIPT environment variable to skip this message.", suite.genStubScript)
 	}
 
 	xcaddyPath, err := exec.LookPath("xcaddy")
 	if err != nil {
-		t.Error("xcaddy not found in PATH. Integration tests require xcaddy to build FrankenPHP.")
+		t.Skip("xcaddy not found in PATH. Integration tests require xcaddy to build FrankenPHP.")
 	}
 	suite.xcaddyPath = xcaddyPath
 
 	phpConfigPath, err := exec.LookPath("php-config")
 	if err != nil {
-		t.Error("php-config not found in PATH. Integration tests require PHP development headers.")
+		t.Skip("php-config not found in PATH. Integration tests require PHP development headers.")
 	}
 	suite.phpConfigPath = phpConfigPath
 

@@ -1,13 +1,18 @@
-# Compile From Sources
+---
+title: Compile FrankenPHP from sources with libphp.so
+description: Build FrankenPHP from source on Linux, macOS and FreeBSD, linking PHP as a shared library via xcaddy or go build, and add custom Caddy modules and extensions.
+---
 
-This document explains how to create a FrankenPHP binary that will load PHP as a dynamic library.
+# Compile from sources
+
+This document explains how to create a FrankenPHP binary that will load PHP as a shared library.
 This is the recommended method.
 
 Alternatively, [fully and mostly static builds](static.md) can also be created.
 
 ## Install PHP
 
-FrankenPHP is compatible with PHP 8.2 and superior.
+FrankenPHP is compatible with PHP 8.2 and higher.
 
 ### With Homebrew (Linux and Mac)
 
@@ -22,7 +27,7 @@ brew install shivammathur/php/php-zts brotli watcher
 brew link --overwrite --force shivammathur/php/php-zts
 ```
 
-### By Compiling PHP
+### By compiling PHP
 
 Alternatively, you can compile PHP from sources with the options needed by FrankenPHP by following these steps.
 
@@ -36,7 +41,7 @@ cd php-*/
 Then, run the `configure` script with the options needed for your platform.
 The following `./configure` flags are mandatory, but you can add others, for example, to compile extensions or additional features.
 
-#### Linux
+#### Linux and FreeBSD
 
 ```console
 ./configure \
@@ -74,7 +79,7 @@ make -j"$(getconf _NPROCESSORS_ONLN)"
 sudo make install
 ```
 
-## Install Optional Dependencies
+## Install optional dependencies
 
 Some FrankenPHP features depend on optional system dependencies that must be installed.
 Alternatively, these features can be disabled by passing build tags to the Go compiler.
@@ -85,14 +90,14 @@ Alternatively, these features can be disabled by passing build tags to the Go co
 | Restart workers on file change | [Watcher C](https://github.com/e-dant/watcher/tree/release/watcher-c)                                        | nowatcher               |
 | [Mercure](mercure.md)          | [Mercure Go library](https://pkg.go.dev/github.com/dunglas/mercure) (automatically installed, AGPL licensed) | nomercure               |
 
-## Compile the Go App
+## Compile the Go app
 
 You can now build the final binary.
 
 ### Using xcaddy
 
 The recommended way is to use [xcaddy](https://github.com/caddyserver/xcaddy) to compile FrankenPHP.
-`xcaddy` also allows to easily add [custom Caddy modules](https://caddyserver.com/docs/modules/) and FrankenPHP extensions:
+`xcaddy` also makes it easy to add [custom Caddy modules](https://caddyserver.com/docs/modules/) and FrankenPHP extensions:
 
 ```console
 CGO_ENABLED=1 \

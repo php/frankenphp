@@ -20,7 +20,7 @@ func TestScaleARegularThreadUpAndDown(t *testing.T) {
 	autoScaledThread := phpThreads[1]
 
 	// scale up
-	scaleRegularThread()
+	scaleRegularThread(mainThread.done, mainThread.state)
 	assert.Equal(t, state.Ready, autoScaledThread.state.Get())
 	assert.IsType(t, &regularThread{}, autoScaledThread.handler)
 
@@ -48,7 +48,7 @@ func TestScaleAWorkerThreadUpAndDown(t *testing.T) {
 	autoScaledThread := phpThreads[2]
 
 	// scale up
-	scaleWorkerThread(workersByPath[workerPath])
+	scaleWorkerThread(workersByPath[workerPath], mainThread.done, mainThread.state)
 	assert.Equal(t, state.Ready, autoScaledThread.state.Get())
 
 	// on down-scale, the thread will be marked as inactive
@@ -69,7 +69,7 @@ func TestMaxIdleTimePreventsEarlyDeactivation(t *testing.T) {
 	autoScaledThread := phpThreads[1]
 
 	// scale up
-	scaleRegularThread()
+	scaleRegularThread(mainThread.done, mainThread.state)
 	assert.Equal(t, state.Ready, autoScaledThread.state.Get())
 
 	// set wait time to 30 minutes (less than 1 hour max idle time)

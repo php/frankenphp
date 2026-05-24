@@ -19,7 +19,7 @@ php_server
 
 Un `Caddyfile` plus avancé, activant davantage de fonctionnalités et fournissant des variables d'environnement pratiques, est disponible [dans le dépôt FrankenPHP](https://github.com/php/frankenphp/blob/main/caddy/frankenphp/Caddyfile) et avec les images Docker.
 
-PHP lui-même peut être configuré [en utilisant un fichier `php.ini`](https://www.php.net/manual/fr/configuration.file.php).
+PHP lui-même peut être configuré [en utilisant un fichier `php.ini`](https://www.php.net/manual/configuration.file.php).
 
 Selon votre méthode d'installation, FrankenPHP et l'interpréteur PHP chercheront les fichiers de configuration aux emplacements décrits ci-dessous.
 
@@ -184,7 +184,7 @@ php_server [<matcher>] {
 	file_server off # Désactive la directive file_server intégrée.
 	worker { # Crée un worker spécifique à ce serveur. Peut être spécifié plusieurs fois pour plusieurs workers.
 		file <path> # Définit le chemin vers le script worker, peut être relatif à la racine du php_server
-		num <num> # Définit le nombre de threads PHP à démarrer, par défaut 2x le nombre de CPU disponibles
+		num <num> # Définit le nombre de threads PHP à démarrer, par défaut 2x le nombre de CPUs disponibles
 		name <name> # Définit le nom du worker, utilisé dans les journaux et les métriques. Par défaut : chemin absolu du fichier du worker. Commence toujours par m# lorsqu'il est défini dans un bloc php_server.
 		watch <path> # Définit le chemin d'accès à surveiller pour les modifications de fichiers. Peut être spécifié plusieurs fois pour plusieurs chemins.
 		env <key> <value> # Définit une variable d'environnement supplémentaire avec la valeur donnée. Peut être spécifié plusieurs fois pour plusieurs variables d'environnement. Les variables d'environnement pour ce worker sont également héritées du parent php_server, mais peuvent être écrasées ici.
@@ -241,11 +241,12 @@ où le processus FrankenPHP a été lancé. Vous pouvez également spécifier un
 
 La surveillance des fichiers est basée sur [e-dant/watcher](https://github.com/e-dant/watcher).
 
-## Faire correspondre le Worker à un chemin
+## Faire correspondre le worker à un chemin
 
 Dans les applications PHP traditionnelles, les scripts sont toujours placés dans le répertoire public. C'est également vrai pour les scripts worker, qui sont traités comme n'importe quel autre script PHP. Si vous souhaitez plutôt placer le script worker en dehors du répertoire public, vous pouvez le faire via la directive `match`.
 
-La directive `match` est une alternative optimisée à `try_files` disponible uniquement à l'intérieur de `php_server` et `php`. L'exemple suivant servira toujours un fichier dans le répertoire public s'il est présent et transmettra sinon la requête au worker correspondant au modèle de chemin.
+La directive `match` est une alternative optimisée à `try_files` disponible uniquement à l'intérieur de `php_server` et `php`. L'exemple suivant servira toujours un fichier dans le répertoire public s'il est présent
+et transmettra sinon la requête au worker correspondant au modèle de chemin.
 
 ```caddyfile
 {
@@ -271,11 +272,11 @@ Les variables d'environnement suivantes peuvent être utilisées pour insérer d
 
 Comme pour les SAPI FPM et CLI, les variables d'environnement sont exposées par défaut dans la superglobale `$_SERVER`.
 
-La valeur `S` de [la directive `variables_order` de PHP](https://www.php.net/manual/fr/ini.core.php#ini.variables-order) est toujours équivalente à `ES`, que `E` soit défini ailleurs dans cette directive ou non.
+La valeur `S` de [la directive `variables_order` de PHP](https://www.php.net/manual/ini.core.php#ini.variables-order) est toujours équivalente à `ES`, que `E` soit défini ailleurs dans cette directive ou non.
 
 ## Configuration PHP
 
-Pour charger [des fichiers de configuration PHP supplémentaires](https://www.php.net/manual/fr/configuration.file.php#configuration.file.scan),
+Pour charger [des fichiers de configuration PHP supplémentaires](https://www.php.net/manual/configuration.file.php#configuration.file.scan),
 la variable d'environnement `PHP_INI_SCAN_DIR` peut être utilisée.
 Lorsqu'elle est définie, PHP chargera tous les fichiers avec l'extension `.ini` présents dans les répertoires donnés.
 
@@ -286,7 +287,7 @@ Vous pouvez également modifier la configuration de PHP en utilisant la directiv
     frankenphp {
         php_ini memory_limit 256M
 
-        # or
+        # ou
 
         php_ini {
             memory_limit 256M
@@ -332,7 +333,7 @@ CADDY_GLOBAL_OPTIONS="servers {
 
 Vous trouverez plus d'informations sur ce paramètre dans la [documentation Caddy](https://caddyserver.com/docs/caddyfile/options#enable-full-duplex).
 
-## Activer le mode Debug
+## Activer le mode debug
 
 Lors de l'utilisation de l'image Docker, définissez la variable d'environnement `CADDY_GLOBAL_OPTIONS` sur `debug` pour activer le mode debug :
 
@@ -342,3 +343,78 @@ docker run -v $PWD:/app/public \
     -p 80:80 -p 443:443 -p 443:443/udp \
     dunglas/frankenphp
 ```
+
+## Autocomplétion Shell
+
+FrankenPHP fournit un support d'autocomplétion intégré pour Bash, Zsh, Fish et PowerShell. Cela permet l'autocomplétion de toutes les commandes (y compris les commandes personnalisées comme `php-server`, `php-cli` et `extension-init`) ainsi que leurs options.
+
+### Bash
+
+Pour charger l'autocomplétion dans votre session shell actuelle :
+
+```console
+source <(frankenphp completion bash)
+```
+
+Pour charger l'autocomplétion à chaque nouvelle session, exécutez :
+
+**Linux :**
+
+```console
+frankenphp completion bash > /usr/share/bash-completion/completions/frankenphp
+```
+
+**macOS :**
+
+```console
+frankenphp completion bash > $(brew --prefix)/share/bash-completion/completions/frankenphp
+```
+
+### Zsh
+
+Si l'autocomplétion shell n'est pas déjà activée dans votre environnement, vous devrez l'activer. Vous pouvez exécuter la commande suivante une fois :
+
+```console
+echo "autoload -U compinit; compinit" >> ~/.zshrc
+```
+
+Pour charger l'autocomplétion à chaque session, exécutez une fois :
+
+```console
+frankenphp completion zsh > "${fpath[1]}/_frankenphp"
+```
+
+Vous devrez démarrer un nouveau shell pour que cette configuration prenne effet.
+
+### Fish
+
+Pour charger l'autocomplétion dans votre session shell actuelle :
+
+```console
+frankenphp completion fish | source
+```
+
+Pour charger l'autocomplétion à chaque nouvelle session, exécutez une fois :
+
+```console
+frankenphp completion fish > ~/.config/fish/completions/frankenphp.fish
+```
+
+### PowerShell
+
+Pour charger l'autocomplétion dans votre session shell actuelle :
+
+```powershell
+frankenphp completion powershell | Out-String | Invoke-Expression
+```
+
+Pour charger l'autocomplétion à chaque nouvelle session, exécutez une fois :
+
+```powershell
+frankenphp completion powershell | Out-File -FilePath (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")
+Add-Content -Path $PROFILE -Value '. (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")'
+```
+
+Vous devrez démarrer un nouveau shell pour que cette configuration prenne effet.
+
+Vous devrez ensuite démarrer un nouveau shell pour que cette configuration prenne effet.

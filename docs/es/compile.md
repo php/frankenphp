@@ -79,11 +79,11 @@ sudo make install
 Algunas características de FrankenPHP dependen de dependencias opcionales del sistema que deben instalarse.
 Alternativamente, estas características pueden deshabilitarse pasando etiquetas de compilación al compilador Go.
 
-| Característica                     | Dependencia                                                                                                   | Etiqueta de compilación para deshabilitarla |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| Compresión Brotli                  | [Brotli](https://github.com/google/brotli)                                                                   | nobrotli                                    |
-| Reiniciar workers al cambiar archivos | [Watcher C](https://github.com/e-dant/watcher/tree/release/watcher-c)                                        | nowatcher                                   |
-| [Mercure](mercure.md)              | [Biblioteca Mercure Go](https://pkg.go.dev/github.com/dunglas/mercure) (instalada automáticamente, licencia AGPL) | nomercure                                   |
+| Característica                        | Dependencia                                                                                                       | Etiqueta de compilación para deshabilitarla |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| Compresión Brotli                     | [Brotli](https://github.com/google/brotli)                                                                        | nobrotli                                    |
+| Reiniciar workers al cambiar archivos | [Watcher C](https://github.com/e-dant/watcher/tree/release/watcher-c)                                             | nowatcher                                   |
+| [Mercure](mercure.md)                 | [Biblioteca Mercure Go](https://pkg.go.dev/github.com/dunglas/mercure) (instalada automáticamente, licencia AGPL) | nomercure                                   |
 
 ## Compilar la aplicación Go
 

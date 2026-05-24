@@ -17,7 +17,7 @@ php_server
 
 一个更高级的 `Caddyfile`，支持更多功能并提供方便的环境变量，可以在 [FrankenPHP 仓库中](https://github.com/php/frankenphp/blob/main/caddy/frankenphp/Caddyfile)找到，并随 Docker 镜像提供。
 
-PHP 本身可以[使用 `php.ini` 文件](https://www.php.net/manual/en/configuration.file.php)进行配置。
+PHP 本身可以[使用 `php.ini` 文件](https://www.php.net/manual/configuration.file.php)进行配置。
 
 根据你的安装方法，FrankenPHP 和 PHP 解释器将在以下位置查找配置文件。
 
@@ -275,7 +275,7 @@ Workers 可以通过 `watch` 指令在文件更改时重新启动。
 
 ## PHP 配置
 
-为了加载[附加的 PHP 配置文件](https://www.php.net/manual/en/configuration.file.php#configuration.file.scan)，可以使用 `PHP_INI_SCAN_DIR` 环境变量。设置后，PHP 将加载给定目录中所有带有 `.ini` 扩展名的文件。
+为了加载[附加的 PHP 配置文件](https://www.php.net/manual/configuration.file.php#configuration.file.scan)，可以使用 `PHP_INI_SCAN_DIR` 环境变量。设置后，PHP 将加载给定目录中所有带有 `.ini` 扩展名的文件。
 
 您还可以通过在 `Caddyfile` 中使用 `php_ini` 指令来更改 PHP 配置：
 
@@ -339,3 +339,79 @@ docker run -v $PWD:/app/public \
     -e CADDY_GLOBAL_OPTIONS=debug \
     -p 80:80 -p 443:443 -p 443:443/udp \
     dunglas/frankenphp
+```
+
+## Shell 补全
+
+FrankenPHP 提供对 Bash、Zsh、Fish 和 PowerShell 的内置 shell 补全支持。这为所有命令（包括 `php-server`、`php-cli` 和 `extension-init` 等自定义命令）及其标志启用了自动补全。
+
+### Bash
+
+要在当前 shell 会话中加载补全：
+
+```console
+source <(frankenphp completion bash)
+```
+
+要为每个新会话加载补全，运行：
+
+**Linux:**
+
+```console
+frankenphp completion bash > /usr/share/bash-completion/completions/frankenphp
+```
+
+**macOS:**
+
+```console
+frankenphp completion bash > $(brew --prefix)/share/bash-completion/completions/frankenphp
+```
+
+### Zsh
+
+如果您的环境中尚未启用 shell 补全，您将需要启用它。您可以执行以下命令一次：
+
+```console
+echo "autoload -U compinit; compinit" >> ~/.zshrc
+```
+
+要为每个会话加载补全，请执行一次：
+
+```console
+frankenphp completion zsh > "${fpath[1]}/_frankenphp"
+```
+
+您需要启动一个新的 shell 会话才能使此设置生效。
+
+### Fish
+
+要在当前 shell 会话中加载补全：
+
+```console
+frankenphp completion fish | source
+```
+
+要为每个新会话加载补全，请执行一次：
+
+```console
+frankenphp completion fish > ~/.config/fish/completions/frankenphp.fish
+```
+
+### PowerShell
+
+要在当前 shell 会话中加载补全：
+
+```powershell
+frankenphp completion powershell | Out-String | Invoke-Expression
+```
+
+要为每个新会话加载补全，请执行一次：
+
+```powershell
+frankenphp completion powershell | Out-File -FilePath (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")
+Add-Content -Path $PROFILE -Value '. (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")'
+```
+
+您需要启动一个新的 shell 会话才能使此设置生效。
+
+您需要启动一个新的 shell 会话才能使此设置生效。

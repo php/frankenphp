@@ -2,7 +2,7 @@
 
 Ejecute [WordPress](https://wordpress.org/) con FrankenPHP para disfrutar de una pila moderna y de alto rendimiento con HTTPS automático, HTTP/3 y compresión Zstandard.
 
-## Instalación Mínima
+## Instalación mínima
 
 1. [Descargue WordPress](https://wordpress.org/download/)
 2. Extraiga el archivo ZIP y abra una terminal en el directorio extraído
@@ -25,9 +25,9 @@ encode zstd br gzip
 log
 ```
 
-## Hot Reload
+## Hot reload
 
-Para usar la función de [Hot reload](hot-reload.md) con WordPress, active [Mercure](mercure.md) y agregue la subdirectiva `hot_reload` a la directiva `php_server` en su `Caddyfile`:
+Para usar la función de [hot reload](hot-reload.md) con WordPress, active [Mercure](mercure.md) y agregue la subdirectiva `hot_reload` a la directiva `php_server` en su `Caddyfile`:
 
 ```caddyfile
 localhost

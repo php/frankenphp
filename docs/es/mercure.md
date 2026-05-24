@@ -1,4 +1,4 @@
-# Tiempo Real
+# Tiempo real
 
 ¡FrankenPHP incluye un hub [Mercure](https://mercure.rocks) integrado!
 Mercure te permite enviar eventos en tiempo real a todos los dispositivos conectados: recibirán un evento JavaScript al instante.
@@ -37,7 +37,7 @@ php_server
 >
 > Descomenta la sección Mercure en `/etc/frankenphp/Caddyfile` para habilitarla.
 
-## Suscribiéndose a Actualizaciones
+## Suscribiéndose a actualizaciones
 
 Por defecto, el hub Mercure está disponible en la ruta `/.well-known/mercure` de tu servidor FrankenPHP.
 Para suscribirte a actualizaciones, usa la clase nativa [`EventSource`](https://developer.mozilla.org/es/docs/Web/API/EventSource) de JavaScript:
@@ -45,7 +45,7 @@ Para suscribirte a actualizaciones, usa la clase nativa [`EventSource`](https://
 ```html
 <!-- public/index.html -->
 <!doctype html>
-<title>Ejemplo Mercure</title>
+<title>Ejemplo de Mercure</title>
 <script>
   const eventSource = new EventSource("/.well-known/mercure?topic=mi-tema");
   eventSource.onmessage = function (event) {
@@ -54,7 +54,7 @@ Para suscribirte a actualizaciones, usa la clase nativa [`EventSource`](https://
 </script>
 ```
 
-## Publicando Actualizaciones
+## Publicando actualizaciones
 
 ### Usando `mercure_publish()`
 
@@ -112,7 +112,7 @@ pero para aplicaciones en producción, se recomienda usar tokens de corta duraci
 
 ### Usando Symfony Mercure
 
-Alternativamente, puedes usar el [Componente Symfony Mercure](https://symfony.com/components/Mercure), una biblioteca PHP independiente.
+Alternativamente, puedes usar el [componente Symfony Mercure](https://symfony.com/components/Mercure), una biblioteca PHP independiente.
 
 Esta biblioteca maneja la generación de JWT, la publicación de actualizaciones así como la autorización basada en cookies para los suscriptores.
 

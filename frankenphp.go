@@ -66,7 +66,8 @@ var (
 
 	metrics Metrics = nullMetrics{}
 
-	maxWaitTime time.Duration
+	maxWaitTime          time.Duration
+	maxRequestsPerThread int
 )
 
 type ErrRejected struct {
@@ -275,6 +276,7 @@ func Init(options ...Option) error {
 	}
 
 	maxWaitTime = opt.maxWaitTime
+	maxRequestsPerThread = opt.maxRequests
 
 	if opt.maxIdleTime > 0 {
 		maxIdleTime = opt.maxIdleTime
@@ -335,7 +337,7 @@ func Init(options ...Option) error {
 	initAutoScaling(mainThread)
 
 	if globalLogger.Enabled(globalCtx, slog.LevelInfo) {
-		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "FrankenPHP started 🐘", slog.String("php_version", Version().Version), slog.Int("num_threads", mainThread.numThreads), slog.Int("max_threads", mainThread.maxThreads))
+		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "FrankenPHP started 🐘", slog.String("php_version", Version().Version), slog.Int("num_threads", mainThread.numThreads), slog.Int("max_threads", mainThread.maxThreads), slog.Int("max_requests", maxRequestsPerThread))
 
 		if EmbeddedAppPath != "" {
 			globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "embedded PHP app 📦", slog.String("path", EmbeddedAppPath))
@@ -786,5 +788,6 @@ func resetGlobals() {
 	workersByPath = nil
 	watcherIsEnabled = false
 	maxIdleTime = defaultMaxIdleTime
+	maxRequestsPerThread = 0
 	globalMu.Unlock()
 }

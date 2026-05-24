@@ -58,3 +58,5 @@ func (handler *inactiveThread) context() context.Context {
 func (handler *inactiveThread) name() string {
 	return "Inactive PHP Thread"
 }
+
+func (handler *inactiveThread) drain() {}

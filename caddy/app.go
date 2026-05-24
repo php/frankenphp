@@ -57,6 +57,8 @@ type FrankenPHPApp struct {
 	MaxWaitTime time.Duration `json:"max_wait_time,omitempty"`
 	// The maximum amount of time an autoscaled thread may be idle before being deactivated
 	MaxIdleTime time.Duration `json:"max_idle_time,omitempty"`
+	// EXPERIMENTAL: MaxRequests sets the maximum number of requests a PHP thread handles before restarting (0 = unlimited)
+	MaxRequests int `json:"max_requests,omitempty"`
 
 	opts    []frankenphp.Option
 	metrics frankenphp.Metrics
@@ -64,7 +66,7 @@ type FrankenPHPApp struct {
 	logger  *slog.Logger
 }
 
-var iniError = errors.New(`"php_ini" must be in the format: php_ini "<key>" "<value>"`)
+var errIni = errors.New(`"php_ini" must be in the format: php_ini "<key>" "<value>"`)
 
 // CaddyModule returns the Caddy module information.
 func (f FrankenPHPApp) CaddyModule() caddy.ModuleInfo {
@@ -153,6 +155,7 @@ func (f *FrankenPHPApp) Start() error {
 		frankenphp.WithPhpIni(f.PhpIni),
 		frankenphp.WithMaxWaitTime(f.MaxWaitTime),
 		frankenphp.WithMaxIdleTime(f.MaxIdleTime),
+		frankenphp.WithMaxRequests(f.MaxRequests),
 	)
 
 	for _, w := range f.Workers {
@@ -192,6 +195,7 @@ func (f *FrankenPHPApp) Stop() error {
 	f.NumThreads = 0
 	f.MaxWaitTime = 0
 	f.MaxIdleTime = 0
+	f.MaxRequests = 0
 
 	optionsMU.Lock()
 	options = nil
@@ -255,18 +259,29 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				}
 
 				f.MaxIdleTime = v
+			case "max_requests":
+				if !d.NextArg() {
+					return d.ArgErr()
+				}
+
+				v, err := strconv.ParseUint(d.Val(), 10, 32)
+				if err != nil {
+					return d.WrapErr(err)
+				}
+
+				f.MaxRequests = int(v)
 			case "php_ini":
 				parseIniLine := func(d *caddyfile.Dispenser) error {
 					key := d.Val()
 					if !d.NextArg() {
-						return d.WrapErr(iniError)
+						return d.WrapErr(errIni)
 					}
 					if f.PhpIni == nil {
 						f.PhpIni = make(map[string]string)
 					}
 					f.PhpIni[key] = d.Val()
 					if d.NextArg() {
-						return d.WrapErr(iniError)
+						return d.WrapErr(errIni)
 					}
 
 					return nil
@@ -283,7 +298,7 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 
 				if !isBlock {
 					if !d.NextArg() {
-						return d.WrapErr(iniError)
+						return d.WrapErr(errIni)
 					}
 					err := parseIniLine(d)
 					if err != nil {
@@ -311,7 +326,7 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 
 				f.Workers = append(f.Workers, wc)
 			default:
-				return wrongSubDirectiveError("frankenphp", "num_threads, max_threads, php_ini, worker, max_wait_time, max_idle_time", d.Val())
+				return wrongSubDirectiveError("frankenphp", "num_threads, max_threads, php_ini, worker, max_wait_time, max_idle_time, max_requests", d.Val())
 			}
 		}
 	}

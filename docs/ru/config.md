@@ -19,7 +19,7 @@ php_server
 
 Более продвинутый `Caddyfile`, включающий дополнительные функции и предоставляющий удобные переменные окружения, можно найти [в репозитории FrankenPHP](https://github.com/php/frankenphp/blob/main/caddy/frankenphp/Caddyfile), а также в Docker-образах.
 
-PHP можно настроить [с помощью файла `php.ini`](https://www.php.net/manual/en/configuration.file.php).
+PHP можно настроить [с помощью файла `php.ini`](https://www.php.net/manual/configuration.file.php).
 
 В зависимости от метода установки, FrankenPHP и PHP-интерпретатор будут искать конфигурационные файлы в местах, описанных ниже.
 
@@ -275,11 +275,11 @@ php_server [<matcher>] {
 
 Как и для FPM и CLI SAPIs, переменные окружения по умолчанию доступны в суперглобальной переменной `$_SERVER`.
 
-Значение `S` в [директиве PHP `variables_order`](https://www.php.net/manual/en/ini.core.php#ini.variables-order) всегда эквивалентно `ES`, независимо от того, где расположена `E` в этой директиве.
+Значение `S` в [директиве PHP `variables_order`](https://www.php.net/manual/ini.core.php#ini.variables-order) всегда эквивалентно `ES`, независимо от того, где расположена `E` в этой директиве.
 
 ## Конфигурация PHP
 
-Для загрузки [дополнительных конфигурационных файлов PHP](https://www.php.net/manual/en/configuration.file.php#configuration.file.scan) можно использовать переменную окружения `PHP_INI_SCAN_DIR`.
+Для загрузки [дополнительных конфигурационных файлов PHP](https://www.php.net/manual/configuration.file.php#configuration.file.scan) можно использовать переменную окружения `PHP_INI_SCAN_DIR`.
 Если она установлена, PHP загрузит все файлы с расширением `.ini`, находящиеся в указанных директориях.
 
 Вы также можете изменить конфигурацию PHP с помощью директивы `php_ini` в `Caddyfile`:
@@ -312,7 +312,7 @@ php_server [<matcher>] {
 
 При использовании HTTP/1.x может быть желательно включить режим полного дуплекса, чтобы разрешить запись ответа до завершения чтения всего тела запроса. (например: [Mercure](mercure.md), WebSocket, Server-Sent Events и т.д.)
 
-Это опция, которую необходимо добавить в глобальные настройки в `Caddyfile`:
+Это конфигурация, которую необходимо добавить в глобальные опции в `Caddyfile`:
 
 ```caddyfile
 {
@@ -345,3 +345,78 @@ docker run -v $PWD:/app/public \
     -p 80:80 -p 443:443 -p 443:443/udp \
     dunglas/frankenphp
 ```
+
+## Автодополнение команд оболочки
+
+FrankenPHP предоставляет встроенную поддержку автодополнения команд для Bash, Zsh, Fish и PowerShell. Это позволяет автоматически завершать все команды (включая пользовательские команды, такие как `php-server`, `php-cli` и `extension-init`) и их флаги.
+
+### Bash
+
+Для загрузки автодополнения в текущую сессию оболочки:
+
+```console
+source <(frankenphp completion bash)
+```
+
+Для загрузки автодополнения для каждой новой сессии выполните:
+
+**Linux:**
+
+```console
+frankenphp completion bash > /usr/share/bash-completion/completions/frankenphp
+```
+
+**macOS:**
+
+```console
+frankenphp completion bash > $(brew --prefix)/share/bash-completion/completions/frankenphp
+```
+
+### Zsh
+
+Если автодополнение команд еще не включено в вашей среде, вам нужно будет его активировать. Вы можете выполнить следующее один раз:
+
+```console
+echo "autoload -U compinit; compinit" >> ~/.zshrc
+```
+
+Чтобы загрузить автодополнение для каждой сессии, выполните один раз:
+
+```console
+frankenphp completion zsh > "${fpath[1]}/_frankenphp"
+```
+
+Вам потребуется запустить новую оболочку, чтобы эти настройки вступили в силу.
+
+### Fish
+
+Для загрузки автодополнения в текущую сессию оболочки:
+
+```console
+frankenphp completion fish | source
+```
+
+Для загрузки автодополнения для каждой новой сессии выполните один раз:
+
+```console
+frankenphp completion fish > ~/.config/fish/completions/frankenphp.fish
+```
+
+### PowerShell
+
+Для загрузки автодополнения в текущую сессию оболочки:
+
+```powershell
+frankenphp completion powershell | Out-String | Invoke-Expression
+```
+
+Для загрузки автодополнения для каждой новой сессии выполните один раз:
+
+```powershell
+frankenphp completion powershell | Out-File -FilePath (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")
+Add-Content -Path $PROFILE -Value '. (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")'
+```
+
+Вам потребуется запустить новую оболочку, чтобы эти настройки вступили в силу.
+
+Вам потребуется запустить новую оболочку, чтобы эти настройки вступили в силу.

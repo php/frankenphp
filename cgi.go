@@ -22,8 +22,6 @@ import (
 	"unsafe"
 
 	"github.com/dunglas/frankenphp/internal/phpheaders"
-	"golang.org/x/text/language"
-	"golang.org/x/text/search"
 )
 
 // cStringHTTPMethods caches C string versions of common HTTP methods
@@ -111,7 +109,7 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		requestURI = fc.requestURI
 	}
 
-	requestPath := ensureLeadingSlash(request.URL.Path)
+	phpSelf := fc.scriptName + fc.pathInfo
 
 	C.frankenphp_register_server_vars(trackVarsArray, C.frankenphp_server_vars{
 		// approximate total length to avoid array re-hashing:
@@ -129,8 +127,8 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		document_root_len:   C.size_t(len(fc.documentRoot)),
 		path_info:           toUnsafeChar(fc.pathInfo),
 		path_info_len:       C.size_t(len(fc.pathInfo)),
-		php_self:            toUnsafeChar(requestPath),
-		php_self_len:        C.size_t(len(requestPath)),
+		php_self:            toUnsafeChar(phpSelf),
+		php_self_len:        C.size_t(len(phpSelf)),
 		document_uri:        toUnsafeChar(fc.docURI),
 		document_uri_len:    C.size_t(len(fc.docURI)),
 		script_filename:     toUnsafeChar(fc.scriptFilename),
@@ -208,16 +206,25 @@ func splitCgiPath(fc *frankenPHPContext) {
 	if splitPos := splitPos(path, splitPath); splitPos > -1 {
 		fc.docURI = path[:splitPos]
 		fc.pathInfo = path[splitPos:]
-
-		// Strip PATH_INFO from SCRIPT_NAME
-		fc.scriptName = strings.TrimSuffix(path, fc.pathInfo)
-
-		// Ensure the SCRIPT_NAME has a leading slash for compliance with RFC3875
-		// Info: https://tools.ietf.org/html/rfc3875#section-4.1.13
-		if fc.scriptName != "" && !strings.HasPrefix(fc.scriptName, "/") {
-			fc.scriptName = "/" + fc.scriptName
-		}
 	}
+
+	// If a worker is already assigned explicitly, derive SCRIPT_NAME from its filename
+	if fc.worker != nil {
+		fc.scriptFilename = fc.worker.fileName
+		docRootWithSep := fc.documentRoot + string(filepath.Separator)
+		if strings.HasPrefix(fc.worker.fileName, docRootWithSep) {
+			fc.scriptName = filepath.ToSlash(strings.TrimPrefix(fc.worker.fileName, fc.documentRoot))
+		} else {
+			fc.docURI = ""
+			fc.pathInfo = ""
+		}
+		return
+	}
+
+	// Strip PATH_INFO from SCRIPT_NAME
+	// Ensure the SCRIPT_NAME has a leading slash for compliance with RFC3875
+	// Info: https://tools.ietf.org/html/rfc3875#section-4.1.13
+	fc.scriptName = ensureLeadingSlash(strings.TrimSuffix(path, fc.pathInfo))
 
 	// TODO: is it possible to delay this and avoid saving everything in the context?
 	// SCRIPT_FILENAME is the absolute path of SCRIPT_NAME
@@ -225,11 +232,16 @@ func splitCgiPath(fc *frankenPHPContext) {
 	fc.worker = workersByPath[fc.scriptFilename]
 }
 
-var splitSearchNonASCII = search.New(language.Und, search.IgnoreCase)
-
 // splitPos returns the index where path should be split based on splitPath.
 // example: if splitPath is [".php"]
 // "/path/to/script.php/some/path": ("/path/to/script.php", "/some/path")
+//
+// Matching is strictly ASCII case-insensitive. Bytes >= utf8.RuneSelf in path
+// never match any split entry: split strings are validated ASCII-only and
+// lower-cased in WithRequestSplitPath, so any Unicode equivalence (e.g.
+// fullwidth or mathematical letters folding to ASCII) would let an attacker
+// upload a file whose name contains such code points and have it served as
+// PHP. See GHSA-3g8v-8r37-cgjm and GHSA-v4h7-cj44-8fc8.
 func splitPos(path string, splitPath []string) int {
 	if len(splitPath) == 0 {
 		return 0
@@ -237,31 +249,18 @@ func splitPos(path string, splitPath []string) int {
 
 	pathLen := len(path)
 
-	// We are sure that split strings are all ASCII-only and lower-case because of validation and normalization in WithRequestSplitPath
 	for _, split := range splitPath {
 		splitLen := len(split)
+		if splitLen == 0 || splitLen > pathLen {
+			continue
+		}
 
-		for i := 0; i < pathLen; i++ {
-			if path[i] >= utf8.RuneSelf {
-				if _, end := splitSearchNonASCII.IndexString(path, split); end > -1 {
-					return end
-				}
-
-				break
-			}
-
-			if i+splitLen > pathLen {
-				continue
-			}
-
+		for i := 0; i <= pathLen-splitLen; i++ {
 			match := true
 			for j := 0; j < splitLen; j++ {
 				c := path[i+j]
-
 				if c >= utf8.RuneSelf {
-					if _, end := splitSearchNonASCII.IndexString(path, split); end > -1 {
-						return end
-					}
+					match = false
 
 					break
 				}

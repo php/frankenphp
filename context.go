@@ -86,14 +86,7 @@ func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Reques
 		}
 	}
 
-	// If a worker is already assigned explicitly, use its filename and skip parsing path variables
-	if fc.worker != nil {
-		fc.scriptFilename = fc.worker.fileName
-	} else {
-		// If no worker was assigned, split the path into the "traditional" CGI path variables.
-		// This needs to already happen here in case a worker script still matches the path.
-		splitCgiPath(fc)
-	}
+	splitCgiPath(fc)
 
 	fc.requestURI = r.URL.RequestURI()
 

@@ -1,15 +1,20 @@
-# Using FrankenPHP Workers
+---
+title: FrankenPHP worker mode: keep your PHP app in memory
+description: Run FrankenPHP in worker mode to keep your PHP application bootstrapped between requests, cut bootstrap overhead, and serve responses in milliseconds.
+---
+
+# Using FrankenPHP workers
 
 Boot your application once and keep it in memory.
 FrankenPHP will handle incoming requests in a few milliseconds.
 
-## Starting Worker Scripts
+## Starting FrankenPHP worker scripts
 
-### Docker
+### Running a FrankenPHP worker with Docker
 
 Set the value of the `FRANKENPHP_CONFIG` environment variable to `worker /path/to/your/worker/script.php`:
 
-```console
+```bash
 docker run \
     -e FRANKENPHP_CONFIG="worker /app/path/to/your/worker/script.php" \
     -v $PWD:/app \
@@ -17,11 +22,11 @@ docker run \
     dunglas/frankenphp
 ```
 
-### Standalone Binary
+### Running a FrankenPHP worker with the standalone binary
 
 Use the `--worker` option of the `php-server` command to serve the content of the current directory using a worker:
 
-```console
+```bash
 frankenphp php-server --worker /path/to/your/worker/script.php
 ```
 
@@ -31,40 +36,21 @@ It will be used automatically.
 It's also possible to [restart the worker on file changes](config.md#watching-for-file-changes) with the `--watch` option.
 The following command will trigger a restart if any file ending in `.php` in the `/path/to/your/app/` directory or subdirectories is modified:
 
-```console
+```bash
 frankenphp php-server --worker /path/to/your/worker/script.php --watch="/path/to/your/app/**/*.php"
 ```
 
 This feature is often used in combination with [hot reloading](hot-reload.md).
 
-## Symfony Runtime
+## Worker mode for Symfony
 
-> [!TIP]
-> The following section is only necessary prior to Symfony 7.4, where native support for FrankenPHP worker mode was introduced.
+See [the FrankenPHP Symfony worker mode documentation](symfony.md#symfony-worker-mode-with-frankenphp).
 
-The worker mode of FrankenPHP is supported by the [Symfony Runtime Component](https://symfony.com/doc/current/components/runtime.html).
-To start any Symfony application in a worker, install the FrankenPHP package of [PHP Runtime](https://github.com/php-runtime/runtime):
+## Worker mode for Laravel Octane
 
-```console
-composer require runtime/frankenphp-symfony
-```
+See [the FrankenPHP Laravel Octane documentation](laravel.md#laravel-octane).
 
-Start your app server by defining the `APP_RUNTIME` environment variable to use the FrankenPHP Symfony Runtime:
-
-```console
-docker run \
-    -e FRANKENPHP_CONFIG="worker ./public/index.php" \
-    -e APP_RUNTIME=Runtime\\FrankenPhpSymfony\\Runtime \
-    -v $PWD:/app \
-    -p 80:80 -p 443:443 -p 443:443/udp \
-    dunglas/frankenphp
-```
-
-## Laravel Octane
-
-See [the dedicated documentation](laravel.md#laravel-octane).
-
-## Custom Apps
+## Writing a custom FrankenPHP worker script
 
 The following example shows how to create your own worker script without relying on a third-party library:
 
@@ -110,7 +96,7 @@ $myApp->shutdown();
 
 Then, start your app and use the `FRANKENPHP_CONFIG` environment variable to configure your worker:
 
-```console
+```bash
 docker run \
     -e FRANKENPHP_CONFIG="worker ./public/index.php" \
     -v $PWD:/app \
@@ -121,7 +107,7 @@ docker run \
 By default, 2 workers per CPU are started.
 You can also configure the number of workers to start:
 
-```console
+```bash
 docker run \
     -e FRANKENPHP_CONFIG="worker ./public/index.php 42" \
     -v $PWD:/app \
@@ -129,27 +115,27 @@ docker run \
     dunglas/frankenphp
 ```
 
-### Restart the Worker After a Certain Number of Requests
+### Restart the worker after a certain number of requests
 
-As PHP was not originally designed for long-running processes, there are still many libraries and legacy codes that leak memory.
+As PHP was not originally designed for long-running processes, many libraries and legacy code still leak memory.
 A workaround to using this type of code in worker mode is to restart the worker script after processing a certain number of requests:
 
-The previous worker snippet allows configuring a maximum number of request to handle by setting an environment variable named `MAX_REQUESTS`.
+The previous worker snippet allows configuring a maximum number of requests to handle by setting an environment variable named `MAX_REQUESTS`.
 
-### Restart Workers Manually
+### Restart workers manually
 
 While it's possible to restart workers [on file changes](config.md#watching-for-file-changes), it's also possible to restart all workers
 gracefully via the [Caddy admin API](https://caddyserver.com/docs/api). If the admin is enabled in your
 [Caddyfile](config.md#caddyfile-config), you can ping the restart endpoint with a simple POST request like this:
 
-```console
+```bash
 curl -X POST http://localhost:2019/frankenphp/workers/restart
 ```
 
-### Worker Failures
+### Worker failures
 
 If a worker script crashes with a non-zero exit code, FrankenPHP will restart it with an exponential backoff strategy.
-If the worker script stays up longer than the last backoff \* 2,
+If the worker script stays up longer than the last backoff × 2,
 it will not penalize the worker script and restart it again.
 However, if the worker script continues to fail with a non-zero exit code in a short period of time
 (for example, having a typo in a script), FrankenPHP will crash with the error: `too many consecutive failures`.
@@ -165,9 +151,9 @@ frankenphp {
 }
 ```
 
-## Superglobals Behavior
+## Superglobals behavior
 
-[PHP superglobals](https://www.php.net/manual/en/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...)
+[PHP superglobals](https://www.php.net/manual/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...)
 behave as follows:
 
 - before the first call to `frankenphp_handle_request()`, superglobals contain values bound to the worker script itself
@@ -187,3 +173,38 @@ $handler = static function () use ($workerServer) {
 
 // ...
 ```
+
+Most superglobals (`$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, `$_SERVER`, `$_REQUEST`) are automatically reset between requests.
+However, **`$_ENV` is currently not reset between requests**.
+This means that any modifications made to `$_ENV` during a request will persist and be visible to subsequent requests handled by the same worker thread.
+Avoid storing request-specific or sensitive data in `$_ENV`.
+
+## State persistence
+
+Because worker mode keeps the PHP process alive between requests, the following state persists across requests:
+
+- **Static variables**: Variables declared with `static` inside functions or methods retain their values between requests.
+- **Class static properties**: Static properties on classes persist between requests.
+- **Global variables**: Variables in the global scope of the worker script persist between requests.
+- **In-memory caches**: Any data stored in memory (arrays, objects) outside the request handler persists.
+
+This is by design and is what makes worker mode fast. However, it requires attention to avoid unintended side effects:
+
+```php
+<?php
+function getCounter(): int {
+    static $count = 0;
+    return ++$count; // Increments across requests!
+}
+
+$handler = static function () {
+    echo getCounter(); // 1, 2, 3, ... for each request on this thread
+};
+
+while (\frankenphp_handle_request($handler)) {
+    // ...
+}
+```
+
+When writing worker scripts, make sure to reset any request-specific state between requests.
+Frameworks like [Symfony](symfony.md) and [Laravel Octane](laravel.md) take care of resetting most state for you, but you may still need to reset your own services. With Symfony, services that hold request-specific state should implement [`Symfony\Contracts\Service\ResetInterface`](https://github.com/symfony/contracts/blob/main/Service/ResetInterface.php) so they're reset by the kernel between requests.
