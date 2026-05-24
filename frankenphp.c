@@ -178,6 +178,46 @@ static void frankenphp_fork_child(void) {
 static void frankenphp_register_atfork(void) {
   pthread_atfork(frankenphp_fork_prepare, NULL, frankenphp_fork_child);
 }
+
+/* pcntl signals delivered to a Go M segfault on PCNTL_G (no TSRM there)
+ * Block these in a constructor so Go's schedinit captures
+ * the mask and every M inherits it; execute_script_cli unblocks on its own
+ * pthread. Caddy's signal.Notify keeps working via runtime.ensureSigM. */
+static void frankenphp_fill_cli_signal_set(sigset_t *s) {
+  sigemptyset(s);
+#ifdef SIGHUP
+  sigaddset(s, SIGHUP);
+#endif
+#ifdef SIGINT
+  sigaddset(s, SIGINT);
+#endif
+#ifdef SIGQUIT
+  sigaddset(s, SIGQUIT);
+#endif
+#ifdef SIGTERM
+  sigaddset(s, SIGTERM);
+#endif
+#ifdef SIGUSR1
+  sigaddset(s, SIGUSR1);
+#endif
+#ifdef SIGUSR2
+  sigaddset(s, SIGUSR2);
+#endif
+#ifdef SIGALRM
+  sigaddset(s, SIGALRM);
+#endif
+#ifdef SIGCHLD
+  sigaddset(s, SIGCHLD);
+#endif
+}
+
+__attribute__((constructor)) static void frankenphp_libpreinit(void) {
+  sigset_t set;
+  frankenphp_fill_cli_signal_set(&set);
+  /* Single-threaded at this point (constructors run before Go's runtime),
+   * so sigprocmask is sufficient and portable. */
+  sigprocmask(SIG_BLOCK, &set, NULL);
+}
 #endif
 
 /* Best-effort force-kill for stuck PHP threads.
@@ -1688,6 +1728,12 @@ static void sapi_cli_register_variables(zval *track_vars_array) /* {{{ */
 static void *execute_script_cli(void *arg) {
   void *exit_status;
   bool eval = (bool)arg;
+
+#ifndef PHP_WIN32
+  sigset_t cli_signals;
+  frankenphp_fill_cli_signal_set(&cli_signals);
+  pthread_sigmask(SIG_UNBLOCK, &cli_signals, NULL);
+#endif
 
   /*
    * The SAPI name "cli" is hardcoded into too many programs... let's usurp it.

@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"runtime"
 	"testing"
 
 	"github.com/dunglas/frankenphp"
@@ -43,6 +44,23 @@ func TestExecuteCLICode(t *testing.T) {
 
 	stdoutStderrStr := string(stdoutStderr)
 	assert.Equal(t, stdoutStderrStr, `Hello World`)
+}
+
+// Regression test for https://github.com/php/frankenphp/issues/1902. A
+// long-running CLI script that installs pcntl_signal handlers must
+// receive its own signals reliably
+func TestExecuteScriptCLISignals(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("pcntl is not available on Windows")
+	}
+	if _, err := os.Stat("internal/testcli/testcli"); err != nil {
+		t.Skip("internal/testcli/testcli has not been compiled, run `cd internal/testcli/ && go build`")
+	}
+
+	cmd := exec.Command("internal/testcli/testcli", "testdata/command-pcntl.php")
+	stdoutStderr, err := cmd.CombinedOutput()
+	assert.NoError(t, err, "output: %s", stdoutStderr)
+	assert.Contains(t, string(stdoutStderr), "ok")
 }
 
 func ExampleExecuteScriptCLI() {
