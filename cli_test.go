@@ -59,6 +59,10 @@ func TestExecuteScriptCLISignals(t *testing.T) {
 
 	cmd := exec.Command("internal/testcli/testcli", "testdata/command-pcntl.php")
 	stdoutStderr, err := cmd.CombinedOutput()
+	var exitError *exec.ExitError
+	if errors.As(err, &exitError) && exitError.ExitCode() == 2 {
+		t.Skipf("pcntl/posix not available: %s", stdoutStderr)
+	}
 	assert.NoError(t, err, "output: %s", stdoutStderr)
 	assert.Contains(t, string(stdoutStderr), "ok")
 }

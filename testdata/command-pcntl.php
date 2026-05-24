@@ -3,9 +3,11 @@
 // Long-running CLI script that uses pcntl signals,
 // simulating queue processors like Laravel Horizon or Symfony Messenger.
 
-if (!extension_loaded('pcntl')) {
-    fwrite(STDERR, "pcntl extension required\n");
-    exit(2);
+foreach (['pcntl_async_signals', 'pcntl_signal', 'pcntl_alarm', 'posix_kill'] as $fn) {
+    if (!function_exists($fn)) {
+        fwrite(STDERR, "missing $fn (pcntl/posix not fully loaded)\n");
+        exit(2);
+    }
 }
 
 pcntl_async_signals(true);
