@@ -1292,6 +1292,17 @@ static void *php_thread(void *arg) {
 
       has_attempted_shutdown = true;
 
+#ifdef HAVE_PHP_SESSION
+      /* A bailout inside a user save handler skips the cleanup that clears
+       * PS(in_save_handler); RSHUTDOWN's recursion guard then refuses to run
+       * the handler's close() and any resource it holds leaks (https://github.com/php/frankenphp/issues/2368).
+       * See https://github.com/php/php-src/blob/900797e54fb8d21a761205e5788b9275dc1c7c0e/ext/session/mod_user.c#L29
+       * fpm doesn't run into this because it kills timed out processes, which releases all resources:
+       * https://github.com/php/php-src/blob/900797e54fb8d21a761205e5788b9275dc1c7c0e/sapi/fpm/fpm/fpm_request.c#L276
+       */
+      PS(in_save_handler) = false;
+#endif
+
       /* shutdown the request, potential bailout to zend_catch */
       php_request_shutdown((void *)0);
       frankenphp_free_request_context();
