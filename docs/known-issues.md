@@ -9,18 +9,19 @@ description: Reference of FrankenPHP limitations, including unsupported PHP exte
 
 The following extensions are known not to be compatible with FrankenPHP:
 
-| Name                                                                                                        | Reason          | Alternatives                                                                                                         |
-| ----------------------------------------------------------------------------------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------- |
-| [imap](https://www.php.net/manual/imap.installation.php)                                                 | Not thread-safe | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap) |
-| [newrelic](https://docs.newrelic.com/docs/apm/agents/php-agent/getting-started/introduction-new-relic-php/) | Not thread-safe | -                                                                                                                    |
+| Name                                                                                                        | Reason          | Alternatives                                                                                                                                                                    |
+| ----------------------------------------------------------------------------------------------------------- | --------------- |---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| [imap](https://www.php.net/manual/imap.installation.php)                                                 | Not thread-safe | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap), [ImapEngine](https://github.com/DirectoryTree/ImapEngine) |
+| [newrelic](https://docs.newrelic.com/docs/apm/agents/php-agent/getting-started/introduction-new-relic-php/) | Not thread-safe | -                                                                                                                                                                               |
 
 ## Buggy PHP extensions
 
 The following extensions have known bugs and unexpected behaviors when used with FrankenPHP:
 
-| Name                                                          | Problem                                                                                                                                                                                                                   |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [ext-openssl](https://www.php.net/manual/book.openssl.php) | When using musl libc, the OpenSSL extension may crash under heavy loads. The problem doesn't occur when using the more popular GNU libc. This bug is [being tracked by PHP](https://github.com/php/php-src/issues/13648). |
+| Name                                  | Problem                                                                                                                                         |
+|---------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
+| [datadog](https://github.com/DataDog) | Experiences instability when profiling FrankenPHP. This bug is [being tracked by DataDog](https://github.com/DataDog/dd-trace-php/issues/3729). |
+| [blackfire](https://blackfire.io/) | [FrankenPHP support is in beta and not yet feature-complete](https://docs.blackfire.io/php/integrations/frankenphp).                            |
 
 ## get_browser
 
