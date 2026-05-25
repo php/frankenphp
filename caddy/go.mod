@@ -11,9 +11,9 @@ require (
 	github.com/caddyserver/certmagic v0.25.3
 	github.com/dunglas/caddy-cbrotli v1.0.1
 	github.com/dunglas/frankenphp v1.12.3
-	github.com/dunglas/mercure v0.24.0
-	github.com/dunglas/mercure/caddy v0.24.0
-	github.com/dunglas/vulcain/caddy v1.4.0
+	github.com/dunglas/mercure v0.24.1
+	github.com/dunglas/mercure/caddy v0.24.1
+	github.com/dunglas/vulcain/caddy v1.4.1
 	github.com/prometheus/client_golang v1.23.2
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
@@ -62,7 +62,7 @@ require (
 	github.com/dlclark/regexp2 v1.12.0 // indirect
 	github.com/dunglas/httpsfv v1.1.0 // indirect
 	github.com/dunglas/skipfilter v1.0.0 // indirect
-	github.com/dunglas/vulcain v1.4.0 // indirect
+	github.com/dunglas/vulcain v1.4.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/e-dant/watcher v0.0.0-20260223030516-06f84a1314be // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
