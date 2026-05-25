@@ -76,12 +76,12 @@ jobs:
       - name: Run integrations tests
         run: ./reload_test.sh
       - name: Lint Go code
-        uses: golangci/golangci-lint-action@v9
+        uses: golangci/golangci-lint-action@v9.2.0
         if: matrix.php-versions == '8.5'
         with:
           version: latest
       - name: Lint Caddy module Go code
-        uses: golangci/golangci-lint-action@v9
+        uses: golangci/golangci-lint-action@v9.2.0
         if: matrix.php-versions == '8.5'
         with:
           version: latest
