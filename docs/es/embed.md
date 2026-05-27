@@ -1,4 +1,4 @@
-# Aplicaciones PHP como Binarios Autónomos
+# Aplicaciones PHP como binarios autónomos
 
 FrankenPHP tiene la capacidad de incrustar el código fuente y los activos de aplicaciones PHP en un binario estático y autónomo.
 
@@ -8,7 +8,7 @@ Obtenga más información sobre esta característica [en la presentación realiz
 
 Para incrustar aplicaciones Laravel, [lea esta entrada específica de documentación](laravel.md#laravel-apps-as-standalone-binaries).
 
-## Preparando su Aplicación
+## Preparando su aplicación
 
 Antes de crear el binario autónomo, asegúrese de que su aplicación esté lista para ser incrustada.
 
@@ -42,12 +42,12 @@ composer install --ignore-platform-reqs --no-dev -a
 composer dump-env prod
 ```
 
-### Personalizar la Configuración
+### Personalizar la configuración
 
 Para personalizar [la configuración](config.md), puede colocar un archivo `Caddyfile` así como un archivo `php.ini`
 en el directorio principal de la aplicación a incrustar (`$TMPDIR/my-prepared-app` en el ejemplo anterior).
 
-## Crear un Binario para Linux
+## Crear un binario para Linux
 
 La forma más fácil de crear un binario para Linux es usar el constructor basado en Docker que proporcionamos.
 
@@ -85,7 +85,7 @@ La forma más fácil de crear un binario para Linux es usar el constructor basad
 
 El binario resultante es el archivo llamado `my-app` en el directorio actual.
 
-## Crear un Binario para Otros Sistemas Operativos
+## Crear un binario para otros sistemas operativos
 
 Si no desea usar Docker o desea construir un binario para macOS, use el script de shell que proporcionamos:
 
@@ -97,7 +97,7 @@ EMBED=/path/to/your/app ./build-static.sh
 
 El binario resultante es el archivo llamado `frankenphp-<os>-<arch>` en el directorio `dist/`.
 
-## Usar el Binario
+## Usar el binario
 
 ¡Listo! El archivo `my-app` (o `dist/frankenphp-<os>-<arch>` en otros sistemas operativos) contiene su aplicación autónoma.
 
@@ -132,13 +132,13 @@ Si el archivo `composer.json` no existe, se construirán las extensiones predete
 
 Para personalizar las extensiones, use la variable de entorno `PHP_EXTENSIONS`.
 
-## Personalizar la Compilación
+## Personalizar la compilación
 
 [Lea la documentación de compilación estática](static.md) para ver cómo personalizar el binario (extensiones, versión de PHP, etc.).
 
-## Distribuir el Binario
+## Distribuir el binario
 
-En Linux, el binario creado se comprime usando [UPX](https://upx.github.io).
+En Linux, el binario creado puede comprimirse usando [UPX](https://upx.github.io) estableciendo la variable de entorno `COMPRESS=1` en el momento de la compilación.
 
 En Mac, para reducir el tamaño del archivo antes de enviarlo, puede comprimirlo.
 Recomendamos `xz`.

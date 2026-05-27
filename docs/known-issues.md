@@ -9,28 +9,29 @@ description: Reference of FrankenPHP limitations, including unsupported PHP exte
 
 The following extensions are known not to be compatible with FrankenPHP:
 
-| Name                                                                                                        | Reason          | Alternatives                                                                                                         |
-| ----------------------------------------------------------------------------------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------- |
-| [imap](https://www.php.net/manual/en/imap.installation.php)                                                 | Not thread-safe | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap) |
-| [newrelic](https://docs.newrelic.com/docs/apm/agents/php-agent/getting-started/introduction-new-relic-php/) | Not thread-safe | -                                                                                                                    |
+| Name                                                                                                        | Reason          | Alternatives                                                                                                                                                                    |
+| ----------------------------------------------------------------------------------------------------------- | --------------- |---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| [imap](https://www.php.net/manual/imap.installation.php)                                                 | Not thread-safe | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap), [ImapEngine](https://github.com/DirectoryTree/ImapEngine) |
+| [newrelic](https://docs.newrelic.com/docs/apm/agents/php-agent/getting-started/introduction-new-relic-php/) | Not thread-safe | -                                                                                                                                                                               |
 
 ## Buggy PHP extensions
 
 The following extensions have known bugs and unexpected behaviors when used with FrankenPHP:
 
-| Name                                                          | Problem                                                                                                                                                                                                                   |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [ext-openssl](https://www.php.net/manual/en/book.openssl.php) | When using musl libc, the OpenSSL extension may crash under heavy loads. The problem doesn't occur when using the more popular GNU libc. This bug is [being tracked by PHP](https://github.com/php/php-src/issues/13648). |
+| Name                                  | Problem                                                                                                                                         |
+|---------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
+| [datadog](https://github.com/DataDog) | Experiences instability when profiling FrankenPHP. This bug is [being tracked by DataDog](https://github.com/DataDog/dd-trace-php/issues/3729). |
+| [blackfire](https://blackfire.io/) | [FrankenPHP support is in beta and not yet feature-complete](https://docs.blackfire.io/php/integrations/frankenphp).                            |
 
 ## get_browser
 
-The [get_browser()](https://www.php.net/manual/en/function.get-browser.php) function seems to perform badly after a while. A workaround is to cache (e.g. with [APCu](https://www.php.net/manual/en/book.apcu.php)) the results per User Agent, as they are static.
+The [get_browser()](https://www.php.net/manual/function.get-browser.php) function seems to perform badly after a while. A workaround is to cache (e.g. with [APCu](https://www.php.net/manual/book.apcu.php)) the results per user agent, as they are static.
 
 ## Standalone binary and Alpine-based Docker images
 
 The fully static binary and Alpine-based Docker images (`dunglas/frankenphp:*-alpine`) use [musl libc](https://musl.libc.org/) instead of [glibc and friends](https://www.etalabs.net/compare_libcs.html), to keep a smaller binary size.
 This may lead to some compatibility issues.
-In particular, the glob flag `GLOB_BRACE` is [not available](https://www.php.net/manual/en/function.glob.php)
+In particular, the glob flag `GLOB_BRACE` is [not available](https://www.php.net/manual/function.glob.php).
 
 Prefer using the GNU variant of the static binary and Debian-based Docker images if you encounter issues.
 
@@ -132,7 +133,7 @@ error:0A000086:SSL routines::certificate verify failed
 
 As the static binary doesn't bundle TLS certificates, you need to point OpenSSL to your local CA certificates installation.
 
-Inspect the output of [`openssl_get_cert_locations()`](https://www.php.net/manual/en/function.openssl-get-cert-locations.php),
+Inspect the output of [`openssl_get_cert_locations()`](https://www.php.net/manual/function.openssl-get-cert-locations.php),
 to find where CA certificates must be installed and store them at this location.
 
 > [!WARNING]

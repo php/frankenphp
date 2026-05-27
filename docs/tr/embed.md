@@ -125,7 +125,7 @@ Binary dosyasının nasıl özelleştirileceğini (uzantılar, PHP sürümü...)
 
 ## Binary Dosyasının Dağıtılması
 
-Linux'ta, oluşturulan ikili dosya [UPX](https://upx.github.io) kullanılarak sıkıştırılır.
+Linux'ta, oluşturulan ikili dosya derleme sırasında `COMPRESS=1` ortam değişkeni ayarlanarak [UPX](https://upx.github.io) ile sıkıştırılabilir.
 
 Mac'te, göndermeden önce dosyanın boyutunu küçültmek için sıkıştırabilirsiniz.
 Biz `xz` öneririz.

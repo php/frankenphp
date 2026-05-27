@@ -28,7 +28,7 @@ unpredictable. The `max_threads` [configuration](config.md#caddyfile-config) all
 `max_threads` can help you figure out how many threads you need to handle your traffic and can make the server more resilient to latency spikes.
 If set to `auto`, the limit will be estimated based on the `memory_limit` in your `php.ini`. If not able to do so,
 `auto` will instead default to 2x `num_threads`. Keep in mind that `auto` might strongly underestimate the number of threads needed.
-`max_threads` is similar to PHP FPM's [pm.max_children](https://www.php.net/manual/en/install.fpm.configuration.php#pm.max-children). The main difference is that FrankenPHP uses threads instead of
+`max_threads` is similar to PHP-FPM's [pm.max_children](https://www.php.net/manual/install.fpm.configuration.php#pm.max-children). The main difference is that FrankenPHP uses threads instead of
 processes and automatically delegates them across different worker scripts and 'classic mode' as needed.
 
 ## Worker mode for higher throughput
@@ -48,7 +48,7 @@ Also, [some bugs only happen when using musl](https://github.com/php/php-src/iss
 
 In production environments, we recommend using FrankenPHP linked against glibc, compiled with an appropriate optimization level.
 
-This can be achieved by using the Debian Docker images, using [our maintainers .deb, .rpm, or .apk packages](https://pkgs.henderkes.com), or by [compiling FrankenPHP from sources](compile.md).
+This can be achieved by using the Debian Docker images, using [our maintainer's .deb, .rpm, or .apk packages](https://pkgs.henderkes.com), or by [compiling FrankenPHP from sources](compile.md).
 
 For leaner or more secure containers, you may want to consider [a hardened Debian image](docker.md#hardening-images) rather than Alpine.
 
@@ -166,10 +166,10 @@ All usual PHP-related performance optimizations apply with FrankenPHP.
 
 In particular:
 
-- check that [OPcache](https://www.php.net/manual/en/book.opcache.php) is installed, enabled, and properly configured
+- check that [OPcache](https://www.php.net/manual/book.opcache.php) is installed, enabled, and properly configured
 - enable [Composer autoloader optimizations](https://getcomposer.org/doc/articles/autoloader-optimization.md)
 - ensure that the `realpath` cache is big enough for the needs of your application
-- use [preloading](https://www.php.net/manual/en/opcache.preloading.php)
+- use [preloading](https://www.php.net/manual/opcache.preloading.php)
 
 For more details, read [the Symfony performance tuning documentation](https://symfony.com/doc/current/performance.html)
 (most tips are useful even if you don't use Symfony).
@@ -202,4 +202,4 @@ example.com {
 }
 ```
 
-Generally it's also advisable to handle very slow endpoints asynchronously, by using relevant mechanisms such as message queues.
+Generally, it's also advisable to handle very slow endpoints asynchronously, by using relevant mechanisms such as message queues.

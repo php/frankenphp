@@ -113,9 +113,9 @@ Pour ce faire, ajoutez l'attribut `data-frankenphp-hot-reload-preserve` à l'él
 </div>
 ```
 
-## Mode Worker
+## Mode worker
 
-Si vous exécutez votre application en [mode Worker](worker.md), le script de votre application reste en mémoire.
+Si vous exécutez votre application en [mode worker](worker.md), le script de votre application reste en mémoire.
 Cela signifie que les modifications de votre code PHP ne seront pas reflétées immédiatement, même si le navigateur recharge la page.
 
 Pour une meilleure expérience de développement, combinez `hot_reload` avec [la sous-directive `watch` dans la directive `worker`](config.md#surveillance-des-modifications-de-fichier).
@@ -143,7 +143,7 @@ php_server {
 ## Comment ça fonctionne
 
 1. **Surveillance** : FrankenPHP surveille le système de fichiers pour les modifications en utilisant [la bibliothèque `e-dant/watcher`](https://github.com/e-dant/watcher) en interne (nous avons contribué à son binding Go).
-2. **Redémarrage (mode Worker)** : si `watch` est activé dans la configuration du worker, le worker PHP est redémarré pour charger le nouveau code.
+2. **Redémarrage (mode worker)** : si `watch` est activé dans la configuration du worker, le worker PHP est redémarré pour charger le nouveau code.
 3. **Envoi** : un payload JSON contenant la liste des fichiers modifiés est envoyé au [hub Mercure](https://mercure.rocks) intégré.
 4. **Réception** : le navigateur, à l'écoute via la bibliothèque JavaScript, reçoit l'événement Mercure.
 5. **Mise à jour** :

@@ -19,7 +19,7 @@ php_server
 
 Более продвинутый `Caddyfile`, включающий дополнительные функции и предоставляющий удобные переменные окружения, можно найти [в репозитории FrankenPHP](https://github.com/php/frankenphp/blob/main/caddy/frankenphp/Caddyfile), а также в Docker-образах.
 
-PHP можно настроить [с помощью файла `php.ini`](https://www.php.net/manual/en/configuration.file.php).
+PHP можно настроить [с помощью файла `php.ini`](https://www.php.net/manual/configuration.file.php).
 
 В зависимости от метода установки, FrankenPHP и PHP-интерпретатор будут искать конфигурационные файлы в местах, описанных ниже.
 
@@ -275,11 +275,11 @@ php_server [<matcher>] {
 
 Как и для FPM и CLI SAPIs, переменные окружения по умолчанию доступны в суперглобальной переменной `$_SERVER`.
 
-Значение `S` в [директиве PHP `variables_order`](https://www.php.net/manual/en/ini.core.php#ini.variables-order) всегда эквивалентно `ES`, независимо от того, где расположена `E` в этой директиве.
+Значение `S` в [директиве PHP `variables_order`](https://www.php.net/manual/ini.core.php#ini.variables-order) всегда эквивалентно `ES`, независимо от того, где расположена `E` в этой директиве.
 
 ## Конфигурация PHP
 
-Для загрузки [дополнительных конфигурационных файлов PHP](https://www.php.net/manual/en/configuration.file.php#configuration.file.scan) можно использовать переменную окружения `PHP_INI_SCAN_DIR`.
+Для загрузки [дополнительных конфигурационных файлов PHP](https://www.php.net/manual/configuration.file.php#configuration.file.scan) можно использовать переменную окружения `PHP_INI_SCAN_DIR`.
 Если она установлена, PHP загрузит все файлы с расширением `.ini`, находящиеся в указанных директориях.
 
 Вы также можете изменить конфигурацию PHP с помощью директивы `php_ini` в `Caddyfile`:

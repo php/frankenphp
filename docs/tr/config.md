@@ -17,7 +17,7 @@ php_server
 
 Daha fazla özellik sağlayan ve kullanışlı ortam değişkenleri sunan daha gelişmiş bir `Caddyfile`, [FrankenPHP deposunda](https://github.com/php/frankenphp/blob/main/caddy/frankenphp/Caddyfile) ve Docker imajlarıyla birlikte sağlanır.
 
-PHP'nin kendisi [bir `php.ini` dosyası kullanılarak yapılandırılabilir](https://www.php.net/manual/en/configuration.file.php).
+PHP'nin kendisi [bir `php.ini` dosyası kullanılarak yapılandırılabilir](https://www.php.net/manual/configuration.file.php).
 
 Kurulum yönteminize bağlı olarak, FrankenPHP ve PHP yorumlayıcısı, aşağıda açıklanan konumlardaki yapılandırma dosyalarını arayacaktır.
 
@@ -263,11 +263,11 @@ Aşağıdaki ortam değişkenleri `Caddyfile` içinde değişiklik yapmadan Cadd
 
 FPM ve CLI SAPI'lerinde olduğu gibi, ortam değişkenleri varsayılan olarak `$_SERVER` süper globalinde gösterilir.
 
-[`variables_order`'a ait PHP yönergesinin](https://www.php.net/manual/en/ini.core.php#ini.variables-order) `S` değeri bu yönergede `E`'nin başka bir yere yerleştirilmesinden bağımsız olarak her zaman `ES` ile eş değerdir.
+[`variables_order`'a ait PHP yönergesinin](https://www.php.net/manual/ini.core.php#ini.variables-order) `S` değeri bu yönergede `E`'nin başka bir yere yerleştirilmesinden bağımsız olarak her zaman `ES` ile eş değerdir.
 
 ## PHP konfigürasyonu
 
-Ek olarak [PHP yapılandırma dosyalarını](https://www.php.net/manual/en/configuration.file.php#configuration.file.scan) yüklemek için,
+Ek olarak [PHP yapılandırma dosyalarını](https://www.php.net/manual/configuration.file.php#configuration.file.scan) yüklemek için,
 `PHP_INI_SCAN_DIR` ortam değişkeni kullanılabilir.
 Ayarlandığında, PHP verilen dizinlerde bulunan `.ini` uzantılı tüm dosyaları yükleyecektir.
 

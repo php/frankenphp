@@ -90,7 +90,7 @@ L'image `builder` fournie par FrankenPHP contient une version compilée de `libp
 > Si vous utilisez Alpine Linux et Symfony,
 > vous devrez peut-être [augmenter la taille de pile par défaut](compile.md#utiliser-xcaddy).
 
-## Activer le mode Worker par défaut
+## Activer le mode worker par défaut
 
 Définissez la variable d'environnement `FRANKENPHP_CONFIG` pour démarrer FrankenPHP avec un script worker :
 

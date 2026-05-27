@@ -12,7 +12,7 @@ When [Caddy metrics](https://caddyserver.com/docs/metrics) are enabled, FrankenP
 
 - `frankenphp_total_threads`: The total number of PHP threads.
 - `frankenphp_busy_threads`: The number of PHP threads currently processing a request (running workers always consume a thread).
-- `frankenphp_queue_depth`: The number of regular queued requests
+- `frankenphp_queue_depth`: The number of regular queued requests.
 - `frankenphp_total_workers{worker="[worker_name]"}`: The total number of workers.
 - `frankenphp_busy_workers{worker="[worker_name]"}`: The number of workers currently processing a request.
 - `frankenphp_worker_request_time{worker="[worker_name]"}`: The time spent processing requests by all workers.

@@ -103,6 +103,21 @@ __thread uintptr_t thread_index;
 __thread bool is_worker_thread = false;
 __thread HashTable *sandboxed_env = NULL;
 
+/* Published via SG(server_context) so ext-parallel children, which inherit
+ * the parent's SG(server_context), can route SAPI callbacks back to the
+ * parent's thread_index instead of their zero-initialized TLS. */
+typedef struct {
+  uintptr_t thread_index;
+} frankenphp_server_ctx;
+static __thread frankenphp_server_ctx frankenphp_local_server_ctx;
+
+static inline uintptr_t frankenphp_thread_index(void) {
+  frankenphp_server_ctx *ctx = (frankenphp_server_ctx *)SG(server_context);
+  /* Fall back to the OS thread's own TLS before
+   * frankenphp_update_request_context(). */
+  return ctx == NULL ? thread_index : ctx->thread_index;
+}
+
 #ifndef PHP_WIN32
 static bool is_forked_child = false;
 static pid_t fork_parent_pid = 0;
@@ -283,7 +298,8 @@ void frankenphp_update_local_thread_context(bool is_worker) {
 static void frankenphp_update_request_context() {
   /* the server context is stored on the go side, still SG(server_context) needs
    * to not be NULL */
-  SG(server_context) = (void *)1;
+  frankenphp_local_server_ctx.thread_index = thread_index;
+  SG(server_context) = &frankenphp_local_server_ctx;
   /* status It is not reset by zend engine, set it to 200. */
   SG(sapi_headers).http_response_code = 200;
 
@@ -551,14 +567,15 @@ static int frankenphp_worker_request_startup() {
 PHP_FUNCTION(frankenphp_finish_request) { /* {{{ */
   ZEND_PARSE_PARAMETERS_NONE();
 
-  if (go_is_context_done(thread_index)) {
+  uintptr_t idx = frankenphp_thread_index();
+  if (go_is_context_done(idx)) {
     RETURN_FALSE;
   }
 
   php_output_end_all();
   php_header();
 
-  go_frankenphp_finish_php_request(thread_index);
+  go_frankenphp_finish_php_request(idx);
 
   RETURN_TRUE;
 } /* }}} */
@@ -653,13 +670,13 @@ PHP_FUNCTION(frankenphp_request_headers) {
   ZEND_PARSE_PARAMETERS_NONE();
 
   struct go_apache_request_headers_return headers =
-      go_apache_request_headers(thread_index);
+      go_apache_request_headers(frankenphp_thread_index());
 
   array_init_size(return_value, headers.r1);
 
   for (size_t i = 0; i < headers.r1; i++) {
     go_string key = headers.r0[i * 2];
-    go_string val = headers.r0[i * 2 + 1];
+    go_string val = headers.r0[(i * 2) + 1];
 
     add_assoc_stringl_ex(return_value, key.data, key.len, val.data, val.len);
   }
@@ -852,8 +869,8 @@ PHP_FUNCTION(mercure_publish) {
     RETURN_THROWS();
   }
 
-  struct go_mercure_publish_return result =
-      go_mercure_publish(thread_index, topics, data, private, id, type, retry);
+  struct go_mercure_publish_return result = go_mercure_publish(
+      frankenphp_thread_index(), topics, data, private, id, type, retry);
 
   switch (result.r1) {
   case 0:
@@ -885,7 +902,7 @@ PHP_FUNCTION(frankenphp_log) {
   ZEND_PARSE_PARAMETERS_END();
 
   char *ret = NULL;
-  ret = go_log_attrs(thread_index, message, level, context);
+  ret = go_log_attrs(frankenphp_thread_index(), message, level, context);
   if (ret != NULL) {
     zend_throw_exception(spl_ce_RuntimeException, ret, 0);
     free(ret);
@@ -995,7 +1012,7 @@ static size_t frankenphp_ub_write(const char *str, size_t str_length) {
 #endif
 
   struct go_ub_write_return result =
-      go_ub_write(thread_index, (char *)str, str_length);
+      go_ub_write(frankenphp_thread_index(), (char *)str, str_length);
 
   if (result.r1) {
     php_handle_aborted_connection();
@@ -1027,7 +1044,8 @@ static int frankenphp_send_headers(sapi_headers_struct *sapi_headers) {
     }
   }
 
-  bool success = go_write_headers(thread_index, status, &sapi_headers->headers);
+  bool success = go_write_headers(frankenphp_thread_index(), status,
+                                  &sapi_headers->headers);
   if (success) {
     return SAPI_HEADER_SENT_SUCCESSFULLY;
   }
@@ -1043,17 +1061,17 @@ static void frankenphp_sapi_flush(void *server_context) {
 #endif
 
   sapi_send_headers();
-  if (go_sapi_flush(thread_index)) {
+  if (go_sapi_flush(frankenphp_thread_index())) {
     php_handle_aborted_connection();
   }
 }
 
 static size_t frankenphp_read_post(char *buffer, size_t count_bytes) {
-  return go_read_post(thread_index, buffer, count_bytes);
+  return go_read_post(frankenphp_thread_index(), buffer, count_bytes);
 }
 
 static char *frankenphp_read_cookies(void) {
-  return go_read_cookies(thread_index);
+  return go_read_cookies(frankenphp_thread_index());
 }
 
 /* all variables with well defined keys can safely be registered like this */
@@ -1173,14 +1191,14 @@ frankenphp_register_variables_from_request_info(zval *track_vars_array) {
       frankenphp_strings.content_type, (char *)SG(request_info).content_type,
       true, track_vars_array);
   frankenphp_register_variable_from_request_info(
-      frankenphp_strings.path_translated,
-      (char *)SG(request_info).path_translated, false, track_vars_array);
+      frankenphp_strings.path_translated, SG(request_info).path_translated,
+      false, track_vars_array);
   frankenphp_register_variable_from_request_info(
       frankenphp_strings.query_string, SG(request_info).query_string, true,
       track_vars_array);
-  frankenphp_register_variable_from_request_info(
-      frankenphp_strings.remote_user, (char *)SG(request_info).auth_user, false,
-      track_vars_array);
+  frankenphp_register_variable_from_request_info(frankenphp_strings.remote_user,
+                                                 SG(request_info).auth_user,
+                                                 false, track_vars_array);
   frankenphp_register_variable_from_request_info(
       frankenphp_strings.request_method,
       (char *)SG(request_info).request_method, false, track_vars_array);
@@ -1229,14 +1247,14 @@ static void frankenphp_register_variables(zval *track_vars_array) {
    * environment, not values added though putenv
    */
   /* import environment and CGI variables from the request context in go */
-  go_register_server_variables(thread_index, track_vars_array);
+  go_register_server_variables(frankenphp_thread_index(), track_vars_array);
 
   /* Some variables are already present in SG(request_info) */
   frankenphp_register_variables_from_request_info(track_vars_array);
 }
 
 static void frankenphp_log_message(const char *message, int syslog_type_int) {
-  go_log(thread_index, (char *)message, syslog_type_int);
+  go_log(frankenphp_thread_index(), (char *)message, syslog_type_int);
 }
 
 static char *frankenphp_getenv(const char *name, size_t name_len) {
@@ -1289,7 +1307,7 @@ sapi_module_struct frankenphp_sapi_module = {
  * License: MIT
  */
 static void set_thread_name(char *thread_name) {
-#if defined(__linux__)
+#ifdef __linux__
   /* Use prctl instead to prevent using _GNU_SOURCE flag and implicit
    * declaration */
   prctl(PR_SET_NAME, thread_name);
@@ -1375,6 +1393,19 @@ static void *php_thread(void *arg) {
                        zend_memory_usage(0), __ATOMIC_RELAXED);
 
       has_attempted_shutdown = true;
+
+#ifdef HAVE_PHP_SESSION
+      /* A bailout inside a user save handler skips the cleanup that clears
+       * PS(in_save_handler); RSHUTDOWN's recursion guard then refuses to run
+       * the handler's close() and any resource it holds leaks
+       * (https://github.com/php/frankenphp/issues/2368). See
+       * https://github.com/php/php-src/blob/900797e54fb8d21a761205e5788b9275dc1c7c0e/ext/session/mod_user.c#L29
+       * fpm doesn't run into this because it kills timed out processes, which
+       * releases all resources:
+       * https://github.com/php/php-src/blob/900797e54fb8d21a761205e5788b9275dc1c7c0e/sapi/fpm/fpm/fpm_request.c#L276
+       */
+      PS(in_save_handler) = false;
+#endif
 
       /* shutdown the request, potential bailout to zend_catch */
       php_request_shutdown((void *)0);
@@ -1744,8 +1775,8 @@ void frankenphp_destroy_thread_metrics(void) {
   thread_metrics = NULL;
 }
 
-size_t frankenphp_get_thread_memory_usage(uintptr_t idx) {
-  return __atomic_load_n(&thread_metrics[idx].last_memory_usage,
+size_t frankenphp_get_thread_memory_usage(uintptr_t thread_index) {
+  return __atomic_load_n(&thread_metrics[thread_index].last_memory_usage,
                          __ATOMIC_RELAXED);
 }
 

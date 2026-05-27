@@ -17,7 +17,7 @@ php_server
 
 一个更高级的 `Caddyfile`，支持更多功能并提供方便的环境变量，可以在 [FrankenPHP 仓库中](https://github.com/php/frankenphp/blob/main/caddy/frankenphp/Caddyfile)找到，并随 Docker 镜像提供。
 
-PHP 本身可以[使用 `php.ini` 文件](https://www.php.net/manual/en/configuration.file.php)进行配置。
+PHP 本身可以[使用 `php.ini` 文件](https://www.php.net/manual/configuration.file.php)进行配置。
 
 根据你的安装方法，FrankenPHP 和 PHP 解释器将在以下位置查找配置文件。
 
@@ -275,7 +275,7 @@ Workers 可以通过 `watch` 指令在文件更改时重新启动。
 
 ## PHP 配置
 
-为了加载[附加的 PHP 配置文件](https://www.php.net/manual/en/configuration.file.php#configuration.file.scan)，可以使用 `PHP_INI_SCAN_DIR` 环境变量。设置后，PHP 将加载给定目录中所有带有 `.ini` 扩展名的文件。
+为了加载[附加的 PHP 配置文件](https://www.php.net/manual/configuration.file.php#configuration.file.scan)，可以使用 `PHP_INI_SCAN_DIR` 环境变量。设置后，PHP 将加载给定目录中所有带有 `.ini` 扩展名的文件。
 
 您还可以通过在 `Caddyfile` 中使用 `php_ini` 指令来更改 PHP 配置：
 

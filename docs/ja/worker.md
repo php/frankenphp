@@ -167,7 +167,7 @@ frankenphp {
 
 ## スーパーグローバルの動作
 
-[PHPのスーパーグローバル](https://www.php.net/manual/en/language.variables.superglobals.php)（`$_SERVER`、`$_ENV`、`$_GET`など）
+[PHPのスーパーグローバル](https://www.php.net/manual/language.variables.superglobals.php)（`$_SERVER`、`$_ENV`、`$_GET`など）
 は以下のように動作します：
 
 - `frankenphp_handle_request()`が最初に呼び出される前は、スーパーグローバルにはワーカースクリプト自体にバインドされた値が格納されています

@@ -22,8 +22,6 @@ import (
 	"unsafe"
 
 	"github.com/dunglas/frankenphp/internal/phpheaders"
-	"golang.org/x/text/language"
-	"golang.org/x/text/search"
 )
 
 // cStringHTTPMethods caches C string versions of common HTTP methods
@@ -234,11 +232,16 @@ func splitCgiPath(fc *frankenPHPContext) {
 	fc.worker = workersByPath[fc.scriptFilename]
 }
 
-var splitSearchNonASCII = search.New(language.Und, search.IgnoreCase)
-
 // splitPos returns the index where path should be split based on splitPath.
 // example: if splitPath is [".php"]
 // "/path/to/script.php/some/path": ("/path/to/script.php", "/some/path")
+//
+// Matching is strictly ASCII case-insensitive. Bytes >= utf8.RuneSelf in path
+// never match any split entry: split strings are validated ASCII-only and
+// lower-cased in WithRequestSplitPath, so any Unicode equivalence (e.g.
+// fullwidth or mathematical letters folding to ASCII) would let an attacker
+// upload a file whose name contains such code points and have it served as
+// PHP. See GHSA-3g8v-8r37-cgjm and GHSA-v4h7-cj44-8fc8.
 func splitPos(path string, splitPath []string) int {
 	if len(splitPath) == 0 {
 		return 0
@@ -246,31 +249,18 @@ func splitPos(path string, splitPath []string) int {
 
 	pathLen := len(path)
 
-	// We are sure that split strings are all ASCII-only and lower-case because of validation and normalization in WithRequestSplitPath
 	for _, split := range splitPath {
 		splitLen := len(split)
+		if splitLen == 0 || splitLen > pathLen {
+			continue
+		}
 
-		for i := 0; i < pathLen; i++ {
-			if path[i] >= utf8.RuneSelf {
-				if _, end := splitSearchNonASCII.IndexString(path, split); end > -1 {
-					return end
-				}
-
-				break
-			}
-
-			if i+splitLen > pathLen {
-				continue
-			}
-
+		for i := 0; i <= pathLen-splitLen; i++ {
 			match := true
 			for j := 0; j < splitLen; j++ {
 				c := path[i+j]
-
 				if c >= utf8.RuneSelf {
-					if _, end := splitSearchNonASCII.IndexString(path, split); end > -1 {
-						return end
-					}
+					match = false
 
 					break
 				}
