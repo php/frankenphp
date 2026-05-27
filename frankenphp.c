@@ -29,7 +29,7 @@
 #ifndef ZEND_WIN32
 #include <unistd.h>
 #endif
-#if defined(__linux__)
+#ifdef __linux__
 #include <sys/prctl.h>
 #elif defined(__FreeBSD__) || defined(__OpenBSD__)
 #include <pthread_np.h>
@@ -610,7 +610,7 @@ PHP_FUNCTION(frankenphp_request_headers) {
 
   for (size_t i = 0; i < headers.r1; i++) {
     go_string key = headers.r0[i * 2];
-    go_string val = headers.r0[i * 2 + 1];
+    go_string val = headers.r0[(i * 2) + 1];
 
     add_assoc_stringl_ex(return_value, key.data, key.len, val.data, val.len);
   }
@@ -1107,14 +1107,14 @@ frankenphp_register_variables_from_request_info(zval *track_vars_array) {
       frankenphp_strings.content_type, (char *)SG(request_info).content_type,
       true, track_vars_array);
   frankenphp_register_variable_from_request_info(
-      frankenphp_strings.path_translated,
-      (char *)SG(request_info).path_translated, false, track_vars_array);
+      frankenphp_strings.path_translated, SG(request_info).path_translated,
+      false, track_vars_array);
   frankenphp_register_variable_from_request_info(
       frankenphp_strings.query_string, SG(request_info).query_string, true,
       track_vars_array);
-  frankenphp_register_variable_from_request_info(
-      frankenphp_strings.remote_user, (char *)SG(request_info).auth_user, false,
-      track_vars_array);
+  frankenphp_register_variable_from_request_info(frankenphp_strings.remote_user,
+                                                 SG(request_info).auth_user,
+                                                 false, track_vars_array);
   frankenphp_register_variable_from_request_info(
       frankenphp_strings.request_method,
       (char *)SG(request_info).request_method, false, track_vars_array);
@@ -1223,7 +1223,7 @@ sapi_module_struct frankenphp_sapi_module = {
  * License: MIT
  */
 static void set_thread_name(char *thread_name) {
-#if defined(__linux__)
+#ifdef __linux__
   /* Use prctl instead to prevent using _GNU_SOURCE flag and implicit
    * declaration */
   prctl(PR_SET_NAME, thread_name);
@@ -1309,6 +1309,19 @@ static void *php_thread(void *arg) {
                        zend_memory_usage(0), __ATOMIC_RELAXED);
 
       has_attempted_shutdown = true;
+
+#ifdef HAVE_PHP_SESSION
+      /* A bailout inside a user save handler skips the cleanup that clears
+       * PS(in_save_handler); RSHUTDOWN's recursion guard then refuses to run
+       * the handler's close() and any resource it holds leaks
+       * (https://github.com/php/frankenphp/issues/2368). See
+       * https://github.com/php/php-src/blob/900797e54fb8d21a761205e5788b9275dc1c7c0e/ext/session/mod_user.c#L29
+       * fpm doesn't run into this because it kills timed out processes, which
+       * releases all resources:
+       * https://github.com/php/php-src/blob/900797e54fb8d21a761205e5788b9275dc1c7c0e/sapi/fpm/fpm/fpm_request.c#L276
+       */
+      PS(in_save_handler) = false;
+#endif
 
       /* shutdown the request, potential bailout to zend_catch */
       php_request_shutdown((void *)0);
@@ -1678,8 +1691,8 @@ void frankenphp_destroy_thread_metrics(void) {
   thread_metrics = NULL;
 }
 
-size_t frankenphp_get_thread_memory_usage(uintptr_t idx) {
-  return __atomic_load_n(&thread_metrics[idx].last_memory_usage,
+size_t frankenphp_get_thread_memory_usage(uintptr_t thread_index) {
+  return __atomic_load_n(&thread_metrics[thread_index].last_memory_usage,
                          __ATOMIC_RELAXED);
 }
 
