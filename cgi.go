@@ -4,10 +4,12 @@ package frankenphp
 // #cgo nocallback frankenphp_register_variable_safe
 // #cgo nocallback frankenphp_register_known_variable
 // #cgo nocallback frankenphp_init_persistent_string
+// #cgo nocallback frankenphp_add_to_sandboxed_env
 // #cgo noescape frankenphp_register_server_vars
 // #cgo noescape frankenphp_register_variable_safe
 // #cgo noescape frankenphp_register_known_variable
 // #cgo noescape frankenphp_init_persistent_string
+// #cgo noescape frankenphp_add_to_sandboxed_env
 // #include "frankenphp.h"
 // #include <php_variables.h>
 import "C"
@@ -180,6 +182,13 @@ func addPreparedEnvToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 	fc.env = nil
 }
 
+// addPreparedEnvToSandbox exposes fc.env to getenv() before any PHP code runs.
+func addPreparedEnvToSandbox(fc *frankenPHPContext) {
+	for k, v := range fc.env {
+		C.frankenphp_add_to_sandboxed_env(toUnsafeChar(k), C.size_t(len(k)-1), toUnsafeChar(v), C.size_t(len(v)))
+	}
+}
+
 //export go_register_server_variables
 func go_register_server_variables(threadIndex C.uintptr_t, trackVarsArray *C.zval) {
 	thread := phpThreads[threadIndex]
@@ -297,6 +306,8 @@ func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) 
 	if request == nil {
 		return nil
 	}
+
+	addPreparedEnvToSandbox(fc)
 
 	if m, ok := cStringHTTPMethods[request.Method]; ok {
 		info.request_method = m

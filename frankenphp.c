@@ -92,6 +92,10 @@ HashTable *main_thread_env = NULL;
 __thread uintptr_t thread_index;
 __thread bool is_worker_thread = false;
 __thread HashTable *sandboxed_env = NULL;
+/* prepared_env holds entries from php(_server)'s `env KEY VAL`,
+ * so they can be merged into $_ENV when 'E' is in
+ * variables_order. Separate from putenv() so we don't leak into $_ENV */
+__thread HashTable *prepared_env = NULL;
 
 /* Published via SG(server_context) so ext-parallel children, which inherit
  * the parent's SG(server_context), can route SAPI callbacks back to the
@@ -429,9 +433,17 @@ bool frankenphp_shutdown_dummy_request(void) {
 }
 
 void get_full_env(zval *track_vars_array) {
-  zend_hash_extend(Z_ARR_P(track_vars_array),
-                   zend_hash_num_elements(main_thread_env), 0);
+  size_t total = zend_hash_num_elements(main_thread_env);
+  if (prepared_env != NULL) {
+    // perf: doesn't matter if we get the exact count, just >= needed
+    total += zend_hash_num_elements(prepared_env);
+  }
+  zend_hash_extend(Z_ARR_P(track_vars_array), total, 0);
   zend_hash_copy(Z_ARR_P(track_vars_array), main_thread_env, NULL);
+  if (prepared_env != NULL) {
+    zend_hash_copy(Z_ARR_P(track_vars_array), prepared_env,
+                   (copy_ctor_func_t)zval_add_ref);
+  }
 }
 
 /* Adapted from php_request_startup() */
@@ -1239,6 +1251,30 @@ static inline void reset_sandboxed_environment() {
     zend_hash_release(sandboxed_env);
     sandboxed_env = NULL;
   }
+  if (prepared_env != NULL) {
+    zend_hash_release(prepared_env);
+    prepared_env = NULL;
+  }
+}
+
+/* Adds a key/value pair to the per-thread sandboxed environment so it becomes
+ * visible to getenv()/$_ENV. Used to expose env vars declared in the
+ * php(_server) directive, which would otherwise only appear in $_SERVER. */
+void frankenphp_add_to_sandboxed_env(char *name, size_t name_len, char *val,
+                                     size_t val_len) {
+  if (sandboxed_env == NULL) {
+    sandboxed_env = zend_array_dup(main_thread_env);
+  }
+  zval zv = {0};
+  ZVAL_STRINGL(&zv, val, val_len);
+  zend_hash_str_update(sandboxed_env, name, name_len, &zv);
+
+  if (prepared_env == NULL) {
+    prepared_env = zend_new_array(8);
+  }
+  zval zv2 = {0};
+  ZVAL_STRINGL(&zv2, val, val_len);
+  zend_hash_str_update(prepared_env, name, name_len, &zv2);
 }
 
 static void *php_thread(void *arg) {

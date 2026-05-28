@@ -767,6 +767,25 @@ func TestEnvIsNotResetInWorkerMode(t *testing.T) {
 	}, &testOptions{workerScript: "env/remember-env.php"})
 }
 
+// reproduction of https://github.com/php/frankenphp/issues/1674
+func TestPreparedEnvIsVisibleToGetenv_module(t *testing.T) {
+	testPreparedEnvIsVisibleToGetenv(t, &testOptions{nbParallelRequests: 1})
+}
+func TestPreparedEnvIsVisibleToGetenv_worker(t *testing.T) {
+	testPreparedEnvIsVisibleToGetenv(t, &testOptions{
+		workerScript: "env/prepared-env-getenv.php",
+	})
+}
+func testPreparedEnvIsVisibleToGetenv(t *testing.T, opts *testOptions) {
+	opts.requestOpts = append(opts.requestOpts,
+		frankenphp.WithRequestEnv(map[string]string{"FRANKENPHP_TEST_PHP_SERVER_ENV_IN_GETENV": "hello"}),
+	)
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/env/prepared-env-getenv.php", handler, t)
+		assert.Equal(t, "getenv='hello'\nserver='hello'\n", body)
+	}, opts)
+}
+
 // reproduction of https://github.com/php/frankenphp/issues/1061
 func TestModificationsToEnvPersistAcrossRequests(t *testing.T) {
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
