@@ -342,70 +342,34 @@ func (m *PrometheusMetrics) Shutdown() {
 
 	if m.totalWorkers != nil {
 		m.registry.Unregister(m.totalWorkers)
-		m.totalWorkers = nil
 	}
 
 	if m.busyWorkers != nil {
 		m.registry.Unregister(m.busyWorkers)
-		m.busyWorkers = nil
 	}
 
 	if m.workerRequestTime != nil {
 		m.registry.Unregister(m.workerRequestTime)
-		m.workerRequestTime = nil
 	}
 
 	if m.workerRequestCount != nil {
 		m.registry.Unregister(m.workerRequestCount)
-		m.workerRequestCount = nil
 	}
 
 	if m.workerCrashes != nil {
 		m.registry.Unregister(m.workerCrashes)
-		m.workerCrashes = nil
 	}
 
 	if m.workerRestarts != nil {
 		m.registry.Unregister(m.workerRestarts)
-		m.workerRestarts = nil
 	}
 
 	if m.readyWorkers != nil {
 		m.registry.Unregister(m.readyWorkers)
-		m.readyWorkers = nil
 	}
 
 	if m.workerQueueDepth != nil {
 		m.registry.Unregister(m.workerQueueDepth)
-		m.workerQueueDepth = nil
-	}
-
-	m.totalThreads = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "frankenphp_total_threads",
-		Help: "Total number of PHP threads",
-	})
-	m.busyThreads = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "frankenphp_busy_threads",
-		Help: "Number of busy PHP threads",
-	})
-	m.queueDepth = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "frankenphp_queue_depth",
-		Help: "Number of regular queued requests",
-	})
-
-	if err := m.registry.Register(m.totalThreads); err != nil &&
-		!errors.As(err, &prometheus.AlreadyRegisteredError{}) {
-		panic(err)
-	}
-
-	if err := m.registry.Register(m.busyThreads); err != nil &&
-		!errors.As(err, &prometheus.AlreadyRegisteredError{}) {
-		panic(err)
-	}
-
-	if err := m.registry.Register(m.queueDepth); err != nil &&
-		!errors.As(err, &prometheus.AlreadyRegisteredError{}) {
-		panic(err)
 	}
 }
 
