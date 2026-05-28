@@ -1621,6 +1621,10 @@ static void *execute_script_cli(void *arg) {
 
   php_embed_init(cli_argc, cli_argv);
 
+  // php_embed_init() forces SG(headers_sent) = 1 and no_headers = 1
+  SG(headers_sent) = 0;
+  SG(request_info).no_headers = 0;
+
   cli_register_file_handles();
   zend_first_try {
     if (eval) {
