@@ -10,6 +10,7 @@ This index points AI agents and crawlers at the canonical English documentation.
 - [FrankenPHP Worker Mode](https://frankenphp.dev/docs/worker/): keep your PHP application bootstrapped in memory between requests for lower latency.
 - [Configuring FrankenPHP](https://frankenphp.dev/docs/config/): Caddyfile, JSON, environment variables, and `php.ini` configuration.
 - [FrankenPHP Internals](https://frankenphp.dev/docs/internals/): thread types, the state machine, the Go/C/PHP CGO boundary, auto-scaling, and per-thread environment sandboxing.
+- [FrankenPHP Security Model](https://frankenphp.dev/docs/security/): trust boundaries between Go, C, and PHP (which inputs are untrusted, what the runtime is responsible for, and what is out of scope).
 
 ## Setup and build
 
