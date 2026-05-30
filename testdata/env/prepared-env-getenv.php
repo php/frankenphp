@@ -8,4 +8,5 @@ return function () {
     // See https://github.com/php/frankenphp/issues/1674
     echo "getenv=" . var_export(getenv('FRANKENPHP_TEST_PHP_SERVER_ENV_IN_GETENV'), true) . "\n";
     echo "server=" . var_export($_SERVER['FRANKENPHP_TEST_PHP_SERVER_ENV_IN_GETENV'] ?? null, true) . "\n";
+    echo "env=" . var_export($_ENV['FRANKENPHP_TEST_PHP_SERVER_ENV_IN_GETENV'] ?? null, true) . "\n";
 };
