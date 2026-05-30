@@ -184,8 +184,9 @@ func addPreparedEnvToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 
 // addPreparedEnvToGetenv exposes fc.env to getenv() before any PHP code runs.
 func addPreparedEnvToGetenv(fc *frankenPHPContext) {
+	size := C.size_t(len(fc.env))
 	for k, v := range fc.env {
-		C.frankenphp_add_to_prepared_env(toUnsafeChar(k), C.size_t(len(k)-1), toUnsafeChar(v), C.size_t(len(v)))
+		C.frankenphp_add_to_prepared_env(toUnsafeChar(k), C.size_t(len(k)-1), toUnsafeChar(v), C.size_t(len(v)), size)
 	}
 }
 

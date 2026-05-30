@@ -1295,9 +1295,9 @@ static inline void reset_sandboxed_environment() {
 /* Adds a key/value pair to the per-thread prepared environment, exposing
  *  env vars from the php(_server) directive to getenv() and $_ENV. */
 void frankenphp_add_to_prepared_env(char *name, size_t name_len, char *val,
-                                    size_t val_len) {
+                                    size_t val_len, size_t size) {
   if (prepared_env == NULL) {
-    prepared_env = zend_new_array(8);
+    prepared_env = zend_new_array(size);
   }
   zval zv = {0};
   ZVAL_STRINGL(&zv, val, val_len);
