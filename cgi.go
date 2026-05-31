@@ -46,11 +46,20 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 	request := fc.request
 	// Separate remote IP and port; more lenient than net.SplitHostPort
 	var ip, port string
-	if idx := strings.LastIndex(request.RemoteAddr, ":"); idx > -1 {
-		ip = request.RemoteAddr[:idx]
-		port = request.RemoteAddr[idx+1:]
+	remoteAddr := request.RemoteAddr
+
+	// When using a UNIX domain socket, Go's net/http sets RemoteAddr to "@"
+	// (see https://github.com/golang/go/issues/49825). In this case, fall
+	// back to 127.0.0.1 as the remote address, which matches the convention
+	// used by Apache httpd and other web servers when listening on UNIX sockets.
+	if remoteAddr == "@" {
+		ip = "127.0.0.1"
+		port = ""
+	} else if idx := strings.LastIndex(remoteAddr, ":"); idx > -1 {
+		ip = remoteAddr[:idx]
+		port = remoteAddr[idx+1:]
 	} else {
-		ip = request.RemoteAddr
+		ip = remoteAddr
 	}
 
 	// Remove [] from IPv6 addresses
