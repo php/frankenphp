@@ -204,6 +204,7 @@ void frankenphp_register_server_vars(zval *track_vars_array,
                                      frankenphp_server_vars vars);
 void frankenphp_add_to_prepared_env(char *name, size_t name_len, char *val,
                                     size_t val_len, size_t size);
+void frankenphp_merge_with_prepared_env(zval *track_vars_array);
 
 zend_string *frankenphp_init_persistent_string(const char *string, size_t len);
 int frankenphp_reset_opcache(void);

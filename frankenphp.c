@@ -592,7 +592,7 @@ PHP_FUNCTION(frankenphp_putenv) {
 
 /* getenv() lookup: sandboxed_env if present (it already holds prepared + OS),
  * otherwise prepared_env then main_thread_env. */
-static zval *frankenphp_lookup_env(const char *name, size_t name_len) {
+static inline zval *frankenphp_lookup_env(const char *name, size_t name_len) {
   if (sandboxed_env != NULL) {
     return zend_hash_str_find(sandboxed_env, name, name_len);
   }
@@ -609,7 +609,7 @@ static zval *frankenphp_lookup_env(const char *name, size_t name_len) {
 }
 
 /* Returns a fresh copy of the full environment, merging the layers above. */
-static HashTable *frankenphp_dup_env(void) {
+static inline HashTable *frankenphp_dup_env(void) {
   if (sandboxed_env != NULL) {
     return zend_array_dup(sandboxed_env);
   }
@@ -1108,6 +1108,13 @@ void frankenphp_register_server_vars(zval *track_vars_array,
   ZVAL_EMPTY_STRING(&zv);
   zend_hash_update_ind(ht, frankenphp_strings.auth_type, &zv);
   zend_hash_update_ind(ht, frankenphp_strings.remote_ident, &zv);
+}
+
+void frankenphp_merge_with_prepared_env(zval *track_vars_array) {
+  if (prepared_env != NULL) {
+    HashTable *ht = Z_ARRVAL_P(track_vars_array);
+    zend_hash_copy(ht, prepared_env, (copy_ctor_func_t)zval_add_ref);
+  }
 }
 
 /** Create an immutable zend_string that lasts for the whole process **/

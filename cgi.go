@@ -175,17 +175,10 @@ func addHeadersToServer(ctx context.Context, request *http.Request, trackVarsArr
 	}
 }
 
-func addPreparedEnvToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
-	for k, v := range fc.env {
-		C.frankenphp_register_variable_safe(toUnsafeChar(k), toUnsafeChar(v), C.size_t(len(v)), trackVarsArray)
-	}
-	fc.env = nil
-}
-
 // addPreparedEnvToGetenv exposes fc.env to getenv() before any PHP code runs.
-func addPreparedEnvToGetenv(fc *frankenPHPContext) {
-	size := C.size_t(len(fc.env))
-	for k, v := range fc.env {
+func addPreparedEnvToGetenv(env PreparedEnv) {
+	size := C.size_t(len(env))
+	for k, v := range env {
 		C.frankenphp_add_to_prepared_env(toUnsafeChar(k), C.size_t(len(k)-1), toUnsafeChar(v), C.size_t(len(v)), size)
 	}
 }
@@ -201,7 +194,9 @@ func go_register_server_variables(threadIndex C.uintptr_t, trackVarsArray *C.zva
 	}
 
 	// The Prepared Environment is registered last and can overwrite any previous values
-	addPreparedEnvToServer(fc, trackVarsArray)
+	if fc.env != nil {
+		C.frankenphp_merge_with_prepared_env(trackVarsArray)
+	}
 }
 
 // splitCgiPath splits the request path into SCRIPT_NAME, SCRIPT_FILENAME, PATH_INFO, DOCUMENT_URI
@@ -308,7 +303,9 @@ func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) 
 		return nil
 	}
 
-	addPreparedEnvToGetenv(fc)
+	if fc.env != nil {
+		addPreparedEnvToGetenv(fc.env)
+	}
 
 	if m, ok := cStringHTTPMethods[request.Method]; ok {
 		info.request_method = m
