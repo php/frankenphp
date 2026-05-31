@@ -222,22 +222,6 @@ void frankenphp_release_thread_for_kill(force_kill_slot slot) {
 #endif
 }
 
-/* Forward declaration */
-PHP_FUNCTION(frankenphp_opcache_reset);
-
-/* Try to override opcache_reset if opcache is loaded.
- * instead of resetting opcache, reboot all threads */
-static void frankenphp_override_opcache_reset(void) {
-  zend_function *func = zend_hash_str_find_ptr(
-      CG(function_table), "opcache_reset", sizeof("opcache_reset") - 1);
-  if (func != NULL && func->type == ZEND_INTERNAL_FUNCTION &&
-      ((zend_internal_function *)func)->handler !=
-          ZEND_FN(frankenphp_opcache_reset)) {
-    ((zend_internal_function *)func)->handler =
-        ZEND_FN(frankenphp_opcache_reset);
-  }
-}
-
 void frankenphp_update_local_thread_context(bool is_worker) {
   is_worker_thread = is_worker;
 
@@ -615,13 +599,6 @@ PHP_FUNCTION(frankenphp_getenv) {
   }
 } /* }}} */
 
-/* {{{ thread-safe opcache reset */
-PHP_FUNCTION(frankenphp_opcache_reset) {
-  go_schedule_opcache_reset(thread_index);
-
-  RETVAL_TRUE;
-} /* }}} */
-
 /* {{{ Fetch all HTTP request headers */
 PHP_FUNCTION(frankenphp_request_headers) {
   ZEND_PARSE_PARAMETERS_NONE();
@@ -864,6 +841,26 @@ PHP_FUNCTION(frankenphp_log) {
     zend_throw_exception(spl_ce_RuntimeException, ret, 0);
     free(ret);
     RETURN_THROWS();
+  }
+}
+
+/* {{{ thread-safe opcache reset */
+PHP_FUNCTION(frankenphp_opcache_reset) {
+  go_schedule_opcache_reset(thread_index);
+
+  RETVAL_TRUE;
+} /* }}} */
+
+/* Try to override opcache_reset if opcache is loaded.
+ * instead of resetting opcache, reboot all threads */
+static void frankenphp_override_opcache_reset(void) {
+  zend_function *func = zend_hash_str_find_ptr(
+      CG(function_table), "opcache_reset", sizeof("opcache_reset") - 1);
+  if (func != NULL && func->type == ZEND_INTERNAL_FUNCTION &&
+      ((zend_internal_function *)func)->handler !=
+          ZEND_FN(frankenphp_opcache_reset)) {
+    ((zend_internal_function *)func)->handler =
+        ZEND_FN(frankenphp_opcache_reset);
   }
 }
 

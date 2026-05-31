@@ -100,6 +100,8 @@ func (thread *phpThread) reboot() bool {
 // shutdown the underlying PHP thread
 func (thread *phpThread) shutdown() {
 	if !thread.state.RequestSafeStateChange(state.ShuttingDown) {
+		// thread is already shutting down, prefer the stable reserved state over done
+		_ = thread.state.CompareAndSwap(state.Done, state.Reserved)
 		return
 	}
 

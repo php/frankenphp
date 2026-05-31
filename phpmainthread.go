@@ -132,8 +132,11 @@ func (mainThread *phpMainThread) start() error {
 // rebootAllThreads reboots all underlying C threads, but keeps the go side alive
 func (mainThread *phpMainThread) rebootAllThreads() bool {
 	if !mainThread.isRebooting.CompareAndSwap(false, true) {
+		// if already rebooting, ignore the call
 		return false
 	}
+
+	defer mainThread.isRebooting.Store(false)
 
 	// allow no scaling or shutdown while rebooting
 	scalingMu.Lock()
@@ -196,12 +199,10 @@ func (mainThread *phpMainThread) rebootAllThreads() bool {
 		}
 	}
 
-	mainThread.isRebooting.Store(false)
-
 	globalLogger.LogAttrs(
 		globalCtx,
 		slog.LevelInfo,
-		"all PHP threads rebooted",
+		"thread reboot finished",
 		slog.String("duration", time.Since(rebootStart).String()),
 		slog.Int("num_threads", len(rebootingThreads)),
 	)
