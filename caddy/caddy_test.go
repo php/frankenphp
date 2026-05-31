@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"math/rand/v2"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -1770,15 +1769,15 @@ func TestOpcacheReset(t *testing.T) {
 	wg.Add(numRequests)
 	for i := 0; i < numRequests; i++ {
 
-		// introduce some random delay
-		if rand.IntN(10) > 8 {
+		// introduce a delay every 10 requests
+		if i%10 == 0 {
 			time.Sleep(time.Millisecond * 10)
 		}
 
 		go func() {
 			defer wg.Done()
-			// randomly call opcache_reset
-			if rand.IntN(10) > 7 {
+			// spam opcache_reset on intervals
+			if i%10 > 7 {
 				tester.AssertGetResponse(
 					"http://localhost:"+testPort+"/opcache_reset.php",
 					http.StatusOK,
@@ -1787,7 +1786,7 @@ func TestOpcacheReset(t *testing.T) {
 				return
 			}
 
-			// otherwise call sleep.php with random sleep and work values
+			// otherwise call sleep.php with different sleep and work values
 			sleep := i % 100
 			work := i % 100
 			tester.AssertGetResponse(
