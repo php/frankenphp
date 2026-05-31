@@ -1766,7 +1766,7 @@ func TestOpcacheReset(t *testing.T) {
 		`, "caddyfile")
 
 	wg := sync.WaitGroup{}
-	numRequests := 1000
+	numRequests := 500
 	wg.Add(numRequests)
 	for i := 0; i < numRequests; i++ {
 

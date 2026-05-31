@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/dunglas/frankenphp/internal/memory"
 	"github.com/dunglas/frankenphp/internal/phpheaders"
@@ -31,6 +32,8 @@ var (
 	phpThreads    []*phpThread
 	mainThread    *phpMainThread
 	commonHeaders map[string]*C.zend_string
+	// drainGracePeriod: time to wait for threads to yield before arming force-kill
+	drainGracePeriod = 30 * time.Second
 )
 
 // initPHPThreads starts the main PHP thread,
@@ -80,6 +83,10 @@ func initPHPThreads(numThreads int, numMaxThreads int, phpIni map[string]string)
 }
 
 func drainPHPThreads() {
+	// disallow any scaling or restarting threads while draining
+	scalingMu.Lock()
+	defer scalingMu.Unlock()
+
 	if mainThread == nil {
 		return // mainThread was never initialized
 	}
@@ -136,9 +143,16 @@ func (mainThread *phpMainThread) rebootAllThreads() bool {
 		return false
 	}
 
+	// allow no scaling or shutdown while rebooting
 	scalingMu.Lock()
 	defer scalingMu.Unlock()
-	globalLogger.Info("rebooting all threads")
+
+	if !mainThread.state.Is(state.Ready) {
+		// mainThread has shut down in the meantime, no need to reboot
+		return false
+	}
+
+	globalLogger.Info("rebooting all PHP threads")
 
 	wg := sync.WaitGroup{}
 	rebootingThreads := []*phpThread{}
@@ -151,7 +165,29 @@ func (mainThread *phpMainThread) rebootAllThreads() bool {
 			})
 		}
 	}
-	wg.Wait()
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(drainGracePeriod):
+		// Force-kill any thread still stuck in a blocking syscall, then
+		// keep waiting unconditionally. On platforms where force-kill
+		// cannot interrupt the syscall (macOS, Windows non-alertable
+		// Sleep) the thread exits when the syscall completes naturally.
+		for _, thread := range rebootingThreads {
+			if !thread.state.Is(state.YieldingForReboot) {
+				thread.forceKillMu.RLock()
+				C.frankenphp_force_kill_thread(thread.forceKill)
+				thread.forceKillMu.RUnlock()
+			}
+		}
+		<-done
+	}
 
 	mainThread.state.Set(state.Rebooting)
 	mainThread.state.WaitFor(state.YieldingForReboot)
