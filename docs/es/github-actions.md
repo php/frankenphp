@@ -12,13 +12,13 @@ En la configuración del repositorio, bajo secrets, agrega los siguientes secret
 - `REGISTRY_PASSWORD`: La contraseña para iniciar sesión en el registro (ej. una clave de acceso).
 - `IMAGE_NAME`: El nombre de la imagen (ej. `dunglas/frankenphp`).
 
-## Construyendo y Subiendo la Imagen
+## Construyendo y subiendo la imagen
 
 1. Crea un Pull Request o haz push a tu fork.
 2. GitHub Actions construirá la imagen y ejecutará cualquier prueba.
 3. Si la construcción es exitosa, la imagen será subida al registro usando la etiqueta `pr-x`, donde `x` es el número del PR.
 
-## Desplegando la Imagen
+## Desplegando la imagen
 
 1. Una vez que el Pull Request sea fusionado, GitHub Actions ejecutará nuevamente las pruebas y construirá una nueva imagen.
 2. Si la construcción es exitosa, la etiqueta `main` será actualizada en el registro Docker.

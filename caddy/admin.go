@@ -41,9 +41,8 @@ func (admin *FrankenPHPAdmin) restartWorkers(w http.ResponseWriter, r *http.Requ
 
 	frankenphp.RestartWorkers()
 	caddy.Log().Info("workers restarted from admin api")
-	admin.success(w, "workers restarted successfully\n")
 
-	return nil
+	return admin.success(w, "workers restarted successfully\n")
 }
 
 func (admin *FrankenPHPAdmin) threads(w http.ResponseWriter, _ *http.Request) error {

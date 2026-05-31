@@ -1,0 +1,18 @@
+name: setup-go
+description: Setup Go using the version from go.mod, with standard cache configuration
+inputs:
+  working-directory:
+    description: Path prefix for go.mod / go.sum files (used when the repo is checked out into a subdirectory)
+    required: false
+    default: "."
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v6
+      with:
+        go-version-file: ${{ inputs.working-directory }}/go.mod
+        cache-dependency-path: |
+          ${{ inputs.working-directory }}/go.sum
+          ${{ inputs.working-directory }}/caddy/go.sum
+        cache: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        check-latest: true

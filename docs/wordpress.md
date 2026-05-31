@@ -1,8 +1,13 @@
+---
+title: Running WordPress with FrankenPHP (HTTPS, HTTP/3, hot reload)
+description: How to run WordPress with FrankenPHP, including a minimal install, a production Caddyfile, and enabling hot reload via Mercure.
+---
+
 # WordPress
 
 Run [WordPress](https://wordpress.org/) with FrankenPHP to enjoy a modern, high-performance stack with automatic HTTPS, HTTP/3, and Zstandard compression.
 
-## Minimal Installation
+## Installing WordPress with FrankenPHP
 
 1. [Download WordPress](https://wordpress.org/download/)
 2. Extract the ZIP archive and open a terminal in the extracted directory
@@ -25,7 +30,7 @@ encode zstd br gzip
 log
 ```
 
-## Hot Reload
+## Hot reload for WordPress
 
 To use the [hot reload](hot-reload.md) feature with WordPress, enable [Mercure](mercure.md) and add the `hot_reload` sub-directive to the `php_server` directive in your `Caddyfile`:
 
@@ -44,6 +49,7 @@ php_server {
 Then, add the code needed to load the JavaScript libraries in the `functions.php` file of your WordPress theme:
 
 ```php
+// wp-content/themes/<your-theme>/functions.php
 function hot_reload() {
     ?>
     <?php if (isset($_SERVER['FRANKENPHP_HOT_RELOAD'])): ?>

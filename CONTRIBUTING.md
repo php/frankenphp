@@ -1,5 +1,7 @@
 # Contributing
 
+For an overview of FrankenPHP's architecture (thread types, state machine, CGO boundary, request flow), see the [Internals documentation](docs/internals.md).
+
 ## Compiling PHP
 
 ### With Docker (Linux)
@@ -299,7 +301,7 @@ The steps assume the following environment:
 
 4. Debug Go files from CLion
 
-   - Right click on a *.go file in the Project view on the left
+   - Right click on a \*.go file in the Project view on the left
    - Override file type → C/C++
 
    Now you can place breakpoints in C, C++ and Go files.
@@ -348,7 +350,7 @@ Use GoLand for primary Go development, but the debugger cannot debug C code.
 
 To debug C files from GoLand
 
-- Right click on a *.c file in the Project view on the left
+- Right click on a \*.c file in the Project view on the left
 - Override file type → Go
 
 Now you can place breakpoints in C, C++ and Go files.

@@ -3,6 +3,7 @@ package caddy_test
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"math/rand/v2"
 	"net/http"
 	"os"
@@ -2079,4 +2080,51 @@ func TestSymlinkWorkerBehavior(t *testing.T) {
 			tester.AssertGetResponse("http://localhost:"+testPort+"/index.php", http.StatusOK, fmt.Sprintf("Request: %d\n", i))
 		}
 	})
+}
+
+// TestSessionLockReleaseOnAbortInUserSaveHandler reproduces issue #2368: a
+// timeout bailout inside a user save handler leaks the underlying flock.
+// num_threads is 2 so R3 can't start until R1's thread frees, which
+// guarantees R2 (blocked in flock) inherits the lock when R1 releases and
+// then bails inside StrictSessionHandler. Without the fix R3 hangs in flock.
+func TestSessionLockReleaseOnAbortInUserSaveHandler(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+			http_port `+testPort+`
+			https_port 9443
+			frankenphp {
+				num_threads 2
+				max_threads 2
+			}
+		}
+		localhost:`+testPort+` {
+			route {
+				php {
+					root ../testdata
+				}
+			}
+		}
+		`, "caddyfile")
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	get := func() error {
+		resp, err := client.Get("http://localhost:" + testPort + "/session_deadlock.php")
+		if err != nil {
+			return err
+		}
+		_, _ = io.Copy(io.Discard, resp.Body)
+		return resp.Body.Close()
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { defer wg.Done(); _ = get() }() // R1: holder
+	time.Sleep(300 * time.Millisecond)
+	go func() { defer wg.Done(); _ = get() }() // R2: bails inside user save handler
+	time.Sleep(100 * time.Millisecond)
+	require.NoError(t, get(), "third request hung -- session lock leaked (issue #2368)")
+	wg.Wait()
 }

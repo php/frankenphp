@@ -1,10 +1,10 @@
 # Production Ortamına Dağıtım
 
-Bu dokümanda, Docker Compose kullanarak bir PHP uygulamasını tek bir sunucuya nasıl dağıtacağımızı öğreneceğiz.
+Bu eğitimde, Docker Compose kullanarak bir PHP uygulamasını tek bir sunucuya nasıl dağıtacağımızı öğreneceğiz.
 
-Symfony kullanıyorsanız, Symfony Docker projesinin (FrankenPHP kullanan) "[Production ortamına dağıtım](https://github.com/dunglas/symfony-docker/blob/main/docs/production.md)" dokümanını okumayı tercih edebilirsiniz.
+Symfony kullanıyorsanız, Symfony Docker projesinin (FrankenPHP kullanan) "[Production ortamına dağıtım](https://github.com/dunglas/symfony-docker/blob/main/docs/production.md)" dokümanını okumanızı tercih ederiz.
 
-API Platform (FrankenPHP de kullanır) tercih ediyorsanız, [çerçevenin dağıtım dokümanına](https://api-platform.com/docs/deployment/) bakabilirsiniz.
+API Platform (FrankenPHP de kullanır) kullanıyorsanız, [çerçevenin dağıtım dokümanına](https://api-platform.com/docs/deployment/) başvurabilirsiniz.
 
 ## Uygulamanızı Hazırlama
 
@@ -18,6 +18,9 @@ ENV SERVER_NAME=your-domain-name.example.com
 # HTTPS'yi devre dışı bırakmak istiyorsanız, bunun yerine bu değeri kullanın:
 #ENV SERVER_NAME=:80
 
+# Projeniz "public" dizinini web kökü olarak kullanmıyorsa, burada ayarlayabilirsiniz:
+# ENV SERVER_ROOT=web/
+
 # PHP production ayarlarını etkinleştirin
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
@@ -28,10 +31,10 @@ COPY . /app/public
 ```
 
 Daha fazla ayrıntı ve seçenek için "[Özel Docker İmajı Oluşturma](docker.md)" bölümüne bakın,
-ve yapılandırmayı nasıl özelleştireceğinizi öğrenmek için PHP eklentilerini ve Caddy modüllerini yükleyin.
+ve yapılandırmayı nasıl özelleştireceğinizi, PHP eklentilerini ve Caddy modüllerini nasıl kuracağınızı öğrenin.
 
 Projeniz Composer kullanıyorsa,
-Docker imajına dahil ettiğinizden ve bağımlılıklarınızı yüklediğinizden emin olun.
+Docker imajına dahil etmeyi ve bağımlılıklarınızı kurmayı unutmayın.
 
 Ardından, bir `compose.yaml` dosyası ekleyin:
 
@@ -48,7 +51,7 @@ services:
       - caddy_data:/data
       - caddy_config:/config
 
-# Caddy sertifikaları ve yapılandırması için gereken yığınlar (volumes)
+# Caddy sertifikaları ve yapılandırması için gereken volume'ler
 volumes:
   caddy_data:
   caddy_config:
@@ -57,16 +60,16 @@ volumes:
 > [!NOTE]
 >
 > Önceki örnekler production kullanımı için tasarlanmıştır.
-> Geliştirme aşamasında, bir yığın (volume), farklı bir PHP yapılandırması ve `SERVER_NAME` ortam değişkeni için farklı bir değer kullanmak isteyebilirsiniz.
+> Geliştirme aşamasında, bir volume, farklı bir PHP yapılandırması ve `SERVER_NAME` ortam değişkeni için farklı bir değer kullanmak isteyebilirsiniz.
 >
-> (FrankenPHP kullanan) çok aşamalı Composer, ekstra PHP eklentileri vb. içeren imajlara başvuran daha gelişmiş bir örnek için [Symfony Docker](https://github.com/dunglas/symfony-docker) projesine bir göz atın.
+> FrankenPHP kullanan [Symfony Docker](https://github.com/dunglas/symfony-docker) projesine, çok aşamalı imajlar, Composer, ek PHP eklentileri vb. kullanan daha gelişmiş bir örnek için göz atabilirsiniz.
 
 Son olarak, eğer Git kullanıyorsanız, bu dosyaları commit edin ve push edin.
 
 ## Sunucu Hazırlama
 
 Uygulamanızı production ortamına dağıtmak için bir sunucuya ihtiyacınız vardır.
-Bu dokümanda, DigitalOcean tarafından sağlanan bir sanal makine kullanacağız, ancak herhangi bir Linux sunucusu çalışabilir.
+Bu eğitimde, DigitalOcean tarafından sağlanan bir sanal makine kullanacağız, ancak herhangi bir Linux sunucusu çalışabilir.
 Docker yüklü bir Linux sunucunuz varsa, doğrudan [bir sonraki bölüme](#alan-adı-yapılandırma) geçebilirsiniz.
 
 Aksi takdirde, 200 $ ücretsiz kredi almak için [bu ortaklık bağlantısını](https://m.do.co/c/5d8aabe3ab80) kullanın, bir hesap oluşturun ve ardından "Create a Droplet" seçeneğine tıklayın.
@@ -76,10 +79,10 @@ Bu, Docker ve Docker Compose'un en son sürümlerinin zaten yüklü olduğu bir 
 Test amaçlı kullanım için en ucuz planlar yeterli olacaktır.
 Gerçek production kullanımı için, muhtemelen ihtiyaçlarınıza uyacak şekilde "genel amaçlı" bölümünden bir plan seçmek isteyeceksiniz.
 
-![Docker ile DigitalOcean FrankenPHP](../digitalocean-droplet.png)
+![FrankenPHP'yi Docker ile DigitalOcean'a Dağıtma](digitalocean-droplet.png)
 
 Diğer ayarlar için varsayılanları koruyabilir veya ihtiyaçlarınıza göre değiştirebilirsiniz.
-SSH anahtarınızı eklemeyi veya bir parola oluşturmayı unutmayın, ardından "Sonlandır ve oluştur" düğmesine basın.
+SSH anahtarınızı eklemeyi veya bir parola oluşturmayı unutmayın, ardından "Finalize and create" düğmesine tıklayın.
 
 Ardından, Droplet'iniz hazırlanırken birkaç saniye bekleyin.
 Droplet'iniz hazır olduğunda, bağlanmak için SSH kullanın:
@@ -105,7 +108,7 @@ DigitalOcean Alan Adları hizmetiyle ilgili örnek ("Networking" > "Domains"):
 
 > [!NOTE]
 >
-> FrankenPHP tarafından varsayılan olarak otomatik olarak TLS sertifikası oluşturmak için kullanılan hizmet olan Let's Encrypt, direkt IP adreslerinin kullanılmasını desteklemez. Let's Encrypt'i kullanmak için alan adı kullanmak zorunludur.
+> FrankenPHP tarafından varsayılan olarak otomatik olarak TLS sertifikası oluşturmak için kullanılan hizmet olan Let's Encrypt, yalın IP adreslerinin kullanılmasını desteklemez. Let's Encrypt'i kullanmak için bir alan adı kullanmak zorunludur.
 
 ## Dağıtım
 
@@ -119,21 +122,42 @@ Git ile örnek:
 git clone git@github.com:<username>/<project-name>.git
 ```
 
-Projenizi içeren dizine gidin (`<proje-adı>`) ve uygulamayı production modunda başlatın:
+Projenizi içeren dizine gidin (`<project-name>`) ve uygulamayı production modunda başlatın:
 
 ```console
-docker compose up -d --wait
+docker compose up --wait
 ```
 
-Sunucunuz hazır ve çalışıyor. Sizin için otomatik olarak bir HTTPS sertifikası oluşturuldu.
+Sunucunuz aktif ve çalışıyor, ve sizin için otomatik olarak bir HTTPS sertifikası oluşturulmuştur.
 `https://your-domain-name.example.com` adresine gidin ve keyfini çıkarın!
 
 > [!CAUTION]
 >
 > Docker bir önbellek katmanına sahip olabilir, her dağıtım için doğru derlemeye sahip olduğunuzdan emin olun veya önbellek sorununu önlemek için projenizi `--no-cache` seçeneği ile yeniden oluşturun.
 
+## Ters Proxy Arkasında Çalıştırma
+
+FrankenPHP bir ters proxy veya yük dengeleyicinin (örn. Nginx, AWS ELB, Google Cloud LB) arkasında çalışıyorsa,
+Caddy'nin gelen `X-Forwarded-*` başlıklarına güvenmesini sağlamak için Caddyfile dosyanızdaki [`trusted_proxies` genel seçeneğini](https://caddyserver.com/docs/caddyfile/options#trusted-proxies) yapılandırmanız gerekir:
+
+```caddyfile
+{
+	servers {
+		trusted_proxies static <your-IPs>
+	}
+}
+```
+
+Gerektiğinde `<your-IPs>` değerini proxy'nizin gerçek IP aralıklarıyla değiştirin.
+
+Ek olarak, PHP çerçeveniz de proxy'ye güvenecek şekilde yapılandırılmalıdır.
+Örneğin, Symfony için [`TRUSTED_PROXIES` ortam değişkenini](https://symfony.com/doc/current/deployment/proxies.html) ayarlayın,
+veya Laravel için [`trustedproxies` ara yazılımını](https://laravel.com/docs/trustedproxy) kullanın.
+
+Her iki yapılandırma da olmazsa, `X-Forwarded-For` ve `X-Forwarded-Proto` gibi başlıklar göz ardı edilecek,
+bu da yanlış HTTPS algılaması veya hatalı istemci IP adresleri gibi sorunlara neden olabilir.
+
 ## Birden Fazla Düğümde Dağıtım
 
-Uygulamanızı bir makine kümesine dağıtmak istiyorsanız, [Docker Swarm](https://docs.docker.com/engine/swarm/stack-deploy/) kullanabilirsiniz,
-sağlanan Compose dosyaları ile uyumludur.
-Kubernetes üzerinde dağıtım yapmak için FrankenPHP kullanan [API Platformu ile sağlanan Helm grafiğine](https://api-platform.com/docs/deployment/kubernetes/) göz atın.
+Uygulamanızı bir makine kümesine dağıtmak istiyorsanız, sağlanan Compose dosyalarıyla uyumlu olan [Docker Swarm](https://docs.docker.com/engine/swarm/stack-deploy/) kullanabilirsiniz.
+Kubernetes üzerinde dağıtım yapmak için FrankenPHP kullanan [API Platformu ile sağlanan Helm grafiğini](https://api-platform.com/docs/deployment/kubernetes/) inceleyebilirsiniz.

@@ -1,9 +1,14 @@
+---
+title: FrankenPHP observability with metrics, logs, and Ember TUI
+description: Monitor FrankenPHP in development and production using Prometheus metrics, structured logs, the Ember TUI dashboard, and custom Grafana scraping setups.
+---
+
 # Observability
 
 FrankenPHP provides built-in observability features: [Prometheus-compatible metrics](metrics.md) and [structured logging](logging.md).
 These features, combined with the recommended tools below, give you full visibility into your PHP application's behavior in development and production.
 
-## Ember TUI and Prometheus Exporter
+## Ember TUI and Prometheus exporter
 
 [Ember](https://github.com/alexandre-daubois/ember) is the most user-friendly way to monitor FrankenPHP.
 
@@ -26,7 +31,7 @@ FrankenPHP integrates with Caddy's logging system and provides `frankenphp_log()
 
 See the [Logging](logging.md) page for usage details.
 
-## Custom Prometheus/Grafana Setup
+## Custom Prometheus/Grafana setup
 
 If you prefer a custom monitoring stack, you can scrape FrankenPHP metrics directly.
 There are two options:

@@ -66,7 +66,7 @@ type FrankenPHPApp struct {
 	logger  *slog.Logger
 }
 
-var iniError = errors.New(`"php_ini" must be in the format: php_ini "<key>" "<value>"`)
+var errIni = errors.New(`"php_ini" must be in the format: php_ini "<key>" "<value>"`)
 
 // CaddyModule returns the Caddy module information.
 func (f FrankenPHPApp) CaddyModule() caddy.ModuleInfo {
@@ -274,14 +274,14 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				parseIniLine := func(d *caddyfile.Dispenser) error {
 					key := d.Val()
 					if !d.NextArg() {
-						return d.WrapErr(iniError)
+						return d.WrapErr(errIni)
 					}
 					if f.PhpIni == nil {
 						f.PhpIni = make(map[string]string)
 					}
 					f.PhpIni[key] = d.Val()
 					if d.NextArg() {
-						return d.WrapErr(iniError)
+						return d.WrapErr(errIni)
 					}
 
 					return nil
@@ -298,7 +298,7 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 
 				if !isBlock {
 					if !d.NextArg() {
-						return d.WrapErr(iniError)
+						return d.WrapErr(errIni)
 					}
 					err := parseIniLine(d)
 					if err != nil {

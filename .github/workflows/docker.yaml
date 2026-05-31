@@ -49,7 +49,7 @@ jobs:
       php84_version: ${{ steps.check.outputs.php84_version }}
       php85_version: ${{ steps.check.outputs.php85_version }}
       skip: ${{ steps.check.outputs.skip }}
-      ref: ${{ steps.check.outputs.ref || (github.event_name == 'workflow_dispatch' && inputs.version) || '' }}
+      ref: ${{ steps.check.outputs.ref || (github.ref_type == 'tag' && github.ref_name) || (github.event_name == 'workflow_dispatch' && inputs.version) || '' }}
       base_fingerprint: ${{ steps.check.outputs.base_fingerprint }}
     steps:
       - uses: actions/checkout@v6
@@ -80,7 +80,6 @@ jobs:
           VERSION: ${{ (github.ref_type == 'tag' && github.ref_name) || steps.check.outputs.ref || 'dev' }}
           PHP_VERSION: ${{ steps.check.outputs.php_version }}
   build:
-    environment: dockerhub
     runs-on: ${{ startsWith(matrix.platform, 'linux/arm') && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     needs:
       - prepare
@@ -131,7 +130,7 @@ jobs:
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }} # zizmor: ignore[secrets-outside-env] TODO: drop once super-linter ships zizmor >=1.24.0, then the allowlist in zizmor.yaml takes over
       - name: Build
         id: build
         uses: docker/bake-action@v7
@@ -144,7 +143,6 @@ jobs:
             runner-${{ matrix.variant }}
           # Remove tags to prevent "can't push tagged ref [...] by digest" error
           set: |
-            ${{ (github.event_name == 'pull_request') && '*.args.NO_COMPRESS=1' || '' }}
             *.tags=
             *.platform=${{ matrix.platform }}
             ${{ fromJson(needs.prepare.outputs.push) && '' || format('builder-{0}.cache-from=type=gha,scope=builder-{0}-{1}-{2}', matrix.variant, needs.prepare.outputs.ref || github.ref, matrix.platform) }}
@@ -159,6 +157,7 @@ jobs:
           VERSION: ${{ (github.ref_type == 'tag' && github.ref_name) || needs.prepare.outputs.ref || 'dev' }}
           PHP_VERSION: ${{ needs.prepare.outputs.php_version }}
           BASE_FINGERPRINT: ${{ needs.prepare.outputs.base_fingerprint }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - # Workaround for https://github.com/actions/runner/pull/2477#issuecomment-1501003600
         name: Export metadata
         if: fromJson(needs.prepare.outputs.push)
@@ -205,12 +204,16 @@ jobs:
 
   # Adapted from https://docs.docker.com/build/ci/github-actions/multi-platform/
   push:
-    environment: dockerhub
     runs-on: ubuntu-24.04
     needs:
       - prepare
       - build
     if: fromJson(needs.prepare.outputs.push)
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     strategy:
       fail-fast: false
       matrix:
@@ -230,7 +233,7 @@ jobs:
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }} # zizmor: ignore[secrets-outside-env] TODO: drop once super-linter ships zizmor >=1.24.0, then the allowlist in zizmor.yaml takes over
       - name: Create manifest list and push
         working-directory: /tmp/metadata
         run: |
@@ -243,10 +246,21 @@ jobs:
           TARGET: ${{ matrix.target }}
           VARIANT: ${{ matrix.variant }}
       - name: Inspect image
+        id: inspect
         run: |
           # shellcheck disable=SC2046,SC2086
-          docker buildx imagetools inspect $(jq -cr ".target.\"${TARGET}-${VARIANT}\".tags | first" <<< ${METADATA})
+          tag=$(jq -cr ".target.\"${TARGET}-${VARIANT}\".tags | first" <<< ${METADATA})
+          docker buildx imagetools inspect "${tag}"
+          digest=$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "${tag}")
+          echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
         env:
           METADATA: ${{ needs.prepare.outputs.metadata }}
           TARGET: ${{ matrix.target }}
           VARIANT: ${{ matrix.variant }}
+      - uses: actions/attest@v4
+        with:
+          # docker.io/ prefix is required: actions/attest splits subject-name
+          # on the first '/' to find the registry. We only push to Docker Hub.
+          subject-name: docker.io/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.inspect.outputs.digest }}
+          push-to-registry: true

@@ -6,7 +6,7 @@
 
 | 名称                                                                                                        | 原因         | 替代方案                                                                                                             |
 | ----------------------------------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------- |
-| [imap](https://www.php.net/manual/en/imap.installation.php)                                                 | 不安全的线程 | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap) |
+| [imap](https://www.php.net/manual/imap.installation.php)                                                 | 不安全的线程 | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap) |
 | [newrelic](https://docs.newrelic.com/docs/apm/agents/php-agent/getting-started/introduction-new-relic-php/) | 不安全的线程 | -                                                                                                                    |
 
 ## 有缺陷的 PHP 扩展
@@ -15,15 +15,15 @@
 
 | 名称                                                          | 问题                                                                                                                                                                                                                                      |
 | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [ext-openssl](https://www.php.net/manual/en/book.openssl.php) | 在使用静态构建的 FrankenPHP（使用 musl libc 构建）时，在重负载下 OpenSSL 扩展可能会崩溃。一个解决方法是使用动态链接的构建（如 Docker 镜像中使用的版本）。此错误正在由 PHP 跟踪。[查看问题](https://github.com/php/php-src/issues/13648)。 |
+| [ext-openssl](https://www.php.net/manual/book.openssl.php) | 在使用静态构建的 FrankenPHP（使用 musl libc 构建）时，在重负载下 OpenSSL 扩展可能会崩溃。一个解决方法是使用动态链接的构建（如 Docker 镜像中使用的版本）。此错误正在由 PHP 跟踪。[查看问题](https://github.com/php/php-src/issues/13648)。 |
 
 ## get_browser
 
-[get_browser()](https://www.php.net/manual/en/function.get-browser.php) 函数在一段时间后似乎表现不佳。解决方法是缓存（例如使用 [APCu](https://www.php.net/manual/zh/book.apcu.php)）每个 User-Agent，因为它们是不变的。
+[get_browser()](https://www.php.net/manual/function.get-browser.php) 函数在一段时间后似乎表现不佳。解决方法是缓存（例如使用 [APCu](https://www.php.net/manual/book.apcu.php)）每个 User-Agent，因为它们是不变的。
 
 ## 独立的二进制和基于 Alpine 的 Docker 镜像
 
-独立的二进制文件和基于 Alpine 的 Docker 镜像 (`dunglas/frankenphp:*-alpine`) 使用的是 [musl libc](https://musl.libc.org/) 而不是 [glibc and friends](https://www.etalabs.net/compare_libcs.html)，为的是保持较小的二进制大小。这可能会导致一些兼容性问题。特别是，glob 标志 `GLOB_BRACE` [不可用](https://www.php.net/manual/en/function.glob.php)。
+独立的二进制文件和基于 Alpine 的 Docker 镜像 (`dunglas/frankenphp:*-alpine`) 使用的是 [musl libc](https://musl.libc.org/) 而不是 [glibc and friends](https://www.etalabs.net/compare_libcs.html)，为的是保持较小的二进制大小。这可能会导致一些兼容性问题。特别是，glob 标志 `GLOB_BRACE` [不可用](https://www.php.net/manual/function.glob.php)。
 
 ## 在 Docker 中使用 `https://127.0.0.1`
 
@@ -122,7 +122,7 @@ error:0A000086:SSL routines::certificate verify failed
 
 由于静态二进制不捆绑 TLS 证书，因此您需要将 OpenSSL 指向本地 CA 证书安装。
 
-检查 [`openssl_get_cert_locations()`](https://www.php.net/manual/en/function.openssl-get-cert-locations.php) 的输出，
+检查 [`openssl_get_cert_locations()`](https://www.php.net/manual/function.openssl-get-cert-locations.php) 的输出，
 以找到 CA 证书必须安装的位置，并将它们存储在该位置。
 
 > [!WARNING]

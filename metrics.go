@@ -94,10 +94,13 @@ type PrometheusMetrics struct {
 	workerRequestCount *prometheus.CounterVec
 	workerQueueDepth   *prometheus.GaugeVec
 	queueDepth         prometheus.Gauge
-	mu                 sync.Mutex
+	mu                 sync.RWMutex
 }
 
 func (m *PrometheusMetrics) StartWorker(name string) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	m.busyThreads.Inc()
 
 	// tests do not register workers before starting them
@@ -109,6 +112,9 @@ func (m *PrometheusMetrics) StartWorker(name string) {
 }
 
 func (m *PrometheusMetrics) ReadyWorker(name string) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	if m.totalWorkers == nil {
 		return
 	}
@@ -117,6 +123,9 @@ func (m *PrometheusMetrics) ReadyWorker(name string) {
 }
 
 func (m *PrometheusMetrics) StopWorker(name string, reason StopReason) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	m.busyThreads.Dec()
 
 	// tests do not register workers before starting them
@@ -246,18 +255,30 @@ func (m *PrometheusMetrics) TotalWorkers(string, int) {
 }
 
 func (m *PrometheusMetrics) TotalThreads(num int) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	m.totalThreads.Add(float64(num))
 }
 
 func (m *PrometheusMetrics) StartRequest() {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	m.busyThreads.Inc()
 }
 
 func (m *PrometheusMetrics) StopRequest() {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	m.busyThreads.Dec()
 }
 
 func (m *PrometheusMetrics) StopWorkerRequest(name string, duration time.Duration) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	if m.workerRequestTime == nil {
 		return
 	}
@@ -268,6 +289,9 @@ func (m *PrometheusMetrics) StopWorkerRequest(name string, duration time.Duratio
 }
 
 func (m *PrometheusMetrics) StartWorkerRequest(name string) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	if m.busyWorkers == nil {
 		return
 	}
@@ -275,6 +299,9 @@ func (m *PrometheusMetrics) StartWorkerRequest(name string) {
 }
 
 func (m *PrometheusMetrics) QueuedWorkerRequest(name string) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	if m.workerQueueDepth == nil {
 		return
 	}
@@ -282,6 +309,9 @@ func (m *PrometheusMetrics) QueuedWorkerRequest(name string) {
 }
 
 func (m *PrometheusMetrics) DequeuedWorkerRequest(name string) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	if m.workerQueueDepth == nil {
 		return
 	}
@@ -289,14 +319,23 @@ func (m *PrometheusMetrics) DequeuedWorkerRequest(name string) {
 }
 
 func (m *PrometheusMetrics) QueuedRequest() {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	m.queueDepth.Inc()
 }
 
 func (m *PrometheusMetrics) DequeuedRequest() {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	m.queueDepth.Dec()
 }
 
 func (m *PrometheusMetrics) Shutdown() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	m.registry.Unregister(m.totalThreads)
 	m.registry.Unregister(m.busyThreads)
 	m.registry.Unregister(m.queueDepth)

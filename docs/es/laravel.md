@@ -12,7 +12,7 @@ docker run -p 80:80 -p 443:443 -p 443:443/udp -v $PWD:/app dunglas/frankenphp
 
 ¡Y listo!
 
-## Instalación Local
+## Instalación local
 
 Alternativamente, puedes ejecutar tus proyectos Laravel con FrankenPHP desde tu máquina local:
 
@@ -80,7 +80,7 @@ Consulta también [cómo usar Mercure con Octane](#soporte-para-mercure).
 
 Aprende más sobre [Laravel Octane en su documentación oficial](https://laravel.com/docs/octane).
 
-## Aplicaciones Laravel como Binarios Autónomos
+## Aplicaciones Laravel como binarios autónomos
 
 Usando [la característica de incrustación de aplicaciones de FrankenPHP](embed.md), es posible distribuir aplicaciones Laravel
 como binarios autónomos.
@@ -161,7 +161,7 @@ Sigue estos pasos para empaquetar tu aplicación Laravel como un binario autóno
 
 Aprende más sobre las opciones disponibles y cómo compilar binarios para otros sistemas operativos en la documentación de [incrustación de aplicaciones](embed.md).
 
-### Cambiar la Ruta de Almacenamiento
+### Cambiar la ruta de almacenamiento
 
 Por defecto, Laravel almacena los archivos subidos, cachés, registros, etc. en el directorio `storage/` de la aplicación.
 Esto no es adecuado para aplicaciones incrustadas, ya que cada nueva versión se extraerá en un directorio temporal diferente.
@@ -196,7 +196,7 @@ Puedes usar [todas las directivas soportadas por Mercure](https://mercure.rocks/
 Para publicar y suscribirte a actualizaciones, recomendamos usar la biblioteca [Laravel Mercure Broadcaster](https://github.com/mvanduijker/laravel-mercure-broadcaster).
 Alternativamente, consulta [la documentación de Mercure](mercure.md) para hacerlo en PHP y JavaScript puros.
 
-### Ejecutar Octane con Binarios Autónomos
+### Ejecutar Octane con binarios autónomos
 
 ¡Incluso es posible empaquetar aplicaciones Laravel Octane como binarios autónomos!
 

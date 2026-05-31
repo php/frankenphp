@@ -521,6 +521,16 @@ func TestEscapeCString(t *testing.T) {
 			input:    `Namespace\Über\Test`,
 			expected: `Namespace\\Über\\Test`,
 		},
+		{
+			name:     "double quote is escaped",
+			input:    `say "hi"`,
+			expected: `say \"hi\"`,
+		},
+		{
+			name:     "newline, carriage return and tab are escaped",
+			input:    "line1\nline2\r\tend",
+			expected: `line1\nline2\r\tend`,
+		},
 	}
 
 	for _, tt := range tests {
