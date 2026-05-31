@@ -32,8 +32,10 @@ var (
 	phpThreads    []*phpThread
 	mainThread    *phpMainThread
 	commonHeaders map[string]*C.zend_string
-	// drainGracePeriod: time to wait for threads to yield before arming force-kill
-	drainGracePeriod = 30 * time.Second
+
+	// timeouts to wait for threads to yield before arming force-kill
+	shutDownGracePeriod = 30 * time.Second
+	rebootGracePeriod   = 6 * time.Second
 )
 
 // initPHPThreads starts the main PHP thread,
@@ -87,25 +89,15 @@ func drainPHPThreads() {
 	scalingMu.Lock()
 	defer scalingMu.Unlock()
 
-	if mainThread == nil {
+	if mainThread == nil || !mainThread.state.Is(state.Ready) {
 		return // mainThread was never initialized
 	}
-	// Idempotent: post-drain state is Reserved; a re-entry (e.g. a
-	// failed-Init cleanup) must not double-close mainThread.done.
-	if mainThread.state.Is(state.Reserved) {
-		return
-	}
+
 	doneWG := sync.WaitGroup{}
 	doneWG.Add(len(phpThreads))
 	mainThread.state.Set(state.ShuttingDown)
 	close(mainThread.done)
 	for _, thread := range phpThreads {
-		// shut down all reserved threads
-		if thread.state.CompareAndSwap(state.Reserved, state.Done) {
-			doneWG.Done()
-			continue
-		}
-		// shut down all active threads
 		go func(thread *phpThread) {
 			thread.shutdown()
 			doneWG.Done()
@@ -152,42 +144,40 @@ func (mainThread *phpMainThread) rebootAllThreads() bool {
 		return false
 	}
 
-	globalLogger.Info("rebooting all PHP threads")
-
-	wg := sync.WaitGroup{}
+	rebootStart := time.Now()
+	rebootWg := sync.WaitGroup{}
 	rebootingThreads := []*phpThread{}
+
+	globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "rebooting all PHP threads")
+
 	for _, thread := range phpThreads {
 		if thread.reboot() {
 			rebootingThreads = append(rebootingThreads, thread)
-			wg.Go(func() {
-				close(thread.drainChan)
-				thread.state.WaitFor(state.YieldingForReboot)
-			})
 		}
 	}
 
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-	case <-time.After(drainGracePeriod):
-		// Force-kill any thread still stuck in a blocking syscall, then
-		// keep waiting unconditionally. On platforms where force-kill
-		// cannot interrupt the syscall (macOS, Windows non-alertable
-		// Sleep) the thread exits when the syscall completes naturally.
-		for _, thread := range rebootingThreads {
-			if !thread.state.Is(state.YieldingForReboot) {
-				thread.forceKillMu.RLock()
-				C.frankenphp_force_kill_thread(thread.forceKill)
-				thread.forceKillMu.RUnlock()
+	for _, thread := range rebootingThreads {
+		rebootWg.Go(func() {
+			close(thread.drainChan)
+			if thread.state.WaitForStateWithTimeout(rebootGracePeriod, state.YieldingForReboot) {
+				return
 			}
-		}
-		<-done
+
+			// thread has not shut down in time, force kill the thread on the PHP side
+			globalLogger.LogAttrs(
+				globalCtx,
+				slog.LevelWarn,
+				"force-killing thread on reboot timeout",
+				slog.String("name", thread.name()),
+				slog.String("state", thread.state.Name()),
+				slog.String("timeout", rebootGracePeriod.String()),
+			)
+			thread.sendKillSignal()
+			thread.state.WaitFor(state.YieldingForReboot)
+		})
 	}
+
+	rebootWg.Wait()
 
 	mainThread.state.Set(state.Rebooting)
 	mainThread.state.WaitFor(state.YieldingForReboot)
@@ -198,11 +188,23 @@ func (mainThread *phpMainThread) rebootAllThreads() bool {
 
 	for _, thread := range rebootingThreads {
 		thread.drainChan = make(chan struct{})
-		thread.state.Set(state.RebootReady)
-		thread.state.WaitFor(state.Ready, state.ShuttingDown)
+		if thread.state.CompareAndSwap(state.YieldingForReboot, state.RebootReady) {
+			// wait for any of the stable states
+			thread.state.WaitFor(state.Ready, state.Inactive, state.Reserved)
+		} else {
+			panic("unexpected state on reboot: " + thread.state.Name() + " for thread " + thread.name())
+		}
 	}
 
 	mainThread.isRebooting.Store(false)
+
+	globalLogger.LogAttrs(
+		globalCtx,
+		slog.LevelInfo,
+		"all PHP threads rebooted",
+		slog.String("duration", time.Since(rebootStart).String()),
+		slog.Int("num_threads", len(rebootingThreads)),
+	)
 
 	return true
 }

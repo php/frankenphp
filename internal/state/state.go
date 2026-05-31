@@ -12,15 +12,15 @@ type State int
 
 const (
 	// lifecycle States of a thread
-	Reserved State = iota
+	Reserved State = iota // stable
 	Booting
 	BootRequested
 	ShuttingDown
 	Done
 
 	// these States are 'stable' and safe to transition from at any time
-	Inactive
-	Ready
+	Inactive // stable
+	Ready // stable
 
 	// States necessary for transitioning between different handlers
 	TransitionRequested
@@ -164,16 +164,39 @@ func (ts *ThreadState) WaitFor(states ...State) {
 	<-sub.ch
 }
 
+func (ts *ThreadState) WaitForStateWithTimeout(timeout time.Duration, states ...State) bool {
+	ts.mu.Lock()
+	if slices.Contains(states, ts.currentState) {
+		ts.mu.Unlock()
+
+		return true
+	}
+
+	sub := stateSubscriber{
+		states: states,
+		ch:     make(chan struct{}),
+	}
+	ts.subscribers = append(ts.subscribers, sub)
+	ts.mu.Unlock()
+	select {
+	case <-sub.ch:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
+}
+
 // RequestSafeStateChange safely requests a state change from a different goroutine
+// returns false if thread is already in reserved state (shut down)
 func (ts *ThreadState) RequestSafeStateChange(nextState State) bool {
 	ts.mu.Lock()
 	switch ts.currentState {
-	// disallow state changes if shutting down or done
-	case ShuttingDown, Done, Reserved:
+	// disallow state changes when already shutting down or done
+	case Reserved, ShuttingDown, Done:
 		ts.mu.Unlock()
 
 		return false
-	// ready and inactive are safe states to transition from
+	// ready and inactive are stable states to transition from
 	case Ready, Inactive:
 		ts.currentState = nextState
 		ts.notifySubscribers(nextState)
@@ -183,8 +206,8 @@ func (ts *ThreadState) RequestSafeStateChange(nextState State) bool {
 	}
 	ts.mu.Unlock()
 
-	// wait for the state to change to a safe state
-	ts.WaitFor(Ready, Inactive, ShuttingDown)
+	// wait for the state to change to a stable state
+	ts.WaitFor(Ready, Inactive, Reserved)
 
 	return ts.RequestSafeStateChange(nextState)
 }
