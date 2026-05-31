@@ -78,6 +78,10 @@ func initPHPThreads(numThreads int, numMaxThreads int, phpIni map[string]string)
 }
 
 func drainPHPThreads() {
+	// disallow scaling during the shutdown process
+	scalingMu.Lock()
+	defer scalingMu.Unlock()
+
 	if mainThread == nil {
 		return // mainThread was never initialized
 	}
