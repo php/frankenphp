@@ -370,6 +370,7 @@ func Shutdown() {
 	}
 
 	drainWatchers()
+	drainAutoScaling()
 	drainPHPThreads()
 
 	metrics.Shutdown()

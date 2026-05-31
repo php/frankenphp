@@ -53,6 +53,16 @@ func initAutoScaling(mainThread *phpMainThread) {
 	go startDownScalingThreads(done)
 }
 
+func drainAutoScaling() {
+	scalingMu.Lock()
+
+	if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
+		globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "shutting down autoscaling", slog.Int("autoScaledThreads", len(autoScaledThreads)))
+	}
+
+	scalingMu.Unlock()
+}
+
 func addRegularThread() (*phpThread, error) {
 	thread := getInactivePHPThread()
 	if thread == nil {
