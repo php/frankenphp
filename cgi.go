@@ -175,8 +175,8 @@ func addHeadersToServer(ctx context.Context, request *http.Request, trackVarsArr
 	}
 }
 
-// addPreparedEnvToGetenv exposes fc.env to getenv() before any PHP code runs.
-func addPreparedEnvToGetenv(env PreparedEnv) {
+// registerPreparedEnv exposes fc.env to getenv() before any PHP code runs.
+func registerPreparedEnv(env PreparedEnv) {
 	size := C.size_t(len(env))
 	for k, v := range env {
 		C.frankenphp_add_to_prepared_env(toUnsafeChar(k), C.size_t(len(k)-1), toUnsafeChar(v), C.size_t(len(v)), size)
@@ -194,7 +194,7 @@ func go_register_server_variables(threadIndex C.uintptr_t, trackVarsArray *C.zva
 	}
 
 	// The Prepared Environment is registered last and can overwrite any previous values
-	if fc.env != nil {
+	if len(fc.env) != 0 {
 		C.frankenphp_merge_with_prepared_env(trackVarsArray)
 	}
 }
@@ -303,8 +303,8 @@ func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) 
 		return nil
 	}
 
-	if fc.env != nil {
-		addPreparedEnvToGetenv(fc.env)
+	if len(fc.env) != 0 {
+		registerPreparedEnv(fc.env)
 	}
 
 	if m, ok := cStringHTTPMethods[request.Method]; ok {
