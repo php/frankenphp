@@ -851,7 +851,7 @@ static void frankenphp_opcache_restart_hook(int reason) {
 
 /* {{{ thread-safe opcache reset */
 PHP_FUNCTION(frankenphp_opcache_reset) {
-  go_schedule_opcache_reset(frankenphp_thread_index());
+  frankenphp_opcache_restart_hook(0);
 
   RETVAL_TRUE;
 } /* }}} */
