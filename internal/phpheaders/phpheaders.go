@@ -135,3 +135,18 @@ func GetUnCommonHeader(ctx context.Context, key string) string {
 
 	return phpHeaderKey
 }
+
+// UncommonHeaderKey returns the NUL-terminated $_SERVER key for a header not in
+// CommonRequestHeaders. drop is true when that key is already claimed by a
+// common (dash-form) header, so an underscore variant like X_Forwarded_For
+// cannot overwrite the dash form's value.
+func UncommonHeaderKey(ctx context.Context, field string, claimedCommonKeys map[string]struct{}) (key string, drop bool) {
+	key = GetUnCommonHeader(ctx, field)
+	if claimedCommonKeys == nil {
+		return key, false
+	}
+
+	_, drop = claimedCommonKeys[strings.TrimSuffix(key, "\x00")]
+
+	return key, drop
+}

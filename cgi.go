@@ -158,16 +158,35 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 }
 
 func addHeadersToServer(ctx context.Context, request *http.Request, trackVarsArray *C.zval) {
+	// Register common headers first so the dash form wins any collision with an
+	// uncommon underscore variant (e.g. X_Forwarded_For spoofing X-Forwarded-For).
+	var claimedCommonKeys map[string]struct{}
 	for field, val := range request.Header {
-		if k := commonHeaders[field]; k != nil {
-			v := strings.Join(val, ", ")
-			C.frankenphp_register_known_variable(k, toUnsafeChar(v), C.size_t(len(v)), trackVarsArray)
+		k := commonHeaders[field]
+		if k == nil {
 			continue
 		}
 
-		// if the header name could not be cached, it needs to be registered safely
-		// this is more inefficient but allows additional sanitizing by PHP
-		k := phpheaders.GetUnCommonHeader(ctx, field)
+		v := strings.Join(val, ", ")
+		C.frankenphp_register_known_variable(k, toUnsafeChar(v), C.size_t(len(v)), trackVarsArray)
+
+		if claimedCommonKeys == nil {
+			claimedCommonKeys = make(map[string]struct{}, len(request.Header))
+		}
+		claimedCommonKeys[phpheaders.CommonRequestHeaders[field]] = struct{}{}
+	}
+
+	for field, val := range request.Header {
+		if commonHeaders[field] != nil {
+			continue
+		}
+
+		// uncommon header names must be registered safely to allow PHP sanitizing
+		k, drop := phpheaders.UncommonHeaderKey(ctx, field, claimedCommonKeys)
+		if drop {
+			continue
+		}
+
 		v := strings.Join(val, ", ")
 		C.frankenphp_register_variable_safe(toUnsafeChar(k), toUnsafeChar(v), C.size_t(len(v)), trackVarsArray)
 	}

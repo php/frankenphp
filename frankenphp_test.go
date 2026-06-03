@@ -1043,6 +1043,27 @@ func testRejectInvalidHeaders(t *testing.T, opts *testOptions) {
 	}
 }
 
+func TestUnderscoreHeaderCannotSpoofDashForm_module(t *testing.T) {
+	testUnderscoreHeaderCannotSpoofDashForm(t, &testOptions{})
+}
+func TestUnderscoreHeaderCannotSpoofDashForm_worker(t *testing.T) {
+	testUnderscoreHeaderCannotSpoofDashForm(t, &testOptions{workerScript: "server-variable.php"})
+}
+
+// Regression test: a client's underscore header (X_Forwarded_For) must not
+// overwrite the dash form (X-Forwarded-For) set by a trusted proxy.
+func testUnderscoreHeaderCannotSpoofDashForm(t *testing.T, opts *testOptions) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		req := httptest.NewRequest("GET", "http://example.com/server-variable.php", nil)
+		req.Header.Set("X-Forwarded-For", "9.9.9.9")
+		req.Header.Set("X_Forwarded_For", "1.2.3.4")
+		body, _ := testRequest(req, handler, t)
+
+		assert.Contains(t, body, "[HTTP_X_FORWARDED_FOR] => 9.9.9.9")
+		assert.NotContains(t, body, "1.2.3.4")
+	}, opts)
+}
+
 func TestFlushEmptyResponse_module(t *testing.T) { testFlushEmptyResponse(t, &testOptions{}) }
 func TestFlushEmptyResponse_worker(t *testing.T) {
 	testFlushEmptyResponse(t, &testOptions{workerScript: "only-headers.php"})
