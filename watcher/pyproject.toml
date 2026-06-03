@@ -1,0 +1,34 @@
+[build-system]
+build-backend = "mesonpy"
+requires = ["meson >= 0.61.5", "meson-python >= 0.14.0"]
+
+[project]
+name = "wtr-watcher"
+version = "0.14.5" # hook: tool/release
+authors = [{name = "Will"}]
+homepage = "https://github.com/e-dant/watcher"
+description = "Filesystem watcher. Works anywhere. Simple, efficient, and friendly."
+readme = "readme.md"
+license = {file = "license"}
+keywords = ["watcher", "filesystem", "events", "async"]
+packages = [{include = "watcher"}]
+
+[tool.cibuildwheel]
+# Focus on recent releases, time is limited.
+skip = ["*p36-*", "*p37-*", "*p38-*", "*p39-*"]
+build = ["*"]
+free-threaded-support = true
+manylinux-x86_64-image = "manylinux2014"
+manylinux-aarch64-image = "manylinux2014"
+manylinux-pypy_x86_64-image = "manylinux2014"
+manylinux-pypy_aarch64-image = "manylinux2014"
+musllinux-x86_64-image = "musllinux_1_2"
+musllinux-aarch64-image = "musllinux_1_2"
+
+[tool.cibuildwheel.linux]
+# Just the two most common architectures
+archs = ["x86_64", "aarch64"]
+
+[tool.cibuildwheel.macos]
+# Bug (in cibw?) prevents x86_64 builds, see action files.
+archs = ["arm64"]

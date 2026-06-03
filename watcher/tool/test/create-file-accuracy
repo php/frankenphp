@@ -1,0 +1,6 @@
+#! /usr/bin/env bash
+
+patch() { sed 's|"dir"|"file"|g' | sed 's|directory|file|g' | sed 's|mkdir|touch|g' | sed 's|rmdir|rm|g' ; }
+them=$(dirname "$0")/create-dir-accuracy
+
+eval "$(patch < "$them")"

@@ -1,0 +1,6 @@
+#! /usr/bin/env bash
+
+patch() { sed 's|"file"|"dir"|g' | sed 's|file|directory|g' | sed 's|touch|mkdir|g' | sed 's|rm|rmdir|g' ; }
+them=$(dirname "$0")/rename-file-accuracy
+
+eval "$(patch < "$them")"

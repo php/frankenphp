@@ -1,0 +1,108 @@
+#! /usr/bin/env bash
+# 2002: If we needed this to be performant, we wouldn't use bash. cat is fine.
+# 2068: We want to resplit argument in this case.
+# shellcheck disable=SC2002,2068
+
+PROJECT_ID='W973564ED9F278A21F3E12037288412FBAF175F889'
+
+PROJECT_HEADER="include/wtr/watcher.hpp"
+
+# @todo This function doesn't work if the file doesn't end in a newline.
+tool::hone() {
+  USAGE="
+  $0 < option > { option }
+
+  option:
+    --header-content-amalgam
+    --header-content-raw
+    --header-path-all
+    --help
+
+  example:
+    tool/hone --header-content-amalgam > include/wtr/watcher.hpp"
+
+  LAST_DIR="$PWD"
+
+  cd "$(dirname "$0")/../devel" || return 1
+
+  # Sanity checks
+  while read -r H
+  do if ! test -f "include/$H"
+  then echo "Header file missing: 'include/$H'"; return 1; fi
+  done <<< "$(\
+    cat "$PROJECT_HEADER" \
+      | grep -E '([ ]*)#([ ]*)include ' \
+      | sed -E 's/(([ ]*)#([ ]*)include )|(["<>])//g')"
+
+  # HEADER_INCLUDES_UNIQUE="$(\
+  #   find include/detail include/wtr -name '*.hpp' -exec cat {} \; \
+  #     | sed -E 's/(([ ]+)?#([ ]+)?include [<"][0-9a-zA-Z\-_\.\:;~`!@#$%^&\*\(\)'\'']+[">])|(.*)/\1/g' \
+  #     | sort \
+  #     | awk '!seen[$0]++')"
+
+  HEADER_PATH_ALL="$(\
+    while read -r H
+    do echo "$PWD/include/$H" || return 1
+    done <<< "$(\
+      cat "$PROJECT_HEADER" \
+        | grep -E '([ ]+)?#([ ]+)?include' \
+        | sed -E 's/(([ ]+)?#([ ]+)?include )|(["<>])//g')"
+  )"
+
+  # cat the headers, replace our pragmas
+  HEADER_CONTENT_RAW="$(\
+    while read -r TOK
+    do
+      cat "$TOK" \
+        | sed -E 's|(/\* )(@pragma/tool/hone/insert )(.+)( \*/)|\3 /\* @pragma/tool/hone/insert \*/|g' \
+        | sed '/#pragma once/d' \
+        | sed '/#include <detail\/wtr\/watcher\/.*/d' \
+        | sed '/#include <wtr\/watcher.*/d' \
+        | sed '/#include "detail\/wtr\/watcher\/.*/d' \
+        | sed '/#include "wtr\/watcher.*/d'
+    done <<< "$HEADER_PATH_ALL"
+  )"
+
+  # # cat the headers, remove includes.
+  # # @todo this function is slow.
+  # HEADER_CONTENT_SANS_INCLUDES="$(\
+  #   while read -r H
+  #   do
+  #     echo "$H" \
+  #       | sed -E '/#pragma once/d' \
+  #       | sed -E '/([ ]+)?#([ ]+)?include/d'
+  #   done <<< "$HEADER_CONTENT_RAW"
+  # )"
+
+  # give us the amalgamated header
+  HEADER_CONTENT_AMALGAM="$(\
+    echo "#ifndef $PROJECT_ID" \
+      && echo "#define $PROJECT_ID" \
+      && echo "$HEADER_CONTENT_RAW" \
+      && echo "#endif /* $PROJECT_ID */"
+  )"
+
+  if test -n "$*"
+  then
+    if echo "$*" | grep -q -- --header-content-amalgam
+    then echo "$HEADER_CONTENT_AMALGAM"; fi
+    if echo "$*" | grep -q -- --header-content-raw
+    then echo "$HEADER_CONTENT_RAW"; fi
+    # if echo "$*" | grep -q -- --header-content-sans-includes
+    # then echo "$HEADER_CONTENT_SANS_INCLUDES"; fi
+    if echo "$*" | grep -q -- --header-path-all
+    then echo "$HEADER_PATH_ALL"; fi
+    if echo "$*" | grep -q -- --help
+    then echo "$USAGE"; fi
+  else
+    AMALGAMATED_FILE=../$PROJECT_HEADER
+    if ! diff <(echo "$HEADER_CONTENT_AMALGAM") "$AMALGAMATED_FILE" &> /dev/null
+    then echo "$HEADER_CONTENT_AMALGAM" > "$AMALGAMATED_FILE"
+    fi
+  fi
+
+  cd "$LAST_DIR" || return 1
+}
+
+tool::hone $@
+exit $?

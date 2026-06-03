@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "outDir": "./build",
+    "allowJs": false,
+    "target": "es2023",
+    "module": "es2020",
+    "moduleResolution": "node"
+  },
+  "include": ["./lib/**/*.ts"]
+}

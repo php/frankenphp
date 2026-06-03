@@ -1,0 +1,26 @@
+#! /usr/bin/env bash
+
+[ $# -ne 2 ] && {
+  echo "Usage: $0 <out-dir> <platform-name|this>"
+  echo "  out-dir:"
+  echo "    The directory to store the artifacts for the specified platform."
+  echo "    A corresponding tarball will be created with the same name (and the .tar.gz extension)."
+  echo "  platform-name:"
+  echo "    The name of the platform to build the artifacts for, or 'this' for the host platform."
+  exit 1
+}
+
+out_dir=$1
+platform_name=$2
+tmp_artifacts_dir=$(mktemp -d) || exit 1
+tmp_tar_dir=$(mktemp -d) || exit 1
+tmp_tar_file=$tmp_tar_dir/$(basename "$out_dir").tar.gz
+
+"$(dirname "$0")/../tool/build" --show-artifacts | grep -E "$platform_name/Release|include|src" | while read -r p
+do cp -r "$p" "$tmp_artifacts_dir" || exit 1
+done
+[ -d "$out_dir" ] && rm -rf "$out_dir"
+[ ! -d "$(dirname "$out_dir")" ] && mkdir -p "$(dirname "$out_dir")"
+cp -r "$tmp_artifacts_dir" "$out_dir" && echo "$out_dir"
+(cd "$tmp_artifacts_dir" && tar -czf "$tmp_tar_file" . || exit 1) && mv "$tmp_tar_file" "$out_dir.tar.gz" && echo "$out_dir.tar.gz"
+

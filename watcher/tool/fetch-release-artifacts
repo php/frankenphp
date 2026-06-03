@@ -1,0 +1,43 @@
+#! /usr/bin/env bash
+set -e
+usage() {
+  cat <<EOF
+Usage: $0 [OPTIONS]
+Options:
+  -h, --help    Show this help message and exit
+  --no-zip      Do not zip the artifacts
+EOF
+}
+echo "$@" | grep -q -- --help && usage && exit 0
+echo "$@" | grep -q -- -h && usage && exit 0
+heredir=$(realpath "$(dirname "$0")/..")
+(
+  [ -d out/dist-unzipped-nested-tmp ] && rm -rf out/dist-unzipped-nested-tmp
+  mkdir -p out/dist-unzipped-nested-tmp
+  cd out/dist-unzipped-nested-tmp
+  gh run download -n wheels-apple -n wheels-linux -n aarch64-apple-darwin.tar -n aarch64-apple-darwin.tar.sha256sum -n aarch64-pc-windows-msvc.tar -n aarch64-pc-windows-msvc.tar.sha256sum -n aarch64-unknown-linux-gnu.tar -n aarch64-unknown-linux-gnu.tar.sha256sum -n aarch64-unknown-linux-musl.tar -n aarch64-unknown-linux-musl.tar.sha256sum -n armv7-unknown-linux-gnueabihf.tar -n armv7-unknown-linux-gnueabihf.tar.sha256sum -n armv7-unknown-linux-musleabihf.tar -n armv7-unknown-linux-musleabihf.tar.sha256sum -n x86_64-pc-windows-msvc.tar -n x86_64-pc-windows-msvc.tar.sha256sum -n x86_64-unknown-linux-gnu.tar -n x86_64-unknown-linux-gnu.tar.sha256sum -n x86_64-unknown-linux-musl.tar -n x86_64-unknown-linux-musl.tar.sha256sum
+  (
+    mkdir dist-unzipped-tmp
+    find . -type f | while read f
+    do mv "$f" "dist-unzipped-tmp/$(basename "$f")"
+    done
+    (
+      mkdir dist-tmp
+      if echo "$@" | grep -q -- --no-zip
+      then
+        find . -type f | while read f
+        do mv "$f" "dist-tmp/$(basename "$f")"
+        done
+      else
+        find . -type f | while read f
+        do zip -r "$f.zip" "$f" && mv "$f.zip" "dist-tmp/$(basename "$f").zip"
+        done
+      fi
+      [ -d "$heredir/out/dist" ] && rm -rf "$heredir/out/dist"
+      [ -d "$heredir/out" ] || mkdir -p "$heredir/out"
+      mv dist-tmp "$heredir/out/dist"
+      echo "$heredir/out/dist"
+    )
+  )
+)
+
