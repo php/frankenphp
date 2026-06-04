@@ -954,16 +954,12 @@ static int frankenphp_send_headers(sapi_headers_struct *sapi_headers) {
     return SAPI_HEADER_SENT_SUCCESSFULLY;
   }
 
-  int status;
-
-  if (SG(sapi_headers).http_status_line) {
-    status = atoi((SG(sapi_headers).http_status_line) + 9);
-  } else {
-    status = SG(sapi_headers).http_response_code;
-
-    if (!status) {
-      status = 200;
-    }
+  /* Use the response code PHP already parsed; reparsing http_status_line with
+   * a fixed +9 offset read out of bounds for lines shorter than 9 bytes, e.g.
+   * header("HTTP/"). */
+  int status = SG(sapi_headers).http_response_code;
+  if (!status) {
+    status = 200;
   }
 
   bool success = go_write_headers(frankenphp_thread_index(), status,
