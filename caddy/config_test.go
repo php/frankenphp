@@ -3,7 +3,9 @@ package caddy
 import (
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/stretchr/testify/require"
 )
@@ -97,6 +99,19 @@ func TestPhpServerEmbedReuseIsPositional(t *testing.T) {
 	for i := range first {
 		require.Equal(t, first[i].Name, second[i].Name, "the duplicate embed must reuse pools by position for worker %d", i)
 	}
+}
+
+func TestModuleRequestBodyTimeout(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`
+	{
+		php {
+			request_body_timeout 5s
+		}
+	}`)
+	module := &FrankenPHPModule{}
+
+	require.NoError(t, module.UnmarshalCaddyfile(d))
+	require.Equal(t, caddy.Duration(5*time.Second), module.RequestBodyTimeout)
 }
 
 func TestModuleWorkerDuplicateFilenamesFail(t *testing.T) {
