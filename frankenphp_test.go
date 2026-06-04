@@ -787,7 +787,7 @@ func testPreparedEnvIsVisibleToGetenv(t *testing.T, opts *testOptions) {
 
 	expectedEnv := "'hello'"
 	if opts.workerScript != "" {
-		// workers don't populate $_ENV regardless or variables_order
+		// workers don't populate $_ENV regardless of variables_order
 		expectedEnv = "NULL"
 	}
 
