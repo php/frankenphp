@@ -26,23 +26,22 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#ifndef PHP_WIN32
+#include <unistd.h>
+#endif
 #if defined(__linux__)
 #include <sys/prctl.h>
-#include <unistd.h>
 #elif defined(__FreeBSD__)
 #include <pthread_np.h>
 #include <sys/procctl.h>
-#include <unistd.h>
 #elif defined(__OpenBSD__)
 #include <pthread_np.h>
-#include <unistd.h>
 #endif
 #if defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__) ||       \
     defined(__DragonFly__)
 #define FRANKENPHP_KQUEUE_PARENT_DEATH 1
 #include <sys/event.h>
 #include <sys/types.h>
-#include <unistd.h>
 #endif
 
 #include "_cgo_export.h"
