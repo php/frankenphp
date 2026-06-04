@@ -125,7 +125,7 @@ static void frankenphp_fork_prepare(void) { fork_parent_pid = getpid(); }
 
 #if defined(FRANKENPHP_KQUEUE_PARENT_DEATH)
 /* Watcher thread for platforms without a kernel parent-death signal.
- * Blocks in kevent() until the parent exit, then force-kills this child. */
+ * Blocks in kevent() until the parent exits, then force-kills this child. */
 static void *frankenphp_parent_death_watcher(void *arg) {
   pid_t ppid = (pid_t)(intptr_t)arg;
   int kq = kqueue();
