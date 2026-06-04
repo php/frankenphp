@@ -137,12 +137,9 @@ static void *frankenphp_parent_death_watcher(void *arg) {
   if (kevent(kq, &kev, 1, NULL, 0, NULL) < 0) {
     _exit(1);
   }
-  struct kevent triggered;
-  if (kevent(kq, NULL, 0, &triggered, 1, NULL) > 0) {
-    _exit(1);
-  }
-  close(kq);
-  return NULL;
+  struct kevent event;
+  while (kevent(kq, NULL, 0, &event, 1, NULL) < 0 && errno == EINTR);
+  _exit(1);
 }
 #endif
 
