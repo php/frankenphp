@@ -1,0 +1,12 @@
+FROM debian:latest
+COPY . /app
+RUN apt-get update -y \
+ && apt-get install -y \
+   build-essential \
+   ca-certificates \
+   python3 \
+   cmake \
+   git \
+   jq
+RUN app/tool/build --no-run
+RUN cp app/out/this/Release/wtr.watcher /usr/local/bin/ww

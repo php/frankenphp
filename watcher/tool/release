@@ -1,0 +1,179 @@
+#! /usr/bin/env bash
+# shellcheck disable=SC2317
+# SC2317: We use eval, things are used.
+
+# boilerplate
+THIS="$(basename "$0")" # 'release'
+LAST_DIR="$PWD"
+cd "$(dirname "$0")/.." || exit 1
+LAST_BRANCH="$(git branch --show-current)"
+
+# htor: human version to regular expression
+release::htor() {
+  case "$1" in
+    maj|major)  local PART='\1';;
+    min|minor)  local PART='\2';;
+    mic|micro)  local PART='\3';;
+    full)       local PART='\1.\2.\3';;
+    *)          local PART='\1.\2.\3';;
+  esac
+  echo "$PART"
+}
+
+release::show() {
+  PART="$(release::htor "$1")"
+  git tag --list \
+    | sort -r \
+    | head -n 1 \
+    | sed -E "s|release/([0-9]+)\.([0-9]+)\.([0-9]+)|$PART|g"
+}
+
+release::show::part() {
+  test $# -ne 1 && return 1
+  PART="$(release::htor "$1")"
+  git tag --list \
+    | sort -r \
+    | head -n 1 \
+    | sed -E "s|release/([0-9]+)\.([0-9]+)\.([0-9]+)|$PART|g"
+}
+
+release::show::all() {
+  PART="$(release::htor full)"
+  git tag --list \
+    | sort -r \
+    | sed -E "s|release/([0-9]+)\.([0-9]+)\.([0-9]+)|$PART|g"
+}
+
+release::show::advance() {
+  test $# -ne 1 && return 1
+
+  MAJ=$(release::show::part maj)
+  MIN=$(release::show::part min)
+  MIC=$(release::show::part mic)
+
+  case "$1" in
+    maj|major)  echo "$((MAJ + 1)).0.0";;
+    min|minor)  echo "$MAJ.$((MIN + 1)).0";;
+    mic|micro)  echo "$MAJ.$MIN.$((MIC + 1))";;
+    *)          return 1;;
+  esac
+}
+
+files-with-versions() {
+  echo 'CMakeLists.txt
+flake.nix
+meson.build
+pyproject.toml
+watcher-py/watcher/watcher.py
+Cargo.toml'
+}
+
+release::create() {
+  local SEMVER="$1"
+  if echo "$SEMVER" | grep -qE -- '^[0-9]+\.[0-9]+\.[0-9]+$'
+  then
+    test "$LAST_BRANCH" = 'next' \
+      || git checkout next
+
+    echo "$SEMVER" > .version
+    git add '.version'
+
+    files-with-versions \
+    | while read -r f
+      do
+        sed \
+          -E -e "s|( +)([\"']?)([0-9]+\.[0-9]+\.[0-9]+)(.+# hook: tool/release)|\1\2$SEMVER\4|" \
+          -i -- "$f"
+        git add "$f"
+        [ -e "$f--" ] && rm "$f--"
+      done
+
+    git commit -m "release: $SEMVER"
+    git push
+
+    git checkout release
+    git merge next -m "release/$SEMVER" \
+      && git push \
+      && git tag \
+        -a "release/$SEMVER" \
+        -m "release/$SEMVER" \
+        "$(git log | head -n 1 | sed -E 's/commit (.*)/\1/g')" \
+      && git push origin "release/$SEMVER" \
+      && git checkout "$LAST_BRANCH"
+    return $?
+  else
+    return 1
+  fi
+}
+
+release::help() {
+echo "
+  synopsis:
+    $0 < --help | --create < version > | --show [ part | --all | --advance part ] >
+
+  example:
+    $0 --help
+    $0 --show
+    $0 --show major
+    $0 --show minor
+    $0 --show micro
+    $0 --show --all
+    $0 --create 1.2.3
+    $0 --show --advance maj
+    $0 --show --advance min
+    $0 --show --advance mic
+    $0 --create \`$0 --show --advance mic\`
+
+  ebnf: 
+    calling convention =
+      '$0 ' , argument
+
+    argument =
+        '--help'
+      | '--create ' , semantic version
+      | '--show '   [ '--advance ' , part
+                    | '--all'
+                    | part ]
+
+    part =
+        'minor' | 'major' | 'micro'
+      | 'maj'   | 'min'   | 'mic' ;
+
+    positive integer =
+      { '0' | '1' | '2' | '3' | '4'
+      | '5' | '6' | '7' | '8' | '9' } ;
+
+    semantic version =
+      positive integer ,
+      '.' , positive integer ,
+      '.' , positive integer ;
+"
+}
+
+release() {
+  if echo "$1" | grep -qE -- '^--.*'
+  then
+    local CMDB="$THIS"
+    for ARG in "$@"; do
+      case "$ARG" in
+        # command
+        --*)  CMDB+="::${ARG##--}";;
+        # argument
+        *)    CMDB+=" ${ARG}";;
+      esac
+    done
+    ${CMDB[@]}
+    return $?
+  else
+    return 1
+  fi
+}
+
+release $@
+
+# boilerplate
+EXIT_VAL=$?
+test $EXIT_VAL -gt 0 \
+  && "$THIS::help"
+cd "$LAST_DIR"
+exit $EXIT_VAL

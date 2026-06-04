@@ -1,0 +1,66 @@
+#! /usr/bin/env bash
+# shellcheck source=tool/test/.ctx
+
+ec=0
+
+(
+  desc='Access events are not reported'
+  read -r -d '' expect << .
+[
+  {
+    "effect_type": "create",
+    "path_name": "s/self/live@d",
+    "path_type": "watcher"
+  },
+  {
+    "effect_type": "create",
+    "path_name": "d/a",
+    "path_type": "dir"
+  },
+  {
+    "effect_type": "create",
+    "path_name": "d/a/a",
+    "path_type": "file"
+  },
+  {
+    "effect_type": "destroy",
+    "path_name": "d/a/a",
+    "path_type": "file"
+  },
+  {
+    "effect_type": "destroy",
+    "path_name": "d/a",
+    "path_type": "dir"
+  },
+  {
+    "effect_type": "destroy",
+    "path_name": "s/self/die@d",
+    "path_type": "watcher"
+  }
+]
+.
+
+  echo -n "$desc ... "
+
+  . "$(dirname "$0")/.ctx"
+
+  actual=$(
+    watch-async "$testdir" -ms 500 > "$testdir.json"
+    mkdir a
+    sleep 0.005 # Else events can be batched and sent in an unpredictable order
+    touch a/a
+    sleep 0.005
+    touch a
+    sleep 0.005
+    touch a/a
+    sleep 0.005
+    rm a/a
+    sleep 0.005
+    rmdir a
+    wait # for the watcher
+    show-events "$testdir" | without-effect-time
+  )
+
+  check-result "$expect" "$actual"
+)
+ec=$((ec + $?))

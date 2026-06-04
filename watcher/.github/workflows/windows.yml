@@ -1,0 +1,57 @@
+name: Windows
+
+on:
+  push:
+    branches: [ release, next ]
+  pull_request:
+    branches: [ release, next ]
+
+jobs:
+  build:
+    runs-on: ${{matrix.os}}
+    permissions:
+      id-token: write
+      contents: read
+      attestations: write
+    strategy:
+      matrix:
+        target-double:
+          - uwp-windows-msvc
+        os:
+          - windows-2022
+          - windows-2025
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/cache@v4
+        with:
+          path: out
+          key: cache.${{matrix.target-double}}.${{matrix.os}}
+      - uses: chetan/git-restore-mtime-action@v2
+      - uses: aminya/setup-cpp@v1
+        with:
+          compiler: 'msvc'
+          vcvarsall: true
+          cmake: true
+          ccache: false
+          ninja: false
+          conan: false
+          vcpkg: false
+          gcovr: false
+          cppcheck: false
+          clangtidy: false
+          opencppcoverage: false
+      - run: |
+          cl.exe src/wtr/tiny_watcher/main.cpp /Iinclude /std:c++17 /O2 /EHs /EHr /EHc /Fe:tiny.exe
+          bash -c 'ls -hal tiny.exe'
+      - shell: bash
+        run: |
+          cmake -S . -B out/this -DBUILD_LIB=ON -DBUILD_BIN=ON -DBUILD_HDR=ON -DBUILD_TESTING=ON -DBUILD_SAN=ON
+          cmake --build out/this --config Release
+      - shell: bash
+        env:
+          VERBOSE: 1
+        run: |
+          out/this/Release/wtr.test_watcher.asan.exe
+          WATCHER=$PWD/out/this/Release/wtr.watcher.asan.exe tool/test/all || true

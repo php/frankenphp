@@ -1,0 +1,39 @@
+name: Android
+
+on:
+  push:
+    branches: [ release, next ]
+  pull_request:
+    branches: [ release, next ]
+
+jobs:
+  build:
+    runs-on: ${{matrix.os}}
+    permissions:
+      id-token: write
+      contents: read
+      attestations: write
+    strategy:
+      matrix:
+        target-double:
+          - linux-android
+        target-platform:
+          - android
+        android-ndk-major-version:
+          - '27'
+          - '28'
+        os:
+          - ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/cache@v4
+        with:
+          path: out
+          key: cache.${{matrix.target-double}}.${{matrix.os}}
+      - run: |
+          export ANDROID_NDK_HOME=$(find /usr/local/lib/android/sdk/ndk -type d -maxdepth 1 -name '${{matrix.android-ndk-major-version}}*' | head -n 1)
+          tool/build --verbose --platform-${{matrix.target-platform}} --no-build-test --no-run
+      - run: ls -al out/${{matrix.target-platform}}/Debug
+      - run: ls -al out/${{matrix.target-platform}}/Release

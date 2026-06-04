@@ -1,0 +1,182 @@
+name: Dist
+
+on:
+  push:
+    branches: [ release, next ]
+
+# Notes on the Wheels:
+#   macos-13 is an intel runner, which cibw wants for x86 builds... But intel mac is busted.
+#   https://github.com/e-dant/watcher/actions/runs/9929111640/job/27426247416#step:3:293
+#   We don't support Windows (but we want to) because meson-python doesn't allow us
+#   to install shared libraries in wheels for Windows. More info and whatnot here:
+#   https://github.com/mesonbuild/meson-python/discussions/629
+#   Other refs, for the action file:
+#   - https://cibuildwheel.pypa.io/en/stable/setup
+#   - https://github.com/scikit-image/scikit-image/blob/main/.github/workflows/wheels_recipe.yml
+jobs:
+  linux-dist:
+    runs-on: ${{matrix.os}}
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+        triple:
+          - aarch64-unknown-linux-gnu
+          - aarch64-unknown-linux-musl 
+          - armv7-unknown-linux-gnueabihf
+          - armv7-unknown-linux-musleabihf
+          - x86_64-unknown-linux-gnu
+          - x86_64-unknown-linux-musl
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - shell: bash
+        run: tool/cross --target-${{matrix.triple}}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{matrix.triple}}.tar
+          path: out/${{matrix.triple}}.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{matrix.triple}}.tar.sha256sum
+          path: out/${{matrix.triple}}.tar.sha256sum
+  apple-dist:
+    runs-on: ${{matrix.os}}
+    strategy:
+      matrix:
+        os:
+          - macos-latest
+        triple:
+          - aarch64-apple-darwin
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - shell: bash
+        run: tool/cross --target-${{matrix.triple}}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{matrix.triple}}.tar
+          path: out/${{matrix.triple}}.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{matrix.triple}}.tar.sha256sum
+          path: out/${{matrix.triple}}.tar.sha256sum
+  windows-dist:
+    runs-on: ${{matrix.os}}
+    strategy:
+      matrix:
+        os:
+          - windows-latest
+        triple:
+          - x86_64-pc-windows-msvc
+          - aarch64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - shell: bash
+        run: tool/cross --target-${{matrix.triple}}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{matrix.triple}}.tar
+          path: out/${{matrix.triple}}.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{matrix.triple}}.tar.sha256sum
+          path: out/${{matrix.triple}}.tar.sha256sum
+  wheels-linux:
+    name: (x86_64|aarch64)-unknown-linux-(gnu|musl)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - uses: pypa/cibuildwheel@v2.19.2
+        with:
+          package-dir: .
+          output-dir: wheelhouse
+          config-file: pyproject.toml
+      - run: python3 tool/shasum.py wheelhouse show
+      - run: python3 tool/shasum.py wheelhouse mk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-linux
+          path: wheelhouse/*
+  wheels-apple:
+    name: aarch64-apple-darwin
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pypa/cibuildwheel@v2.19.2
+        env:
+          MACOSX_DEPLOYMENT_TARGET: 11
+        with:
+          package-dir: .
+          output-dir: wheelhouse
+          config-file: pyproject.toml
+      - run: python3 tool/shasum.py wheelhouse show
+      - run: python3 tool/shasum.py wheelhouse mk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-apple
+          path: wheelhouse/*
+  create-gh-release:
+    if: ${{ github.ref == 'refs/heads/release' }}
+    runs-on: ubuntu-latest
+    needs:
+      - linux-dist
+      - apple-dist
+      - windows-dist
+      - wheels-apple
+      - wheels-linux
+    steps:
+      - uses: actions/checkout@v6
+      - run: |
+          tool/fetch-release-artifacts --no-zip
+          gh release create "$(cat .version)" --notes "$(tool/show-changelog-for-version)"
+          gh release upload "$(cat .version)" out/dist/*
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+  # Ref: https://packaging.python.org/en/latest/guides/publishing-package-distribution-releases-using-github-actions-ci-cd-workflows
+  publish-wheels-pypi:
+    if: ${{ github.ref == 'refs/heads/release' }}
+    runs-on: ubuntu-latest
+    needs:
+      - wheels-apple
+      - wheels-linux
+    environment:
+      name: dist
+      url: https://pypi.org/p/wtr-watcher
+    permissions: write-all
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ github.token }}
+      - run: |
+          tool/fetch-release-artifacts --no-zip
+          mkdir dist
+          find out/dist -name '*.whl' | while read f
+          do cp "$f" dist ; echo "$f"
+          done
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          verbose: true
+  publish-crates-io:
+    # Refs:
+    # - https://github.com/azriel91/peace/blob/main/.github/workflows/publish.yml
+    # - https://users.rust-lang.org/t/does-anyone-use-github-actions-to-run-cargo-publish/92374
+    if: ${{ github.ref == 'refs/heads/release' }}
+    environment:
+      name: publish-crates-io
+      url: https://crates.io/crates/wtr-watcher
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+    - run: cargo publish
+      env:
+        CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

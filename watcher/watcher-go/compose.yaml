@@ -1,0 +1,10 @@
+# `docker compose exec dev bash` to connect to the container
+services:
+  dev:
+    build:
+      context: ..
+      dockerfile: watcher-go/Dockerfile
+    volumes:
+      - ./:/usr/src/app
+    command: [ "sleep", "infinity" ]
+    restart: no

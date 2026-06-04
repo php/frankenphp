@@ -1,0 +1,37 @@
+name: Ubuntu
+
+on:
+  push:
+    branches: [ release, next ]
+  pull_request:
+    branches: [ release, next ]
+
+jobs:
+  build:
+    runs-on: ${{matrix.os}}
+    permissions:
+      id-token: write
+      contents: read
+      attestations: write
+    strategy:
+      matrix:
+        target-double:
+          - unknown-linux-gnu
+        target-platform:
+          - this
+        os:
+          - ubuntu-22.04
+          - ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/cache@v4
+        with:
+          path: out
+          key: cache.${{matrix.target-double}}.${{matrix.os}}
+      - uses: chetan/git-restore-mtime-action@v2
+      - run: cmake -S . -B out -DBUILD_TESTING=ON -DBUILD_SAN=ON
+      - run: make -C out -j$(nproc)
+      - run: cd out && ctest -V
+      - run: c++ src/wtr/tiny_watcher/main.cpp -Iinclude -std=c++17 -o /dev/null # C++17 Compat check

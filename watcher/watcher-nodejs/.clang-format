@@ -1,0 +1,131 @@
+AccessModifierOffset: -2
+AlignAfterOpenBracket: AlwaysBreak
+AlignArrayOfStructures: Right
+# AlignConsecutiveAssignments: None
+AlignConsecutiveBitFields:
+  Enabled: true
+  AcrossEmptyLines: true
+  AcrossComments: true
+# AlignConsecutiveDeclarations: None
+# AlignConsecutiveMacros
+AlignEscapedNewlines: Left
+AlignOperands: AlignAfterOperator
+AlignTrailingComments: true
+# [v16+]
+# AlignTrailingComments:
+#   Kind: Always
+#   OverEmptyLines: 2
+AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
+AllowShortBlocksOnASingleLine: Always # Empty
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortEnumsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: All # Empty
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: All # Empty
+AllowShortLoopsOnASingleLine: true
+AlwaysBreakAfterReturnType: None
+AlwaysBreakBeforeMultilineStrings: false
+AlwaysBreakTemplateDeclarations: Yes
+BinPackArguments: false
+BinPackParameters: false
+BitFieldColonSpacing: Both
+# [v16+]
+# BreakAfterAttributes: Always
+BreakBeforeBinaryOperators: NonAssignment # All
+# break before function scope (incl. lambdas) and else statements
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterCaseLabel: false
+  AfterClass: false
+  # [v16+]
+  AfterControlStatement: Never
+  AfterEnum: false
+  AfterFunction: true
+  AfterNamespace: false
+  AfterObjCDeclaration: false
+  AfterStruct: false
+  AfterUnion: false
+  AfterExternBlock: false
+  BeforeCatch: false
+  BeforeElse: false
+  BeforeLambdaBody: true
+  BeforeWhile: false
+  IndentBraces: false
+  SplitEmptyFunction: false
+  SplitEmptyRecord: false
+  SplitEmptyNamespace: false
+BreakBeforeConceptDeclarations: Always
+BreakBeforeTernaryOperators: true
+BreakConstructorInitializers: BeforeComma
+BreakInheritanceList: BeforeColon
+BreakStringLiterals: true
+ColumnLimit: 120
+# CommentPragmas regex
+CompactNamespaces: false
+ContinuationIndentWidth: 2
+Cpp11BracedListStyle: true
+EmptyLineAfterAccessModifier: Never
+EmptyLineBeforeAccessModifier: Always
+FixNamespaceComments: false
+IncludeBlocks: Merge
+# IncludeCategories regex [maybe useful for tool/hone]
+IndentAccessModifiers: false
+IndentCaseBlocks: false
+IndentCaseLabels: true
+IndentExternBlock: false
+IndentGotoLabels: true
+# IndentPPDirectives: BeforeHash [messes up includes, nice w/modules]
+IndentRequiresClause: false
+IndentWidth: 2
+# [v16+]
+# InsertNewlineAtEOF: true
+# [v16+]
+# IntegerLiteralSeparator:
+#   Binary: 4
+#   Decimal: 3
+#   Hex: 2
+# [v16+]
+# LineEnding: LF
+NamespaceIndentation: None
+PackConstructorInitializers: Never
+PenaltyBreakOpenParenthesis: 0
+PenaltyBreakBeforeFirstCallParameter: 0
+PointerAlignment: Left
+QualifierAlignment: Custom
+# [bad docs? 'friend' does not work]
+QualifierOrder: ['inline', 'static', 'constexpr', 'volatile', 'restrict', 'type', 'const']
+ReferenceAlignment: Left
+ReflowComments: true
+RequiresClausePosition: OwnLine
+# [v16+]
+# RequiresExpressionIndentation: OuterScope
+SeparateDefinitionBlocks: Always
+SortIncludes: CaseInsensitive
+# SortIncludes: true
+# [bad docs?]
+# SortUsingDeclarations: LexicographicNumeric
+SortUsingDeclarations: true
+SpaceAfterCStyleCast: false
+SpaceAfterLogicalNot: true # false
+SpaceAfterTemplateKeyword: false
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeCaseColon: true
+SpaceBeforeCpp11BracedList: false # true
+SpaceBeforeRangeBasedForLoopColon: true
+SpaceBeforeSquareBrackets: false # true
+SpaceInEmptyBlock: false
+SpaceInEmptyParentheses: false
+SpacesBeforeTrailingComments: 2
+SpacesInConditionalStatement: false
+SpacesInContainerLiterals: true
+SpacesInAngles: Never
+SpacesInCStyleCastParentheses: false
+# SpacesInLineCommentPrefix
+SpacesInSquareBrackets: false
+Standard: Latest
+SpaceBeforeCtorInitializerColon: true
+SpaceBeforeInheritanceColon: true
+SpaceBeforeParens: ControlStatements # Never
+TabWidth: 2
+UseTab: Never

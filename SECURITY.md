@@ -7,6 +7,12 @@ Please ensure that you're always using the latest release.
 
 Binaries and Docker images are rebuilt nightly using the latest versions of dependencies.
 
+## Security Model
+
+FrankenPHP embeds the PHP interpreter into a Go and Caddy server, so its trust boundaries span Go, C, and PHP.
+Before auditing the project or reporting an issue, read the [security model documentation](docs/security.md),
+which describes what is trusted, what is not, and which attack surfaces belong to FrankenPHP itself.
+
 ## Reporting a Vulnerability
 
 If you believe you have discovered a security issue directly affecting FrankenPHP,
