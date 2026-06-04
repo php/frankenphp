@@ -384,3 +384,7 @@ jobs:
           tag-name: v${{ inputs.version }}
         env:
           COMMITTER_TOKEN: ${{ secrets.HOMEBREW_TOKEN }}
+          # The action reads the source repo (release tag, tarball checksum) with
+          # GITHUB_TOKEN; without it, it falls back to COMMITTER_TOKEN, whose
+          # fine-grained PAT only sees the tap and gets 403 on this repo.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
