@@ -639,12 +639,29 @@ func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (r
 		return 0
 	}
 
+	var rc *http.ResponseController
+	if fc.requestBodyTimeout > 0 {
+		if fc.responseController == nil {
+			fc.responseController = http.NewResponseController(fc.responseWriter)
+		}
+		rc = fc.responseController
+	}
+
 	p := unsafe.Slice((*byte)(unsafe.Pointer(cBuf)), countBytes)
 	var err error
 	for readBytes < countBytes && err == nil {
+		if rc != nil {
+			// reset before each read: bound a stall, not a steady upload
+			_ = rc.SetReadDeadline(time.Now().Add(fc.requestBodyTimeout))
+		}
+
 		var n int
 		n, err = fc.request.Body.Read(p[readBytes:])
 		readBytes += C.size_t(n)
+	}
+
+	if rc != nil {
+		_ = rc.SetReadDeadline(time.Time{})
 	}
 
 	return
