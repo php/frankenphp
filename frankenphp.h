@@ -228,4 +228,13 @@ void frankenphp_release_thread_for_kill(force_kill_slot slot);
 
 void register_extensions(zend_module_entry **m, int len);
 
+/* Tri-state result of go_frankenphp_worker_handle_request_start.
+ * Distinct from the user-facing PHP constant FRANKENPHP_REQUEST_IDLE_TIMEOUT (-1):
+ * these are internal cgo signal codes shared by C and Go. */
+enum frankenphp_handle_request_result {
+  FRANKENPHP_HANDLE_REQUEST_STOP = 0,   /* worker is shutting down / recycling */
+  FRANKENPHP_HANDLE_REQUEST_NORMAL = 1, /* a request is ready to handle */
+  FRANKENPHP_HANDLE_REQUEST_IDLE = 2,   /* idle timeout fired, no request */
+};
+
 #endif

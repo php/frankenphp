@@ -41,6 +41,8 @@ type workerConfig struct {
 	MatchPath []string `json:"match_path,omitempty"`
 	// MaxConsecutiveFailures sets the maximum number of consecutive failures before panicking (defaults to 6, set to -1 to never panick)
 	MaxConsecutiveFailures int `json:"max_consecutive_failures,omitempty"`
+	// RequestIdleTimeout: after this idle duration with no request, frankenphp_handle_request() returns FRANKENPHP_REQUEST_IDLE_TIMEOUT (-1). 0 disables it.
+	RequestIdleTimeout caddy.Duration `json:"request_idle_timeout,omitempty"`
 
 	options        []frankenphp.WorkerOption
 	requestOptions []frankenphp.RequestOption
@@ -145,8 +147,22 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 			}
 
 			wc.MaxConsecutiveFailures = v
+		case "request_idle_timeout":
+			if !d.NextArg() {
+				return wc, d.ArgErr()
+			}
+
+			v, err := caddy.ParseDuration(d.Val())
+			if err != nil {
+				return wc, d.Errf("request_idle_timeout must be a valid duration (example: 30s): %v", err)
+			}
+			if v < 0 {
+				return wc, d.Err("request_idle_timeout must be >= 0")
+			}
+
+			wc.RequestIdleTimeout = caddy.Duration(v)
 		default:
-			return wc, wrongSubDirectiveError("worker", "name, file, num, env, watch, match, max_consecutive_failures, max_threads", v)
+			return wc, wrongSubDirectiveError("worker", "name, file, num, env, watch, match, max_consecutive_failures, max_threads, request_idle_timeout", v)
 		}
 	}
 

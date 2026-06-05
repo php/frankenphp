@@ -311,6 +311,50 @@ static void frankenphp_reset_super_globals() {
   ZEND_HASH_FOREACH_END();
 }
 
+/* Empty the request superglobals on an idle tick (no live request): bind fresh
+ * empty arrays into the symbol table and disarm the auto-globals so a worker
+ * reading e.g. $_SERVER sees an empty array, not stale data. $_ENV and $GLOBALS
+ * are kept; the next request repopulates via frankenphp_reset_super_globals(). */
+static void frankenphp_clear_super_globals() {
+  zend_try {
+    zend_auto_global *auto_global;
+    ZEND_HASH_MAP_FOREACH_PTR(CG(auto_globals), auto_global) {
+      zend_string *name = auto_global->name;
+
+      /* keep $_ENV; never touch $GLOBALS (it aliases the symbol table) */
+      if (zend_string_equals_literal(name, "_ENV") ||
+          zend_string_equals_literal(name, "GLOBALS")) {
+        continue;
+      }
+
+      if (zend_string_equals_literal(name, "_SESSION")) {
+        /* $_SESSION has no meaningful empty value outside a request */
+        zend_hash_del(&EG(symbol_table), name);
+      } else {
+        zval empty;
+        array_init(&empty);
+        zend_hash_update(&EG(symbol_table), name, &empty);
+      }
+
+      /* disarm so the read returns the bound value without invoking the
+       * request-dependent auto-global callback */
+      auto_global->armed = 0;
+    }
+    ZEND_HASH_FOREACH_END();
+
+    /* keep the backing http_globals arrays consistent (empty) */
+    int track_vars[] = {TRACK_VARS_GET,   TRACK_VARS_POST,
+                        TRACK_VARS_COOKIE, TRACK_VARS_SERVER,
+                        TRACK_VARS_FILES};
+    for (size_t i = 0; i < sizeof(track_vars) / sizeof(track_vars[0]); i++) {
+      zval *g = &PG(http_globals)[track_vars[i]];
+      zval_ptr_dtor_nogc(g);
+      array_init(g);
+    }
+  }
+  zend_end_try();
+}
+
 /*
  * free php_stream resources that are temporary (php_stream_temp_ops)
  * streams are globally registered in EG(regular_list), see zend_list.c
@@ -691,9 +735,17 @@ PHP_FUNCTION(frankenphp_handle_request) {
 
   struct go_frankenphp_worker_handle_request_start_return result =
       go_frankenphp_worker_handle_request_start(thread_index);
+
+  if (result.r0 == FRANKENPHP_HANDLE_REQUEST_IDLE) {
+    /* Idle timeout: no request was handled. Clear the request superglobals so
+     * the worker does not see stale data, then hand control back to PHP. */
+    frankenphp_clear_super_globals();
+    RETURN_LONG(-1);
+  }
+
   if (frankenphp_worker_request_startup() == FAILURE
       /* Shutting down */
-      || !result.r0) {
+      || result.r0 == FRANKENPHP_HANDLE_REQUEST_STOP) {
     RETURN_FALSE;
   }
 

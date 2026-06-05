@@ -2,7 +2,9 @@ package caddy
 
 import (
 	"testing"
+	"time"
 
+	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/stretchr/testify/require"
 )
@@ -219,4 +221,66 @@ func TestModuleWorkerWithCustomName(t *testing.T) {
 	require.NoError(t, err, "Expected no error when adding the worker to the app")
 	require.Equal(t, "m#custom-worker-name", module.Workers[0].Name, "Worker should have the custom name, prefixed with m#")
 	require.Equal(t, "m#custom-worker-name", app.Workers[0].Name, "Worker should have the custom name, prefixed with m#")
+}
+
+func TestParseWorkerRequestIdleTimeout(t *testing.T) {
+	config := `
+	{
+		php {
+			worker {
+				file ../testdata/worker-with-env.php
+				request_idle_timeout 30s
+			}
+		}
+	}`
+
+	d := caddyfile.NewTestDispenser(config)
+	module := &FrankenPHPModule{}
+
+	err := module.UnmarshalCaddyfile(d)
+	require.NoError(t, err, "Expected no error when configuring a worker with request_idle_timeout")
+
+	require.Len(t, module.Workers, 1, "Expected one worker to be added to the module")
+	require.Equal(t, caddy.Duration(30*time.Second), module.Workers[0].RequestIdleTimeout, "Worker should have the correct request_idle_timeout")
+}
+
+func TestParseWorkerRequestIdleTimeoutZeroDisables(t *testing.T) {
+	// 0 is a valid value: it disables the idle timeout. This is what a template
+	// config that resolves the duration to 0 produces, and it must be accepted.
+	config := `
+	{
+		php {
+			worker {
+				file ../testdata/worker-with-env.php
+				request_idle_timeout 0
+			}
+		}
+	}`
+
+	d := caddyfile.NewTestDispenser(config)
+	module := &FrankenPHPModule{}
+
+	err := module.UnmarshalCaddyfile(d)
+	require.NoError(t, err, "request_idle_timeout 0 must be accepted (disabled)")
+
+	require.Len(t, module.Workers, 1, "Expected one worker to be added to the module")
+	require.Equal(t, caddy.Duration(0), module.Workers[0].RequestIdleTimeout, "request_idle_timeout 0 should disable the timeout")
+}
+
+func TestParseWorkerRequestIdleTimeoutRejectsNegative(t *testing.T) {
+	config := `
+	{
+		php {
+			worker {
+				file ../testdata/worker-with-env.php
+				request_idle_timeout -5s
+			}
+		}
+	}`
+
+	d := caddyfile.NewTestDispenser(config)
+	module := &FrankenPHPModule{}
+
+	err := module.UnmarshalCaddyfile(d)
+	require.Error(t, err, "a negative request_idle_timeout must be rejected")
 }

@@ -12,6 +12,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestWithWorkerRequestIdleTimeoutSetsField(t *testing.T) {
+	w := &workerOpt{}
+	require.NoError(t, WithWorkerRequestIdleTimeout(5*time.Second)(w))
+	assert.Equal(t, 5*time.Second, w.requestIdleTimeout)
+}
+
+func TestWithWorkerRequestIdleTimeoutRejectsNegative(t *testing.T) {
+	w := &workerOpt{}
+	assert.Error(t, WithWorkerRequestIdleTimeout(-1*time.Second)(w))
+}
+
 // TestRestartWorkersForceKillsStuckThread verifies the drain path does
 // not hang when a worker is stuck in a blocking PHP call (sleep, etc.).
 // macOS has no realtime signals so we can't unblock sleep() there; skip.

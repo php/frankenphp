@@ -46,6 +46,7 @@ type testOptions struct {
 	realServer         bool
 	logger             *slog.Logger
 	initOpts           []frankenphp.Option
+	workerOpts         []frankenphp.WorkerOption
 	requestOpts        []frankenphp.RequestOption
 	phpIni             map[string]string
 }
@@ -67,6 +68,7 @@ func runTest(t *testing.T, test func(func(http.ResponseWriter, *http.Request), *
 			frankenphp.WithWorkerEnv(opts.env),
 			frankenphp.WithWorkerWatchMode(opts.watch),
 		}
+		workerOpts = append(workerOpts, opts.workerOpts...)
 		initOpts = append(initOpts, frankenphp.WithWorkers("workerName", testDataDir+opts.workerScript, opts.nbWorkers, workerOpts...))
 	}
 	initOpts = append(initOpts, opts.initOpts...)
@@ -1348,4 +1350,74 @@ func testOpcachePreload(t *testing.T, opts *testOptions) {
 		body, _ := testGet("http://example.com/preload-check.php", handler, t)
 		assert.Equal(t, "I am preloaded", body)
 	}, opts)
+}
+
+func TestIdleTimeoutConstantExposed(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, resp := testGet("http://example.com/idle-timeout-const.php", handler, t)
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, "-1", body)
+	}, &testOptions{nbParallelRequests: 1})
+}
+
+func TestWorkerRequestIdleTimeout(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body1, resp1 := testGet("http://example.com/worker-idle-timeout.php", handler, t)
+		assert.Equal(t, 200, resp1.StatusCode)
+		assert.Contains(t, body1, "idle:0")
+		assert.Contains(t, body1, "idleServerCount:-1")
+		instance1 := strings.Split(strings.Split(body1, ",")[0], ":")[1]
+
+		// Wait past the idle timeout so the worker ticks at least once.
+		time.Sleep(400 * time.Millisecond)
+
+		body2, resp2 := testGet("http://example.com/worker-idle-timeout.php", handler, t)
+		assert.Equal(t, 200, resp2.StatusCode)
+		assert.Contains(t, body2, "idleServerCount:0", "superglobals must be empty during an idle tick")
+		assert.NotContains(t, body2, "idle:0", "at least one idle tick must have fired")
+		instance2 := strings.Split(strings.Split(body2, ",")[0], ":")[1]
+		assert.Equal(t, instance1, instance2, "worker must not restart on an idle tick")
+	}, &testOptions{
+		workerScript:       "worker-idle-timeout.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		workerOpts: []frankenphp.WorkerOption{
+			frankenphp.WithWorkerRequestIdleTimeout(100 * time.Millisecond),
+		},
+	})
+}
+
+func TestWorkerNoIdleTimeoutByDefault(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body1, _ := testGet("http://example.com/worker-idle-timeout.php", handler, t)
+		instance1 := strings.Split(strings.Split(body1, ",")[0], ":")[1]
+		time.Sleep(400 * time.Millisecond)
+		body2, _ := testGet("http://example.com/worker-idle-timeout.php", handler, t)
+		assert.Contains(t, body2, "idle:0", "no idle tick should fire when the timeout is unset")
+		instance2 := strings.Split(strings.Split(body2, ",")[0], ":")[1]
+		assert.Equal(t, instance1, instance2)
+	}, &testOptions{
+		workerScript:       "worker-idle-timeout.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+	})
+}
+
+func TestWorkerIdleTimeoutDoesNotCountTowardMaxRequests(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body1, _ := testGet("http://example.com/worker-idle-timeout.php", handler, t)
+		instance1 := strings.Split(strings.Split(body1, ",")[0], ":")[1]
+		time.Sleep(500 * time.Millisecond)
+		body2, _ := testGet("http://example.com/worker-idle-timeout.php", handler, t)
+		instance2 := strings.Split(strings.Split(body2, ",")[0], ":")[1]
+		assert.Equal(t, instance1, instance2, "idle ticks must not count toward max_requests")
+	}, &testOptions{
+		workerScript:       "worker-idle-timeout.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		initOpts:           []frankenphp.Option{frankenphp.WithNumThreads(2), frankenphp.WithMaxRequests(5)},
+		workerOpts: []frankenphp.WorkerOption{
+			frankenphp.WithWorkerRequestIdleTimeout(100 * time.Millisecond),
+		},
+	})
 }

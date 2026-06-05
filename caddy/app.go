@@ -164,6 +164,7 @@ func (f *FrankenPHPApp) Start() error {
 			frankenphp.WithWorkerWatchMode(w.Watch),
 			frankenphp.WithWorkerMaxFailures(w.MaxConsecutiveFailures),
 			frankenphp.WithWorkerMaxThreads(w.MaxThreads),
+			frankenphp.WithWorkerRequestIdleTimeout(time.Duration(w.RequestIdleTimeout)),
 			frankenphp.WithWorkerRequestOptions(w.requestOptions...),
 		)
 
