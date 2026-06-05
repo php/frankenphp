@@ -1774,7 +1774,7 @@ func TestOpcacheReset(t *testing.T) {
 			time.Sleep(time.Millisecond * 10)
 		}
 
-		go func() {
+		go func(i int) {
 			defer wg.Done()
 			// spam opcache_reset on intervals
 			if i%10 > 7 {
@@ -1794,7 +1794,7 @@ func TestOpcacheReset(t *testing.T) {
 				http.StatusOK,
 				fmt.Sprintf("slept for %d ms and worked for %d iterations", sleep, work),
 			)
-		}()
+		}(i)
 	}
 
 	wg.Wait()

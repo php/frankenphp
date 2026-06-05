@@ -757,7 +757,9 @@ func go_is_context_done(threadIndex C.uintptr_t) C.bool {
 
 //export go_schedule_opcache_reset
 func go_schedule_opcache_reset(threadIndex C.uintptr_t) {
-	go mainThread.rebootAllThreads()
+	if mainThread != nil {
+		go mainThread.rebootAllThreads()
+	}
 }
 
 func convertArgs(args []string) (C.int, []*C.char) {

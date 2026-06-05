@@ -165,7 +165,7 @@ func newWorker(o workerOpt) (*worker, error) {
 	return w, nil
 }
 
-// EXPERIMENTAL: DrainWorkers initiates a graceful drain of all worker scripts.
+// EXPERIMENTAL: DrainWorkers initiates a graceful drain of all php threads.
 // Blocks until every drained thread yields. Force-kill is armed after a
 // grace period to wake threads parked in blocking syscalls (sleep, I/O).
 func DrainWorkers() {

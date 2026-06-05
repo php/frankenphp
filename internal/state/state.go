@@ -182,12 +182,18 @@ func (ts *ThreadState) WaitForStateWithTimeout(timeout time.Duration, states ...
 	case <-sub.ch:
 		return true
 	case <-time.After(timeout):
+		ts.mu.Lock()
+		// remove subscripber so there is no leak potential
+		ts.subscribers = slices.DeleteFunc(ts.subscribers, func(s stateSubscriber) bool {
+			return sub.ch == s.ch
+		})
+		ts.mu.Unlock()
 		return false
 	}
 }
 
 // RequestSafeStateChange safely requests a state change from a different goroutine
-// returns false if thread is already in reserved state (shut down)
+// returns false if the thread is already reserved, shutting down, or done
 func (ts *ThreadState) RequestSafeStateChange(nextState State) bool {
 	ts.mu.Lock()
 	switch ts.currentState {
