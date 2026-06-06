@@ -35,8 +35,12 @@ var (
 )
 
 func initAutoScaling(mainThread *phpMainThread) {
+	// reused across reloads so queued requests aren't orphaned on a stale channel
+	if scaleChan == nil {
+		scaleChan = make(chan *frankenPHPContext)
+	}
+
 	if mainThread.maxThreads <= mainThread.numThreads {
-		scaleChan = nil
 		return
 	}
 
@@ -44,7 +48,6 @@ func initAutoScaling(mainThread *phpMainThread) {
 	mstate := mainThread.state
 
 	scalingMu.Lock()
-	scaleChan = make(chan *frankenPHPContext)
 	maxScaledThreads := mainThread.maxThreads - mainThread.numThreads
 	autoScaledThreads = make([]*phpThread, 0, maxScaledThreads)
 	scalingMu.Unlock()
