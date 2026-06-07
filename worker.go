@@ -179,7 +179,9 @@ func DrainWorkers() {
 // blocking syscalls so a stuck sleep doesn't make this hang for the
 // full duration of the syscall.
 func RestartWorkers() {
-	mainThread.rebootAllThreads()
+	if mainThread != nil {
+		mainThread.rebootAllThreads()
+	}
 }
 
 func (worker *worker) attachThread(thread *phpThread) {
