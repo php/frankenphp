@@ -18,7 +18,8 @@ runs:
     - if: steps.cache-watcher.outputs.cache-hit != 'true'
       name: Compile e-dant/watcher
       run: |
-        mkdir watcher
+        mkdir -p watcher
+        rm -rf watcher/*
         gh release download --repo e-dant/watcher -A tar.gz -O - | tar -xz -C watcher --strip-components 1
         cd watcher
         cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
