@@ -56,7 +56,7 @@ func (handler *workerThread) beforeScriptExecution() string {
 		setupWorkerScript(handler, handler.worker)
 
 		return handler.worker.fileName
-	case state.Rebooting:
+	case state.Rebooting, state.ForceRebooting:
 		return ""
 	case state.RebootReady:
 		handler.requestCount = 0

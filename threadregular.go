@@ -52,7 +52,7 @@ func (handler *regularThread) beforeScriptExecution() string {
 		return handler.waitForRequest()
 	case state.Ready:
 		return handler.waitForRequest()
-	case state.Rebooting:
+	case state.Rebooting, state.ForceRebooting:
 		return ""
 	case state.RebootReady:
 		handler.requestCount = 0

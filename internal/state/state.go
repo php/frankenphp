@@ -20,7 +20,7 @@ const (
 
 	// these States are 'stable' and safe to transition from at any time
 	Inactive // stable
-	Ready // stable
+	Ready    // stable
 
 	// States necessary for transitioning between different handlers
 	TransitionRequested
@@ -29,6 +29,7 @@ const (
 
 	// thread is exiting the C loop for a full ZTS restart (max_requests)
 	Rebooting
+	ForceRebooting
 	// C thread has exited and ZTS state is cleaned up, ready to spawn a new C thread
 	RebootReady
 	// all threads are yielding for main thread reboot
@@ -59,6 +60,8 @@ func (s State) String() string {
 		return "transition complete"
 	case Rebooting:
 		return "rebooting"
+	case ForceRebooting:
+		return "rebooting (force)"
 	case RebootReady:
 		return "reboot ready"
 	case YieldingForReboot:

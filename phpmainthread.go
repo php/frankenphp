@@ -154,7 +154,7 @@ func (mainThread *phpMainThread) rebootAllThreads() bool {
 	globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "rebooting all PHP threads")
 
 	for _, thread := range phpThreads {
-		if thread.reboot() {
+		if thread.forceReboot() {
 			rebootingThreads = append(rebootingThreads, thread)
 		}
 	}
