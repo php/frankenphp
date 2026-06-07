@@ -40,6 +40,9 @@ func TestRestartWorkerViaAdminApi(t *testing.T) {
 		}
 		`, "caddyfile")
 
+	// make sure workers are not still running from any previous tests
+	assertAdminResponse(t, tester, "POST", "workers/restart", http.StatusOK, "workers restarted successfully\n")
+
 	tester.AssertGetResponse("http://localhost:"+testPort+"/", http.StatusOK, "requests:1")
 	tester.AssertGetResponse("http://localhost:"+testPort+"/", http.StatusOK, "requests:2")
 
