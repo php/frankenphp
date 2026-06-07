@@ -62,15 +62,19 @@ func TestHotReload(t *testing.T) {
 		req = req.WithContext(cx)
 		resp := tester.AssertResponseCode(req, http.StatusOK)
 
-		connected.Done()
-
 		var receivedBody strings.Builder
 
 		buf := make([]byte, 1024)
+		isConnected := false
 		for {
 			n, err := resp.Body.Read(buf)
 			if n > 0 {
 				receivedBody.Write(buf[:n])
+			}
+			if !isConnected {
+				// wait for the first bytes before marking the client as connected
+				isConnected = true
+				connected.Done()
 			}
 			if strings.Contains(receivedBody.String(), "index.php") {
 				cancel()
