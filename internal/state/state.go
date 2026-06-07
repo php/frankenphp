@@ -178,12 +178,13 @@ func (ts *ThreadState) WaitForStateWithTimeout(timeout time.Duration, states ...
 	}
 	ts.subscribers = append(ts.subscribers, sub)
 	ts.mu.Unlock()
+
 	select {
 	case <-sub.ch:
 		return true
 	case <-time.After(timeout):
 		ts.mu.Lock()
-		// remove subscripber so there is no leak potential
+		// remove subscriber so there is no leak potential
 		ts.subscribers = slices.DeleteFunc(ts.subscribers, func(s stateSubscriber) bool {
 			return sub.ch == s.ch
 		})
