@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"sync"
 	"time"
 	"unsafe"
 
+	"github.com/dunglas/frankenphp/internal/blockio"
 	"github.com/dunglas/frankenphp/internal/state"
 )
 
@@ -27,6 +29,11 @@ type workerThread struct {
 	isBootingScript         bool // true if the worker has not reached frankenphp_handle_request yet
 	failureCount            int  // number of consecutive startup failures
 	requestCount            int  // number of requests handled since last restart
+
+	// per-request timeout watchdog (worker.workerTimeout > 0)
+	timeoutMu    sync.Mutex
+	requestTimer *time.Timer
+	requestEpoch uint64 // bumped on every request finish to invalidate a stale watchdog
 }
 
 func convertToWorkerThread(thread *phpThread, worker *worker) {
@@ -134,6 +141,12 @@ func setupWorkerScript(handler *workerThread, worker *worker) {
 
 func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 	worker := handler.worker
+
+	// Stop any pending request-timeout watchdog. On a fatal error (including a
+	// timeout-induced bailout) go_frankenphp_finish_worker_request is skipped,
+	// so this is the crash-path counterpart to the cancel done there.
+	handler.cancelRequestTimeout()
+
 	handler.dummyFrankenPHPContext = nil
 	handler.dummyContext = nil
 
@@ -277,7 +290,106 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 		}
 	}
 
+	handler.armRequestTimeout()
+
 	return true, handler.workerFrankenPHPContext.handlerParameters
+}
+
+// armRequestTimeout starts a watchdog for the request that is about to execute.
+// If the request runs longer than worker.workerTimeout, the watchdog arms the
+// per-thread timeout flag + VM interrupt (so a "Worker request timeout" fatal
+// is raised at the next opcode boundary), on Linux shuts down the socket fd(s)
+// the thread is blocked on (so a blocked DB/HTTP read returns instead of
+// retrying EINTR) and wakes EINTR-abortable waits (sleep) via the realtime kill
+// signal (Linux/FreeBSD). The worker script then restarts.
+//
+// A timeout of 0 disables the watchdog. On platforms without a realtime kill
+// signal (macOS, Windows non-alertable waits) a blocking syscall already in
+// progress cannot be unblocked; only the VM-interrupt flag is set, which is
+// honored at the next opcode boundary (so CPU-bound overruns are still caught).
+func (handler *workerThread) armRequestTimeout() {
+	timeout := handler.worker.workerTimeout
+	if timeout <= 0 {
+		return
+	}
+
+	thread := handler.thread
+
+	// Reset any stale pending flag from a previous request whose watchdog raced
+	// completion, so it can't abort this one. Runs on the PHP thread, and always
+	// after such a stale watchdog has finished: cancelRequestTimeout (called on
+	// the same PHP thread when the previous request ended) blocks on timeoutMu
+	// until a mid-flight watchdog body has run to completion.
+	C.frankenphp_clear_worker_timeout(C.uintptr_t(thread.threadIndex))
+
+	handler.timeoutMu.Lock()
+	epoch := handler.requestEpoch
+	handler.requestTimer = time.AfterFunc(timeout, func() {
+		// timeoutMu is held for the entire interrupt sequence so the watchdog
+		// cannot interleave with its request finishing: cancelRequestTimeout
+		// (and therefore the next request's arm + pending-flag clear) waits
+		// until this body is done. Checking the epoch under the same mutex
+		// makes a watchdog whose request already finished a strict no-op - it
+		// can never arm the timeout for (or shut down the sockets of) a request
+		// it wasn't armed for, and it can never touch the per-thread C state
+		// after a teardown's cancelRequestTimeout returned.
+		handler.timeoutMu.Lock()
+		defer handler.timeoutMu.Unlock()
+
+		if handler.requestEpoch != epoch {
+			return
+		}
+
+		// Only interrupt a thread that is actively handling a request. Any
+		// other state means the thread is yielding, restarting, rebooting or
+		// shutting down on its own and its force-kill slot may already be
+		// cleared (frankenphp_force_kill_thread is still safe on a zeroed slot).
+		if !handler.state.Is(state.Ready) {
+			return
+		}
+
+		if globalLogger.Enabled(globalCtx, slog.LevelWarn) {
+			globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "worker request timeout, interrupting thread",
+				slog.String("worker", handler.worker.name),
+				slog.Int("thread", thread.threadIndex),
+				slog.Duration("timeout", timeout),
+			)
+		}
+
+		thread.forceKillMu.RLock()
+		// 1. Arm: set the pending flag + VM interrupt so the interrupt hook
+		//    raises our fatal as soon as the thread runs PHP again. Done before
+		//    any wakeup so the driver's own I/O error can't pre-empt the message.
+		C.frankenphp_arm_worker_timeout(
+			C.uintptr_t(thread.threadIndex),
+			thread.forceKill,
+			C.double(timeout.Seconds()),
+		)
+		// 2. Abort the fd the thread is blocked on (e.g. a mysqlnd socket that
+		//    isn't reachable via the resource list) so a retried blocking read
+		//    fails terminally instead of resuming.
+		blockio.Abort(int(thread.kernelTID.Load()))
+		// 3. Wake EINTR-abortable waits (sleep) that have no fd to shut down.
+		C.frankenphp_wake_worker_thread(thread.forceKill)
+		thread.forceKillMu.RUnlock()
+	})
+	handler.timeoutMu.Unlock()
+}
+
+// cancelRequestTimeout stops the watchdog armed by armRequestTimeout and bumps
+// the request epoch so a watchdog whose timer already fired but has not yet taken
+// timeoutMu becomes a no-op. Because the watchdog body holds timeoutMu for its
+// whole run, this call also blocks until a mid-flight watchdog has finished -
+// after it returns, the watchdog can no longer interrupt the thread or touch
+// the per-thread C state. Safe to call when no watchdog is armed.
+func (handler *workerThread) cancelRequestTimeout() {
+	handler.timeoutMu.Lock()
+	handler.requestEpoch++
+	if handler.requestTimer != nil {
+		handler.requestTimer.Stop()
+		handler.requestTimer = nil
+	}
+	handler.timeoutMu.Unlock()
 }
 
 // go_frankenphp_worker_handle_request_start is called at the start of every php request served.
@@ -310,6 +422,10 @@ func go_frankenphp_worker_handle_request_start(threadIndex C.uintptr_t) (C.bool,
 //export go_frankenphp_finish_worker_request
 func go_frankenphp_finish_worker_request(threadIndex C.uintptr_t, retval *C.zval) {
 	thread := phpThreads[threadIndex]
+
+	// the request completed normally: disarm the timeout watchdog
+	thread.handler.(*workerThread).cancelRequestTimeout()
+
 	ctx := thread.context()
 	fc := ctx.Value(contextKey).(*frankenPHPContext)
 

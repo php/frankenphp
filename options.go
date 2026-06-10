@@ -45,6 +45,7 @@ type workerOpt struct {
 	requestOptions         []RequestOption
 	watch                  []string
 	maxConsecutiveFailures int
+	workerTimeout          time.Duration
 	extensionWorkers       *extensionWorkers
 	onThreadReady          func(int)
 	onThreadShutdown       func(int)
@@ -219,6 +220,32 @@ func WithWorkerMaxFailures(maxFailures int) WorkerOption {
 			return fmt.Errorf("max consecutive failures must be >= -1, got %d", maxFailures)
 		}
 		w.maxConsecutiveFailures = maxFailures
+
+		return nil
+	}
+}
+
+// EXPERIMENTAL: WithWorkerTimeout sets a hard per-request timeout for the worker
+// (0 = disabled, the default). When a worker request runs longer than the
+// timeout, FrankenPHP aborts it with a "Worker request timeout of N second(s)
+// exceeded" fatal and the worker script restarts cleanly, ready for the next
+// request. This is the worker-mode equivalent of PHP-FPM's
+// request_terminate_timeout, and unlike max_execution_time it also covers time
+// spent inside a blocking call such as a slow database query.
+//
+// On Linux, a request blocked in a socket read (a stuck DB query, a hung HTTP
+// read) is aborted by shutting down the file descriptor it is parked on, so the
+// read fails and the request unwinds. A long sleep is woken by a realtime signal
+// on Linux/FreeBSD. On macOS/Windows, and for tight CPU loops in extensions that
+// swallow EINTR, only the VM-interrupt flag is set: CPU-bound overruns are still
+// caught at the next opcode boundary, but a blocking syscall already in progress
+// cannot be unblocked.
+func WithWorkerTimeout(timeout time.Duration) WorkerOption {
+	return func(w *workerOpt) error {
+		if timeout < 0 {
+			return fmt.Errorf("worker timeout must be >= 0, got %s", timeout)
+		}
+		w.workerTimeout = timeout
 
 		return nil
 	}
