@@ -38,25 +38,31 @@ var cStringHTTPMethods = map[string]*C.char{
 	"PATCH":   C.CString("PATCH"),
 }
 
+// splitRemoteAddr separates the remote IP and port; it is more lenient than
+// net.SplitHostPort and tolerates malformed values without panicking.
+func splitRemoteAddr(remoteAddr string) (ip, port string) {
+	if idx := strings.LastIndex(remoteAddr, ":"); idx > -1 {
+		ip = remoteAddr[:idx]
+		port = remoteAddr[idx+1:]
+	} else {
+		ip = remoteAddr
+	}
+
+	// Remove [] from IPv6 addresses, only when properly bracketed
+	if len(ip) > 1 && ip[0] == '[' && ip[len(ip)-1] == ']' {
+		ip = ip[1 : len(ip)-1]
+	}
+
+	return ip, port
+}
+
 // computeKnownVariables returns a set of CGI environment variables for the request.
 //
 // TODO: handle this case https://github.com/caddyserver/caddy/issues/3718
 // Inspired by https://github.com/caddyserver/caddy/blob/master/modules/caddyhttp/reverseproxy/fastcgi/fastcgi.go
 func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 	request := fc.request
-	// Separate remote IP and port; more lenient than net.SplitHostPort
-	var ip, port string
-	if idx := strings.LastIndex(request.RemoteAddr, ":"); idx > -1 {
-		ip = request.RemoteAddr[:idx]
-		port = request.RemoteAddr[idx+1:]
-	} else {
-		ip = request.RemoteAddr
-	}
-
-	// Remove [] from IPv6 addresses
-	if len(ip) > 0 && ip[0] == '[' {
-		ip = ip[1 : len(ip)-1]
-	}
+	ip, port := splitRemoteAddr(request.RemoteAddr)
 
 	var rs, https, sslProtocol *C.zend_string
 	var sslCipher string
