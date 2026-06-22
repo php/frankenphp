@@ -33,6 +33,36 @@ func TestEnsureLeadingSlash(t *testing.T) {
 	}
 }
 
+func TestSplitRemoteAddr(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		wantIP   string
+		wantPort string
+	}{
+		{"IPv4 with port", "192.0.2.1:1234", "192.0.2.1", "1234"},
+		{"IPv4 without port", "192.0.2.1", "192.0.2.1", ""},
+		{"IPv6 bracketed with port", "[::1]:80", "::1", "80"},
+		{"empty", "", "", ""},
+		{"lone opening bracket", "[", "[", ""},
+		{"opening bracket with colon", "[:", "[", ""},
+		{"unterminated bracket with port", "[::1:80", "[::1", "80"},
+		{"only colon", ":", "", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ip, port := splitRemoteAddr(tt.input)
+			assert.Equal(t, tt.wantIP, ip, "ip for %q", tt.input)
+			assert.Equal(t, tt.wantPort, port, "port for %q", tt.input)
+		})
+	}
+}
+
 func TestSplitPos(t *testing.T) {
 	tests := []struct {
 		name      string
