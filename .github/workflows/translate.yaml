@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v6.0.3
         with:
           fetch-depth: 0
           # zizmor: ignore[artipacked]
@@ -45,7 +45,7 @@ jobs:
       - name: Run Linter
         if: steps.md_files.outputs.found == 'true'
         continue-on-error: true
-        uses: super-linter/super-linter/slim@v8
+        uses: super-linter/super-linter/slim@v8.6.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LINTER_RULES_PATH: /
