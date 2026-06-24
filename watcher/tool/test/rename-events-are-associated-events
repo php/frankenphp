@@ -1,0 +1,65 @@
+#! /usr/bin/env bash
+# shellcheck source=tool/test/.ctx
+
+ec=0
+
+(
+  desc='Rename events are associated events'
+  # See these issues for more context on the event count:
+  # - https://github.com/e-dant/watcher/issues/85
+  # - https://github.com/e-dant/watcher/issues/80
+  count=100
+  read -r -d '' expect << .
+[
+  {
+    "effect_type": "create",
+    "path_name": "0",
+    "path_type": "file"
+  },
+$(for i in $(seq 1 $count); do cat << eol
+  {
+    "associated": {
+      "effect_type": "rename",
+      "path_name": "$i",
+      "path_type": "file"
+    },
+    "effect_type": "rename",
+    "path_name": "$((i - 1))",
+    "path_type": "file"
+  },
+eol
+done)
+  {
+    "effect_type": "destroy",
+    "path_name": "$count",
+    "path_type": "file"
+  }
+]
+.
+  if [ "$(uname -s)" = Darwin ]
+  then
+    echo "$desc ... [Skipped on macOS, see issue nr. 80 on GitHub]"
+    exit 0
+  fi
+  echo -n "$desc ... "
+
+  . "$(dirname "$0")/.ctx"
+
+  actual=$(
+    watch-async "$testdir" -s 3 > "$testdir.json"
+    touch 0
+    for i in $(seq 1 $count)
+    do mv $((i - 1)) $i
+    done
+    rm $count
+    wait # for the watcher
+    show-events "$testdir" \
+      | without-effect-time \
+      | without-self-events \
+      | sed s,d/,,g \
+      | jq -Ss 'sort_by(.path_name | tonumber)'
+  )
+
+  check-result "$expect" "$actual"
+)
+exit $?

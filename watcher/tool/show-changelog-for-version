@@ -1,0 +1,28 @@
+#!/bin/bash
+default_version=$(cat "$(dirname "$0")/../.version")
+usage() {
+cat <<EOF
+Usage: $0 [version(= $default_version) | --help, -h]
+Example:
+  For a changelog with the following content:
+    # A doc
+    ## 0.12.1
+    text
+    ## 0.12.0
+    other text
+  The command:
+    $ $0 0.12.1
+  Would display:
+    text
+EOF
+}
+version=${1:-$default_version}
+[ "$1" = "--help" -o "$1" = "-h" ] && { usage ; exit 0; }
+changelog="$(dirname "$0")/../changelog.md"
+awk \
+  -v section="## $version" \
+  '
+  $0 ~ section { in_section=1; next }
+  in_section && /^## / && $0 != section { in_section=0 }
+  in_section { print }' \
+  "$changelog"

@@ -1,0 +1,19 @@
+{
+  "name": "watcher",
+  "type": "module",
+  "exports": "./build/watcher.js",
+  "scripts": {
+    "test": "node --experimental-vm-modules --force-node-api-uncaught-exceptions-policy=true ./node_modules/.bin/jest",
+    "ccdb": "npx node-gyp configure --release -- -f gyp.generator.compile_commands_json.py && cp build/Release/compile_commands.json .",
+    "build-debug": "./node_modules/.bin/node-gyp configure && ./node_modules/.bin/node-gyp build --debug",
+    "build-release": "./node_modules/.bin/node-gyp configure && ./node_modules/.bin/node-gyp build --release",
+    "build-ts": "tsc",
+    "build": "npm run build-ts && npm run build-release && npm run build-debug",
+    "example": "node examples/example-usage.js"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "node-gyp": "^12",
+    "jest": "^30"
+  }
+}

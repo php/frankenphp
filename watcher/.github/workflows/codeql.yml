@@ -1,0 +1,43 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [ release, next ]
+  pull_request:
+    branches: [ release, next ]
+  schedule:
+    - cron: '00 3 * * 5' # At 3:00am on Friday. Every week, every month.
+
+jobs:
+  analyze:
+    runs-on: ${{matrix.os}}
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    strategy:
+      matrix:
+        target-double:
+          - unknown-linux-gnu
+        target-platform:
+          - this
+        os:
+          - ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/cache@v4
+        with:
+          path: out
+          key: cache.${{matrix.target-double}}.${{matrix.os}}
+      - name: Setup CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: c-cpp
+      - name: Build
+        run: |
+          cmake -S . -B out/${{matrix.target-platform}}/codeql -DCMAKE_BUILD_TYPE=Debug
+          cmake --build out/${{matrix.target-platform}}/codeql --config Debug
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3

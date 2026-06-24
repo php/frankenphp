@@ -1,0 +1,38 @@
+name: macOS
+
+on:
+  push:
+    branches: [ release, next ]
+  pull_request:
+    branches: [ release, next ]
+
+jobs:
+  build:
+    runs-on: ${{matrix.os}}
+    permissions:
+      id-token: write
+      contents: read
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        target-double:
+          - apple-darwin
+        target-platform:
+          - this
+        os:
+          - macos-14
+          - macos-15
+    steps:
+      - uses: lukka/get-cmake@v3.29.3
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/cache@v4
+        with:
+          path: out
+          key: cache.${{matrix.target-double}}.${{matrix.os}}
+      - uses: chetan/git-restore-mtime-action@v2
+      - run: cmake -S . -B out -DBUILD_TESTING=ON -DBUILD_SAN=ON
+      - run: make -C out -j$(nproc)
+      - run: cd out && ctest -V

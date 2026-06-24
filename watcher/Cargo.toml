@@ -1,0 +1,54 @@
+[package]
+name = "wtr-watcher"
+version = "0.14.5" # hook: tool/release
+edition = "2021"
+build = "watcher-rs/build.rs"
+authors = ["Will <edant.io@protonmail.com>"]
+description = "Filesystem watcher. Works anywhere. Simple, efficient and friendly."
+documentation = "https://github.com/e-dant/watcher/blob/release/readme.md"
+homepage = "https://github.com/e-dant/watcher"
+keywords = [
+  "events",
+  "filesystem",
+  "monitoring",
+  "tracing",
+  "watcher",
+]
+categories = [
+  "asynchronous",
+  "command-line-interface",
+  "command-line-utilities",
+  "development-tools",
+  "filesystem",
+]
+license = "MIT"
+readme = "readme.md"
+repository = "https://github.com/e-dant/watcher"
+
+[lib]
+name = "wtr_watcher"
+path = "watcher-rs/src/lib.rs"
+
+[[bin]]
+name = "wtr-watcher"
+path = "watcher-rs/src/main.rs"
+required-features = ["cli"]
+
+[[example]]
+name = "show-events"
+path = "watcher-rs/examples/show-events.rs"
+
+[features]
+serde = ["dep:serde"]
+cli = ["dep:serde", "serde_json", "tokio", "tokio/rt", "tokio/macros", "tokio/signal"]
+default = ["cli", "serde"]
+
+[dependencies]
+futures = { version = "0", features = ["alloc", "std"], default-features = false }
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+tokio = { version = "1", default-features = false, optional = true }
+
+[build-dependencies]
+cc = "1"
+bindgen = "0"

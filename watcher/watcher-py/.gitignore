@@ -1,0 +1,9 @@
+watcher/lib
+build
+dist
+__pycache__
+*.o
+*.a
+*.so
+*.dylib
+*.dll

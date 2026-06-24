@@ -1,0 +1,56 @@
+#! /usr/bin/env bash
+
+IGNORE_GLOB="\
+security.md\
+|virtualenv\
+|node_modules\
+|build\
+|linux-cross-compilation-containers\
+|cross-files\
+|license\
+|readme.md\
+|changelog.md\
+|contributing.md\
+|SECURITY.md\
+|LICENSE\
+|README.md\
+|CHANGELOG.md\
+|CONTRIBUTING.md\
+|test_watcher\
+|tool\
+|this\
+|notes.md\
+|artifacts.txt\
+|compile_commands.json\
+|Dockerfile\
+|Containerfile\
+|CMakeLists.txt\
+|conanfile.txt\
+|meson.build\
+|pyproject.toml\
+|tsconfig.json\
+|package.json\
+|package-lock.json\
+|binding.gyp\
+|cross-compile.sh\
+|cmake\
+|flake.nix\
+|flake.lock\
+|portable-destructive-rename\
+|etc\
+|result\
+|container-devel\
+|WORKSPACE\
+|BUILD.bazel"
+
+(
+  cd "$(dirname "$0")/.." || exit 1
+  exa \
+    . \
+    --tree \
+    --level 100 \
+    --ignore-glob="$IGNORE_GLOB" \
+    --sort type \
+    --reverse \
+    | tail -n +1
+)

@@ -1,0 +1,25 @@
+#! /usr/bin/env python3
+
+"""
+A portable `cp` command that works on both Windows and Unix-like systems.
+"""
+
+import os
+import sys
+import shutil
+
+def main():
+    if len(sys.argv) != 3:
+        print("Usage: {} SOURCE DEST".format(sys.argv[0]))
+        sys.exit(1)
+
+    src = sys.argv[1]
+    dst = sys.argv[2]
+
+    if os.path.isdir(src):
+        shutil.copytree(src, dst)
+    else:
+        shutil.copy2(src, dst)
+
+if __name__ == "__main__":
+    main()
