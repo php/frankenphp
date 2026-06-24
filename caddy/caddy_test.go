@@ -858,6 +858,69 @@ func TestWorkerMetrics(t *testing.T) {
 		))
 }
 
+// #2477: verify one pool per worker, no "_0" duplicates.
+func TestPhpServerWorkerMatchPoolCount(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+	{
+		skip_install_trust
+		admin localhost:2999
+		http_port `+testPort+`
+		https_port 9443
+		metrics
+	}
+
+	localhost:`+testPort+` {
+		php_server {
+			root ../testdata
+			worker {
+				file ../testdata/dedup-match-worker.php
+				num 1
+				match /match/*
+			}
+			worker {
+				file ../testdata/dedup-plain-worker.php
+				num 1
+			}
+		}
+	}
+	`, "caddyfile")
+
+	matchedWorker, _ := fastabs.FastAbs("../testdata/dedup-match-worker.php")
+	plainWorker, _ := fastabs.FastAbs("../testdata/dedup-plain-worker.php")
+
+	// the matched (non-.php) path must still be served by its worker
+	tester.AssertGetResponse("http://localhost:"+testPort+"/match/anything", http.StatusOK, "dedup-match-worker")
+
+	resp, err := http.Get("http://localhost:2999/metrics")
+	require.NoError(t, err, "failed to fetch metrics")
+	t.Cleanup(func() {
+		require.NoError(t, resp.Body.Close())
+	})
+
+	metrics := new(bytes.Buffer)
+	_, err = metrics.ReadFrom(resp.Body)
+	require.NoError(t, err, "failed to read metrics")
+
+	var pools []string
+	for _, line := range strings.Split(metrics.String(), "\n") {
+		if !strings.HasPrefix(line, "frankenphp_total_workers{worker=") {
+			continue
+		}
+		if !strings.Contains(line, "dedup-match-worker.php") && !strings.Contains(line, "dedup-plain-worker.php") {
+			continue
+		}
+		pools = append(pools, line)
+	}
+
+	require.Len(t, pools, 2, "expected exactly one pool per distinct worker, got: %v", pools)
+	joined := strings.Join(pools, "\n")
+	require.NotContains(t, joined, escapeMetricLabel(matchedWorker)+`_0`, "matched worker must not be registered twice: %v", pools)
+	require.NotContains(t, joined, escapeMetricLabel(plainWorker)+`_0`, "plain worker must not be registered twice: %v", pools)
+	require.Contains(t, joined, escapeMetricLabel(matchedWorker), "matched worker pool must be present: %v", pools)
+	require.Contains(t, joined, escapeMetricLabel(plainWorker), "plain worker pool must be present: %v", pools)
+}
+
 func TestNamedWorkerMetrics(t *testing.T) {
 	var wg sync.WaitGroup
 	tester := caddytest.NewTester(t)
