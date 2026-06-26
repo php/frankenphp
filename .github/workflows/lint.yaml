@@ -30,7 +30,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LINTER_RULES_PATH: /
           MARKDOWN_CONFIG_FILE: .markdown-lint.yaml
-          FILTER_REGEX_EXCLUDE: docs/(cn|es|fr|ja|pt-br|ru|tr)/
+          # watcher/ is a vendored copy of the third-party wtr/watcher library
+          FILTER_REGEX_EXCLUDE: ^(docs/(cn|es|fr|ja|pt-br|ru|tr)|watcher)/
           VALIDATE_CPP: false
           VALIDATE_JSCPD: false
           VALIDATE_GO: false
