@@ -26,13 +26,22 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#ifndef ZEND_WIN32
+#ifndef PHP_WIN32
 #include <unistd.h>
 #endif
-#ifdef __linux__
+#if defined(__linux__)
 #include <sys/prctl.h>
-#elif defined(__FreeBSD__) || defined(__OpenBSD__)
+#elif defined(__FreeBSD__)
 #include <pthread_np.h>
+#include <sys/procctl.h>
+#elif defined(__OpenBSD__)
+#include <pthread_np.h>
+#endif
+#if defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__) ||       \
+    defined(__DragonFly__)
+#define FRANKENPHP_KQUEUE_PARENT_DEATH 1
+#include <sys/event.h>
+#include <sys/types.h>
 #endif
 
 #include "_cgo_export.h"
@@ -110,10 +119,63 @@ static inline uintptr_t frankenphp_thread_index(void) {
 
 #ifndef PHP_WIN32
 static bool is_forked_child = false;
-static void frankenphp_fork_child(void) { is_forked_child = true; }
+static pid_t fork_parent_pid = 0;
+
+static void frankenphp_fork_prepare(void) { fork_parent_pid = getpid(); }
+
+#if defined(FRANKENPHP_KQUEUE_PARENT_DEATH)
+/* Watcher thread for platforms without a kernel parent-death signal.
+ * Blocks in kevent() until the parent exits, then force-kills this child. */
+static void *frankenphp_parent_death_watcher(void *arg) {
+  pid_t ppid = (pid_t)(intptr_t)arg;
+  int kq = kqueue();
+  if (kq < 0) {
+    _exit(1);
+  }
+  struct kevent kev;
+  EV_SET(&kev, ppid, EVFILT_PROC, EV_ADD | EV_ONESHOT, NOTE_EXIT, 0, NULL);
+  if (kevent(kq, &kev, 1, NULL, 0, NULL) < 0) {
+    _exit(1);
+  }
+  struct kevent event;
+  while (kevent(kq, NULL, 0, &event, 1, NULL) < 0 && errno == EINTR);
+  _exit(1);
+}
+#endif
+
+static void frankenphp_fork_child(void) {
+  is_forked_child = true;
+#if defined(__linux__)
+  // if the parent process dies between fork() and this prctl()
+  if (prctl(PR_SET_PDEATHSIG, SIGKILL, 0, 0, 0) != 0 ||
+      getppid() != fork_parent_pid) {
+    _exit(1);
+  }
+#elif defined(__FreeBSD__)
+  /* FreeBSD analogue of PR_SET_PDEATHSIG - except with
+   * parent process death, rather than parent thread death. */
+  int sig = SIGKILL;
+  if (procctl(P_PID, 0, PROC_PDEATHSIG_CTL, &sig) != 0 ||
+      getppid() != fork_parent_pid) {
+    _exit(1);
+  }
+#elif defined(FRANKENPHP_KQUEUE_PARENT_DEATH)
+  /* No kernel parent-death signal available; spawn a watcher that
+   * blocks on EVFILT_PROC/NOTE_EXIT. */
+  if (getppid() != fork_parent_pid) {
+    _exit(1);
+  }
+  pthread_t watcher;
+  if (pthread_create(&watcher, NULL, frankenphp_parent_death_watcher,
+                     (void *)(intptr_t)fork_parent_pid) != 0) {
+    _exit(1);
+  }
+  pthread_detach(watcher);
+#endif
+}
 
 static void frankenphp_register_atfork(void) {
-  pthread_atfork(NULL, NULL, frankenphp_fork_child);
+  pthread_atfork(frankenphp_fork_prepare, NULL, frankenphp_fork_child);
 }
 #endif
 
@@ -977,6 +1039,12 @@ static int frankenphp_startup(sapi_module_struct *sapi_module) {
 static int frankenphp_deactivate(void) { return SUCCESS; }
 
 static size_t frankenphp_ub_write(const char *str, size_t str_length) {
+#ifndef PHP_WIN32
+  if (UNEXPECTED(is_forked_child)) {
+    return 0;
+  }
+#endif
+
   struct go_ub_write_return result =
       go_ub_write(frankenphp_thread_index(), (char *)str, str_length);
 
@@ -988,20 +1056,22 @@ static size_t frankenphp_ub_write(const char *str, size_t str_length) {
 }
 
 static int frankenphp_send_headers(sapi_headers_struct *sapi_headers) {
+#ifndef PHP_WIN32
+  if (UNEXPECTED(is_forked_child)) {
+    return SAPI_HEADER_SEND_FAILED;
+  }
+#endif
+
   if (SG(request_info).no_headers == 1) {
     return SAPI_HEADER_SENT_SUCCESSFULLY;
   }
 
-  int status;
-
-  if (SG(sapi_headers).http_status_line) {
-    status = atoi((SG(sapi_headers).http_status_line) + 9);
-  } else {
-    status = SG(sapi_headers).http_response_code;
-
-    if (!status) {
-      status = 200;
-    }
+  /* Use the response code PHP already parsed; reparsing http_status_line with
+   * a fixed +9 offset read out of bounds for lines shorter than 9 bytes, e.g.
+   * header("HTTP/"). */
+  int status = SG(sapi_headers).http_response_code;
+  if (!status) {
+    status = 200;
   }
 
   bool success = go_write_headers(frankenphp_thread_index(), status,
@@ -1014,6 +1084,12 @@ static int frankenphp_send_headers(sapi_headers_struct *sapi_headers) {
 }
 
 static void frankenphp_sapi_flush(void *server_context) {
+#ifndef PHP_WIN32
+  if (UNEXPECTED(is_forked_child)) {
+    return;
+  }
+#endif
+
   sapi_send_headers();
   if (go_sapi_flush(frankenphp_thread_index())) {
     php_handle_aborted_connection();

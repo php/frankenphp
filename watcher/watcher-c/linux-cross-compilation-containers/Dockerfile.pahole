@@ -1,3 +1,0 @@
-FROM debian:latest
-RUN apt-get update -yqq && apt-get install -yqq pahole
-ENTRYPOINT ["pahole"]
