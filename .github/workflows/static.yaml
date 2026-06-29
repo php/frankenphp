@@ -63,7 +63,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REF: ${{ (github.ref_type == 'tag' && github.ref_name) || (github.event_name == 'workflow_dispatch' && inputs.version) || '' }}
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ steps.check.outputs.ref }}
           persist-credentials: false
@@ -110,7 +110,7 @@ jobs:
         run: echo "sanitized_platform=${PLATFORM//\//-}" >> "${GITHUB_OUTPUT}"
         env:
           PLATFORM: ${{ matrix.platform }}
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.ref }}
           persist-credentials: false
@@ -202,7 +202,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REF: ${{ (github.ref_type == 'tag' && github.ref_name) || needs.prepare.outputs.ref }}
       - if: fromJson(needs.prepare.outputs.push) && (needs.prepare.outputs.ref || github.ref_type == 'tag')
-        uses: actions/attest@v4
+        uses: actions/attest@v4.1.0
         with:
           subject-path: ${{ github.workspace }}/frankenphp-linux-*
       - name: Run sanity checks
@@ -265,7 +265,7 @@ jobs:
         run: echo "sanitized_platform=${PLATFORM//\//-}" >> "${GITHUB_OUTPUT}"
         env:
           PLATFORM: ${{ matrix.platform }}
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.ref }}
           persist-credentials: false
@@ -360,7 +360,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REF: ${{ (github.ref_type == 'tag' && github.ref_name) || needs.prepare.outputs.ref }}
       - if: fromJson(needs.prepare.outputs.push) && (needs.prepare.outputs.ref || github.ref_type == 'tag')
-        uses: actions/attest@v4
+        uses: actions/attest@v4.1.0
         with:
           subject-path: ${{ github.workspace }}/gh-output/frankenphp-linux-*-gnu
       - name: Run sanity checks
@@ -449,7 +449,7 @@ jobs:
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.ref }}
           persist-credentials: false
@@ -471,7 +471,7 @@ jobs:
           path: dist/static-php-cli/log
           name: static-php-cli-log-${{ matrix.platform }}-${{ github.sha }}
       - if: needs.prepare.outputs.ref || github.ref_type == 'tag'
-        uses: actions/attest@v4
+        uses: actions/attest@v4.1.0
         with:
           subject-path: ${{ github.workspace }}/dist/frankenphp-mac-*
       - name: Upload artifact
