@@ -138,7 +138,8 @@ static void *frankenphp_parent_death_watcher(void *arg) {
     _exit(1);
   }
   struct kevent event;
-  while (kevent(kq, NULL, 0, &event, 1, NULL) < 0 && errno == EINTR);
+  while (kevent(kq, NULL, 0, &event, 1, NULL) < 0 && errno == EINTR)
+    ;
   _exit(1);
 }
 #endif
