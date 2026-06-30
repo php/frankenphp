@@ -49,6 +49,8 @@ jobs:
         with:
           app-id: ${{ vars.RELEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-actions: write
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
