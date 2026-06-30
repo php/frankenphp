@@ -33,6 +33,10 @@ type worker struct {
 	onThreadReady          func(int)
 	onThreadShutdown       func(int)
 	queuedRequests         atomic.Int32
+	scope                  Scope
+	// bg, if non-nil, marks this as a background (non-HTTP) worker and
+	// holds its bg-specific lifecycle state.
+	bg *backgroundWorkerExtras
 }
 
 var (
@@ -57,18 +61,35 @@ func initWorkers(opt []workerOpt) error {
 	workersByName = make(map[string]*worker, len(opt))
 	workersByPath = make(map[string]*worker, len(opt))
 
-	for _, o := range opt {
+	declared := make([]*worker, len(opt))
+	for i, o := range opt {
 		w, err := newWorker(o)
 		if err != nil {
 			return err
 		}
 
 		totalThreadsToStart += w.num
+		declared[i] = w
 		workers = append(workers, w)
-		workersByName[w.name] = w
+		// Background workers are resolved per-scope via backgroundLookups
+		// so the same user-facing name can appear in multiple scopes
+		// without colliding in the global workersByName map.
+		if w.bg == nil {
+			workersByName[w.name] = w
+		}
 		if w.allowPathMatching {
 			workersByPath[w.fileName] = w
 		}
+	}
+
+	// Build the per-scope lookups (named + catch-all per scope). Each
+	// php_server block gets its own scope; the global/embed scope is 0.
+	// Each declaration registers in its scope's lookup so lazy-start
+	// siblings inherit the template options.
+	var err error
+	backgroundLookups, err = buildBackgroundWorkerLookups(declared, opt)
+	if err != nil {
+		return err
 	}
 
 	startupFailChan = make(chan error, totalThreadsToStart)
@@ -76,7 +97,11 @@ func initWorkers(opt []workerOpt) error {
 	for _, w := range workers {
 		for i := 0; i < w.num; i++ {
 			thread := getInactivePHPThread()
-			convertToWorkerThread(thread, w)
+			if w.bg != nil {
+				convertToBackgroundWorkerThread(thread, w, w.name, w.bg.ready)
+			} else {
+				convertToWorkerThread(thread, w)
+			}
 
 			workersReady.Go(func() {
 				thread.state.WaitFor(state.Ready, state.ShuttingDown, state.Done)
@@ -121,21 +146,32 @@ func newWorker(o workerOpt) (*worker, error) {
 	}
 
 	// workers that have a name starting with "m#" are module workers
-	// they can only be matched by their name, not by their path
-	allowPathMatching := !strings.HasPrefix(o.name, "m#")
+	// they can only be matched by their name, not by their path.
+	// Background workers are matched only by name, never by path, since
+	// they don't handle HTTP requests.
+	allowPathMatching := !strings.HasPrefix(o.name, "m#") && !o.isBackgroundWorker
 
-	if w := workersByPath[absFileName]; w != nil && allowPathMatching {
-		return w, fmt.Errorf("two workers cannot have the same filename: %q", absFileName)
-	}
-	if w := workersByName[o.name]; w != nil {
-		return w, fmt.Errorf("two workers cannot have the same name: %q", o.name)
+	// Background workers are matched only by name, never by path. Multiple
+	// named bg workers can share an entrypoint file; uniqueness is enforced
+	// per-scope via backgroundLookups, not at the global path level.
+	if !o.isBackgroundWorker {
+		if w := workersByPath[absFileName]; w != nil && allowPathMatching {
+			return w, fmt.Errorf("two workers cannot have the same filename: %q", absFileName)
+		}
+		// Background workers are resolved through per-scope lookups, not the
+		// global workersByName map; the same user-facing name can appear in
+		// multiple php_server scopes without collision.
+		if w := workersByName[o.name]; w != nil {
+			return w, fmt.Errorf("two workers cannot have the same name: %q", o.name)
+		}
 	}
 
 	if o.env == nil {
-		o.env = make(PreparedEnv, 1)
+		o.env = make(PreparedEnv)
 	}
 
-	o.env["FRANKENPHP_WORKER\x00"] = "1"
+	// $_SERVER['FRANKENPHP_WORKER'] is populated downstream from
+	// fc.worker.name via frankenphp_register_server_vars.
 	w := &worker{
 		name:                   o.name,
 		fileName:               absFileName,
@@ -148,10 +184,17 @@ func newWorker(o workerOpt) (*worker, error) {
 		maxConsecutiveFailures: o.maxConsecutiveFailures,
 		onThreadReady:          o.onThreadReady,
 		onThreadShutdown:       o.onThreadShutdown,
+		scope:                  o.scope,
+	}
+	if o.isBackgroundWorker {
+		w.bg = &backgroundWorkerExtras{ready: newBackgroundWorkerState()}
 	}
 
 	w.configureMercure(&o)
 
+	// o.env is shared by reference across instances; treat it as
+	// read-only after init. Deep-clone if per-instance env is ever
+	// needed.
 	w.requestOptions = append(
 		w.requestOptions,
 		WithRequestDocumentRoot(filepath.Dir(o.fileName), false),
@@ -172,9 +215,16 @@ var drainGracePeriod = 30 * time.Second
 // Blocks until every drained thread yields. Force-kill is armed after a
 // grace period to wake threads parked in blocking syscalls (sleep, I/O).
 func DrainWorkers() {
+	// Defensive RLock paired with RestartWorkers' scalingMu.Lock to
+	// guard against future runtime mutators of the workers slice.
+	scalingMu.RLock()
+	defer scalingMu.RUnlock()
 	_ = drainWorkerThreads()
 }
 
+// drainWorkerThreads walks the global workers slice. The caller must
+// ensure no concurrent mutation of the slice (either hold scalingMu or
+// be called from a context where scaling is paused).
 func drainWorkerThreads() (drainedThreads []*phpThread) {
 	var ready sync.WaitGroup
 
@@ -253,6 +303,27 @@ func (worker *worker) attachThread(thread *phpThread) {
 	worker.threadMutex.Lock()
 	worker.threads = append(worker.threads, thread)
 	worker.threadMutex.Unlock()
+}
+
+// invalidateBackgroundEntry releases the registry slot held by a bg
+// worker exiting on max_consecutive_failures so a future ensure() can
+// lazy-spawn a fresh thread. Single-instance only (catch-all instances,
+// lazy named).
+func (worker *worker) invalidateBackgroundEntry(name string) {
+	bg := worker.bg
+	if bg.catchAllNames != nil {
+		bg.catchAllMu.Lock()
+		delete(bg.catchAllNames, name)
+		bg.catchAllMu.Unlock()
+		return
+	}
+	if worker.num == 0 {
+		// Fresh slot so the retry isn't poisoned by the prior abort.
+		bg.lazyMu.Lock()
+		bg.ready = newBackgroundWorkerState()
+		bg.lazyStarted = false
+		bg.lazyMu.Unlock()
+	}
 }
 
 func (worker *worker) detachThread(thread *phpThread) {

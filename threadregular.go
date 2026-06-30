@@ -86,6 +86,8 @@ func (handler *regularThread) name() string {
 
 func (handler *regularThread) drain() {}
 
+func (handler *regularThread) scopedWorker() *worker { return nil }
+
 func (handler *regularThread) waitForRequest() string {
 	// max_requests reached: restart the thread to clean up all ZTS state
 	if maxRequestsPerThread > 0 && handler.requestCount >= maxRequestsPerThread {

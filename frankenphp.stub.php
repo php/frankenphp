@@ -54,3 +54,33 @@ function mercure_publish(string|array $topics, string $data = '', bool $private 
  * array<string, any> $context Values of the array will be converted to the corresponding Go type (if supported by FrankenPHP) and added to the context of the structured logs using https://pkg.go.dev/log/slog#Attr
  */
 function frankenphp_log(string $message, int $level = 0, array $context = []): void {}
+
+/**
+ * Declares a dependency on one or more background workers. Lazy-starts each
+ * worker that isn't already running, then blocks until every named worker
+ * has reached its main loop (signalled by its first call to
+ * frankenphp_get_worker_handle()), aborts after exhausting its
+ * max_consecutive_failures cap, or the timeout expires. Throws
+ * RuntimeException if no background worker is configured for any given
+ * name, if a worker fails to reach readiness within the timeout, or if a
+ * worker aborts during boot.
+ *
+ * The array form rejects empty arrays (ValueError), non-string elements
+ * (TypeError), empty strings, and duplicate names (ValueError) before
+ * any worker is started.
+ *
+ * @param string|string[] $name
+ * @param float|null $timeout deadline in seconds. null (the default) falls
+ *                            back to FrankenPHP's internal default
+ *                            timeout. A value <= 0 raises ValueError.
+ */
+function frankenphp_ensure_background_worker(string|array $name, ?float $timeout = null): void {}
+
+/**
+ * Returns the stop-signal stream for the current background worker. The
+ * stream closes when FrankenPHP is draining the worker so the script can
+ * exit its loop gracefully. Only callable from inside a background worker.
+ *
+ * @return resource
+ */
+function frankenphp_get_worker_handle(): mixed {}

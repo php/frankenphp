@@ -42,7 +42,7 @@ var cStringHTTPMethods = map[string]*C.char{
 //
 // TODO: handle this case https://github.com/caddyserver/caddy/issues/3718
 // Inspired by https://github.com/caddyserver/caddy/blob/master/modules/caddyhttp/reverseproxy/fastcgi/fastcgi.go
-func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
+func addKnownVariablesToServer(thread *phpThread, fc *frankenPHPContext, trackVarsArray *C.zval) {
 	request := fc.request
 	// Separate remote IP and port; more lenient than net.SplitHostPort
 	ip, port := splitRemoteAddr(request.RemoteAddr)
@@ -100,6 +100,21 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 
 	phpSelf := fc.scriptName + fc.pathInfo
 
+	// Worker identity for $_SERVER. Bg-worker threads override fc.worker
+	// because catch-all threads share the catch-all template *worker
+	// (whose name is the entrypoint path); the per-thread runtimeName is
+	// the actual ensure() argument. m# is stripped so PHP sees the user-
+	// facing name regardless of how the worker was registered.
+	var workerName string
+	var isBackgroundWorker bool
+	if bgHandler, ok := thread.handler.(*backgroundWorkerThread); ok {
+		workerName = strings.TrimPrefix(bgHandler.runtimeName, "m#")
+		isBackgroundWorker = true
+	} else if fc.worker != nil {
+		workerName = strings.TrimPrefix(fc.worker.name, "m#")
+		isBackgroundWorker = fc.worker.bg != nil
+	}
+
 	C.frankenphp_register_server_vars(trackVarsArray, C.frankenphp_server_vars{
 		// approximate total length to avoid array re-hashing:
 		// 28 CGI vars + headers + environment
@@ -143,6 +158,11 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		request_scheme: rs,          // "http" or "https"
 		ssl_protocol:   sslProtocol, // values from tlsProtocol
 		https:          https,       // "on" or empty
+
+		// Worker identity (empty for non-worker requests)
+		worker_name:          toUnsafeChar(workerName),
+		worker_name_len:      C.size_t(len(workerName)),
+		is_background_worker: C._Bool(isBackgroundWorker),
 	})
 }
 
@@ -175,7 +195,7 @@ func go_register_server_variables(threadIndex C.uintptr_t, trackVarsArray *C.zva
 	fc := thread.frankenPHPContext()
 
 	if fc.request != nil {
-		addKnownVariablesToServer(fc, trackVarsArray)
+		addKnownVariablesToServer(thread, fc, trackVarsArray)
 		addHeadersToServer(thread.context(), fc.request, trackVarsArray)
 	}
 

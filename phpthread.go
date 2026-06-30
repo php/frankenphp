@@ -47,6 +47,9 @@ type threadHandler interface {
 	// current handlers are no-ops; this is the seam later handler types use
 	// without having to modify drainWorkerThreads.
 	drain()
+	// scopedWorker returns the *worker this handler runs (HTTP / bg
+	// workers), or nil for non-worker handlers.
+	scopedWorker() *worker
 }
 
 func newPHPThread(threadIndex int) *phpThread {
@@ -105,6 +108,9 @@ func (thread *phpThread) shutdown() {
 		return
 	}
 
+	// Wake up handlers parked in a blocking C call (background workers'
+	// stream_select on the stop pipe). No-op for regular/worker handlers.
+	thread.handler.drain()
 	close(thread.drainChan)
 
 	// Arm force-kill after the grace period to wake any thread stuck in
