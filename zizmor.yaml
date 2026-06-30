@@ -1,9 +1,5 @@
 ---
 rules:
-  unpinned-uses:
-    config:
-      policies:
-        "*": ref-pin
   secrets-outside-env:
     config:
       allow:
