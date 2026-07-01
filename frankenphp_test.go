@@ -1354,16 +1354,16 @@ func TestPhpServerLib(t *testing.T) {
 	cwd, _ := os.Getwd()
 	testDataDir := cwd + "/testdata/"
 	defer frankenphp.Shutdown()
-	frankenphp.Init(
+	assert.NoError(t, frankenphp.Init(
 		frankenphp.WithPhpServer(
 			1,
 			frankenphp.WithPhpServerRoot(testDataDir),
 		),
-	)
+	))
 	request := httptest.NewRequest("GET", "http://example.com/index.php", nil)
 	response := httptest.NewRecorder()
 
-	frankenphp.PhpServers[1].ServeHTTP(response, request)
+	assert.NoError(t, frankenphp.PhpServers[1].ServeHTTP(response, request))
 
 	assert.Equal(t, "I am by birth a Genevese (i not set)", response.Body.String())
 }

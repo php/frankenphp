@@ -17,7 +17,6 @@ type PhpServer struct {
 	workersByPath map[string]*worker
 	workerOpts    []workerOpt
 	logger        *slog.Logger
-	mainThread    *phpMainThread
 }
 
 var (
