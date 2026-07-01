@@ -19,6 +19,9 @@ type Option func(h *opt) error
 // WorkerOption instances allow configuring FrankenPHP worker.
 type WorkerOption func(*workerOpt) error
 
+// PhpServerOption instances allow to configure a PhpServer.
+type PhpServerOption func(*PhpServer) error
+
 // opt contains the available options.
 //
 // If you change this, also update the Caddy module and the documentation.

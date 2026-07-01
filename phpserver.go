@@ -6,9 +6,8 @@ import (
 	"sync"
 )
 
-// PhpServer represents a PHP server instance.
-// it helps to scope a request to a specific set of configurations.
-// useful to represent a php_server or php block in the caddyfile.
+// PhpServer represents a php_server block in the caddyfile.
+// can also be used to scope workers to a specific set of configurations.
 type PhpServer struct {
 	idx           int
 	root          string
@@ -21,10 +20,9 @@ type PhpServer struct {
 	mainThread    *phpMainThread
 }
 
-// PhpServerOption instances allow to configure a PhpServer.
-type PhpServerOption func(*PhpServer) error
-
 var (
+	// PhpServers is a map of all registered PhpServer instances.
+	// instances will be accessible after frankenphp.Init() has been called.
 	PhpServers   = make(map[int]*PhpServer)
 	phpServersMu sync.Mutex
 )
@@ -73,6 +71,7 @@ func newDummyPhpServer() *PhpServer {
 }
 
 // ServeHTTP executes a PHP script according to the given context.
+// the request will be scoped to the PhpServer instance.
 func (s *PhpServer) ServeHTTP(responseWriter http.ResponseWriter, request *http.Request, opts ...RequestOption) error {
 	h := responseWriter.Header()
 	if h["Server"] == nil {
