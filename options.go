@@ -45,6 +45,7 @@ type workerOpt struct {
 	requestOptions         []RequestOption
 	watch                  []string
 	maxConsecutiveFailures int
+	requestIdleTimeout     time.Duration
 	extensionWorkers       *extensionWorkers
 	onThreadReady          func(int)
 	onThreadShutdown       func(int)
@@ -219,6 +220,19 @@ func WithWorkerMaxFailures(maxFailures int) WorkerOption {
 			return fmt.Errorf("max consecutive failures must be >= -1, got %d", maxFailures)
 		}
 		w.maxConsecutiveFailures = maxFailures
+
+		return nil
+	}
+}
+
+// WithWorkerRequestIdleTimeout sets how long a worker waits idle for a request before
+// frankenphp_handle_request() returns FRANKENPHP_REQUEST_IDLE_TIMEOUT (-1). 0 disables it.
+func WithWorkerRequestIdleTimeout(timeout time.Duration) WorkerOption {
+	return func(w *workerOpt) error {
+		if timeout < 0 {
+			return fmt.Errorf("request idle timeout must be >= 0, got %s", timeout)
+		}
+		w.requestIdleTimeout = timeout
 
 		return nil
 	}

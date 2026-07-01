@@ -203,7 +203,7 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 }
 
 // waitForWorkerRequest is called during frankenphp_handle_request in the php worker script.
-func (handler *workerThread) waitForWorkerRequest() (bool, any) {
+func (handler *workerThread) waitForWorkerRequest() (C.int, any) {
 	// unpin any memory left over from previous requests
 	handler.thread.Unpin()
 
@@ -234,7 +234,7 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 		}
 
 		if handler.thread.reboot() {
-			return false, nil
+			return C.FRANKENPHP_HANDLE_REQUEST_STOP, nil
 		}
 	}
 
@@ -257,9 +257,19 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 			C.frankenphp_reset_opcache()
 		}
 
-		return false, nil
+		return C.FRANKENPHP_HANDLE_REQUEST_STOP, nil
 	case requestCH = <-handler.thread.requestChan:
 	case requestCH = <-handler.worker.requestChan:
+	case <-timeoutChan(handler.worker.requestIdleTimeout):
+		if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
+			globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "request idle timeout reached",
+				slog.String("worker", handler.worker.name),
+				slog.Int("thread", handler.thread.threadIndex),
+			)
+		}
+		handler.state.MarkAsWaiting(false)
+
+		return C.FRANKENPHP_HANDLE_REQUEST_IDLE, nil
 	}
 
 	handler.requestCount++
@@ -277,15 +287,15 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 		}
 	}
 
-	return true, handler.workerFrankenPHPContext.handlerParameters
+	return C.FRANKENPHP_HANDLE_REQUEST_NORMAL, handler.workerFrankenPHPContext.handlerParameters
 }
 
 // go_frankenphp_worker_handle_request_start is called at the start of every php request served.
 //
 //export go_frankenphp_worker_handle_request_start
-func go_frankenphp_worker_handle_request_start(threadIndex C.uintptr_t) (C.bool, unsafe.Pointer) {
+func go_frankenphp_worker_handle_request_start(threadIndex C.uintptr_t) (C.int, unsafe.Pointer) {
 	handler := phpThreads[threadIndex].handler.(*workerThread)
-	hasRequest, parameters := handler.waitForWorkerRequest()
+	code, parameters := handler.waitForWorkerRequest()
 
 	if parameters != nil {
 		var ptr unsafe.Pointer
@@ -299,10 +309,10 @@ func go_frankenphp_worker_handle_request_start(threadIndex C.uintptr_t) (C.bool,
 		}
 		handler.thread.Pin(ptr)
 
-		return C.bool(hasRequest), ptr
+		return code, ptr
 	}
 
-	return C.bool(hasRequest), nil
+	return code, nil
 }
 
 // go_frankenphp_finish_worker_request is called at the end of every php request served.

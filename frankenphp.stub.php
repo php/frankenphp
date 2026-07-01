@@ -14,7 +14,10 @@ const FRANKENPHP_LOG_LEVEL_WARN = 4;
 /** @var int */
 const FRANKENPHP_LOG_LEVEL_ERROR = 8;
 
-function frankenphp_handle_request(callable $callback): bool {}
+/** @var int */
+const FRANKENPHP_REQUEST_IDLE_TIMEOUT = -1;
+
+function frankenphp_handle_request(callable $callback): int|bool {}
 
 function headers_send(int $status = 200): int {}
 

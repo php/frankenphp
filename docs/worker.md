@@ -122,6 +122,109 @@ A workaround to using this type of code in worker mode is to restart the worker 
 
 The previous worker snippet allows configuring a maximum number of requests to handle by setting an environment variable named `MAX_REQUESTS`.
 
+Note that this `MAX_REQUESTS` loop and the server-side `max_requests` directive recycle at different depths.
+The loop counter ends the script, which FrankenPHP then re-runs in the same thread, so the PHP engine stays warm and only your application is bootstrapped again.
+The `max_requests` directive instead reboots the whole thread, fully resetting the PHP engine, which is what you want when the leak lives in the engine or an extension rather than your code.
+
+### Refresh connections after idle periods
+
+Long-lived connections opened by a worker (to a database, Redis, and so on) can go stale while the worker sits idle: the server may close them, a failover may happen, or they may simply time out.
+The `request_idle_timeout` option lets a worker wake up after a period of inactivity so it can refresh those connections, without restarting the whole script.
+
+When set, `frankenphp_handle_request()` can return one of three values:
+
+- `true`: a request was handled, keep looping.
+- `false`: the worker is shutting down or being recycled, exit the loop.
+- `FRANKENPHP_REQUEST_IDLE_TIMEOUT` (`-1`): no request was handled because the worker was idle for longer than `request_idle_timeout`. No request ran, so this is the moment to refresh connections, then keep looping.
+
+```php
+<?php
+while (true) {
+    $result = \frankenphp_handle_request($handler);
+
+    if ($result === false) {
+        break; // shutting down
+    }
+
+    if ($result === FRANKENPHP_REQUEST_IDLE_TIMEOUT) {
+        // No request was handled. Refresh long-lived resources.
+        $db->reconnect();
+        continue;
+    }
+
+    // $result === true: a real request ran
+    $myApp->terminate();
+    gc_collect_cycles();
+}
+```
+
+Configure it per worker in your [Caddyfile](config.md#caddyfile-config):
+
+```caddyfile
+frankenphp {
+    worker {
+        # ...
+        request_idle_timeout 5m
+    }
+}
+```
+
+The timeout resets on every served request, so it only fires after a genuine idle period.
+On an idle tick no request runs, the handler is not called, and the request superglobals (`$_GET`, `$_POST`, `$_SERVER`...) are emptied, so reading them during the refresh returns empty arrays rather than the previous request's data.
+The option is disabled by default (`0`), and existing scripts that only check `true`/`false` keep working unchanged because `-1` is emitted only when the timeout is configured.
+
+#### Keeping warm state fresh without slowing down requests
+
+The whole point of an application server is the shared, warm memory that survives between requests.
+You get the most out of it by keeping expensive, rarely-changing data (feature flags, configuration, lookup tables) in memory and doing the costly fetch *outside* the request, so the request itself only reads from memory.
+
+The trick is *when* to refresh that warm copy:
+
+- After each request, once the response is already sent. The client isn't waiting, so a Redis round-trip here costs nothing the user can feel, and the next request sees up-to-date data.
+- On an idle tick, when traffic goes quiet. Without this, a flag changed during a slow period would sit stale until the next request happens to trigger a post-request refresh. The idle wakeup bounds how stale the warm copy can get.
+
+Together, the two cover both busy and quiet periods: the request path never pays for the fetch, and the in-memory copy is never older than one request or one idle interval.
+
+```php
+<?php
+require __DIR__.'/vendor/autoload.php';
+
+$myApp = new \App\Kernel();
+$myApp->boot();
+$redis = new Redis();
+$redis->connect('redis', 6379);
+
+// Warm, in-memory copy shared across every request this worker handles
+$featureFlags = $redis->hGetAll('feature_flags');
+
+$handler = static function () use ($myApp, &$featureFlags) {
+    // Reads flags straight from memory, no Redis round-trip on the hot path
+    echo $myApp->handle($_GET, $_POST, $featureFlags);
+};
+
+while (true) {
+    $result = \frankenphp_handle_request($handler);
+
+    if ($result === false) {
+        break;
+    }
+
+    if ($result === FRANKENPHP_REQUEST_IDLE_TIMEOUT) {
+        // Quiet period: keep the warm copy from going stale
+        $featureFlags = $redis->hGetAll('feature_flags');
+        continue;
+    }
+
+    // Real request finished and the response is already sent. Refresh now,
+    // off the hot path, so the next request reads fresh data from memory.
+    $myApp->terminate();
+    $featureFlags = $redis->hGetAll('feature_flags');
+    gc_collect_cycles();
+}
+```
+
+With a `request_idle_timeout` of, say, `30s`, the flags are never more than 30 seconds out of date even if the worker handles no traffic, and a busy worker refreshes them after every response. Either way, the request that actually serves a user does no Redis lookup for flags at all.
+
 ### Restart workers manually
 
 While it's possible to restart workers [on file changes](config.md#watching-for-file-changes), it's also possible to restart all workers
@@ -175,6 +278,7 @@ $handler = static function () use ($workerServer) {
 ```
 
 Most superglobals (`$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, `$_SERVER`, `$_REQUEST`) are automatically reset between requests.
+When a [`request_idle_timeout`](#refresh-connections-after-idle-periods) fires, those same superglobals are emptied (since no request is in flight), while `$_ENV` is left untouched there too.
 However, **`$_ENV` is currently not reset between requests**.
 This means that any modifications made to `$_ENV` during a request will persist and be visible to subsequent requests handled by the same worker thread.
 Avoid storing request-specific or sensitive data in `$_ENV`.
