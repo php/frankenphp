@@ -13,6 +13,7 @@ The following extensions are known not to be compatible with FrankenPHP:
 | ----------------------------------------------------------------------------------------------------------- | --------------- |---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | [imap](https://www.php.net/manual/imap.installation.php)                                                 | Not thread-safe | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap), [ImapEngine](https://github.com/DirectoryTree/ImapEngine) |
 | [newrelic](https://docs.newrelic.com/docs/apm/agents/php-agent/getting-started/introduction-new-relic-php/) | Not thread-safe | -                                                                                                                                                                               |
+| [pcov](https://github.com/krakjoe/pcov)                                                                     | Not thread-safe ([SIGSEGV in classic mode](https://github.com/krakjoe/pcov/issues/132)) | Collect coverage with the CLI SAPI (run PHPUnit/Pest outside FrankenPHP) |
 
 ## Buggy PHP extensions
 
@@ -22,6 +23,7 @@ The following extensions have known bugs and unexpected behaviors when used with
 |---------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
 | [datadog](https://github.com/DataDog) | Experiences instability when profiling FrankenPHP. This bug is [being tracked by DataDog](https://github.com/DataDog/dd-trace-php/issues/3729). |
 | [blackfire](https://blackfire.io/) | [FrankenPHP support is in beta and not yet feature-complete](https://docs.blackfire.io/php/integrations/frankenphp).                            |
+| [imagick](https://github.com/Imagick/imagick) | ImageMagick's OpenMP threads conflict with FrankenPHP's threads, causing instability and crashes. Mitigate by disabling ImageMagick threading via `Imagick::setResourceLimit(\Imagick::RESOURCETYPE_THREAD, 1)` or by compiling ImageMagick with `--disable-openmp`. |
 
 ## get_browser
 
