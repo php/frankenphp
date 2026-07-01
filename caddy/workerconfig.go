@@ -46,6 +46,7 @@ type workerConfig struct {
 	requestOptions []frankenphp.RequestOption
 	absFileName    string
 	matchRelPath   string // pre-computed relative URL path for fast matching
+	routeGroup     string // identifies the php_server directive whose route embeds share this pool
 }
 
 func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {

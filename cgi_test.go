@@ -33,6 +33,37 @@ func TestEnsureLeadingSlash(t *testing.T) {
 	}
 }
 
+func TestSplitRemoteAddr(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		addr     string
+		wantIP   string
+		wantPort string
+	}{
+		{"ipv4 with port", "1.2.3.4:5", "1.2.3.4", "5"},
+		{"ipv6 bracketed with port", "[::1]:443", "::1", "443"},
+		{"ipv6 zone bracketed with port", "[fe80::1%eth0]:443", "fe80::1%eth0", "443"},
+		{"ipv4 without port", "192.168.0.1", "192.168.0.1", ""},
+		{"empty", "", "", ""},
+		// Must not panic: would crash the process via the cgo callback.
+		{"lone open bracket", "[", "[", ""},
+		{"open bracket with port", "[:9000", "[", "9000"},
+		{"empty brackets", "[]", "", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ip, port := splitRemoteAddr(tt.addr)
+			assert.Equal(t, tt.wantIP, ip, "splitRemoteAddr(%q) ip", tt.addr)
+			assert.Equal(t, tt.wantPort, port, "splitRemoteAddr(%q) port", tt.addr)
+		})
+	}
+}
+
 func TestSplitPos(t *testing.T) {
 	tests := []struct {
 		name      string

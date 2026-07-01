@@ -32,6 +32,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 	"unsafe"
@@ -66,7 +67,8 @@ var (
 
 	metrics Metrics = nullMetrics{}
 
-	maxWaitTime          time.Duration
+	// atomic: read by in-flight requests while a reload may rewrite it
+	maxWaitTime          atomic.Int64
 	maxRequestsPerThread int
 )
 
@@ -275,7 +277,7 @@ func Init(options ...Option) error {
 		metrics = opt.metrics
 	}
 
-	maxWaitTime = opt.maxWaitTime
+	maxWaitTime.Store(int64(opt.maxWaitTime))
 	maxRequestsPerThread = opt.maxRequests
 
 	if opt.maxIdleTime > 0 {
@@ -317,7 +319,10 @@ func Init(options ...Option) error {
 		return err
 	}
 
-	regularRequestChan = make(chan contextHolder)
+	// reused across reloads so queued requests aren't orphaned on a stale channel
+	if regularRequestChan == nil {
+		regularRequestChan = make(chan contextHolder)
+	}
 	regularThreads = make([]*phpThread, 0, opt.numThreads-workerThreadCount)
 	for i := 0; i < opt.numThreads-workerThreadCount; i++ {
 		convertToRegularThread(getInactivePHPThread())

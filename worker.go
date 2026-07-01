@@ -330,7 +330,7 @@ func (worker *worker) handleRequest(ch contextHolder) error {
 			return nil
 		case workerScaleChan <- ch.frankenPHPContext:
 			// the request has triggered scaling, continue to wait for a thread
-		case <-timeoutChan(maxWaitTime):
+		case <-timeoutChan(time.Duration(maxWaitTime.Load())):
 			// the request has timed out stalling
 			worker.queuedRequests.Add(-1)
 			metrics.DequeuedWorkerRequest(worker.name)

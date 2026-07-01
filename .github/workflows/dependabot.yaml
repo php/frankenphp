@@ -1,0 +1,37 @@
+name: Dependabot Auto-Merge
+on:
+  pull_request_target:
+    branches:
+      - main
+permissions: {}
+jobs:
+  auto-merge:
+    runs-on: ubuntu-latest
+    environment: dependabot
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    steps:
+      # The default GITHUB_TOKEN lacks the `workflows` scope and is refused on
+      # PRs that touch .github/workflows; use the release app token instead.
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: app-token
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-workflows: write
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@21025c705c08248db411dc16f3619e6b5f9ea21a # v2.5.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+      # Only minor and patch GitHub Actions bumps auto-merge; majors and other
+      # ecosystems wait for a human review.
+      - name: Auto-merge minor and patch GitHub Actions updates
+        if: steps.metadata.outputs.package-ecosystem == 'github_actions' && steps.metadata.outputs.update-type != 'version-update:semver-major'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          gh pr review --approve "${PR_URL}"
+          gh pr merge --auto --squash "${PR_URL}"

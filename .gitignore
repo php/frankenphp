@@ -13,6 +13,7 @@
 /package/etc/php.ini
 /super-linter-output
 /vcpkg_installed/
+/watcher/
 .DS_Store
 .idea/
 .vscode/

@@ -47,18 +47,7 @@ var cStringHTTPMethods = map[string]*C.char{
 func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 	request := fc.request
 	// Separate remote IP and port; more lenient than net.SplitHostPort
-	var ip, port string
-	if idx := strings.LastIndex(request.RemoteAddr, ":"); idx > -1 {
-		ip = request.RemoteAddr[:idx]
-		port = request.RemoteAddr[idx+1:]
-	} else {
-		ip = request.RemoteAddr
-	}
-
-	// Remove [] from IPv6 addresses
-	if len(ip) > 0 && ip[0] == '[' {
-		ip = ip[1 : len(ip)-1]
-	}
+	ip, port := splitRemoteAddr(request.RemoteAddr)
 
 	var rs, https, sslProtocol *C.zend_string
 	var sslCipher string
@@ -361,6 +350,28 @@ func sanitizedPathJoin(root, reqPath string) string {
 	}
 
 	return path
+}
+
+// splitRemoteAddr splits "host:port" leniently: a missing port is accepted.
+// A malformed value such as "[" must not panic, as that would unwind out of
+// the go_register_server_variables cgo callback and crash the whole process.
+func splitRemoteAddr(remoteAddr string) (ip, port string) {
+	if host, p, err := net.SplitHostPort(remoteAddr); err == nil {
+		return host, p
+	}
+
+	if idx := strings.LastIndex(remoteAddr, ":"); idx > -1 {
+		ip = remoteAddr[:idx]
+		port = remoteAddr[idx+1:]
+	} else {
+		ip = remoteAddr
+	}
+
+	if len(ip) >= 2 && ip[0] == '[' && ip[len(ip)-1] == ']' {
+		ip = ip[1 : len(ip)-1]
+	}
+
+	return ip, port
 }
 
 const separator = string(filepath.Separator)
