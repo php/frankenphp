@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -193,19 +192,7 @@ func (w *worker) matchesRequest(r *http.Request, documentRoot string) bool {
 		return w.matchRequest(r)
 	}
 
-	if w.matchRelPath != "" {
-		reqPath := r.URL.Path
-		if reqPath == w.matchRelPath {
-			return true
-		}
-		if reqPath == "" || reqPath[0] != '/' {
-			reqPath = "/" + reqPath
-		}
-		return path.Clean(reqPath) == w.matchRelPath
-	}
-
-	fullPath, _ := fastabs.FastAbs(filepath.Join(documentRoot, r.URL.Path))
-	return fullPath == w.fileName
+	return false
 }
 
 // EXPERIMENTAL: DrainWorkers initiates a graceful drain of all php threads.

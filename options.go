@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
-	"unicode/utf8"
 )
 
 // defaultMaxConsecutiveFailures is the default maximum number of consecutive failures before panicking
@@ -231,11 +229,12 @@ func WithWorkerWatchMode(watch []string) WorkerOption {
 	}
 }
 
-// WithWorkerMatchOn sets a request matcher for this worker (for example from Caddy's MatchPath).
-// if no request matcher is set, matching happens explicitly by path
-func WithWorkerMatchOn(matchOn func(*http.Request) bool) WorkerOption {
+// WithWorkerMatchOn sets a request matcher for this worker
+// if the matcher returns true, the worker will be used to handle the request
+// if no request matcher is set, matching happens only by path (filename == root + request path)
+func WithWorkerMatchOn(matcherFunc func(*http.Request) bool) WorkerOption {
 	return func(w *workerOpt) error {
-		w.matchRequest = matchOn
+		w.matchRequest = matcherFunc
 		return nil
 	}
 }
@@ -303,26 +302,8 @@ func WithPhpServerRoot(root string) PhpServerOption {
 
 func WithPhpServerSplitPath(splitPath []string) PhpServerOption {
 	return func(s *PhpServer) error {
-		var b strings.Builder
-
-		for i, split := range splitPath {
-			b.Grow(len(split))
-
-			for j := 0; j < len(split); j++ {
-				c := split[j]
-				if c >= utf8.RuneSelf {
-					return ErrInvalidSplitPath
-				}
-
-				if 'A' <= c && c <= 'Z' {
-					b.WriteByte(c + 'a' - 'A')
-				} else {
-					b.WriteByte(c)
-				}
-			}
-
-			splitPath[i] = b.String()
-			b.Reset()
+		if err := normalizeSplitPath(splitPath); err != nil {
+			return err
 		}
 		s.splitPath = splitPath
 

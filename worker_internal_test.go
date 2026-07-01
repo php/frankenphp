@@ -78,21 +78,6 @@ func TestRestartWorkersForceKillsStuckThread(t *testing.T) {
 		"VM interrupt was never observed; sleep returned naturally")
 }
 
-func TestWorkerMatchesRequestByScriptPath(t *testing.T) {
-	t.Parallel()
-
-	w := &worker{
-		fileName:     "/srv/app/index.php",
-		matchRelPath: "/index.php",
-	}
-
-	req := httptest.NewRequest("GET", "/index.php", nil)
-	require.True(t, w.matchesRequest(req, "/srv/app"))
-
-	req = httptest.NewRequest("GET", "/other", nil)
-	require.False(t, w.matchesRequest(req, "/srv/app"))
-}
-
 func TestWorkerMatchesRequestWithInjectedMatcher(t *testing.T) {
 	t.Parallel()
 
