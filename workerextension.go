@@ -46,12 +46,18 @@ func (w *extensionWorkers) NumThreads() int {
 // EXPERIMENTAL: SendMessage sends a message to the worker and waits for a response.
 func (w *extensionWorkers) SendMessage(ctx context.Context, message any, rw http.ResponseWriter) (any, error) {
 	fc := newFrankenPHPContext()
+	fc.phpServer = w.internalWorker.phpServer
 	fc.logger = globalLogger
 	fc.worker = w.internalWorker
 	fc.responseWriter = rw
 	fc.handlerParameters = message
+	fc.ctx = ctx
 
-	err := w.internalWorker.handleRequest(contextHolder{context.WithValue(ctx, contextKey, fc), fc})
+	if fc.phpServer == nil {
+		fc.phpServer = newDummyPhpServer()
+	}
+
+	err := w.internalWorker.handleRequest(fc)
 
 	return fc.handlerReturn, err
 }

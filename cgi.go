@@ -163,6 +163,10 @@ func addHeadersToServer(ctx context.Context, request *http.Request, trackVarsArr
 }
 
 func addPreparedEnvToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
+	for k, v := range fc.phpServer.env {
+		C.frankenphp_register_variable_safe(toUnsafeChar(k), toUnsafeChar(v), C.size_t(len(v)), trackVarsArray)
+	}
+
 	for k, v := range fc.env {
 		C.frankenphp_register_variable_safe(toUnsafeChar(k), toUnsafeChar(v), C.size_t(len(v)), trackVarsArray)
 	}
@@ -218,7 +222,12 @@ func splitCgiPath(fc *frankenPHPContext) {
 	// TODO: is it possible to delay this and avoid saving everything in the context?
 	// SCRIPT_FILENAME is the absolute path of SCRIPT_NAME
 	fc.scriptFilename = sanitizedPathJoin(fc.documentRoot, fc.scriptName)
-	fc.worker = workersByPath[fc.scriptFilename]
+
+	// see if a phpServer or global worker matches the request
+	fc.worker = fc.phpServer.workersByPath[fc.scriptFilename]
+	if fc.worker == nil {
+		fc.worker = globalWorkersByPath[fc.scriptFilename]
+	}
 }
 
 // splitPos returns the index where path should be split based on splitPath.

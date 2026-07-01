@@ -284,6 +284,11 @@ func Init(options ...Option) error {
 		maxIdleTime = opt.maxIdleTime
 	}
 
+	// append all module workers to the global workers for registration
+	for _, phpServer := range PhpServers {
+		opt.workers = append(opt.workers, phpServer.workerOpts...)
+	}
+
 	workerThreadCount, err := calculateMaxThreads(opt)
 	if err != nil {
 		Shutdown()
@@ -321,7 +326,7 @@ func Init(options ...Option) error {
 
 	// reused across reloads so queued requests aren't orphaned on a stale channel
 	if regularRequestChan == nil {
-		regularRequestChan = make(chan contextHolder)
+		regularRequestChan = make(chan *frankenPHPContext)
 	}
 	regularThreads = make([]*phpThread, 0, opt.numThreads-workerThreadCount)
 	for i := 0; i < opt.numThreads-workerThreadCount; i++ {
@@ -376,6 +381,7 @@ func Shutdown() {
 
 	drainWatchers()
 	drainPHPThreads()
+	drainPhpServers()
 
 	metrics.Shutdown()
 
@@ -394,37 +400,16 @@ func Shutdown() {
 
 // ServeHTTP executes a PHP script according to the given context.
 func ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) error {
-	h := responseWriter.Header()
-	if h["Server"] == nil {
-		h["Server"] = serverHeader
-	}
-
-	if !isRunning {
-		return ErrNotRunning
-	}
-
 	ctx := request.Context()
-	fc, ok := fromContext(ctx)
-
-	ch := contextHolder{ctx, fc}
+	opts, ok := ctx.Value(contextKey).([]RequestOption)
 
 	if !ok {
 		return ErrInvalidRequest
 	}
 
-	fc.responseWriter = responseWriter
+	phpServer := newDummyPhpServer()
 
-	if err := fc.validate(); err != nil {
-		return err
-	}
-
-	// Detect if a worker is available to handle this request
-	if fc.worker != nil {
-		return fc.worker.handleRequest(ch)
-	}
-
-	// If no worker was available, send the request to non-worker threads
-	return handleRequestWithRegularPHPThreads(ch)
+	return phpServer.ServeHTTP(responseWriter, request, opts...)
 }
 
 //export go_ub_write
@@ -796,7 +781,7 @@ func resetGlobals() {
 	globalLogger = slog.Default()
 	workers = nil
 	workersByName = nil
-	workersByPath = nil
+	globalWorkersByPath = nil
 	watcherIsEnabled = false
 	maxIdleTime = defaultMaxIdleTime
 	maxRequestsPerThread = 0

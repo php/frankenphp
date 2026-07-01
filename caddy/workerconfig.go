@@ -1,8 +1,6 @@
 package caddy
 
 import (
-	"net/http"
-	"path"
 	"path/filepath"
 	"strconv"
 
@@ -10,7 +8,6 @@ import (
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 	"github.com/dunglas/frankenphp"
-	"github.com/dunglas/frankenphp/internal/fastabs"
 )
 
 // workerConfig represents the "worker" directive in the Caddyfile
@@ -44,9 +41,6 @@ type workerConfig struct {
 
 	options        []frankenphp.WorkerOption
 	requestOptions []frankenphp.RequestOption
-	absFileName    string
-	matchRelPath   string // pre-computed relative URL path for fast matching
-	routeGroup     string // identifies the php_server directive whose route embeds share this pool
 }
 
 func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
@@ -162,41 +156,21 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 	return wc, nil
 }
 
-func (wc *workerConfig) inheritEnv(env map[string]string) {
-	if wc.Env == nil {
-		wc.Env = make(map[string]string, len(env))
-	}
-	for k, v := range env {
-		// do not overwrite existing environment variables
-		if _, exists := wc.Env[k]; !exists {
-			wc.Env[k] = v
-		}
-	}
-}
-
-func (wc *workerConfig) matchesPath(r *http.Request, documentRoot string) bool {
-	// try to match against a pattern if one is assigned
-	if len(wc.MatchPath) != 0 {
-		return (caddyhttp.MatchPath)(wc.MatchPath).Match(r)
+func (wc *workerConfig) toWorkerOptions() []frankenphp.WorkerOption {
+	opts := []frankenphp.WorkerOption{
+		frankenphp.WithWorkerEnv(wc.Env),
+		frankenphp.WithWorkerWatchMode(wc.Watch),
+		frankenphp.WithWorkerMaxFailures(wc.MaxConsecutiveFailures),
+		frankenphp.WithWorkerMaxThreads(wc.MaxThreads),
+		frankenphp.WithWorkerRequestOptions(wc.requestOptions...),
 	}
 
-	// fast path: compare the request URL path against the pre-computed relative path
-	if wc.matchRelPath != "" {
-		reqPath := r.URL.Path
-		if reqPath == wc.matchRelPath {
-			return true
-		}
-
-		// ensure leading slash for relative paths (see #2166)
-		if reqPath == "" || reqPath[0] != '/' {
-			reqPath = "/" + reqPath
-		}
-
-		return path.Clean(reqPath) == wc.matchRelPath
+	// copy the caddy match logic and create a unique matcher function for this worker
+	// inject the matcher into frankenphp
+	if len(wc.MatchPath) > 0 {
+		matchFunc := caddyhttp.MatchPath(append([]string(nil), wc.MatchPath...))
+		_ = matchFunc.Provision(caddy.Context{})
+		opts = append(opts, frankenphp.WithWorkerMatchOn(matchFunc.Match))
 	}
-
-	// fallback when documentRoot is dynamic (contains placeholders)
-	fullPath, _ := fastabs.FastAbs(filepath.Join(documentRoot, r.URL.Path))
-
-	return fullPath == wc.absFileName
+	return opts
 }
