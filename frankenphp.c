@@ -16,6 +16,7 @@
 #else
 #include <php_config.h>
 #endif
+#include <main/php_streams.h>
 #include <php_ini.h>
 #include <php_main.h>
 #include <php_output.h>
@@ -100,6 +101,9 @@ HashTable *main_thread_env = NULL;
 
 __thread uintptr_t thread_index;
 __thread bool is_worker_thread = false;
+__thread bool is_background_worker = false;
+__thread int worker_stop_fds[2] = {-1, -1};
+__thread php_stream *worker_signaling_stream = NULL;
 __thread HashTable *sandboxed_env = NULL;
 
 /* Published via SG(server_context) so ext-parallel children, which inherit
@@ -285,11 +289,96 @@ void frankenphp_release_thread_for_kill(force_kill_slot slot) {
 #endif
 }
 
+static void frankenphp_worker_close_stop_fds(void);
+
 void frankenphp_update_local_thread_context(bool is_worker) {
+  /* A thread that previously ran as a bg worker can be recycled into an
+   * HTTP worker or a regular request thread; reset the bg-worker TLS so
+   * frankenphp_handle_request() and friends don't reject the caller. The
+   * cached worker_signaling_stream is already dangling here (its
+   * zend_resource was freed by php_request_shutdown's EG(regular_list)
+   * teardown), so just NULL it without dereferencing. */
+  bool was_background_worker = is_background_worker;
+
   is_worker_thread = is_worker;
+  is_background_worker = false;
+
+  if (was_background_worker) {
+    frankenphp_worker_close_stop_fds();
+    worker_signaling_stream = NULL;
+  }
 
   /* workers should keep running if the user aborts the connection */
   PG(ignore_user_abort) = is_worker ? 1 : original_user_abort_setting;
+}
+
+/* Background worker stop-pipe: anonymous pipe whose read end is exposed to
+ * the PHP script via frankenphp_get_worker_handle. When the Go side closes
+ * the write end (on drain), the read end reaches EOF so the script can
+ * return from stream_select and exit its loop. */
+static int frankenphp_worker_open_stop_pipe(void) {
+#ifdef PHP_WIN32
+  return _pipe(worker_stop_fds, 4096, _O_BINARY);
+#else
+  return pipe(worker_stop_fds);
+#endif
+}
+
+static void frankenphp_worker_close_stop_fds(void) {
+  for (int i = 0; i < 2; i++) {
+    if (worker_stop_fds[i] >= 0) {
+#ifdef PHP_WIN32
+      _close(worker_stop_fds[i]);
+#else
+      close(worker_stop_fds[i]);
+#endif
+      worker_stop_fds[i] = -1;
+    }
+  }
+}
+
+/* Marks the calling thread as a background worker, opens its stop pipe,
+ * transfers the write fd to the caller (clearing the TLS slot so later
+ * recycle won't double-close), and disarms max_execution_time. Returns
+ * -1 if the pipe could not be opened. */
+int frankenphp_set_background_worker_and_get_stop_fd_write(void) {
+  is_background_worker = true;
+  /* Drop the dangling stream pointer (see
+   * frankenphp_update_local_thread_context for why). */
+  worker_signaling_stream = NULL;
+  /* Bg workers don't enforce max_execution_time; disarm any lingering timer. */
+  zend_unset_timeout();
+
+  frankenphp_worker_close_stop_fds();
+  if (frankenphp_worker_open_stop_pipe() != 0) {
+    worker_stop_fds[0] = -1;
+    worker_stop_fds[1] = -1;
+    return -1;
+  }
+  int fd = worker_stop_fds[1];
+  worker_stop_fds[1] = -1;
+  return fd;
+}
+
+void frankenphp_worker_close_fd(int fd) {
+  if (fd < 0) {
+    return;
+  }
+  /* Closing the write end of the stop pipe lands as EOF on the read end,
+   * so the PHP side's stream_select returns promptly. */
+#ifdef PHP_WIN32
+  _close(fd);
+#else
+  close(fd);
+#endif
+}
+
+static int frankenphp_worker_dup_fd(int fd) {
+#ifdef PHP_WIN32
+  return _dup(fd);
+#else
+  return dup(fd);
+#endif
 }
 
 static void frankenphp_update_request_context() {
@@ -907,6 +996,56 @@ PHP_FUNCTION(frankenphp_log) {
   }
 }
 
+PHP_FUNCTION(frankenphp_get_worker_handle) {
+  ZEND_PARSE_PARAMETERS_NONE();
+
+  if (!is_background_worker) {
+    zend_throw_exception(spl_ce_RuntimeException,
+                         "frankenphp_get_worker_handle() can only be called "
+                         "from a background worker",
+                         0);
+    RETURN_THROWS();
+  }
+
+  /* Return the cached stream on repeat calls. The first call (below)
+   * crosses the boundary that opens a fresh PHP stream over the read end
+   * of the stop pipe; subsequent calls hand back the same stream. */
+  if (worker_signaling_stream != NULL) {
+    php_stream_to_zval(worker_signaling_stream, return_value);
+    GC_ADDREF(Z_COUNTED_P(return_value));
+    return;
+  }
+
+  if (worker_stop_fds[0] < 0) {
+    zend_throw_exception(spl_ce_RuntimeException,
+                         "failed to create background worker stop pipe", 0);
+    RETURN_THROWS();
+  }
+
+  /* DUP so closing the PHP stream doesn't affect worker_stop_fds[0]; the
+   * original stays owned by the C side for cleanup at worker restart. */
+  int fd = frankenphp_worker_dup_fd(worker_stop_fds[0]);
+  if (fd < 0) {
+    zend_throw_exception(spl_ce_RuntimeException,
+                         "failed to dup background worker stop fd", 0);
+    RETURN_THROWS();
+  }
+
+  php_stream *stream = php_stream_fopen_from_fd(fd, "rb", NULL);
+  if (!stream) {
+    frankenphp_worker_close_fd(fd);
+    zend_throw_exception(spl_ce_RuntimeException,
+                         "failed to create stream from stop fd", 0);
+    RETURN_THROWS();
+  }
+
+  worker_signaling_stream = stream;
+  php_stream_to_zval(stream, return_value);
+
+  /* Extra ref so PHP can't destroy the stream while TLS caches the pointer. */
+  GC_ADDREF(Z_COUNTED_P(return_value));
+}
+
 #ifdef FRANKENPHP_TEST
 /* Test-only entry point that exercises zval.h end-to-end:
  * validate -> persist (request -> persistent memory) ->
@@ -1363,6 +1502,12 @@ static void *php_thread(void *arg) {
         frankenphp_log_message("Request startup failed, thread is unhealthy",
                                LOG_ERR);
         zend_bailout();
+      }
+
+      /* php_request_startup re-arms max_execution_time; bg workers
+       * never enforce it, disarm again. */
+      if (is_background_worker) {
+        zend_unset_timeout();
       }
 
       zend_file_handle file_handle;

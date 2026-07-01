@@ -105,6 +105,9 @@ func (thread *phpThread) shutdown() {
 		return
 	}
 
+	// Wake up handlers parked in a blocking C call (background workers'
+	// stream_select on the stop pipe). No-op for regular/worker handlers.
+	thread.handler.drain()
 	close(thread.drainChan)
 
 	// Arm force-kill after the grace period to wake any thread stuck in
