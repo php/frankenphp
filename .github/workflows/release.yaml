@@ -44,12 +44,14 @@ jobs:
             echo "::error::Invalid version: '${VERSION}' (must be SemVer, no v prefix)"
             exit 1
           fi
-      - uses: actions/create-github-app-token@v3
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         id: release-app-token
         with:
           app-id: ${{ vars.RELEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-      - uses: actions/checkout@v6
+          permission-contents: write
+          permission-actions: write
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -377,7 +379,7 @@ jobs:
           fi
       - name: Bump Homebrew formula
         if: steps.classify.outputs.prerelease != 'true'
-        uses: mislav/bump-homebrew-formula-action@v4
+        uses: mislav/bump-homebrew-formula-action@ccf2332299a883f6af50a1d2d41e5df7904dd769 # v4.1
         with:
           formula-name: frankenphp
           homebrew-tap: dunglas/homebrew-frankenphp

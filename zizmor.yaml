@@ -1,9 +1,10 @@
 ---
 rules:
-  unpinned-uses:
-    config:
-      policies:
-        "*": ref-pin
+  # Dependabot auto-merge requires pull_request_target to obtain repo-write
+  # permissions; the job is guarded by an `if:` check on the PR author.
+  dangerous-triggers:
+    ignore:
+      - dependabot.yaml
   secrets-outside-env:
     config:
       allow:
