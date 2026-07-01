@@ -182,21 +182,11 @@ static void frankenphp_register_atfork(void) {
 /* pcntl signals delivered to a Go M segfault on PCNTL_G (no TSRM there)
  * Block these in a constructor so Go's schedinit captures
  * the mask and every M inherits it; execute_script_cli unblocks on its own
- * pthread. Caddy's signal.Notify keeps working via runtime.ensureSigM. */
+ * pthread. Caddy's `signal.Notify` keeps working via `runtime.ensureSigM`.
+ * Limited to async-notify signals: Go's minitSignalMask re-unblocks anything
+ * flagged _SigKill/_SigThrow/_SigUnblock on every M anyway. */
 static void frankenphp_fill_cli_signal_set(sigset_t *s) {
   sigemptyset(s);
-#ifdef SIGHUP
-  sigaddset(s, SIGHUP);
-#endif
-#ifdef SIGINT
-  sigaddset(s, SIGINT);
-#endif
-#ifdef SIGQUIT
-  sigaddset(s, SIGQUIT);
-#endif
-#ifdef SIGTERM
-  sigaddset(s, SIGTERM);
-#endif
 #ifdef SIGUSR1
   sigaddset(s, SIGUSR1);
 #endif
@@ -205,9 +195,6 @@ static void frankenphp_fill_cli_signal_set(sigset_t *s) {
 #endif
 #ifdef SIGALRM
   sigaddset(s, SIGALRM);
-#endif
-#ifdef SIGCHLD
-  sigaddset(s, SIGCHLD);
 #endif
 }
 
