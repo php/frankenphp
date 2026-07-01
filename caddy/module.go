@@ -50,7 +50,6 @@ type FrankenPHPModule struct {
 	resolvedDocumentRoot string
 	preparedEnv          frankenphp.PreparedEnv
 	requestOptions       []frankenphp.RequestOption
-	phpServer            *frankenphp.PhpServer
 }
 
 // CaddyModule returns the Caddy module information.
@@ -234,7 +233,12 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 		opts = append(opts, frankenphp.WithRequestPreparedEnv(env))
 	}
 
-	err := frankenphp.PhpServers[f.PhpServerIdx].ServeHTTP(w, r, opts...)
+	phpServer := frankenphp.PhpServers[f.PhpServerIdx]
+	if phpServer == nil {
+		return fmt.Errorf("php server with idx %d was not correctly provisioned", f.PhpServerIdx)
+	}
+
+	err := phpServer.ServeHTTP(w, r, opts...)
 
 	if err != nil && !errors.As(err, &frankenphp.ErrRejected{}) {
 		return caddyhttp.Error(http.StatusInternalServerError, err)
@@ -317,11 +321,10 @@ func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	return nil
 }
 
-func (f *FrankenPHPModule) assignPhpServerIdx(h httpcaddyfile.Helper) error {
+func (f *FrankenPHPModule) assignPhpServerIdx(h httpcaddyfile.Helper) {
 	counter, _ := h.State["php_server_count"].(int)
 	f.PhpServerIdx = counter
 	h.State["php_server_count"] = counter + 1
-	return nil
 }
 
 // parseCaddyfile unmarshals tokens from h into a new Middleware.

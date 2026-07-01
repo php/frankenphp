@@ -63,10 +63,7 @@ type FrankenPHPApp struct {
 	metrics        frankenphp.Metrics
 	ctx            context.Context
 	logger         *slog.Logger
-	phpServerCount int
 }
-
-var phpServers = make(map[int]*frankenphp.PhpServer)
 
 var errIni = errors.New(`"php_ini" must be in the format: php_ini "<key>" "<value>"`)
 
