@@ -45,13 +45,6 @@ type frankenPHPContext struct {
 	startedAt time.Time
 }
 
-func newFrankenPHPContext() *frankenPHPContext {
-	return &frankenPHPContext{
-		done:      make(chan any),
-		startedAt: time.Now(),
-	}
-}
-
 // NewRequestWithContext creates a new FrankenPHP request context.
 //
 // FrankenPHP does not strip request headers whose name contains an underscore.
@@ -63,9 +56,6 @@ func newFrankenPHPContext() *frankenPHPContext {
 // you explicitly need (and whitelist) them. The Caddy-based server and reverse
 // proxies such as nginx (underscores_in_headers off) already do this.
 func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Request, error) {
-	fc := newFrankenPHPContext()
-	fc.request = r
-
 	c := context.WithValue(r.Context(), contextKey, opts)
 
 	return r.WithContext(c), nil
@@ -150,6 +140,25 @@ func newDummyContext(w *worker) (*frankenPHPContext, error) {
 	splitCgiPath(fc)
 
 	return fc, nil
+}
+
+func newContextFromMessage(message any, rw http.ResponseWriter, ctx context.Context, w *worker) *frankenPHPContext {
+	fc := &frankenPHPContext{
+		done:              make(chan any),
+		startedAt:         time.Now(),
+		phpServer:         w.phpServer,
+		worker:            w,
+		logger:            globalLogger,
+		responseWriter:    rw,
+		handlerParameters: message,
+		ctx:               ctx,
+	}
+
+	if fc.phpServer == nil {
+		fc.phpServer = newDummyPhpServer()
+	}
+
+	return fc
 }
 
 // closeContext sends the response to the client
