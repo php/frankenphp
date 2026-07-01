@@ -148,3 +148,11 @@ On Linux, the created binary can be compressed using [UPX](https://upx.github.io
 
 On macOS, to reduce the size of the file before sending it, you can compress it.
 We recommend `xz`.
+
+### Disabling UPX
+
+In case you don't wish to use compression, you can skip it by setting the environment variable `NO_COMPRESS=1` before running build-static.sh:
+
+```console
+RUN NO_COMPRESS=1 ./build-static.sh
+```
