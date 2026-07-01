@@ -3,7 +3,6 @@ package frankenphp
 import (
 	"log/slog"
 	"net/http"
-	"sync"
 )
 
 // PhpServer represents a php_server block in the caddyfile.
@@ -19,23 +18,15 @@ type PhpServer struct {
 	logger        *slog.Logger
 }
 
-var (
-	// PhpServers is a map of all registered PhpServer instances.
-	// instances will be accessible after frankenphp.Init() has been called.
-	PhpServers   = make(map[int]*PhpServer)
-	phpServersMu sync.Mutex
-)
+// PhpServers is a map of all registered PhpServer instances.
+// instances will be accessible after frankenphp.Init() has been called.
+var PhpServers = make(map[int]*PhpServer)
 
 func drainPhpServers() {
-	phpServersMu.Lock()
-	defer phpServersMu.Unlock()
 	PhpServers = make(map[int]*PhpServer)
 }
 
 func newPhpServer(idx int, opts ...PhpServerOption) (*PhpServer, error) {
-	phpServersMu.Lock()
-	defer phpServersMu.Unlock()
-
 	existingPhpServer, ok := PhpServers[idx]
 	if ok {
 		globalLogger.Debug("php server already registered, ignoring duplicate registration", "idx", idx)

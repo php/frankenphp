@@ -223,7 +223,8 @@ func splitCgiPath(fc *frankenPHPContext) {
 	// SCRIPT_FILENAME is the absolute path of SCRIPT_NAME
 	fc.scriptFilename = sanitizedPathJoin(fc.documentRoot, fc.scriptName)
 
-	// see if a phpServer or global worker matches the request
+	// see if a phpServer or global worker matches the request path
+	// aka: root + request path == worker.filename
 	fc.worker = fc.phpServer.workersByPath[fc.scriptFilename]
 	if fc.worker == nil {
 		fc.worker = globalWorkersByPath[fc.scriptFilename]
