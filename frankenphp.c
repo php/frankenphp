@@ -1,5 +1,6 @@
 #include "frankenphp.h"
 #include <SAPI.h>
+#include <Zend/zend.h>
 #include <Zend/zend_alloc.h>
 #include <Zend/zend_exceptions.h>
 #include <Zend/zend_interfaces.h>
@@ -88,6 +89,33 @@ bool should_filter_var = 0;
 bool original_user_abort_setting = 0;
 frankenphp_interned_strings_t frankenphp_strings = {0};
 HashTable *main_thread_env = NULL;
+
+/* Implicit opcache restart safety — prevents zend_mm_heap corrupted
+ * crashes from the implicit restart path (OOM, hash overflow).
+ *
+ * PR #2073 handles explicit opcache_reset() calls by draining all
+ * threads through the Go state machine. However, WordPress triggers
+ * implicit restarts via opcache_invalidate() filling opcache memory,
+ * which fires zend_accel_schedule_restart() → restart_pending → the
+ * actual reset during the next php_request_startup(). That path is
+ * not covered by the opcache_reset() override.
+ *
+ * Fix: pthread_rwlock around the request lifecycle. Normal requests
+ * take a read lock (concurrent). When the restart hook fires, it sets
+ * a flag; the next php_request_startup() acquires a write lock,
+ * blocking until all other threads' requests complete, then performs
+ * the reset exclusively. */
+static pthread_rwlock_t frankenphp_opcache_rwlock =
+    PTHREAD_RWLOCK_INITIALIZER;
+static volatile int frankenphp_opcache_restart_pending = 0;
+
+#if defined(ZTS) && PHP_VERSION_ID >= 80400
+static void frankenphp_opcache_restart_hook(int reason) {
+  (void)reason;
+  __atomic_store_n(&frankenphp_opcache_restart_pending, 1,
+                   __ATOMIC_RELEASE);
+}
+#endif
 
 __thread uintptr_t thread_index;
 __thread bool is_worker_thread = false;
@@ -1298,7 +1326,20 @@ static void *php_thread(void *arg) {
 
       frankenphp_update_request_context();
 
+      /* Implicit opcache restart: if scheduled, take exclusive access
+       * so the reset in php_request_startup() runs while no other
+       * thread touches shared memory. Otherwise read lock. */
+      if (__atomic_load_n(&frankenphp_opcache_restart_pending,
+                          __ATOMIC_ACQUIRE)) {
+        pthread_rwlock_wrlock(&frankenphp_opcache_rwlock);
+        __atomic_store_n(&frankenphp_opcache_restart_pending, 0,
+                         __ATOMIC_RELEASE);
+      } else {
+        pthread_rwlock_rdlock(&frankenphp_opcache_rwlock);
+      }
+
       if (UNEXPECTED(php_request_startup() == FAILURE)) {
+        pthread_rwlock_unlock(&frankenphp_opcache_rwlock);
         /* Request startup failed, bail out to zend_catch */
         frankenphp_log_message("Request startup failed, thread is unhealthy",
                                LOG_ERR);
@@ -1329,6 +1370,7 @@ static void *php_thread(void *arg) {
 
       /* shutdown the request, potential bailout to zend_catch */
       php_request_shutdown((void *)0);
+      pthread_rwlock_unlock(&frankenphp_opcache_rwlock);
       frankenphp_free_request_context();
       go_frankenphp_after_script_execution(thread_index, EG(exit_status));
     }
@@ -1350,6 +1392,7 @@ static void *php_thread(void *arg) {
       zend_catch {}
       zend_end_try();
     }
+    pthread_rwlock_unlock(&frankenphp_opcache_rwlock);
 
     /* Log the last error message, it must be cleared to prevent a crash when
      * freeing execution globals */
@@ -1470,6 +1513,13 @@ static void *php_main(void *arg) {
   }
 
   frankenphp_sapi_module.startup(&frankenphp_sapi_module);
+
+#if defined(ZTS) && PHP_VERSION_ID >= 80400
+  /* Hook implicit opcache restarts (OOM, hash overflow). The hook
+   * sets a flag; the next php_request_startup() acquires exclusive
+   * access via the rwlock so the reset runs safely. */
+  zend_accel_schedule_restart_hook = frankenphp_opcache_restart_hook;
+#endif
 
   /* check if a default filter is set in php.ini and only filter if
    * it is, this is deprecated and will be removed in PHP 9 */
