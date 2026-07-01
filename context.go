@@ -83,8 +83,8 @@ func newContextFromRequest(request *http.Request, responseWriter http.ResponseWr
 
 	// see if a worker matches the request
 	if fc.worker == nil {
-		for _, w := range s.workers {
-			if w.matchesRequest(request, s.root) {
+		for _, w := range s.workersWithRequestMatcher {
+			if w.matchRequest(request) {
 				fc.worker = w
 				break
 			}

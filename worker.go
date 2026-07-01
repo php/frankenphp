@@ -74,6 +74,9 @@ func initWorkers(opts []workerOpt) error {
 		} else {
 			w.phpServer.workers = append(w.phpServer.workers, w)
 			w.phpServer.workersByPath[w.fileName] = w
+			if w.matchRequest != nil {
+				w.phpServer.workersWithRequestMatcher = append(w.phpServer.workersWithRequestMatcher, w)
+			}
 		}
 	}
 
@@ -185,14 +188,6 @@ func newWorker(o workerOpt) (*worker, error) {
 	}
 
 	return w, nil
-}
-
-func (w *worker) matchesRequest(r *http.Request, documentRoot string) bool {
-	if w.matchRequest != nil {
-		return w.matchRequest(r)
-	}
-
-	return false
 }
 
 // EXPERIMENTAL: DrainWorkers initiates a graceful drain of all php threads.

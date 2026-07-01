@@ -1,7 +1,6 @@
 package frankenphp
 
 import (
-	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -76,20 +75,4 @@ func TestRestartWorkersForceKillsStuckThread(t *testing.T) {
 	}
 	assert.NotContains(t, recorder.Body.String(), "should not reach",
 		"VM interrupt was never observed; sleep returned naturally")
-}
-
-func TestWorkerMatchesRequestWithInjectedMatcher(t *testing.T) {
-	t.Parallel()
-
-	w := &worker{
-		matchRequest: func(r *http.Request) bool {
-			return r.URL.Path == "/matched"
-		},
-	}
-
-	req := httptest.NewRequest("GET", "/matched", nil)
-	require.True(t, w.matchesRequest(req, ""))
-
-	req = httptest.NewRequest("GET", "/other", nil)
-	require.False(t, w.matchesRequest(req, ""))
 }

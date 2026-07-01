@@ -8,14 +8,15 @@ import (
 // PhpServer represents a php_server block in the caddyfile.
 // can also be used to scope workers to a specific set of configurations.
 type PhpServer struct {
-	idx           int
-	root          string
-	splitPath     []string
-	env           PreparedEnv
-	workers       []*worker
-	workersByPath map[string]*worker
-	workerOpts    []workerOpt
-	logger        *slog.Logger
+	idx                       int
+	root                      string
+	splitPath                 []string
+	env                       PreparedEnv
+	workers                   []*worker
+	workersByPath             map[string]*worker
+	workersWithRequestMatcher []*worker
+	workerOpts                []workerOpt
+	logger                    *slog.Logger
 }
 
 // PhpServers is a map of all registered PhpServer instances.
