@@ -111,8 +111,8 @@ func newContextFromRequest(request *http.Request, responseWriter http.ResponseWr
 	return fc, nil
 }
 
-// newDummyContext creates a fake context from a request path
-func newDummyContext(w *worker) (*frankenPHPContext, error) {
+// newWorkerDummyContext creates a context for worker startup
+func newWorkerDummyContext(w *worker) (*frankenPHPContext, error) {
 	r, err := http.NewRequestWithContext(globalCtx, http.MethodGet, filepath.Base(w.fileName), nil)
 	if err != nil {
 		return nil, err
@@ -142,6 +142,7 @@ func newDummyContext(w *worker) (*frankenPHPContext, error) {
 	return fc, nil
 }
 
+// newContextFromMessage creates a context from a message (external workers)
 func newContextFromMessage(message any, rw http.ResponseWriter, ctx context.Context, w *worker) *frankenPHPContext {
 	fc := &frankenPHPContext{
 		done:              make(chan any),

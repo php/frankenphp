@@ -93,7 +93,7 @@ func setupWorkerScript(handler *workerThread, worker *worker) {
 	metrics.StartWorker(worker.name)
 
 	// Create a dummy request to set up the worker
-	fc, err := newDummyContext(worker)
+	fc, err := newWorkerDummyContext(worker)
 	if err != nil {
 		panic(err)
 	}
