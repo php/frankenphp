@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/dunglas/frankenphp/internal/memory"
 	"github.com/dunglas/frankenphp/internal/phpheaders"
@@ -18,17 +20,22 @@ import (
 // represents the main PHP thread
 // the thread needs to keep running as long as all other threads are running
 type phpMainThread struct {
-	state      *state.ThreadState
-	done       chan struct{}
-	numThreads int
-	maxThreads int
-	phpIni     map[string]string
+	state       *state.ThreadState
+	done        chan struct{}
+	numThreads  int
+	maxThreads  int
+	phpIni      map[string]string
+	isRebooting atomic.Bool
 }
 
 var (
 	phpThreads    []*phpThread
 	mainThread    *phpMainThread
 	commonHeaders map[string]*C.zend_string
+
+	// timeouts to wait for threads to yield before arming force-kill
+	shutDownGracePeriod = 30 * time.Second
+	rebootGracePeriod   = 6 * time.Second
 )
 
 // initPHPThreads starts the main PHP thread,
@@ -78,25 +85,19 @@ func initPHPThreads(numThreads int, numMaxThreads int, phpIni map[string]string)
 }
 
 func drainPHPThreads() {
-	if mainThread == nil {
+	// disallow any scaling or restarting threads while draining
+	scalingMu.Lock()
+	defer scalingMu.Unlock()
+
+	if mainThread == nil || !mainThread.state.Is(state.Ready) {
 		return // mainThread was never initialized
 	}
-	// Idempotent: post-drain state is Reserved; a re-entry (e.g. a
-	// failed-Init cleanup) must not double-close mainThread.done.
-	if mainThread.state.Is(state.Reserved) {
-		return
-	}
+
 	doneWG := sync.WaitGroup{}
 	doneWG.Add(len(phpThreads))
 	mainThread.state.Set(state.ShuttingDown)
 	close(mainThread.done)
 	for _, thread := range phpThreads {
-		// shut down all reserved threads
-		if thread.state.CompareAndSwap(state.Reserved, state.Done) {
-			doneWG.Done()
-			continue
-		}
-		// shut down all active threads
 		go func(thread *phpThread) {
 			thread.shutdown()
 			doneWG.Done()
@@ -128,6 +129,87 @@ func (mainThread *phpMainThread) start() error {
 	return nil
 }
 
+// rebootAllThreads reboots all underlying C threads, but keeps the go side alive
+func (mainThread *phpMainThread) rebootAllThreads() bool {
+	if !mainThread.isRebooting.CompareAndSwap(false, true) {
+		// if already rebooting, ignore the call
+		return false
+	}
+
+	defer mainThread.isRebooting.Store(false)
+
+	// allow no scaling or shutdown while rebooting
+	scalingMu.Lock()
+	defer scalingMu.Unlock()
+
+	if !mainThread.state.Is(state.Ready) {
+		// mainThread has shut down in the meantime, no need to reboot
+		return false
+	}
+
+	rebootStart := time.Now()
+	rebootWg := sync.WaitGroup{}
+	rebootingThreads := []*phpThread{}
+
+	globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "rebooting all PHP threads")
+
+	for _, thread := range phpThreads {
+		if thread.forceReboot() {
+			rebootingThreads = append(rebootingThreads, thread)
+		}
+	}
+
+	for _, thread := range rebootingThreads {
+		rebootWg.Go(func() {
+			close(thread.drainChan)
+			if thread.state.WaitForStateWithTimeout(rebootGracePeriod, state.YieldingForReboot) {
+				return
+			}
+
+			// thread has not shut down in time, force kill the thread on the PHP side
+			globalLogger.LogAttrs(
+				globalCtx,
+				slog.LevelWarn,
+				"force-killing thread on reboot timeout",
+				slog.String("name", thread.name()),
+				slog.String("state", thread.state.Name()),
+				slog.String("timeout", rebootGracePeriod.String()),
+			)
+			thread.sendKillSignal()
+			thread.state.WaitFor(state.YieldingForReboot)
+		})
+	}
+
+	rebootWg.Wait()
+
+	mainThread.state.Set(state.Rebooting)
+	mainThread.state.WaitFor(state.YieldingForReboot)
+	if C.frankenphp_new_main_thread(C.int(mainThread.numThreads)) != 0 {
+		panic("unable to recreate main thread after reboot")
+	}
+	mainThread.state.WaitFor(state.Ready)
+
+	for _, thread := range rebootingThreads {
+		thread.drainChan = make(chan struct{})
+		if thread.state.CompareAndSwap(state.YieldingForReboot, state.RebootReady) {
+			// wait for any of the stable states
+			thread.state.WaitFor(state.Ready, state.Inactive, state.Reserved)
+		} else {
+			panic("unexpected state on reboot: " + thread.state.Name() + " for thread " + thread.name())
+		}
+	}
+
+	globalLogger.LogAttrs(
+		globalCtx,
+		slog.LevelInfo,
+		"thread reboot finished",
+		slog.String("duration", time.Since(rebootStart).String()),
+		slog.Int("num_threads", len(rebootingThreads)),
+	)
+
+	return true
+}
+
 func getInactivePHPThread() *phpThread {
 	for _, thread := range phpThreads {
 		if thread.state.Is(state.Inactive) {
@@ -153,7 +235,7 @@ func go_frankenphp_main_thread_is_ready() {
 	}
 
 	mainThread.state.Set(state.Ready)
-	mainThread.state.WaitFor(state.Done)
+	mainThread.state.WaitFor(state.Done, state.Rebooting)
 }
 
 // max_threads = auto
@@ -179,6 +261,9 @@ func (mainThread *phpMainThread) setAutomaticMaxThreads() {
 
 //export go_frankenphp_shutdown_main_thread
 func go_frankenphp_shutdown_main_thread() {
+	if mainThread.state.CompareAndSwap(state.Rebooting, state.YieldingForReboot) {
+		return
+	}
 	mainThread.state.Set(state.Reserved)
 }
 

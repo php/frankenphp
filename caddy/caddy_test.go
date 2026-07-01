@@ -1794,6 +1794,75 @@ func TestDd(t *testing.T) {
 	)
 }
 
+// test to force the opcache segfault race condition under concurrency (~1.7s)
+func TestOpcacheReset(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	tester.Client.Timeout = 60 * time.Second
+	tester.InitServer(`
+		{
+			skip_install_trust
+			admin localhost:2999
+			http_port `+testPort+`
+			metrics
+
+			frankenphp {
+				num_threads 40
+				php_ini {
+					opcache.enable 1
+					opcache.log_verbosity_level 4
+					max_execution_time 30s
+				}
+			}
+		}
+
+		localhost:`+testPort+` {
+			php {
+				root ../testdata
+				worker {
+                    file sleep.php
+                    match /sleep*
+                    num 20
+                }
+			}
+		}
+		`, "caddyfile")
+
+	wg := sync.WaitGroup{}
+	numRequests := 500
+	wg.Add(numRequests)
+	for i := 0; i < numRequests; i++ {
+
+		// introduce a delay every 10 requests
+		if i%10 == 0 {
+			time.Sleep(time.Millisecond * 10)
+		}
+
+		go func(i int) {
+			defer wg.Done()
+			// spam opcache_reset on intervals
+			if i%10 > 7 {
+				tester.AssertGetResponse(
+					"http://localhost:"+testPort+"/opcache_reset.php",
+					http.StatusOK,
+					"opcache reset done",
+				)
+				return
+			}
+
+			// otherwise call sleep.php with different sleep and work values
+			sleep := i % 100
+			work := i % 100
+			tester.AssertGetResponse(
+				fmt.Sprintf("http://localhost:%s/sleep.php?sleep=%d&work=%d", testPort, sleep, work),
+				http.StatusOK,
+				fmt.Sprintf("slept for %d ms and worked for %d iterations", sleep, work),
+			)
+		}(i)
+	}
+
+	wg.Wait()
+}
+
 func TestLog(t *testing.T) {
 	tester := caddytest.NewTester(t)
 	initServer(t, tester, `

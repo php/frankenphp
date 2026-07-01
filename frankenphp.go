@@ -375,7 +375,6 @@ func Shutdown() {
 	}
 
 	drainWatchers()
-	drainAutoScaling()
 	drainPHPThreads()
 
 	metrics.Shutdown()
@@ -759,6 +758,13 @@ func mapToAttr(input map[string]any) []slog.Attr {
 //export go_is_context_done
 func go_is_context_done(threadIndex C.uintptr_t) C.bool {
 	return C.bool(phpThreads[threadIndex].frankenPHPContext().isDone)
+}
+
+//export go_schedule_opcache_reset
+func go_schedule_opcache_reset(threadIndex C.uintptr_t) {
+	if mainThread != nil {
+		go mainThread.rebootAllThreads()
+	}
 }
 
 func convertArgs(args []string) (C.int, []*C.char) {

@@ -56,23 +56,14 @@ func initAutoScaling(mainThread *phpMainThread) {
 	go startDownScalingThreads(done)
 }
 
-func drainAutoScaling() {
-	scalingMu.Lock()
-
-	if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
-		globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "shutting down autoscaling", slog.Int("autoScaledThreads", len(autoScaledThreads)))
-	}
-
-	scalingMu.Unlock()
-}
-
 func addRegularThread() (*phpThread, error) {
 	thread := getInactivePHPThread()
 	if thread == nil {
 		return nil, ErrMaxThreadsReached
 	}
 	convertToRegularThread(thread)
-	thread.state.WaitFor(state.Ready, state.ShuttingDown, state.Reserved)
+	thread.state.WaitFor(state.Ready, state.Inactive, state.Reserved) // stable states
+
 	return thread, nil
 }
 
@@ -82,7 +73,8 @@ func addWorkerThread(worker *worker) (*phpThread, error) {
 		return nil, ErrMaxThreadsReached
 	}
 	convertToWorkerThread(thread, worker)
-	thread.state.WaitFor(state.Ready, state.ShuttingDown, state.Reserved)
+	thread.state.WaitFor(state.Ready, state.Inactive, state.Reserved) // stable states
+
 	return thread, nil
 }
 
