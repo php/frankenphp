@@ -388,8 +388,9 @@ func TestRegisteredModuleWorkerPoolsMustBeCorrect(t *testing.T) {
 		receivedThreadNames = append(receivedThreadNames, thread.Name)
 	}
 
+	assert.Len(t, receivedThreadNames, 4, "expected 4 threads to be present")
 	assert.Contains(t, receivedThreadNames, "Regular PHP Thread", "expected a regular thread to be present")
-	assert.Contains(t, receivedThreadNames, "Worker PHP Thread - "+worker1Path, "expected worker 1 to be present")
-	assert.Contains(t, receivedThreadNames, "Worker PHP Thread - "+worker2Path, "expected worker 2 to be present")
-	assert.Contains(t, receivedThreadNames, "Worker PHP Thread - "+worker3Path, "expected worker 3 to be present")
+	assert.Contains(t, receivedThreadNames, "Worker PHP Thread - "+worker1Path, "expected global worker to be present")
+	assert.Contains(t, receivedThreadNames, "Worker PHP Thread - "+worker2Path, "expected module worker with \"match\" directive to be present")
+	assert.Contains(t, receivedThreadNames, "Worker PHP Thread - "+worker3Path, "expected module worker without \"match\" directive to be present")
 }
