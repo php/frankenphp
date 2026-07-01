@@ -59,10 +59,10 @@ type FrankenPHPApp struct {
 	// EXPERIMENTAL: MaxRequests sets the maximum number of requests a PHP thread handles before restarting (0 = unlimited)
 	MaxRequests int `json:"max_requests,omitempty"`
 
-	opts           []frankenphp.Option
-	metrics        frankenphp.Metrics
-	ctx            context.Context
-	logger         *slog.Logger
+	opts    []frankenphp.Option
+	metrics frankenphp.Metrics
+	ctx     context.Context
+	logger  *slog.Logger
 }
 
 var errIni = errors.New(`"php_ini" must be in the format: php_ini "<key>" "<value>"`)
