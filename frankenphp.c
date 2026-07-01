@@ -202,8 +202,35 @@ static void frankenphp_register_atfork(void) {
 static void CALLBACK frankenphp_noop_apc(ULONG_PTR param) { (void)param; }
 #endif
 
+/* ===== Worker request timeout (per-request hard timeout) =====
+ *
+ * A blocking syscall (a stuck SELECT SLEEP(), a hung HTTP read, ...) cannot be
+ * aborted by the VM-interrupt flag alone: PHP's network layer retries EINTR, so
+ * the read just resumes, and a driver like mysqlnd even removes its socket from
+ * EG(regular_list) so it can't be found by walking the resource list. To cut
+ * such a request short the Go watchdog shuts down the fd the thread is blocked
+ * on (found via /proc/<tid>/syscall); the EINTR wakes sleep-style waits. Once
+ * the thread runs PHP again, this custom zend_interrupt_function raises a clear
+ * "Worker request timeout" fatal.
+ *
+ * Per-thread state is indexed by thread_index and allocated once max_threads is
+ * known (frankenphp_init_worker_timeout). */
+static zend_atomic_bool *worker_timeout_pending = NULL;
+static double *worker_timeout_seconds = NULL;
+static int worker_timeout_max_threads = 0;
+/* Saved to chain PHP's own interrupt handler (fibers, pcntl, ...). */
+static void (*frankenphp_original_interrupt)(zend_execute_data *) = NULL;
+
+static bool frankenphp_worker_timeout_is_pending(uintptr_t idx) {
+  return worker_timeout_pending != NULL &&
+         idx < (uintptr_t)worker_timeout_max_threads &&
+         zend_atomic_bool_load(&worker_timeout_pending[idx]);
+}
+
 #ifdef FRANKENPHP_HAS_KILL_SIGNAL
-/* No-op: delivery itself is what unblocks the syscall via EINTR. */
+/* No-op: delivery itself is what unblocks an EINTR-abortable wait. The socket
+ * abort that handles retried blocking reads is done from Go (shutdown on the
+ * blocked fd), not here. */
 static void frankenphp_kill_signal_handler(int sig) { (void)sig; }
 
 static pthread_once_t kill_signal_handler_installed = PTHREAD_ONCE_INIT;
@@ -283,6 +310,104 @@ void frankenphp_release_thread_for_kill(force_kill_slot slot) {
 #else
   (void)slot;
 #endif
+}
+
+/* zend_interrupt_function hook: when a worker timeout is pending for this
+ * thread, raise a fatal that unwinds the request with a clear message. Any
+ * exception left over from the aborted I/O (e.g. a mysqli connection error
+ * caused by the socket shutdown) is dropped so our message is what surfaces.
+ * E_ERROR triggers a bailout, so the original handler is not chained in that
+ * case; otherwise we chain it. */
+static void frankenphp_timeout_interrupt(zend_execute_data *execute_data) {
+  if (is_worker_thread && frankenphp_worker_timeout_is_pending(thread_index)) {
+    zend_atomic_bool_store(&worker_timeout_pending[thread_index], false);
+    if (EG(exception)) {
+      zend_clear_exception();
+    }
+    zend_error_noreturn(E_ERROR, "Worker request timeout of %g second(s) exceeded",
+                        worker_timeout_seconds[thread_index]);
+  }
+
+  if (frankenphp_original_interrupt != NULL) {
+    frankenphp_original_interrupt(execute_data);
+  }
+}
+
+/* Installed on the main thread after SAPI startup. php_main can run more than
+ * once per process (Init/Shutdown cycles when embedding, and in the test
+ * suite) and zend_interrupt_function survives a SAPI shutdown, so guard
+ * against saving ourselves as the "original" handler - the chain call would
+ * recurse forever the first time the hook fired without a pending timeout. */
+static void frankenphp_install_timeout_interrupt(void) {
+  if (zend_interrupt_function == frankenphp_timeout_interrupt) {
+    return;
+  }
+  frankenphp_original_interrupt = zend_interrupt_function;
+  zend_interrupt_function = frankenphp_timeout_interrupt;
+}
+
+/* Allocate per-thread timeout state once max_threads is known. Called from Go
+ * alongside frankenphp_init_thread_metrics. */
+void frankenphp_init_worker_timeout(int max_threads) {
+  worker_timeout_max_threads = max_threads;
+  worker_timeout_pending = calloc(max_threads, sizeof(zend_atomic_bool));
+  worker_timeout_seconds = calloc(max_threads, sizeof(double));
+}
+
+void frankenphp_destroy_worker_timeout(void) {
+  free(worker_timeout_pending);
+  worker_timeout_pending = NULL;
+  free(worker_timeout_seconds);
+  worker_timeout_seconds = NULL;
+  worker_timeout_max_threads = 0;
+}
+
+/* Arm the timeout for a thread that has overrun its worker_timeout: record the
+ * limit (for the message) and set the per-thread flag + VM interrupt so the
+ * interrupt hook fires the moment the thread next runs PHP. No wakeup yet - the
+ * caller first shuts down the blocked fd (so the message isn't pre-empted by the
+ * driver's own connection error), then calls frankenphp_wake_worker_thread. */
+void frankenphp_arm_worker_timeout(uintptr_t thread_index_arg, force_kill_slot slot,
+                                   double timeout_seconds) {
+  if (slot.vm_interrupt == NULL ||
+      thread_index_arg >= (uintptr_t)worker_timeout_max_threads ||
+      worker_timeout_pending == NULL || worker_timeout_seconds == NULL) {
+    return;
+  }
+
+  worker_timeout_seconds[thread_index_arg] = timeout_seconds;
+  zend_atomic_bool_store(&worker_timeout_pending[thread_index_arg], true);
+  zend_atomic_bool_store(slot.vm_interrupt, true);
+}
+
+/* Wake a thread parked in an EINTR-abortable wait (sleep, usleep) so it returns
+ * and reaches the VM interrupt. Socket reads are handled by the fd shutdown done
+ * before this call; this is the fallback for waits that have no fd. Safe on a
+ * thread that has already gone away (zeroed slot). */
+void frankenphp_wake_worker_thread(force_kill_slot slot) {
+  if (slot.vm_interrupt == NULL) {
+    return;
+  }
+#ifdef FRANKENPHP_HAS_KILL_SIGNAL
+  if (zend_atomic_bool_load(&kill_signal_handler_active)) {
+    pthread_kill(slot.tid, FRANKENPHP_KILL_SIGNAL);
+  }
+#elif defined(PHP_WIN32)
+  if (slot.thread_handle != NULL) {
+    CancelSynchronousIo(slot.thread_handle);
+    QueueUserAPC((PAPCFUNC)frankenphp_noop_apc, slot.thread_handle, 0);
+  }
+#endif
+}
+
+/* Clear a (possibly stale) pending flag at the start of a worker request so a
+ * watchdog that raced request completion cannot abort the next request. */
+void frankenphp_clear_worker_timeout(uintptr_t thread_index_arg) {
+  if (worker_timeout_pending == NULL ||
+      thread_index_arg >= (uintptr_t)worker_timeout_max_threads) {
+    return;
+  }
+  zend_atomic_bool_store(&worker_timeout_pending[thread_index_arg], false);
 }
 
 void frankenphp_update_local_thread_context(bool is_worker) {
@@ -1346,6 +1471,12 @@ static void *php_thread(void *arg) {
    * grace period can wake it from a busy PHP loop or blocking syscall. */
   frankenphp_register_thread_for_kill(thread_index);
 
+#ifdef __linux__
+  /* Publish the kernel thread id so the worker-timeout watchdog can locate the
+   * fd this thread blocks on (via /proc/<tid>/syscall) and shut it down. */
+  go_frankenphp_store_thread_tid(thread_index, (int)gettid());
+#endif
+
   bool thread_is_healthy = true;
   bool has_attempted_shutdown = false;
 
@@ -1543,6 +1674,9 @@ static void *php_main(void *arg) {
   }
 
   frankenphp_sapi_module.startup(&frankenphp_sapi_module);
+
+  /* Hook the VM interrupt so worker_timeout can raise its own fatal. */
+  frankenphp_install_timeout_interrupt();
 
   /* check if a default filter is set in php.ini and only filter if
    * it is, this is deprecated and will be removed in PHP 9 */

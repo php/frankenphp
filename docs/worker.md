@@ -151,6 +151,74 @@ frankenphp {
 }
 ```
 
+### Request timeout (experimental)
+
+By default a worker thread blocked on a slow external call (a hung MySQL query, a
+stuck HTTP client, a Redis call, a long `sleep()`) holds that thread until the call
+returns on its own. The `worker_timeout` option sets a hard per-request timeout —
+the worker-mode equivalent of PHP-FPM's `request_terminate_timeout` — after which
+FrankenPHP interrupts the PHP thread so the request bails out and the worker is
+reclaimed:
+
+```caddyfile
+frankenphp {
+    worker {
+        # ...
+        worker_timeout 30s
+    }
+}
+```
+
+When the timeout elapses, the request is aborted with a fatal error whose message
+is `Worker request timeout of N second(s) exceeded`. The worker script then
+restarts cleanly and serves the next request — no special userland code is
+required. Note that `max_execution_time` does **not** count time spent inside a
+blocking call such as a database query, which is exactly the case `worker_timeout`
+is designed to cover.
+
+How it works (and its limits):
+
+- A blocking syscall (a stuck database query, a hung Redis/Elasticsearch/HTTP
+  read, a black-holed `connect()`) cannot be aborted by PHP's timeout flag
+  alone, because PHP retries the interrupted read. On **Linux**, FrankenPHP
+  inspects what the worker thread is blocked on and shuts down the socket(s)
+  involved, so the read fails and the request unwinds. Only sockets are
+  aborted this way (a read blocked on a file or pipe is not). It recognises:
+  - `read`/`recvfrom`/`recvmsg` and a blocking `connect` — the descriptor is the
+    syscall's first argument;
+  - `poll`/`ppoll` — the descriptors are read out of the poll set (PHP's stream
+    layer, and thus most Redis/HTTP/DB clients built on it, always poll before
+    reading). This is what lets a stuck `SELECT SLEEP(30)` actually stop at the
+    timeout instead of running to completion;
+  - `epoll_wait`/`epoll_pwait` — the watched descriptors are enumerated from the
+    epoll instance (covers clients running their own event loop, such as
+    `curl_multi` and gRPC).
+
+  Every descriptor is confirmed to be a socket before it is shut down.
+- A long `sleep()`/`usleep()` (no socket) is interrupted by a realtime signal on
+  **Linux and FreeBSD**.
+- On **macOS** and **Windows**, and for a tight CPU loop inside a C extension that
+  swallows `EINTR`, only PHP's VM-interrupt flag is set: a CPU-bound overrun is
+  still caught at the next opcode boundary, but a blocking syscall already in
+  progress cannot be unblocked. A client blocked in a `select`-based loop (rare on
+  Linux, where `poll` is preferred) is likewise not aborted.
+- The socket abort needs no extra privilege (all inspection is of the process
+  itself), but it relies on `/proc` and — for poll-based waits, the common case —
+  on [`process_vm_readv(2)`](https://man7.org/linux/man-pages/man2/process_vm_readv.2.html).
+  Docker's default seccomp profile allows this syscall on kernels ≥ 4.8
+  ([moby#42083](https://github.com/moby/moby/pull/42083)); under an older or
+  stricter policy (gVisor, custom profiles) the call fails closed: FrankenPHP
+  logs a warning once and a request blocked in a poll-based socket read can then
+  not be aborted (sleeps and CPU-bound overruns still are).
+- `worker_timeout` aborts the request hard, like `request_terminate_timeout`
+  does in PHP-FPM. The database server rolls back an open transaction when its
+  connection is shut down, and PHP's request shutdown still runs (sessions are
+  released as usual). But application-level sequences are not rolled back: an
+  e-mail already sent, a file already written or an external lock with a TTL
+  stay as they are. Set the timeout comfortably above your slowest legitimate
+  request.
+- `worker_timeout` defaults to `0` (disabled).
+
 ## Superglobals behavior
 
 [PHP superglobals](https://www.php.net/manual/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...)

@@ -226,6 +226,21 @@ size_t frankenphp_get_thread_memory_usage(uintptr_t thread_index);
 void frankenphp_force_kill_thread(force_kill_slot slot);
 void frankenphp_release_thread_for_kill(force_kill_slot slot);
 
+/* Per-request worker timeout. When a request overruns its worker_timeout, the
+ * Go watchdog calls frankenphp_arm_worker_timeout (set the per-thread pending
+ * flag + VM interrupt so a "Worker request timeout" fatal is raised at the
+ * next opcode boundary), then shuts down the socket fd(s) the thread is
+ * blocked on (so a blocked DB/HTTP read fails instead of retrying EINTR), and
+ * finally calls frankenphp_wake_worker_thread to wake EINTR-abortable waits
+ * such as sleep. The init/destroy pair allocates the per-thread state; clear
+ * resets a stale flag at request start. */
+void frankenphp_init_worker_timeout(int max_threads);
+void frankenphp_destroy_worker_timeout(void);
+void frankenphp_arm_worker_timeout(uintptr_t thread_index, force_kill_slot slot,
+                                   double timeout_seconds);
+void frankenphp_wake_worker_thread(force_kill_slot slot);
+void frankenphp_clear_worker_timeout(uintptr_t thread_index);
+
 void register_extensions(zend_module_entry **m, int len);
 
 #endif

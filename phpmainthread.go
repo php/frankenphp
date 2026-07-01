@@ -57,6 +57,7 @@ func initPHPThreads(numThreads int, numMaxThreads int, phpIni map[string]string)
 	// Must follow start(): maxThreads is only final once
 	// setAutomaticMaxThreads runs on the main PHP thread (before Ready).
 	C.frankenphp_init_thread_metrics(C.int(mainThread.maxThreads))
+	C.frankenphp_init_worker_timeout(C.int(mainThread.maxThreads))
 
 	// initialize all other threads
 	phpThreads = make([]*phpThread, mainThread.maxThreads)
@@ -107,6 +108,7 @@ func drainPHPThreads() {
 	mainThread.state.Set(state.Done)
 	mainThread.state.WaitFor(state.Reserved)
 	C.frankenphp_destroy_thread_metrics()
+	C.frankenphp_destroy_worker_timeout()
 	phpThreads = nil
 }
 

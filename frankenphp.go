@@ -38,6 +38,8 @@ import (
 	"unsafe"
 	// debug on Linux
 	//_ "github.com/ianlancetaylor/cgosymbolizer"
+
+	"github.com/dunglas/frankenphp/internal/blockio"
 )
 
 type contextKeyStruct struct{}
@@ -270,6 +272,10 @@ func Init(options ...Option) error {
 		globalLogger = opt.logger
 		opt.logger = nil
 	}
+
+	// Let the worker-timeout watchdog report (once) when the platform denies
+	// the syscalls it needs to abort a blocked socket read.
+	blockio.SetLogger(globalLogger)
 
 	globalMu.Unlock()
 

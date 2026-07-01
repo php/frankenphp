@@ -26,6 +26,10 @@ type phpThread struct {
 	contextMu    sync.RWMutex
 	state        *state.ThreadState
 	requestCount atomic.Int64
+	// kernelTID is the Linux kernel thread id (gettid), published by the C
+	// thread at boot. Used by the worker-timeout watchdog to find the fd the
+	// thread is blocked on via /proc. 0 on platforms without it.
+	kernelTID atomic.Int64
 	// forceKill holds &EG() pointers captured on the PHP thread itself.
 	// forceKillMu pairs with go_frankenphp_clear_force_kill_slot's write
 	// lock so a concurrent kill never dereferences pointers freed by
@@ -257,6 +261,11 @@ func go_frankenphp_clear_force_kill_slot(threadIndex C.uintptr_t) {
 	C.frankenphp_release_thread_for_kill(thread.forceKill)
 	thread.forceKill = C.force_kill_slot{}
 	thread.forceKillMu.Unlock()
+}
+
+//export go_frankenphp_store_thread_tid
+func go_frankenphp_store_thread_tid(threadIndex C.uintptr_t, tid C.int) {
+	phpThreads[threadIndex].kernelTID.Store(int64(tid))
 }
 
 //export go_frankenphp_on_thread_shutdown

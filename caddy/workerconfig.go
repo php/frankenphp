@@ -5,6 +5,7 @@ import (
 	"path"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
@@ -41,6 +42,8 @@ type workerConfig struct {
 	MatchPath []string `json:"match_path,omitempty"`
 	// MaxConsecutiveFailures sets the maximum number of consecutive failures before panicking (defaults to 6, set to -1 to never panick)
 	MaxConsecutiveFailures int `json:"max_consecutive_failures,omitempty"`
+	// WorkerTimeout sets a hard per-request timeout (e.g. 30s). A worker request running longer is interrupted so the thread can be reclaimed. 0 (default) disables it.
+	WorkerTimeout time.Duration `json:"worker_timeout,omitempty"`
 
 	options        []frankenphp.WorkerOption
 	requestOptions []frankenphp.RequestOption
@@ -145,8 +148,22 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 			}
 
 			wc.MaxConsecutiveFailures = v
+		case "worker_timeout":
+			if !d.NextArg() {
+				return wc, d.ArgErr()
+			}
+
+			v, err := time.ParseDuration(d.Val())
+			if err != nil {
+				return wc, d.Errf("worker_timeout must be a valid duration (example: 30s): %v", err)
+			}
+			if v < 0 {
+				return wc, d.Err("worker_timeout must be >= 0")
+			}
+
+			wc.WorkerTimeout = v
 		default:
-			return wc, wrongSubDirectiveError("worker", "name, file, num, env, watch, match, max_consecutive_failures, max_threads", v)
+			return wc, wrongSubDirectiveError("worker", "name, file, num, env, watch, match, max_consecutive_failures, max_threads, worker_timeout", v)
 		}
 	}
 

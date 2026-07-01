@@ -2,6 +2,7 @@ package caddy
 
 import (
 	"testing"
+	"time"
 
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/stretchr/testify/require"
@@ -33,6 +34,64 @@ func TestModuleWorkerDuplicateFilenamesFail(t *testing.T) {
 	// Verify that an error was returned
 	require.Error(t, err, "Expected an error when two workers in the same module have the same filename")
 	require.Contains(t, err.Error(), "must not have duplicate filenames", "Error message should mention duplicate filenames")
+}
+
+func TestModuleWorkerTimeoutParses(t *testing.T) {
+	config := `
+	{
+		php {
+			worker {
+				file ../testdata/worker-with-env.php
+				num 1
+				worker_timeout 30s
+			}
+		}
+	}`
+
+	d := caddyfile.NewTestDispenser(config)
+	module := &FrankenPHPModule{}
+
+	require.NoError(t, module.UnmarshalCaddyfile(d))
+	require.Len(t, module.Workers, 1)
+	require.Equal(t, 30*time.Second, module.Workers[0].WorkerTimeout)
+}
+
+func TestModuleWorkerTimeoutDefaultsToZero(t *testing.T) {
+	config := `
+	{
+		php {
+			worker {
+				file ../testdata/worker-with-env.php
+				num 1
+			}
+		}
+	}`
+
+	d := caddyfile.NewTestDispenser(config)
+	module := &FrankenPHPModule{}
+
+	require.NoError(t, module.UnmarshalCaddyfile(d))
+	require.Len(t, module.Workers, 1)
+	require.Zero(t, module.Workers[0].WorkerTimeout)
+}
+
+func TestModuleWorkerTimeoutInvalidDurationFails(t *testing.T) {
+	config := `
+	{
+		php {
+			worker {
+				file ../testdata/worker-with-env.php
+				worker_timeout not-a-duration
+			}
+		}
+	}`
+
+	d := caddyfile.NewTestDispenser(config)
+	module := &FrankenPHPModule{}
+
+	err := module.UnmarshalCaddyfile(d)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "worker_timeout must be a valid duration")
 }
 
 func TestModuleWorkersWithDifferentFilenames(t *testing.T) {
