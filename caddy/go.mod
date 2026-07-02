@@ -8,7 +8,7 @@ retract v1.0.0-rc.1 // Human error
 
 require (
 	github.com/caddyserver/caddy/v2 v2.11.4
-	github.com/caddyserver/certmagic v0.25.3
+	github.com/caddyserver/certmagic v0.25.4
 	github.com/dunglas/caddy-cbrotli v1.0.1
 	github.com/dunglas/frankenphp v1.12.4
 	github.com/dunglas/mercure v0.24.2
