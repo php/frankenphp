@@ -4,10 +4,12 @@ package frankenphp
 // #cgo nocallback frankenphp_register_variable_safe
 // #cgo nocallback frankenphp_register_known_variable
 // #cgo nocallback frankenphp_init_persistent_string
+// #cgo nocallback frankenphp_add_to_prepared_env
 // #cgo noescape frankenphp_register_server_vars
 // #cgo noescape frankenphp_register_variable_safe
 // #cgo noescape frankenphp_register_known_variable
 // #cgo noescape frankenphp_init_persistent_string
+// #cgo noescape frankenphp_add_to_prepared_env
 // #include "frankenphp.h"
 // #include <php_variables.h>
 import "C"
@@ -162,15 +164,15 @@ func addHeadersToServer(ctx context.Context, request *http.Request, trackVarsArr
 	}
 }
 
-func addPreparedEnvToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
+// registerPreparedEnv exposes fc.env to getenv() before any PHP code runs.
+func registerPreparedEnv(fc *frankenPHPContext) {
+	size := C.size_t(len(fc.env) + len(fc.phpServer.env))
 	for k, v := range fc.phpServer.env {
-		C.frankenphp_register_variable_safe(toUnsafeChar(k), toUnsafeChar(v), C.size_t(len(v)), trackVarsArray)
+		C.frankenphp_add_to_prepared_env(toUnsafeChar(k), C.size_t(len(k)-1), toUnsafeChar(v), C.size_t(len(v)), size)
 	}
-
 	for k, v := range fc.env {
-		C.frankenphp_register_variable_safe(toUnsafeChar(k), toUnsafeChar(v), C.size_t(len(v)), trackVarsArray)
+		C.frankenphp_add_to_prepared_env(toUnsafeChar(k), C.size_t(len(k)-1), toUnsafeChar(v), C.size_t(len(v)), size)
 	}
-	fc.env = nil
 }
 
 //export go_register_server_variables
@@ -184,7 +186,9 @@ func go_register_server_variables(threadIndex C.uintptr_t, trackVarsArray *C.zva
 	}
 
 	// The Prepared Environment is registered last and can overwrite any previous values
-	addPreparedEnvToServer(fc, trackVarsArray)
+	if len(fc.env) != 0 {
+		C.frankenphp_merge_with_prepared_env(trackVarsArray)
+	}
 }
 
 // splitCgiPath splits the request path into SCRIPT_NAME, SCRIPT_FILENAME, PATH_INFO, DOCUMENT_URI
@@ -295,6 +299,10 @@ func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) 
 
 	if request == nil {
 		return nil
+	}
+
+	if len(fc.env) != 0 || len(fc.phpServer.env) != 0 {
+		registerPreparedEnv(fc)
 	}
 
 	if m, ok := cStringHTTPMethods[request.Method]; ok {

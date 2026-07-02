@@ -101,6 +101,10 @@ HashTable *main_thread_env = NULL;
 __thread uintptr_t thread_index;
 __thread bool is_worker_thread = false;
 __thread HashTable *sandboxed_env = NULL;
+/* prepared_env holds entries from php(_server)'s `env KEY VAL`, exposed to
+ * getenv() and merged into $_ENV when 'E' is in variables_order. Separate from
+ * putenv() so those don't leak into $_ENV. */
+__thread HashTable *prepared_env = NULL;
 
 /* Published via SG(server_context) so ext-parallel children, which inherit
  * the parent's SG(server_context), can route SAPI callbacks back to the
@@ -519,9 +523,17 @@ bool frankenphp_shutdown_dummy_request(void) {
 }
 
 void get_full_env(zval *track_vars_array) {
-  zend_hash_extend(Z_ARR_P(track_vars_array),
-                   zend_hash_num_elements(main_thread_env), 0);
+  size_t total = zend_hash_num_elements(main_thread_env);
+  if (prepared_env != NULL) {
+    // perf: doesn't matter if we get the exact count, just >= needed
+    total += zend_hash_num_elements(prepared_env);
+  }
+  zend_hash_extend(Z_ARR_P(track_vars_array), total, 0);
   zend_hash_copy(Z_ARR_P(track_vars_array), main_thread_env, NULL);
+  if (prepared_env != NULL) {
+    zend_hash_copy(Z_ARR_P(track_vars_array), prepared_env,
+                   (copy_ctor_func_t)zval_add_ref);
+  }
 }
 
 /* Adapted from php_request_startup() */
@@ -626,6 +638,13 @@ PHP_FUNCTION(frankenphp_putenv) {
 
   if (sandboxed_env == NULL) {
     sandboxed_env = zend_array_dup(main_thread_env);
+    /* prepared_env overrides the OS env and putenv() overrides both, so layer
+     * the prepared vars onto the dup before sandboxed_env starts shadowing the
+     * other two layers in getenv(). */
+    if (prepared_env != NULL) {
+      zend_hash_copy(sandboxed_env, prepared_env,
+                     (copy_ctor_func_t)zval_add_ref);
+    }
   }
 
   /* cut at null byte to stay consistent with regular putenv */
@@ -661,6 +680,38 @@ PHP_FUNCTION(frankenphp_putenv) {
   RETURN_BOOL(success);
 } /* }}} */
 
+/* getenv() lookup: sandboxed_env if present (it already holds prepared + OS),
+ * otherwise prepared_env then main_thread_env. */
+static inline zval *frankenphp_lookup_env(const char *name, size_t name_len) {
+  if (sandboxed_env != NULL) {
+    return zend_hash_str_find(sandboxed_env, name, name_len);
+  }
+
+  zval *env_val = NULL;
+  if (prepared_env != NULL) {
+    env_val = zend_hash_str_find(prepared_env, name, name_len);
+  }
+  if (env_val == NULL) {
+    env_val = zend_hash_str_find(main_thread_env, name, name_len);
+  }
+
+  return env_val;
+}
+
+/* Returns a fresh copy of the full environment, merging the layers above. */
+static inline HashTable *frankenphp_dup_env(void) {
+  if (sandboxed_env != NULL) {
+    return zend_array_dup(sandboxed_env);
+  }
+
+  HashTable *env = zend_array_dup(main_thread_env);
+  if (prepared_env != NULL) {
+    zend_hash_copy(env, prepared_env, (copy_ctor_func_t)zval_add_ref);
+  }
+
+  return env;
+}
+
 /* {{{ Get the env from the sandboxed environment */
 PHP_FUNCTION(frankenphp_getenv) {
   zend_string *name = NULL;
@@ -672,14 +723,12 @@ PHP_FUNCTION(frankenphp_getenv) {
   Z_PARAM_BOOL(local_only)
   ZEND_PARSE_PARAMETERS_END();
 
-  HashTable *ht = sandboxed_env ? sandboxed_env : main_thread_env;
-
   if (!name) {
-    RETURN_ARR(zend_array_dup(ht));
+    RETURN_ARR(frankenphp_dup_env());
     return;
   }
 
-  zval *env_val = zend_hash_find(ht, name);
+  zval *env_val = frankenphp_lookup_env(ZSTR_VAL(name), ZSTR_LEN(name));
   if (env_val && Z_TYPE_P(env_val) == IS_STRING) {
     zend_string *str = Z_STR_P(env_val);
     zend_string_addref(str);
@@ -1203,6 +1252,13 @@ void frankenphp_register_server_vars(zval *track_vars_array,
   zend_hash_update_ind(ht, frankenphp_strings.remote_ident, &zv);
 }
 
+void frankenphp_merge_with_prepared_env(zval *track_vars_array) {
+  if (prepared_env != NULL) {
+    HashTable *ht = Z_ARRVAL_P(track_vars_array);
+    zend_hash_copy(ht, prepared_env, (copy_ctor_func_t)zval_add_ref);
+  }
+}
+
 /** Create an immutable zend_string that lasts for the whole process **/
 zend_string *frankenphp_init_persistent_string(const char *string, size_t len) {
   /* persistent strings will be ignored by the GC at the end of a request */
@@ -1316,9 +1372,7 @@ static void frankenphp_log_message(const char *message, int syslog_type_int) {
 }
 
 static char *frankenphp_getenv(const char *name, size_t name_len) {
-  HashTable *ht = sandboxed_env ? sandboxed_env : main_thread_env;
-
-  zval *env_val = zend_hash_str_find(ht, name, name_len);
+  zval *env_val = frankenphp_lookup_env(name, name_len);
   if (env_val && Z_TYPE_P(env_val) == IS_STRING) {
     zend_string *str = Z_STR_P(env_val);
     return ZSTR_VAL(str);
@@ -1381,6 +1435,22 @@ static inline void reset_sandboxed_environment() {
     zend_hash_release(sandboxed_env);
     sandboxed_env = NULL;
   }
+  if (prepared_env != NULL) {
+    zend_hash_release(prepared_env);
+    prepared_env = NULL;
+  }
+}
+
+/* Adds a key/value pair to the per-thread prepared environment, exposing
+ *  env vars from the php(_server) directive to getenv() and $_ENV. */
+void frankenphp_add_to_prepared_env(char *name, size_t name_len, char *val,
+                                    size_t val_len, size_t size) {
+  if (prepared_env == NULL) {
+    prepared_env = zend_new_array(size);
+  }
+  zval zv = {0};
+  ZVAL_STRINGL(&zv, val, val_len);
+  zend_hash_str_update(prepared_env, name, name_len, &zv);
 }
 
 static void *php_thread(void *arg) {
