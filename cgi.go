@@ -185,7 +185,7 @@ func go_register_server_variables(threadIndex C.uintptr_t, trackVarsArray *C.zva
 	}
 
 	// The Prepared Environment is registered last and can overwrite any previous values
-	if len(fc.env) != 0 {
+	if len(fc.env) != 0 || len(fc.phpServer.env) != 0 {
 		C.frankenphp_merge_with_prepared_env(trackVarsArray)
 	}
 }
