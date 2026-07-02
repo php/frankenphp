@@ -20,10 +20,10 @@ type PhpServer struct {
 }
 
 // PhpServers is a map of all registered PhpServer instances.
-// instances will be accessible after frankenphp.Init() has been called.
+// access this map only between frankenphp.Init() and frankenphp.Shutdown() calls (so it can be kept lock-free)
 var PhpServers = make(map[int]*PhpServer)
 
-func drainPhpServers() {
+func resetPhpServers() {
 	PhpServers = make(map[int]*PhpServer)
 }
 

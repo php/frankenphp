@@ -44,7 +44,7 @@ type FrankenPHPModule struct {
 	Env map[string]string `json:"env,omitempty"`
 	// Workers configures the worker scripts to start.
 	Workers []workerConfig `json:"workers,omitempty"`
-	// PhpServerIdx is the index of the php server to use, do not set manually
+	// PhpServerIdx is the idx of the php_server this module belongs to
 	PhpServerIdx int `json:"php_server_idx,omitempty"`
 
 	resolvedDocumentRoot string

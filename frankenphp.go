@@ -381,7 +381,7 @@ func Shutdown() {
 
 	drainWatchers()
 	drainPHPThreads()
-	drainPhpServers()
+	resetPhpServers()
 
 	metrics.Shutdown()
 
