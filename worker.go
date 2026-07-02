@@ -24,7 +24,6 @@ type worker struct {
 	name                   string
 	fileName               string
 	matchRequest           func(*http.Request) bool
-	matchRelPath           string
 	num                    int
 	maxThreads             int
 	requestOptions         []RequestOption
@@ -178,13 +177,6 @@ func newWorker(o workerOpt) (*worker, error) {
 
 	if o.extensionWorkers != nil {
 		o.extensionWorkers.internalWorker = w
-	}
-
-	if o.matchRequest == nil && o.phpServer != nil && o.phpServer.root != "" {
-		docRootWithSep := o.phpServer.root + string(filepath.Separator)
-		if strings.HasPrefix(absFileName, docRootWithSep) {
-			w.matchRelPath = filepath.ToSlash(absFileName[len(o.phpServer.root):])
-		}
 	}
 
 	return w, nil
