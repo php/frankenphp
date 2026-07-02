@@ -69,12 +69,8 @@ func initWorkers(opts []workerOpt) error {
 		workersByName[w.name] = w
 		if w.phpServer == nil {
 			globalWorkersByPath[w.fileName] = w
-		} else {
-			w.phpServer.workers = append(w.phpServer.workers, w)
-			w.phpServer.workersByPath[w.fileName] = w
-			if w.matchRequest != nil {
-				w.phpServer.workersWithRequestMatcher = append(w.phpServer.workersWithRequestMatcher, w)
-			}
+		} else if err := w.phpServer.addWorker(w); err != nil {
+			return err
 		}
 	}
 

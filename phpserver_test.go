@@ -152,7 +152,7 @@ func TestPhpServer(t *testing.T) {
 		assert.Contains(t, body5, "I am by birth a Genevese (i not set)", "should fall back to (non-worker) index.php")
 	})
 
-	t.Run("worker_inherits_env", func(t *testing.T) {
+	t.Run("disallow_duplicate_worker_filenames_in_php_server", func(t *testing.T) {
 		initPhpServer(t, frankenphp.WithPhpServer(1,
 			frankenphp.WithPhpServerRoot(testDataDir, false),
 			frankenphp.WithPhpServerEnv(map[string]string{"APP_ENV": "staging"}),
@@ -162,6 +162,21 @@ func TestPhpServer(t *testing.T) {
 		body, _ := phpServerGet(t, frankenphp.PhpServers[1], "http://example.com/worker-with-env.php")
 
 		assert.Equal(t, "Worker has APP_ENV=staging", body)
+	})
+
+	t.Run("duplicate_worker_filenames_in_php_server", func(t *testing.T) {
+		t.Cleanup(frankenphp.Shutdown)
+
+		err := frankenphp.Init(
+			frankenphp.WithPhpServer(1,
+				frankenphp.WithPhpServerRoot(testDataDir, false),
+				frankenphp.WithPhpServerWorker("worker1", testDataDir+"worker-with-counter.php", 1),
+				frankenphp.WithPhpServerWorker("worker2", testDataDir+"worker-with-counter.php", 1),
+			),
+		)
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "two workers in a php_server cannot have the same filename")
 	})
 
 	t.Run("duplicate_registration", func(t *testing.T) {

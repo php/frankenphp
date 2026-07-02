@@ -1,6 +1,7 @@
 package frankenphp
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 )
@@ -59,6 +60,21 @@ func newDummyPhpServer() *PhpServer {
 		workersByPath: make(map[string]*worker),
 		env:           make(map[string]string),
 	}
+}
+
+func (s *PhpServer) addWorker(w *worker) error {
+	w.phpServer.workers = append(w.phpServer.workers, w)
+	if w.matchRequest != nil {
+		w.phpServer.workersWithRequestMatcher = append(w.phpServer.workersWithRequestMatcher, w)
+		return nil
+	}
+
+	if _, exists := w.phpServer.workersByPath[w.fileName]; exists {
+		return fmt.Errorf("two workers in a php_server cannot have the same filename: %q", w.fileName)
+	}
+	w.phpServer.workersByPath[w.fileName] = w
+
+	return nil
 }
 
 // ServeHTTP executes a PHP script according to the given context.
