@@ -19,7 +19,7 @@ import (
 type phpThread struct {
 	runtime.Pinner
 	threadIndex  int
-	requestChan  chan contextHolder
+	requestChan  chan *frankenPHPContext
 	drainChan    chan struct{}
 	handlerMu    sync.RWMutex
 	handler      threadHandler
@@ -39,7 +39,6 @@ type threadHandler interface {
 	name() string
 	beforeScriptExecution() string
 	afterScriptExecution(exitStatus int)
-	context() context.Context
 	frankenPHPContext() *frankenPHPContext
 	// drain is a hook called by drainWorkerThreads right before drainChan is
 	// closed. Handlers that need to wake up a thread parked in a blocking C
@@ -52,7 +51,7 @@ type threadHandler interface {
 func newPHPThread(threadIndex int) *phpThread {
 	return &phpThread{
 		threadIndex: threadIndex,
-		requestChan: make(chan contextHolder),
+		requestChan: make(chan *frankenPHPContext),
 		state:       state.NewThreadState(),
 	}
 }
@@ -182,12 +181,11 @@ func (thread *phpThread) frankenPHPContext() *frankenPHPContext {
 }
 
 func (thread *phpThread) context() context.Context {
-	if thread.handler == nil {
-		// handler can be nil when using opcache.preload
-		return globalCtx
+	if fc := thread.frankenPHPContext(); fc != nil && fc.ctx != nil {
+		return fc.ctx
 	}
 
-	return thread.handler.context()
+	return globalCtx
 }
 
 func (thread *phpThread) name() string {

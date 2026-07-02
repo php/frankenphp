@@ -4,7 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"path/filepath"
 	"time"
+
+	"github.com/dunglas/frankenphp/internal/fastabs"
 )
 
 // defaultMaxConsecutiveFailures is the default maximum number of consecutive failures before panicking
@@ -15,6 +19,9 @@ type Option func(h *opt) error
 
 // WorkerOption instances allow configuring FrankenPHP worker.
 type WorkerOption func(*workerOpt) error
+
+// PhpServerOption instances allow to configure a PhpServer.
+type PhpServerOption func(*PhpServer) error
 
 // opt contains the available options.
 //
@@ -44,8 +51,10 @@ type workerOpt struct {
 	env                    PreparedEnv
 	requestOptions         []RequestOption
 	watch                  []string
+	matchRequest           func(*http.Request) bool
 	maxConsecutiveFailures int
 	extensionWorkers       *extensionWorkers
+	phpServer              *PhpServer
 	onThreadReady          func(int)
 	onThreadShutdown       func(int)
 	onServerStartup        func()
@@ -149,6 +158,17 @@ func WithPhpIni(overrides map[string]string) Option {
 	}
 }
 
+// WithPhpServer configures a PHP server.
+func WithPhpServer(idx int, opts ...PhpServerOption) Option {
+	return func(o *opt) error {
+		_, err := newPhpServer(idx, opts...)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+}
+
 // WithMaxWaitTime configures the max time a request may be stalled waiting for a thread.
 func WithMaxWaitTime(maxWaitTime time.Duration) Option {
 	return func(o *opt) error {
@@ -212,6 +232,16 @@ func WithWorkerWatchMode(watch []string) WorkerOption {
 	}
 }
 
+// WithWorkerMatchOn sets a request matcher for this worker
+// if the matcher returns true, the worker will be used to handle the request
+// if no request matcher is set, matching happens only by path (filename == root + request path)
+func WithWorkerMatchOn(matcherFunc func(*http.Request) bool) WorkerOption {
+	return func(w *workerOpt) error {
+		w.matchRequest = matcherFunc
+		return nil
+	}
+}
+
 // WithWorkerMaxFailures sets the maximum number of consecutive failures before panicking
 func WithWorkerMaxFailures(maxFailures int) WorkerOption {
 	return func(w *workerOpt) error {
@@ -261,6 +291,76 @@ func WithWorkerOnServerShutdown(f func()) WorkerOption {
 func withExtensionWorkers(w *extensionWorkers) WorkerOption {
 	return func(wo *workerOpt) error {
 		wo.extensionWorkers = w
+
+		return nil
+	}
+}
+
+func WithPhpServerRoot(root string, resolveSymlink bool) PhpServerOption {
+	return func(s *PhpServer) error {
+		root, err := fastabs.FastAbs(root)
+		if err != nil {
+			return err
+		}
+
+		if resolveSymlink {
+			if root, err = filepath.EvalSymlinks(root); err != nil {
+				return err
+			}
+		}
+
+		s.root = root
+		return nil
+	}
+}
+
+func WithPhpServerSplitPath(splitPath []string) PhpServerOption {
+	return func(s *PhpServer) error {
+		if err := normalizeSplitPath(splitPath); err != nil {
+			return err
+		}
+		s.splitPath = splitPath
+
+		return nil
+	}
+}
+
+func WithPhpServerEnv(env map[string]string) PhpServerOption {
+	return func(s *PhpServer) error {
+		s.env = PrepareEnv(env)
+
+		return nil
+	}
+}
+
+// WithPhpServerWorker configures the PHP workers to start for a specific php server
+func WithPhpServerWorker(name, fileName string, num int, options ...WorkerOption) PhpServerOption {
+	return func(s *PhpServer) error {
+		workerOpt := workerOpt{
+			name:                   name,
+			fileName:               fileName,
+			num:                    num,
+			env:                    PrepareEnv(nil),
+			watch:                  []string{},
+			maxConsecutiveFailures: defaultMaxConsecutiveFailures,
+			phpServer:              s,
+		}
+
+		for _, option := range options {
+			if err := option(&workerOpt); err != nil {
+				return err
+			}
+		}
+
+		s.workerOpts = append(s.workerOpts, workerOpt)
+
+		return nil
+	}
+}
+
+func WithPHPServerLogger(logger *slog.Logger) PhpServerOption {
+	return func(s *PhpServer) error {
+		s.logger = logger
 
 		return nil
 	}

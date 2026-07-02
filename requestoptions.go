@@ -83,6 +83,19 @@ func WithRequestResolvedDocumentRoot(documentRoot string) RequestOption {
 // which can be mitigated with use of a try_files-like behavior
 // that 404s if the FastCGI path info is not found.
 func WithRequestSplitPath(splitPath []string) (RequestOption, error) {
+	if err := normalizeSplitPath(splitPath); err != nil {
+		return nil, err
+	}
+
+	return func(o *frankenPHPContext) error {
+		o.splitPath = splitPath
+
+		return nil
+	}, nil
+}
+
+// normalize split path in-place to lowercase ASCII characters
+func normalizeSplitPath(splitPath []string) error {
 	var b strings.Builder
 
 	for i, split := range splitPath {
@@ -91,7 +104,7 @@ func WithRequestSplitPath(splitPath []string) (RequestOption, error) {
 		for j := 0; j < len(split); j++ {
 			c := split[j]
 			if c >= utf8.RuneSelf {
-				return nil, ErrInvalidSplitPath
+				return ErrInvalidSplitPath
 			}
 
 			if 'A' <= c && c <= 'Z' {
@@ -105,11 +118,7 @@ func WithRequestSplitPath(splitPath []string) (RequestOption, error) {
 		b.Reset()
 	}
 
-	return func(o *frankenPHPContext) error {
-		o.splitPath = splitPath
-
-		return nil
-	}, nil
+	return nil
 }
 
 type PreparedEnv = map[string]string

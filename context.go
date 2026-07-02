@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ import (
 type frankenPHPContext struct {
 	mercureContext
 
+	ctx             context.Context
 	documentRoot    string
 	splitPath       []string
 	env             PreparedEnv
@@ -29,6 +31,7 @@ type frankenPHPContext struct {
 	scriptName     string
 	scriptFilename string
 	requestURI     string
+	phpServer      *PhpServer
 
 	// Whether the request is already closed by us
 	isDone bool
@@ -42,24 +45,6 @@ type frankenPHPContext struct {
 	startedAt time.Time
 }
 
-type contextHolder struct {
-	ctx               context.Context
-	frankenPHPContext *frankenPHPContext
-}
-
-// fromContext extracts the frankenPHPContext from a context.
-func fromContext(ctx context.Context) (fctx *frankenPHPContext, ok bool) {
-	fctx, ok = ctx.Value(contextKey).(*frankenPHPContext)
-	return
-}
-
-func newFrankenPHPContext() *frankenPHPContext {
-	return &frankenPHPContext{
-		done:      make(chan any),
-		startedAt: time.Now(),
-	}
-}
-
 // NewRequestWithContext creates a new FrankenPHP request context.
 //
 // FrankenPHP does not strip request headers whose name contains an underscore.
@@ -71,12 +56,38 @@ func newFrankenPHPContext() *frankenPHPContext {
 // you explicitly need (and whitelist) them. The Caddy-based server and reverse
 // proxies such as nginx (underscores_in_headers off) already do this.
 func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Request, error) {
-	fc := newFrankenPHPContext()
-	fc.request = r
+	c := context.WithValue(r.Context(), contextKey, opts)
+
+	return r.WithContext(c), nil
+}
+
+func newContextFromRequest(request *http.Request, responseWriter http.ResponseWriter, s *PhpServer, opts ...RequestOption) (*frankenPHPContext, error) {
+	fc := &frankenPHPContext{
+		ctx:            request.Context(),
+		done:           make(chan any),
+		startedAt:      time.Now(),
+		phpServer:      s,
+		splitPath:      s.splitPath,
+		logger:         s.logger,
+		request:        request,
+		documentRoot:   s.root,
+		responseWriter: responseWriter,
+		requestURI:     request.URL.RequestURI(),
+	}
 
 	for _, o := range opts {
 		if err := o(fc); err != nil {
 			return nil, err
+		}
+	}
+
+	// see if a worker matches the request
+	if fc.worker == nil {
+		for _, w := range s.workersWithRequestMatcher {
+			if w.matchRequest(request) {
+				fc.worker = w
+				break
+			}
 		}
 	}
 
@@ -97,28 +108,58 @@ func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Reques
 
 	splitCgiPath(fc)
 
-	fc.requestURI = r.URL.RequestURI()
-
-	c := context.WithValue(r.Context(), contextKey, fc)
-
-	return r.WithContext(c), nil
+	return fc, nil
 }
 
-// newDummyContext creates a fake context from a request path
-func newDummyContext(requestPath string, opts ...RequestOption) (*frankenPHPContext, error) {
-	r, err := http.NewRequestWithContext(globalCtx, http.MethodGet, requestPath, nil)
+// newWorkerDummyContext creates a context for worker startup
+func newWorkerDummyContext(w *worker) (*frankenPHPContext, error) {
+	r, err := http.NewRequestWithContext(globalCtx, http.MethodGet, filepath.Base(w.fileName), nil)
 	if err != nil {
 		return nil, err
 	}
 
-	fr, err := NewRequestWithContext(r, opts...)
-	if err != nil {
-		return nil, err
+	fc := &frankenPHPContext{
+		ctx:       r.Context(),
+		phpServer: w.phpServer,
+		request:   r,
+		startedAt: time.Now(),
+		logger:    globalLogger,
+		worker:    w,
 	}
 
-	fc, _ := fromContext(fr.Context())
+	for _, o := range w.requestOptions {
+		if err := o(fc); err != nil {
+			return nil, err
+		}
+	}
+
+	if fc.phpServer == nil {
+		fc.phpServer = newDummyPhpServer()
+	}
+
+	splitCgiPath(fc)
 
 	return fc, nil
+}
+
+// newContextFromMessage creates a context from a message (external workers)
+func newContextFromMessage(message any, rw http.ResponseWriter, ctx context.Context, w *worker) *frankenPHPContext {
+	fc := &frankenPHPContext{
+		done:              make(chan any),
+		startedAt:         time.Now(),
+		phpServer:         w.phpServer,
+		worker:            w,
+		logger:            globalLogger,
+		responseWriter:    rw,
+		handlerParameters: message,
+		ctx:               ctx,
+	}
+
+	if fc.phpServer == nil {
+		fc.phpServer = newDummyPhpServer()
+	}
+
+	return fc
 }
 
 // closeContext sends the response to the client
@@ -154,12 +195,12 @@ func (fc *frankenPHPContext) validate() error {
 }
 
 func (fc *frankenPHPContext) clientHasClosed() bool {
-	if fc.request == nil {
+	if fc.ctx == nil {
 		return false
 	}
 
 	select {
-	case <-fc.request.Context().Done():
+	case <-fc.ctx.Done():
 		return true
 	default:
 		return false

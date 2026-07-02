@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"path/filepath"
 	"runtime"
@@ -45,14 +44,12 @@ type FrankenPHPModule struct {
 	Env map[string]string `json:"env,omitempty"`
 	// Workers configures the worker scripts to start.
 	Workers []workerConfig `json:"workers,omitempty"`
-	// RouteGroup is set automatically to pair the route embeds of one php_server directive (#2477). Do not set it manually.
-	RouteGroup string `json:"route_group,omitempty"`
+	// PhpServerIdx is the idx of the php_server this module belongs to
+	PhpServerIdx int `json:"php_server_idx,omitempty"`
 
-	resolvedDocumentRoot        string
-	preparedEnv                 frankenphp.PreparedEnv
-	preparedEnvNeedsReplacement bool
-	logger                      *slog.Logger
-	requestOptions              []frankenphp.RequestOption
+	resolvedDocumentRoot string
+	preparedEnv          frankenphp.PreparedEnv
+	requestOptions       []frankenphp.RequestOption
 }
 
 // CaddyModule returns the Caddy module information.
@@ -65,7 +62,6 @@ func (FrankenPHPModule) CaddyModule() caddy.ModuleInfo {
 
 // Provision sets up the module.
 func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
-	f.logger = ctx.Slogger()
 	app, err := ctx.App("frankenphp")
 	if err != nil {
 		return err
@@ -80,7 +76,6 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 
 	f.assignMercureHub(ctx)
 
-	loggerOpt := frankenphp.WithRequestLogger(f.logger)
 	for i, wc := range f.Workers {
 		// make the file path absolute from the public directory
 		// this can only be done if the root is defined inside php_server
@@ -88,21 +83,23 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 			wc.FileName = filepath.Join(f.Root, wc.FileName)
 		}
 
-		// Inherit environment variables from the parent php_server directive
-		if f.Env != nil {
-			wc.inheritEnv(f.Env)
-		}
-
-		wc.requestOptions = append(wc.requestOptions, loggerOpt)
-		wc.routeGroup = f.RouteGroup
 		f.Workers[i] = wc
 	}
 
-	workers, err := fapp.addModuleWorkers(f.Workers...)
-	if err != nil {
-		return err
+	for i, wc := range f.Workers {
+		if frankenphp.EmbeddedAppPath != "" && filepath.IsLocal(wc.FileName) {
+			wc.FileName = filepath.Join(frankenphp.EmbeddedAppPath, wc.FileName)
+		}
+
+		phpServerPrefix := fmt.Sprintf("m%d#", f.PhpServerIdx)
+		if wc.Name == "" {
+			wc.Name = f.generateUniqueModuleWorkerName(wc.FileName, phpServerPrefix)
+		} else if !strings.HasPrefix(wc.Name, phpServerPrefix) {
+			wc.Name = phpServerPrefix + wc.Name
+		}
+
+		f.Workers[i] = wc
 	}
-	f.Workers = workers
 
 	if f.Root == "" {
 		if frankenphp.EmbeddedAppPath == "" {
@@ -116,23 +113,8 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		f.Root = filepath.Join(frankenphp.EmbeddedAppPath, f.Root)
 	}
 
-	if len(f.SplitPath) == 0 {
-		f.SplitPath = []string{".php"}
-	}
-
-	opt, err := frankenphp.WithRequestSplitPath(f.SplitPath)
-	if err != nil {
-		return fmt.Errorf("invalid split_path: %w", err)
-	}
-	f.requestOptions = append(f.requestOptions, opt)
-
 	if f.ResolveRootSymlink == nil {
 		f.ResolveRootSymlink = new(true)
-	}
-
-	// Always pre-compute absolute file names for fallback matching
-	for i := range f.Workers {
-		f.Workers[i].absFileName, _ = fastabs.FastAbs(f.Workers[i].FileName)
 	}
 
 	if !needReplacement(f.Root) {
@@ -155,43 +137,63 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 				if filepath.IsAbs(wc.FileName) {
 					resolvedPath, _ := filepath.EvalSymlinks(wc.FileName)
 					f.Workers[i].FileName = resolvedPath
-					f.Workers[i].absFileName = resolvedPath
 				}
 			}
 		}
 
-		// Pre-compute relative match paths for all workers (requires resolved document root)
-		docRootWithSep := f.resolvedDocumentRoot + string(filepath.Separator)
-		for i := range f.Workers {
-			if strings.HasPrefix(f.Workers[i].absFileName, docRootWithSep) {
-				f.Workers[i].matchRelPath = filepath.ToSlash(f.Workers[i].absFileName[len(f.resolvedDocumentRoot):])
-			}
-		}
-
-		f.requestOptions = append(f.requestOptions, frankenphp.WithRequestResolvedDocumentRoot(f.resolvedDocumentRoot))
-	}
-
-	if f.preparedEnv == nil {
-		f.preparedEnv = frankenphp.PrepareEnv(f.Env)
-
-		for _, e := range f.preparedEnv {
-			if needReplacement(e) {
-				f.preparedEnvNeedsReplacement = true
-
-				break
-			}
-		}
-	}
-
-	if !f.preparedEnvNeedsReplacement {
-		f.requestOptions = append(f.requestOptions, frankenphp.WithRequestPreparedEnv(f.preparedEnv))
 	}
 
 	if err := f.configureHotReload(fapp); err != nil {
 		return err
 	}
 
+	unchangingEnv := make(map[string]string) // env variables that do not need replacement
+	requestEnv := make(map[string]string)    // env variables that need replacement, e.g. {http.vars.root}
+
+	for k, e := range f.Env {
+		if needReplacement(e) {
+			requestEnv[k] = e
+		} else {
+			unchangingEnv[k] = e
+		}
+	}
+
+	f.preparedEnv = frankenphp.PrepareEnv(requestEnv)
+
+	// note: duplicate PhpServerIdx registration will be ignored, only the first one will be used
+	// this is necessary since caddy drops the module instance between parsing and provisioning
+	phpServerOptions := []frankenphp.PhpServerOption{
+		frankenphp.WithPhpServerRoot(f.resolvedDocumentRoot, *f.ResolveRootSymlink),
+		frankenphp.WithPhpServerEnv(unchangingEnv),
+		frankenphp.WithPHPServerLogger(ctx.Slogger()),
+		frankenphp.WithPhpServerSplitPath(f.SplitPath),
+	}
+
+	for _, w := range f.Workers {
+		phpServerOptions = append(phpServerOptions, frankenphp.WithPhpServerWorker(w.Name, w.FileName, w.Num, w.toWorkerOptions()...))
+	}
+
+	fapp.opts = append(fapp.opts, frankenphp.WithPhpServer(f.PhpServerIdx, phpServerOptions...))
+
 	return nil
+}
+
+func (f *FrankenPHPModule) generateUniqueModuleWorkerName(filepath string, phpServerPrefix string) string {
+	var i uint
+	filepath, _ = fastabs.FastAbs(filepath)
+	name := phpServerPrefix + filepath
+
+retry:
+	for _, wc := range f.Workers {
+		if wc.Name == name {
+			name = phpServerPrefix + filepath + fmt.Sprintf("_%d", i)
+			i++
+
+			goto retry
+		}
+	}
+
+	return name
 }
 
 // needReplacement checks if a string contains placeholders.
@@ -208,6 +210,7 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 
 	opts := make([]frankenphp.RequestOption, 0, len(f.requestOptions)+4)
 	opts = append(opts, f.requestOptions...)
+	opts = append(opts, frankenphp.WithOriginalRequest(new(ctx.Value(caddyhttp.OriginalRequestCtxKey).(http.Request))))
 
 	if documentRoot == "" {
 		documentRoot = repl.ReplaceKnown(f.Root, "")
@@ -221,8 +224,8 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 		opts = append(opts, frankenphp.WithRequestDocumentRoot(documentRoot, false))
 	}
 
-	if f.preparedEnvNeedsReplacement {
-		env := make(frankenphp.PreparedEnv, len(f.Env))
+	if len(f.preparedEnv) > 0 {
+		env := make(frankenphp.PreparedEnv, len(f.preparedEnv))
 		for k, v := range f.preparedEnv {
 			env[k] = repl.ReplaceKnown(v, "")
 		}
@@ -230,28 +233,14 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 		opts = append(opts, frankenphp.WithRequestPreparedEnv(env))
 	}
 
-	workerName := ""
-	for _, w := range f.Workers {
-		if w.matchesPath(r, documentRoot) {
-			workerName = w.Name
-			break
-		}
+	phpServer := frankenphp.PhpServers[f.PhpServerIdx]
+	if phpServer == nil {
+		return fmt.Errorf("php server with idx %d was not correctly provisioned", f.PhpServerIdx)
 	}
 
-	fr, err := frankenphp.NewRequestWithContext(
-		r,
-		append(
-			opts,
-			frankenphp.WithOriginalRequest(new(ctx.Value(caddyhttp.OriginalRequestCtxKey).(http.Request))),
-			frankenphp.WithWorkerName(workerName),
-		)...,
-	)
+	err := phpServer.ServeHTTP(w, r, opts...)
 
-	if err != nil {
-		return caddyhttp.Error(http.StatusInternalServerError, err)
-	}
-
-	if err = frankenphp.ServeHTTP(w, fr); err != nil && !errors.As(err, &frankenphp.ErrRejected{}) {
+	if err != nil && !errors.As(err, &frankenphp.ErrRejected{}) {
 		return caddyhttp.Error(http.StatusInternalServerError, err)
 	}
 
@@ -282,10 +271,8 @@ func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				}
 				if f.Env == nil {
 					f.Env = make(map[string]string)
-					f.preparedEnv = make(frankenphp.PreparedEnv)
 				}
 				f.Env[args[0]] = args[1]
-				f.preparedEnv[args[0]+"\x00"] = args[1]
 
 			case "resolve_root_symlink":
 				if !d.NextArg() {
@@ -334,15 +321,21 @@ func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	return nil
 }
 
+func (f *FrankenPHPModule) assignPhpServerIdx(h httpcaddyfile.Helper) {
+	counter, _ := h.State["php_server_count"].(int)
+	f.PhpServerIdx = counter
+	h.State["php_server_count"] = counter + 1
+}
+
 // parseCaddyfile unmarshals tokens from h into a new Middleware.
 func parseCaddyfile(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error) {
 	m := &FrankenPHPModule{}
 	err := m.UnmarshalCaddyfile(h.Dispenser)
 
+	m.assignPhpServerIdx(h)
+
 	return m, err
 }
-
-const routeGroupStateKey = "frankenphp.worker_route_group_seq"
 
 // parsePhpServer parses the php_server directive, which has a similar syntax
 // to the php_fastcgi directive. A line such as this:
@@ -375,12 +368,6 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 	if !h.Next() {
 		return nil, h.ArgErr()
 	}
-
-	// per-adaptation counter: identical for both embeds of this directive, distinct for every other
-	// (including separate snippet imports), and stable across re-adaptation since State resets each time
-	seq, _ := h.State[routeGroupStateKey].(int)
-	h.State[routeGroupStateKey] = seq + 1
-	routeGroup := strconv.Itoa(seq)
 
 	// set up FrankenPHP
 	phpsrv := FrankenPHPModule{}
@@ -481,6 +468,9 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 		return nil, err
 	}
 
+	// assign a unique index to the php server
+	phpsrv.assignPhpServerIdx(h)
+
 	if frankenphp.EmbeddedAppPath != "" {
 		if phpsrv.Root == "" {
 			phpsrv.Root = filepath.Join(frankenphp.EmbeddedAppPath, defaultDocumentRoot)
@@ -491,8 +481,6 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 			fsrv.Root = phpsrv.Root
 		}
 	}
-
-	phpsrv.RouteGroup = routeGroup
 
 	// set up a route list that we'll append to
 	routes := caddyhttp.RouteList{}
