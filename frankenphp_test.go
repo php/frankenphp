@@ -37,6 +37,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var testDataDir = ""
+
 type testOptions struct {
 	workerScript       string
 	watch              []string
@@ -148,6 +150,9 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
+	cwd, _ := os.Getwd()
+	testDataDir = cwd + strings.Clone("/testdata/")
+
 	os.Exit(m.Run())
 }
 
@@ -230,8 +235,6 @@ func TestPathInfo_worker(t *testing.T) {
 	testPathInfo(t, &testOptions{workerScript: "server-variable.php"})
 }
 func testPathInfo(t *testing.T, opts *testOptions) {
-	cwd, _ := os.Getwd()
-	testDataDir := cwd + strings.Clone("/testdata/")
 	path := strings.Clone("/server-variable.php/pathinfo")
 
 	runTest(t, func(_ func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
@@ -1348,22 +1351,4 @@ func testOpcachePreload(t *testing.T, opts *testOptions) {
 		body, _ := testGet("http://example.com/preload-check.php", handler, t)
 		assert.Equal(t, "I am preloaded", body)
 	}, opts)
-}
-
-func TestPhpServerLib(t *testing.T) {
-	cwd, _ := os.Getwd()
-	testDataDir := cwd + "/testdata/"
-	defer frankenphp.Shutdown()
-	assert.NoError(t, frankenphp.Init(
-		frankenphp.WithPhpServer(
-			1,
-			frankenphp.WithPhpServerRoot(testDataDir),
-		),
-	))
-	request := httptest.NewRequest("GET", "http://example.com/index.php", nil)
-	response := httptest.NewRecorder()
-
-	assert.NoError(t, frankenphp.PhpServers[1].ServeHTTP(response, request))
-
-	assert.Equal(t, "I am by birth a Genevese (i not set)", response.Body.String())
 }

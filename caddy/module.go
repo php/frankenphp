@@ -163,7 +163,7 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 	// note: duplicate PhpServerIdx registration will be ignored, only the first one will be used
 	// this is necessary since caddy drops the module instance between parsing and provisioning
 	phpServerOptions := []frankenphp.PhpServerOption{
-		frankenphp.WithPhpServerRoot(f.resolvedDocumentRoot),
+		frankenphp.WithPhpServerRoot(f.resolvedDocumentRoot, *f.ResolveRootSymlink),
 		frankenphp.WithPhpServerEnv(unchangingEnv),
 		frankenphp.WithPHPServerLogger(ctx.Slogger()),
 		frankenphp.WithPhpServerSplitPath(f.SplitPath),

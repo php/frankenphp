@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"path/filepath"
 	"time"
+
+	"github.com/dunglas/frankenphp/internal/fastabs"
 )
 
 // defaultMaxConsecutiveFailures is the default maximum number of consecutive failures before panicking
@@ -293,8 +296,19 @@ func withExtensionWorkers(w *extensionWorkers) WorkerOption {
 	}
 }
 
-func WithPhpServerRoot(root string) PhpServerOption {
+func WithPhpServerRoot(root string, resolveSymlink bool) PhpServerOption {
 	return func(s *PhpServer) error {
+		root, err := fastabs.FastAbs(root)
+		if err != nil {
+			return err
+		}
+
+		if resolveSymlink {
+			if root, err = filepath.EvalSymlinks(root); err != nil {
+				return err
+			}
+		}
+
 		s.root = root
 		return nil
 	}

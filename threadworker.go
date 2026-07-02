@@ -235,11 +235,11 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 	handler.thread.contextMu.Unlock()
 	handler.state.MarkAsWaiting(false)
 
-	if globalLogger.Enabled(fc.ctx, slog.LevelDebug) {
+	if fc.logger.Enabled(fc.ctx, slog.LevelDebug) {
 		if handler.workerFrankenPHPContext.request == nil {
-			globalLogger.LogAttrs(fc.ctx, slog.LevelDebug, "request handling started", slog.String("worker", handler.worker.name), slog.Int("thread", handler.thread.threadIndex))
+			fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "request handling started", slog.String("worker", handler.worker.name), slog.Int("thread", handler.thread.threadIndex))
 		} else {
-			globalLogger.LogAttrs(fc.ctx, slog.LevelDebug, "request handling started", slog.String("worker", handler.worker.name), slog.Int("thread", handler.thread.threadIndex), slog.String("url", handler.workerFrankenPHPContext.request.RequestURI))
+			fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "request handling started", slog.String("worker", handler.worker.name), slog.Int("thread", handler.thread.threadIndex), slog.String("url", handler.workerFrankenPHPContext.request.RequestURI))
 		}
 	}
 
