@@ -1209,6 +1209,10 @@ void frankenphp_register_server_vars(zval *track_vars_array,
   zend_hash_extend(ht, vars.total_num_vars, 0);
   zend_hash_copy(ht, main_thread_env, NULL);
 
+  if (prepared_env != NULL) {
+    zend_hash_copy(ht, prepared_env, NULL);
+  }
+
   // update values with variable strings
 #define FRANKENPHP_REGISTER_VAR(name)                                          \
   frankenphp_register_trusted_var(frankenphp_strings.name, vars.name,          \

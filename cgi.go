@@ -164,14 +164,13 @@ func addHeadersToServer(ctx context.Context, request *http.Request, trackVarsArr
 	}
 }
 
-// registerPreparedEnv exposes fc.env to getenv() before any PHP code runs.
-func registerPreparedEnv(fc *frankenPHPContext) {
-	size := C.size_t(len(fc.env) + len(fc.phpServer.env))
+// registerPreparedEnv exposes fc.env and fc.phpServer.env to getenv() before any PHP code runs.
+func registerPreparedEnv(fc *frankenPHPContext, preparedEnvLen int) {
 	for k, v := range fc.phpServer.env {
-		C.frankenphp_add_to_prepared_env(toUnsafeChar(k), C.size_t(len(k)-1), toUnsafeChar(v), C.size_t(len(v)), size)
+		C.frankenphp_add_to_prepared_env(toUnsafeChar(k), C.size_t(len(k)-1), toUnsafeChar(v), C.size_t(len(v)), C.size_t(preparedEnvLen))
 	}
 	for k, v := range fc.env {
-		C.frankenphp_add_to_prepared_env(toUnsafeChar(k), C.size_t(len(k)-1), toUnsafeChar(v), C.size_t(len(v)), size)
+		C.frankenphp_add_to_prepared_env(toUnsafeChar(k), C.size_t(len(k)-1), toUnsafeChar(v), C.size_t(len(v)), C.size_t(preparedEnvLen))
 	}
 }
 
@@ -301,8 +300,9 @@ func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) 
 		return nil
 	}
 
-	if len(fc.env) != 0 || len(fc.phpServer.env) != 0 {
-		registerPreparedEnv(fc)
+	preparedEnvLen := len(fc.env) + len(fc.phpServer.env)
+	if preparedEnvLen != 0 {
+		registerPreparedEnv(fc, preparedEnvLen)
 	}
 
 	if m, ok := cStringHTTPMethods[request.Method]; ok {
