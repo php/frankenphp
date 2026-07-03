@@ -103,6 +103,12 @@ EMBED=/path/to/your/app ./build-static.sh
 
 The resulting binary is the file named `frankenphp-<os>-<arch>` in the `dist/` directory.
 
+> [!NOTE]
+>
+> Standalone binaries can currently be created for Linux and macOS only,
+> as [static builds are not available for Windows](static.md).
+> To create a Linux binary from Windows, use the Docker-based builder or [WSL](https://learn.microsoft.com/windows/wsl/).
+
 ## Using the binary
 
 This is it! The `my-app` file (or `dist/frankenphp-<os>-<arch>` on other OSes) contains your self-contained app!
