@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"path/filepath"
 	"time"
 
 	"github.com/dunglas/frankenphp/internal/fastabs"
@@ -20,8 +19,8 @@ type Option func(h *opt) error
 // WorkerOption instances allow configuring FrankenPHP worker.
 type WorkerOption func(*workerOpt) error
 
-// PhpServerOption instances allow to configure a PhpServer.
-type PhpServerOption func(*PhpServer) error
+// ServerOption instances allow to configure a server.
+type ServerOption func(*server) error
 
 // opt contains the available options.
 //
@@ -54,7 +53,7 @@ type workerOpt struct {
 	matchRequest           func(*http.Request) bool
 	maxConsecutiveFailures int
 	extensionWorkers       *extensionWorkers
-	phpServer              *PhpServer
+	server                 *server
 	onThreadReady          func(int)
 	onThreadShutdown       func(int)
 	onServerStartup        func()
@@ -98,19 +97,9 @@ func WithMetrics(m Metrics) Option {
 // WithWorkers configures the PHP workers to start
 func WithWorkers(name, fileName string, num int, options ...WorkerOption) Option {
 	return func(o *opt) error {
-		worker := workerOpt{
-			name:                   name,
-			fileName:               fileName,
-			num:                    num,
-			env:                    PrepareEnv(nil),
-			watch:                  []string{},
-			maxConsecutiveFailures: defaultMaxConsecutiveFailures,
-		}
-
-		for _, option := range options {
-			if err := option(&worker); err != nil {
-				return err
-			}
+		worker, err := newWorkerOpt(name, fileName, num, options...)
+		if err != nil {
+			return err
 		}
 
 		o.workers = append(o.workers, worker)
@@ -154,17 +143,6 @@ func WithLogger(l *slog.Logger) Option {
 func WithPhpIni(overrides map[string]string) Option {
 	return func(o *opt) error {
 		o.phpIni = overrides
-		return nil
-	}
-}
-
-// WithPhpServer configures a PHP server.
-func WithPhpServer(idx int, opts ...PhpServerOption) Option {
-	return func(o *opt) error {
-		_, err := newPhpServer(idx, opts...)
-		if err != nil {
-			return err
-		}
 		return nil
 	}
 }
@@ -296,60 +274,40 @@ func withExtensionWorkers(w *extensionWorkers) WorkerOption {
 	}
 }
 
-func WithPhpServerRoot(root string, resolveSymlink bool) PhpServerOption {
-	return func(s *PhpServer) error {
-		root, err := fastabs.FastAbs(root)
+// WithServer configures a server.
+func WithServer(
+	idx int,
+	resolvedDocumentRoot string,
+	splitPath []string,
+	env map[string]string,
+	opts ...ServerOption,
+) Option {
+	return func(o *opt) error {
+		root, err := fastabs.FastAbs(resolvedDocumentRoot)
 		if err != nil {
 			return err
 		}
 
-		if resolveSymlink {
-			if root, err = filepath.EvalSymlinks(root); err != nil {
-				return err
-			}
-		}
-
-		s.root = root
-		return nil
-	}
-}
-
-func WithPhpServerSplitPath(splitPath []string) PhpServerOption {
-	return func(s *PhpServer) error {
 		if err := normalizeSplitPath(splitPath); err != nil {
 			return err
 		}
-		s.splitPath = splitPath
 
-		return nil
-	}
-}
+		_, err = newServer(idx, root, splitPath, PrepareEnv(env), opts...)
 
-func WithPhpServerEnv(env map[string]string) PhpServerOption {
-	return func(s *PhpServer) error {
-		s.env = PrepareEnv(env)
-
-		return nil
-	}
-}
-
-// WithPhpServerWorker configures the PHP workers to start for a specific php server
-func WithPhpServerWorker(name, fileName string, num int, options ...WorkerOption) PhpServerOption {
-	return func(s *PhpServer) error {
-		workerOpt := workerOpt{
-			name:                   name,
-			fileName:               fileName,
-			num:                    num,
-			env:                    PrepareEnv(nil),
-			watch:                  []string{},
-			maxConsecutiveFailures: defaultMaxConsecutiveFailures,
-			phpServer:              s,
+		if err != nil {
+			return err
 		}
+		return nil
+	}
+}
 
-		for _, option := range options {
-			if err := option(&workerOpt); err != nil {
-				return err
-			}
+// WithServerWorker configures the PHP workers to start for a specific server
+func WithServerWorker(name, fileName string, num int, options ...WorkerOption) ServerOption {
+	return func(s *server) error {
+		workerOpt, err := newWorkerOpt(name, fileName, num, options...)
+		workerOpt.server = s
+		if err != nil {
+			return err
 		}
 
 		s.workerOpts = append(s.workerOpts, workerOpt)
@@ -358,10 +316,21 @@ func WithPhpServerWorker(name, fileName string, num int, options ...WorkerOption
 	}
 }
 
-func WithPHPServerLogger(logger *slog.Logger) PhpServerOption {
-	return func(s *PhpServer) error {
-		s.logger = logger
-
-		return nil
+func newWorkerOpt(name, fileName string, num int, options ...WorkerOption) (workerOpt, error) {
+	workerOpt := workerOpt{
+		name:                   name,
+		fileName:               fileName,
+		num:                    num,
+		env:                    PrepareEnv(nil),
+		watch:                  []string{},
+		maxConsecutiveFailures: defaultMaxConsecutiveFailures,
 	}
+
+	for _, option := range options {
+		if err := option(&workerOpt); err != nil {
+			return workerOpt, err
+		}
+	}
+
+	return workerOpt, nil
 }

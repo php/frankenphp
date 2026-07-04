@@ -164,9 +164,9 @@ func addHeadersToServer(ctx context.Context, request *http.Request, trackVarsArr
 	}
 }
 
-// registerPreparedEnv exposes fc.env and fc.phpServer.env to getenv() before any PHP code runs.
+// registerPreparedEnv exposes fc.env and fc.server.env to getenv() before any PHP code runs.
 func registerPreparedEnv(fc *frankenPHPContext, preparedEnvLen int) {
-	for k, v := range fc.phpServer.env {
+	for k, v := range fc.server.env {
 		C.frankenphp_add_to_prepared_env(toUnsafeChar(k), C.size_t(len(k)-1), toUnsafeChar(v), C.size_t(len(v)), C.size_t(preparedEnvLen))
 	}
 	for k, v := range fc.env {
@@ -185,7 +185,7 @@ func go_register_server_variables(threadIndex C.uintptr_t, trackVarsArray *C.zva
 	}
 
 	// The Prepared Environment is registered last and can overwrite any previous values
-	if len(fc.env) != 0 || len(fc.phpServer.env) != 0 {
+	if len(fc.env) != 0 || len(fc.server.env) != 0 {
 		C.frankenphp_merge_with_prepared_env(trackVarsArray)
 	}
 }
@@ -228,7 +228,7 @@ func splitCgiPath(fc *frankenPHPContext) {
 
 	// see if a php_server worker or global worker matches the request path
 	// aka: root + request path == worker.filename
-	fc.worker = fc.phpServer.workersByPath[fc.scriptFilename]
+	fc.worker = fc.server.workersByPath[fc.scriptFilename]
 	if fc.worker == nil {
 		fc.worker = globalWorkersByPath[fc.scriptFilename]
 	}
@@ -300,7 +300,7 @@ func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) 
 		return nil
 	}
 
-	preparedEnvLen := len(fc.env) + len(fc.phpServer.env)
+	preparedEnvLen := len(fc.env) + len(fc.server.env)
 	if preparedEnvLen != 0 {
 		registerPreparedEnv(fc, preparedEnvLen)
 	}

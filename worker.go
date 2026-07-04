@@ -33,7 +33,7 @@ type worker struct {
 	onThreadReady          func(int)
 	onThreadShutdown       func(int)
 	queuedRequests         atomic.Int32
-	phpServer              *PhpServer
+	server                 *server
 }
 
 var (
@@ -67,9 +67,9 @@ func initWorkers(opts []workerOpt) error {
 		totalThreadsToStart += w.num
 		workers = append(workers, w)
 		workersByName[w.name] = w
-		if w.phpServer == nil {
+		if w.server == nil {
 			globalWorkersByPath[w.fileName] = w
-		} else if err := w.phpServer.addWorker(w); err != nil {
+		} else if err := w.server.addWorker(w); err != nil {
 			return err
 		}
 	}
@@ -123,7 +123,7 @@ func newWorker(o workerOpt) (*worker, error) {
 		o.name = absFileName
 	}
 
-	if o.phpServer == nil {
+	if o.server == nil {
 		if w := globalWorkersByPath[absFileName]; w != nil {
 			return w, fmt.Errorf("two workers cannot have the same filename: %q", absFileName)
 		}
@@ -139,8 +139,8 @@ func newWorker(o workerOpt) (*worker, error) {
 
 	o.env["FRANKENPHP_WORKER\x00"] = "1"
 
-	if o.phpServer != nil && len(o.phpServer.env) > 0 {
-		for k, v := range o.phpServer.env {
+	if o.server != nil && len(o.server.env) > 0 {
+		for k, v := range o.server.env {
 			if _, exists := o.env[k]; !exists {
 				o.env[k] = v
 			}
@@ -159,7 +159,7 @@ func newWorker(o workerOpt) (*worker, error) {
 		maxConsecutiveFailures: o.maxConsecutiveFailures,
 		onThreadReady:          o.onThreadReady,
 		onThreadShutdown:       o.onThreadShutdown,
-		phpServer:              o.phpServer,
+		server:                 o.server,
 	}
 
 	w.configureMercure(&o)

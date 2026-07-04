@@ -31,7 +31,7 @@ type frankenPHPContext struct {
 	scriptName     string
 	scriptFilename string
 	requestURI     string
-	phpServer      *PhpServer
+	server         *server
 
 	// Whether the request is already closed by us
 	isDone bool
@@ -61,12 +61,12 @@ func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Reques
 	return r.WithContext(c), nil
 }
 
-func newContextFromRequest(request *http.Request, responseWriter http.ResponseWriter, s *PhpServer, opts ...RequestOption) (*frankenPHPContext, error) {
+func newContextFromRequest(request *http.Request, responseWriter http.ResponseWriter, s *server, opts ...RequestOption) (*frankenPHPContext, error) {
 	fc := &frankenPHPContext{
 		ctx:            request.Context(),
 		done:           make(chan any),
 		startedAt:      time.Now(),
-		phpServer:      s,
+		server:         s,
 		splitPath:      s.splitPath,
 		logger:         s.logger,
 		request:        request,
@@ -120,7 +120,7 @@ func newWorkerDummyContext(w *worker) (*frankenPHPContext, error) {
 
 	fc := &frankenPHPContext{
 		ctx:       r.Context(),
-		phpServer: w.phpServer,
+		server:    w.server,
 		request:   r,
 		startedAt: time.Now(),
 		logger:    globalLogger,
@@ -133,8 +133,8 @@ func newWorkerDummyContext(w *worker) (*frankenPHPContext, error) {
 		}
 	}
 
-	if fc.phpServer == nil {
-		fc.phpServer = newDummyPhpServer()
+	if fc.server == nil {
+		fc.server = newDummyServer()
 	}
 
 	splitCgiPath(fc)
@@ -147,7 +147,7 @@ func newContextFromMessage(message any, rw http.ResponseWriter, ctx context.Cont
 	fc := &frankenPHPContext{
 		done:              make(chan any),
 		startedAt:         time.Now(),
-		phpServer:         w.phpServer,
+		server:            w.server,
 		worker:            w,
 		logger:            globalLogger,
 		responseWriter:    rw,
@@ -155,8 +155,8 @@ func newContextFromMessage(message any, rw http.ResponseWriter, ctx context.Cont
 		ctx:               ctx,
 	}
 
-	if fc.phpServer == nil {
-		fc.phpServer = newDummyPhpServer()
+	if fc.server == nil {
+		fc.server = newDummyServer()
 	}
 
 	return fc

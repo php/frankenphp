@@ -49,6 +49,7 @@ var (
 	ErrMainThreadCreation = errors.New("error creating the main thread")
 	ErrScriptExecution    = errors.New("error during PHP script execution")
 	ErrNotRunning         = errors.New("FrankenPHP is not running. For proper configuration visit: https://frankenphp.dev/docs/config/#caddyfile-config")
+	ServerNotFoundError   = errors.New("server not found")
 
 	ErrInvalidRequestPath         = ErrRejected{"invalid request path", http.StatusBadRequest}
 	ErrInvalidContentLengthHeader = ErrRejected{"invalid Content-Length header", http.StatusBadRequest}
@@ -285,8 +286,8 @@ func Init(options ...Option) error {
 	}
 
 	// append all module workers to the global workers for registration
-	for _, phpServer := range PhpServers {
-		opt.workers = append(opt.workers, phpServer.workerOpts...)
+	for _, server := range servers {
+		opt.workers = append(opt.workers, server.workerOpts...)
 	}
 
 	workerThreadCount, err := calculateMaxThreads(opt)
@@ -381,7 +382,7 @@ func Shutdown() {
 
 	drainWatchers()
 	drainPHPThreads()
-	resetPhpServers()
+	resetServers()
 
 	metrics.Shutdown()
 
@@ -407,9 +408,9 @@ func ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) error 
 		return ErrInvalidRequest
 	}
 
-	phpServer := newDummyPhpServer()
+	s := newDummyServer()
 
-	return phpServer.ServeHTTP(responseWriter, request, opts...)
+	return s.serveHTTP(responseWriter, request, opts...)
 }
 
 //export go_ub_write
