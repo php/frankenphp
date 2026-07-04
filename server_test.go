@@ -48,20 +48,12 @@ func serverGet(t *testing.T, serverIdx int, url string) (string, *http.Response)
 func TestServer(t *testing.T) {
 	t.Run("idx", func(t *testing.T) {
 		initServer(t,
-			frankenphp.WithServer(1,
-				testDataDir,
-				[]string{},
-				map[string]string{
-					"PHP_SERVER_IDX": "1",
-				},
-			),
-			frankenphp.WithServer(2,
-				testDataDir,
-				[]string{},
-				map[string]string{
-					"PHP_SERVER_IDX": "2",
-				},
-			),
+			frankenphp.WithServer(1, testDataDir, nil, map[string]string{
+				"PHP_SERVER_IDX": "1",
+			}),
+			frankenphp.WithServer(2, testDataDir, nil, map[string]string{
+				"PHP_SERVER_IDX": "2",
+			}),
 		)
 
 		body1, _ := serverGet(t, 1, "http://example.com/server-variable.php")
@@ -74,11 +66,7 @@ func TestServer(t *testing.T) {
 	})
 
 	t.Run("root", func(t *testing.T) {
-		initServer(t, frankenphp.WithServer(1,
-			testDataDir,
-			[]string{},
-			map[string]string{},
-		))
+		initServer(t, frankenphp.WithServer(1, testDataDir, nil, nil))
 
 		body, _ := serverGet(t, 1, "http://example.com/server-globals.php")
 
@@ -87,13 +75,9 @@ func TestServer(t *testing.T) {
 	})
 
 	t.Run("env", func(t *testing.T) {
-		initServer(t, frankenphp.WithServer(1,
-			testDataDir,
-			[]string{},
-			map[string]string{
-				"PHP_SERVER_TEST_KEY": "from_php_server",
-			},
-		))
+		initServer(t, frankenphp.WithServer(1, testDataDir, nil, map[string]string{
+			"PHP_SERVER_TEST_KEY": "from_php_server",
+		}))
 
 		body, _ := serverGet(t, 1, "http://example.com/server-variable.php")
 
@@ -101,12 +85,7 @@ func TestServer(t *testing.T) {
 	})
 
 	t.Run("split_path", func(t *testing.T) {
-		initServer(t, frankenphp.WithServer(
-			1,
-			testDataDir,
-			[]string{".custom"},
-			map[string]string{},
-		))
+		initServer(t, frankenphp.WithServer(1, testDataDir, []string{".custom"}, nil))
 
 		body, _ := serverGet(t, 1, "http://example.com/split-path.custom/pathinfo")
 
@@ -116,23 +95,18 @@ func TestServer(t *testing.T) {
 	})
 
 	t.Run("workers_by_path_and_request_matcher", func(t *testing.T) {
+		server1Idx := 1
+		server2Idx := 2
 		initServer(
 			t,
-			frankenphp.WithServer(1,
-				testDataDir,
-				[]string{},
-				map[string]string{},
-				frankenphp.WithServerWorker("counter", testDataDir+"worker-with-counter.php", 1),
-			),
-			frankenphp.WithServer(2,
-				testDataDir,
-				[]string{},
-				map[string]string{},
-				frankenphp.WithServerWorker("match", testDataDir+"worker-with-counter.php", 1,
-					frankenphp.WithWorkerMatchOn(func(r *http.Request) bool {
-						return strings.HasPrefix(r.URL.Path, "/match/")
-					}),
-				),
+			frankenphp.WithServer(server1Idx, testDataDir, nil, nil),
+			frankenphp.WithServer(server2Idx, testDataDir, nil, nil),
+			frankenphp.WithWorkers("counter", testDataDir+"worker-with-counter.php", 1, frankenphp.WithWorkerServerScope(server1Idx)),
+			frankenphp.WithWorkers("match", testDataDir+"worker-with-counter.php", 1,
+				frankenphp.WithWorkerServerScope(server2Idx),
+				frankenphp.WithWorkerMatchOn(func(r *http.Request) bool {
+					return strings.HasPrefix(r.URL.Path, "/match/")
+				}),
 			),
 		)
 
@@ -150,15 +124,13 @@ func TestServer(t *testing.T) {
 	})
 
 	t.Run("worker_env_inheritance", func(t *testing.T) {
-		initServer(t, frankenphp.WithServer(
-			1,
-			testDataDir,
-			[]string{},
-			map[string]string{
+		initServer(
+			t,
+			frankenphp.WithServer(1, testDataDir, nil, map[string]string{
 				"APP_ENV": "staging",
-			},
-			frankenphp.WithServerWorker("env", testDataDir+"worker-with-env.php", 1),
-		))
+			}),
+			frankenphp.WithWorkers("env", testDataDir+"worker-with-env.php", 1, frankenphp.WithWorkerServerScope(1)),
+		)
 
 		body, _ := serverGet(t, 1, "http://example.com/worker-with-env.php")
 
@@ -169,13 +141,9 @@ func TestServer(t *testing.T) {
 		t.Cleanup(frankenphp.Shutdown)
 
 		err := frankenphp.Init(
-			frankenphp.WithServer(1,
-				testDataDir,
-				[]string{},
-				map[string]string{},
-				frankenphp.WithServerWorker("worker1", testDataDir+"worker-with-counter.php", 1),
-				frankenphp.WithServerWorker("worker2", testDataDir+"worker-with-counter.php", 1),
-			),
+			frankenphp.WithServer(1, testDataDir, nil, nil),
+			frankenphp.WithWorkers("worker1", testDataDir+"worker-with-counter.php", 1, frankenphp.WithWorkerServerScope(1)),
+			frankenphp.WithWorkers("worker2", testDataDir+"worker-with-counter.php", 1, frankenphp.WithWorkerServerScope(1)),
 		)
 
 		assert.Error(t, err)
@@ -184,20 +152,12 @@ func TestServer(t *testing.T) {
 
 	t.Run("duplicate_registration", func(t *testing.T) {
 		initServer(t,
-			frankenphp.WithServer(1,
-				testDataDir,
-				[]string{},
-				map[string]string{
-					"PHP_SERVER_IDX": "first",
-				},
-			),
-			frankenphp.WithServer(1,
-				testDataDir+"/other/",
-				[]string{},
-				map[string]string{
-					"PHP_SERVER_IDX": "second",
-				},
-			),
+			frankenphp.WithServer(1, testDataDir, nil, map[string]string{
+				"PHP_SERVER_IDX": "first",
+			}),
+			frankenphp.WithServer(1, testDataDir+"/other/", nil, map[string]string{
+				"PHP_SERVER_IDX": "second",
+			}),
 		)
 
 		body, _ := serverGet(t, 1, "http://example.com/server-variable.php")
@@ -207,11 +167,7 @@ func TestServer(t *testing.T) {
 	})
 
 	t.Run("serve_http_validation", func(t *testing.T) {
-		initServer(t, frankenphp.WithServer(1,
-			testDataDir,
-			[]string{},
-			map[string]string{},
-		))
+		initServer(t, frankenphp.WithServer(1, testDataDir, nil, nil))
 
 		req := httptest.NewRequest(http.MethodGet, "http://example.com/server-variable.php", nil)
 		req.Header.Add("Content-Length", "-1")
