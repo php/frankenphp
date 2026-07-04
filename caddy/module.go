@@ -44,8 +44,8 @@ type FrankenPHPModule struct {
 	Env map[string]string `json:"env,omitempty"`
 	// Workers configures the worker scripts to start.
 	Workers []workerConfig `json:"workers,omitempty"`
-	// PhpServerIdx is the idx of the php_server this module belongs to
-	PhpServerIdx int `json:"php_server_idx,omitempty"`
+	// ServerIdx is the idx of the php_server this module belongs to
+	ServerIdx int `json:"server_idx,omitempty"`
 
 	resolvedDocumentRoot string
 	preparedEnv          frankenphp.PreparedEnv
@@ -91,11 +91,11 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 			wc.FileName = filepath.Join(frankenphp.EmbeddedAppPath, wc.FileName)
 		}
 
-		phpServerPrefix := fmt.Sprintf("m%d#", f.PhpServerIdx)
+		serverPrefix := fmt.Sprintf("m%d#", f.ServerIdx)
 		if wc.Name == "" {
-			wc.Name = f.generateUniqueModuleWorkerName(wc.FileName, phpServerPrefix)
-		} else if !strings.HasPrefix(wc.Name, phpServerPrefix) {
-			wc.Name = phpServerPrefix + wc.Name
+			wc.Name = f.generateUniqueModuleWorkerName(wc.FileName, serverPrefix)
+		} else if !strings.HasPrefix(wc.Name, serverPrefix) {
+			wc.Name = serverPrefix + wc.Name
 		}
 
 		f.Workers[i] = wc
@@ -160,19 +160,28 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 
 	f.preparedEnv = frankenphp.PrepareEnv(requestEnv)
 
-	// duplicate PhpServerIdx registrations will be ignored, only the first one will be used
-	// this is necessary since caddy drops the module instance between parsing and provisioning
-	phpServerOptions := []frankenphp.ServerOption{}
-	for _, w := range f.Workers {
-		phpServerOptions = append(phpServerOptions, frankenphp.WithServerWorker(w.Name, w.FileName, w.Num, w.toWorkerOptions()...))
+	if fapp.moduleWorkers == nil {
+		fapp.moduleWorkers = make(map[int][]workerConfig)
 	}
 
+	if f.ServerIdx <= 0 {
+		// when registering via JSON configuration, it's possible that no idx was yet assigned
+		f.ServerIdx = len(fapp.moduleWorkers) + 1
+		caddy.Log().Warn("\"php\" is missing a \"server_idx\", assigning one on-the-fly")
+	}
+
+	if _, ok := fapp.moduleWorkers[f.ServerIdx]; ok {
+		// server was already registered, avoid duplicate registrations
+		return nil
+	}
+
+	fapp.moduleWorkers[f.ServerIdx] = f.Workers
+
 	fapp.opts = append(fapp.opts, frankenphp.WithServer(
-		f.PhpServerIdx,
+		f.ServerIdx,
 		f.resolvedDocumentRoot,
 		f.SplitPath,
 		resolvedEnv,
-		phpServerOptions...,
 	))
 
 	return nil
@@ -233,7 +242,7 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 		opts = append(opts, frankenphp.WithRequestPreparedEnv(env))
 	}
 
-	err := frankenphp.ServeHTTPSrv(f.PhpServerIdx, w, r, opts...)
+	err := frankenphp.ServeHTTPSrv(f.ServerIdx, w, r, opts...)
 
 	if err != nil && !errors.As(err, &frankenphp.ErrRejected{}) {
 		return caddyhttp.Error(http.StatusInternalServerError, err)
@@ -316,9 +325,9 @@ func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	return nil
 }
 
-func (f *FrankenPHPModule) assignPhpServerIdx(h httpcaddyfile.Helper) {
+func (f *FrankenPHPModule) assignServerIdx(h httpcaddyfile.Helper) {
 	counter, _ := h.State["php_server_count"].(int)
-	f.PhpServerIdx = counter
+	f.ServerIdx = counter + 1
 	h.State["php_server_count"] = counter + 1
 }
 
@@ -327,7 +336,7 @@ func parseCaddyfile(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error)
 	m := &FrankenPHPModule{}
 	err := m.UnmarshalCaddyfile(h.Dispenser)
 
-	m.assignPhpServerIdx(h)
+	m.assignServerIdx(h)
 
 	return m, err
 }
@@ -464,7 +473,7 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 	}
 
 	// assign a unique index to the php server
-	phpsrv.assignPhpServerIdx(h)
+	phpsrv.assignServerIdx(h)
 
 	if frankenphp.EmbeddedAppPath != "" {
 		if phpsrv.Root == "" {

@@ -59,10 +59,11 @@ type FrankenPHPApp struct {
 	// EXPERIMENTAL: MaxRequests sets the maximum number of requests a PHP thread handles before restarting (0 = unlimited)
 	MaxRequests int `json:"max_requests,omitempty"`
 
-	opts    []frankenphp.Option
-	metrics frankenphp.Metrics
-	ctx     context.Context
-	logger  *slog.Logger
+	opts          []frankenphp.Option
+	metrics       frankenphp.Metrics
+	ctx           context.Context
+	logger        *slog.Logger
+	moduleWorkers map[int][]workerConfig
 }
 
 var errIni = errors.New(`"php_ini" must be in the format: php_ini "<key>" "<value>"`)
@@ -119,9 +120,19 @@ func (f *FrankenPHPApp) Start() error {
 		frankenphp.WithMaxRequests(f.MaxRequests),
 	)
 
+	// register global workers
 	for _, w := range f.Workers {
 		w.FileName = repl.ReplaceKnown(w.FileName, "")
 		f.opts = append(f.opts, frankenphp.WithWorkers(w.Name, w.FileName, w.Num, w.toWorkerOptions()...))
+	}
+
+	// register module workers
+	for serverIdx, workers := range f.moduleWorkers {
+		for _, w := range workers {
+			w.FileName = repl.ReplaceKnown(w.FileName, "")
+			workerOptions := append(w.toWorkerOptions(), frankenphp.WithWorkerServerScope(serverIdx))
+			f.opts = append(f.opts, frankenphp.WithWorkers(w.Name, w.FileName, w.Num, workerOptions...))
+		}
 	}
 
 	frankenphp.Shutdown()
@@ -150,6 +161,7 @@ func (f *FrankenPHPApp) Stop() error {
 	f.MaxWaitTime = 0
 	f.MaxIdleTime = 0
 	f.MaxRequests = 0
+	f.moduleWorkers = nil
 
 	optionsMU.Lock()
 	options = nil

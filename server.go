@@ -26,7 +26,7 @@ func resetServers() {
 	servers = make(map[int]*server)
 }
 
-func newServer(idx int, root string, splitPath []string, env map[string]string, opts ...ServerOption) (*server, error) {
+func newServer(idx int, root string, splitPath []string, env map[string]string) (*server, error) {
 	existingServer, ok := servers[idx]
 	if ok {
 		globalLogger.Debug("server already registered, ignoring duplicate registration", "idx", idx)
@@ -40,12 +40,6 @@ func newServer(idx int, root string, splitPath []string, env map[string]string, 
 		env:           env,
 		workersByPath: make(map[string]*worker),
 		workerOpts:    make([]workerOpt, 0),
-	}
-
-	for _, option := range opts {
-		if err := option(server); err != nil {
-			return server, err
-		}
 	}
 
 	if len(server.splitPath) == 0 {

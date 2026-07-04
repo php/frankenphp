@@ -19,9 +19,6 @@ type Option func(h *opt) error
 // WorkerOption instances allow configuring FrankenPHP worker.
 type WorkerOption func(*workerOpt) error
 
-// ServerOption instances allow to configure a server.
-type ServerOption func(*server) error
-
 // opt contains the available options.
 //
 // If you change this, also update the Caddy module and the documentation.
@@ -53,11 +50,11 @@ type workerOpt struct {
 	matchRequest           func(*http.Request) bool
 	maxConsecutiveFailures int
 	extensionWorkers       *extensionWorkers
-	server                 *server
 	onThreadReady          func(int)
 	onThreadShutdown       func(int)
 	onServerStartup        func()
 	onServerShutdown       func()
+	serverIdx              int
 }
 
 // WithContext sets the main context to use.
@@ -97,9 +94,19 @@ func WithMetrics(m Metrics) Option {
 // WithWorkers configures the PHP workers to start
 func WithWorkers(name, fileName string, num int, options ...WorkerOption) Option {
 	return func(o *opt) error {
-		worker, err := newWorkerOpt(name, fileName, num, options...)
-		if err != nil {
-			return err
+		worker := workerOpt{
+			name:                   name,
+			fileName:               fileName,
+			num:                    num,
+			env:                    PrepareEnv(nil),
+			watch:                  []string{},
+			maxConsecutiveFailures: defaultMaxConsecutiveFailures,
+		}
+
+		for _, option := range options {
+			if err := option(&worker); err != nil {
+				return err
+			}
 		}
 
 		o.workers = append(o.workers, worker)
@@ -220,6 +227,15 @@ func WithWorkerMatchOn(matcherFunc func(*http.Request) bool) WorkerOption {
 	}
 }
 
+// WithWorkerServerScope scopes the worker to a server instance.
+// Only requests that are handled by the server instance will reach the worker.
+func WithWorkerServerScope(serverIdx int) WorkerOption {
+	return func(w *workerOpt) error {
+		w.serverIdx = serverIdx
+		return nil
+	}
+}
+
 // WithWorkerMaxFailures sets the maximum number of consecutive failures before panicking
 func WithWorkerMaxFailures(maxFailures int) WorkerOption {
 	return func(w *workerOpt) error {
@@ -280,9 +296,12 @@ func WithServer(
 	resolvedDocumentRoot string,
 	splitPath []string,
 	env map[string]string,
-	opts ...ServerOption,
 ) Option {
 	return func(o *opt) error {
+		if idx <= 0 {
+			return fmt.Errorf("server idx must be > 0, got %d", idx)
+		}
+
 		root, err := fastabs.FastAbs(resolvedDocumentRoot)
 		if err != nil {
 			return err
@@ -292,45 +311,11 @@ func WithServer(
 			return err
 		}
 
-		_, err = newServer(idx, root, splitPath, PrepareEnv(env), opts...)
+		_, err = newServer(idx, root, splitPath, PrepareEnv(env))
 
 		if err != nil {
 			return err
 		}
 		return nil
 	}
-}
-
-// WithServerWorker configures the PHP workers to start for a specific server
-func WithServerWorker(name, fileName string, num int, options ...WorkerOption) ServerOption {
-	return func(s *server) error {
-		workerOpt, err := newWorkerOpt(name, fileName, num, options...)
-		workerOpt.server = s
-		if err != nil {
-			return err
-		}
-
-		s.workerOpts = append(s.workerOpts, workerOpt)
-
-		return nil
-	}
-}
-
-func newWorkerOpt(name, fileName string, num int, options ...WorkerOption) (workerOpt, error) {
-	workerOpt := workerOpt{
-		name:                   name,
-		fileName:               fileName,
-		num:                    num,
-		env:                    PrepareEnv(nil),
-		watch:                  []string{},
-		maxConsecutiveFailures: defaultMaxConsecutiveFailures,
-	}
-
-	for _, option := range options {
-		if err := option(&workerOpt); err != nil {
-			return workerOpt, err
-		}
-	}
-
-	return workerOpt, nil
 }

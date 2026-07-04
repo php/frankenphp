@@ -123,11 +123,17 @@ func newWorker(o workerOpt) (*worker, error) {
 		o.name = absFileName
 	}
 
-	if o.server == nil {
-		if w := globalWorkersByPath[absFileName]; w != nil {
-			return w, fmt.Errorf("two workers cannot have the same filename: %q", absFileName)
+	var server *server
+	if o.serverIdx != 0 {
+		server = servers[o.serverIdx]
+
+		if server == nil {
+			return nil, fmt.Errorf("worker was registered with a non-existent server idx %d: %q", o.serverIdx, absFileName)
 		}
+	} else if w := globalWorkersByPath[absFileName]; w != nil {
+		return w, fmt.Errorf("two global workers cannot have the same filename: %q", absFileName)
 	}
+
 	if w := workersByName[o.name]; w != nil {
 		return w, fmt.Errorf("two workers cannot have the same name: %q", o.name)
 	}
@@ -137,15 +143,16 @@ func newWorker(o workerOpt) (*worker, error) {
 		o.env = make(PreparedEnv, 1)
 	}
 
-	o.env["FRANKENPHP_WORKER\x00"] = "1"
-
-	if o.server != nil && len(o.server.env) > 0 {
-		for k, v := range o.server.env {
+	// if the worker is scoped to a server, inherit the server env
+	if server != nil && len(server.env) > 0 {
+		for k, v := range server.env {
 			if _, exists := o.env[k]; !exists {
 				o.env[k] = v
 			}
 		}
 	}
+
+	o.env["FRANKENPHP_WORKER\x00"] = "1"
 
 	w := &worker{
 		name:                   o.name,
@@ -159,7 +166,7 @@ func newWorker(o workerOpt) (*worker, error) {
 		maxConsecutiveFailures: o.maxConsecutiveFailures,
 		onThreadReady:          o.onThreadReady,
 		onThreadShutdown:       o.onThreadShutdown,
-		server:                 o.server,
+		server:                 server,
 	}
 
 	w.configureMercure(&o)

@@ -285,11 +285,6 @@ func Init(options ...Option) error {
 		maxIdleTime = opt.maxIdleTime
 	}
 
-	// append all module workers to the global workers for registration
-	for _, server := range servers {
-		opt.workers = append(opt.workers, server.workerOpts...)
-	}
-
 	workerThreadCount, err := calculateMaxThreads(opt)
 	if err != nil {
 		Shutdown()
@@ -423,7 +418,11 @@ func ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) error 
 func ServeHTTPSrv(serverIdx int, responseWriter http.ResponseWriter, request *http.Request, opts ...RequestOption) error {
 	s, ok := servers[serverIdx]
 	if !ok {
-		return errors.Join(ServerNotFoundError, fmt.Errorf("server with idx %d not found or not started", serverIdx))
+		existinggIdxs := ""
+		for idx := range servers {
+			existinggIdxs += fmt.Sprintf("%d, ", idx)
+		}
+		return errors.Join(ServerNotFoundError, fmt.Errorf("server with idx %d not found or not started, existing servers: %s", serverIdx, existinggIdxs))
 	}
 
 	return s.serveHTTP(responseWriter, request, opts...)
