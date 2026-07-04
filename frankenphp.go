@@ -671,7 +671,7 @@ func go_read_cookies(threadIndex C.uintptr_t) *C.char {
 
 // getLogger returns the logger and context savely even if phpThreads have not been created yet
 func getLogger(threadIndex C.uintptr_t) (*slog.Logger, context.Context) {
-	if threadIndex < 0 || threadIndex >= C.uintptr_t(len(phpThreads)) {
+	if threadIndex >= C.uintptr_t(len(phpThreads)) {
 		return globalLogger, globalCtx
 	}
 
