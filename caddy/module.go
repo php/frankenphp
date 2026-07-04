@@ -147,33 +147,33 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		return err
 	}
 
-	unchangingEnv := make(map[string]string) // env variables that do not need replacement
-	requestEnv := make(map[string]string)    // env variables that need replacement, e.g. {http.vars.root}
+	resolvedEnv := make(map[string]string) // env variables that do not need replacement
+	requestEnv := make(map[string]string)  // env variables that need replacement, e.g. {http.vars.root}
 
 	for k, e := range f.Env {
 		if needReplacement(e) {
 			requestEnv[k] = e
 		} else {
-			unchangingEnv[k] = e
+			resolvedEnv[k] = e
 		}
 	}
 
 	f.preparedEnv = frankenphp.PrepareEnv(requestEnv)
 
-	// note: duplicate PhpServerIdx registration will be ignored, only the first one will be used
+	// duplicate PhpServerIdx registrations will be ignored, only the first one will be used
 	// this is necessary since caddy drops the module instance between parsing and provisioning
-	phpServerOptions := []frankenphp.PhpServerOption{
-		frankenphp.WithPhpServerRoot(f.resolvedDocumentRoot, *f.ResolveRootSymlink),
-		frankenphp.WithPhpServerEnv(unchangingEnv),
-		frankenphp.WithPHPServerLogger(ctx.Slogger()),
-		frankenphp.WithPhpServerSplitPath(f.SplitPath),
-	}
-
+	phpServerOptions := []frankenphp.ServerOption{}
 	for _, w := range f.Workers {
-		phpServerOptions = append(phpServerOptions, frankenphp.WithPhpServerWorker(w.Name, w.FileName, w.Num, w.toWorkerOptions()...))
+		phpServerOptions = append(phpServerOptions, frankenphp.WithServerWorker(w.Name, w.FileName, w.Num, w.toWorkerOptions()...))
 	}
 
-	fapp.opts = append(fapp.opts, frankenphp.WithPhpServer(f.PhpServerIdx, phpServerOptions...))
+	fapp.opts = append(fapp.opts, frankenphp.WithServer(
+		f.PhpServerIdx,
+		f.resolvedDocumentRoot,
+		f.SplitPath,
+		resolvedEnv,
+		phpServerOptions...,
+	))
 
 	return nil
 }
@@ -233,12 +233,7 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 		opts = append(opts, frankenphp.WithRequestPreparedEnv(env))
 	}
 
-	phpServer := frankenphp.PhpServers[f.PhpServerIdx]
-	if phpServer == nil {
-		return fmt.Errorf("php server with idx %d was not correctly provisioned", f.PhpServerIdx)
-	}
-
-	err := phpServer.ServeHTTP(w, r, opts...)
+	err := frankenphp.ServeHTTPSrv(f.PhpServerIdx, w, r, opts...)
 
 	if err != nil && !errors.As(err, &frankenphp.ErrRejected{}) {
 		return caddyhttp.Error(http.StatusInternalServerError, err)
