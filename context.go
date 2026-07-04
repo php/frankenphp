@@ -134,7 +134,8 @@ func newWorkerDummyContext(w *worker) (*frankenPHPContext, error) {
 	}
 
 	if fc.server == nil {
-		fc.server = newDummyServer()
+		// global worker, not associated with a server
+		fc.server = fallbackServer
 	}
 
 	splitCgiPath(fc)
@@ -153,10 +154,7 @@ func newContextFromMessage(message any, rw http.ResponseWriter, ctx context.Cont
 		responseWriter:    rw,
 		handlerParameters: message,
 		ctx:               ctx,
-	}
-
-	if fc.server == nil {
-		fc.server = newDummyServer()
+		server:            fallbackServer,
 	}
 
 	return fc

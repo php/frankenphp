@@ -407,9 +407,7 @@ func ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) error 
 		return ErrInvalidRequest
 	}
 
-	s := newDummyServer()
-
-	return s.serveHTTP(responseWriter, request, opts...)
+	return fallbackServer.serveHTTP(responseWriter, request, opts...)
 }
 
 // ServeHTTPSrv executes a PHP script with a registered server.

@@ -20,7 +20,14 @@ type server struct {
 	logger                    *slog.Logger
 }
 
-var servers = make(map[int]*server)
+var (
+	servers        = make(map[int]*server)
+	fallbackServer = &server{
+		idx:           -1,
+		workersByPath: make(map[string]*worker),
+		env:           make(map[string]string),
+	}
+)
 
 func resetServers() {
 	servers = make(map[int]*server)
@@ -53,15 +60,6 @@ func newServer(idx int, root string, splitPath []string, env map[string]string) 
 	servers[server.idx] = server
 
 	return server, nil
-}
-
-// fallback PHP server if none could be associated with a request
-func newDummyServer() *server {
-	return &server{
-		idx:           -1,
-		workersByPath: make(map[string]*worker),
-		env:           make(map[string]string),
-	}
 }
 
 func (s *server) addWorker(w *worker) error {
