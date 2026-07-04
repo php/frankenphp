@@ -401,6 +401,10 @@ func Shutdown() {
 
 // ServeHTTP executes a PHP script according to the given context.
 func ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) error {
+	if !isRunning {
+		return ErrNotRunning
+	}
+
 	ctx := request.Context()
 	opts, ok := ctx.Value(contextKey).([]RequestOption)
 
@@ -409,6 +413,18 @@ func ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) error 
 	}
 
 	s := newDummyServer()
+
+	return s.serveHTTP(responseWriter, request, opts...)
+}
+
+// ServeHTTPSrv executes a PHP script with a registered server.
+// this allows using a pre-configured server instance.
+// otherwise, it is equivalent to calling ServeHTTP.
+func ServeHTTPSrv(serverIdx int, responseWriter http.ResponseWriter, request *http.Request, opts ...RequestOption) error {
+	s, ok := servers[serverIdx]
+	if !ok {
+		return errors.Join(ServerNotFoundError, fmt.Errorf("server with idx %d not found or not started", serverIdx))
+	}
 
 	return s.serveHTTP(responseWriter, request, opts...)
 }

@@ -1,7 +1,6 @@
 package frankenphp
 
 import (
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -86,25 +85,10 @@ func (s *server) addWorker(w *worker) error {
 	return nil
 }
 
-func ServeHTTPSrv(serverIdx int, responseWriter http.ResponseWriter, request *http.Request, opts ...RequestOption) error {
-	s, ok := servers[serverIdx]
-	if !ok {
-		return errors.Join(ServerNotFoundError, fmt.Errorf("server with idx %d not found", serverIdx))
-	}
-
-	return s.serveHTTP(responseWriter, request, opts...)
-}
-
-// ServeHTTP executes a PHP script according to the given context.
-// the request will be scoped to the server instance.
 func (s *server) serveHTTP(responseWriter http.ResponseWriter, request *http.Request, opts ...RequestOption) error {
 	h := responseWriter.Header()
 	if h["Server"] == nil {
 		h["Server"] = serverHeader
-	}
-
-	if !isRunning {
-		return ErrNotRunning
 	}
 
 	fc, err := newContextFromRequest(request, responseWriter, s, opts...)
