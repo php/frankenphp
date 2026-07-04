@@ -171,3 +171,21 @@ which can cause issues like incorrect HTTPS detection or wrong client IP address
 If you want to deploy your app on a cluster of machines, you can use [Docker Swarm](https://docs.docker.com/engine/swarm/stack-deploy/),
 which is compatible with the provided Compose files.
 To deploy on Kubernetes, take a look at [the Helm chart provided with API Platform](https://api-platform.com/docs/deployment/kubernetes/), which uses FrankenPHP.
+
+## Deploying on macOS
+
+FrankenPHP also runs natively on macOS.
+
+Install it with [Homebrew](https://brew.sh):
+
+```console
+brew install dunglas/frankenphp/frankenphp
+```
+
+To run FrankenPHP in the background and start it automatically at boot, use [`brew services`](https://github.com/Homebrew/homebrew-services):
+
+```console
+brew services start dunglas/frankenphp/frankenphp
+```
+
+The service runs FrankenPHP with the configuration file located at `$(brew --prefix)/etc/Caddyfile`.
