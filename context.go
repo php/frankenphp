@@ -154,7 +154,10 @@ func newContextFromMessage(message any, rw http.ResponseWriter, ctx context.Cont
 		responseWriter:    rw,
 		handlerParameters: message,
 		ctx:               ctx,
-		server:            fallbackServer,
+	}
+
+	if fc.server == nil {
+		fc.server = fallbackServer
 	}
 
 	return fc
