@@ -137,7 +137,7 @@ func TestServer(t *testing.T) {
 		assert.Equal(t, "Worker has APP_ENV=staging", body)
 	})
 
-	t.Run("duplicate_worker_filenames_in_php_server", func(t *testing.T) {
+	t.Run("error_on_duplicate_worker_filenames", func(t *testing.T) {
 		t.Cleanup(frankenphp.Shutdown)
 
 		err := frankenphp.Init(
@@ -150,20 +150,13 @@ func TestServer(t *testing.T) {
 		assert.Contains(t, err.Error(), "two workers in a server cannot have the same filename")
 	})
 
-	t.Run("duplicate_registration", func(t *testing.T) {
-		initServer(t,
-			frankenphp.WithServer(1, testDataDir, nil, map[string]string{
-				"PHP_SERVER_IDX": "first",
-			}),
-			frankenphp.WithServer(1, testDataDir+"/other/", nil, map[string]string{
-				"PHP_SERVER_IDX": "second",
-			}),
+	t.Run("error_on_duplicate_registration", func(t *testing.T) {
+		err := frankenphp.Init(
+			frankenphp.WithServer(1, testDataDir, nil, nil),
+			frankenphp.WithServer(1, testDataDir, nil, nil),
 		)
 
-		body, _ := serverGet(t, 1, "http://example.com/server-variable.php")
-
-		assert.Contains(t, body, "[PHP_SERVER_IDX] => first", "should contain the first server env variable")
-		assert.NotContains(t, body, "[PHP_SERVER_IDX] => second", "should not contain the duplicate server env variable")
+		assert.ErrorIs(t, err, frankenphp.ErrAlreadyRegistered)
 	})
 
 	t.Run("serve_http_validation", func(t *testing.T) {
@@ -183,6 +176,6 @@ func TestServer(t *testing.T) {
 
 		err := frankenphp.ServeHTTPSrv(1, w, req)
 
-		assert.ErrorIs(t, err, frankenphp.ServerNotFoundError)
+		assert.ErrorIs(t, err, frankenphp.ErrServerNotFound)
 	})
 }

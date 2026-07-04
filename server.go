@@ -34,10 +34,8 @@ func resetServers() {
 }
 
 func newServer(idx int, root string, splitPath []string, env map[string]string) (*server, error) {
-	existingServer, ok := servers[idx]
-	if ok {
-		globalLogger.Debug("server already registered, ignoring duplicate registration", "idx", idx)
-		return existingServer, nil
+	if _, ok := servers[idx]; ok {
+		return nil, fmt.Errorf("%w: duplicate registration of server with idx %d", ErrAlreadyRegistered, idx)
 	}
 
 	server := &server{
@@ -53,8 +51,8 @@ func newServer(idx int, root string, splitPath []string, env map[string]string) 
 		server.splitPath = []string{".php"}
 	}
 
-	if env == nil {
-		env = PrepareEnv(nil)
+	if server.env == nil {
+		server.env = PrepareEnv(nil)
 	}
 
 	servers[server.idx] = server

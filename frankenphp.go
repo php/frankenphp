@@ -49,7 +49,8 @@ var (
 	ErrMainThreadCreation = errors.New("error creating the main thread")
 	ErrScriptExecution    = errors.New("error during PHP script execution")
 	ErrNotRunning         = errors.New("FrankenPHP is not running. For proper configuration visit: https://frankenphp.dev/docs/config/#caddyfile-config")
-	ServerNotFoundError   = errors.New("server not found")
+	ErrServerNotFound     = errors.New("server not found")
+	ErrAlreadyRegistered  = errors.New("server already registered")
 
 	ErrInvalidRequestPath         = ErrRejected{"invalid request path", http.StatusBadRequest}
 	ErrInvalidContentLengthHeader = ErrRejected{"invalid Content-Length header", http.StatusBadRequest}
@@ -416,11 +417,7 @@ func ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) error 
 func ServeHTTPSrv(serverIdx int, responseWriter http.ResponseWriter, request *http.Request, opts ...RequestOption) error {
 	s, ok := servers[serverIdx]
 	if !ok {
-		existinggIdxs := ""
-		for idx := range servers {
-			existinggIdxs += fmt.Sprintf("%d, ", idx)
-		}
-		return errors.Join(ServerNotFoundError, fmt.Errorf("server with idx %d not found or not started, existing servers: %s", serverIdx, existinggIdxs))
+		return fmt.Errorf("%w: no server with idx %d was registered (%d servers registered overall)", ErrServerNotFound, serverIdx, len(servers))
 	}
 
 	return s.serveHTTP(responseWriter, request, opts...)
