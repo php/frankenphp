@@ -170,7 +170,7 @@ func (wc *workerConfig) toWorkerOptions() []frankenphp.WorkerOption {
 	if len(wc.MatchPath) > 0 {
 		matchFunc := caddyhttp.MatchPath(append([]string(nil), wc.MatchPath...))
 		_ = matchFunc.Provision(caddy.Context{})
-		opts = append(opts, frankenphp.WithWorkerMatchOn(matchFunc.Match))
+		opts = append(opts, frankenphp.WithWorkerMatcher(matchFunc.Match))
 	}
 	return opts
 }

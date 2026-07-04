@@ -104,7 +104,7 @@ func TestServer(t *testing.T) {
 			frankenphp.WithWorkers("counter", testDataDir+"worker-with-counter.php", 1, frankenphp.WithWorkerServerScope(server1Idx)),
 			frankenphp.WithWorkers("match", testDataDir+"worker-with-counter.php", 1,
 				frankenphp.WithWorkerServerScope(server2Idx),
-				frankenphp.WithWorkerMatchOn(func(r *http.Request) bool {
+				frankenphp.WithWorkerMatcher(func(r *http.Request) bool {
 					return strings.HasPrefix(r.URL.Path, "/match/")
 				}),
 			),

@@ -217,10 +217,10 @@ func WithWorkerWatchMode(watch []string) WorkerOption {
 	}
 }
 
-// WithWorkerMatchOn sets a request matcher for this worker
+// WithWorkerMatcher sets a request matcher for this worker
 // if the matcher returns true, the worker will be used to handle the request
 // if no request matcher is set, matching happens only by path (filename == root + request path)
-func WithWorkerMatchOn(matcherFunc func(*http.Request) bool) WorkerOption {
+func WithWorkerMatcher(matcherFunc func(*http.Request) bool) WorkerOption {
 	return func(w *workerOpt) error {
 		w.matchRequest = matcherFunc
 		return nil
