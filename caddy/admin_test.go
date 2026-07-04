@@ -325,7 +325,7 @@ func TestAddModuleWorkerViaAdminApi(t *testing.T) {
 	assert.NoError(t, err)
 	r.Header.Set("Content-Type", "text/caddyfile")
 	resp := tester.AssertResponseCode(r, http.StatusOK)
-	defer func() { require.NoError(t, resp.Body.Close()) }()
+	require.NoError(t, resp.Body.Close())
 
 	// Get the updated debug state to check if the worker was added
 	updatedDebugState := getDebugState(t, tester)
