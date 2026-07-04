@@ -277,7 +277,7 @@ func go_frankenphp_worker_handle_request_start(threadIndex C.uintptr_t) (C.bool,
 func go_frankenphp_finish_worker_request(threadIndex C.uintptr_t, retval *C.zval) {
 	thread := phpThreads[threadIndex]
 	ctx := thread.context()
-	fc := thread.frankenPHPContext()
+	fc := thread.handler.frankenPHPContext()
 
 	if retval != nil {
 		r, err := GoValue[any](unsafe.Pointer(retval))
@@ -309,7 +309,7 @@ func go_frankenphp_finish_worker_request(threadIndex C.uintptr_t, retval *C.zval
 //export go_frankenphp_finish_php_request
 func go_frankenphp_finish_php_request(threadIndex C.uintptr_t) {
 	thread := phpThreads[threadIndex]
-	fc := thread.frankenPHPContext()
+	fc := thread.handler.frankenPHPContext()
 
 	fc.closeContext()
 

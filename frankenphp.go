@@ -426,7 +426,7 @@ func ServeHTTPSrv(serverIdx int, responseWriter http.ResponseWriter, request *ht
 //export go_ub_write
 func go_ub_write(threadIndex C.uintptr_t, cBuf *C.char, length C.size_t) (C.size_t, C.bool) {
 	thread := phpThreads[threadIndex]
-	fc := thread.frankenPHPContext()
+	fc := thread.handler.frankenPHPContext()
 
 	if fc.isDone {
 		return 0, C.bool(true)
@@ -471,7 +471,7 @@ func go_ub_write(threadIndex C.uintptr_t, cBuf *C.char, length C.size_t) (C.size
 func go_apache_request_headers(threadIndex C.uintptr_t) (*C.go_string, C.size_t) {
 	thread := phpThreads[threadIndex]
 	ctx := thread.context()
-	fc := thread.frankenPHPContext()
+	fc := thread.handler.frankenPHPContext()
 
 	if fc.responseWriter == nil {
 		// worker mode, not handling a request
@@ -552,7 +552,7 @@ func splitRawHeader(rawHeader *C.char, length int) (string, string) {
 //export go_write_headers
 func go_write_headers(threadIndex C.uintptr_t, status C.int, headers *C.zend_llist) C.bool {
 	thread := phpThreads[threadIndex]
-	fc := thread.frankenPHPContext()
+	fc := thread.handler.frankenPHPContext()
 	if fc == nil {
 		return C.bool(false)
 	}
@@ -604,7 +604,7 @@ func go_write_headers(threadIndex C.uintptr_t, status C.int, headers *C.zend_lli
 //export go_sapi_flush
 func go_sapi_flush(threadIndex C.uintptr_t) bool {
 	thread := phpThreads[threadIndex]
-	fc := thread.frankenPHPContext()
+	fc := thread.handler.frankenPHPContext()
 	if fc == nil {
 		return false
 	}
@@ -633,7 +633,7 @@ func go_sapi_flush(threadIndex C.uintptr_t) bool {
 
 //export go_read_post
 func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (readBytes C.size_t) {
-	fc := phpThreads[threadIndex].frankenPHPContext()
+	fc := phpThreads[threadIndex].handler.frankenPHPContext()
 
 	if fc.responseWriter == nil {
 		return 0
@@ -652,7 +652,7 @@ func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (r
 
 //export go_read_cookies
 func go_read_cookies(threadIndex C.uintptr_t) *C.char {
-	request := phpThreads[threadIndex].frankenPHPContext().request
+	request := phpThreads[threadIndex].handler.frankenPHPContext().request
 	if request == nil {
 		return nil
 	}
@@ -669,23 +669,24 @@ func go_read_cookies(threadIndex C.uintptr_t) *C.char {
 	return C.CString(cookie)
 }
 
+// getLogger returns the logger and context savely even if phpThreads have not been created yet
 func getLogger(threadIndex C.uintptr_t) (*slog.Logger, context.Context) {
-	ctxHolder := phpThreads[threadIndex]
-	if ctxHolder == nil {
+	if threadIndex < 0 || threadIndex >= C.uintptr_t(len(phpThreads)) {
 		return globalLogger, globalCtx
 	}
 
-	ctx := ctxHolder.context()
-	if ctxHolder.handler == nil {
-		return globalLogger, ctx
+	thread := phpThreads[threadIndex]
+	if thread == nil || thread.handler == nil {
+		return globalLogger, globalCtx
 	}
 
-	fCtx := ctxHolder.frankenPHPContext()
-	if fCtx == nil || fCtx.logger == nil {
-		return globalLogger, ctx
+	fc := thread.handler.frankenPHPContext()
+	if fc == nil {
+		return globalLogger, globalCtx
 	}
 
-	return fCtx.logger, ctx
+	// logger and context must always be defined on fc
+	return fc.logger, fc.ctx
 }
 
 //export go_log
@@ -753,7 +754,7 @@ func mapToAttr(input map[string]any) []slog.Attr {
 
 //export go_is_context_done
 func go_is_context_done(threadIndex C.uintptr_t) C.bool {
-	return C.bool(phpThreads[threadIndex].frankenPHPContext().isDone)
+	return C.bool(phpThreads[threadIndex].handler.frankenPHPContext().isDone)
 }
 
 //export go_schedule_opcache_reset

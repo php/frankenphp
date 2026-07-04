@@ -176,12 +176,8 @@ func (thread *phpThread) transitionToNewHandler() string {
 	return thread.handler.beforeScriptExecution()
 }
 
-func (thread *phpThread) frankenPHPContext() *frankenPHPContext {
-	return thread.handler.frankenPHPContext()
-}
-
 func (thread *phpThread) context() context.Context {
-	if fc := thread.frankenPHPContext(); fc != nil && fc.ctx != nil {
+	if fc := thread.handler.frankenPHPContext(); fc != nil && fc.ctx != nil {
 		return fc.ctx
 	}
 

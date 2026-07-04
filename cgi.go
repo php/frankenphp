@@ -177,11 +177,11 @@ func registerPreparedEnv(fc *frankenPHPContext, preparedEnvLen int) {
 //export go_register_server_variables
 func go_register_server_variables(threadIndex C.uintptr_t, trackVarsArray *C.zval) {
 	thread := phpThreads[threadIndex]
-	fc := thread.frankenPHPContext()
+	fc := thread.handler.frankenPHPContext()
 
 	if fc.request != nil {
 		addKnownVariablesToServer(fc, trackVarsArray)
-		addHeadersToServer(thread.context(), fc.request, trackVarsArray)
+		addHeadersToServer(fc.ctx, fc.request, trackVarsArray)
 	}
 
 	// The Prepared Environment is registered last and can overwrite any previous values
@@ -293,7 +293,7 @@ func splitPos(path string, splitPath []string) int {
 //export go_update_request_info
 func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) *C.char {
 	thread := phpThreads[threadIndex]
-	fc := thread.frankenPHPContext()
+	fc := thread.handler.frankenPHPContext()
 	request := fc.request
 
 	if request == nil {

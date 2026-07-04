@@ -21,7 +21,7 @@ type mercureContext struct {
 func go_mercure_publish(threadIndex C.uintptr_t, topics *C.struct__zval_struct, data *C.zend_string, private bool, id, typ *C.zend_string, retry uint64) (generatedID *C.zend_string, error C.short) {
 	thread := phpThreads[threadIndex]
 	ctx := thread.context()
-	fc := thread.frankenPHPContext()
+	fc := thread.handler.frankenPHPContext()
 
 	if fc.mercureHub == nil {
 		if fc.logger.Enabled(ctx, slog.LevelError) {
