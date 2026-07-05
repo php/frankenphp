@@ -383,3 +383,22 @@ func testThreadCalculationError(t *testing.T, o *opt) {
 	_, err := calculateMaxThreads(o)
 	assert.Error(t, err, "configuration must error")
 }
+
+func TestContextAndLoggerMustNotBeNil(t *testing.T) {
+	log, ctx := getLogger(0)
+	assert.NotNil(t, log, "logger is defined if all threads are inactive")
+	assert.NotNil(t, ctx, "context is defined if all threads are inactive")
+
+	fc := newContextFromMessage(nil, nil, nil, &worker{})
+	assert.NotNil(t, fc.logger, "logger is defined for message context")
+	assert.NotNil(t, fc.ctx, "context is defined for message context")
+
+	r := httptest.NewRequest("GET", "http://localhost/index.php", nil)
+	fc, _ = newContextFromRequest(r, nil, &server{})
+	assert.NotNil(t, fc.logger, "logger is defined for request context")
+	assert.NotNil(t, fc.ctx, "context is defined for request context")
+
+	fc, _ = newWorkerDummyContext(&worker{})
+	assert.NotNil(t, fc.logger, "logger is defined for worker dummy context")
+	assert.NotNil(t, fc.ctx, "context is defined for worker dummy context")
+}

@@ -160,6 +160,10 @@ func newContextFromMessage(message any, rw http.ResponseWriter, ctx context.Cont
 		fc.server = fallbackServer
 	}
 
+	if fc.ctx == nil {
+		fc.ctx = globalCtx
+	}
+
 	return fc
 }
 
