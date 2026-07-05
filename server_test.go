@@ -116,24 +116,26 @@ func TestServer(t *testing.T) {
 	})
 
 	t.Run("worker_env_inheritance", func(t *testing.T) {
+		envTestDataDir := testDataDir + "env"
 		initServers(
 			t,
-			frankenphp.WithServer(1, testDataDir, nil, map[string]string{
+			frankenphp.WithServer(1, envTestDataDir, nil, map[string]string{
 				"FROM_SERVER_ENV": "original",
 				"FROM_WORKER_ENV": "overridden",
 			}),
 			frankenphp.WithWorkers(
 				"env",
-				testDataDir+"env/env.php",
+				envTestDataDir+"/env.php",
 				1,
 				frankenphp.WithWorkerServerScope(1),
+				frankenphp.WithWorkerMatcher(func(r *http.Request) bool { return true }),
 				frankenphp.WithWorkerEnv(map[string]string{
 					"FROM_WORKER_ENV": "original",
 				}),
 			),
 		)
 
-		body := serverGet(t, 1, "http://example.com/env/env.php?keys[]=FROM_SERVER_ENV&keys[]=FROM_WORKER_ENV")
+		body := serverGet(t, 1, "http://example.com/env.php?keys[]=FROM_SERVER_ENV&keys[]=FROM_WORKER_ENV")
 
 		assert.Equal(
 			t,
