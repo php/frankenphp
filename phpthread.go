@@ -4,7 +4,6 @@ package frankenphp
 // #include "frankenphp.h"
 import "C"
 import (
-	"context"
 	"log/slog"
 	"runtime"
 	"sync"
@@ -174,14 +173,6 @@ func (thread *phpThread) transitionToNewHandler() string {
 
 	// execute beforeScriptExecution of the new handler
 	return thread.handler.beforeScriptExecution()
-}
-
-func (thread *phpThread) context() context.Context {
-	if fc := thread.handler.frankenPHPContext(); fc != nil && fc.ctx != nil {
-		return fc.ctx
-	}
-
-	return globalCtx
 }
 
 func (thread *phpThread) name() string {

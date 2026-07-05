@@ -276,13 +276,12 @@ func go_frankenphp_worker_handle_request_start(threadIndex C.uintptr_t) (C.bool,
 //export go_frankenphp_finish_worker_request
 func go_frankenphp_finish_worker_request(threadIndex C.uintptr_t, retval *C.zval) {
 	thread := phpThreads[threadIndex]
-	ctx := thread.context()
 	fc := thread.handler.frankenPHPContext()
 
 	if retval != nil {
 		r, err := GoValue[any](unsafe.Pointer(retval))
-		if err != nil && globalLogger.Enabled(ctx, slog.LevelError) {
-			globalLogger.LogAttrs(ctx, slog.LevelError, "cannot convert return value", slog.Any("error", err), slog.Int("thread", thread.threadIndex))
+		if err != nil && fc.logger.Enabled(fc.ctx, slog.LevelError) {
+			fc.logger.LogAttrs(fc.ctx, slog.LevelError, "cannot convert return value", slog.Any("error", err), slog.Int("thread", thread.threadIndex))
 		}
 
 		fc.handlerReturn = r
@@ -295,11 +294,11 @@ func go_frankenphp_finish_worker_request(threadIndex C.uintptr_t, retval *C.zval
 	thread.handler.(*workerThread).workerFrankenPHPContext = nil
 	thread.contextMu.Unlock()
 
-	if globalLogger.Enabled(ctx, slog.LevelDebug) {
+	if fc.logger.Enabled(fc.ctx, slog.LevelDebug) {
 		if fc.request == nil {
-			fc.logger.LogAttrs(ctx, slog.LevelDebug, "request handling finished", slog.String("worker", fc.worker.name), slog.Int("thread", thread.threadIndex))
+			fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "request handling finished", slog.String("worker", fc.worker.name), slog.Int("thread", thread.threadIndex))
 		} else {
-			fc.logger.LogAttrs(ctx, slog.LevelDebug, "request handling finished", slog.String("worker", fc.worker.name), slog.Int("thread", thread.threadIndex), slog.String("url", fc.request.RequestURI))
+			fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "request handling finished", slog.String("worker", fc.worker.name), slog.Int("thread", thread.threadIndex), slog.String("url", fc.request.RequestURI))
 		}
 	}
 }
@@ -313,8 +312,7 @@ func go_frankenphp_finish_php_request(threadIndex C.uintptr_t) {
 
 	fc.closeContext()
 
-	ctx := thread.context()
-	if fc.logger.Enabled(ctx, slog.LevelDebug) {
-		fc.logger.LogAttrs(ctx, slog.LevelDebug, "request handling finished", slog.Int("thread", thread.threadIndex), slog.String("url", fc.request.RequestURI))
+	if fc.logger.Enabled(fc.ctx, slog.LevelDebug) {
+		fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "request handling finished", slog.Int("thread", thread.threadIndex), slog.String("url", fc.request.RequestURI))
 	}
 }

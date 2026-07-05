@@ -200,8 +200,8 @@ func (fc *frankenPHPContext) validate() error {
 }
 
 func (fc *frankenPHPContext) clientHasClosed() bool {
-	if fc.ctx == nil {
-		return false
+	if fc.request == nil {
+		return false // not in HTTP context
 	}
 
 	select {

@@ -441,27 +441,14 @@ func go_ub_write(threadIndex C.uintptr_t, cBuf *C.char, length C.size_t) (C.size
 		writer = fc.responseWriter
 	}
 
-	var ctx context.Context
-
 	i, e := writer.Write(unsafe.Slice((*byte)(unsafe.Pointer(cBuf)), length))
-	if e != nil {
-		ctx = thread.context()
-
-		if fc.logger.Enabled(ctx, slog.LevelWarn) {
-			fc.logger.LogAttrs(ctx, slog.LevelWarn, "write error", slog.Any("error", e))
-		}
+	if e != nil && fc.logger.Enabled(fc.ctx, slog.LevelWarn) {
+		fc.logger.LogAttrs(fc.ctx, slog.LevelWarn, "write error", slog.Any("error", e))
 	}
 
-	if fc.responseWriter == nil {
+	if fc.responseWriter == nil && fc.logger.Enabled(fc.ctx, slog.LevelInfo) {
 		// probably starting a worker script, log the output
-
-		if ctx == nil {
-			ctx = thread.context()
-		}
-
-		if fc.logger.Enabled(ctx, slog.LevelInfo) {
-			fc.logger.LogAttrs(ctx, slog.LevelInfo, writer.(*bytes.Buffer).String())
-		}
+		fc.logger.LogAttrs(fc.ctx, slog.LevelInfo, writer.(*bytes.Buffer).String())
 	}
 
 	return C.size_t(i), C.bool(fc.clientHasClosed())
@@ -470,14 +457,13 @@ func go_ub_write(threadIndex C.uintptr_t, cBuf *C.char, length C.size_t) (C.size
 //export go_apache_request_headers
 func go_apache_request_headers(threadIndex C.uintptr_t) (*C.go_string, C.size_t) {
 	thread := phpThreads[threadIndex]
-	ctx := thread.context()
 	fc := thread.handler.frankenPHPContext()
 
 	if fc.responseWriter == nil {
 		// worker mode, not handling a request
 
-		if globalLogger.Enabled(ctx, slog.LevelDebug) {
-			globalLogger.LogAttrs(ctx, slog.LevelDebug, "apache_request_headers() called in non-HTTP context", slog.String("worker", fc.worker.name))
+		if fc.logger.Enabled(fc.ctx, slog.LevelDebug) {
+			fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "apache_request_headers() called in non-HTTP context", slog.String("worker", fc.worker.name))
 		}
 
 		return nil, 0
@@ -506,11 +492,11 @@ func go_apache_request_headers(threadIndex C.uintptr_t) (*C.go_string, C.size_t)
 	return sd, C.size_t(len(fc.request.Header))
 }
 
-func addHeader(ctx context.Context, fc *frankenPHPContext, h *C.sapi_header_struct) {
+func addHeader(fc *frankenPHPContext, h *C.sapi_header_struct) {
 	key, val := splitRawHeader(h.header, int(h.header_len))
 	if key == "" {
-		if fc.logger.Enabled(ctx, slog.LevelDebug) {
-			fc.logger.LogAttrs(ctx, slog.LevelDebug, "invalid header", slog.String("header", C.GoStringN(h.header, C.int(h.header_len))))
+		if fc.logger.Enabled(fc.ctx, slog.LevelDebug) {
+			fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "invalid header", slog.String("header", C.GoStringN(h.header, C.int(h.header_len))))
 		}
 
 		return
@@ -570,7 +556,7 @@ func go_write_headers(threadIndex C.uintptr_t, status C.int, headers *C.zend_lli
 	for current != nil {
 		h := (*C.sapi_header_struct)(unsafe.Pointer(&(current.data)))
 
-		addHeader(thread.context(), fc, h)
+		addHeader(fc, h)
 		current = current.next
 	}
 
@@ -579,10 +565,9 @@ func go_write_headers(threadIndex C.uintptr_t, status C.int, headers *C.zend_lli
 	// go panics on invalid status code
 	// https://github.com/golang/go/blob/9b8742f2e79438b9442afa4c0a0139d3937ea33f/src/net/http/server.go#L1162
 	if goStatus < 100 || goStatus > 999 {
-		ctx := thread.context()
 
-		if globalLogger.Enabled(ctx, slog.LevelWarn) {
-			globalLogger.LogAttrs(ctx, slog.LevelWarn, "Invalid response status code", slog.Int("status_code", goStatus))
+		if fc.logger.Enabled(fc.ctx, slog.LevelWarn) {
+			fc.logger.LogAttrs(fc.ctx, slog.LevelWarn, "Invalid response status code", slog.Int("status_code", goStatus))
 		}
 
 		goStatus = 500
@@ -621,10 +606,8 @@ func go_sapi_flush(threadIndex C.uintptr_t) bool {
 		fc.responseController = http.NewResponseController(fc.responseWriter)
 	}
 	if err := fc.responseController.Flush(); err != nil {
-		ctx := thread.context()
-
-		if globalLogger.Enabled(ctx, slog.LevelWarn) {
-			globalLogger.LogAttrs(ctx, slog.LevelWarn, "the current responseWriter is not a flusher, if you are not using a custom build, please report this issue", slog.Any("error", err))
+		if fc.logger.Enabled(fc.ctx, slog.LevelWarn) {
+			fc.logger.LogAttrs(fc.ctx, slog.LevelWarn, "the current responseWriter is not a flusher, if you are not using a custom build, please report this issue", slog.Any("error", err))
 		}
 	}
 
