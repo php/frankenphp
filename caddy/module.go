@@ -50,6 +50,7 @@ type FrankenPHPModule struct {
 	resolvedDocumentRoot string
 	preparedEnv          frankenphp.PreparedEnv
 	requestOptions       []frankenphp.RequestOption
+	server               *frankenphp.Server
 }
 
 // CaddyModule returns the Caddy module information.
@@ -72,6 +73,12 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 	}
 	if fapp == nil {
 		return fmt.Errorf(`expected ctx.App("frankenphp") to return *FrankenPHPApp, got nil`)
+	}
+
+	if f.ServerIdx <= 0 {
+		// when registering via JSON configuration, it's possible that no idx was yet assigned to this module
+		f.ServerIdx = len(fapp.modules) + 1
+		caddy.Log().Warn("\"php\" is missing a \"server_idx\", assigning one on-the-fly")
 	}
 
 	f.assignMercureHub(ctx)
@@ -160,29 +167,10 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 
 	f.preparedEnv = frankenphp.PrepareEnv(requestEnv)
 
-	if fapp.moduleWorkers == nil {
-		fapp.moduleWorkers = make(map[int][]workerConfig)
-	}
+	server, serverOpt := frankenphp.WithServer(f.ServerIdx, f.resolvedDocumentRoot, f.SplitPath, resolvedEnv)
+	f.server = server
 
-	if f.ServerIdx <= 0 {
-		// when registering via JSON configuration, it's possible that no idx was yet assigned
-		f.ServerIdx = len(fapp.moduleWorkers) + 1
-		caddy.Log().Warn("\"php\" is missing a \"server_idx\", assigning one on-the-fly")
-	}
-
-	if _, ok := fapp.moduleWorkers[f.ServerIdx]; ok {
-		// server was already registered, avoid duplicate registrations
-		return nil
-	}
-
-	fapp.moduleWorkers[f.ServerIdx] = f.Workers
-
-	fapp.opts = append(fapp.opts, frankenphp.WithServer(
-		f.ServerIdx,
-		f.resolvedDocumentRoot,
-		f.SplitPath,
-		resolvedEnv,
-	))
+	fapp.registerModule(f, serverOpt)
 
 	return nil
 }
@@ -242,7 +230,7 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 		opts = append(opts, frankenphp.WithRequestPreparedEnv(env))
 	}
 
-	err := frankenphp.ServeHTTPSrv(f.ServerIdx, w, r, opts...)
+	err := f.server.ServeHTTP(w, r, opts...)
 
 	if err != nil && !errors.As(err, &frankenphp.ErrRejected{}) {
 		return caddyhttp.Error(http.StatusInternalServerError, err)

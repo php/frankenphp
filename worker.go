@@ -124,11 +124,11 @@ func newWorker(o workerOpt) (*worker, error) {
 	}
 
 	var server *server
-	if o.serverIdx != 0 {
-		server = servers[o.serverIdx]
+	if o.server != nil {
+		server = servers[o.server.idx]
 
 		if server == nil {
-			return nil, fmt.Errorf("worker was registered with a non-existent server idx %d: %q", o.serverIdx, absFileName)
+			return nil, fmt.Errorf("worker was registered with a non-existent server idx %d: %q", o.server.idx, absFileName)
 		}
 	} else if w := globalWorkersByPath[absFileName]; w != nil {
 		return w, fmt.Errorf("two global workers cannot have the same filename: %q", absFileName)

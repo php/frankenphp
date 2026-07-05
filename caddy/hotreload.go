@@ -26,7 +26,6 @@ type hotReloadConfig struct {
 	Watch []string `json:"watch"`
 }
 
-// TODO: this should be scoped to the php_server to avoid duplicate hot reloads
 func (f *FrankenPHPModule) configureHotReload(app *FrankenPHPApp) error {
 	if f.HotReload == nil {
 		return nil

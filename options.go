@@ -54,7 +54,7 @@ type workerOpt struct {
 	onThreadShutdown       func(int)
 	onServerStartup        func()
 	onServerShutdown       func()
-	serverIdx              int
+	server                 *Server
 }
 
 // WithContext sets the main context to use.
@@ -229,9 +229,10 @@ func WithWorkerMatcher(matcherFunc func(*http.Request) bool) WorkerOption {
 
 // WithWorkerServerScope scopes the worker to a server instance.
 // Only requests that are handled by the server instance will reach the worker.
-func WithWorkerServerScope(serverIdx int) WorkerOption {
+func WithWorkerServerScope(server *Server) WorkerOption {
 	return func(w *workerOpt) error {
-		w.serverIdx = serverIdx
+		w.server = server
+
 		return nil
 	}
 }
@@ -296,26 +297,28 @@ func WithServer(
 	resolvedDocumentRoot string,
 	splitPath []string,
 	env map[string]string,
-) Option {
-	return func(o *opt) error {
-		if idx <= 0 {
-			return fmt.Errorf("server idx must be > 0, got %d", idx)
-		}
+) (*Server, Option) {
+	return &Server{
+			idx: idx,
+		}, func(o *opt) error {
+			if idx <= 0 {
+				return fmt.Errorf("server idx must be > 0, got %d", idx)
+			}
 
-		root, err := fastabs.FastAbs(resolvedDocumentRoot)
-		if err != nil {
-			return err
-		}
+			root, err := fastabs.FastAbs(resolvedDocumentRoot)
+			if err != nil {
+				return err
+			}
 
-		if err := normalizeSplitPath(splitPath); err != nil {
-			return err
-		}
+			if err := normalizeSplitPath(splitPath); err != nil {
+				return err
+			}
 
-		_, err = newServer(idx, root, splitPath, PrepareEnv(env))
+			_, err = newServer(idx, root, splitPath, PrepareEnv(env))
 
-		if err != nil {
-			return err
+			if err != nil {
+				return err
+			}
+			return nil
 		}
-		return nil
-	}
 }

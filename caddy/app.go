@@ -59,11 +59,11 @@ type FrankenPHPApp struct {
 	// EXPERIMENTAL: MaxRequests sets the maximum number of requests a PHP thread handles before restarting (0 = unlimited)
 	MaxRequests int `json:"max_requests,omitempty"`
 
-	opts          []frankenphp.Option
-	metrics       frankenphp.Metrics
-	ctx           context.Context
-	logger        *slog.Logger
-	moduleWorkers map[int][]workerConfig
+	opts    []frankenphp.Option
+	metrics frankenphp.Metrics
+	ctx     context.Context
+	logger  *slog.Logger
+	modules map[int]*FrankenPHPModule
 }
 
 var errIni = errors.New(`"php_ini" must be in the format: php_ini "<key>" "<value>"`)
@@ -127,10 +127,13 @@ func (f *FrankenPHPApp) Start() error {
 	}
 
 	// register module workers
-	for serverIdx, workers := range f.moduleWorkers {
-		for _, w := range workers {
+	for _, module := range f.modules {
+		for _, w := range module.Workers {
 			w.FileName = repl.ReplaceKnown(w.FileName, "")
-			workerOptions := append(w.toWorkerOptions(), frankenphp.WithWorkerServerScope(serverIdx))
+			if module.server == nil {
+				return fmt.Errorf("module %d has no server", module.ServerIdx)
+			}
+			workerOptions := append(w.toWorkerOptions(), frankenphp.WithWorkerServerScope(module.server))
 			f.opts = append(f.opts, frankenphp.WithWorkers(w.Name, w.FileName, w.Num, workerOptions...))
 		}
 	}
@@ -139,6 +142,10 @@ func (f *FrankenPHPApp) Start() error {
 	if err := frankenphp.Init(f.opts...); err != nil {
 		return err
 	}
+
+	// after startup, reset all configuration for future reloads or tests
+	// it is necessary to do this here since caddy will re-use the app instance
+	f.reset()
 
 	return nil
 }
@@ -155,19 +162,35 @@ func (f *FrankenPHPApp) Stop() error {
 		frankenphp.Shutdown()
 	}
 
-	// reset the configuration so it doesn't bleed into later tests
+	return nil
+}
+
+func (f *FrankenPHPApp) reset() {
 	f.Workers = nil
 	f.NumThreads = 0
 	f.MaxWaitTime = 0
 	f.MaxIdleTime = 0
 	f.MaxRequests = 0
-	f.moduleWorkers = nil
-
+	f.PhpIni = nil
+	f.modules = nil
+	f.opts = nil
+	f.ctx = nil
+	f.metrics = nil
 	optionsMU.Lock()
 	options = nil
 	optionsMU.Unlock()
+}
 
-	return nil
+func (f *FrankenPHPApp) registerModule(m *FrankenPHPModule, serverOpt frankenphp.Option) {
+	if f.modules == nil {
+		f.modules = make(map[int]*FrankenPHPModule)
+	}
+
+	if _, ok := f.modules[m.ServerIdx]; !ok {
+		// only register the module if it's not already registered
+		f.modules[m.ServerIdx] = m
+		f.opts = append(f.opts, serverOpt)
+	}
 }
 
 // UnmarshalCaddyfile implements caddyfile.Unmarshaler.

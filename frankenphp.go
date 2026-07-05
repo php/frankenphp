@@ -411,18 +411,6 @@ func ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) error 
 	return fallbackServer.serveHTTP(responseWriter, request, opts...)
 }
 
-// ServeHTTPSrv executes a PHP script with a registered server.
-// this allows using a pre-configured server instance.
-// otherwise, it is equivalent to calling ServeHTTP.
-func ServeHTTPSrv(serverIdx int, responseWriter http.ResponseWriter, request *http.Request, opts ...RequestOption) error {
-	s, ok := servers[serverIdx]
-	if !ok {
-		return fmt.Errorf("%w: no server with idx %d was registered (%d servers registered overall)", ErrServerNotFound, serverIdx, len(servers))
-	}
-
-	return s.serveHTTP(responseWriter, request, opts...)
-}
-
 //export go_ub_write
 func go_ub_write(threadIndex C.uintptr_t, cBuf *C.char, length C.size_t) (C.size_t, C.bool) {
 	thread := phpThreads[threadIndex]

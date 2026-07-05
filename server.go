@@ -18,6 +18,10 @@ type server struct {
 	workerOpts                []workerOpt
 }
 
+type Server struct {
+	idx int
+}
+
 var (
 	servers        = make(map[int]*server)
 	fallbackServer = &server{
@@ -71,6 +75,18 @@ func (s *server) addWorker(w *worker) error {
 	s.workersByPath[w.fileName] = w
 
 	return nil
+}
+
+// ServeHTTPSrv executes a PHP script with a registered server.
+// this allows using a pre-configured server instance.
+// otherwise, it is equivalent to calling ServeHTTP.
+func (se *Server) ServeHTTP(responseWriter http.ResponseWriter, request *http.Request, opts ...RequestOption) error {
+	s, ok := servers[se.idx]
+	if !ok {
+		return fmt.Errorf("%w: no server with idx %d was registered (%d servers registered overall)", ErrServerNotFound, se.idx, len(servers))
+	}
+
+	return s.serveHTTP(responseWriter, request, opts...)
 }
 
 func (s *server) serveHTTP(responseWriter http.ResponseWriter, request *http.Request, opts ...RequestOption) error {

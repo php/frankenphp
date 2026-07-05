@@ -40,9 +40,6 @@ func TestRestartWorkerViaAdminApi(t *testing.T) {
 		}
 		`, "caddyfile")
 
-	// make sure workers are not still running from any previous tests
-	assertAdminResponse(t, tester, "POST", "workers/restart", http.StatusOK, "workers restarted successfully\n")
-
 	tester.AssertGetResponse("http://localhost:"+testPort+"/", http.StatusOK, "requests:1")
 	tester.AssertGetResponse("http://localhost:"+testPort+"/", http.StatusOK, "requests:2")
 
@@ -79,6 +76,7 @@ func TestShowTheCorrectThreadDebugStatus(t *testing.T) {
 	debugState := getDebugState(t, tester)
 
 	// assert that the correct threads are present in the thread info
+	assert.Len(t, debugState.ThreadDebugStates, 3)
 	assert.Equal(t, debugState.ThreadDebugStates[0].State, "ready")
 	assert.Contains(t, debugState.ThreadDebugStates[1].Name, "worker-with-counter.php")
 	assert.Contains(t, debugState.ThreadDebugStates[2].Name, "index.php")
