@@ -2,7 +2,6 @@ package frankenphp
 
 import (
 	"fmt"
-	"log/slog"
 	"net/http"
 )
 
@@ -17,7 +16,6 @@ type server struct {
 	workersByPath             map[string]*worker
 	workersWithRequestMatcher []*worker
 	workerOpts                []workerOpt
-	logger                    *slog.Logger
 }
 
 var (

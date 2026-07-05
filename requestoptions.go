@@ -173,7 +173,7 @@ func ensurePreparedEnv(env PreparedEnv) PreparedEnv {
 
 func WithOriginalRequest(r *http.Request) RequestOption {
 	return func(o *frankenPHPContext) error {
-		o.originalRequest = r
+		o.requestURI = r.URL.RequestURI()
 
 		return nil
 	}
@@ -183,6 +183,10 @@ func WithOriginalRequest(r *http.Request) RequestOption {
 func WithRequestLogger(logger *slog.Logger) RequestOption {
 	return func(o *frankenPHPContext) error {
 		o.logger = logger
+
+		if o.logger == nil {
+			o.logger = globalLogger // fall back to global logger
+		}
 
 		return nil
 	}

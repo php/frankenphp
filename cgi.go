@@ -93,13 +93,6 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 	serverPort := reqPort
 	contentLength := request.Header.Get("Content-Length")
 
-	var requestURI string
-	if fc.originalRequest != nil {
-		requestURI = fc.originalRequest.URL.RequestURI()
-	} else {
-		requestURI = fc.requestURI
-	}
-
 	phpSelf := fc.scriptName + fc.pathInfo
 
 	C.frankenphp_register_server_vars(trackVarsArray, C.frankenphp_server_vars{
@@ -136,8 +129,8 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		server_protocol_len: C.size_t(len(request.Proto)),
 		http_host:           toUnsafeChar(request.Host),
 		http_host_len:       C.size_t(len(request.Host)),
-		request_uri:         toUnsafeChar(requestURI),
-		request_uri_len:     C.size_t(len(requestURI)),
+		request_uri:         toUnsafeChar(fc.requestURI),
+		request_uri_len:     C.size_t(len(fc.requestURI)),
 		ssl_cipher:          toUnsafeChar(sslCipher),
 		ssl_cipher_len:      C.size_t(len(sslCipher)),
 

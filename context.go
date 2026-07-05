@@ -17,21 +17,20 @@ import (
 type frankenPHPContext struct {
 	mercureContext
 
-	ctx             context.Context
-	documentRoot    string
-	splitPath       []string
-	env             PreparedEnv
-	logger          *slog.Logger
-	request         *http.Request
-	originalRequest *http.Request
-	worker          *worker
+	ctx          context.Context
+	documentRoot string
+	splitPath    []string
+	env          PreparedEnv
+	logger       *slog.Logger
+	request      *http.Request
+	worker       *worker
+	server       *server
 
 	docURI         string
 	pathInfo       string
 	scriptName     string
 	scriptFilename string
 	requestURI     string
-	server         *server
 
 	// Whether the request is already closed by us
 	isDone bool
@@ -68,11 +67,10 @@ func newContextFromRequest(request *http.Request, responseWriter http.ResponseWr
 		startedAt:      time.Now(),
 		server:         s,
 		splitPath:      s.splitPath,
-		logger:         s.logger,
+		logger:         globalLogger,
 		request:        request,
 		documentRoot:   s.root,
 		responseWriter: responseWriter,
-		requestURI:     request.URL.RequestURI(),
 	}
 
 	for _, o := range opts {
@@ -81,7 +79,7 @@ func newContextFromRequest(request *http.Request, responseWriter http.ResponseWr
 		}
 	}
 
-	// see if a worker matches the request
+	// assign a worker directly if it has a request matcher
 	if fc.worker == nil {
 		for _, w := range s.workersWithRequestMatcher {
 			if w.matchRequest(request) {
@@ -89,10 +87,6 @@ func newContextFromRequest(request *http.Request, responseWriter http.ResponseWr
 				break
 			}
 		}
-	}
-
-	if fc.logger == nil {
-		fc.logger = globalLogger
 	}
 
 	if fc.documentRoot == "" {
@@ -104,6 +98,11 @@ func newContextFromRequest(request *http.Request, responseWriter http.ResponseWr
 				return nil, err
 			}
 		}
+	}
+
+	if fc.requestURI == "" {
+		// if no WithOriginalRequest() was passed, use the URI from the actual request
+		fc.requestURI = fc.request.URL.RequestURI()
 	}
 
 	splitCgiPath(fc)
