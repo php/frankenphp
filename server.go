@@ -77,13 +77,13 @@ func (s *server) addWorker(w *worker) error {
 	return nil
 }
 
-// ServeHTTPSrv executes a PHP script with a registered server.
-// this allows using a pre-configured server instance.
-// otherwise, it is equivalent to calling ServeHTTP.
-func (se *Server) ServeHTTP(responseWriter http.ResponseWriter, request *http.Request, opts ...RequestOption) error {
-	s, ok := servers[se.idx]
+// ServeHTTP executes a PHP script on the registered server.
+// The request will be scoped to the server instance that was registered via WithServer().
+// Otherwise, it is equivalent to calling ServeHTTP.
+func (publicServer *Server) ServeHTTP(responseWriter http.ResponseWriter, request *http.Request, opts ...RequestOption) error {
+	s, ok := servers[publicServer.idx]
 	if !ok {
-		return fmt.Errorf("%w: no server with idx %d was registered (%d servers registered overall)", ErrServerNotFound, se.idx, len(servers))
+		return fmt.Errorf("%w: server with idx %d was not initialized (%d servers initialized overall)", ErrServerNotFound, publicServer.idx, len(servers))
 	}
 
 	return s.serveHTTP(responseWriter, request, opts...)

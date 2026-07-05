@@ -126,7 +126,7 @@ func (f *FrankenPHPApp) Start() error {
 		f.opts = append(f.opts, frankenphp.WithWorkers(w.Name, w.FileName, w.Num, w.toWorkerOptions()...))
 	}
 
-	// register module workers
+	// register module workers that are scoped to a php_server or php block
 	for _, module := range f.modules {
 		for _, w := range module.Workers {
 			w.FileName = repl.ReplaceKnown(w.FileName, "")
@@ -143,8 +143,8 @@ func (f *FrankenPHPApp) Start() error {
 		return err
 	}
 
-	// after startup, reset all configuration for future reloads or tests
-	// it is necessary to do this here since caddy will re-use the app instance
+	// after startup, reset all configuration on the app instance
+	// this must happen here since the instance is re-used across reloads and tests
 	f.reset()
 
 	return nil
@@ -181,13 +181,18 @@ func (f *FrankenPHPApp) reset() {
 	optionsMU.Unlock()
 }
 
-func (f *FrankenPHPApp) registerModule(m *FrankenPHPModule, serverOpt frankenphp.Option) {
+// register the php_server or php block to the app instance
+func (f *FrankenPHPApp) registerServer(m *FrankenPHPModule) {
 	if f.modules == nil {
 		f.modules = make(map[int]*FrankenPHPModule)
 	}
 
+	server, serverOpt := frankenphp.WithServer(m.ServerIdx, m.resolvedDocumentRoot, m.SplitPath, m.resolvedEnv)
+	m.server = server
+
+	// only register the server module if it's not already registered to avoid duplicate modules
+	// this can happen if multiple "php" directives are used in the same caddy route block (like with worker matches)
 	if _, ok := f.modules[m.ServerIdx]; !ok {
-		// only register the module if it's not already registered
 		f.modules[m.ServerIdx] = m
 		f.opts = append(f.opts, serverOpt)
 	}

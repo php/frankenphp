@@ -442,7 +442,7 @@ func TestCustomCaddyVariablesInEnv(t *testing.T) {
 	tester.AssertGetResponse("http://localhost:"+testPort+"/worker-env.php", http.StatusOK, "hello world")
 }
 
-func TestServerDirective(t *testing.T) {
+func TestPHPServerDirective(t *testing.T) {
 	tester := caddytest.NewTester(t)
 	initServer(t, tester, `
 		{
@@ -463,7 +463,7 @@ func TestServerDirective(t *testing.T) {
 	tester.AssertGetResponse("http://localhost:"+testPort+"/not-found.txt", http.StatusOK, "I am by birth a Genevese (i not set)")
 }
 
-func TestServerDirectiveDisableFileServer(t *testing.T) {
+func TestPHPServerDirectiveDisableFileServer(t *testing.T) {
 	tester := caddytest.NewTester(t)
 	initServer(t, tester, `
 		{
@@ -487,7 +487,7 @@ func TestServerDirectiveDisableFileServer(t *testing.T) {
 	tester.AssertGetResponse("http://localhost:"+testPort+"/not-found.txt", http.StatusOK, "I am by birth a Genevese (i not set)")
 }
 
-func TestServerGlobals(t *testing.T) {
+func TestPHPServerGlobals(t *testing.T) {
 	documentRoot, _ := filepath.Abs("../testdata")
 	scriptFilename := filepath.Join(documentRoot, "server-globals.php")
 
@@ -539,7 +539,7 @@ REQUEST_URI: /server-globals.php/en
 	)
 }
 
-func TestWorkerServerGlobals(t *testing.T) {
+func TestWorkerPHPServerGlobals(t *testing.T) {
 	documentRoot, _ := filepath.Abs("../testdata")
 	documentRoot2, _ := filepath.Abs("../caddy")
 	scriptFilename := documentRoot + string(filepath.Separator) + "server-globals.php"
@@ -859,7 +859,7 @@ func TestWorkerMetrics(t *testing.T) {
 }
 
 // #2477: verify one pool per worker, no "_0" duplicates.
-func TestServerWorkerMatchPoolCount(t *testing.T) {
+func TestPhpServerWorkerMatchPoolCount(t *testing.T) {
 	tester := caddytest.NewTester(t)
 	initServer(t, tester, `
 	{

@@ -100,8 +100,10 @@ func newContextFromRequest(request *http.Request, responseWriter http.ResponseWr
 		}
 	}
 
+	// if no originalRequest was passed, use the URI from the actual request
+	// when using Caddy's http module, the original unchanged uri will be used here
+	// request.URL is often already rewritten to match a PHP script path
 	if fc.requestURI == "" {
-		// if no WithOriginalRequest() was passed, use the URI from the actual request
 		fc.requestURI = fc.request.URL.RequestURI()
 	}
 

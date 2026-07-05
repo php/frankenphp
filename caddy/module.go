@@ -24,6 +24,7 @@ import (
 
 // FrankenPHPModule represents the "php_server" and "php" directives in the Caddyfile
 // they are responsible for forwarding requests to FrankenPHP via "ServeHTTP"
+// keep in mind that the module reference gets lost between Caddy parsing and Caddy provisioning
 //
 //	example.com {
 //		php_server {
@@ -48,7 +49,8 @@ type FrankenPHPModule struct {
 	ServerIdx int `json:"server_idx,omitempty"`
 
 	resolvedDocumentRoot string
-	preparedEnv          frankenphp.PreparedEnv
+	resolvedEnv          map[string]string
+	requestEnv           frankenphp.PreparedEnv
 	requestOptions       []frankenphp.RequestOption
 	server               *frankenphp.Server
 }
@@ -75,10 +77,11 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		return fmt.Errorf(`expected ctx.App("frankenphp") to return *FrankenPHPApp, got nil`)
 	}
 
-	if f.ServerIdx <= 0 {
-		// when registering via JSON configuration, it's possible that no idx was yet assigned to this module
+	if f.ServerIdx == 0 {
+		// if no idx was yet assigned to this module, assign one on-the-fly
+		// this is possible in JSON configuration when using "php" directives in route blocks
 		f.ServerIdx = len(fapp.modules) + 1
-		caddy.Log().Warn("\"php\" is missing a \"server_idx\", assigning one on-the-fly")
+		caddy.Log().Warn("\"php\" in route block is missing a \"server_idx\", assigning one on-the-fly")
 	}
 
 	f.assignMercureHub(ctx)
@@ -90,14 +93,11 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 			wc.FileName = filepath.Join(f.Root, wc.FileName)
 		}
 
-		f.Workers[i] = wc
-	}
-
-	for i, wc := range f.Workers {
 		if frankenphp.EmbeddedAppPath != "" && filepath.IsLocal(wc.FileName) {
 			wc.FileName = filepath.Join(frankenphp.EmbeddedAppPath, wc.FileName)
 		}
 
+		// module worker names are prefixed with m<idx>#, to distinguish them from global workers
 		serverPrefix := fmt.Sprintf("m%d#", f.ServerIdx)
 		if wc.Name == "" {
 			wc.Name = f.generateUniqueModuleWorkerName(wc.FileName, serverPrefix)
@@ -147,30 +147,24 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 				}
 			}
 		}
-
 	}
 
 	if err := f.configureHotReload(fapp); err != nil {
 		return err
 	}
 
-	resolvedEnv := make(map[string]string) // env variables that do not need replacement
-	requestEnv := make(map[string]string)  // env variables that need replacement, e.g. {http.vars.root}
+	f.resolvedEnv = make(map[string]string) // env variables that do not need replacement
+	f.requestEnv = make(map[string]string)  // env variables that need replacement, e.g. {http.vars.root}
 
 	for k, e := range f.Env {
 		if needReplacement(e) {
-			requestEnv[k] = e
+			f.requestEnv[k+"\x00"] = e // prepare the env with a null byte
 		} else {
-			resolvedEnv[k] = e
+			f.resolvedEnv[k] = e
 		}
 	}
 
-	f.preparedEnv = frankenphp.PrepareEnv(requestEnv)
-
-	server, serverOpt := frankenphp.WithServer(f.ServerIdx, f.resolvedDocumentRoot, f.SplitPath, resolvedEnv)
-	f.server = server
-
-	fapp.registerModule(f, serverOpt)
+	fapp.registerServer(f)
 
 	return nil
 }
@@ -203,14 +197,13 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 	ctx := r.Context()
 	repl := ctx.Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
 
-	documentRoot := f.resolvedDocumentRoot
-
 	opts := make([]frankenphp.RequestOption, 0, len(f.requestOptions)+4)
 	opts = append(opts, f.requestOptions...)
 	opts = append(opts, frankenphp.WithOriginalRequest(new(ctx.Value(caddyhttp.OriginalRequestCtxKey).(http.Request))))
 
-	if documentRoot == "" {
-		documentRoot = repl.ReplaceKnown(f.Root, "")
+	// if the root contains a caddy placeholder, it needs to be resolved here in the hot path
+	if f.resolvedDocumentRoot == "" {
+		documentRoot := repl.ReplaceKnown(f.Root, "")
 		if documentRoot == "" && frankenphp.EmbeddedAppPath != "" {
 			documentRoot = frankenphp.EmbeddedAppPath
 		}
@@ -221,9 +214,10 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 		opts = append(opts, frankenphp.WithRequestDocumentRoot(documentRoot, false))
 	}
 
-	if len(f.preparedEnv) > 0 {
-		env := make(frankenphp.PreparedEnv, len(f.preparedEnv))
-		for k, v := range f.preparedEnv {
+	// all env variables that contain caddy placeholders need to be resolved here in the hot path
+	if len(f.requestEnv) > 0 {
+		env := make(frankenphp.PreparedEnv, len(f.requestEnv))
+		for k, v := range f.requestEnv {
 			env[k] = repl.ReplaceKnown(v, "")
 		}
 

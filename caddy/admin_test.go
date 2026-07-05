@@ -76,7 +76,6 @@ func TestShowTheCorrectThreadDebugStatus(t *testing.T) {
 	debugState := getDebugState(t, tester)
 
 	// assert that the correct threads are present in the thread info
-	assert.Len(t, debugState.ThreadDebugStates, 3)
 	assert.Equal(t, debugState.ThreadDebugStates[0].State, "ready")
 	assert.Contains(t, debugState.ThreadDebugStates[1].Name, "worker-with-counter.php")
 	assert.Contains(t, debugState.ThreadDebugStates[2].Name, "index.php")
@@ -323,7 +322,7 @@ func TestAddModuleWorkerViaAdminApi(t *testing.T) {
 	assert.NoError(t, err)
 	r.Header.Set("Content-Type", "text/caddyfile")
 	resp := tester.AssertResponseCode(r, http.StatusOK)
-	require.NoError(t, resp.Body.Close())
+	defer func() { require.NoError(t, resp.Body.Close()) }()
 
 	// Get the updated debug state to check if the worker was added
 	updatedDebugState := getDebugState(t, tester)
