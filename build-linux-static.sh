@@ -21,13 +21,10 @@ set -x
 PHP_EXTENSIONS="bcmath,ctype,curl,dom,fileinfo,filter,gd,hash,intl,json,mbstring,openssl,pcre,pdo,session,tokenizer,xml"
 PHP_VERSION=8.4
 
-# Build the static Linux binary using the musl static builder
-docker buildx bake --load \
-    --set "*.args.PHP_EXTENSIONS=${PHP_EXTENSIONS}" \
-    --set "*.args.PHP_VERSION=${PHP_VERSION}" \
-    static-builder-musl
+# build glibc for linux amd64
+docker buildx bake --load static-builder-gnu \
+	 --set "*.args.PHP_EXTENSIONS=${PHP_EXTENSIONS}" \
+     --set "*.args.PHP_VERSION=${PHP_VERSION}" \
 
-# Copy the binary out of the container
-docker buildx bake --load static-builder-gnu
 docker cp $(docker create --name static-builder-gnu dunglas/frankenphp:static-builder-gnu):/go/src/app/dist/frankenphp-linux-$(uname -m) frankenphp
 docker rm static-builder-gnu
