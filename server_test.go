@@ -42,10 +42,10 @@ func serverGet(t *testing.T, server *frankenphp.Server, url string) string {
 
 func TestServer(t *testing.T) {
 	t.Run("idx", func(t *testing.T) {
-		server1, opt1 := frankenphp.WithServer(1, testDataDir, nil, map[string]string{"PHP_SERVER_IDX_1": "1"})
-		server2, opt2 := frankenphp.WithServer(2, testDataDir, nil, map[string]string{"PHP_SERVER_IDX_2": "2"})
+		server1, _ := frankenphp.NewServer(testDataDir, nil, map[string]string{"PHP_SERVER_IDX_1": "1"})
+		server2, _ := frankenphp.NewServer(testDataDir, nil, map[string]string{"PHP_SERVER_IDX_2": "2"})
 
-		initServers(t, opt1, opt2)
+		initServers(t, frankenphp.WithServer(server1), frankenphp.WithServer(server2))
 
 		body1 := serverGet(t, server1, "http://example.com/server-variable.php")
 		body2 := serverGet(t, server2, "http://example.com/server-variable.php")
@@ -57,8 +57,8 @@ func TestServer(t *testing.T) {
 	})
 
 	t.Run("root", func(t *testing.T) {
-		server, opt := frankenphp.WithServer(1, testDataDir, nil, nil)
-		initServers(t, opt)
+		server, _ := frankenphp.NewServer(testDataDir, nil, nil)
+		initServers(t, frankenphp.WithServer(server))
 
 		body := serverGet(t, server, "http://example.com/server-globals.php")
 
@@ -67,8 +67,8 @@ func TestServer(t *testing.T) {
 	})
 
 	t.Run("env", func(t *testing.T) {
-		server, opt := frankenphp.WithServer(1, testDataDir, nil, map[string]string{"TEST_123": "123"})
-		initServers(t, opt)
+		server, _ := frankenphp.NewServer(testDataDir, nil, map[string]string{"TEST_123": "123"})
+		initServers(t, frankenphp.WithServer(server))
 
 		body := serverGet(t, server, "http://example.com/server-variable.php")
 
@@ -76,8 +76,8 @@ func TestServer(t *testing.T) {
 	})
 
 	t.Run("split_path", func(t *testing.T) {
-		server, opt := frankenphp.WithServer(1, testDataDir, []string{".custom"}, nil)
-		initServers(t, opt)
+		server, _ := frankenphp.NewServer(testDataDir, []string{".custom"}, nil)
+		initServers(t, frankenphp.WithServer(server))
 
 		body := serverGet(t, server, "http://example.com/split-path.custom/pathinfo")
 
@@ -87,12 +87,12 @@ func TestServer(t *testing.T) {
 	})
 
 	t.Run("workers_by_path_and_request_matcher", func(t *testing.T) {
-		server1, opt1 := frankenphp.WithServer(1, testDataDir, nil, nil)
-		server2, opt2 := frankenphp.WithServer(2, testDataDir, nil, nil)
+		server1, _ := frankenphp.NewServer(testDataDir, nil, nil)
+		server2, _ := frankenphp.NewServer(testDataDir, nil, nil)
 		initServers(
 			t,
-			opt1,
-			opt2,
+			frankenphp.WithServer(server1),
+			frankenphp.WithServer(server2),
 			frankenphp.WithWorkers("counter", testDataDir+"worker-with-counter.php", 1, frankenphp.WithWorkerServerScope(server1)),
 			frankenphp.WithWorkers("match", testDataDir+"worker-with-counter.php", 1,
 				frankenphp.WithWorkerServerScope(server2),
@@ -118,14 +118,14 @@ func TestServer(t *testing.T) {
 	})
 
 	t.Run("worker_env_inheritance", func(t *testing.T) {
-		server, opt := frankenphp.WithServer(1, testDataDir, nil, map[string]string{
+		server, _ := frankenphp.NewServer(testDataDir, nil, map[string]string{
 			"FROM_SERVER_ENV": "original",
 			"FROM_WORKER_ENV": "overridden",
 		})
 		initServers(
 			t,
 			frankenphp.WithPhpIni(map[string]string{"variables_order": "EGPCS"}),
-			opt,
+			frankenphp.WithServer(server),
 			frankenphp.WithWorkers(
 				"env",
 				testDataDir+"env/env.php",
@@ -150,9 +150,9 @@ func TestServer(t *testing.T) {
 	t.Run("error_on_duplicate_worker_filenames", func(t *testing.T) {
 		t.Cleanup(frankenphp.Shutdown)
 
-		server, opt := frankenphp.WithServer(1, testDataDir, nil, nil)
+		server, _ := frankenphp.NewServer(testDataDir, nil, nil)
 		err := frankenphp.Init(
-			opt,
+			frankenphp.WithServer(server),
 			frankenphp.WithWorkers("worker1", testDataDir+"worker-with-counter.php", 1, frankenphp.WithWorkerServerScope(server)),
 			frankenphp.WithWorkers("worker2", testDataDir+"worker-with-counter.php", 1, frankenphp.WithWorkerServerScope(server)),
 		)
@@ -161,21 +161,9 @@ func TestServer(t *testing.T) {
 		assert.Contains(t, err.Error(), "two workers in a server cannot have the same filename")
 	})
 
-	t.Run("error_on_duplicate_registration", func(t *testing.T) {
-		_, opt1 := frankenphp.WithServer(1, testDataDir, nil, nil)
-		_, opt2 := frankenphp.WithServer(1, testDataDir, nil, nil)
-		err := frankenphp.Init(opt1, opt2)
-
-		assert.ErrorIs(t, err, frankenphp.ErrAlreadyRegistered)
-	})
-
 	t.Run("error_on_missing_registration", func(t *testing.T) {
-		server, _ := frankenphp.WithServer(1, testDataDir, nil, nil)
-		req := httptest.NewRequest(http.MethodGet, "http://example.com/server-variable.php", nil)
-		w := httptest.NewRecorder()
+		server, _ := frankenphp.NewServer(testDataDir, nil, nil)
 
-		err := server.ServeHTTP(w, req)
-
-		assert.ErrorIs(t, err, frankenphp.ErrServerNotFound)
+		assert.ErrorIs(t, server.ServeHTTP(nil, nil), frankenphp.ErrNotRunning)
 	})
 }

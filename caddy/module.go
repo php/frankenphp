@@ -164,7 +164,9 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		}
 	}
 
-	fapp.registerServer(f)
+	if err := fapp.registerModule(f); err != nil {
+		return fmt.Errorf("unable to register module: %w", err)
+	}
 
 	return nil
 }

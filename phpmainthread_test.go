@@ -394,7 +394,7 @@ func TestContextAndLoggerMustNotBeNil(t *testing.T) {
 	assert.NotNil(t, fc.ctx, "context is defined for message context")
 
 	r := httptest.NewRequest("GET", "http://localhost/index.php", nil)
-	fc, _ = newContextFromRequest(r, nil, &server{})
+	fc, _ = newContextFromRequest(r, nil, fallbackServer)
 	assert.NotNil(t, fc.logger, "logger is defined for request context")
 	assert.NotNil(t, fc.ctx, "context is defined for request context")
 

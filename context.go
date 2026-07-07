@@ -24,7 +24,7 @@ type frankenPHPContext struct {
 	logger       *slog.Logger
 	request      *http.Request
 	worker       *worker
-	server       *server
+	server       *Server
 
 	docURI         string
 	pathInfo       string
@@ -60,7 +60,7 @@ func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Reques
 	return r.WithContext(c), nil
 }
 
-func newContextFromRequest(request *http.Request, responseWriter http.ResponseWriter, s *server, opts ...RequestOption) (*frankenPHPContext, error) {
+func newContextFromRequest(request *http.Request, responseWriter http.ResponseWriter, s *Server, opts ...RequestOption) (*frankenPHPContext, error) {
 	fc := &frankenPHPContext{
 		ctx:            request.Context(),
 		done:           make(chan any),

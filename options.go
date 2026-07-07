@@ -6,8 +6,6 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
-
-	"github.com/dunglas/frankenphp/internal/fastabs"
 )
 
 // defaultMaxConsecutiveFailures is the default maximum number of consecutive failures before panicking
@@ -35,6 +33,7 @@ type opt struct {
 	maxWaitTime time.Duration
 	maxIdleTime time.Duration
 	maxRequests int
+	servers     []*Server
 }
 
 type workerOpt struct {
@@ -229,9 +228,9 @@ func WithWorkerMatcher(matcherFunc func(*http.Request) bool) WorkerOption {
 
 // WithWorkerServerScope scopes the worker to a server instance.
 // Only requests that are handled by the server instance will reach the worker.
-func WithWorkerServerScope(server *Server) WorkerOption {
+func WithWorkerServerScope(s *Server) WorkerOption {
 	return func(w *workerOpt) error {
-		w.server = server
+		w.server = s
 
 		return nil
 	}
@@ -292,33 +291,10 @@ func withExtensionWorkers(w *extensionWorkers) WorkerOption {
 }
 
 // WithServer configures a server.
-func WithServer(
-	idx int,
-	resolvedDocumentRoot string,
-	splitPath []string,
-	env map[string]string,
-) (*Server, Option) {
-	return &Server{
-			idx: idx,
-		}, func(o *opt) error {
-			if idx <= 0 {
-				return fmt.Errorf("server idx must be > 0, got %d", idx)
-			}
+func WithServer(s *Server) Option {
+	return func(o *opt) error {
+		o.servers = append(o.servers, s)
 
-			root, err := fastabs.FastAbs(resolvedDocumentRoot)
-			if err != nil {
-				return err
-			}
-
-			if err := normalizeSplitPath(splitPath); err != nil {
-				return err
-			}
-
-			_, err = newServer(idx, root, splitPath, PrepareEnv(env))
-
-			if err != nil {
-				return err
-			}
-			return nil
-		}
+		return nil
+	}
 }

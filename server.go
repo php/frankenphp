@@ -3,11 +3,13 @@ package frankenphp
 import (
 	"fmt"
 	"net/http"
+
+	"github.com/dunglas/frankenphp/internal/fastabs"
 )
 
-// server represents a server block in the caddyfile.
-// can also be used to scope workers to a specific set of configurations.
-type server struct {
+// Server represents a preconfigured server block with
+// requests and workers can be scoped to a server block
+type Server struct {
 	idx                       int
 	root                      string
 	splitPath                 []string
@@ -16,53 +18,64 @@ type server struct {
 	workersByPath             map[string]*worker
 	workersWithRequestMatcher []*worker
 	workerOpts                []workerOpt
-}
-
-type Server struct {
-	idx int
+	isRegistered              bool
 }
 
 var (
-	servers        = make(map[int]*server)
-	fallbackServer = &server{
+	servers        = []*Server{} // currently unused, but useful down the line
+	fallbackServer = &Server{
 		idx:           -1,
 		workersByPath: make(map[string]*worker),
 		env:           make(map[string]string),
 	}
 )
 
-func resetServers() {
-	servers = make(map[int]*server)
+func registerServers(newServers []*Server) {
+	servers = newServers
+	fallbackServer.isRegistered = true
+	for _, s := range servers {
+		s.isRegistered = true
+		s.idx = len(servers)
+	}
 }
 
-func newServer(idx int, root string, splitPath []string, env map[string]string) (*server, error) {
-	if _, ok := servers[idx]; ok {
-		return nil, fmt.Errorf("%w: duplicate registration of server with idx %d", ErrAlreadyRegistered, idx)
+func unregisterServers() {
+	fallbackServer.isRegistered = false
+	for _, server := range servers {
+		server.isRegistered = false
+	}
+}
+
+func NewServer(root string, splitPath []string, env map[string]string) (*Server, error) {
+	root, err := fastabs.FastAbs(root)
+	if err != nil {
+		return nil, err
 	}
 
-	server := &server{
-		idx:           idx,
+	if err := normalizeSplitPath(splitPath); err != nil {
+		return nil, err
+	}
+
+	s := &Server{
 		root:          root,
 		splitPath:     splitPath,
-		env:           env,
+		env:           PrepareEnv(env),
 		workersByPath: make(map[string]*worker),
 		workerOpts:    make([]workerOpt, 0),
 	}
 
-	if len(server.splitPath) == 0 {
-		server.splitPath = []string{".php"}
+	if len(s.splitPath) == 0 {
+		s.splitPath = []string{".php"}
 	}
 
-	if server.env == nil {
-		server.env = PrepareEnv(nil)
+	if s.env == nil {
+		s.env = PrepareEnv(nil)
 	}
 
-	servers[server.idx] = server
-
-	return server, nil
+	return s, nil
 }
 
-func (s *server) addWorker(w *worker) error {
+func (s *Server) addWorker(w *worker) error {
 	s.workers = append(s.workers, w)
 	if w.matchRequest != nil {
 		s.workersWithRequestMatcher = append(s.workersWithRequestMatcher, w)
@@ -80,16 +93,11 @@ func (s *server) addWorker(w *worker) error {
 // ServeHTTP executes a PHP script on the registered server.
 // The request will be scoped to the server instance that was registered via WithServer().
 // Otherwise, it is equivalent to calling ServeHTTP.
-func (publicServer *Server) ServeHTTP(responseWriter http.ResponseWriter, request *http.Request, opts ...RequestOption) error {
-	s, ok := servers[publicServer.idx]
-	if !ok {
-		return fmt.Errorf("%w: server with idx %d was not initialized (%d servers initialized overall)", ErrServerNotFound, publicServer.idx, len(servers))
+func (s *Server) ServeHTTP(responseWriter http.ResponseWriter, request *http.Request, opts ...RequestOption) error {
+	if !s.isRegistered {
+		return ErrNotRunning
 	}
 
-	return s.serveHTTP(responseWriter, request, opts...)
-}
-
-func (s *server) serveHTTP(responseWriter http.ResponseWriter, request *http.Request, opts ...RequestOption) error {
 	h := responseWriter.Header()
 	if h["Server"] == nil {
 		h["Server"] = serverHeader

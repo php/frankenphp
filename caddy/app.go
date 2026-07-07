@@ -182,20 +182,29 @@ func (f *FrankenPHPApp) reset() {
 }
 
 // register the php_server or php block to the app instance
-func (f *FrankenPHPApp) registerServer(m *FrankenPHPModule) {
+func (f *FrankenPHPApp) registerModule(m *FrankenPHPModule) error {
 	if f.modules == nil {
 		f.modules = make(map[int]*FrankenPHPModule)
 	}
 
-	server, serverOpt := frankenphp.WithServer(m.ServerIdx, m.resolvedDocumentRoot, m.SplitPath, m.resolvedEnv)
-	m.server = server
-
-	// only register the server module if it's not already registered to avoid duplicate modules
-	// this can happen if multiple "php" directives are used in the same caddy route block (like with worker matches)
-	if _, ok := f.modules[m.ServerIdx]; !ok {
-		f.modules[m.ServerIdx] = m
-		f.opts = append(f.opts, serverOpt)
+	registeredModule, ok := f.modules[m.ServerIdx]
+	if ok {
+		// module with this index was already registered, don't register it again
+		// this can happen if multiple "php" blocks are defined with the same php_server subroute
+		m.server = registeredModule.server
+		return nil
 	}
+
+	server, err := frankenphp.NewServer(m.resolvedDocumentRoot, m.SplitPath, m.resolvedEnv)
+	if err != nil {
+		return err
+	}
+
+	m.server = server
+	f.modules[m.ServerIdx] = m
+	f.opts = append(f.opts, frankenphp.WithServer(server))
+
+	return nil
 }
 
 // UnmarshalCaddyfile implements caddyfile.Unmarshaler.

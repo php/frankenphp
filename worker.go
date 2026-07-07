@@ -33,7 +33,7 @@ type worker struct {
 	onThreadReady          func(int)
 	onThreadShutdown       func(int)
 	queuedRequests         atomic.Int32
-	server                 *server
+	server                 *Server
 }
 
 var (
@@ -123,15 +123,8 @@ func newWorker(o workerOpt) (*worker, error) {
 		o.name = absFileName
 	}
 
-	var server *server
-	if o.server != nil {
-		server = servers[o.server.idx]
-
-		if server == nil {
-			return nil, fmt.Errorf("worker was registered with a non-existent server idx %d: %q", o.server.idx, absFileName)
-		}
-	} else if w := globalWorkersByPath[absFileName]; w != nil {
-		return w, fmt.Errorf("two global workers cannot have the same filename: %q", absFileName)
+	if o.server == nil && globalWorkersByPath[absFileName] != nil {
+		return nil, fmt.Errorf("two global workers cannot have the same filename: %q", absFileName)
 	}
 
 	if w := workersByName[o.name]; w != nil {
@@ -144,8 +137,8 @@ func newWorker(o workerOpt) (*worker, error) {
 	}
 
 	// if the worker is scoped to a server, inherit the server env
-	if server != nil && len(server.env) > 0 {
-		for k, v := range server.env {
+	if o.server != nil && len(o.server.env) > 0 {
+		for k, v := range o.server.env {
 			if _, exists := o.env[k]; !exists {
 				o.env[k] = v
 			}
@@ -166,7 +159,7 @@ func newWorker(o workerOpt) (*worker, error) {
 		maxConsecutiveFailures: o.maxConsecutiveFailures,
 		onThreadReady:          o.onThreadReady,
 		onThreadShutdown:       o.onThreadShutdown,
-		server:                 server,
+		server:                 o.server,
 	}
 
 	w.configureMercure(&o)

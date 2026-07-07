@@ -48,9 +48,7 @@ var (
 	ErrInvalidPHPVersion  = errors.New("FrankenPHP is only compatible with PHP 8.2+")
 	ErrMainThreadCreation = errors.New("error creating the main thread")
 	ErrScriptExecution    = errors.New("error during PHP script execution")
-	ErrNotRunning         = errors.New("FrankenPHP is not running. For proper configuration visit: https://frankenphp.dev/docs/config/#caddyfile-config")
-	ErrServerNotFound     = errors.New("server not found")
-	ErrAlreadyRegistered  = errors.New("server already registered")
+	ErrNotRunning         = errors.New("server is not registered, you must first call frankenphp.Init() with the WithServer() option")
 
 	ErrInvalidRequestPath         = ErrRejected{"invalid request path", http.StatusBadRequest}
 	ErrInvalidContentLengthHeader = ErrRejected{"invalid Content-Length header", http.StatusBadRequest}
@@ -286,6 +284,8 @@ func Init(options ...Option) error {
 		maxIdleTime = opt.maxIdleTime
 	}
 
+	registerServers(opt.servers)
+
 	workerThreadCount, err := calculateMaxThreads(opt)
 	if err != nil {
 		Shutdown()
@@ -378,7 +378,7 @@ func Shutdown() {
 
 	drainWatchers()
 	drainPHPThreads()
-	resetServers()
+	unregisterServers()
 
 	metrics.Shutdown()
 
@@ -397,10 +397,6 @@ func Shutdown() {
 
 // ServeHTTP executes a PHP script according to the given context.
 func ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) error {
-	if !isRunning {
-		return ErrNotRunning
-	}
-
 	ctx := request.Context()
 	opts, ok := ctx.Value(contextKey).([]RequestOption)
 
@@ -408,7 +404,7 @@ func ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) error 
 		return ErrInvalidRequest
 	}
 
-	return fallbackServer.serveHTTP(responseWriter, request, opts...)
+	return fallbackServer.ServeHTTP(responseWriter, request, opts...)
 }
 
 //export go_ub_write
