@@ -14,17 +14,31 @@ set -x
   #    CLEAN: when set, libphp and all its dependencies are built from scratch (no cache)
   #    COMPRESS: when set to 1, pack the resulting binary with UPX (Linux only; ignored when DEBUG_SYMBOLS is set)
   #    DEBUG_SYMBOLS: when set, debug-symbols will not be stripped and will be added to the binary
-  #    MIMALLOC: (experimental, Linux-only) replace musl’s mallocng by mimalloc for improved performance. We only recommend using this for musl targeting builds, for glibc prefer disabling this option and using LD_PRELOAD when you run your binary instead.
+  #    MIMALLOC: (experimental, Linux-only) replace musl's mallocng by mimalloc for improved performance. We only recommend using this for musl targeting builds, for glibc prefer disabling this option and using LD_PRELOAD when you run your binary instead.
   #    RELEASE: (maintainers only) when set, the resulting binary will be uploaded on GitHub
 
 # PHP extensions from composer.json
 PHP_EXTENSIONS="bcmath,ctype,curl,dom,fileinfo,filter,gd,hash,intl,json,mbstring,openssl,pcre,pdo,session,tokenizer,xml"
 PHP_VERSION=8.4
 
-# build glibc for linux amd64
-docker buildx bake --load static-builder-gnu \
-	 --set "*.args.PHP_EXTENSIONS=${PHP_EXTENSIONS}" \
-     --set "*.args.PHP_VERSION=${PHP_VERSION}" \
+# Create a temporary override bake file to restrict to linux/amd64 only
+OVERRIDE_FILE=$(mktemp /tmp/bake-override-XXXXXX.hcl)
+cat > "${OVERRIDE_FILE}" <<'EOF'
+target "static-builder-gnu" {
+    platforms = ["linux/amd64"]
+}
+EOF
 
-docker cp $(docker create --name static-builder-gnu dunglas/frankenphp:static-builder-gnu):/go/src/app/dist/frankenphp-linux-$(uname -m) frankenphp
+# Build the static Linux binary using the gnu (glibc) static builder
+docker buildx bake --load \
+    -f docker-bake.hcl \
+    -f "${OVERRIDE_FILE}" \
+    --set "*.args.PHP_EXTENSIONS=${PHP_EXTENSIONS}" \
+    --set "*.args.PHP_VERSION=${PHP_VERSION}" \
+    static-builder-gnu
+
+rm -f "${OVERRIDE_FILE}"
+
+# Copy the binary out of the container
+docker cp $(docker create --name static-builder-gnu dunglas/frankenphp:static-builder-gnu):/go/src/app/dist/frankenphp-linux-x86_64 frankenphp
 docker rm static-builder-gnu
