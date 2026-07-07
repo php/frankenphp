@@ -1,0 +1,39 @@
+---
+name: Build Linux static binary
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "build-linux-static.sh"
+      - "docker-bake.hcl"
+      - "static-builder-gnu.Dockerfile"
+      - ".github/workflows/build-linux-static.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build frankenphp linux/amd64 (glibc)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v3
+
+      - name: Build static binary
+        run: bash build-linux-static.sh
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: frankenphp-linux-amd64
+          path: frankenphp
+          if-no-files-found: error

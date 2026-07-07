@@ -18,7 +18,7 @@ set -x
   #    RELEASE: (maintainers only) when set, the resulting binary will be uploaded on GitHub
 
 # PHP extensions from composer.json
-PHP_EXTENSIONS="bcmath,ctype,curl,dom,fileinfo,filter,gd,hash,intl,json,mbstring,openssl,pcre,pdo,session,tokenizer,xml"
+PHP_EXTENSIONS="bcmath,ctype,curl,dom,fileinfo,filter,gd,hash,intl,json,mbstring,openssl,pcre,pdo,redis,session,tokenizer,xml"
 PHP_VERSION=8.4
 
 # Create a temporary override bake file to restrict to linux/amd64 only
