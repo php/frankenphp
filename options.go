@@ -290,7 +290,8 @@ func withExtensionWorkers(w *extensionWorkers) WorkerOption {
 	}
 }
 
-// WithServer configures a server.
+// WithServer starts FrankenPHP with the given Server instance.
+// After registering, it will be possible to call Server.ServeHTTP()
 func WithServer(s *Server) Option {
 	return func(o *opt) error {
 		o.servers = append(o.servers, s)

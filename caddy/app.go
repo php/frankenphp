@@ -138,14 +138,15 @@ func (f *FrankenPHPApp) Start() error {
 		}
 	}
 
+	// If FrankenPHP is currently running, shut it down first
+	// this will happen in admin API reloads (like in the caddy tests)
+	// make sure the app instance is reset after startup since it persists across reloads
 	frankenphp.Shutdown()
+	defer f.reset()
+
 	if err := frankenphp.Init(f.opts...); err != nil {
 		return err
 	}
-
-	// after startup, reset all configuration on the app instance
-	// this must happen here since the instance is re-used across reloads and tests
-	f.reset()
 
 	return nil
 }
