@@ -102,8 +102,8 @@ func setupWorkerScript(handler *workerThread, worker *worker) {
 	handler.isBootingScript = true
 	handler.requestCount = 0
 
-	if globalLogger.Enabled(fc.ctx, slog.LevelDebug) {
-		globalLogger.LogAttrs(fc.ctx, slog.LevelDebug, "starting", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex))
+	if fc.logger.Enabled(fc.ctx, slog.LevelDebug) {
+		fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "starting", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex))
 	}
 }
 
