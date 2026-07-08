@@ -104,13 +104,13 @@ HashTable *main_thread_env = NULL;
 #define THREAD_LOCAL __thread
 #endif
 
-THREAD_LOCAL uintptr_t thread_index;
-THREAD_LOCAL bool is_worker_thread = false;
-THREAD_LOCAL HashTable *sandboxed_env = NULL;
+static THREAD_LOCAL uintptr_t thread_index;
+static THREAD_LOCAL bool is_worker_thread = false;
+static THREAD_LOCAL HashTable *sandboxed_env = NULL;
 /* prepared_env holds entries from php(_server)'s `env KEY VAL`, exposed to
  * getenv() and merged into $_ENV when 'E' is in variables_order. Separate from
  * putenv() so those don't leak into $_ENV. */
-THREAD_LOCAL HashTable *prepared_env = NULL;
+static THREAD_LOCAL HashTable *prepared_env = NULL;
 
 /* Published via SG(server_context) so ext-parallel children, which inherit
  * the parent's SG(server_context), can route SAPI callbacks back to the
