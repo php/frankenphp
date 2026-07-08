@@ -18,7 +18,7 @@ We strongly recommend changing these values. For best system stability, it is re
 To find the right values, it's best to run load tests simulating real traffic.
 [k6](https://k6.io) and [Gatling](https://gatling.io) are good tools for this.
 
-To configure the number of threads, use the `num_threads` option of the `php_server` and `php` directives.
+To configure the number of threads, use the `num_threads` option of the global `frankenphp` directive.
 To change the number of workers, use the `num` option of the `worker` section of the `frankenphp` directive.
 
 ### `max_threads`
