@@ -120,6 +120,7 @@ func newWorkerDummyContext(w *worker) (*frankenPHPContext, error) {
 	}
 
 	fc := &frankenPHPContext{
+		done:      make(chan any),
 		ctx:       r.Context(),
 		server:    w.server,
 		request:   r,

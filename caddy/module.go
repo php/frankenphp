@@ -77,13 +77,6 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		return fmt.Errorf(`expected ctx.App("frankenphp") to return *FrankenPHPApp, got nil`)
 	}
 
-	if f.ServerIdx == 0 {
-		// if no idx was yet assigned to this module, assign one on-the-fly
-		// this is possible in JSON configuration when using "php" directives in route blocks
-		f.ServerIdx = len(fapp.modules) + 1
-		caddy.Log().Warn("\"php\" in route block is missing a \"server_idx\", assigning one on-the-fly")
-	}
-
 	f.assignMercureHub(ctx)
 
 	for i, wc := range f.Workers {
@@ -164,9 +157,7 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		}
 	}
 
-	if err := fapp.registerModule(f); err != nil {
-		return fmt.Errorf("unable to register module: %w", err)
-	}
+	fapp.modules = append(fapp.modules, f)
 
 	return nil
 }
@@ -473,11 +464,11 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 	// set up a route list that we'll append to
 	routes := caddyhttp.RouteList{}
 
-	// prepend routes from the 'worker match *' directives
-	routes = prependWorkerRoutes(routes, h, phpsrv, fsrv, disableFsrv)
-
 	// set the list of allowed path segments on which to split
 	phpsrv.SplitPath = extensions
+
+	// prepend routes from the 'worker match *' directives
+	routes = prependWorkerRoutes(routes, h, phpsrv, fsrv, disableFsrv)
 
 	// if the index is turned off, we skip the redirect and try_files
 	if indexFile != "off" {

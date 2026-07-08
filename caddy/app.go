@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -63,7 +62,7 @@ type FrankenPHPApp struct {
 	metrics frankenphp.Metrics
 	ctx     context.Context
 	logger  *slog.Logger
-	modules map[int]*FrankenPHPModule
+	modules []*FrankenPHPModule
 }
 
 var errIni = errors.New(`"php_ini" must be in the format: php_ini "<key>" "<value>"`)
@@ -126,16 +125,8 @@ func (f *FrankenPHPApp) Start() error {
 		f.opts = append(f.opts, frankenphp.WithWorkers(w.Name, w.FileName, w.Num, w.toWorkerOptions()...))
 	}
 
-	// register module workers that are scoped to a php_server or php block
-	for _, module := range f.modules {
-		for _, w := range module.Workers {
-			w.FileName = repl.ReplaceKnown(w.FileName, "")
-			if module.server == nil {
-				return fmt.Errorf("module %d has no server", module.ServerIdx)
-			}
-			workerOptions := append(w.toWorkerOptions(), frankenphp.WithWorkerServerScope(module.server))
-			f.opts = append(f.opts, frankenphp.WithWorkers(w.Name, w.FileName, w.Num, workerOptions...))
-		}
+	if err := f.registerModules(repl); err != nil {
+		return err
 	}
 
 	// If FrankenPHP is currently running, shut it down first
@@ -182,28 +173,49 @@ func (f *FrankenPHPApp) reset() {
 	optionsMU.Unlock()
 }
 
-// register the php_server or php block to the app instance
-func (f *FrankenPHPApp) registerModule(m *FrankenPHPModule) error {
-	if f.modules == nil {
-		f.modules = make(map[int]*FrankenPHPModule)
+// register all modules for Init()
+func (f *FrankenPHPApp) registerModules(repl *caddy.Replacer) error {
+	modulesByIndex := make(map[int]*FrankenPHPModule)
+	for _, module := range f.modules {
+		if module.ServerIdx == 0 {
+			// module has no dedicated index, this can happen if registered via json route config
+			if err := f.registerModule(repl, module); err != nil {
+				return err
+			}
+			continue
+		}
+
+		// ignore modules with a duplicate index
+		// this can happen if multiple "php" modules are defined within the same caddy subroute
+		if existingModule, ok := modulesByIndex[module.ServerIdx]; ok {
+			module.server = existingModule.server
+			continue
+		}
+
+		modulesByIndex[module.ServerIdx] = module
+		if err := f.registerModule(repl, module); err != nil {
+			return err
+		}
 	}
 
-	registeredModule, ok := f.modules[m.ServerIdx]
-	if ok {
-		// module with this index was already registered, don't register it again
-		// this can happen if multiple "php" blocks are defined with the same php_server subroute
-		m.server = registeredModule.server
-		return nil
-	}
+	return nil
+}
 
-	server, err := frankenphp.NewServer(m.resolvedDocumentRoot, m.SplitPath, m.resolvedEnv)
+// register module server and workers for Init()
+func (f *FrankenPHPApp) registerModule(repl *caddy.Replacer, module *FrankenPHPModule) error {
+	server, err := frankenphp.NewServer(module.resolvedDocumentRoot, module.SplitPath, module.resolvedEnv)
 	if err != nil {
 		return err
 	}
 
-	m.server = server
-	f.modules[m.ServerIdx] = m
+	module.server = server
 	f.opts = append(f.opts, frankenphp.WithServer(server))
+
+	for _, w := range module.Workers {
+		w.FileName = repl.ReplaceKnown(w.FileName, "")
+		workerOptions := append(w.toWorkerOptions(), frankenphp.WithWorkerServerScope(server))
+		f.opts = append(f.opts, frankenphp.WithWorkers(w.Name, w.FileName, w.Num, workerOptions...))
+	}
 
 	return nil
 }
@@ -318,8 +330,8 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				if frankenphp.EmbeddedAppPath != "" && filepath.IsLocal(wc.FileName) {
 					wc.FileName = filepath.Join(frankenphp.EmbeddedAppPath, wc.FileName)
 				}
-				if strings.HasPrefix(wc.Name, "m#") {
-					return d.Errf(`global worker names must not start with "m#": %q`, wc.Name)
+				if len(wc.Name) >= 3 && wc.Name[0] == 'm' && wc.Name[2] == '#' {
+					return d.Errf(`global worker names must not start with "m<num>#": %q`, wc.Name)
 				}
 				// check for duplicate workers
 				for _, existingWorker := range f.Workers {
