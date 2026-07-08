@@ -28,7 +28,7 @@ func (handler *inactiveThread) beforeScriptExecution() string {
 
 		// wait for external signal to start or shut down
 		thread.state.MarkAsWaiting(true)
-		thread.state.WaitFor(state.TransitionRequested, state.ShuttingDown, state.Rebooting)
+		thread.state.WaitFor(state.TransitionRequested, state.ShuttingDown, state.Rebooting, state.ForceRebooting)
 		thread.state.MarkAsWaiting(false)
 
 		return handler.beforeScriptExecution()
