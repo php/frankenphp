@@ -126,17 +126,47 @@ func (f *FrankenPHPApp) addModuleWorkers(workers ...workerConfig) ([]workerConfi
 		if frankenphp.EmbeddedAppPath != "" && filepath.IsLocal(w.FileName) {
 			w.FileName = filepath.Join(frankenphp.EmbeddedAppPath, w.FileName)
 		}
+	}
 
-		if w.Name == "" {
-			w.Name = f.generateUniqueModuleWorkerName(w.FileName)
-		} else if !strings.HasPrefix(w.Name, "m#") {
-			w.Name = "m#" + w.Name
+	// A php_server directive is provisioned once per route it's embedded in. Only the first embed
+	// registers its pools; later embeds reuse them by position, never touching other directives (#2477).
+	var registered []workerConfig
+	if len(workers) > 0 && workers[0].routeGroup != "" {
+		registered = f.moduleWorkersInRouteGroup(workers[0].routeGroup)
+	}
+
+	for i := range workers {
+		if i < len(registered) {
+			workers[i].Name = registered[i].Name
+			continue
 		}
 
-		f.Workers = append(f.Workers, *w)
+		f.registerModuleWorker(&workers[i])
 	}
 
 	return workers, nil
+}
+
+func (f *FrankenPHPApp) registerModuleWorker(w *workerConfig) {
+	if w.Name == "" {
+		w.Name = f.generateUniqueModuleWorkerName(w.FileName)
+	} else if !strings.HasPrefix(w.Name, "m#") {
+		w.Name = "m#" + w.Name
+	}
+
+	f.Workers = append(f.Workers, *w)
+}
+
+// moduleWorkersInRouteGroup returns the registered workers of one directive, in registration order.
+func (f *FrankenPHPApp) moduleWorkersInRouteGroup(routeGroup string) []workerConfig {
+	var group []workerConfig
+	for _, w := range f.Workers {
+		if w.routeGroup == routeGroup {
+			group = append(group, w)
+		}
+	}
+
+	return group
 }
 
 func (f *FrankenPHPApp) Start() error {

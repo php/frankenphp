@@ -107,6 +107,10 @@ HashTable *main_thread_env = NULL;
 THREAD_LOCAL uintptr_t thread_index;
 THREAD_LOCAL bool is_worker_thread = false;
 THREAD_LOCAL HashTable *sandboxed_env = NULL;
+/* prepared_env holds entries from php(_server)'s `env KEY VAL`, exposed to
+ * getenv() and merged into $_ENV when 'E' is in variables_order. Separate from
+ * putenv() so those don't leak into $_ENV. */
+THREAD_LOCAL HashTable *prepared_env = NULL;
 
 /* Published via SG(server_context) so ext-parallel children, which inherit
  * the parent's SG(server_context), can route SAPI callbacks back to the
@@ -183,6 +187,33 @@ static void frankenphp_fork_child(void) {
 
 static void frankenphp_register_atfork(void) {
   pthread_atfork(frankenphp_fork_prepare, NULL, frankenphp_fork_child);
+}
+
+/* pcntl signals delivered to a Go M segfault on PCNTL_G (no TSRM there)
+ * Block these in a constructor so Go's schedinit captures
+ * the mask and every M inherits it; execute_script_cli unblocks on its own
+ * pthread. Caddy's `signal.Notify` keeps working via `runtime.ensureSigM`.
+ * Limited to async-notify signals: Go's minitSignalMask re-unblocks anything
+ * flagged _SigKill/_SigThrow/_SigUnblock on every M anyway. */
+static void frankenphp_fill_cli_signal_set(sigset_t *s) {
+  sigemptyset(s);
+#ifdef SIGUSR1
+  sigaddset(s, SIGUSR1);
+#endif
+#ifdef SIGUSR2
+  sigaddset(s, SIGUSR2);
+#endif
+#ifdef SIGALRM
+  sigaddset(s, SIGALRM);
+#endif
+}
+
+__attribute__((constructor)) static void frankenphp_libpreinit(void) {
+  sigset_t set;
+  frankenphp_fill_cli_signal_set(&set);
+  /* Single-threaded at this point (constructors run before Go's runtime),
+   * so sigprocmask is sufficient and portable. */
+  sigprocmask(SIG_BLOCK, &set, NULL);
 }
 #endif
 
@@ -498,9 +529,17 @@ bool frankenphp_shutdown_dummy_request(void) {
 }
 
 void get_full_env(zval *track_vars_array) {
-  zend_hash_extend(Z_ARR_P(track_vars_array),
-                   zend_hash_num_elements(main_thread_env), 0);
+  size_t total = zend_hash_num_elements(main_thread_env);
+  if (prepared_env != NULL) {
+    // perf: doesn't matter if we get the exact count, just >= needed
+    total += zend_hash_num_elements(prepared_env);
+  }
+  zend_hash_extend(Z_ARR_P(track_vars_array), total, 0);
   zend_hash_copy(Z_ARR_P(track_vars_array), main_thread_env, NULL);
+  if (prepared_env != NULL) {
+    zend_hash_copy(Z_ARR_P(track_vars_array), prepared_env,
+                   (copy_ctor_func_t)zval_add_ref);
+  }
 }
 
 /* Adapted from php_request_startup() */
@@ -605,6 +644,13 @@ PHP_FUNCTION(frankenphp_putenv) {
 
   if (sandboxed_env == NULL) {
     sandboxed_env = zend_array_dup(main_thread_env);
+    /* prepared_env overrides the OS env and putenv() overrides both, so layer
+     * the prepared vars onto the dup before sandboxed_env starts shadowing the
+     * other two layers in getenv(). */
+    if (prepared_env != NULL) {
+      zend_hash_copy(sandboxed_env, prepared_env,
+                     (copy_ctor_func_t)zval_add_ref);
+    }
   }
 
   /* cut at null byte to stay consistent with regular putenv */
@@ -640,6 +686,38 @@ PHP_FUNCTION(frankenphp_putenv) {
   RETURN_BOOL(success);
 } /* }}} */
 
+/* getenv() lookup: sandboxed_env if present (it already holds prepared + OS),
+ * otherwise prepared_env then main_thread_env. */
+static inline zval *frankenphp_lookup_env(const char *name, size_t name_len) {
+  if (sandboxed_env != NULL) {
+    return zend_hash_str_find(sandboxed_env, name, name_len);
+  }
+
+  zval *env_val = NULL;
+  if (prepared_env != NULL) {
+    env_val = zend_hash_str_find(prepared_env, name, name_len);
+  }
+  if (env_val == NULL) {
+    env_val = zend_hash_str_find(main_thread_env, name, name_len);
+  }
+
+  return env_val;
+}
+
+/* Returns a fresh copy of the full environment, merging the layers above. */
+static inline HashTable *frankenphp_dup_env(void) {
+  if (sandboxed_env != NULL) {
+    return zend_array_dup(sandboxed_env);
+  }
+
+  HashTable *env = zend_array_dup(main_thread_env);
+  if (prepared_env != NULL) {
+    zend_hash_copy(env, prepared_env, (copy_ctor_func_t)zval_add_ref);
+  }
+
+  return env;
+}
+
 /* {{{ Get the env from the sandboxed environment */
 PHP_FUNCTION(frankenphp_getenv) {
   zend_string *name = NULL;
@@ -651,14 +729,12 @@ PHP_FUNCTION(frankenphp_getenv) {
   Z_PARAM_BOOL(local_only)
   ZEND_PARSE_PARAMETERS_END();
 
-  HashTable *ht = sandboxed_env ? sandboxed_env : main_thread_env;
-
   if (!name) {
-    RETURN_ARR(zend_array_dup(ht));
+    RETURN_ARR(frankenphp_dup_env());
     return;
   }
 
-  zval *env_val = zend_hash_find(ht, name);
+  zval *env_val = frankenphp_lookup_env(ZSTR_VAL(name), ZSTR_LEN(name));
   if (env_val && Z_TYPE_P(env_val) == IS_STRING) {
     zend_string *str = Z_STR_P(env_val);
     zend_string_addref(str);
@@ -913,6 +989,31 @@ PHP_FUNCTION(frankenphp_log) {
   }
 }
 
+static void frankenphp_opcache_restart_hook(int reason) {
+  (void)reason;
+  go_schedule_opcache_reset(frankenphp_thread_index());
+}
+
+/* {{{ thread-safe opcache reset */
+PHP_FUNCTION(frankenphp_opcache_reset) {
+  frankenphp_opcache_restart_hook(0);
+
+  RETVAL_TRUE;
+} /* }}} */
+
+/* Try to override opcache_reset if opcache is loaded.
+ * instead of resetting opcache, reboot all threads */
+static void frankenphp_override_opcache_reset(void) {
+  zend_function *func = zend_hash_str_find_ptr(
+      CG(function_table), "opcache_reset", sizeof("opcache_reset") - 1);
+  if (func != NULL && func->type == ZEND_INTERNAL_FUNCTION &&
+      ((zend_internal_function *)func)->handler !=
+          ZEND_FN(frankenphp_opcache_reset)) {
+    ((zend_internal_function *)func)->handler =
+        ZEND_FN(frankenphp_opcache_reset);
+  }
+}
+
 #ifdef FRANKENPHP_TEST
 /* Test-only entry point that exercises zval.h end-to-end:
  * validate -> persist (request -> persistent memory) ->
@@ -984,6 +1085,10 @@ PHP_MINIT_FUNCTION(frankenphp) {
     php_error(E_WARNING, "Failed to find built-in getenv function");
   }
 
+  // Override opcache_reset (may not be available yet if opcache loads as a
+  // shared extension in PHP 8.4 and below)
+  frankenphp_override_opcache_reset();
+
   return SUCCESS;
 }
 
@@ -1002,7 +1107,16 @@ static zend_module_entry frankenphp_module = {
 static int frankenphp_startup(sapi_module_struct *sapi_module) {
   php_import_environment_variables = get_full_env;
 
-  return php_module_startup(sapi_module, &frankenphp_module);
+  int result = php_module_startup(sapi_module, &frankenphp_module);
+#if PHP_VERSION_ID < 80500
+  if (result == SUCCESS) {
+    /* Override opcache here again if loaded as a shared extension
+     * (php 8.4 and under) */
+    frankenphp_override_opcache_reset();
+  }
+#endif
+
+  return result;
 }
 
 static int frankenphp_deactivate(void) { return SUCCESS; }
@@ -1144,6 +1258,13 @@ void frankenphp_register_server_vars(zval *track_vars_array,
   zend_hash_update_ind(ht, frankenphp_strings.remote_ident, &zv);
 }
 
+void frankenphp_merge_with_prepared_env(zval *track_vars_array) {
+  if (prepared_env != NULL) {
+    HashTable *ht = Z_ARRVAL_P(track_vars_array);
+    zend_hash_copy(ht, prepared_env, (copy_ctor_func_t)zval_add_ref);
+  }
+}
+
 /** Create an immutable zend_string that lasts for the whole process **/
 zend_string *frankenphp_init_persistent_string(const char *string, size_t len) {
   /* persistent strings will be ignored by the GC at the end of a request */
@@ -1257,9 +1378,7 @@ static void frankenphp_log_message(const char *message, int syslog_type_int) {
 }
 
 static char *frankenphp_getenv(const char *name, size_t name_len) {
-  HashTable *ht = sandboxed_env ? sandboxed_env : main_thread_env;
-
-  zval *env_val = zend_hash_str_find(ht, name, name_len);
+  zval *env_val = frankenphp_lookup_env(name, name_len);
   if (env_val && Z_TYPE_P(env_val) == IS_STRING) {
     zend_string *str = Z_STR_P(env_val);
     return ZSTR_VAL(str);
@@ -1322,6 +1441,22 @@ static inline void reset_sandboxed_environment() {
     zend_hash_release(sandboxed_env);
     sandboxed_env = NULL;
   }
+  if (prepared_env != NULL) {
+    zend_hash_release(prepared_env);
+    prepared_env = NULL;
+  }
+}
+
+/* Adds a key/value pair to the per-thread prepared environment, exposing
+ *  env vars from the php(_server) directive to getenv() and $_ENV. */
+void frankenphp_add_to_prepared_env(char *name, size_t name_len, char *val,
+                                    size_t val_len, size_t size) {
+  if (prepared_env == NULL) {
+    prepared_env = zend_new_array(size);
+  }
+  zval zv = {0};
+  ZVAL_STRINGL(&zv, val, val_len);
+  zend_hash_str_update(prepared_env, name, name_len, &zv);
 }
 
 static void *php_thread(void *arg) {
@@ -1370,6 +1505,12 @@ static void *php_thread(void *arg) {
                                LOG_ERR);
         zend_bailout();
       }
+
+#if PHP_VERSION_ID < 80500
+      /* Override opcache here again if loaded as a shared extension
+       * (php 8.4 and under) */
+      frankenphp_override_opcache_reset();
+#endif
 
       zend_file_handle file_handle;
       zend_stream_init_filename(&file_handle, scriptName);
@@ -1550,6 +1691,13 @@ static void *php_main(void *arg) {
 
   frankenphp_sapi_module.startup(&frankenphp_sapi_module);
 
+#if defined(ZTS) && PHP_VERSION_ID >= 80400
+  /* Also restart everything on opcache memory overflow or similar events, the
+   * hook is triggered right before an opcache reset is scheduled
+   */
+  zend_accel_schedule_restart_hook = frankenphp_opcache_restart_hook;
+#endif
+
   /* check if a default filter is set in php.ini and only filter if
    * it is, this is deprecated and will be removed in PHP 9 */
   char *default_filter;
@@ -1695,6 +1843,12 @@ static void *execute_script_cli(void *arg) {
   void *exit_status;
   bool eval = (bool)arg;
 
+#ifndef PHP_WIN32
+  sigset_t cli_signals;
+  frankenphp_fill_cli_signal_set(&cli_signals);
+  pthread_sigmask(SIG_UNBLOCK, &cli_signals, NULL);
+#endif
+
   /*
    * The SAPI name "cli" is hardcoded into too many programs... let's usurp it.
    */
@@ -1755,16 +1909,6 @@ int frankenphp_execute_script_cli(char *script, int argc, char **argv,
   }
 
   return (intptr_t)exit_status;
-}
-
-int frankenphp_reset_opcache(void) {
-  zend_function *opcache_reset =
-      zend_hash_str_find_ptr(CG(function_table), ZEND_STRL("opcache_reset"));
-  if (opcache_reset) {
-    zend_call_known_function(opcache_reset, NULL, NULL, NULL, 0, NULL, NULL);
-  }
-
-  return 0;
 }
 
 int frankenphp_get_current_memory_limit() { return PG(memory_limit); }

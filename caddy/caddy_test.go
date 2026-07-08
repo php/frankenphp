@@ -858,6 +858,69 @@ func TestWorkerMetrics(t *testing.T) {
 		))
 }
 
+// #2477: verify one pool per worker, no "_0" duplicates.
+func TestPhpServerWorkerMatchPoolCount(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+	{
+		skip_install_trust
+		admin localhost:2999
+		http_port `+testPort+`
+		https_port 9443
+		metrics
+	}
+
+	localhost:`+testPort+` {
+		php_server {
+			root ../testdata
+			worker {
+				file ../testdata/dedup-match-worker.php
+				num 1
+				match /match/*
+			}
+			worker {
+				file ../testdata/dedup-plain-worker.php
+				num 1
+			}
+		}
+	}
+	`, "caddyfile")
+
+	matchedWorker, _ := fastabs.FastAbs("../testdata/dedup-match-worker.php")
+	plainWorker, _ := fastabs.FastAbs("../testdata/dedup-plain-worker.php")
+
+	// the matched (non-.php) path must still be served by its worker
+	tester.AssertGetResponse("http://localhost:"+testPort+"/match/anything", http.StatusOK, "dedup-match-worker")
+
+	resp, err := http.Get("http://localhost:2999/metrics")
+	require.NoError(t, err, "failed to fetch metrics")
+	t.Cleanup(func() {
+		require.NoError(t, resp.Body.Close())
+	})
+
+	metrics := new(bytes.Buffer)
+	_, err = metrics.ReadFrom(resp.Body)
+	require.NoError(t, err, "failed to read metrics")
+
+	var pools []string
+	for _, line := range strings.Split(metrics.String(), "\n") {
+		if !strings.HasPrefix(line, "frankenphp_total_workers{worker=") {
+			continue
+		}
+		if !strings.Contains(line, "dedup-match-worker.php") && !strings.Contains(line, "dedup-plain-worker.php") {
+			continue
+		}
+		pools = append(pools, line)
+	}
+
+	require.Len(t, pools, 2, "expected exactly one pool per distinct worker, got: %v", pools)
+	joined := strings.Join(pools, "\n")
+	require.NotContains(t, joined, escapeMetricLabel(matchedWorker)+`_0`, "matched worker must not be registered twice: %v", pools)
+	require.NotContains(t, joined, escapeMetricLabel(plainWorker)+`_0`, "plain worker must not be registered twice: %v", pools)
+	require.Contains(t, joined, escapeMetricLabel(matchedWorker), "matched worker pool must be present: %v", pools)
+	require.Contains(t, joined, escapeMetricLabel(plainWorker), "plain worker pool must be present: %v", pools)
+}
+
 func TestNamedWorkerMetrics(t *testing.T) {
 	var wg sync.WaitGroup
 	tester := caddytest.NewTester(t)
@@ -1729,6 +1792,75 @@ func TestDd(t *testing.T) {
 		http.StatusInternalServerError,
 		"dump123",
 	)
+}
+
+// test to force the opcache segfault race condition under concurrency (~1.7s)
+func TestOpcacheReset(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	tester.Client.Timeout = 60 * time.Second
+	tester.InitServer(`
+		{
+			skip_install_trust
+			admin localhost:2999
+			http_port `+testPort+`
+			metrics
+
+			frankenphp {
+				num_threads 40
+				php_ini {
+					opcache.enable 1
+					opcache.log_verbosity_level 4
+					max_execution_time 30s
+				}
+			}
+		}
+
+		localhost:`+testPort+` {
+			php {
+				root ../testdata
+				worker {
+                    file sleep.php
+                    match /sleep*
+                    num 20
+                }
+			}
+		}
+		`, "caddyfile")
+
+	wg := sync.WaitGroup{}
+	numRequests := 500
+	wg.Add(numRequests)
+	for i := 0; i < numRequests; i++ {
+
+		// introduce a delay every 10 requests
+		if i%10 == 0 {
+			time.Sleep(time.Millisecond * 10)
+		}
+
+		go func(i int) {
+			defer wg.Done()
+			// spam opcache_reset on intervals
+			if i%10 > 7 {
+				tester.AssertGetResponse(
+					"http://localhost:"+testPort+"/opcache_reset.php",
+					http.StatusOK,
+					"opcache reset done",
+				)
+				return
+			}
+
+			// otherwise call sleep.php with different sleep and work values
+			sleep := i % 100
+			work := i % 100
+			tester.AssertGetResponse(
+				fmt.Sprintf("http://localhost:%s/sleep.php?sleep=%d&work=%d", testPort, sleep, work),
+				http.StatusOK,
+				fmt.Sprintf("slept for %d ms and worked for %d iterations", sleep, work),
+			)
+		}(i)
+	}
+
+	wg.Wait()
 }
 
 func TestLog(t *testing.T) {
