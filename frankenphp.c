@@ -98,9 +98,15 @@ bool original_user_abort_setting = 0;
 frankenphp_interned_strings_t frankenphp_strings = {0};
 HashTable *main_thread_env = NULL;
 
-__thread uintptr_t thread_index;
-__thread bool is_worker_thread = false;
-__thread HashTable *sandboxed_env = NULL;
+#if defined(__ELF__) && defined(__GNUC__)
+#define THREAD_LOCAL __thread __attribute__((tls_model("local-exec")))
+#else
+#define THREAD_LOCAL __thread
+#endif
+
+THREAD_LOCAL uintptr_t thread_index;
+THREAD_LOCAL bool is_worker_thread = false;
+THREAD_LOCAL HashTable *sandboxed_env = NULL;
 
 /* Published via SG(server_context) so ext-parallel children, which inherit
  * the parent's SG(server_context), can route SAPI callbacks back to the
@@ -108,7 +114,7 @@ __thread HashTable *sandboxed_env = NULL;
 typedef struct {
   uintptr_t thread_index;
 } frankenphp_server_ctx;
-static __thread frankenphp_server_ctx frankenphp_local_server_ctx;
+static THREAD_LOCAL frankenphp_server_ctx frankenphp_local_server_ctx;
 
 static inline uintptr_t frankenphp_thread_index(void) {
   frankenphp_server_ctx *ctx = (frankenphp_server_ctx *)SG(server_context);
