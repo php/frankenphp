@@ -33,9 +33,9 @@ var (
 func registerServers(newServers []*Server) {
 	servers = newServers
 	fallbackServer.isRegistered = true
-	for _, s := range servers {
+	for i, s := range servers {
 		s.isRegistered = true
-		s.idx = len(servers)
+		s.idx = i
 	}
 }
 
