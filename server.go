@@ -7,7 +7,7 @@ import (
 	"github.com/dunglas/frankenphp/internal/fastabs"
 )
 
-// Server represents a preconfigured server block with
+// Server represents a preconfigured server block
 // requests and workers can be scoped to a server block
 type Server struct {
 	idx                       int
