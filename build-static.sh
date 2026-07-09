@@ -195,6 +195,9 @@ if [ -n "${COMPRESS}" ] && [ -z "${DEBUG_SYMBOLS}" ] && [ "${os}" = "linux" ]; t
 	SPC_OPT_INSTALL_ARGS="${SPC_OPT_INSTALL_ARGS} upx"
 fi
 
+MTLS_CFLAGS="$(sh "${CURRENT_DIR}/mtls-cflags.sh")"
+export CGO_CFLAGS="${CGO_CFLAGS} ${MTLS_CFLAGS}"
+
 export SPC_DEFAULT_C_FLAGS="-fPIC -O2"
 if [ -n "${DEBUG_SYMBOLS}" ]; then
 	SPC_CMD_VAR_PHP_MAKE_EXTRA_CFLAGS="${SPC_CMD_VAR_PHP_MAKE_EXTRA_CFLAGS} -fPIE -g"
