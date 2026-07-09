@@ -1,10 +1,10 @@
 package caddy
 
 import (
-	"testing"
-
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/stretchr/testify/require"
+	"path/filepath"
+	"testing"
 )
 
 func TestModuleWorkerDuplicateFilenamesFail(t *testing.T) {
@@ -201,4 +201,27 @@ func TestModuleWorkerWithCustomName(t *testing.T) {
 	// Verify that the worker was added to the module
 	require.Len(t, module.Workers, 1, "Expected one worker to be added to the module")
 	require.Equal(t, "../testdata/worker-with-env.php", module.Workers[0].FileName, "Worker should have the correct filename")
+}
+
+func TestCreateUniqueWorkerNames(t *testing.T) {
+	app := &FrankenPHPApp{}
+	filename := "../testdata/worker-with-env.php"
+	absFileName, _ := filepath.Abs(filename)
+	names := make([]string, 6)
+	for i := 0; i < 3; i++ {
+		names[i] = app.createUniqueWorkerName(workerConfig{
+			FileName: filename,
+			Name:     "custom-worker-name",
+		})
+		names[i+3] = app.createUniqueWorkerName(workerConfig{
+			FileName: filename,
+		})
+	}
+
+	require.Equal(t, "custom-worker-name", names[0])
+	require.Equal(t, "custom-worker-name_1", names[1])
+	require.Equal(t, "custom-worker-name_2", names[2])
+	require.Equal(t, absFileName, names[3])
+	require.Equal(t, absFileName+"_1", names[4])
+	require.Equal(t, absFileName+"_2", names[5])
 }

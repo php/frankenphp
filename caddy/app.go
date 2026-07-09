@@ -16,6 +16,7 @@ import (
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 	"github.com/dunglas/frankenphp"
+	"github.com/dunglas/frankenphp/internal/fastabs"
 )
 
 var (
@@ -58,11 +59,12 @@ type FrankenPHPApp struct {
 	// EXPERIMENTAL: MaxRequests sets the maximum number of requests a PHP thread handles before restarting (0 = unlimited)
 	MaxRequests int `json:"max_requests,omitempty"`
 
-	opts    []frankenphp.Option
-	metrics frankenphp.Metrics
-	ctx     context.Context
-	logger  *slog.Logger
-	modules []*FrankenPHPModule
+	opts            []frankenphp.Option
+	metrics         frankenphp.Metrics
+	ctx             context.Context
+	logger          *slog.Logger
+	modules         []*FrankenPHPModule
+	usedWorkerNames map[string]bool
 }
 
 var errIni = errors.New(`"php_ini" must be in the format: php_ini "<key>" "<value>"`)
@@ -122,6 +124,7 @@ func (f *FrankenPHPApp) Start() error {
 	// register global workers
 	for _, w := range f.Workers {
 		w.FileName = repl.ReplaceKnown(w.FileName, "")
+		w.Name = f.createUniqueWorkerName(w)
 		f.opts = append(f.opts, frankenphp.WithWorkers(w.Name, w.FileName, w.Num, w.toWorkerOptions()...))
 	}
 
@@ -168,6 +171,7 @@ func (f *FrankenPHPApp) reset() {
 	f.opts = nil
 	f.ctx = nil
 	f.metrics = nil
+	f.usedWorkerNames = nil
 	optionsMU.Lock()
 	options = nil
 	optionsMU.Unlock()
@@ -213,11 +217,35 @@ func (f *FrankenPHPApp) registerModule(repl *caddy.Replacer, module *FrankenPHPM
 
 	for _, w := range module.Workers {
 		w.FileName = repl.ReplaceKnown(w.FileName, "")
+		w.Name = f.createUniqueWorkerName(w)
 		workerOptions := append(w.toWorkerOptions(), frankenphp.WithWorkerServerScope(server))
 		f.opts = append(f.opts, frankenphp.WithWorkers(w.Name, w.FileName, w.Num, workerOptions...))
 	}
 
 	return nil
+}
+
+func (f *FrankenPHPApp) createUniqueWorkerName(wc workerConfig) string {
+	if f.usedWorkerNames == nil {
+		f.usedWorkerNames = make(map[string]bool)
+	}
+
+	if wc.Name == "" {
+		wc.Name, _ = fastabs.FastAbs(wc.FileName)
+	}
+
+	name := wc.Name
+	suffix := 0
+	for {
+		if _, ok := f.usedWorkerNames[name]; !ok {
+			f.usedWorkerNames[name] = true
+			break
+		}
+		suffix++
+		name = fmt.Sprintf("%s_%d", wc.Name, suffix)
+	}
+
+	return name
 }
 
 // UnmarshalCaddyfile implements caddyfile.Unmarshaler.
@@ -329,9 +357,6 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				}
 				if frankenphp.EmbeddedAppPath != "" && filepath.IsLocal(wc.FileName) {
 					wc.FileName = filepath.Join(frankenphp.EmbeddedAppPath, wc.FileName)
-				}
-				if len(wc.Name) >= 3 && wc.Name[0] == 'm' && wc.Name[2] == '#' {
-					return d.Errf(`global worker names must not start with "m<num>#": %q`, wc.Name)
 				}
 				// check for duplicate workers
 				for _, existingWorker := range f.Workers {

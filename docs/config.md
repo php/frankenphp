@@ -192,7 +192,7 @@ php_server [<matcher>] {
 	worker { # Creates a worker specific to this server. Can be specified more than once for multiple workers.
 		file <path> # Sets the path to the worker script, can be relative to the php_server root
 		num <num> # Sets the number of PHP threads to start, defaults to 2x the number of available
-		name <name> # Sets the name for the worker, used in logs and metrics. Default: absolute path of worker file. Always starts with m# when defined in a php_server block.
+		name <name> # Sets the name for the worker, used in logs and metrics. Default: absolute path of worker file. Postfixed with a number if name is already in use.
 		watch <path> # Sets the path to watch for file changes. Can be specified more than once for multiple paths.
 		env <key> <value> # Sets an extra environment variable to the given value. Can be specified more than once for multiple environment variables. Environment variables for this worker are also inherited from the php_server parent, but can be overwritten here.
 		match <path> # match the worker to a path pattern. Overrides try_files and can only be used in the php_server directive.

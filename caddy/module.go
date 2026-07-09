@@ -90,14 +90,6 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 			wc.FileName = filepath.Join(frankenphp.EmbeddedAppPath, wc.FileName)
 		}
 
-		// module worker names are prefixed with m<idx>#, to distinguish them from global workers
-		serverPrefix := fmt.Sprintf("m%d#", f.ServerIdx)
-		if wc.Name == "" {
-			wc.Name = f.generateUniqueModuleWorkerName(wc.FileName, serverPrefix)
-		} else if !strings.HasPrefix(wc.Name, serverPrefix) {
-			wc.Name = serverPrefix + wc.Name
-		}
-
 		f.Workers[i] = wc
 	}
 
@@ -160,24 +152,6 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 	fapp.modules = append(fapp.modules, f)
 
 	return nil
-}
-
-func (f *FrankenPHPModule) generateUniqueModuleWorkerName(filepath string, phpServerPrefix string) string {
-	var i uint
-	filepath, _ = fastabs.FastAbs(filepath)
-	name := phpServerPrefix + filepath
-
-retry:
-	for _, wc := range f.Workers {
-		if wc.Name == name {
-			name = phpServerPrefix + filepath + fmt.Sprintf("_%d", i)
-			i++
-
-			goto retry
-		}
-	}
-
-	return name
 }
 
 // needReplacement checks if a string contains placeholders.

@@ -22,7 +22,7 @@ import (
 type workerConfig struct {
 	mercureContext
 
-	// Name for the worker. Default: the filename for FrankenPHPApp workers, always prefixed with "m#" for FrankenPHPModule workers.
+	// Name for the worker. Default: the filename for FrankenPHPApp workers, postfix with a number if the name is already used.
 	Name string `json:"name,omitempty"`
 	// FileName sets the path to the worker script.
 	FileName string `json:"file_name,omitempty"`

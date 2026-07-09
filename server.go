@@ -8,7 +8,7 @@ import (
 )
 
 // Server represents a preconfigured server block
-// requests and workers can be scoped to a server block
+// requests and workers can be scoped to a Server
 type Server struct {
 	idx                       int
 	root                      string
