@@ -103,6 +103,8 @@ func (f *FrankenPHPApp) Provision(ctx caddy.Context) error {
 }
 
 func (f *FrankenPHPApp) Start() error {
+	defer f.reset() // reset after startup since the app persists across reloads
+
 	repl := caddy.NewReplacer()
 
 	optionsMU.RLock()
@@ -132,12 +134,9 @@ func (f *FrankenPHPApp) Start() error {
 		return err
 	}
 
-	// If FrankenPHP is currently running, shut it down first
-	// this will happen in admin API reloads (like in the caddy tests)
-	// make sure the app instance is reset after startup since it persists across reloads
+	// if FrankenPHP is currently running, shut it down first
+	// this will happen in admin API reloads and caddy tests
 	frankenphp.Shutdown()
-	defer f.reset()
-
 	if err := frankenphp.Init(f.opts...); err != nil {
 		return err
 	}
@@ -179,12 +178,11 @@ func (f *FrankenPHPApp) reset() {
 	f.usedWorkerNames = nil
 }
 
-// register all modules for Init()
+// register workers and servers for "php" and "php_server" modules
 func (f *FrankenPHPApp) registerModules(repl *caddy.Replacer) error {
 	modulesByIndex := make(map[int]*FrankenPHPModule)
 	for _, module := range f.modules {
 		if module.ServerIdx == 0 {
-			// if a module has no server idx, it should be registered as a standalone server
 			if err := f.registerModule(repl, module); err != nil {
 				return err
 			}
@@ -193,7 +191,7 @@ func (f *FrankenPHPApp) registerModules(repl *caddy.Replacer) error {
 
 		// modules with the same server_idx should share the same server instance
 		// example: the worker { match * } rule adds 2 "php" subroutes to the caddy handler
-		// workers must not be registered multiple times
+		// the 2 handlers belong to the same "php_server" and must therefore share workers
 		if existingModule, ok := modulesByIndex[module.ServerIdx]; ok {
 			module.server = existingModule.server
 			continue
