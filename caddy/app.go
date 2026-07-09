@@ -157,6 +157,11 @@ func (f *FrankenPHPApp) Stop() error {
 		frankenphp.Shutdown()
 	}
 
+	// reset global options
+	optionsMU.Lock()
+	options = nil
+	optionsMU.Unlock()
+
 	return nil
 }
 
@@ -172,9 +177,6 @@ func (f *FrankenPHPApp) reset() {
 	f.ctx = nil
 	f.metrics = nil
 	f.usedWorkerNames = nil
-	optionsMU.Lock()
-	options = nil
-	optionsMU.Unlock()
 }
 
 // register all modules for Init()
@@ -182,15 +184,16 @@ func (f *FrankenPHPApp) registerModules(repl *caddy.Replacer) error {
 	modulesByIndex := make(map[int]*FrankenPHPModule)
 	for _, module := range f.modules {
 		if module.ServerIdx == 0 {
-			// module has no dedicated index, this can happen if registered via json route config
+			// if a module has no server idx, it should be registered as a standalone server
 			if err := f.registerModule(repl, module); err != nil {
 				return err
 			}
 			continue
 		}
 
-		// ignore modules with a duplicate index
-		// this can happen if multiple "php" modules are defined within the same caddy subroute
+		// modules with the same server_idx should share the same server instance
+		// example: the worker { match * } rule adds 2 "php" subroutes to the caddy handler
+		// workers must not be registered multiple times
 		if existingModule, ok := modulesByIndex[module.ServerIdx]; ok {
 			module.server = existingModule.server
 			continue
@@ -205,7 +208,7 @@ func (f *FrankenPHPApp) registerModules(repl *caddy.Replacer) error {
 	return nil
 }
 
-// register module server and workers for Init()
+// register a server instance and its workers for a single caddy module
 func (f *FrankenPHPApp) registerModule(repl *caddy.Replacer, module *FrankenPHPModule) error {
 	server, err := frankenphp.NewServer(module.resolvedDocumentRoot, module.SplitPath, module.resolvedEnv)
 	if err != nil {
@@ -225,6 +228,7 @@ func (f *FrankenPHPApp) registerModule(repl *caddy.Replacer, module *FrankenPHPM
 	return nil
 }
 
+// avoid name collisions for workers
 func (f *FrankenPHPApp) createUniqueWorkerName(wc workerConfig) string {
 	if f.usedWorkerNames == nil {
 		f.usedWorkerNames = make(map[string]bool)
