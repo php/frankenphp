@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"path/filepath"
 	"runtime"
@@ -53,6 +54,7 @@ type FrankenPHPModule struct {
 	requestEnv           frankenphp.PreparedEnv
 	requestOptions       []frankenphp.RequestOption
 	server               *frankenphp.Server
+	logger               *slog.Logger
 }
 
 // CaddyModule returns the Caddy module information.
@@ -65,6 +67,8 @@ func (FrankenPHPModule) CaddyModule() caddy.ModuleInfo {
 
 // Provision sets up the module.
 func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
+	f.logger = ctx.Slogger()
+
 	app, err := ctx.App("frankenphp")
 	if err != nil {
 		return err

@@ -208,7 +208,7 @@ func (f *FrankenPHPApp) registerModules(repl *caddy.Replacer) error {
 
 // register a server instance and its workers for a single caddy module
 func (f *FrankenPHPApp) registerModule(repl *caddy.Replacer, module *FrankenPHPModule) error {
-	server, err := frankenphp.NewServer(module.resolvedDocumentRoot, module.SplitPath, module.resolvedEnv)
+	server, err := frankenphp.NewServer(module.resolvedDocumentRoot, module.SplitPath, module.resolvedEnv, module.logger)
 	if err != nil {
 		return err
 	}

@@ -2,6 +2,7 @@ package frankenphp
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/dunglas/frankenphp/internal/fastabs"
@@ -14,6 +15,7 @@ type Server struct {
 	root                      string
 	splitPath                 []string
 	env                       PreparedEnv
+	logger                    *slog.Logger
 	workers                   []*worker
 	workersByPath             map[string]*worker
 	workersWithRequestMatcher []*worker
@@ -46,7 +48,7 @@ func unregisterServers() {
 	}
 }
 
-func NewServer(root string, splitPath []string, env map[string]string) (*Server, error) {
+func NewServer(root string, splitPath []string, env map[string]string, logger *slog.Logger) (*Server, error) {
 	root, err := fastabs.FastAbs(root)
 	if err != nil {
 		return nil, err
@@ -60,6 +62,7 @@ func NewServer(root string, splitPath []string, env map[string]string) (*Server,
 		root:          root,
 		splitPath:     splitPath,
 		env:           PrepareEnv(env),
+		logger:        logger,
 		workersByPath: make(map[string]*worker),
 		workerOpts:    make([]workerOpt, 0),
 	}
@@ -70,6 +73,10 @@ func NewServer(root string, splitPath []string, env map[string]string) (*Server,
 
 	if s.env == nil {
 		s.env = PrepareEnv(nil)
+	}
+
+	if s.logger == nil {
+		s.logger = globalLogger
 	}
 
 	return s, nil
