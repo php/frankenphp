@@ -362,6 +362,8 @@ func Init(options ...Option) error {
 		}
 	}
 
+	startWorkerPings()
+
 	return nil
 }
 
@@ -370,6 +372,8 @@ func Shutdown() {
 	if !isRunning {
 		return
 	}
+
+	stopWorkerPings()
 
 	// call the shutdown hooks (mainly useful for extensions)
 	for _, fn := range onServerShutdown {

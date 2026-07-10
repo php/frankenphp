@@ -1,8 +1,11 @@
 package caddy
 
 import (
+	"fmt"
 	"path/filepath"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
@@ -38,9 +41,18 @@ type workerConfig struct {
 	MatchPath []string `json:"match_path,omitempty"`
 	// MaxConsecutiveFailures sets the maximum number of consecutive failures before panicking (defaults to 6, set to -1 to never panick)
 	MaxConsecutiveFailures int `json:"max_consecutive_failures,omitempty"`
+	// Pings configures periodic internal HTTP requests sent to the worker.
+	Pings []workerPingConfig `json:"pings,omitempty"`
 
 	options        []frankenphp.WorkerOption
 	requestOptions []frankenphp.RequestOption
+}
+
+type workerPingConfig struct {
+	Interval time.Duration `json:"interval"`
+	Path     string        `json:"path"`
+	Aligned  bool          `json:"aligned,omitempty"`
+	Each     bool          `json:"each,omitempty"`
 }
 
 func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
@@ -140,8 +152,38 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 			}
 
 			wc.MaxConsecutiveFailures = v
+		case "ping":
+			args := d.RemainingArgs()
+			if len(args) < 2 || len(args) > 3 {
+				return wc, d.ArgErr()
+			}
+
+			each := false
+			var interval, path string
+
+			if strings.ToLower(args[0]) == "each" {
+				if len(args) != 3 {
+					return wc, d.ArgErr()
+				}
+				each = true
+				interval = args[1]
+				path = args[2]
+			} else {
+				if len(args) != 2 {
+					return wc, d.ArgErr()
+				}
+				interval = args[0]
+				path = args[1]
+			}
+
+			ping, err := parseWorkerPing(interval, path, each)
+			if err != nil {
+				return wc, d.WrapErr(err)
+			}
+
+			wc.Pings = append(wc.Pings, ping)
 		default:
-			return wc, wrongSubDirectiveError("worker", "name, file, num, env, watch, match, max_consecutive_failures, max_threads", v)
+			return wc, wrongSubDirectiveError("worker", "name, file, num, env, watch, match, ping, max_consecutive_failures, max_threads", v)
 		}
 	}
 
@@ -172,5 +214,49 @@ func (wc *workerConfig) toWorkerOptions() []frankenphp.WorkerOption {
 		_ = matchFunc.Provision(caddy.Context{})
 		opts = append(opts, frankenphp.WithWorkerMatcher(matchFunc.Match))
 	}
+
+	if len(wc.Pings) > 0 {
+		for _, p := range wc.Pings {
+			opts = append(opts, frankenphp.WithWorkerPings(p.Interval, p.Path, p.Aligned, p.Each))
+		}
+	}
+
 	return opts
+}
+
+func parseWorkerPing(interval, path string, each bool) (workerPingConfig, error) {
+	if !strings.HasPrefix(path, "/") {
+		return workerPingConfig{}, fmt.Errorf("ping path must start with /")
+	}
+
+	parsedInterval, aligned, err := parsePingInterval(interval)
+	if err != nil {
+		return workerPingConfig{}, err
+	}
+
+	return workerPingConfig{
+		Interval: parsedInterval,
+		Path:     path,
+		Aligned:  aligned,
+		Each:     each,
+	}, nil
+}
+
+func parsePingInterval(s string) (time.Duration, bool, error) {
+	switch strings.ToLower(s) {
+	case "minutely":
+		return time.Minute, true, nil
+	case "hourly":
+		return time.Hour, true, nil
+	default:
+		d, err := time.ParseDuration(s)
+		if err != nil {
+			return 0, false, err
+		}
+		if d <= 0 {
+			return 0, false, fmt.Errorf("ping interval must be positive")
+		}
+
+		return d, false, nil
+	}
 }

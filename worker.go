@@ -3,6 +3,7 @@ package frankenphp
 // #include "frankenphp.h"
 import "C"
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -32,6 +33,8 @@ type worker struct {
 	maxConsecutiveFailures int
 	onThreadReady          func(int)
 	onThreadShutdown       func(int)
+	pings                  []workerPing
+	pingCancel             context.CancelFunc
 	queuedRequests         atomic.Int32
 	server                 *Server
 }
@@ -159,6 +162,7 @@ func newWorker(o workerOpt) (*worker, error) {
 		maxConsecutiveFailures: o.maxConsecutiveFailures,
 		onThreadReady:          o.onThreadReady,
 		onThreadShutdown:       o.onThreadShutdown,
+		pings:                  o.pings,
 		server:                 o.server,
 	}
 
@@ -232,6 +236,23 @@ func (worker *worker) isAtThreadLimit() bool {
 	worker.threadMutex.RUnlock()
 
 	return atMaxThreads
+}
+
+func (worker *worker) handleRequestOnThread(thread *phpThread, fc *frankenPHPContext) error {
+	metrics.StartWorkerRequest(worker.name)
+
+	select {
+	case thread.requestChan <- fc:
+		<-fc.done
+		metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
+
+		return nil
+	case <-timeoutChan(time.Duration(maxWaitTime.Load())):
+		metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
+		fc.reject(ErrMaxWaitTimeExceeded)
+
+		return ErrMaxWaitTimeExceeded
+	}
 }
 
 func (worker *worker) handleRequest(fc *frankenPHPContext) error {

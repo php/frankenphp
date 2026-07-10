@@ -36,6 +36,13 @@ type opt struct {
 	servers     []*Server
 }
 
+type workerPing struct {
+	interval time.Duration
+	path     string
+	aligned  bool
+	each     bool
+}
+
 type workerOpt struct {
 	mercureContext
 
@@ -46,6 +53,7 @@ type workerOpt struct {
 	env                    PreparedEnv
 	requestOptions         []RequestOption
 	watch                  []string
+	pings                  []workerPing
 	matchRequest           func(*http.Request) bool
 	maxConsecutiveFailures int
 	extensionWorkers       *extensionWorkers
@@ -211,6 +219,20 @@ func WithWorkerMaxThreads(num int) WorkerOption {
 func WithWorkerWatchMode(watch []string) WorkerOption {
 	return func(w *workerOpt) error {
 		w.watch = watch
+
+		return nil
+	}
+}
+
+// WithWorkerPings configures a periodic internal HTTP request sent to the worker.
+func WithWorkerPings(interval time.Duration, path string, aligned, each bool) WorkerOption {
+	return func(w *workerOpt) error {
+		w.pings = append(w.pings, workerPing{
+			interval: interval,
+			path:     path,
+			aligned:  aligned,
+			each:     each,
+		})
 
 		return nil
 	}

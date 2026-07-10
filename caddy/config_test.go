@@ -5,6 +5,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestModuleWorkerDuplicateFilenamesFail(t *testing.T) {
@@ -224,4 +225,94 @@ func TestCreateUniqueWorkerNames(t *testing.T) {
 	require.Equal(t, absFileName, names[3])
 	require.Equal(t, absFileName+"_1", names[4])
 	require.Equal(t, absFileName+"_2", names[5])
+}
+
+func TestModuleWorkerWithPingConfiguration(t *testing.T) {
+	configWithPing := `
+	{
+		php {
+			worker ../testdata/worker-with-counter.php {
+				ping 60s /health
+				ping minutely each /cron
+			}
+		}
+	}`
+
+	d := caddyfile.NewTestDispenser(configWithPing)
+	module := &FrankenPHPModule{}
+
+	err := module.UnmarshalCaddyfile(d)
+	require.NoError(t, err)
+	require.Len(t, module.Workers, 1)
+	require.Equal(t, "../testdata/worker-with-counter.php", module.Workers[0].FileName)
+	require.Len(t, module.Workers[0].Pings, 2)
+	require.Equal(t, 60*time.Second, module.Workers[0].Pings[0].Interval)
+	require.Equal(t, "/health", module.Workers[0].Pings[0].Path)
+	require.False(t, module.Workers[0].Pings[0].Aligned)
+	require.False(t, module.Workers[0].Pings[0].Each)
+	require.Equal(t, time.Minute, module.Workers[0].Pings[1].Interval)
+	require.Equal(t, "/cron", module.Workers[0].Pings[1].Path)
+	require.True(t, module.Workers[0].Pings[1].Aligned)
+	require.True(t, module.Workers[0].Pings[1].Each)
+}
+
+func TestModuleWorkerWithInvalidPingConfiguration(t *testing.T) {
+	tests := []struct {
+		name   string
+		config string
+	}{
+		{
+			name: "missing path",
+			config: `{
+				php {
+					worker {
+						file ../testdata/worker-with-counter.php
+						ping 60s
+					}
+				}
+			}`,
+		},
+		{
+			name: "invalid interval",
+			config: `{
+				php {
+					worker {
+						file ../testdata/worker-with-counter.php
+						ping not-a-duration /health
+					}
+				}
+			}`,
+		},
+		{
+			name: "each must come first",
+			config: `{
+				php {
+					worker {
+						file ../testdata/worker-with-counter.php
+						ping 60s /health each
+					}
+				}
+			}`,
+		},
+		{
+			name: "relative path",
+			config: `{
+				php {
+					worker {
+						file ../testdata/worker-with-counter.php
+						ping 60s health
+					}
+				}
+			}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := caddyfile.NewTestDispenser(tt.config)
+			module := &FrankenPHPModule{}
+			err := module.UnmarshalCaddyfile(d)
+			require.Error(t, err)
+		})
+	}
 }

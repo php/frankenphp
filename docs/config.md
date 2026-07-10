@@ -111,6 +111,8 @@ You can also explicitly configure FrankenPHP using the [global option](https://c
 			watch <path> # Sets the path to watch for file changes. Can be specified more than once for multiple paths.
 			name <name> # Sets the name of the worker, used in logs and metrics. Default: absolute path of worker file
 			max_consecutive_failures <num> # Sets the maximum number of consecutive failures before the worker is considered unhealthy, -1 means the worker will always restart. Default: 6.
+			ping <interval> <path> # Sends a periodic internal HTTP GET request to the worker. Interval can be a duration (e.g. 60s, 1m) or a cron-like keyword (minutely, hourly). Can be specified more than once.
+			ping each <interval> <path> # Like ping, but sends the request to every worker thread instead of a single thread.
 		}
 	}
 }
@@ -196,6 +198,8 @@ php_server [<matcher>] {
 		watch <path> # Sets the path to watch for file changes. Can be specified more than once for multiple paths.
 		env <key> <value> # Sets an extra environment variable to the given value. Can be specified more than once for multiple environment variables. Environment variables for this worker are also inherited from the php_server parent, but can be overwritten here.
 		match <path> # match the worker to a path pattern. Overrides try_files and can only be used in the php_server directive.
+		ping <interval> <path> # Sends a periodic internal HTTP GET request to the worker. Interval can be a duration (e.g. 60s, 1m) or a cron-like keyword (minutely, hourly). Can be specified more than once.
+		ping each <interval> <path> # Like ping, but sends the request to every worker thread instead of a single thread.
 	}
 	worker <other_file> <num> # Can also use the short form like in the global frankenphp block.
 }
@@ -245,6 +249,30 @@ where the FrankenPHP process was started. You can instead also specify one or mo
 - Directories can also be relative (to where the FrankenPHP process is started from)
 - If you have multiple workers defined, all of them will be restarted when a file changes
 - Be wary about watching files that are created at runtime (like logs) since they might cause unwanted worker restarts.
+
+### Pinging workers
+
+Workers can receive periodic internal HTTP GET requests via the `ping` directive.
+This is useful to run scheduled tasks inside your worker script (for example, to flush queues or run cron jobs).
+
+```caddyfile
+worker /path/to/worker.php {
+	ping 60s /tasks/run
+	ping each minutely /tasks/minutely
+}
+```
+
+The interval can be:
+
+- a [Go duration](https://pkg.go.dev/time#ParseDuration) such as `60s`, `1m`, or `5m`
+- `minutely` to run at the start of every minute
+- `hourly` to run at the start of every hour
+
+The path must start with `/`. The request is routed to the worker regardless of the `match` directive.
+
+By default, each ping is handled by a single worker thread. Prefix the interval with `each` to send the ping to every thread of the worker. This is useful when each thread maintains its own state and must run the scheduled task independently.
+
+You can specify multiple `ping` lines to schedule different paths at different intervals.
 
 The file watcher is based on [e-dant/watcher](https://github.com/e-dant/watcher).
 
