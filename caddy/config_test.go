@@ -233,7 +233,7 @@ func TestModuleWorkerWithPingConfiguration(t *testing.T) {
 		php {
 			worker ../testdata/worker-with-counter.php {
 				ping 60s health
-				ping minutely each cron
+				ping minutely each message
 			}
 		}
 	}`
@@ -251,7 +251,7 @@ func TestModuleWorkerWithPingConfiguration(t *testing.T) {
 	require.False(t, module.Workers[0].Pings[0].Aligned)
 	require.False(t, module.Workers[0].Pings[0].Each)
 	require.Equal(t, time.Minute, module.Workers[0].Pings[1].Interval)
-	require.Equal(t, "cron", module.Workers[0].Pings[1].Message)
+	require.Equal(t, "message", module.Workers[0].Pings[1].Message)
 	require.True(t, module.Workers[0].Pings[1].Aligned)
 	require.True(t, module.Workers[0].Pings[1].Each)
 }
