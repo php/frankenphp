@@ -1415,3 +1415,27 @@ func testOpcachePreload(t *testing.T, opts *testOptions) {
 		assert.Equal(t, "I am preloaded", body)
 	}, opts)
 }
+
+func TestPings(t *testing.T) {
+	logger, buf := newTestLogger(t)
+	require.NoError(t, frankenphp.Init(
+		frankenphp.WithLogger(logger),
+		frankenphp.WithWorkers("ping-worker", "testdata/worker-with-counter.php", 1,
+			frankenphp.WithWorkerPings(100*time.Microsecond, "ping", false, false),
+		),
+	))
+	t.Cleanup(frankenphp.Shutdown)
+
+	i := 0
+	for {
+		output := buf.String()
+		if strings.Contains(output, "requests:1") {
+			break
+		}
+		time.Sleep(500 * time.Microsecond)
+		i++
+		if i > 10000 { // 5s timeout
+			t.Fatal("timed out without recording a worker ping") 
+		}
+	}
+}
