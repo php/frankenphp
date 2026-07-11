@@ -1435,7 +1435,7 @@ func TestPings(t *testing.T) {
 		time.Sleep(500 * time.Microsecond)
 		i++
 		if i > 10000 { // 5s timeout
-			t.Fatal("timed out without recording a worker ping") 
+			t.Fatal("timed out without recording a worker ping")
 		}
 	}
 }

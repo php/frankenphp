@@ -859,18 +859,10 @@ PHP_FUNCTION(frankenphp_handle_request) {
   zval retval = {0};
   zval *callback_ret = NULL;
 
-  /* always pass at least NULL as the first parameter to avoid PHP warnings
-   * about the function having too few parameters */
-  if (result.r1 == NULL) {
-    zval *null = {0};
-    ZVAL_NULL(null);
-    result.r1 = null;
-  }
-
   fci.size = sizeof fci;
   fci.retval = &retval;
   fci.params = result.r1;
-  fci.param_count = 1;
+  fci.param_count = result.r1 == NULL ? 0 : 1;
 
   if (zend_call_function(&fci, &fcc) == SUCCESS && Z_TYPE(retval) != IS_UNDEF) {
     callback_ret = &retval;
