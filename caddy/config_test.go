@@ -232,8 +232,8 @@ func TestModuleWorkerWithPingConfiguration(t *testing.T) {
 	{
 		php {
 			worker ../testdata/worker-with-counter.php {
-				ping 60s /health
-				ping minutely each /cron
+				ping 60s health
+				ping minutely each cron
 			}
 		}
 	}`
@@ -247,11 +247,11 @@ func TestModuleWorkerWithPingConfiguration(t *testing.T) {
 	require.Equal(t, "../testdata/worker-with-counter.php", module.Workers[0].FileName)
 	require.Len(t, module.Workers[0].Pings, 2)
 	require.Equal(t, 60*time.Second, module.Workers[0].Pings[0].Interval)
-	require.Equal(t, "/health", module.Workers[0].Pings[0].Path)
+	require.Equal(t, "health", module.Workers[0].Pings[0].Message)
 	require.False(t, module.Workers[0].Pings[0].Aligned)
 	require.False(t, module.Workers[0].Pings[0].Each)
 	require.Equal(t, time.Minute, module.Workers[0].Pings[1].Interval)
-	require.Equal(t, "/cron", module.Workers[0].Pings[1].Path)
+	require.Equal(t, "cron", module.Workers[0].Pings[1].Message)
 	require.True(t, module.Workers[0].Pings[1].Aligned)
 	require.True(t, module.Workers[0].Pings[1].Each)
 }
@@ -262,7 +262,7 @@ func TestModuleWorkerWithInvalidPingConfiguration(t *testing.T) {
 		config string
 	}{
 		{
-			name: "missing path",
+			name: "missing message",
 			config: `{
 				php {
 					worker {
@@ -278,7 +278,7 @@ func TestModuleWorkerWithInvalidPingConfiguration(t *testing.T) {
 				php {
 					worker {
 						file ../testdata/worker-with-counter.php
-						ping not-a-duration /health
+						ping not-a-duration health
 					}
 				}
 			}`,
@@ -289,18 +289,7 @@ func TestModuleWorkerWithInvalidPingConfiguration(t *testing.T) {
 				php {
 					worker {
 						file ../testdata/worker-with-counter.php
-						ping 60s /health each
-					}
-				}
-			}`,
-		},
-		{
-			name: "relative path",
-			config: `{
-				php {
-					worker {
-						file ../testdata/worker-with-counter.php
-						ping 60s health
+						ping 60s health each
 					}
 				}
 			}`,

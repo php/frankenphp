@@ -22,8 +22,8 @@ func TestWorkerPing(t *testing.T) {
 	t.Cleanup(Shutdown)
 
 	require.NoError(t, Init(
-		WithWorkers("ping-worker", "testdata/worker-with-counter.php", 1,
-			WithWorkerPings(50*time.Millisecond, "/ping", false, false),
+		WithWorkers("ping-worker", "testdata/message-worker.php", 1,
+			WithWorkerPings(50*time.Millisecond, "ping", false, false),
 		),
 	))
 

@@ -89,70 +89,36 @@ func nextAlignedPing(interval time.Duration, now time.Time) time.Time {
 
 func (w *worker) sendPings(ping workerPing) {
 	if ping.each {
-		w.sendPingToEachThread(ping.path)
+		w.sendPingToEachThread(ping.message)
 		return
 	}
 
-	w.sendPing(ping.path)
+	w.sendPing(ping.message)
 }
 
-func (w *worker) newPingContext(path string) (*frankenPHPContext, error) {
-	req, err := http.NewRequestWithContext(globalCtx, http.MethodGet, "http://localhost"+path, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	rw := discardResponseWriter{}
-	s := fallbackServer
-	if w.server != nil && w.server.isRegistered {
-		s = w.server
-	}
-
-	fc, err := newContextFromRequest(req, rw, s, WithWorkerName(w.name))
-	if err != nil {
-		return nil, err
-	}
-
-	if err := fc.validate(); err != nil {
-		return nil, err
-	}
-
-	return fc, nil
+func (w *worker) newPingContext(message string) *frankenPHPContext {
+	return newContextFromMessage(message, discardResponseWriter{}, globalCtx, w)
 }
 
-func (w *worker) sendPing(path string) {
-	fc, err := w.newPingContext(path)
-	if err != nil {
-		if globalLogger.Enabled(globalCtx, slog.LevelWarn) {
-			globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "worker ping request failed", slog.String("worker", w.name), slog.String("path", path), slog.Any("error", err))
-		}
-
-		return
-	}
+func (w *worker) sendPing(message string) {
+	fc := w.newPingContext(message)
 
 	if err := w.handleRequest(fc); err != nil && globalLogger.Enabled(globalCtx, slog.LevelWarn) {
-		globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "worker ping failed", slog.String("worker", w.name), slog.String("path", path), slog.Any("error", err))
+		globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "worker ping failed", slog.String("worker", w.name), slog.String("message", message), slog.Any("error", err))
 	}
 }
 
-func (w *worker) sendPingToEachThread(path string) {
+func (w *worker) sendPingToEachThread(message string) {
 	w.threadMutex.RLock()
 	threads := make([]*phpThread, len(w.threads))
 	copy(threads, w.threads)
 	w.threadMutex.RUnlock()
 
 	for _, thread := range threads {
-		fc, err := w.newPingContext(path)
-		if err != nil {
-			if globalLogger.Enabled(globalCtx, slog.LevelWarn) {
-				globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "worker ping request failed", slog.String("worker", w.name), slog.String("path", path), slog.Any("error", err))
-			}
-
-			continue
-		}
+		fc := w.newPingContext(message)
 
 		if err := w.handleRequestOnThread(thread, fc); err != nil && globalLogger.Enabled(globalCtx, slog.LevelWarn) {
-			globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "worker ping failed", slog.String("worker", w.name), slog.String("path", path), slog.Any("error", err))
+			globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "worker ping failed", slog.String("worker", w.name), slog.String("message", message), slog.Any("error", err))
 		}
 	}
 }

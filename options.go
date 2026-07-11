@@ -38,7 +38,7 @@ type opt struct {
 
 type workerPing struct {
 	interval time.Duration
-	path     string
+	message  string
 	aligned  bool
 	each     bool
 }
@@ -224,12 +224,12 @@ func WithWorkerWatchMode(watch []string) WorkerOption {
 	}
 }
 
-// WithWorkerPings configures a periodic internal HTTP request sent to the worker.
-func WithWorkerPings(interval time.Duration, path string, aligned, each bool) WorkerOption {
+// WithWorkerPings configures a periodic message sent to the worker via frankenphp_handle_request().
+func WithWorkerPings(interval time.Duration, message string, aligned, each bool) WorkerOption {
 	return func(w *workerOpt) error {
 		w.pings = append(w.pings, workerPing{
 			interval: interval,
-			path:     path,
+			message:  message,
 			aligned:  aligned,
 			each:     each,
 		})

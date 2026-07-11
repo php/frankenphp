@@ -50,7 +50,7 @@ type workerConfig struct {
 
 type workerPingConfig struct {
 	Interval time.Duration `json:"interval"`
-	Path     string        `json:"path"`
+	Message  string        `json:"message"`
 	Aligned  bool          `json:"aligned,omitempty"`
 	Each     bool          `json:"each,omitempty"`
 }
@@ -159,7 +159,7 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 			}
 
 			each := false
-			var interval, path string
+			var interval, message string
 
 			if strings.ToLower(args[0]) == "each" {
 				if len(args) != 3 {
@@ -167,16 +167,16 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 				}
 				each = true
 				interval = args[1]
-				path = args[2]
+				message = args[2]
 			} else {
 				if len(args) != 2 {
 					return wc, d.ArgErr()
 				}
 				interval = args[0]
-				path = args[1]
+				message = args[1]
 			}
 
-			ping, err := parseWorkerPing(interval, path, each)
+			ping, err := parseWorkerPing(interval, message, each)
 			if err != nil {
 				return wc, d.WrapErr(err)
 			}
@@ -217,18 +217,14 @@ func (wc *workerConfig) toWorkerOptions() []frankenphp.WorkerOption {
 
 	if len(wc.Pings) > 0 {
 		for _, p := range wc.Pings {
-			opts = append(opts, frankenphp.WithWorkerPings(p.Interval, p.Path, p.Aligned, p.Each))
+			opts = append(opts, frankenphp.WithWorkerPings(p.Interval, p.Message, p.Aligned, p.Each))
 		}
 	}
 
 	return opts
 }
 
-func parseWorkerPing(interval, path string, each bool) (workerPingConfig, error) {
-	if !strings.HasPrefix(path, "/") {
-		return workerPingConfig{}, fmt.Errorf("ping path must start with /")
-	}
-
+func parseWorkerPing(interval, message string, each bool) (workerPingConfig, error) {
 	parsedInterval, aligned, err := parsePingInterval(interval)
 	if err != nil {
 		return workerPingConfig{}, err
@@ -236,7 +232,7 @@ func parseWorkerPing(interval, path string, each bool) (workerPingConfig, error)
 
 	return workerPingConfig{
 		Interval: parsedInterval,
-		Path:     path,
+		Message:  message,
 		Aligned:  aligned,
 		Each:     each,
 	}, nil
