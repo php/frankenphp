@@ -33,7 +33,7 @@ type worker struct {
 	maxConsecutiveFailures int
 	onThreadReady          func(int)
 	onThreadShutdown       func(int)
-	pings                  []workerPing
+	pings                  []*ping
 	pingCancel             context.CancelFunc
 	queuedRequests         atomic.Int32
 	server                 *Server

@@ -41,14 +41,14 @@ type workerConfig struct {
 	MatchPath []string `json:"match_path,omitempty"`
 	// MaxConsecutiveFailures sets the maximum number of consecutive failures before panicking (defaults to 6, set to -1 to never panick)
 	MaxConsecutiveFailures int `json:"max_consecutive_failures,omitempty"`
-	// Pings configures periodic internal HTTP requests sent to the worker.
-	Pings []workerPingConfig `json:"pings,omitempty"`
+	// Pings configures periodic internal messages sent to the worker.
+	Pings []*pingConfig `json:"pings,omitempty"`
 
 	options        []frankenphp.WorkerOption
 	requestOptions []frankenphp.RequestOption
 }
 
-type workerPingConfig struct {
+type pingConfig struct {
 	Interval time.Duration `json:"interval"`
 	Message  string        `json:"message"`
 	Aligned  bool          `json:"aligned,omitempty"`
@@ -176,7 +176,7 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 				message = args[1]
 			}
 
-			ping, err := parseWorkerPing(interval, message, each)
+			ping, err := parsePingConfig(interval, message, each)
 			if err != nil {
 				return wc, d.WrapErr(err)
 			}
@@ -224,13 +224,13 @@ func (wc *workerConfig) toWorkerOptions() []frankenphp.WorkerOption {
 	return opts
 }
 
-func parseWorkerPing(interval, message string, each bool) (workerPingConfig, error) {
+func parsePingConfig(interval, message string, each bool) (*pingConfig, error) {
 	parsedInterval, aligned, err := parsePingInterval(interval)
 	if err != nil {
-		return workerPingConfig{}, err
+		return nil, err
 	}
 
-	return workerPingConfig{
+	return &pingConfig{
 		Interval: parsedInterval,
 		Message:  message,
 		Aligned:  aligned,

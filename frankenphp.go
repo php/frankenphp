@@ -362,7 +362,7 @@ func Init(options ...Option) error {
 		}
 	}
 
-	startWorkerPings()
+	initPings()
 
 	return nil
 }
@@ -373,7 +373,7 @@ func Shutdown() {
 		return
 	}
 
-	stopWorkerPings()
+	shutdownPings()
 
 	// call the shutdown hooks (mainly useful for extensions)
 	for _, fn := range onServerShutdown {
@@ -606,7 +606,7 @@ func go_sapi_flush(threadIndex C.uintptr_t) bool {
 func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (readBytes C.size_t) {
 	fc := phpThreads[threadIndex].handler.frankenPHPContext()
 
-	if fc.responseWriter == nil {
+	if fc.responseWriter == nil || fc.request == nil {
 		return 0
 	}
 

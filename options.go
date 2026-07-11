@@ -36,13 +36,6 @@ type opt struct {
 	servers     []*Server
 }
 
-type workerPing struct {
-	interval time.Duration
-	message  string
-	aligned  bool
-	each     bool
-}
-
 type workerOpt struct {
 	mercureContext
 
@@ -53,7 +46,7 @@ type workerOpt struct {
 	env                    PreparedEnv
 	requestOptions         []RequestOption
 	watch                  []string
-	pings                  []workerPing
+	pings                  []*ping
 	matchRequest           func(*http.Request) bool
 	maxConsecutiveFailures int
 	extensionWorkers       *extensionWorkers
@@ -227,7 +220,7 @@ func WithWorkerWatchMode(watch []string) WorkerOption {
 // WithWorkerPings configures a periodic message sent to the worker via frankenphp_handle_request().
 func WithWorkerPings(interval time.Duration, message string, aligned, each bool) WorkerOption {
 	return func(w *workerOpt) error {
-		w.pings = append(w.pings, workerPing{
+		w.pings = append(w.pings, &ping{
 			interval: interval,
 			message:  message,
 			aligned:  aligned,
