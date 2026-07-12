@@ -208,3 +208,28 @@ while (\frankenphp_handle_request($handler)) {
 
 When writing worker scripts, make sure to reset any request-specific state between requests.
 Frameworks like [Symfony](symfony.md) and [Laravel Octane](laravel.md) take care of resetting most state for you, but you may still need to reset your own services. With Symfony, services that hold request-specific state should implement [`Symfony\Contracts\Service\ResetInterface`](https://github.com/symfony/contracts/blob/main/Service/ResetInterface.php) so they're reset by the kernel between requests.
+
+## Pinging
+
+Workers can also be pinged repeatedly with a message. This works in a HTTP and Non-HTTP context.
+
+```caddyfile
+worker /path/to/worker {
+    ping 1s "Hello Worker" # send a single ping with message "Hello Worker" each second
+    ping minutely "Hello Worker" # send a ping aligned to the start of each minute
+    ping each 10s "Hello Worker" # send a ping to each active thread every 10s (aka 4 threads = 4 messages)
+    ping idle 5m "Hello Worker" # send a ping to each thread that has not handled a request since 5 minutes
+}
+```
+
+The function passed to `frankenphp_handle_request()` will receive the message directly as an argument:
+
+```
+$handler = function(string $message = ""){
+    echo $message; # "Hello Worker"
+}
+
+while(frankenphp_handle_request($handler)){}
+```
+
+If the worker also handles requests, messages will be empty, so the function needs to define a default parameter.
