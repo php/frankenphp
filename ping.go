@@ -13,6 +13,7 @@ type ping struct {
 	message  string
 	aligned  bool
 	each     bool
+	idle     bool
 }
 
 func initPings() {
@@ -93,28 +94,32 @@ func nextAlignedPing(interval time.Duration, now time.Time) time.Time {
 
 func (w *worker) sendPings(p *ping) {
 	if p.each {
-		w.sendPingToEachThread(p.message)
+		w.sendPingToEachThread(p)
 		return
 	}
 
-	w.sendPing(p.message)
+	w.sendPing(p)
 }
 
-func (w *worker) sendPing(message string) {
-	fc := newContextFromMessage(message, nil, globalCtx, w)
+func (w *worker) sendPing(p *ping) {
+	fc := newContextFromMessage(p.message, nil, globalCtx, w)
 
 	if err := w.handleRequest(fc); err != nil && globalLogger.Enabled(globalCtx, slog.LevelWarn) {
-		globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "worker ping failed", slog.String("worker", w.name), slog.String("message", message), slog.Any("error", err))
+		globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "worker ping failed", slog.String("worker", w.name), slog.String("message", p.message), slog.Any("error", err))
 	}
 }
 
-func (w *worker) sendPingToEachThread(message string) {
+func (w *worker) sendPingToEachThread(p *ping) {
 	w.threadMutex.RLock()
 	for _, thread := range w.threads {
+		if p.idle && thread.state.WaitTime() < p.interval.Milliseconds() {
+			// only ping the thread if it's been idle for at least the interval
+			continue
+		}
 		go func(thread *phpThread) {
-			fc := newContextFromMessage(message, nil, globalCtx, w)
+			fc := newContextFromMessage(p.message, nil, globalCtx, w)
 			if err := w.handleRequestOnThread(thread, fc); err != nil && globalLogger.Enabled(globalCtx, slog.LevelWarn) {
-				globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "worker ping failed", slog.String("worker", w.name), slog.String("message", message), slog.Any("error", err))
+				globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "worker ping failed", slog.String("worker", w.name), slog.String("message", p.message), slog.Any("error", err))
 			}
 		}(thread)
 	}

@@ -53,6 +53,7 @@ type pingConfig struct {
 	Message  string        `json:"message"`
 	Aligned  bool          `json:"aligned,omitempty"`
 	Each     bool          `json:"each,omitempty"`
+	Idle     bool          `json:"idle,omitempty"`
 }
 
 func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
@@ -153,30 +154,7 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 
 			wc.MaxConsecutiveFailures = v
 		case "ping":
-			args := d.RemainingArgs()
-			if len(args) < 2 || len(args) > 3 {
-				return wc, d.ArgErr()
-			}
-
-			each := false
-			var interval, message string
-
-			if strings.ToLower(args[0]) == "each" {
-				if len(args) != 3 {
-					return wc, d.ArgErr()
-				}
-				each = true
-				interval = args[1]
-				message = args[2]
-			} else {
-				if len(args) != 2 {
-					return wc, d.ArgErr()
-				}
-				interval = args[0]
-				message = args[1]
-			}
-
-			ping, err := parsePingConfig(interval, message, each)
+			ping, err := parsePingConfig(d)
 			if err != nil {
 				return wc, d.WrapErr(err)
 			}
@@ -217,14 +195,39 @@ func (wc *workerConfig) toWorkerOptions() []frankenphp.WorkerOption {
 
 	if len(wc.Pings) > 0 {
 		for _, p := range wc.Pings {
-			opts = append(opts, frankenphp.WithWorkerPings(p.Interval, p.Message, p.Aligned, p.Each))
+			opts = append(opts, frankenphp.WithWorkerPings(p.Interval, p.Message, p.Aligned, p.Each, p.Idle))
 		}
 	}
 
 	return opts
 }
 
-func parsePingConfig(interval, message string, each bool) (*pingConfig, error) {
+func parsePingConfig(d *caddyfile.Dispenser) (*pingConfig, error) {
+	args := d.RemainingArgs()
+	if len(args) < 2 || len(args) > 3 {
+		return nil, d.ArgErr()
+	}
+
+	each := false
+	idle := false
+	var interval, message string
+
+	if args[0] == "each" || args[0] == "idle" {
+		if len(args) != 3 {
+			return nil, d.ArgErr()
+		}
+		each = true
+		idle = args[0] == "idle"
+		interval = args[1]
+		message = args[2]
+	} else {
+		if len(args) != 2 {
+			return nil, d.ArgErr()
+		}
+		interval = args[0]
+		message = args[1]
+	}
+
 	parsedInterval, aligned, err := parsePingInterval(interval)
 	if err != nil {
 		return nil, err
@@ -235,6 +238,7 @@ func parsePingConfig(interval, message string, each bool) (*pingConfig, error) {
 		Message:  message,
 		Aligned:  aligned,
 		Each:     each,
+		Idle:     idle,
 	}, nil
 }
 
@@ -247,10 +251,10 @@ func parsePingInterval(s string) (time.Duration, bool, error) {
 	default:
 		d, err := time.ParseDuration(s)
 		if err != nil {
-			return 0, false, err
+			return 0, false, fmt.Errorf("ping interval must be a valid duration, received: %s (%s)", s, err)
 		}
 		if d <= 0 {
-			return 0, false, fmt.Errorf("ping interval must be positive")
+			return 0, false, fmt.Errorf("ping interval must be positive, received: %s (%s)", s, d)
 		}
 
 		return d, false, nil

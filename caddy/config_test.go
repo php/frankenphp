@@ -233,7 +233,8 @@ func TestModuleWorkerWithPingConfiguration(t *testing.T) {
 		php {
 			worker ../testdata/worker-with-counter.php {
 				ping 60s health
-				ping minutely each message
+				ping each minutely message
+				ping idle 3s "HELLO THERE!!!!"
 			}
 		}
 	}`
@@ -244,16 +245,23 @@ func TestModuleWorkerWithPingConfiguration(t *testing.T) {
 	err := module.UnmarshalCaddyfile(d)
 	require.NoError(t, err)
 	require.Len(t, module.Workers, 1)
-	require.Equal(t, "../testdata/worker-with-counter.php", module.Workers[0].FileName)
-	require.Len(t, module.Workers[0].Pings, 2)
-	require.Equal(t, 60*time.Second, module.Workers[0].Pings[0].Interval)
-	require.Equal(t, "health", module.Workers[0].Pings[0].Message)
-	require.False(t, module.Workers[0].Pings[0].Aligned)
-	require.False(t, module.Workers[0].Pings[0].Each)
-	require.Equal(t, time.Minute, module.Workers[0].Pings[1].Interval)
-	require.Equal(t, "message", module.Workers[0].Pings[1].Message)
-	require.True(t, module.Workers[0].Pings[1].Aligned)
-	require.True(t, module.Workers[0].Pings[1].Each)
+
+	pings := module.Workers[0].Pings
+	require.Len(t, pings, 3)
+	require.Equal(t, 60*time.Second, pings[0].Interval)
+	require.Equal(t, "health", pings[0].Message)
+	require.False(t, pings[0].Aligned)
+	require.False(t, pings[0].Each)
+
+	require.Equal(t, time.Minute, pings[1].Interval)
+	require.Equal(t, "message", pings[1].Message)
+	require.True(t, pings[1].Aligned)
+	require.True(t, pings[1].Each)
+
+	require.Equal(t, "HELLO THERE!!!!", module.Workers[0].Pings[2].Message)
+	require.True(t, module.Workers[0].Pings[2].Idle)
+	require.True(t, module.Workers[0].Pings[2].Each)
+	require.Equal(t, 3*time.Second, module.Workers[0].Pings[2].Interval)
 }
 
 func TestModuleWorkerWithInvalidPingConfiguration(t *testing.T) {

@@ -218,13 +218,14 @@ func WithWorkerWatchMode(watch []string) WorkerOption {
 }
 
 // WithWorkerPings configures a periodic message sent to the worker via frankenphp_handle_request().
-func WithWorkerPings(interval time.Duration, message string, aligned, each bool) WorkerOption {
+func WithWorkerPings(interval time.Duration, message string, aligned, each, idle bool) WorkerOption {
 	return func(w *workerOpt) error {
 		w.pings = append(w.pings, &ping{
 			interval: interval,
 			message:  message,
 			aligned:  aligned,
 			each:     each,
+			idle:     idle,
 		})
 
 		return nil
