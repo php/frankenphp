@@ -49,11 +49,10 @@ type workerConfig struct {
 }
 
 type pingConfig struct {
-	Interval time.Duration `json:"interval"`
-	Message  string        `json:"message"`
-	Aligned  bool          `json:"aligned,omitempty"`
-	Each     bool          `json:"each,omitempty"`
-	Idle     bool          `json:"idle,omitempty"`
+	Interval time.Duration       `json:"interval"`
+	Message  string              `json:"message"`
+	Aligned  bool                `json:"aligned,omitempty"`
+	Mode     frankenphp.PingMode `json:"mode,omitempty"`
 }
 
 func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
@@ -195,7 +194,7 @@ func (wc *workerConfig) toWorkerOptions() []frankenphp.WorkerOption {
 
 	if len(wc.Pings) > 0 {
 		for _, p := range wc.Pings {
-			opts = append(opts, frankenphp.WithWorkerPings(p.Interval, p.Message, p.Aligned, p.Each, p.Idle))
+			opts = append(opts, frankenphp.WithWorkerPings(p.Mode, p.Interval, p.Message, p.Aligned))
 		}
 	}
 
@@ -208,37 +207,33 @@ func parsePingConfig(d *caddyfile.Dispenser) (*pingConfig, error) {
 		return nil, d.ArgErr()
 	}
 
-	each := false
-	idle := false
-	var interval, message string
-
-	if args[0] == "each" || args[0] == "idle" {
-		if len(args) != 3 {
-			return nil, d.ArgErr()
+	mode := frankenphp.PingModeSynchronous
+	if len(args) == 3 {
+		switch args[0] {
+		case "each":
+			mode = frankenphp.PingModeEach
+		case "idle":
+			mode = frankenphp.PingModeIdle
+		case "overlap":
+			mode = frankenphp.PingModeOverlapping
+		case "sync":
+			mode = frankenphp.PingModeSynchronous
+		default:
+			return nil, d.Errf("invalid ping mode: %s, valid modes are: each, idle, overlap, sync (default)", args[0])
 		}
-		each = true
-		idle = args[0] == "idle"
-		interval = args[1]
-		message = args[2]
-	} else {
-		if len(args) != 2 {
-			return nil, d.ArgErr()
-		}
-		interval = args[0]
-		message = args[1]
+		args = args[1:]
 	}
 
-	parsedInterval, aligned, err := parsePingInterval(interval)
+	parsedInterval, aligned, err := parsePingInterval(args[0])
 	if err != nil {
 		return nil, err
 	}
 
 	return &pingConfig{
 		Interval: parsedInterval,
-		Message:  message,
+		Message:  args[1],
 		Aligned:  aligned,
-		Each:     each,
-		Idle:     idle,
+		Mode:     mode,
 	}, nil
 }
 

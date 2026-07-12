@@ -1421,7 +1421,7 @@ func TestPings(t *testing.T) {
 	require.NoError(t, frankenphp.Init(
 		frankenphp.WithLogger(logger),
 		frankenphp.WithWorkers("ping-worker", "testdata/worker-with-counter.php", 1,
-			frankenphp.WithWorkerPings(100*time.Microsecond, "ping", false, false, false),
+			frankenphp.WithWorkerPings(frankenphp.PingModeSynchronous, 100*time.Microsecond, "ping", false),
 		),
 	))
 	t.Cleanup(frankenphp.Shutdown)

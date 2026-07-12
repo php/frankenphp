@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/dunglas/frankenphp"
 )
 
 func TestModuleWorkerDuplicateFilenamesFail(t *testing.T) {
@@ -234,6 +236,7 @@ func TestModuleWorkerWithPingConfiguration(t *testing.T) {
 			worker ../testdata/worker-with-counter.php {
 				ping 60s health
 				ping each minutely message
+				ping overlap hourly message
 				ping idle 3s "HELLO THERE!!!!"
 			}
 		}
@@ -247,21 +250,26 @@ func TestModuleWorkerWithPingConfiguration(t *testing.T) {
 	require.Len(t, module.Workers, 1)
 
 	pings := module.Workers[0].Pings
-	require.Len(t, pings, 3)
+	require.Len(t, pings, 4)
 	require.Equal(t, 60*time.Second, pings[0].Interval)
 	require.Equal(t, "health", pings[0].Message)
 	require.False(t, pings[0].Aligned)
-	require.False(t, pings[0].Each)
+	require.Equal(t, frankenphp.PingModeSynchronous, pings[0].Mode)
 
 	require.Equal(t, time.Minute, pings[1].Interval)
 	require.Equal(t, "message", pings[1].Message)
 	require.True(t, pings[1].Aligned)
-	require.True(t, pings[1].Each)
+	require.Equal(t, frankenphp.PingModeEach, pings[1].Mode)
 
-	require.Equal(t, "HELLO THERE!!!!", module.Workers[0].Pings[2].Message)
-	require.True(t, module.Workers[0].Pings[2].Idle)
-	require.True(t, module.Workers[0].Pings[2].Each)
-	require.Equal(t, 3*time.Second, module.Workers[0].Pings[2].Interval)
+	require.Equal(t, time.Hour, pings[2].Interval)
+	require.Equal(t, "message", pings[2].Message)
+	require.True(t, pings[2].Aligned)
+	require.Equal(t, frankenphp.PingModeOverlapping, pings[2].Mode)
+
+	require.Equal(t, "HELLO THERE!!!!", pings[3].Message)
+	require.False(t, pings[3].Aligned)
+	require.Equal(t, frankenphp.PingModeIdle, pings[3].Mode)
+	require.Equal(t, 3*time.Second, pings[3].Interval)
 }
 
 func TestModuleWorkerWithInvalidPingConfiguration(t *testing.T) {
