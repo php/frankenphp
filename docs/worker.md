@@ -211,25 +211,44 @@ Frameworks like [Symfony](symfony.md) and [Laravel Octane](laravel.md) take care
 
 ## Pinging
 
-Workers can also be pinged repeatedly with a message. This works in a HTTP and Non-HTTP context.
+Workers can also be pinged repeatedly with a message.
 
 ```caddyfile
-worker /path/to/worker {
+worker /path/to/worker.php {
     ping 1s "Hello Worker" # send a single ping with message "Hello Worker" each second
-    ping minutely "Hello Worker" # send a ping aligned to the start of each minute
-    ping each 10s "Hello Worker" # send a ping to each active thread every 10s (aka 4 threads = 4 messages)
-    ping idle 5m "Hello Worker" # send a ping to each thread that has not handled a request since 5 minutes
 }
 ```
 
-The function passed to `frankenphp_handle_request()` will receive the message directly as an argument:
+In the worker script, the function passed to `frankenphp_handle_request()` will receive the message directly as an argument:
 
 ```
-$handler = function(string $message = ""){
+$handler = function(string $message = "") {
     echo $message; # "Hello Worker"
 }
 
 while(frankenphp_handle_request($handler)){}
 ```
 
-If the worker also handles requests, messages will be empty, so the function needs to define a default parameter.
+### Ping modes
+
+Available modes for pinging are: "sync", "overlap", "each" and "idle".
+
+```caddyfile
+worker /path/to/worker {
+    ping sync 10s "message" # send a single ping each 10s, wait for completion in-between pings
+    ping overlap 10s "message" # send a single ping each 10s, don't wait for completion
+    ping each 10s "message" # send pings to each active thread every 10s, don't wait for completion
+    ping idle 10s "message" # send pings to each active thread every 10s if the thread has been idle for more than 10s
+}
+```
+
+### Aligned pings
+
+A ping can also be aligned to the start of a minute or hour with the "minutely" or "hourly" keywords (cron-like).
+
+```caddyfile
+worker /path/to/worker {
+    ping overlap minutely "message" # send the ping at the exact start of each minute
+    ping overlap hourly "message" # send the ping at the exact start of each hour
+}
+```

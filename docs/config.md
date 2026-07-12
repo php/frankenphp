@@ -111,8 +111,7 @@ You can also explicitly configure FrankenPHP using the [global option](https://c
 			watch <path> # Sets the path to watch for file changes. Can be specified more than once for multiple paths.
 			name <name> # Sets the name of the worker, used in logs and metrics. Default: absolute path of worker file
 			max_consecutive_failures <num> # Sets the maximum number of consecutive failures before the worker is considered unhealthy, -1 means the worker will always restart. Default: 6.
-			ping <interval> <message> # Sends a periodic message to the worker via frankenphp_handle_request(). Interval can be a duration (e.g. 60s, 1m) or keyword (minutely, hourly). Can be specified more than once.
-			ping each <interval> <message> # Like ping, but sends the message to every worker thread instead of a single thread.
+			ping <mode> <interval> <message> # Sends a periodic message to the worker via frankenphp_handle_request(). Interval can be a duration (e.g. 60s, 1m) or keyword (minutely, hourly). Mode can be sync, overlap, each and idle. Can be specified more than once.
 		}
 	}
 }
