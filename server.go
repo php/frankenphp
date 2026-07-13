@@ -35,6 +35,7 @@ var (
 func registerServers(newServers []*Server) {
 	servers = newServers
 	fallbackServer.isRegistered = true
+	fallbackServer.logger = globalLogger
 	for i, s := range servers {
 		s.isRegistered = true
 		s.idx = i
