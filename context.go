@@ -67,7 +67,7 @@ func newContextFromRequest(request *http.Request, responseWriter http.ResponseWr
 		startedAt:      time.Now(),
 		server:         s,
 		splitPath:      s.splitPath,
-		logger:         globalLogger,
+		logger:         s.logger,
 		request:        request,
 		documentRoot:   s.root,
 		responseWriter: responseWriter,
