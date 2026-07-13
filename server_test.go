@@ -171,6 +171,7 @@ func TestServer(t *testing.T) {
 		logger, buf := newTestLogger(t)
 		server, _ := frankenphp.NewServer(testDataDir, nil, nil, logger)
 		initServers(t, frankenphp.WithServer(server))
+
 		_ = serverGet(t, server, "http://example.com/log-frankenphp_log.php")
 		_ = serverGet(t, server, "http://example.com/log-frankenphp_log.php")
 
