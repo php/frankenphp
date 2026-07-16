@@ -64,7 +64,21 @@ ZEND_TSRMLS_CACHE_DEFINE()
  *
  * @see https://github.com/DataDog/dd-trace-php/pull/3169 for an example
  */
-static const char *MODULES_TO_RELOAD[] = {"filter", NULL};
+static const char *MODULES_TO_RELOAD[] = {
+    "filter",
+#ifndef HAVE_PHP_SESSION
+    /* When the session extension is not visible at build time (e.g. it is
+     * loaded as a shared module), frankenphp_reset_session_state() is
+     * compiled out. Reset the session module through the registry instead so
+     * PS(id) is cleared between worker requests and a stale id cannot bleed
+     * across concurrent clients. See GHSA-v3ph-cgqh-r8p5.
+     *
+     * Unlike frankenphp_reset_session_state(), the module RSHUTDOWN frees
+     * save handlers registered from the worker bootstrap; that is an
+     * acceptable trade-off for a build where the extension isn't linked. */
+    "session",
+#endif
+    NULL};
 
 frankenphp_version frankenphp_get_version() {
   return (frankenphp_version){
