@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig"
@@ -47,6 +48,8 @@ type FrankenPHPModule struct {
 	Workers []workerConfig `json:"workers,omitempty"`
 	// RouteGroup is set automatically to pair the route embeds of one php_server directive (#2477). Do not set it manually.
 	RouteGroup string `json:"route_group,omitempty"`
+	// RequestBodyTimeout is an idle timeout on request body reads: a stalled (slow POST) client is cut off while a steady upload of any size succeeds. Defaults to 60s when omitted; set to 0 to disable.
+	RequestBodyTimeout *caddy.Duration `json:"request_body_timeout,omitempty"`
 
 	resolvedDocumentRoot        string
 	preparedEnv                 frankenphp.PreparedEnv
@@ -125,6 +128,14 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		return fmt.Errorf("invalid split_path: %w", err)
 	}
 	f.requestOptions = append(f.requestOptions, opt)
+
+	if f.RequestBodyTimeout == nil {
+		f.RequestBodyTimeout = new(defaultRequestBodyTimeout)
+	}
+
+	if *f.RequestBodyTimeout > 0 {
+		f.requestOptions = append(f.requestOptions, frankenphp.WithRequestBodyTimeout(time.Duration(*f.RequestBodyTimeout)))
+	}
 
 	if f.ResolveRootSymlink == nil {
 		f.ResolveRootSymlink = new(true)
@@ -313,8 +324,21 @@ func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					return err
 				}
 
+			case "request_body_timeout":
+				if !d.NextArg() {
+					return d.ArgErr()
+				}
+				v, err := caddy.ParseDuration(d.Val())
+				if err != nil {
+					return err
+				}
+				if d.NextArg() {
+					return d.ArgErr()
+				}
+				f.RequestBodyTimeout = new(caddy.Duration(v))
+
 			default:
-				return wrongSubDirectiveError("php or php_server", "hot_reload, name, root, split, env, resolve_root_symlink, worker", d.Val())
+				return wrongSubDirectiveError("php or php_server", "hot_reload, name, root, split, env, resolve_root_symlink, request_body_timeout, worker", d.Val())
 			}
 		}
 	}
