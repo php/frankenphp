@@ -57,7 +57,7 @@ php_server {
 }
 ```
 
-Utilisez la forme longue de `hot_reload` pour spécifier le *topic* Mercure à utiliser ainsi que les répertoires ou fichiers à surveiller :
+Utilisez la forme longue de `hot_reload` pour spécifier le _topic_ Mercure à utiliser ainsi que les répertoires ou fichiers à surveiller :
 
 ```caddyfile
 localhost
@@ -83,8 +83,8 @@ php_server {
 Le serveur détecte les modifications et publie les modifications automatiquement. Le navigateur doit s'abonner à ces événements pour mettre à jour la page.
 FrankenPHP expose l'URL du Hub Mercure à utiliser pour s'abonner aux modifications de fichiers via la variable d'environnement `$_SERVER['FRANKENPHP_HOT_RELOAD']`.
 
-La bibliothèque JavaScript [frankenphp-hot-reload](https://www.npmjs.com/package/frankenphp-hot-reload) gére la logique côté client.
-Pour l'utiliser, ajoutez le code suivant à votre gabarit (*layout*) principal :
+La bibliothèque JavaScript [frankenphp-hot-reload](https://www.npmjs.com/package/frankenphp-hot-reload) gère la logique côté client.
+Pour l'utiliser, ajoutez le code suivant à votre gabarit (_layout_) principal :
 
 ```php
 <!DOCTYPE html>
@@ -103,17 +103,19 @@ Alternativement, vous pouvez implémenter votre propre logique côté client en 
 
 ### Conserver les nœuds DOM existants
 
-Dans de rares cas, comme lors de l'utilisation d'outils de développement tels que [la *web debug toolbar* de Symfony](https://github.com/symfony/symfony/pull/62970),
+Dans de rares cas, comme lors de l'utilisation d'outils de développement tels que [la _web debug toolbar_ de Symfony](https://github.com/symfony/symfony/pull/62970),
 vous pouvez souhaiter conserver des nœuds DOM spécifiques.
 Pour ce faire, ajoutez l'attribut `data-frankenphp-hot-reload-preserve` à l'élément HTML concerné :
 
 ```html
-<div data-frankenphp-hot-reload-preserve><!-- Ma barre de développement --></div>
+<div data-frankenphp-hot-reload-preserve>
+  <!-- Ma barre de développement -->
+</div>
 ```
 
-## Mode Worker
+## Mode worker
 
-Si vous exécutez votre application en [mode Worker](worker.md), le script de votre application reste en mémoire.
+Si vous exécutez votre application en [mode worker](worker.md), le script de votre application reste en mémoire.
 Cela signifie que les modifications de votre code PHP ne seront pas reflétées immédiatement, même si le navigateur recharge la page.
 
 Pour une meilleure expérience de développement, combinez `hot_reload` avec [la sous-directive `watch` dans la directive `worker`](config.md#surveillance-des-modifications-de-fichier).
@@ -141,7 +143,7 @@ php_server {
 ## Comment ça fonctionne
 
 1. **Surveillance** : FrankenPHP surveille le système de fichiers pour les modifications en utilisant [la bibliothèque `e-dant/watcher`](https://github.com/e-dant/watcher) en interne (nous avons contribué à son binding Go).
-2. **Redémarrage (mode Worker)** : si `watch` est activé dans la configuration du worker, le worker PHP est redémarré pour charger le nouveau code.
+2. **Redémarrage (mode worker)** : si `watch` est activé dans la configuration du worker, le worker PHP est redémarré pour charger le nouveau code.
 3. **Envoi** : un payload JSON contenant la liste des fichiers modifiés est envoyé au [hub Mercure](https://mercure.rocks) intégré.
 4. **Réception** : le navigateur, à l'écoute via la bibliothèque JavaScript, reçoit l'événement Mercure.
 5. **Mise à jour** :

@@ -26,17 +26,32 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#ifndef ZEND_WIN32
+#ifndef PHP_WIN32
 #include <unistd.h>
 #endif
 #if defined(__linux__)
 #include <sys/prctl.h>
-#elif defined(__FreeBSD__) || defined(__OpenBSD__)
+#elif defined(__FreeBSD__)
 #include <pthread_np.h>
+#include <sys/procctl.h>
+#elif defined(__OpenBSD__)
+#include <pthread_np.h>
+#endif
+#if defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__) ||       \
+    defined(__DragonFly__)
+#define FRANKENPHP_KQUEUE_PARENT_DEATH 1
+#include <sys/event.h>
+#include <sys/types.h>
 #endif
 
 #include "_cgo_export.h"
 #include "frankenphp_arginfo.h"
+#ifdef FRANKENPHP_TEST
+/* The persistent_zval helpers are only compiled in when a consumer needs
+ * them. The step that lands the first real caller (background workers)
+ * will drop this guard. */
+#include "zval.h"
+#endif
 
 #if defined(PHP_WIN32) && defined(ZTS)
 ZEND_TSRMLS_CACHE_DEFINE()
@@ -49,7 +64,21 @@ ZEND_TSRMLS_CACHE_DEFINE()
  *
  * @see https://github.com/DataDog/dd-trace-php/pull/3169 for an example
  */
-static const char *MODULES_TO_RELOAD[] = {"filter", NULL};
+static const char *MODULES_TO_RELOAD[] = {
+    "filter",
+#ifndef HAVE_PHP_SESSION
+    /* When the session extension is not visible at build time (e.g. it is
+     * loaded as a shared module), frankenphp_reset_session_state() is
+     * compiled out. Reset the session module through the registry instead so
+     * PS(id) is cleared between worker requests and a stale id cannot bleed
+     * across concurrent clients. See GHSA-v3ph-cgqh-r8p5.
+     *
+     * Unlike frankenphp_reset_session_state(), the module RSHUTDOWN frees
+     * save handlers registered from the worker bootstrap; that is an
+     * acceptable trade-off for a build where the extension isn't linked. */
+    "session",
+#endif
+    NULL};
 
 frankenphp_version frankenphp_get_version() {
   return (frankenphp_version){
@@ -83,9 +112,229 @@ bool original_user_abort_setting = 0;
 frankenphp_interned_strings_t frankenphp_strings = {0};
 HashTable *main_thread_env = NULL;
 
-__thread uintptr_t thread_index;
-__thread bool is_worker_thread = false;
-__thread HashTable *sandboxed_env = NULL;
+#if defined(__ELF__) && defined(__GNUC__)
+#define THREAD_LOCAL __thread __attribute__((tls_model("local-exec")))
+#else
+#define THREAD_LOCAL __thread
+#endif
+
+static THREAD_LOCAL uintptr_t thread_index;
+static THREAD_LOCAL bool is_worker_thread = false;
+static THREAD_LOCAL HashTable *sandboxed_env = NULL;
+/* prepared_env holds entries from php(_server)'s `env KEY VAL`, exposed to
+ * getenv() and merged into $_ENV when 'E' is in variables_order. Separate from
+ * putenv() so those don't leak into $_ENV. */
+static THREAD_LOCAL HashTable *prepared_env = NULL;
+
+/* Published via SG(server_context) so ext-parallel children, which inherit
+ * the parent's SG(server_context), can route SAPI callbacks back to the
+ * parent's thread_index instead of their zero-initialized TLS. */
+typedef struct {
+  uintptr_t thread_index;
+} frankenphp_server_ctx;
+static THREAD_LOCAL frankenphp_server_ctx frankenphp_local_server_ctx;
+
+static inline uintptr_t frankenphp_thread_index(void) {
+  frankenphp_server_ctx *ctx = (frankenphp_server_ctx *)SG(server_context);
+  /* Fall back to the OS thread's own TLS before
+   * frankenphp_update_request_context(). */
+  return ctx == NULL ? thread_index : ctx->thread_index;
+}
+
+#ifndef PHP_WIN32
+static bool is_forked_child = false;
+static pid_t fork_parent_pid = 0;
+
+static void frankenphp_fork_prepare(void) { fork_parent_pid = getpid(); }
+
+#if defined(FRANKENPHP_KQUEUE_PARENT_DEATH)
+/* Watcher thread for platforms without a kernel parent-death signal.
+ * Blocks in kevent() until the parent exits, then force-kills this child. */
+static void *frankenphp_parent_death_watcher(void *arg) {
+  pid_t ppid = (pid_t)(intptr_t)arg;
+  int kq = kqueue();
+  if (kq < 0) {
+    _exit(1);
+  }
+  struct kevent kev;
+  EV_SET(&kev, ppid, EVFILT_PROC, EV_ADD | EV_ONESHOT, NOTE_EXIT, 0, NULL);
+  if (kevent(kq, &kev, 1, NULL, 0, NULL) < 0) {
+    _exit(1);
+  }
+  struct kevent event;
+  while (kevent(kq, NULL, 0, &event, 1, NULL) < 0 && errno == EINTR)
+    ;
+  _exit(1);
+}
+#endif
+
+static void frankenphp_fork_child(void) {
+  is_forked_child = true;
+#if defined(__linux__)
+  // if the parent process dies between fork() and this prctl()
+  if (prctl(PR_SET_PDEATHSIG, SIGKILL, 0, 0, 0) != 0 ||
+      getppid() != fork_parent_pid) {
+    _exit(1);
+  }
+#elif defined(__FreeBSD__)
+  /* FreeBSD analogue of PR_SET_PDEATHSIG - except with
+   * parent process death, rather than parent thread death. */
+  int sig = SIGKILL;
+  if (procctl(P_PID, 0, PROC_PDEATHSIG_CTL, &sig) != 0 ||
+      getppid() != fork_parent_pid) {
+    _exit(1);
+  }
+#elif defined(FRANKENPHP_KQUEUE_PARENT_DEATH)
+  /* No kernel parent-death signal available; spawn a watcher that
+   * blocks on EVFILT_PROC/NOTE_EXIT. */
+  if (getppid() != fork_parent_pid) {
+    _exit(1);
+  }
+  pthread_t watcher;
+  if (pthread_create(&watcher, NULL, frankenphp_parent_death_watcher,
+                     (void *)(intptr_t)fork_parent_pid) != 0) {
+    _exit(1);
+  }
+  pthread_detach(watcher);
+#endif
+}
+
+static void frankenphp_register_atfork(void) {
+  pthread_atfork(frankenphp_fork_prepare, NULL, frankenphp_fork_child);
+}
+
+/* pcntl signals delivered to a Go M segfault on PCNTL_G (no TSRM there)
+ * Block these in a constructor so Go's schedinit captures
+ * the mask and every M inherits it; execute_script_cli unblocks on its own
+ * pthread. Caddy's `signal.Notify` keeps working via `runtime.ensureSigM`.
+ * Limited to async-notify signals: Go's minitSignalMask re-unblocks anything
+ * flagged _SigKill/_SigThrow/_SigUnblock on every M anyway. */
+static void frankenphp_fill_cli_signal_set(sigset_t *s) {
+  sigemptyset(s);
+#ifdef SIGUSR1
+  sigaddset(s, SIGUSR1);
+#endif
+#ifdef SIGUSR2
+  sigaddset(s, SIGUSR2);
+#endif
+#ifdef SIGALRM
+  sigaddset(s, SIGALRM);
+#endif
+}
+
+__attribute__((constructor)) static void frankenphp_libpreinit(void) {
+  sigset_t set;
+  frankenphp_fill_cli_signal_set(&set);
+  /* Single-threaded at this point (constructors run before Go's runtime),
+   * so sigprocmask is sufficient and portable. */
+  sigprocmask(SIG_BLOCK, &set, NULL);
+}
+#endif
+
+/* Best-effort force-kill for stuck PHP threads.
+ *
+ * Each thread captures &EG(vm_interrupt) / &EG(timed_out) at boot and
+ * hands them to Go via go_frankenphp_store_force_kill_slot. To kill,
+ * Go passes the slot back to frankenphp_force_kill_thread, which stores
+ * true into both bools (the VM bails through zend_timeout() at the next
+ * opcode boundary) and then wakes any in-flight syscall:
+ *   - Linux/FreeBSD: pthread_kill(SIGRTMIN+3) -> EINTR.
+ *   - Windows: CancelSynchronousIo + QueueUserAPC for alertable I/O +
+ *     SleepEx. Non-alertable Sleep (including PHP's usleep) stays stuck.
+ *   - macOS: atomic-bool only; busy loops bail, blocking syscalls don't.
+ *
+ * Reserved signal: SIGRTMIN+3. PHP's pcntl_signal(SIGRTMIN+3, ...)
+ * clobbers it. glibc NPTL reserves SIGRTMIN..SIGRTMIN+2; embedders with
+ * their own Go signal usage may need to patch this constant.
+ *
+ * The slot lives Go-side on phpThread; the C side has no global table.
+ * The signal handler is installed once via pthread_once. */
+#ifdef PHP_WIN32
+static void CALLBACK frankenphp_noop_apc(ULONG_PTR param) { (void)param; }
+#endif
+
+#ifdef FRANKENPHP_HAS_KILL_SIGNAL
+/* No-op: delivery itself is what unblocks the syscall via EINTR. */
+static void frankenphp_kill_signal_handler(int sig) { (void)sig; }
+
+static pthread_once_t kill_signal_handler_installed = PTHREAD_ONCE_INIT;
+/* Set to true only after sigaction() succeeds. force_kill_thread skips
+ * pthread_kill when this is false, so a sigaction failure (invalid
+ * signal number, exhausted handler slots, etc.) can't deliver the
+ * signal with its default action (process termination). */
+static zend_atomic_bool kill_signal_handler_active;
+static void install_kill_signal_handler(void) {
+  /* No SA_RESTART so syscalls return EINTR rather than being restarted.
+   * SA_ONSTACK guards against an accidental process-level delivery to a
+   * Go-managed thread, where Go requires the alternate signal stack. */
+  struct sigaction sa;
+  memset(&sa, 0, sizeof(sa));
+  sa.sa_handler = frankenphp_kill_signal_handler;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = SA_ONSTACK;
+  if (sigaction(FRANKENPHP_KILL_SIGNAL, &sa, NULL) == 0) {
+    zend_atomic_bool_store(&kill_signal_handler_active, true);
+  }
+}
+#endif
+
+/* Must run on the PHP thread itself: EG() resolves to its own TSRM
+ * context and pthread_self() captures the right tid. */
+static void frankenphp_register_thread_for_kill(uintptr_t idx) {
+  force_kill_slot slot;
+  memset(&slot, 0, sizeof(slot));
+  slot.vm_interrupt = &EG(vm_interrupt);
+  slot.timed_out = &EG(timed_out);
+#ifdef FRANKENPHP_HAS_KILL_SIGNAL
+  slot.tid = pthread_self();
+  pthread_once(&kill_signal_handler_installed, install_kill_signal_handler);
+#elif defined(PHP_WIN32)
+  if (!DuplicateHandle(GetCurrentProcess(), GetCurrentThread(),
+                       GetCurrentProcess(), &slot.thread_handle, 0, FALSE,
+                       DUPLICATE_SAME_ACCESS)) {
+    /* On failure, force_kill falls back to atomic-bool only. */
+    slot.thread_handle = NULL;
+  }
+#endif
+  go_frankenphp_store_force_kill_slot(idx, slot);
+}
+
+void frankenphp_force_kill_thread(force_kill_slot slot) {
+  if (slot.vm_interrupt == NULL) {
+    /* Boot aborted before the slot was published. */
+    return;
+  }
+
+  /* Atomic stores first: by the time the thread wakes (signal-driven or
+   * natural) the VM sees them and bails through zend_timeout(). */
+  zend_atomic_bool_store(slot.timed_out, true);
+  zend_atomic_bool_store(slot.vm_interrupt, true);
+
+#ifdef FRANKENPHP_HAS_KILL_SIGNAL
+  /* ESRCH (thread already exited) / EINVAL are both benign here.
+   * Skip if sigaction() failed at install time: delivering an unhandled
+   * SIGRTMIN+3 would terminate the process. */
+  if (zend_atomic_bool_load(&kill_signal_handler_active)) {
+    pthread_kill(slot.tid, FRANKENPHP_KILL_SIGNAL);
+  }
+#elif defined(PHP_WIN32)
+  if (slot.thread_handle != NULL) {
+    CancelSynchronousIo(slot.thread_handle);
+    QueueUserAPC((PAPCFUNC)frankenphp_noop_apc, slot.thread_handle, 0);
+  }
+#endif
+}
+
+/* CloseHandle on Windows; no-op on POSIX. */
+void frankenphp_release_thread_for_kill(force_kill_slot slot) {
+#ifdef PHP_WIN32
+  if (slot.thread_handle != NULL) {
+    CloseHandle(slot.thread_handle);
+  }
+#else
+  (void)slot;
+#endif
+}
 
 void frankenphp_update_local_thread_context(bool is_worker) {
   is_worker_thread = is_worker;
@@ -97,7 +346,8 @@ void frankenphp_update_local_thread_context(bool is_worker) {
 static void frankenphp_update_request_context() {
   /* the server context is stored on the go side, still SG(server_context) needs
    * to not be NULL */
-  SG(server_context) = (void *)1;
+  frankenphp_local_server_ctx.thread_index = thread_index;
+  SG(server_context) = &frankenphp_local_server_ctx;
   /* status It is not reset by zend engine, set it to 200. */
   SG(sapi_headers).http_response_code = 200;
 
@@ -293,9 +543,17 @@ bool frankenphp_shutdown_dummy_request(void) {
 }
 
 void get_full_env(zval *track_vars_array) {
-  zend_hash_extend(Z_ARR_P(track_vars_array),
-                   zend_hash_num_elements(main_thread_env), 0);
+  size_t total = zend_hash_num_elements(main_thread_env);
+  if (prepared_env != NULL) {
+    // perf: doesn't matter if we get the exact count, just >= needed
+    total += zend_hash_num_elements(prepared_env);
+  }
+  zend_hash_extend(Z_ARR_P(track_vars_array), total, 0);
   zend_hash_copy(Z_ARR_P(track_vars_array), main_thread_env, NULL);
+  if (prepared_env != NULL) {
+    zend_hash_copy(Z_ARR_P(track_vars_array), prepared_env,
+                   (copy_ctor_func_t)zval_add_ref);
+  }
 }
 
 /* Adapted from php_request_startup() */
@@ -365,14 +623,15 @@ static int frankenphp_worker_request_startup() {
 PHP_FUNCTION(frankenphp_finish_request) { /* {{{ */
   ZEND_PARSE_PARAMETERS_NONE();
 
-  if (go_is_context_done(thread_index)) {
+  uintptr_t idx = frankenphp_thread_index();
+  if (go_is_context_done(idx)) {
     RETURN_FALSE;
   }
 
   php_output_end_all();
   php_header();
 
-  go_frankenphp_finish_php_request(thread_index);
+  go_frankenphp_finish_php_request(idx);
 
   RETURN_TRUE;
 } /* }}} */
@@ -399,6 +658,13 @@ PHP_FUNCTION(frankenphp_putenv) {
 
   if (sandboxed_env == NULL) {
     sandboxed_env = zend_array_dup(main_thread_env);
+    /* prepared_env overrides the OS env and putenv() overrides both, so layer
+     * the prepared vars onto the dup before sandboxed_env starts shadowing the
+     * other two layers in getenv(). */
+    if (prepared_env != NULL) {
+      zend_hash_copy(sandboxed_env, prepared_env,
+                     (copy_ctor_func_t)zval_add_ref);
+    }
   }
 
   /* cut at null byte to stay consistent with regular putenv */
@@ -434,6 +700,38 @@ PHP_FUNCTION(frankenphp_putenv) {
   RETURN_BOOL(success);
 } /* }}} */
 
+/* getenv() lookup: sandboxed_env if present (it already holds prepared + OS),
+ * otherwise prepared_env then main_thread_env. */
+static inline zval *frankenphp_lookup_env(const char *name, size_t name_len) {
+  if (sandboxed_env != NULL) {
+    return zend_hash_str_find(sandboxed_env, name, name_len);
+  }
+
+  zval *env_val = NULL;
+  if (prepared_env != NULL) {
+    env_val = zend_hash_str_find(prepared_env, name, name_len);
+  }
+  if (env_val == NULL) {
+    env_val = zend_hash_str_find(main_thread_env, name, name_len);
+  }
+
+  return env_val;
+}
+
+/* Returns a fresh copy of the full environment, merging the layers above. */
+static inline HashTable *frankenphp_dup_env(void) {
+  if (sandboxed_env != NULL) {
+    return zend_array_dup(sandboxed_env);
+  }
+
+  HashTable *env = zend_array_dup(main_thread_env);
+  if (prepared_env != NULL) {
+    zend_hash_copy(env, prepared_env, (copy_ctor_func_t)zval_add_ref);
+  }
+
+  return env;
+}
+
 /* {{{ Get the env from the sandboxed environment */
 PHP_FUNCTION(frankenphp_getenv) {
   zend_string *name = NULL;
@@ -445,14 +743,12 @@ PHP_FUNCTION(frankenphp_getenv) {
   Z_PARAM_BOOL(local_only)
   ZEND_PARSE_PARAMETERS_END();
 
-  HashTable *ht = sandboxed_env ? sandboxed_env : main_thread_env;
-
   if (!name) {
-    RETURN_ARR(zend_array_dup(ht));
+    RETURN_ARR(frankenphp_dup_env());
     return;
   }
 
-  zval *env_val = zend_hash_find(ht, name);
+  zval *env_val = frankenphp_lookup_env(ZSTR_VAL(name), ZSTR_LEN(name));
   if (env_val && Z_TYPE_P(env_val) == IS_STRING) {
     zend_string *str = Z_STR_P(env_val);
     zend_string_addref(str);
@@ -467,13 +763,13 @@ PHP_FUNCTION(frankenphp_request_headers) {
   ZEND_PARSE_PARAMETERS_NONE();
 
   struct go_apache_request_headers_return headers =
-      go_apache_request_headers(thread_index);
+      go_apache_request_headers(frankenphp_thread_index());
 
   array_init_size(return_value, headers.r1);
 
   for (size_t i = 0; i < headers.r1; i++) {
     go_string key = headers.r0[i * 2];
-    go_string val = headers.r0[i * 2 + 1];
+    go_string val = headers.r0[(i * 2) + 1];
 
     add_assoc_stringl_ex(return_value, key.data, key.len, val.data, val.len);
   }
@@ -565,7 +861,11 @@ PHP_FUNCTION(frankenphp_handle_request) {
    * Reset default timeout
    */
   if (PG(max_input_time) != -1) {
+#if PHP_VERSION_ID < 80600
     zend_set_timeout(INI_INT("max_execution_time"), 0);
+#else
+    zend_set_timeout(zend_ini_long_literal("max_execution_time"), 0);
+#endif
   }
 #endif
 
@@ -600,6 +900,12 @@ PHP_FUNCTION(frankenphp_handle_request) {
       zend_bailout();
     }
   }
+
+#ifndef PHP_WIN32
+  if (UNEXPECTED(is_forked_child)) {
+    _exit(EG(exit_status));
+  }
+#endif
 
   frankenphp_worker_request_shutdown();
   go_frankenphp_finish_worker_request(thread_index, callback_ret);
@@ -656,8 +962,8 @@ PHP_FUNCTION(mercure_publish) {
     RETURN_THROWS();
   }
 
-  struct go_mercure_publish_return result =
-      go_mercure_publish(thread_index, topics, data, private, id, type, retry);
+  struct go_mercure_publish_return result = go_mercure_publish(
+      frankenphp_thread_index(), topics, data, private, id, type, retry);
 
   switch (result.r1) {
   case 0:
@@ -689,7 +995,7 @@ PHP_FUNCTION(frankenphp_log) {
   ZEND_PARSE_PARAMETERS_END();
 
   char *ret = NULL;
-  ret = go_log_attrs(thread_index, message, level, context);
+  ret = go_log_attrs(frankenphp_thread_index(), message, level, context);
   if (ret != NULL) {
     zend_throw_exception(spl_ce_RuntimeException, ret, 0);
     free(ret);
@@ -697,8 +1003,81 @@ PHP_FUNCTION(frankenphp_log) {
   }
 }
 
+static void frankenphp_opcache_restart_hook(int reason) {
+  (void)reason;
+  go_schedule_opcache_reset(frankenphp_thread_index());
+}
+
+/* {{{ thread-safe opcache reset */
+PHP_FUNCTION(frankenphp_opcache_reset) {
+  frankenphp_opcache_restart_hook(0);
+
+  RETVAL_TRUE;
+} /* }}} */
+
+/* Try to override opcache_reset if opcache is loaded.
+ * instead of resetting opcache, reboot all threads */
+static void frankenphp_override_opcache_reset(void) {
+  zend_function *func = zend_hash_str_find_ptr(
+      CG(function_table), "opcache_reset", sizeof("opcache_reset") - 1);
+  if (func != NULL && func->type == ZEND_INTERNAL_FUNCTION &&
+      ((zend_internal_function *)func)->handler !=
+          ZEND_FN(frankenphp_opcache_reset)) {
+    ((zend_internal_function *)func)->handler =
+        ZEND_FN(frankenphp_opcache_reset);
+  }
+}
+
+#ifdef FRANKENPHP_TEST
+/* Test-only entry point that exercises zval.h end-to-end:
+ * validate -> persist (request -> persistent memory) ->
+ * to_request (persistent -> fresh request memory) -> free persistent copy.
+ * Compiled only when FRANKENPHP_TEST is defined; never registered
+ * in production builds. */
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(
+    arginfo_frankenphp_test_persist_roundtrip, 0, 1, IS_MIXED, 0)
+ZEND_ARG_TYPE_INFO(0, value, IS_MIXED, 0)
+ZEND_END_ARG_INFO()
+
+PHP_FUNCTION(frankenphp_test_persist_roundtrip) {
+  zval *input;
+  ZEND_PARSE_PARAMETERS_START(1, 1)
+  Z_PARAM_ZVAL(input)
+  ZEND_PARSE_PARAMETERS_END();
+
+  if (!persistent_zval_validate(input)) {
+    zend_throw_exception(spl_ce_LogicException,
+                         "persistent_zval: value type not supported "
+                         "(only scalars, arrays, and enums are allowed)",
+                         0);
+    RETURN_THROWS();
+  }
+
+  zval persistent;
+  persistent_zval_persist(&persistent, input);
+  persistent_zval_to_request(return_value, &persistent);
+  persistent_zval_free(&persistent);
+}
+
+static const zend_function_entry frankenphp_test_hook_functions[] = {
+    PHP_FE(frankenphp_test_persist_roundtrip,
+           arginfo_frankenphp_test_persist_roundtrip) PHP_FE_END};
+#endif
+
 PHP_MINIT_FUNCTION(frankenphp) {
   register_frankenphp_symbols(module_number);
+#ifndef PHP_WIN32
+  /* MINIT runs once per ZTS thread — guard the atfork registration */
+  static pthread_once_t atfork_once = PTHREAD_ONCE_INIT;
+  pthread_once(&atfork_once, frankenphp_register_atfork);
+#endif
+
+#ifdef FRANKENPHP_TEST
+  if (zend_register_functions(NULL, frankenphp_test_hook_functions, NULL,
+                              MODULE_PERSISTENT) == FAILURE) {
+    return FAILURE;
+  }
+#endif
 
   zend_function *func;
 
@@ -720,6 +1099,10 @@ PHP_MINIT_FUNCTION(frankenphp) {
     php_error(E_WARNING, "Failed to find built-in getenv function");
   }
 
+  // Override opcache_reset (may not be available yet if opcache loads as a
+  // shared extension in PHP 8.4 and below)
+  frankenphp_override_opcache_reset();
+
   return SUCCESS;
 }
 
@@ -738,14 +1121,29 @@ static zend_module_entry frankenphp_module = {
 static int frankenphp_startup(sapi_module_struct *sapi_module) {
   php_import_environment_variables = get_full_env;
 
-  return php_module_startup(sapi_module, &frankenphp_module);
+  int result = php_module_startup(sapi_module, &frankenphp_module);
+#if PHP_VERSION_ID < 80500
+  if (result == SUCCESS) {
+    /* Override opcache here again if loaded as a shared extension
+     * (php 8.4 and under) */
+    frankenphp_override_opcache_reset();
+  }
+#endif
+
+  return result;
 }
 
 static int frankenphp_deactivate(void) { return SUCCESS; }
 
 static size_t frankenphp_ub_write(const char *str, size_t str_length) {
+#ifndef PHP_WIN32
+  if (UNEXPECTED(is_forked_child)) {
+    return 0;
+  }
+#endif
+
   struct go_ub_write_return result =
-      go_ub_write(thread_index, (char *)str, str_length);
+      go_ub_write(frankenphp_thread_index(), (char *)str, str_length);
 
   if (result.r1) {
     php_handle_aborted_connection();
@@ -755,23 +1153,26 @@ static size_t frankenphp_ub_write(const char *str, size_t str_length) {
 }
 
 static int frankenphp_send_headers(sapi_headers_struct *sapi_headers) {
+#ifndef PHP_WIN32
+  if (UNEXPECTED(is_forked_child)) {
+    return SAPI_HEADER_SEND_FAILED;
+  }
+#endif
+
   if (SG(request_info).no_headers == 1) {
     return SAPI_HEADER_SENT_SUCCESSFULLY;
   }
 
-  int status;
-
-  if (SG(sapi_headers).http_status_line) {
-    status = atoi((SG(sapi_headers).http_status_line) + 9);
-  } else {
-    status = SG(sapi_headers).http_response_code;
-
-    if (!status) {
-      status = 200;
-    }
+  /* Use the response code PHP already parsed; reparsing http_status_line with
+   * a fixed +9 offset read out of bounds for lines shorter than 9 bytes, e.g.
+   * header("HTTP/"). */
+  int status = SG(sapi_headers).http_response_code;
+  if (!status) {
+    status = 200;
   }
 
-  bool success = go_write_headers(thread_index, status, &sapi_headers->headers);
+  bool success = go_write_headers(frankenphp_thread_index(), status,
+                                  &sapi_headers->headers);
   if (success) {
     return SAPI_HEADER_SENT_SUCCESSFULLY;
   }
@@ -780,18 +1181,24 @@ static int frankenphp_send_headers(sapi_headers_struct *sapi_headers) {
 }
 
 static void frankenphp_sapi_flush(void *server_context) {
+#ifndef PHP_WIN32
+  if (UNEXPECTED(is_forked_child)) {
+    return;
+  }
+#endif
+
   sapi_send_headers();
-  if (go_sapi_flush(thread_index)) {
+  if (go_sapi_flush(frankenphp_thread_index())) {
     php_handle_aborted_connection();
   }
 }
 
 static size_t frankenphp_read_post(char *buffer, size_t count_bytes) {
-  return go_read_post(thread_index, buffer, count_bytes);
+  return go_read_post(frankenphp_thread_index(), buffer, count_bytes);
 }
 
 static char *frankenphp_read_cookies(void) {
-  return go_read_cookies(thread_index);
+  return go_read_cookies(frankenphp_thread_index());
 }
 
 /* all variables with well defined keys can safely be registered like this */
@@ -865,6 +1272,13 @@ void frankenphp_register_server_vars(zval *track_vars_array,
   zend_hash_update_ind(ht, frankenphp_strings.remote_ident, &zv);
 }
 
+void frankenphp_merge_with_prepared_env(zval *track_vars_array) {
+  if (prepared_env != NULL) {
+    HashTable *ht = Z_ARRVAL_P(track_vars_array);
+    zend_hash_copy(ht, prepared_env, (copy_ctor_func_t)zval_add_ref);
+  }
+}
+
 /** Create an immutable zend_string that lasts for the whole process **/
 zend_string *frankenphp_init_persistent_string(const char *string, size_t len) {
   /* persistent strings will be ignored by the GC at the end of a request */
@@ -911,14 +1325,14 @@ frankenphp_register_variables_from_request_info(zval *track_vars_array) {
       frankenphp_strings.content_type, (char *)SG(request_info).content_type,
       true, track_vars_array);
   frankenphp_register_variable_from_request_info(
-      frankenphp_strings.path_translated,
-      (char *)SG(request_info).path_translated, false, track_vars_array);
+      frankenphp_strings.path_translated, SG(request_info).path_translated,
+      false, track_vars_array);
   frankenphp_register_variable_from_request_info(
       frankenphp_strings.query_string, SG(request_info).query_string, true,
       track_vars_array);
-  frankenphp_register_variable_from_request_info(
-      frankenphp_strings.remote_user, (char *)SG(request_info).auth_user, false,
-      track_vars_array);
+  frankenphp_register_variable_from_request_info(frankenphp_strings.remote_user,
+                                                 SG(request_info).auth_user,
+                                                 false, track_vars_array);
   frankenphp_register_variable_from_request_info(
       frankenphp_strings.request_method,
       (char *)SG(request_info).request_method, false, track_vars_array);
@@ -967,20 +1381,18 @@ static void frankenphp_register_variables(zval *track_vars_array) {
    * environment, not values added though putenv
    */
   /* import environment and CGI variables from the request context in go */
-  go_register_server_variables(thread_index, track_vars_array);
+  go_register_server_variables(frankenphp_thread_index(), track_vars_array);
 
   /* Some variables are already present in SG(request_info) */
   frankenphp_register_variables_from_request_info(track_vars_array);
 }
 
 static void frankenphp_log_message(const char *message, int syslog_type_int) {
-  go_log(thread_index, (char *)message, syslog_type_int);
+  go_log(frankenphp_thread_index(), (char *)message, syslog_type_int);
 }
 
 static char *frankenphp_getenv(const char *name, size_t name_len) {
-  HashTable *ht = sandboxed_env ? sandboxed_env : main_thread_env;
-
-  zval *env_val = zend_hash_str_find(ht, name, name_len);
+  zval *env_val = frankenphp_lookup_env(name, name_len);
   if (env_val && Z_TYPE_P(env_val) == IS_STRING) {
     zend_string *str = Z_STR_P(env_val);
     return ZSTR_VAL(str);
@@ -1027,7 +1439,7 @@ sapi_module_struct frankenphp_sapi_module = {
  * License: MIT
  */
 static void set_thread_name(char *thread_name) {
-#if defined(__linux__)
+#ifdef __linux__
   /* Use prctl instead to prevent using _GNU_SOURCE flag and implicit
    * declaration */
   prctl(PR_SET_NAME, thread_name);
@@ -1043,6 +1455,22 @@ static inline void reset_sandboxed_environment() {
     zend_hash_release(sandboxed_env);
     sandboxed_env = NULL;
   }
+  if (prepared_env != NULL) {
+    zend_hash_release(prepared_env);
+    prepared_env = NULL;
+  }
+}
+
+/* Adds a key/value pair to the per-thread prepared environment, exposing
+ *  env vars from the php(_server) directive to getenv() and $_ENV. */
+void frankenphp_add_to_prepared_env(char *name, size_t name_len, char *val,
+                                    size_t val_len, size_t size) {
+  if (prepared_env == NULL) {
+    prepared_env = zend_new_array(size);
+  }
+  zval zv = {0};
+  ZVAL_STRINGL(&zv, val, val_len);
+  zend_hash_str_update(prepared_env, name, name_len, &zv);
 }
 
 static void *php_thread(void *arg) {
@@ -1051,6 +1479,16 @@ static void *php_thread(void *arg) {
   snprintf(thread_name, 16, "php-%" PRIxPTR, thread_index);
   set_thread_name(thread_name);
 
+#ifdef FRANKENPHP_HAS_KILL_SIGNAL
+  /* The spawning Go-managed M may block realtime signals, which the
+   * new pthread inherits. Unblock FRANKENPHP_KILL_SIGNAL here so
+   * force-kill deliveries are not silently dropped. */
+  sigset_t unblock;
+  sigemptyset(&unblock);
+  sigaddset(&unblock, FRANKENPHP_KILL_SIGNAL);
+  pthread_sigmask(SIG_UNBLOCK, &unblock, NULL);
+#endif
+
   /* Initial allocation of all global PHP memory for this thread */
 #ifdef ZTS
   (void)ts_resource(0);
@@ -1058,6 +1496,10 @@ static void *php_thread(void *arg) {
   ZEND_TSRMLS_CACHE_UPDATE();
 #endif
 #endif
+
+  /* Publish this thread's force-kill slot to Go so the graceful-drain
+   * grace period can wake it from a busy PHP loop or blocking syscall. */
+  frankenphp_register_thread_for_kill(thread_index);
 
   bool thread_is_healthy = true;
   bool has_attempted_shutdown = false;
@@ -1078,6 +1520,12 @@ static void *php_thread(void *arg) {
         zend_bailout();
       }
 
+#if PHP_VERSION_ID < 80500
+      /* Override opcache here again if loaded as a shared extension
+       * (php 8.4 and under) */
+      frankenphp_override_opcache_reset();
+#endif
+
       zend_file_handle file_handle;
       zend_stream_init_filename(&file_handle, scriptName);
 
@@ -1086,6 +1534,11 @@ static void *php_thread(void *arg) {
 
       /* Execute the PHP script, potential bailout to zend_catch */
       php_execute_script(&file_handle);
+#ifndef PHP_WIN32
+      if (UNEXPECTED(is_forked_child)) {
+        _exit(EG(exit_status));
+      }
+#endif
       zend_destroy_file_handle(&file_handle);
       reset_sandboxed_environment();
 
@@ -1095,6 +1548,19 @@ static void *php_thread(void *arg) {
 
       has_attempted_shutdown = true;
 
+#ifdef HAVE_PHP_SESSION
+      /* A bailout inside a user save handler skips the cleanup that clears
+       * PS(in_save_handler); RSHUTDOWN's recursion guard then refuses to run
+       * the handler's close() and any resource it holds leaks
+       * (https://github.com/php/frankenphp/issues/2368). See
+       * https://github.com/php/php-src/blob/900797e54fb8d21a761205e5788b9275dc1c7c0e/ext/session/mod_user.c#L29
+       * fpm doesn't run into this because it kills timed out processes, which
+       * releases all resources:
+       * https://github.com/php/php-src/blob/900797e54fb8d21a761205e5788b9275dc1c7c0e/sapi/fpm/fpm/fpm_request.c#L276
+       */
+      PS(in_save_handler) = false;
+#endif
+
       /* shutdown the request, potential bailout to zend_catch */
       php_request_shutdown((void *)0);
       frankenphp_free_request_context();
@@ -1102,6 +1568,12 @@ static void *php_thread(void *arg) {
     }
   }
   zend_catch {
+#ifndef PHP_WIN32
+    if (UNEXPECTED(is_forked_child)) {
+      _exit(EG(exit_status));
+    }
+#endif
+
     /* Critical failure from php_execute_script or php_request_shutdown, mark
      * the thread as unhealthy */
     thread_is_healthy = false;
@@ -1125,6 +1597,11 @@ static void *php_thread(void *arg) {
   }
   zend_end_try();
 
+  /* Must precede ts_free_thread: that frees the TSRM storage backing
+   * the slot's &EG() pointers. Clearing first means any concurrent
+   * force-kill either ran before us or sees a zero slot. */
+  go_frankenphp_clear_force_kill_slot(thread_index);
+
   /* free all global PHP memory reserved for this thread */
 #ifdef ZTS
   ts_free_thread();
@@ -1133,12 +1610,9 @@ static void *php_thread(void *arg) {
   /* Thread is healthy, signal to Go that the thread has shut down */
   if (thread_is_healthy) {
     go_frankenphp_on_thread_shutdown(thread_index);
-
     return NULL;
   }
 
-  /* Thread is unhealthy, PHP globals might be in a bad state after a bailout,
-   * restart the entire thread */
   frankenphp_log_message("Restarting unhealthy thread", LOG_WARNING);
 
   if (!frankenphp_new_php_thread(thread_index)) {
@@ -1231,6 +1705,13 @@ static void *php_main(void *arg) {
 
   frankenphp_sapi_module.startup(&frankenphp_sapi_module);
 
+#if defined(ZTS) && PHP_VERSION_ID >= 80400
+  /* Also restart everything on opcache memory overflow or similar events, the
+   * hook is triggered right before an opcache reset is scheduled
+   */
+  zend_accel_schedule_restart_hook = frankenphp_opcache_restart_hook;
+#endif
+
   /* check if a default filter is set in php.ini and only filter if
    * it is, this is deprecated and will be removed in PHP 9 */
   char *default_filter;
@@ -1240,7 +1721,9 @@ static void *php_main(void *arg) {
 
   go_frankenphp_main_thread_is_ready();
 
-  /* channel closed, shutdown gracefully */
+  /* channel closed, shutdown gracefully. drainPHPThreads has already
+   * waited for every PHP thread to exit (state.Done), so SAPI/TSRM
+   * teardown here is safe. */
   frankenphp_sapi_module.shutdown(&frankenphp_sapi_module);
 
   sapi_shutdown();
@@ -1374,6 +1857,12 @@ static void *execute_script_cli(void *arg) {
   void *exit_status;
   bool eval = (bool)arg;
 
+#ifndef PHP_WIN32
+  sigset_t cli_signals;
+  frankenphp_fill_cli_signal_set(&cli_signals);
+  pthread_sigmask(SIG_UNBLOCK, &cli_signals, NULL);
+#endif
+
   /*
    * The SAPI name "cli" is hardcoded into too many programs... let's usurp it.
    */
@@ -1382,6 +1871,10 @@ static void *execute_script_cli(void *arg) {
   php_embed_module.register_server_variables = sapi_cli_register_variables;
 
   php_embed_init(cli_argc, cli_argv);
+
+  // php_embed_init() forces SG(headers_sent) = 1 and no_headers = 1
+  SG(headers_sent) = 0;
+  SG(request_info).no_headers = 0;
 
   cli_register_file_handles();
   zend_first_try {
@@ -1432,16 +1925,6 @@ int frankenphp_execute_script_cli(char *script, int argc, char **argv,
   return (intptr_t)exit_status;
 }
 
-int frankenphp_reset_opcache(void) {
-  zend_function *opcache_reset =
-      zend_hash_str_find_ptr(CG(function_table), ZEND_STRL("opcache_reset"));
-  if (opcache_reset) {
-    zend_call_known_function(opcache_reset, NULL, NULL, NULL, 0, NULL, NULL);
-  }
-
-  return 0;
-}
-
 int frankenphp_get_current_memory_limit() { return PG(memory_limit); }
 
 void frankenphp_init_thread_metrics(int max_threads) {
@@ -1453,8 +1936,8 @@ void frankenphp_destroy_thread_metrics(void) {
   thread_metrics = NULL;
 }
 
-size_t frankenphp_get_thread_memory_usage(uintptr_t idx) {
-  return __atomic_load_n(&thread_metrics[idx].last_memory_usage,
+size_t frankenphp_get_thread_memory_usage(uintptr_t thread_index) {
+  return __atomic_load_n(&thread_metrics[thread_index].last_memory_usage,
                          __ATOMIC_RELAXED);
 }
 

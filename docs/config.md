@@ -1,6 +1,11 @@
+---
+title: Configuring FrankenPHP with Caddyfile, php.ini, and env vars
+description: Configure FrankenPHP and Caddy via Caddyfile, JSON, or environment variables, including PHP runtime tuning, worker mode, file watching, and module options.
+---
+
 # Configuration
 
-FrankenPHP, Caddy as well as the [Mercure](mercure.md) and [Vulcain](https://vulcain.rocks) modules can be configured using [the formats supported by Caddy](https://caddyserver.com/docs/getting-started#your-first-config).
+FrankenPHP, Caddy, as well as the [Mercure](mercure.md) and [Vulcain](https://vulcain.rocks) modules, can be configured using [the formats supported by Caddy](https://caddyserver.com/docs/getting-started#your-first-config).
 
 The most common format is the `Caddyfile`, which is a simple, human-readable text format.
 By default, FrankenPHP will look for a `Caddyfile` in the current directory.
@@ -20,7 +25,7 @@ php_server
 A more advanced `Caddyfile` enabling more features and providing convenient environment variables is provided [in the FrankenPHP repository](https://github.com/php/frankenphp/blob/main/caddy/frankenphp/Caddyfile),
 and with Docker images.
 
-PHP itself can be configured [using a `php.ini` file](https://www.php.net/manual/en/configuration.file.php).
+PHP itself can be configured [using a `php.ini` file](https://www.php.net/manual/configuration.file.php).
 
 Depending on your installation method, FrankenPHP and the PHP interpreter will look for configuration files in locations described below.
 
@@ -73,7 +78,7 @@ PHP:
 - PHP extensions: cannot be loaded, bundle them in the binary itself
 - copy one of `php.ini-production` or `php.ini-development` provided [in the PHP sources](https://github.com/php/php-src/).
 
-## Caddyfile Config
+## Caddyfile config
 
 The `php_server` or the `php` [HTTP directives](https://caddyserver.com/docs/caddyfile/concepts#directives) may be used within the site blocks to serve your PHP app.
 
@@ -97,6 +102,7 @@ You can also explicitly configure FrankenPHP using the [global option](https://c
 		max_threads <num_threads> # Limits the number of additional PHP threads that can be started at runtime. Default: num_threads. Can be set to 'auto'.
 		max_wait_time <duration> # Sets the maximum time a request may wait for a free PHP thread before timing out. Default: disabled.
 		max_idle_time <duration> # Sets the maximum time an autoscaled thread may be idle before being deactivated. Default: 5s.
+		max_requests <num> # (experimental) Sets the maximum number of requests a PHP thread will handle before being restarted, useful for mitigating memory leaks. Applies to both regular and worker threads. Default: 0 (unlimited).
 		php_ini <key> <value> # Set a php.ini directive. Can be used several times to set multiple directives.
 		worker {
 			file <path> # Sets the path to the worker script.
@@ -195,7 +201,7 @@ php_server [<matcher>] {
 }
 ```
 
-### Watching for File Changes
+### Watching for file changes
 
 Since workers only boot your application once and keep it in memory, any changes
 to your PHP files will not be reflected immediately.
@@ -242,7 +248,7 @@ where the FrankenPHP process was started. You can instead also specify one or mo
 
 The file watcher is based on [e-dant/watcher](https://github.com/e-dant/watcher).
 
-## Matching the Worker To a Path
+## Matching the worker to a path
 
 In traditional PHP applications, scripts are always placed in the public directory.
 This is also true for worker scripts, which are treated like any other PHP script.
@@ -265,7 +271,26 @@ and otherwise forward the request to the worker matching the path pattern.
 }
 ```
 
-## Environment Variables
+## Restarting threads after a number of requests (experimental)
+
+FrankenPHP can automatically restart PHP threads after they have handled a given number of requests.
+When a thread reaches the limit, it is fully restarted,
+cleaning up all memory and state. Other threads continue to serve requests during the restart.
+
+If you notice memory growing over time, the ideal fix is to report the leak
+to the responsible extension or library maintainer.
+But when the fix depends on a third party you don't control,
+`max_requests` provides a pragmatic and hopefully temporary workaround for production:
+
+```caddyfile
+{
+	frankenphp {
+		max_requests 500
+	}
+}
+```
+
+## Environment variables
 
 The following environment variables can be used to inject Caddy directives in the `Caddyfile` without modifying it:
 
@@ -276,13 +301,13 @@ The following environment variables can be used to inject Caddy directives in th
 
 As for FPM and CLI SAPIs, environment variables are exposed by default in the `$_SERVER` superglobal.
 
-The `S` value of [the `variables_order` PHP directive](https://www.php.net/manual/en/ini.core.php#ini.variables-order) is always equivalent to `ES` regardless of the placement of `E` elsewhere in this directive.
+The `S` value of [the `variables_order` PHP directive](https://www.php.net/manual/ini.core.php#ini.variables-order) is always equivalent to `ES` regardless of the placement of `E` elsewhere in this directive.
 
 ## PHP config
 
-To load [additional PHP configuration files](https://www.php.net/manual/en/configuration.file.php#configuration.file.scan),
+To load [additional PHP configuration files](https://www.php.net/manual/configuration.file.php#configuration.file.scan),
 the `PHP_INI_SCAN_DIR` environment variable can be used.
-When set, PHP will load all the file with the `.ini` extension present in the given directories.
+When set, PHP will load all the files with the `.ini` extension present in the given directories.
 
 You can also change the PHP configuration using the `php_ini` directive in the `Caddyfile`:
 
@@ -303,17 +328,17 @@ You can also change the PHP configuration using the `php_ini` directive in the `
 
 ### Disabling HTTPS
 
-By default, FrankenPHP will automatically enable HTTPS using for all the hostnames, including `localhost`.
+By default, FrankenPHP will automatically enable HTTPS for all the hostnames, including `localhost`.
 If you want to disable HTTPS (for example in a development environment), you can set the `SERVER_NAME` environment variable to `http://` or `:80`:
 
 Alternatively, you can use all other methods described in the [Caddy documentation](https://caddyserver.com/docs/automatic-https#activation).
 
 If you want to use HTTPS with the `127.0.0.1` IP address instead of the `localhost` hostname, please read the [known issues](known-issues.md#using-https127001-with-docker) section.
 
-### Full Duplex (HTTP/1)
+### Full duplex (HTTP/1)
 
 When using HTTP/1.x, it may be desirable to enable full-duplex mode to allow writing a response before the entire body
-has been read. (for example: [Mercure](mercure.md), WebSocket, Server-Sent Events, etc.)
+has been read (for example: [Mercure](mercure.md), WebSocket, Server-Sent Events, etc.).
 
 This is an opt-in configuration that needs to be added to the global options in the `Caddyfile`:
 
@@ -338,7 +363,7 @@ CADDY_GLOBAL_OPTIONS="servers {
 
 You can find more information about this setting in the [Caddy documentation](https://caddyserver.com/docs/caddyfile/options#enable-full-duplex).
 
-## Enable the Debug Mode
+## Enable the debug mode
 
 When using the Docker image, set the `CADDY_GLOBAL_OPTIONS` environment variable to `debug` to enable the debug mode:
 
@@ -349,7 +374,7 @@ docker run -v $PWD:/app/public \
     dunglas/frankenphp
 ```
 
-## Shell Completion
+## Shell completion
 
 FrankenPHP provides built-in shell completion support for Bash, Zsh, Fish, and PowerShell. This enables autocompletion for all commands (including custom commands like `php-server`, `php-cli`, and `extension-init`) and their flags.
 
@@ -419,7 +444,5 @@ To load completions for every new session, execute once:
 frankenphp completion powershell | Out-File -FilePath (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")
 Add-Content -Path $PROFILE -Value '. (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")'
 ```
-
-You will need to start a new shell for this setup to take effect.
 
 You will need to start a new shell for this setup to take effect.

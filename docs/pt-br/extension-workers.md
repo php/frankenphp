@@ -37,9 +37,9 @@ func init() {
 
 Se você planeja compartilhar sua extensão (como uma fila genérica ou um listener de eventos), você deve encapsulá-la em um módulo Caddy. Isso permite que os usuários configurem o caminho do script e a contagem de threads através do seu `Caddyfile`. Isso exige a implementação da interface `caddy.Provisioner` e a análise do Caddyfile ([veja um exemplo](https://github.com/dunglas/frankenphp-queue/blob/989120d394d66dd6c8e2101cac73dd622fade334/caddy.go)).
 
-### Em uma Aplicação Go Pura (Embedagem)
+### Em uma Aplicação Go Pura (Incorporação)
 
-Se você está [embedando o FrankenPHP em uma aplicação Go padrão sem caddy](https://pkg.go.dev/github.com/dunglas/frankenphp#example-ServeHTTP), você pode registrar workers de extensão usando `frankenphp.WithExtensionWorkers` ao inicializar as opções.
+Se você está [incorporando o FrankenPHP em uma aplicação Go padrão sem caddy](https://pkg.go.dev/github.com/dunglas/frankenphp#example-ServeHTTP), você pode registrar workers de extensão usando `frankenphp.WithExtensionWorkers` ao inicializar as opções.
 
 ## Interagindo com Workers
 
@@ -135,12 +135,12 @@ while (frankenphp_handle_request($handler)) {
 
 FrankenPHP oferece hooks para executar código Go em pontos específicos do ciclo de vida.
 
-| Tipo de Hook | Nome da Opção                  | Assinatura           | Contexto e Caso de Uso                                                     |
-| :--------- | :--------------------------- | :------------------- | :------------------------------------------------------------------------- |
-| **Servidor** | `WithWorkerOnServerStartup`  | `func()`             | Configuração global. Executado **Uma Vez**. Exemplo: Conectar ao NATS/Redis. |
-| **Servidor** | `WithWorkerOnServerShutdown` | `func()`             | Limpeza global. Executado **Uma Vez**. Exemplo: Fechar conexões compartilhadas. |
-| **Thread** | `WithWorkerOnReady`          | `func(threadID int)` | Configuração por thread. Chamado quando um thread inicia. Recebe o ID do Thread. |
-| **Thread** | `WithWorkerOnShutdown`       | `func(threadID int)` | Limpeza por thread. Recebe o ID do Thread.                                  |
+| Tipo de Hook | Nome da Opção                | Assinatura           | Contexto e Caso de Uso                                                           |
+| :----------- | :--------------------------- | :------------------- | :------------------------------------------------------------------------------- |
+| **Servidor** | `WithWorkerOnServerStartup`  | `func()`             | Configuração global. Executado **Uma Vez**. Exemplo: Conectar ao NATS/Redis.     |
+| **Servidor** | `WithWorkerOnServerShutdown` | `func()`             | Limpeza global. Executado **Uma Vez**. Exemplo: Fechar conexões compartilhadas.  |
+| **Thread**   | `WithWorkerOnReady`          | `func(threadID int)` | Configuração por thread. Chamado quando um thread inicia. Recebe o ID do Thread. |
+| **Thread**   | `WithWorkerOnShutdown`       | `func(threadID int)` | Limpeza por thread. Recebe o ID do Thread.                                       |
 
 ### Exemplo
 

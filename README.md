@@ -155,6 +155,7 @@ Go to `https://localhost`, and enjoy!
 
 - [Classic mode](https://frankenphp.dev/docs/classic/)
 - [Worker mode](https://frankenphp.dev/docs/worker/)
+- [Migrating from Nginx/PHP-FPM](https://frankenphp.dev/docs/migrate/)
 - [Early Hints support (103 HTTP status code)](https://frankenphp.dev/docs/early-hints/)
 - [Real-time](https://frankenphp.dev/docs/mercure/)
 - [Logging](https://frankenphp.dev/docs/logging/)
@@ -168,7 +169,7 @@ Go to `https://localhost`, and enjoy!
 - [Create **standalone**, self-executable PHP apps](https://frankenphp.dev/docs/embed/)
 - [Create static binaries](https://frankenphp.dev/docs/static/)
 - [Compile from sources](https://frankenphp.dev/docs/compile/)
-- [Monitoring FrankenPHP](https://frankenphp.dev/docs/metrics/)
+- [Observability](https://frankenphp.dev/docs/observability/)
 - [WordPress integration](https://frankenphp.dev/docs/wordpress/)
 - [Symfony integration](https://frankenphp.dev/docs/symfony/)
 - [Laravel integration](https://frankenphp.dev/docs/laravel/)
@@ -176,6 +177,7 @@ Go to `https://localhost`, and enjoy!
 - [Demo app (Symfony) and benchmarks](https://github.com/dunglas/frankenphp-demo)
 - [Go library documentation](https://pkg.go.dev/github.com/dunglas/frankenphp)
 - [Contributing and debugging](https://frankenphp.dev/docs/contributing/)
+- [Internals (architecture overview)](docs/internals.md)
 
 ## Examples and Skeletons
 
@@ -188,3 +190,4 @@ Go to `https://localhost`, and enjoy!
 - [Joomla](https://github.com/alexandreelise/frankenphp-joomla)
 - [TYPO3](https://github.com/ochorocho/franken-typo3)
 - [Magento2](https://github.com/ekino/frankenphp-magento2)
+- [WoltLab Suite](https://github.com/SoftCreatRMedia/frankenphp-woltlab-suite)

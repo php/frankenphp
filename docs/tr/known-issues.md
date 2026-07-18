@@ -6,7 +6,7 @@ Aşağıdaki eklentilerin FrankenPHP ile uyumlu olmadığı bilinmektedir:
 
 | Adı                                                         | Nedeni                     | Alternatifleri                                                                                                       |
 | ----------------------------------------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| [imap](https://www.php.net/manual/en/imap.installation.php) | İş parçacığı güvenli değil | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap) |
+| [imap](https://www.php.net/manual/imap.installation.php) | İş parçacığı güvenli değil | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap) |
 
 ## Sorunlu PHP Eklentileri
 
@@ -17,7 +17,7 @@ Aşağıdaki eklentiler FrankenPHP ile kullanıldığında bilinen hatalara ve b
 
 ## get_browser
 
-[get_browser()](https://www.php.net/manual/en/function.get-browser.php) fonksiyonu bir süre sonra kötü performans gösteriyor gibi görünüyor. Geçici bir çözüm, statik oldukları için User-Agent başına sonuçları önbelleğe almaktır (örneğin [APCu](https://www.php.net/manual/en/book.apcu.php) ile).
+[get_browser()](https://www.php.net/manual/function.get-browser.php) fonksiyonu bir süre sonra kötü performans gösteriyor gibi görünüyor. Geçici bir çözüm, statik oldukları için User-Agent başına sonuçları önbelleğe almaktır (örneğin [APCu](https://www.php.net/manual/book.apcu.php) ile).
 
 ## Binary Çıktısı ve Alpine Tabanlı Docker İmajları
 

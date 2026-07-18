@@ -42,7 +42,7 @@ Cette fonctionnalité se combine très bien avec le [rechargement à chaud](hot-
 > [!TIP]
 > La section suivante est nécessaire uniquement avant Symfony 7.4, où le support natif du mode worker de FrankenPHP a été introduit.
 
-Le mode worker de FrankenPHP est pris en charge par le [Composant Runtime de Symfony](https://symfony.com/doc/current/components/runtime.html).
+Le mode worker de FrankenPHP est pris en charge par le [composant Runtime de Symfony](https://symfony.com/doc/current/components/runtime.html).
 Pour démarrer une application Symfony dans un worker, installez le package FrankenPHP de [PHP Runtime](https://github.com/php-runtime/runtime) :
 
 ```console
@@ -64,7 +64,7 @@ docker run \
 
 Voir [la documentation dédiée](laravel.md#laravel-octane).
 
-## Applications Personnalisées
+## Applications personnalisées
 
 L'exemple suivant montre comment créer votre propre script worker sans dépendre d'une bibliothèque tierce :
 
@@ -150,7 +150,7 @@ curl -X POST http://localhost:2019/frankenphp/workers/restart
 ### Échecs des workers
 
 Si un script de worker se plante avec un code de sortie non nul, FrankenPHP le redémarre avec une stratégie de backoff exponentielle.
-Si le script worker reste en place plus longtemps que le dernier backoff \* 2, FrankenPHP ne pénalisera pas le script et le redémarrera à nouveau.
+Si le script worker reste en place plus longtemps que le dernier backoff × 2, FrankenPHP ne pénalisera pas le script et le redémarrera à nouveau.
 Toutefois, si le script de worker continue d'échouer avec un code de sortie non nul dans un court laps de temps
 (par exemple, une faute de frappe dans un script), FrankenPHP plantera avec l'erreur : `too many consecutive failures` (trop d'échecs consécutifs).
 
@@ -167,7 +167,7 @@ frankenphp {
 
 ## Comportement des superglobales
 
-[Les superglobales PHP](https://www.php.net/manual/fr/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...)
+[Les superglobales PHP](https://www.php.net/manual/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...)
 se comportent comme suit :
 
 - avant le premier appel à `frankenphp_handle_request()`, les superglobales contiennent des valeurs liées au script worker lui-même
@@ -186,3 +186,4 @@ $handler = static function () use ($workerServer) {
 };
 
 // ...
+```

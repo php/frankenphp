@@ -26,6 +26,7 @@ type workerThread struct {
 	workerContext           context.Context
 	isBootingScript         bool // true if the worker has not reached frankenphp_handle_request yet
 	failureCount            int  // number of consecutive startup failures
+	requestCount            int  // number of requests handled since last restart
 }
 
 func convertToWorkerThread(thread *phpThread, worker *worker) {
@@ -46,13 +47,6 @@ func (handler *workerThread) beforeScriptExecution() string {
 		}
 		handler.worker.detachThread(handler.thread)
 		return handler.thread.transitionToNewHandler()
-	case state.Restarting:
-		if handler.worker.onThreadShutdown != nil {
-			handler.worker.onThreadShutdown(handler.thread.threadIndex)
-		}
-		handler.state.Set(state.Yielding)
-		handler.state.WaitFor(state.Ready, state.ShuttingDown)
-		return handler.beforeScriptExecution()
 	case state.Ready, state.TransitionComplete:
 		handler.thread.updateContext(true)
 		if handler.worker.onThreadReady != nil {
@@ -62,6 +56,12 @@ func (handler *workerThread) beforeScriptExecution() string {
 		setupWorkerScript(handler, handler.worker)
 
 		return handler.worker.fileName
+	case state.Rebooting, state.ForceRebooting:
+		return ""
+	case state.RebootReady:
+		handler.requestCount = 0
+		handler.state.Set(state.Ready)
+		return handler.beforeScriptExecution()
 	case state.ShuttingDown:
 		if handler.worker.onThreadShutdown != nil {
 			handler.worker.onThreadShutdown(handler.thread.threadIndex)
@@ -70,9 +70,9 @@ func (handler *workerThread) beforeScriptExecution() string {
 
 		// signal to stop
 		return ""
+	default:
+		panic("unexpected state: " + handler.state.Name())
 	}
-
-	panic("unexpected state: " + handler.state.Name())
 }
 
 func (handler *workerThread) afterScriptExecution(exitStatus int) {
@@ -98,6 +98,8 @@ func (handler *workerThread) name() string {
 	return "Worker PHP Thread - " + handler.worker.fileName
 }
 
+func (handler *workerThread) drain() {}
+
 func setupWorkerScript(handler *workerThread, worker *worker) {
 	metrics.StartWorker(worker.name)
 
@@ -116,6 +118,7 @@ func setupWorkerScript(handler *workerThread, worker *worker) {
 	handler.dummyFrankenPHPContext = fc
 	handler.dummyContext = ctx
 	handler.isBootingScript = true
+	handler.requestCount = 0
 
 	if globalLogger.Enabled(ctx, slog.LevelDebug) {
 		globalLogger.LogAttrs(ctx, slog.LevelDebug, "starting", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex))
@@ -213,6 +216,21 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 		metrics.ReadyWorker(handler.worker.name)
 	}
 
+	// max_requests reached: signal reboot for full ZTS cleanup
+	if maxRequestsPerThread > 0 && handler.requestCount >= maxRequestsPerThread {
+		if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
+			globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "max requests reached, restarting",
+				slog.String("worker", handler.worker.name),
+				slog.Int("thread", handler.thread.threadIndex),
+				slog.Int("max_requests", maxRequestsPerThread),
+			)
+		}
+
+		if handler.thread.reboot() {
+			return false, nil
+		}
+	}
+
 	if handler.state.Is(state.TransitionComplete) {
 		handler.state.Set(state.Ready)
 	}
@@ -226,17 +244,12 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 			globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "shutting down", slog.String("worker", handler.worker.name), slog.Int("thread", handler.thread.threadIndex))
 		}
 
-		// flush the opcache when restarting due to watcher or admin api
-		// note: this is done right before frankenphp_handle_request() returns 'false'
-		if handler.state.Is(state.Restarting) {
-			C.frankenphp_reset_opcache()
-		}
-
 		return false, nil
 	case requestCH = <-handler.thread.requestChan:
 	case requestCH = <-handler.worker.requestChan:
 	}
 
+	handler.requestCount++
 	handler.thread.contextMu.Lock()
 	handler.workerContext = requestCH.ctx
 	handler.workerFrankenPHPContext = requestCH.frankenPHPContext

@@ -1,10 +1,14 @@
 package frankenphp
 
+// #include "frankenphp.h"
+import "C"
 import (
 	"context"
+	"log/slog"
 	"runtime"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/dunglas/frankenphp/internal/state"
 )
@@ -15,8 +19,9 @@ import (
 type regularThread struct {
 	contextHolder
 
-	state  *state.ThreadState
-	thread *phpThread
+	state        *state.ThreadState
+	thread       *phpThread
+	requestCount int
 }
 
 var (
@@ -46,8 +51,13 @@ func (handler *regularThread) beforeScriptExecution() string {
 		handler.state.Set(state.Ready)
 
 		return handler.waitForRequest()
-
 	case state.Ready:
+		return handler.waitForRequest()
+	case state.Rebooting, state.ForceRebooting:
+		return ""
+	case state.RebootReady:
+		handler.requestCount = 0
+		handler.state.Set(state.Ready)
 		return handler.waitForRequest()
 
 	case state.ShuttingDown:
@@ -76,7 +86,23 @@ func (handler *regularThread) name() string {
 	return "Regular PHP Thread"
 }
 
+func (handler *regularThread) drain() {}
+
 func (handler *regularThread) waitForRequest() string {
+	// max_requests reached: restart the thread to clean up all ZTS state
+	if maxRequestsPerThread > 0 && handler.requestCount >= maxRequestsPerThread {
+		if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
+			globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "max requests reached, restarting thread",
+				slog.Int("thread", handler.thread.threadIndex),
+				slog.Int("max_requests", maxRequestsPerThread),
+			)
+		}
+
+		if handler.thread.reboot() {
+			return ""
+		}
+	}
+
 	handler.state.MarkAsWaiting(true)
 
 	var ch contextHolder
@@ -89,6 +115,7 @@ func (handler *regularThread) waitForRequest() string {
 	case ch = <-handler.thread.requestChan:
 	}
 
+	handler.requestCount++
 	handler.thread.contextMu.Lock()
 	handler.ctx = ch.ctx
 	handler.contextHolder.frankenPHPContext = ch.frankenPHPContext
@@ -145,7 +172,7 @@ func handleRequestWithRegularPHPThreads(ch contextHolder) error {
 			return nil
 		case scaleChan <- ch.frankenPHPContext:
 			// the request has triggered scaling, continue to wait for a thread
-		case <-timeoutChan(maxWaitTime):
+		case <-timeoutChan(time.Duration(maxWaitTime.Load())):
 			// the request has timed out stalling
 			queuedRegularThreads.Add(-1)
 			metrics.DequeuedRequest()

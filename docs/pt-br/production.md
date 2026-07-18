@@ -4,7 +4,7 @@ Neste tutorial, aprenderemos como implantar uma aplicação PHP em um único
 servidor usando o Docker Compose.
 
 Se você estiver usando o Symfony, leia a documentação
-[Implantar em produção](https://github.com/dunglas/symfony-docker/blob/main/docs/production.md)
+"[Implantar em produção](https://github.com/dunglas/symfony-docker/blob/main/docs/production.md)"
 do projeto Docker do Symfony (que usa FrankenPHP).
 
 Se você estiver usando a API Platform (que também usa FrankenPHP), consulte
@@ -17,14 +17,12 @@ Primeiro, crie um `Dockerfile` no diretório raiz do seu projeto PHP:
 ```dockerfile
 FROM dunglas/frankenphp
 
-# Certifique-se de substituir "seu-nome-de-dominio.example.com" pelo seu nome de
-# domínio
-ENV SERVER_NAME=seu-nome-de-dominio.example.com
+# Certifique-se de substituir "your-domain-name.example.com" pelo seu nome de domínio
+ENV SERVER_NAME=your-domain-name.example.com
 # Se quiser desabilitar o HTTPS, use este valor:
 #ENV SERVER_NAME=:80
 
-# Se o seu projeto não estiver usando o diretório "public" como diretório raiz,
-# você pode defini-lo aqui:
+# Se o seu projeto não estiver usando o diretório "public" como diretório raiz da web, você pode defini-lo aqui:
 # ENV SERVER_ROOT=web/
 
 # Habilita as configurações de produção do PHP
@@ -36,12 +34,12 @@ COPY . /app/public
 #COPY . /app
 ```
 
-Consulte [Construindo uma imagem Docker personalizada](docker.md) para mais
+Consulte "[Construindo uma imagem Docker personalizada](docker.md)" para mais
 detalhes e opções, e para aprender como personalizar a configuração, instalar
 extensões PHP e módulos Caddy.
 
-Se o seu projeto usa o Composer, certifique-se de incluí-lo na imagem Docker e
-instalar suas dependências.
+Se o seu projeto usa o Composer,
+certifique-se de incluí-lo na imagem Docker e instalar suas dependências.
 
 Em seguida, adicione um arquivo `compose.yaml`:
 
@@ -120,7 +118,7 @@ Em seguida, crie um registro DNS do tipo `A` para o seu nome de domínio,
 apontando para o endereço IP do seu servidor:
 
 ```dns
-seu-nome-de-dominio.example.com.  IN  A  <ip-do-seu-servidor>
+seu-nome-de-dominio.example.com.  IN  A     <ip-do-seu-servidor>
 ```
 
 Exemplo com o serviço DigitalOcean Domains ("Networking" > "Domains"):
@@ -163,6 +161,29 @@ Acesse `https://seu-nome-de-dominio.example.com` e divirta-se!
 > O Docker pode ter uma camada de cache; certifique-se de ter a construção
 > correta para cada implantação ou reconstrua seu projeto com a opção
 > `--no-cache` para evitar problemas de cache.
+
+## Executando por Trás de um Proxy Reverso
+
+Se o FrankenPHP estiver sendo executado por trás de um proxy reverso ou um balanceador de carga (por exemplo, Nginx, AWS ELB, Google Cloud LB),
+você deve configurar a [opção global `trusted_proxies`](https://caddyserver.com/docs/caddyfile/options#trusted-proxies) no seu Caddyfile
+para que o Caddy confie nos cabeçalhos `X-Forwarded-*` recebidos:
+
+```caddyfile
+{
+	servers {
+		trusted_proxies static <your-IPs>
+	}
+}
+```
+
+Substitua `<your-IPs>` pelos intervalos de IP reais do seu proxy, se necessário.
+
+Além disso, seu framework PHP também deve ser configurado para confiar no proxy.
+Por exemplo, defina a [variável de ambiente `TRUSTED_PROXIES`](https://symfony.com/doc/current/deployment/proxies.html) para o Symfony,
+ou o [middleware `trustedproxies`](https://laravel.com/docs/trustedproxy) para o Laravel.
+
+Sem ambas as configurações, cabeçalhos como `X-Forwarded-For` e `X-Forwarded-Proto` serão ignorados,
+o que pode causar problemas como detecção incorreta de HTTPS ou endereços IP de cliente errados.
 
 ## Implantando em múltiplos nós
 

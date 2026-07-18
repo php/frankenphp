@@ -32,6 +32,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 	"unsafe"
@@ -66,7 +67,9 @@ var (
 
 	metrics Metrics = nullMetrics{}
 
-	maxWaitTime time.Duration
+	// atomic: read by in-flight requests while a reload may rewrite it
+	maxWaitTime          atomic.Int64
+	maxRequestsPerThread int
 )
 
 type ErrRejected struct {
@@ -274,7 +277,8 @@ func Init(options ...Option) error {
 		metrics = opt.metrics
 	}
 
-	maxWaitTime = opt.maxWaitTime
+	maxWaitTime.Store(int64(opt.maxWaitTime))
+	maxRequestsPerThread = opt.maxRequests
 
 	if opt.maxIdleTime > 0 {
 		maxIdleTime = opt.maxIdleTime
@@ -315,7 +319,10 @@ func Init(options ...Option) error {
 		return err
 	}
 
-	regularRequestChan = make(chan contextHolder)
+	// reused across reloads so queued requests aren't orphaned on a stale channel
+	if regularRequestChan == nil {
+		regularRequestChan = make(chan contextHolder)
+	}
 	regularThreads = make([]*phpThread, 0, opt.numThreads-workerThreadCount)
 	for i := 0; i < opt.numThreads-workerThreadCount; i++ {
 		convertToRegularThread(getInactivePHPThread())
@@ -335,7 +342,7 @@ func Init(options ...Option) error {
 	initAutoScaling(mainThread)
 
 	if globalLogger.Enabled(globalCtx, slog.LevelInfo) {
-		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "FrankenPHP started 🐘", slog.String("php_version", Version().Version), slog.Int("num_threads", mainThread.numThreads), slog.Int("max_threads", mainThread.maxThreads))
+		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "FrankenPHP started 🐘", slog.String("php_version", Version().Version), slog.Int("num_threads", mainThread.numThreads), slog.Int("max_threads", mainThread.maxThreads), slog.Int("max_requests", maxRequestsPerThread))
 
 		if EmbeddedAppPath != "" {
 			globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "embedded PHP app 📦", slog.String("path", EmbeddedAppPath))
@@ -368,7 +375,6 @@ func Shutdown() {
 	}
 
 	drainWatchers()
-	drainAutoScaling()
 	drainPHPThreads()
 
 	metrics.Shutdown()
@@ -754,6 +760,13 @@ func go_is_context_done(threadIndex C.uintptr_t) C.bool {
 	return C.bool(phpThreads[threadIndex].frankenPHPContext().isDone)
 }
 
+//export go_schedule_opcache_reset
+func go_schedule_opcache_reset(threadIndex C.uintptr_t) {
+	if mainThread != nil {
+		go mainThread.rebootAllThreads()
+	}
+}
+
 func convertArgs(args []string) (C.int, []*C.char) {
 	argc := C.int(len(args))
 	argv := make([]*C.char, argc)
@@ -786,5 +799,6 @@ func resetGlobals() {
 	workersByPath = nil
 	watcherIsEnabled = false
 	maxIdleTime = defaultMaxIdleTime
+	maxRequestsPerThread = 0
 	globalMu.Unlock()
 }

@@ -24,7 +24,7 @@ Para ativar o recarregamento instantâneo, habilite o Mercure e, em seguida, adi
 >
 > Este recurso é destinado **apenas para ambientes de desenvolvimento**.
 > Não ative `hot_reload` em produção, pois este recurso não é seguro (expõe detalhes internos sensíveis) e desacelera a aplicação.
->
+
 ```caddyfile
 localhost
 

@@ -2,7 +2,6 @@ package frankenphp
 
 import (
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -17,7 +16,6 @@ func createPrometheusMetrics() *PrometheusMetrics {
 		totalThreads: prometheus.NewCounter(prometheus.CounterOpts{Name: "frankenphp_total_threads"}),
 		busyThreads:  prometheus.NewGauge(prometheus.GaugeOpts{Name: "frankenphp_busy_threads"}),
 		queueDepth:   prometheus.NewGauge(prometheus.GaugeOpts{Name: "frankenphp_queue_depth"}),
-		mu:           sync.Mutex{},
 	}
 }
 

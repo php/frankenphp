@@ -3,6 +3,7 @@ package caddy_test
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -486,6 +487,195 @@ func TestPHPServerDirectiveDisableFileServer(t *testing.T) {
 	tester.AssertGetResponse("http://localhost:"+testPort+"/not-found.txt", http.StatusOK, "I am by birth a Genevese (i not set)")
 }
 
+func TestPHPServerGlobals(t *testing.T) {
+	documentRoot, _ := filepath.Abs("../testdata")
+	scriptFilename := filepath.Join(documentRoot, "server-globals.php")
+
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+			http_port `+testPort+`
+			https_port 9443
+		}
+
+		localhost:`+testPort+` {
+			root ../testdata
+			php_server {
+				index server-globals.php
+			}
+		}
+		`, "caddyfile")
+
+	// Request to /en: no matching file, falls through to server-globals.php worker
+	// SCRIPT_NAME should be /server-globals.php, PHP_SELF should be /server-globals.php (no /en), PATH_INFO empty
+	tester.AssertGetResponse(
+		"http://localhost:"+testPort+"/en",
+		http.StatusOK,
+		fmt.Sprintf(`SCRIPT_NAME: /server-globals.php
+SCRIPT_FILENAME: %s
+PHP_SELF: /server-globals.php
+PATH_INFO:
+DOCUMENT_ROOT: %s
+DOCUMENT_URI: /server-globals.php
+REQUEST_URI: /en
+`, scriptFilename, documentRoot),
+	)
+
+	// Request to /server-globals.php/en: explicit PHP file with path info
+	// SCRIPT_NAME should be /server-globals.php, PHP_SELF should be /server-globals.php/en, PATH_INFO should be /en
+	tester.AssertGetResponse(
+		"http://localhost:"+testPort+"/server-globals.php/en",
+		http.StatusOK,
+		fmt.Sprintf(`SCRIPT_NAME: /server-globals.php
+SCRIPT_FILENAME: %s
+PHP_SELF: /server-globals.php/en
+PATH_INFO: /en
+DOCUMENT_ROOT: %s
+DOCUMENT_URI: /server-globals.php
+REQUEST_URI: /server-globals.php/en
+`, scriptFilename, documentRoot),
+	)
+}
+
+func TestWorkerPHPServerGlobals(t *testing.T) {
+	documentRoot, _ := filepath.Abs("../testdata")
+	documentRoot2, _ := filepath.Abs("../caddy")
+	scriptFilename := documentRoot + string(filepath.Separator) + "server-globals.php"
+	testPortNum, _ := strconv.Atoi(testPort)
+	testPortTwo := strconv.Itoa(testPortNum + 1)
+	testPortThree := strconv.Itoa(testPortNum + 2)
+
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+
+			frankenphp {
+				worker {
+					file ../testdata/server-globals.php
+					num 1
+				}
+			}
+		}
+
+		http://localhost:`+testPort+` {
+			php_server {
+				root ../testdata
+				index server-globals.php
+			}
+		}
+
+		http://localhost:`+testPortTwo+` {
+			php_server {
+				root ../testdata
+				index server-globals.php
+				worker {
+					file server-globals.php
+					num 1
+				}
+			}
+		}
+
+		http://localhost:`+testPortThree+` {
+			php_server {
+				root ./
+				index server-globals.php
+				worker {
+					file ../testdata/server-globals.php
+					num 1
+					match *
+				}
+			}
+		}
+		`, "caddyfile")
+
+	// === Site 1: global worker with php_server ===
+	// because we don't specify a php file, PATH_INFO should be empty
+	tester.AssertGetResponse(
+		"http://localhost:"+testPort+"/en",
+		http.StatusOK,
+		fmt.Sprintf(`SCRIPT_NAME: /server-globals.php
+SCRIPT_FILENAME: %s
+PHP_SELF: /server-globals.php
+PATH_INFO:
+DOCUMENT_ROOT: %s
+DOCUMENT_URI: /server-globals.php
+REQUEST_URI: /en
+`, scriptFilename, documentRoot),
+	)
+
+	tester.AssertGetResponse(
+		"http://localhost:"+testPort+"/server-globals.php/en",
+		http.StatusOK,
+		fmt.Sprintf(`SCRIPT_NAME: /server-globals.php
+SCRIPT_FILENAME: %s
+PHP_SELF: /server-globals.php/en
+PATH_INFO: /en
+DOCUMENT_ROOT: %s
+DOCUMENT_URI: /server-globals.php
+REQUEST_URI: /server-globals.php/en
+`, scriptFilename, documentRoot),
+	)
+
+	// === Site 2: php_server with its own worker ===
+	// because the request does not specify a php file, PATH_INFO should be empty
+	tester.AssertGetResponse(
+		"http://localhost:"+testPortTwo+"/en",
+		http.StatusOK,
+		fmt.Sprintf(`SCRIPT_NAME: /server-globals.php
+SCRIPT_FILENAME: %s
+PHP_SELF: /server-globals.php
+PATH_INFO:
+DOCUMENT_ROOT: %s
+DOCUMENT_URI: /server-globals.php
+REQUEST_URI: /en
+`, scriptFilename, documentRoot),
+	)
+
+	tester.AssertGetResponse(
+		"http://localhost:"+testPortTwo+"/server-globals.php/en",
+		http.StatusOK,
+		fmt.Sprintf(`SCRIPT_NAME: /server-globals.php
+SCRIPT_FILENAME: %s
+PHP_SELF: /server-globals.php/en
+PATH_INFO: /en
+DOCUMENT_ROOT: %s
+DOCUMENT_URI: /server-globals.php
+REQUEST_URI: /server-globals.php/en
+`, scriptFilename, documentRoot),
+	)
+
+	// === Site 3: php_server with its own match worker ===
+	tester.AssertGetResponse(
+		"http://localhost:"+testPortThree+"/en",
+		http.StatusOK,
+		fmt.Sprintf(`SCRIPT_NAME:
+SCRIPT_FILENAME: %s
+PHP_SELF:
+PATH_INFO:
+DOCUMENT_ROOT: %s
+DOCUMENT_URI:
+REQUEST_URI: /en
+`, scriptFilename, documentRoot2),
+	)
+
+	tester.AssertGetResponse(
+		"http://localhost:"+testPortThree+"/server-globals.php/en",
+		http.StatusOK,
+		fmt.Sprintf(`SCRIPT_NAME:
+SCRIPT_FILENAME: %s
+PHP_SELF:
+PATH_INFO:
+DOCUMENT_ROOT: %s
+DOCUMENT_URI:
+REQUEST_URI: /server-globals.php/en
+`, scriptFilename, documentRoot2),
+	)
+}
+
 func TestMetrics(t *testing.T) {
 	var wg sync.WaitGroup
 	tester := caddytest.NewTester(t)
@@ -666,6 +856,69 @@ func TestWorkerMetrics(t *testing.T) {
 			"frankenphp_worker_request_count",
 			"frankenphp_ready_workers",
 		))
+}
+
+// #2477: verify one pool per worker, no "_0" duplicates.
+func TestPhpServerWorkerMatchPoolCount(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+	{
+		skip_install_trust
+		admin localhost:2999
+		http_port `+testPort+`
+		https_port 9443
+		metrics
+	}
+
+	localhost:`+testPort+` {
+		php_server {
+			root ../testdata
+			worker {
+				file ../testdata/dedup-match-worker.php
+				num 1
+				match /match/*
+			}
+			worker {
+				file ../testdata/dedup-plain-worker.php
+				num 1
+			}
+		}
+	}
+	`, "caddyfile")
+
+	matchedWorker, _ := fastabs.FastAbs("../testdata/dedup-match-worker.php")
+	plainWorker, _ := fastabs.FastAbs("../testdata/dedup-plain-worker.php")
+
+	// the matched (non-.php) path must still be served by its worker
+	tester.AssertGetResponse("http://localhost:"+testPort+"/match/anything", http.StatusOK, "dedup-match-worker")
+
+	resp, err := http.Get("http://localhost:2999/metrics")
+	require.NoError(t, err, "failed to fetch metrics")
+	t.Cleanup(func() {
+		require.NoError(t, resp.Body.Close())
+	})
+
+	metrics := new(bytes.Buffer)
+	_, err = metrics.ReadFrom(resp.Body)
+	require.NoError(t, err, "failed to read metrics")
+
+	var pools []string
+	for _, line := range strings.Split(metrics.String(), "\n") {
+		if !strings.HasPrefix(line, "frankenphp_total_workers{worker=") {
+			continue
+		}
+		if !strings.Contains(line, "dedup-match-worker.php") && !strings.Contains(line, "dedup-plain-worker.php") {
+			continue
+		}
+		pools = append(pools, line)
+	}
+
+	require.Len(t, pools, 2, "expected exactly one pool per distinct worker, got: %v", pools)
+	joined := strings.Join(pools, "\n")
+	require.NotContains(t, joined, escapeMetricLabel(matchedWorker)+`_0`, "matched worker must not be registered twice: %v", pools)
+	require.NotContains(t, joined, escapeMetricLabel(plainWorker)+`_0`, "plain worker must not be registered twice: %v", pools)
+	require.Contains(t, joined, escapeMetricLabel(matchedWorker), "matched worker pool must be present: %v", pools)
+	require.Contains(t, joined, escapeMetricLabel(plainWorker), "plain worker pool must be present: %v", pools)
 }
 
 func TestNamedWorkerMetrics(t *testing.T) {
@@ -1541,6 +1794,75 @@ func TestDd(t *testing.T) {
 	)
 }
 
+// test to force the opcache segfault race condition under concurrency (~1.7s)
+func TestOpcacheReset(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	tester.Client.Timeout = 60 * time.Second
+	tester.InitServer(`
+		{
+			skip_install_trust
+			admin localhost:2999
+			http_port `+testPort+`
+			metrics
+
+			frankenphp {
+				num_threads 40
+				php_ini {
+					opcache.enable 1
+					opcache.log_verbosity_level 4
+					max_execution_time 30s
+				}
+			}
+		}
+
+		localhost:`+testPort+` {
+			php {
+				root ../testdata
+				worker {
+                    file sleep.php
+                    match /sleep*
+                    num 20
+                }
+			}
+		}
+		`, "caddyfile")
+
+	wg := sync.WaitGroup{}
+	numRequests := 500
+	wg.Add(numRequests)
+	for i := 0; i < numRequests; i++ {
+
+		// introduce a delay every 10 requests
+		if i%10 == 0 {
+			time.Sleep(time.Millisecond * 10)
+		}
+
+		go func(i int) {
+			defer wg.Done()
+			// spam opcache_reset on intervals
+			if i%10 > 7 {
+				tester.AssertGetResponse(
+					"http://localhost:"+testPort+"/opcache_reset.php",
+					http.StatusOK,
+					"opcache reset done",
+				)
+				return
+			}
+
+			// otherwise call sleep.php with different sleep and work values
+			sleep := i % 100
+			work := i % 100
+			tester.AssertGetResponse(
+				fmt.Sprintf("http://localhost:%s/sleep.php?sleep=%d&work=%d", testPort, sleep, work),
+				http.StatusOK,
+				fmt.Sprintf("slept for %d ms and worked for %d iterations", sleep, work),
+			)
+		}(i)
+	}
+
+	wg.Wait()
+}
+
 func TestLog(t *testing.T) {
 	tester := caddytest.NewTester(t)
 	initServer(t, tester, `
@@ -1820,4 +2142,51 @@ func TestSymlinkWorkerBehavior(t *testing.T) {
 			tester.AssertGetResponse("http://localhost:"+testPort+"/index.php", http.StatusOK, fmt.Sprintf("Request: %d\n", i))
 		}
 	})
+}
+
+// TestSessionLockReleaseOnAbortInUserSaveHandler reproduces issue #2368: a
+// timeout bailout inside a user save handler leaks the underlying flock.
+// num_threads is 2 so R3 can't start until R1's thread frees, which
+// guarantees R2 (blocked in flock) inherits the lock when R1 releases and
+// then bails inside StrictSessionHandler. Without the fix R3 hangs in flock.
+func TestSessionLockReleaseOnAbortInUserSaveHandler(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+			http_port `+testPort+`
+			https_port 9443
+			frankenphp {
+				num_threads 2
+				max_threads 2
+			}
+		}
+		localhost:`+testPort+` {
+			route {
+				php {
+					root ../testdata
+				}
+			}
+		}
+		`, "caddyfile")
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	get := func() error {
+		resp, err := client.Get("http://localhost:" + testPort + "/session_deadlock.php")
+		if err != nil {
+			return err
+		}
+		_, _ = io.Copy(io.Discard, resp.Body)
+		return resp.Body.Close()
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { defer wg.Done(); _ = get() }() // R1: holder
+	time.Sleep(300 * time.Millisecond)
+	go func() { defer wg.Done(); _ = get() }() // R2: bails inside user save handler
+	time.Sleep(100 * time.Millisecond)
+	require.NoError(t, get(), "third request hung -- session lock leaked (issue #2368)")
+	wg.Wait()
 }

@@ -7,7 +7,7 @@ FrankenPHP:
 
 | Nome                                                                                                        | Motivo            | Alternativas                                                                                                         |
 | ----------------------------------------------------------------------------------------------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------- |
-| [imap](https://www.php.net/manual/pt_BR/imap.installation.php)                                              | Não é thread-safe | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap) |
+| [imap](https://www.php.net/manual/imap.installation.php)                                              | Não é thread-safe | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap) |
 | [newrelic](https://docs.newrelic.com/docs/apm/agents/php-agent/getting-started/introduction-new-relic-php/) | Não é thread-safe | -                                                                                                                    |
 
 ## Extensões PHP com falhas
@@ -17,15 +17,15 @@ quando usadas com o FrankenPHP:
 
 | Nome                                                             | Problema                                                                                                                                                                                                                                                                                                                    |
 | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [ext-openssl](https://www.php.net/manual/pt_BR/book.openssl.php) | Ao usar uma versão estática do FrankenPHP (compilada com a `libc` `musl`), a extensão OpenSSL pode quebrar sob cargas pesadas. Uma solução alternativa é usar uma versão vinculada dinamicamente (como a usada em imagens Docker). Esta falha está [sendo monitorada pelo PHP](https://github.com/php/php-src/issues/13648) |
+| [ext-openssl](https://www.php.net/manual/book.openssl.php) | Ao usar uma versão estática do FrankenPHP (compilada com a `libc` `musl`), a extensão OpenSSL pode quebrar sob cargas pesadas. Uma solução alternativa é usar uma versão vinculada dinamicamente (como a usada em imagens Docker). Esta falha está [sendo monitorada pelo PHP](https://github.com/php/php-src/issues/13648) |
 
 ## `get_browser`
 
 A função
-[`get_browser()`](https://www.php.net/manual/pt_BR/function.get-browser.php)
+[`get_browser()`](https://www.php.net/manual/function.get-browser.php)
 parece apresentar mau desempenho após algum tempo.
 Uma solução alternativa é armazenar em cache (por exemplo, com
-[APCu](https://www.php.net/manual/pt_BR/book.apcu.php)) os resultados por Agente
+[APCu](https://www.php.net/manual/book.apcu.php)) os resultados por Agente
 de Usuário, pois são estáticos.
 
 ## Imagens Docker binárias independentes e baseadas em Alpine
@@ -36,7 +36,7 @@ em vez de [`glibc` e similares](https://www.etalabs.net/compare_libcs.html) para
 manter um tamanho binário menor.
 Isso pode levar a alguns problemas de compatibilidade.
 Em particular, o sinalizador glob `GLOB_BRACE`
-[não está disponível](https://www.php.net/manual/pt_BR/function.glob.php)
+[não está disponível](https://www.php.net/manual/function.glob.php).
 
 ## Usando `https://127.0.0.1` com o Docker
 
@@ -160,7 +160,7 @@ Como o binário estático não empacota certificados TLS, você precisa apontar 
 OpenSSL para a instalação local de certificados de CA.
 
 Inspecione a saída de
-[`openssl_get_cert_locations()`](https://www.php.net/manual/pt_BR/function.openssl-get-cert-locations.php),
+[`openssl_get_cert_locations()`](https://www.php.net/manual/function.openssl-get-cert-locations.php),
 para descobrir onde os certificados de CA devem ser instalados e armazene-os
 neste local.
 

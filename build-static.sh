@@ -21,6 +21,7 @@ os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 # - FRANKENPHP_VERSION: FrankenPHP version (default: current Git commit)
 # - EMBED: Path to the PHP app to embed (default: none)
 # - DEBUG_SYMBOLS: Enable debug symbols if set to 1 (default: none)
+# - COMPRESS: Pack the resulting Linux binary with UPX if set to 1; ignored when DEBUG_SYMBOLS is set (default: none)
 # - MIMALLOC: Use mimalloc as the allocator if set to 1 (default: none)
 # - XCADDY_ARGS: Additional arguments to pass to xcaddy
 # - RELEASE: [maintainer only] Create a GitHub release if set to 1 (default: none)
@@ -158,7 +159,6 @@ fi
 if [ -z "${PHP_EXTENSIONS}" ]; then
 	# enable EMBED mode, first check if project has dumped extensions
 	if [ -n "${EMBED}" ] && [ -f "${EMBED}/composer.json" ] && [ -f "${EMBED}/composer.lock" ] && [ -f "${EMBED}/vendor/composer/installed.json" ]; then
-		cd "${EMBED}"
 		# read the extensions using spc dump-extensions
 		PHP_EXTENSIONS=$(${spcCommand} dump-extensions "${EMBED}" --format=text --no-dev --no-ext-output="${defaultExtensions}")
 	else
@@ -190,10 +190,13 @@ if [ -n "${EMBED}" ] && [ -d "${EMBED}" ]; then
 fi
 
 SPC_OPT_INSTALL_ARGS="go-xcaddy"
-if [ -z "${DEBUG_SYMBOLS}" ] && [ -z "${NO_COMPRESS}" ] && [ "${os}" = "linux" ]; then
+if [ -n "${COMPRESS}" ] && [ -z "${DEBUG_SYMBOLS}" ] && [ "${os}" = "linux" ]; then
 	SPC_OPT_BUILD_ARGS="${SPC_OPT_BUILD_ARGS} --with-upx-pack"
 	SPC_OPT_INSTALL_ARGS="${SPC_OPT_INSTALL_ARGS} upx"
 fi
+
+MTLS_CFLAGS="$(sh "${CURRENT_DIR}/mtls-cflags.sh")"
+export CGO_CFLAGS="${CGO_CFLAGS} ${MTLS_CFLAGS}"
 
 export SPC_DEFAULT_C_FLAGS="-fPIC -O2"
 if [ -n "${DEBUG_SYMBOLS}" ]; then
