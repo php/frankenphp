@@ -41,7 +41,7 @@ seu `php.ini`. Se não for possível fazer isso,
 Lembre-se de que `auto` pode subestimar bastante o número de threads
 necessárias.
 `max_threads` é semelhante ao
-[pm.max_children](https://www.php.net/manual/pt_BR/install.fpm.configuration.php#pm.max-children)
+[pm.max_children](https://www.php.net/manual/install.fpm.configuration.php#pm.max-children)
 do PHP FPM.
 A principal diferença é que o FrankenPHP usa threads em vez de processos e as
 delega automaticamente entre diferentes worker scripts e o 'classic mode',
@@ -208,14 +208,14 @@ FrankenPHP.
 
 Em particular:
 
-- Verifique se o [OPcache](https://www.php.net/manual/pt_BR/book.opcache.php)
+- Verifique se o [OPcache](https://www.php.net/manual/book.opcache.php)
   está instalado, habilitado e configurado corretamente;
 - Habilite as
   [otimizações do carregador automático do Composer](https://getcomposer.org/doc/articles/autoloader-optimization.md);
 - Certifique-se de que o cache do `realpath` seja grande o suficiente para as
   necessidades da sua aplicação;
 - Use
-  [pré-carregamento](https://www.php.net/manual/pt_BR/opcache.preloading.php).
+  [pré-carregamento](https://www.php.net/manual/opcache.preloading.php).
 
 Para mais detalhes, leia
 [a entrada dedicada na documentação do Symfony](https://symfony.com/doc/current/performance.html)

@@ -2,7 +2,7 @@
 
 Les Workers d'extension permettent à votre [extension FrankenPHP](https://frankenphp.dev/docs/extensions/) de gérer un pool dédié de threads PHP pour exécuter des tâches en arrière-plan, gérer des événements asynchrones ou implémenter des protocoles personnalisés. Cela se révèle utile pour les systèmes de files d'attente, les event listeners, les planificateurs, etc.
 
-## Enregistrement du Worker
+## Enregistrement du worker
 
 ### Enregistrement statique
 
@@ -41,7 +41,7 @@ Si vous prévoyez de partager votre extension (comme une file d'attente généri
 
 Si vous [intégrez FrankenPHP dans une application Go standard sans Caddy](https://pkg.go.dev/github.com/dunglas/frankenphp#example-ServeHTTP), vous pouvez enregistrer des workers d'extension en utilisant `frankenphp.WithExtensionWorkers` lors de l'initialisation des options.
 
-## Interaction avec les Workers
+## Interaction avec les workers
 
 Une fois le pool de workers actif, vous pouvez lui envoyer des tâches. Cela peut être fait à l'intérieur de [fonctions natives exportées vers PHP](https://frankenphp.dev/docs/extensions/#writing-the-extension), ou à partir de toute logique Go telle qu'un planificateur cron, un écouteur d'événements (MQTT, Kafka), ou toute autre goroutine.
 
@@ -49,7 +49,7 @@ Une fois le pool de workers actif, vous pouvez lui envoyer des tâches. Cela peu
 
 Utilisez `SendMessage` pour passer des données brutes directement à votre script worker. C'est idéal pour les files d'attente ou les commandes simples.
 
-#### Exemple : Une extension de file d'attente asynchrone
+#### Exemple : une extension de file d'attente asynchrone
 
 ```go
 // #include <Zend/zend_types.h>
@@ -109,7 +109,7 @@ func my_worker_http_request(path *C.zend_string) unsafe.Pointer {
 }
 ```
 
-## Script Worker
+## Script worker
 
 Le script worker PHP s'exécute dans une boucle et peut gérer à la fois les messages bruts et les requêtes HTTP.
 
@@ -131,16 +131,16 @@ while (frankenphp_handle_request($handler)) {
 }
 ```
 
-## Hooks de Cycle de Vie
+## Hooks de cycle de vie
 
 FrankenPHP fournit des hooks pour exécuter du code Go à des points spécifiques du cycle de vie.
 
-| Type de Hook | Nom de l'Option                  | Signature            | Contexte et Cas d'Utilisation                                          |
-| :--------- | :--------------------------- | :------------------- | :--------------------------------------------------------------------- |
-| **Serveur** | `WithWorkerOnServerStartup`  | `func()`             | Configuration globale. Exécuté **Une fois**. Exemple : Connexion à NATS/Redis. |
-| **Serveur** | `WithWorkerOnServerShutdown` | `func()`             | Nettoyage global. Exécuté **Une fois**. Exemple : Fermeture des connexions partagées. |
-| **Thread** | `WithWorkerOnReady`          | `func(threadID int)` | Configuration par thread. Appelé lorsqu'un thread démarre. Reçoit l'ID du Thread. |
-| **Thread** | `WithWorkerOnShutdown`       | `func(threadID int)` | Nettoyage par thread. Reçoit l'ID du Thread.                           |
+| Type de Hook | Nom de l'Option              | Signature            | Contexte et Cas d'Utilisation                                                         |
+| :----------- | :--------------------------- | :------------------- | :------------------------------------------------------------------------------------ |
+| **Serveur**  | `WithWorkerOnServerStartup`  | `func()`             | Configuration globale. Exécuté **Une fois**. Exemple : Connexion à NATS/Redis.        |
+| **Serveur**  | `WithWorkerOnServerShutdown` | `func()`             | Nettoyage global. Exécuté **Une fois**. Exemple : Fermeture des connexions partagées. |
+| **Thread**   | `WithWorkerOnReady`          | `func(threadID int)` | Configuration par thread. Appelé lorsqu'un thread démarre. Reçoit l'ID du Thread.     |
+| **Thread**   | `WithWorkerOnShutdown`       | `func(threadID int)` | Nettoyage par thread. Reçoit l'ID du Thread.                                          |
 
 ### Exemple
 

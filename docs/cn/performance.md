@@ -23,7 +23,7 @@
 `max_threads` 可以帮助你确定需要多少线程来处理你的流量，并可以使服务器对延迟峰值更具弹性。
 如果设置为 `auto`，限制将基于你的 `php.ini` 中的 `memory_limit` 进行估算。如果无法这样做，
 `auto` 将默认为 2x `num_threads`。请记住，`auto` 可能会严重低估所需的线程数。
-`max_threads` 类似于 PHP FPM 的 [pm.max_children](https://www.php.net/manual/en/install.fpm.configuration.php#pm.max-children)。主要区别是 FrankenPHP 使用线程而不是
+`max_threads` 类似于 PHP FPM 的 [pm.max_children](https://www.php.net/manual/install.fpm.configuration.php#pm.max-children)。主要区别是 FrankenPHP 使用线程而不是
 进程，并根据需要自动在不同的 worker 脚本和"经典模式"之间委派它们。
 
 ## Worker 模式
@@ -160,10 +160,10 @@ FrankenPHP 使用官方 PHP 解释器。
 
 特别是：
 
-- 检查 [OPcache](https://www.php.net/manual/zh/book.opcache.php) 是否已安装、启用并正确配置
+- 检查 [OPcache](https://www.php.net/manual/book.opcache.php) 是否已安装、启用并正确配置
 - 启用 [Composer 自动加载器优化](https://getcomposer.org/doc/articles/autoloader-optimization.md)
 - 确保 `realpath` 缓存对于你的应用程序需求足够大
-- 使用[预加载](https://www.php.net/manual/zh/opcache.preloading.php)
+- 使用[预加载](https://www.php.net/manual/opcache.preloading.php)
 
 有关更多详细信息，请阅读[专门的 Symfony 文档条目](https://symfony.com/doc/current/performance.html)
 （即使你不使用 Symfony，大多数提示也很有用）。

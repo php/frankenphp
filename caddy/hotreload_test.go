@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/caddyserver/caddy/v2/caddytest"
 	"github.com/stretchr/testify/require"
@@ -25,6 +26,10 @@ func TestHotReload(t *testing.T) {
 	indexFile := filepath.Join(tmpDir, "index.php")
 
 	tester := caddytest.NewTester(t)
+	// caddytest's default 5s http.Client.Timeout is too tight for the
+	// SSE roundtrip below on slow CI runners (notably emulated armv7).
+	// 30s keeps the test bounded so a real regression fails fast.
+	tester.Client.Timeout = 30 * time.Second
 	tester.InitServer(`
 		{
 			debug
@@ -57,22 +62,30 @@ func TestHotReload(t *testing.T) {
 		req = req.WithContext(cx)
 		resp := tester.AssertResponseCode(req, http.StatusOK)
 
-		connected.Done()
-
 		var receivedBody strings.Builder
 
 		buf := make([]byte, 1024)
+		isConnected := false
 		for {
-			_, err := resp.Body.Read(buf)
-			require.NoError(t, err)
-
-			receivedBody.Write(buf)
-
+			n, err := resp.Body.Read(buf)
+			if n > 0 {
+				receivedBody.Write(buf[:n])
+			}
+			if !isConnected {
+				// wait for the first bytes before marking the client as connected
+				isConnected = true
+				connected.Done()
+			}
 			if strings.Contains(receivedBody.String(), "index.php") {
 				cancel()
 
 				break
 			}
+			// Surface the read error only after checking the buffer: on
+			// Windows the SSE server sometimes flushes the event and closes
+			// the connection in the same syscall, so Read returns (n>0, EOF)
+			// and we'd otherwise fail despite having the data we wanted.
+			require.NoError(t, err)
 		}
 
 		require.NoError(t, resp.Body.Close())

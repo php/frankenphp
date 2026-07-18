@@ -1,6 +1,12 @@
 ---
 rules:
-  unpinned-uses:
+  # Dependabot auto-merge requires pull_request_target to obtain repo-write
+  # permissions; the job is guarded by an `if:` check on the PR author.
+  dangerous-triggers:
+    ignore:
+      - dependabot.yaml
+  secrets-outside-env:
     config:
-      policies:
-        "*": ref-pin
+      allow:
+        # TODO: re-enable the environment when the GitHub UI supports grouping or masking environment notifications (they pollute pull requests right now)
+        - DOCKERHUB_TOKEN

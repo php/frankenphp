@@ -23,7 +23,7 @@ tahmin edilemez olma eğilimindedir. `max_threads` [yapılandırması](config.md
 `max_threads`, trafiğinizi yönetmek için kaç iş parçacığına ihtiyacınız olduğunu anlamanıza yardımcı olabilir ve sunucuyu gecikme artışlarına karşı daha dirençli hale getirebilir.
 Eğer `auto` olarak ayarlanırsa, sınır `php.ini` dosyanızdaki `memory_limit` değerine göre tahmin edilecektir. Bunu yapamazsa,
 `auto` bunun yerine varsayılan olarak 2x `num_threads` olacaktır. `auto`'nun ihtiyaç duyulan iş parçacığı sayısını büyük ölçüde küçümseyebileceğini unutmayın.
-`max_threads`, PHP FPM'nin [pm.max_children](https://www.php.net/manual/en/install.fpm.configuration.php#pm.max-children) ile benzerdir. Temel fark, FrankenPHP'nin süreçler yerine
+`max_threads`, PHP FPM'nin [pm.max_children](https://www.php.net/manual/install.fpm.configuration.php#pm.max-children) ile benzerdir. Temel fark, FrankenPHP'nin süreçler yerine
 iş parçacıkları kullanması ve gerektiğinde bunları farklı işçi komut dosyaları ve 'klasik mod' arasında otomatik olarak devretmesidir.
 
 ## İşçi Modu
@@ -158,10 +158,10 @@ Tüm olağan PHP ile ilgili performans optimizasyonları FrankenPHP ile de geçe
 
 Özellikle:
 
-- [OPcache](https://www.php.net/manual/en/book.opcache.php)'in kurulu, etkin ve doğru şekilde yapılandırıldığını kontrol edin
+- [OPcache](https://www.php.net/manual/book.opcache.php)'in kurulu, etkin ve doğru şekilde yapılandırıldığını kontrol edin
 - [Composer otomatik yükleyici optimizasyonlarını](https://getcomposer.org/doc/articles/autoloader-optimization.md) etkinleştirin
 - `realpath` önbelleğinin uygulamanızın ihtiyaçları için yeterince büyük olduğundan emin olun
-- [ön yüklemeyi](https://www.php.net/manual/en/opcache.preloading.php) kullanın
+- [ön yüklemeyi](https://www.php.net/manual/opcache.preloading.php) kullanın
 
 Daha fazla ayrıntı için, [Symfony'nin bu konuya ayrılmış dokümantasyon girişini](https://symfony.com/doc/current/performance.html) okuyun
 (ipuçlarının çoğu Symfony kullanmasanız bile faydalıdır).

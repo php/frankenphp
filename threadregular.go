@@ -1,11 +1,14 @@
 package frankenphp
 
+// #include "frankenphp.h"
+import "C"
 import (
 	"context"
 	"log/slog"
 	"runtime"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/dunglas/frankenphp/internal/state"
 )
@@ -48,10 +51,10 @@ func (handler *regularThread) beforeScriptExecution() string {
 		handler.state.Set(state.Ready)
 
 		return handler.waitForRequest()
-
 	case state.Ready:
 		return handler.waitForRequest()
-
+	case state.Rebooting, state.ForceRebooting:
+		return ""
 	case state.RebootReady:
 		handler.requestCount = 0
 		handler.state.Set(state.Ready)
@@ -82,6 +85,8 @@ func (handler *regularThread) context() context.Context {
 func (handler *regularThread) name() string {
 	return "Regular PHP Thread"
 }
+
+func (handler *regularThread) drain() {}
 
 func (handler *regularThread) waitForRequest() string {
 	// max_requests reached: restart the thread to clean up all ZTS state
@@ -167,7 +172,7 @@ func handleRequestWithRegularPHPThreads(ch contextHolder) error {
 			return nil
 		case scaleChan <- ch.frankenPHPContext:
 			// the request has triggered scaling, continue to wait for a thread
-		case <-timeoutChan(maxWaitTime):
+		case <-timeoutChan(time.Duration(maxWaitTime.Load())):
 			// the request has timed out stalling
 			queuedRegularThreads.Add(-1)
 			metrics.DequeuedRequest()

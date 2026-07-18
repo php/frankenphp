@@ -19,7 +19,7 @@ php_server
 
 Un `Caddyfile` plus avancé, activant davantage de fonctionnalités et fournissant des variables d'environnement pratiques, est disponible [dans le dépôt FrankenPHP](https://github.com/php/frankenphp/blob/main/caddy/frankenphp/Caddyfile) et avec les images Docker.
 
-PHP lui-même peut être configuré [en utilisant un fichier `php.ini`](https://www.php.net/manual/fr/configuration.file.php).
+PHP lui-même peut être configuré [en utilisant un fichier `php.ini`](https://www.php.net/manual/configuration.file.php).
 
 Selon votre méthode d'installation, FrankenPHP et l'interpréteur PHP chercheront les fichiers de configuration aux emplacements décrits ci-dessous.
 
@@ -242,7 +242,7 @@ où le processus FrankenPHP a été lancé. Vous pouvez également spécifier un
 
 La surveillance des fichiers est basée sur [e-dant/watcher](https://github.com/e-dant/watcher).
 
-## Faire correspondre le Worker à un chemin
+## Faire correspondre le worker à un chemin
 
 Dans les applications PHP traditionnelles, les scripts sont toujours placés dans le répertoire public. C'est également vrai pour les scripts worker, qui sont traités comme n'importe quel autre script PHP. Si vous souhaitez plutôt placer le script worker en dehors du répertoire public, vous pouvez le faire via la directive `match`.
 
@@ -292,11 +292,11 @@ Les variables d'environnement suivantes peuvent être utilisées pour insérer d
 
 Comme pour les SAPI FPM et CLI, les variables d'environnement sont exposées par défaut dans la superglobale `$_SERVER`.
 
-La valeur `S` de [la directive `variables_order` de PHP](https://www.php.net/manual/fr/ini.core.php#ini.variables-order) est toujours équivalente à `ES`, que `E` soit défini ailleurs dans cette directive ou non.
+La valeur `S` de [la directive `variables_order` de PHP](https://www.php.net/manual/ini.core.php#ini.variables-order) est toujours équivalente à `ES`, que `E` soit défini ailleurs dans cette directive ou non.
 
 ## Configuration PHP
 
-Pour charger [des fichiers de configuration PHP supplémentaires](https://www.php.net/manual/fr/configuration.file.php#configuration.file.scan),
+Pour charger [des fichiers de configuration PHP supplémentaires](https://www.php.net/manual/configuration.file.php#configuration.file.scan),
 la variable d'environnement `PHP_INI_SCAN_DIR` peut être utilisée.
 Lorsqu'elle est définie, PHP chargera tous les fichiers avec l'extension `.ini` présents dans les répertoires donnés.
 
@@ -353,7 +353,7 @@ CADDY_GLOBAL_OPTIONS="servers {
 
 Vous trouverez plus d'informations sur ce paramètre dans la [documentation Caddy](https://caddyserver.com/docs/caddyfile/options#enable-full-duplex).
 
-## Activer le mode Debug
+## Activer le mode debug
 
 Lors de l'utilisation de l'image Docker, définissez la variable d'environnement `CADDY_GLOBAL_OPTIONS` sur `debug` pour activer le mode debug :
 

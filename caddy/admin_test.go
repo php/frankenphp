@@ -15,6 +15,7 @@ import (
 	"github.com/caddyserver/caddy/v2/caddytest"
 	"github.com/dunglas/frankenphp"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRestartWorkerViaAdminApi(t *testing.T) {
@@ -38,6 +39,9 @@ func TestRestartWorkerViaAdminApi(t *testing.T) {
 			}
 		}
 		`, "caddyfile")
+
+	// make sure workers are not still running from any previous tests
+	assertAdminResponse(t, tester, "POST", "workers/restart", http.StatusOK, "workers restarted successfully\n")
 
 	tester.AssertGetResponse("http://localhost:"+testPort+"/", http.StatusOK, "requests:1")
 	tester.AssertGetResponse("http://localhost:"+testPort+"/", http.StatusOK, "requests:2")
@@ -161,14 +165,15 @@ func TestAutoScaleWorkerThreads(t *testing.T) {
 		wg.Add(requestsPerTry)
 		for range requestsPerTry {
 			go func() {
+				// deferred so a t.Fatalf from a failed request doesn't leak the WaitGroup
+				defer wg.Done()
 				tester.AssertGetResponse(endpoint, http.StatusOK, "slept for 2 ms and worked for 1000 iterations")
-				wg.Done()
 			}()
 		}
 		wg.Wait()
 
 		amountOfThreads = getNumThreads(t, tester)
-		if amountOfThreads > 2 {
+		if amountOfThreads > 2 || t.Failed() {
 			break
 		}
 	}
@@ -213,14 +218,15 @@ func TestAutoScaleRegularThreadsOnAutomaticThreadLimit(t *testing.T) {
 		wg.Add(requestsPerTry)
 		for range requestsPerTry {
 			go func() {
+				// deferred so a t.Fatalf from a failed request doesn't leak the WaitGroup
+				defer wg.Done()
 				tester.AssertGetResponse(endpoint, http.StatusOK, "slept for 2 ms and worked for 1000 iterations")
-				wg.Done()
 			}()
 		}
 		wg.Wait()
 
 		amountOfThreads = getNumThreads(t, tester)
-		if amountOfThreads > 1 {
+		if amountOfThreads > 1 || t.Failed() {
 			break
 		}
 	}
@@ -245,7 +251,7 @@ func getAdminResponseBody(t *testing.T, tester *caddytest.Tester, method string,
 	r, err := http.NewRequest(method, adminUrl+path, nil)
 	assert.NoError(t, err)
 	resp := tester.AssertResponseCode(r, http.StatusOK)
-	defer resp.Body.Close()
+	defer func() { require.NoError(t, resp.Body.Close()) }()
 	bytes, err := io.ReadAll(resp.Body)
 	assert.NoError(t, err)
 
@@ -319,7 +325,7 @@ func TestAddModuleWorkerViaAdminApi(t *testing.T) {
 	assert.NoError(t, err)
 	r.Header.Set("Content-Type", "text/caddyfile")
 	resp := tester.AssertResponseCode(r, http.StatusOK)
-	defer resp.Body.Close()
+	defer func() { require.NoError(t, resp.Body.Close()) }()
 
 	// Get the updated debug state to check if the worker was added
 	updatedDebugState := getDebugState(t, tester)

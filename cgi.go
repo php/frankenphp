@@ -4,10 +4,12 @@ package frankenphp
 // #cgo nocallback frankenphp_register_variable_safe
 // #cgo nocallback frankenphp_register_known_variable
 // #cgo nocallback frankenphp_init_persistent_string
+// #cgo nocallback frankenphp_add_to_prepared_env
 // #cgo noescape frankenphp_register_server_vars
 // #cgo noescape frankenphp_register_variable_safe
 // #cgo noescape frankenphp_register_known_variable
 // #cgo noescape frankenphp_init_persistent_string
+// #cgo noescape frankenphp_add_to_prepared_env
 // #include "frankenphp.h"
 // #include <php_variables.h>
 import "C"
@@ -22,8 +24,6 @@ import (
 	"unsafe"
 
 	"github.com/dunglas/frankenphp/internal/phpheaders"
-	"golang.org/x/text/language"
-	"golang.org/x/text/search"
 )
 
 // cStringHTTPMethods caches C string versions of common HTTP methods
@@ -47,18 +47,7 @@ var cStringHTTPMethods = map[string]*C.char{
 func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 	request := fc.request
 	// Separate remote IP and port; more lenient than net.SplitHostPort
-	var ip, port string
-	if idx := strings.LastIndex(request.RemoteAddr, ":"); idx > -1 {
-		ip = request.RemoteAddr[:idx]
-		port = request.RemoteAddr[idx+1:]
-	} else {
-		ip = request.RemoteAddr
-	}
-
-	// Remove [] from IPv6 addresses
-	if len(ip) > 0 && ip[0] == '[' {
-		ip = ip[1 : len(ip)-1]
-	}
+	ip, port := splitRemoteAddr(request.RemoteAddr)
 
 	var rs, https, sslProtocol *C.zend_string
 	var sslCipher string
@@ -111,7 +100,7 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		requestURI = fc.requestURI
 	}
 
-	requestPath := ensureLeadingSlash(request.URL.Path)
+	phpSelf := fc.scriptName + fc.pathInfo
 
 	C.frankenphp_register_server_vars(trackVarsArray, C.frankenphp_server_vars{
 		// approximate total length to avoid array re-hashing:
@@ -129,8 +118,8 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		document_root_len:   C.size_t(len(fc.documentRoot)),
 		path_info:           toUnsafeChar(fc.pathInfo),
 		path_info_len:       C.size_t(len(fc.pathInfo)),
-		php_self:            toUnsafeChar(requestPath),
-		php_self_len:        C.size_t(len(requestPath)),
+		php_self:            toUnsafeChar(phpSelf),
+		php_self_len:        C.size_t(len(phpSelf)),
 		document_uri:        toUnsafeChar(fc.docURI),
 		document_uri_len:    C.size_t(len(fc.docURI)),
 		script_filename:     toUnsafeChar(fc.scriptFilename),
@@ -175,11 +164,12 @@ func addHeadersToServer(ctx context.Context, request *http.Request, trackVarsArr
 	}
 }
 
-func addPreparedEnvToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
-	for k, v := range fc.env {
-		C.frankenphp_register_variable_safe(toUnsafeChar(k), toUnsafeChar(v), C.size_t(len(v)), trackVarsArray)
+// registerPreparedEnv exposes fc.env to getenv() before any PHP code runs.
+func registerPreparedEnv(env PreparedEnv) {
+	size := C.size_t(len(env))
+	for k, v := range env {
+		C.frankenphp_add_to_prepared_env(toUnsafeChar(k), C.size_t(len(k)-1), toUnsafeChar(v), C.size_t(len(v)), size)
 	}
-	fc.env = nil
 }
 
 //export go_register_server_variables
@@ -193,7 +183,9 @@ func go_register_server_variables(threadIndex C.uintptr_t, trackVarsArray *C.zva
 	}
 
 	// The Prepared Environment is registered last and can overwrite any previous values
-	addPreparedEnvToServer(fc, trackVarsArray)
+	if len(fc.env) != 0 {
+		C.frankenphp_merge_with_prepared_env(trackVarsArray)
+	}
 }
 
 // splitCgiPath splits the request path into SCRIPT_NAME, SCRIPT_FILENAME, PATH_INFO, DOCUMENT_URI
@@ -208,16 +200,25 @@ func splitCgiPath(fc *frankenPHPContext) {
 	if splitPos := splitPos(path, splitPath); splitPos > -1 {
 		fc.docURI = path[:splitPos]
 		fc.pathInfo = path[splitPos:]
-
-		// Strip PATH_INFO from SCRIPT_NAME
-		fc.scriptName = strings.TrimSuffix(path, fc.pathInfo)
-
-		// Ensure the SCRIPT_NAME has a leading slash for compliance with RFC3875
-		// Info: https://tools.ietf.org/html/rfc3875#section-4.1.13
-		if fc.scriptName != "" && !strings.HasPrefix(fc.scriptName, "/") {
-			fc.scriptName = "/" + fc.scriptName
-		}
 	}
+
+	// If a worker is already assigned explicitly, derive SCRIPT_NAME from its filename
+	if fc.worker != nil {
+		fc.scriptFilename = fc.worker.fileName
+		docRootWithSep := fc.documentRoot + string(filepath.Separator)
+		if strings.HasPrefix(fc.worker.fileName, docRootWithSep) {
+			fc.scriptName = filepath.ToSlash(strings.TrimPrefix(fc.worker.fileName, fc.documentRoot))
+		} else {
+			fc.docURI = ""
+			fc.pathInfo = ""
+		}
+		return
+	}
+
+	// Strip PATH_INFO from SCRIPT_NAME
+	// Ensure the SCRIPT_NAME has a leading slash for compliance with RFC3875
+	// Info: https://tools.ietf.org/html/rfc3875#section-4.1.13
+	fc.scriptName = ensureLeadingSlash(strings.TrimSuffix(path, fc.pathInfo))
 
 	// TODO: is it possible to delay this and avoid saving everything in the context?
 	// SCRIPT_FILENAME is the absolute path of SCRIPT_NAME
@@ -225,11 +226,16 @@ func splitCgiPath(fc *frankenPHPContext) {
 	fc.worker = workersByPath[fc.scriptFilename]
 }
 
-var splitSearchNonASCII = search.New(language.Und, search.IgnoreCase)
-
 // splitPos returns the index where path should be split based on splitPath.
 // example: if splitPath is [".php"]
 // "/path/to/script.php/some/path": ("/path/to/script.php", "/some/path")
+//
+// Matching is strictly ASCII case-insensitive. Bytes >= utf8.RuneSelf in path
+// never match any split entry: split strings are validated ASCII-only and
+// lower-cased in WithRequestSplitPath, so any Unicode equivalence (e.g.
+// fullwidth or mathematical letters folding to ASCII) would let an attacker
+// upload a file whose name contains such code points and have it served as
+// PHP. See GHSA-3g8v-8r37-cgjm and GHSA-v4h7-cj44-8fc8.
 func splitPos(path string, splitPath []string) int {
 	if len(splitPath) == 0 {
 		return 0
@@ -237,31 +243,18 @@ func splitPos(path string, splitPath []string) int {
 
 	pathLen := len(path)
 
-	// We are sure that split strings are all ASCII-only and lower-case because of validation and normalization in WithRequestSplitPath
 	for _, split := range splitPath {
 		splitLen := len(split)
+		if splitLen == 0 || splitLen > pathLen {
+			continue
+		}
 
-		for i := 0; i < pathLen; i++ {
-			if path[i] >= utf8.RuneSelf {
-				if _, end := splitSearchNonASCII.IndexString(path, split); end > -1 {
-					return end
-				}
-
-				break
-			}
-
-			if i+splitLen > pathLen {
-				continue
-			}
-
+		for i := 0; i <= pathLen-splitLen; i++ {
 			match := true
 			for j := 0; j < splitLen; j++ {
 				c := path[i+j]
-
 				if c >= utf8.RuneSelf {
-					if _, end := splitSearchNonASCII.IndexString(path, split); end > -1 {
-						return end
-					}
+					match = false
 
 					break
 				}
@@ -297,6 +290,10 @@ func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) 
 
 	if request == nil {
 		return nil
+	}
+
+	if len(fc.env) != 0 {
+		registerPreparedEnv(fc.env)
 	}
 
 	if m, ok := cStringHTTPMethods[request.Method]; ok {
@@ -353,6 +350,28 @@ func sanitizedPathJoin(root, reqPath string) string {
 	}
 
 	return path
+}
+
+// splitRemoteAddr splits "host:port" leniently: a missing port is accepted.
+// A malformed value such as "[" must not panic, as that would unwind out of
+// the go_register_server_variables cgo callback and crash the whole process.
+func splitRemoteAddr(remoteAddr string) (ip, port string) {
+	if host, p, err := net.SplitHostPort(remoteAddr); err == nil {
+		return host, p
+	}
+
+	if idx := strings.LastIndex(remoteAddr, ":"); idx > -1 {
+		ip = remoteAddr[:idx]
+		port = remoteAddr[idx+1:]
+	} else {
+		ip = remoteAddr
+	}
+
+	if len(ip) >= 2 && ip[0] == '[' && ip[len(ip)-1] == ']' {
+		ip = ip[1 : len(ip)-1]
+	}
+
+	return ip, port
 }
 
 const separator = string(filepath.Separator)

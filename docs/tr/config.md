@@ -1,6 +1,6 @@
 # Konfigürasyon
 
-FrankenPHP, Caddy ile birlikte [Mercure](mercure.md) ve [Vulcain](https://vulcain.rocks) modülleri [Caddy tarafından desteklenen formatlar](https://caddyserver.com/docs/getting-started#your-first-config) kullanılarak yapılandırılabilir.
+FrankenPHP, Caddy'nin yanı sıra [Mercure](mercure.md) ve [Vulcain](https://vulcain.rocks) modülleri [Caddy tarafından desteklenen formatlar](https://caddyserver.com/docs/getting-started#your-first-config) kullanılarak yapılandırılabilir.
 
 En yaygın format, basit, insan tarafından okunabilir bir metin formatı olan `Caddyfile`'dır. Varsayılan olarak, FrankenPHP mevcut dizinde bir `Caddyfile` arar. Özel bir yol belirtmek için `-c` veya `--config` seçeneğini kullanabilirsiniz.
 
@@ -17,7 +17,7 @@ php_server
 
 Daha fazla özellik sağlayan ve kullanışlı ortam değişkenleri sunan daha gelişmiş bir `Caddyfile`, [FrankenPHP deposunda](https://github.com/php/frankenphp/blob/main/caddy/frankenphp/Caddyfile) ve Docker imajlarıyla birlikte sağlanır.
 
-PHP'nin kendisi [bir `php.ini` dosyası kullanılarak yapılandırılabilir](https://www.php.net/manual/en/configuration.file.php).
+PHP'nin kendisi [bir `php.ini` dosyası kullanılarak yapılandırılabilir](https://www.php.net/manual/configuration.file.php).
 
 Kurulum yönteminize bağlı olarak, FrankenPHP ve PHP yorumlayıcısı, aşağıda açıklanan konumlardaki yapılandırma dosyalarını arayacaktır.
 
@@ -94,7 +94,6 @@ Ayrıca, FrankenPHP'yi [global seçenek](https://caddyserver.com/docs/caddyfile/
 		max_threads <num_threads> # Çalışma zamanında başlatılabilecek ek PHP iş parçacığı sayısını sınırlar. Varsayılan: num_threads. 'auto' olarak ayarlanabilir.
 		max_wait_time <duration> # Bir isteğin boş bir PHP iş parçacığı bekleme süresinin zaman aşımına uğramadan önceki maksimum süresini ayarlar. Varsayılan: devre dışı.
 		max_idle_time <duration> # Otomatik ölçeklenen bir iş parçacığının devre dışı bırakılmadan önce ne kadar süre boş kalabileceğini ayarlar. Varsayılan: 5s.
-		max_requests <num> # (deneysel) Bir PHP iş parçacığının yeniden başlatılmadan önce işleyeceği maksimum istek sayısını ayarlar, bellek sızıntılarını azaltmak için faydalıdır. Hem normal hem de çalışan iş parçacıkları için geçerlidir. Varsayılan: 0 (sınırsız).
 		php_ini <key> <value> # Bir php.ini yönergesi ayarlar. Birden fazla yönerge ayarlamak için birden fazla kez kullanılabilir.
 		worker {
 			file <path> # Çalışan komut dosyasının yolunu ayarlar.
@@ -194,9 +193,9 @@ php_server [<matcher>] {
 
 ### Dosya Değişikliklerini İzleme
 
-İşçiler yalnızca uygulamanızı bir kez başlatır ve bellekte tutar, bu nedenle PHP dosyalarınızdaki herhangi bir değişiklik hemen yansımaz.
+Workers yalnızca uygulamanızı bir kez başlatır ve bellekte tutar, bu nedenle PHP dosyalarınızdaki herhangi bir değişiklik hemen yansımaz.
 
-İşçiler, `watch` yönergesi aracılığıyla dosya değişikliklerinde yeniden başlatılabilir. Bu, geliştirme ortamları için kullanışlıdır.
+Bunun yerine işçiler, `watch` yönergesi aracılığıyla dosya değişikliklerinde yeniden başlatılabilir. Bu, geliştirme ortamları için kullanışlıdır.
 
 ```caddyfile
 {
@@ -253,20 +252,6 @@ Geleneksel PHP uygulamalarında, betikler her zaman public dizininde bulunur. Bu
 }
 ```
 
-## İstek Sayısından Sonra İş Parçacıklarını Yeniden Başlatma (Deneysel)
-
-FrankenPHP, PHP iş parçacıklarını belirli bir sayıda isteği işledikten sonra otomatik olarak yeniden başlatabilir. Bir iş parçacığı limite ulaştığında, tüm belleği ve durumu temizleyerek tamamen yeniden başlatılır. Diğer iş parçacıkları yeniden başlatma sırasında istekleri işlemeye devam eder.
-
-Zamanla bellek kullanımının arttığını fark ederseniz, ideal çözüm sızıntıyı sorumlu uzantı veya kütüphane geliştiricisine bildirmektir. Ancak çözüm, kontrol edemediğiniz bir üçüncü tarafa bağlı olduğunda, `max_requests` üretim için pratik ve umarız geçici bir çözüm sunar:
-
-```caddyfile
-{
-	frankenphp {
-		max_requests 500
-	}
-}
-```
-
 ## Ortam Değişkenleri
 
 Aşağıdaki ortam değişkenleri `Caddyfile` içinde değişiklik yapmadan Caddy yönergelerini entegre etmek için kullanılabilir:
@@ -278,11 +263,11 @@ Aşağıdaki ortam değişkenleri `Caddyfile` içinde değişiklik yapmadan Cadd
 
 FPM ve CLI SAPI'lerinde olduğu gibi, ortam değişkenleri varsayılan olarak `$_SERVER` süper globalinde gösterilir.
 
-[`variables_order` PHP yönergesinin](https://www.php.net/manual/en/ini.core.php#ini.variables-order) `S` değeri bu yönergede `E`'nin başka bir yere yerleştirilmesinden bağımsız olarak her zaman `ES` ile eş değerdir.
+[`variables_order`'a ait PHP yönergesinin](https://www.php.net/manual/ini.core.php#ini.variables-order) `S` değeri bu yönergede `E`'nin başka bir yere yerleştirilmesinden bağımsız olarak her zaman `ES` ile eş değerdir.
 
 ## PHP konfigürasyonu
 
-Ek olarak [PHP yapılandırma dosyalarını](https://www.php.net/manual/en/configuration.file.php#configuration.file.scan) yüklemek için,
+Ek olarak [PHP yapılandırma dosyalarını](https://www.php.net/manual/configuration.file.php#configuration.file.scan) yüklemek için,
 `PHP_INI_SCAN_DIR` ortam değişkeni kullanılabilir.
 Ayarlandığında, PHP verilen dizinlerde bulunan `.ini` uzantılı tüm dosyaları yükleyecektir.
 

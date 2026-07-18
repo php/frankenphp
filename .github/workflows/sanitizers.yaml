@@ -41,15 +41,10 @@ jobs:
     steps:
       - name: Remove local PHP
         run: sudo apt-get remove --purge --autoremove 'php*' 'libmemcached*'
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: actions/setup-go@v6
-        with:
-          go-version: "1.26"
-          cache-dependency-path: |
-            go.sum 
-            caddy/go.sum
+      - uses: ./.github/actions/setup-go
       - name: Determine PHP version
         id: determine-php-version
         run: |
@@ -58,7 +53,7 @@ jobs:
           echo archive="$(jq -r '.[] .source[] | select(.filename |endswith(".xz")) | "https://www.php.net/distributions/" + .filename' version.json)" >> "$GITHUB_OUTPUT"
       - name: Cache PHP
         id: cache-php
-        uses: actions/cache@v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: php/target
           key: php-sanitizers-${{ matrix.sanitizer }}-${{ runner.arch }}-${{ steps.determine-php-version.outputs.version }}
@@ -108,7 +103,7 @@ jobs:
       - name: Set CGO flags
         run: |
           {
-            echo "CGO_CFLAGS=$CFLAGS -I${PWD}/watcher/target/include $(php-config --includes)"
+            echo "CGO_CFLAGS=$CFLAGS -I${PWD}/watcher/target/include -DFRANKENPHP_TEST $(php-config --includes)"
             echo "CGO_LDFLAGS=$LDFLAGS $(php-config --ldflags) $(php-config --libs)"
           } >> "$GITHUB_ENV"
       - name: Run tests

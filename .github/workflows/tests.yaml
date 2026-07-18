@@ -38,28 +38,20 @@ jobs:
       LIBRARY_PATH: ${{ github.workspace }}/watcher/target/lib
       GOFLAGS: "-tags=nobadger,nomysql,nopgx"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: actions/setup-go@v6
-        with:
-          go-version: "1.26"
-          cache-dependency-path: |
-            go.sum 
-            caddy/go.sum
-      - uses: shivammathur/setup-php@v2
+      - uses: ./.github/actions/setup-go
+      - uses: ./.github/actions/setup-php
         with:
           php-version: ${{ matrix.php-versions }}
-          ini-file: development
-          coverage: none
-          tools: none
-        env:
-          phpts: ts
-          debug: true
       - name: Install e-dant/watcher
         uses: ./.github/actions/watcher
+      - name: Reinstall libbrotli-dev
+        # TODO: remove this workaround when fixed upstream
+        run: sudo apt-get install --reinstall -y libbrotli-dev
       - name: Set CGO flags
-        run: echo "CGO_CFLAGS=-I${PWD}/watcher/target/include $(php-config --includes)" >> "${GITHUB_ENV}"
+        run: echo "CGO_CFLAGS=-I${PWD}/watcher/target/include -DFRANKENPHP_TEST $(php-config --includes)" >> "${GITHUB_ENV}"
       - name: Build
         run: go build
       - name: Build testcli binary
@@ -84,10 +76,16 @@ jobs:
       - name: Run integrations tests
         run: ./reload_test.sh
       - name: Lint Go code
-        uses: golangci/golangci-lint-action@v9
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         if: matrix.php-versions == '8.5'
         with:
           version: latest
+      - name: Lint Caddy module Go code
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        if: matrix.php-versions == '8.5'
+        with:
+          version: latest
+          working-directory: caddy/
       - name: Ensure go.mod is tidy
         if: matrix.php-versions == '8.5'
         run: go mod tidy -diff
@@ -105,24 +103,13 @@ jobs:
     env:
       XCADDY_GO_BUILD_FLAGS: "-tags=nobadger,nomysql,nopgx"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: actions/setup-go@v6
-        with:
-          go-version: "1.26"
-          cache-dependency-path: |
-            go.sum
-            caddy/go.sum
-      - uses: shivammathur/setup-php@v2
+      - uses: ./.github/actions/setup-go
+      - uses: ./.github/actions/setup-php
         with:
           php-version: ${{ matrix.php-versions }}
-          ini-file: development
-          coverage: none
-          tools: none
-        env:
-          phpts: ts
-          debug: true
       - name: Install PHP development libraries
         run: sudo apt-get update && sudo apt-get install -y libkrb5-dev libsodium-dev libargon2-dev
       - name: Install xcaddy
@@ -135,7 +122,7 @@ jobs:
           echo "GEN_STUB_SCRIPT=${PWD}/php-${PHP_VERSION}/build/gen_stub.php" >> "${GITHUB_ENV}"
       - name: Set CGO flags
         run: |
-          echo "CGO_CFLAGS=$(php-config --includes)" >> "${GITHUB_ENV}"
+          echo "CGO_CFLAGS=-DFRANKENPHP_TEST $(php-config --includes)" >> "${GITHUB_ENV}"
           echo "CGO_LDFLAGS=$(php-config --ldflags) $(php-config --libs)" >> "${GITHUB_ENV}"
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@latest
@@ -149,30 +136,17 @@ jobs:
       HOMEBREW_NO_AUTO_UPDATE: 1
       GOFLAGS: "-tags=nowatcher,nobadger,nomysql,nopgx"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: actions/setup-go@v6
-        with:
-          go-version: "1.26"
-          cache-dependency-path: |
-            go.sum
-            caddy/go.sum
-      - uses: shivammathur/setup-php@v2
-        with:
-          php-version: 8.5
-          ini-file: development
-          coverage: none
-          tools: none
-        env:
-          phpts: ts
-          debug: true
+      - uses: ./.github/actions/setup-go
+      - uses: ./.github/actions/setup-php
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@latest
       - name: Set CGO flags
         run: |
           {
-           echo "CGO_CFLAGS=-I/opt/homebrew/include/ $(php-config --includes)"
+           echo "CGO_CFLAGS=-I/opt/homebrew/include/ -DFRANKENPHP_TEST $(php-config --includes)"
            echo "CGO_LDFLAGS=-L/opt/homebrew/lib/ $(php-config --ldflags) $(php-config --libs)"
           } >> "${GITHUB_ENV}"
       - name: Build

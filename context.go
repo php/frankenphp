@@ -61,6 +61,15 @@ func newFrankenPHPContext() *frankenPHPContext {
 }
 
 // NewRequestWithContext creates a new FrankenPHP request context.
+//
+// FrankenPHP does not strip request headers whose name contains an underscore.
+// Because CGI maps dashes to underscores ("Foo-Bar" becomes the HTTP_FOO_BAR
+// variable), a client-supplied "Foo_Bar" header is indistinguishable from the
+// legitimate "Foo-Bar" in $_SERVER and can spoof it. This affects any such
+// header an application or upstream proxy trusts (forwarded-for, auth, etc.).
+// Drop headers containing an underscore before calling this function, unless
+// you explicitly need (and whitelist) them. The Caddy-based server and reverse
+// proxies such as nginx (underscores_in_headers off) already do this.
 func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Request, error) {
 	fc := newFrankenPHPContext()
 	fc.request = r
@@ -86,14 +95,7 @@ func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Reques
 		}
 	}
 
-	// If a worker is already assigned explicitly, use its filename and skip parsing path variables
-	if fc.worker != nil {
-		fc.scriptFilename = fc.worker.fileName
-	} else {
-		// If no worker was assigned, split the path into the "traditional" CGI path variables.
-		// This needs to already happen here in case a worker script still matches the path.
-		splitCgiPath(fc)
-	}
+	splitCgiPath(fc)
 
 	fc.requestURI = r.URL.RequestURI()
 

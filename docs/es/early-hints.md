@@ -1,4 +1,4 @@
-# Early Hints (Pistas Tempranas)
+# Early Hints (pistas tempranas)
 
 FrankenPHP soporta nativamente el [código de estado 103 Early Hints](https://developer.chrome.com/blog/early-hints/).
 El uso de Early Hints puede mejorar el tiempo de carga de sus páginas web hasta en un 30%.

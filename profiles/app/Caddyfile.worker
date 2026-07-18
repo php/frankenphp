@@ -1,0 +1,17 @@
+# this is, intentionally, not an optimised configuration
+# we're trying to cover as many codepaths as possible
+
+{
+	skip_install_trust
+	admin localhost:22019
+    grace_period 0s
+}
+
+:22080 {
+	root * .
+	encode zstd br gzip
+
+	php_server {
+        worker index.php
+    }
+}

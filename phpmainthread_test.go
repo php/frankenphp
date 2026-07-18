@@ -95,8 +95,9 @@ func TestTransitionThreadsWhileDoingRequests(t *testing.T) {
 	t.Cleanup(Shutdown)
 
 	var (
-		isDone atomic.Bool
-		wg     sync.WaitGroup
+		isDone        atomic.Bool
+		wg            sync.WaitGroup
+		transitionsWG sync.WaitGroup
 	)
 
 	numThreads := 10
@@ -122,8 +123,10 @@ func TestTransitionThreadsWhileDoingRequests(t *testing.T) {
 
 	// try all possible permutations of transition, transition every ms
 	transitions := allPossibleTransitions(worker1Path, worker2Path)
+	transitionsWG.Add(numThreads)
 	for i := range numThreads {
 		go func(thread *phpThread, start int) {
+			defer transitionsWG.Done()
 			for {
 				for j := start; j < len(transitions); j++ {
 					if isDone.Load() {
@@ -158,6 +161,68 @@ func TestTransitionThreadsWhileDoingRequests(t *testing.T) {
 	// we are finished as soon as all 1000 requests are done
 	wg.Wait()
 	isDone.Store(true)
+	// wait for transition goroutines to exit before Shutdown to avoid them
+	// racing with a subsequent test's initPHPThreads via mainThread.state
+	transitionsWG.Wait()
+}
+
+// Test https://github.com/php/frankenphp/issues/2469
+// A request queued for a thread when the server reloads must be served
+// by the new threads, not rejected with ErrMaxWaitTimeExceeded.
+func TestQueuedRequestSurvivesReload(t *testing.T) {
+	t.Cleanup(Shutdown)
+
+	initOpts := []Option{
+		WithNumThreads(1),
+		WithMaxThreads(1),
+		WithMaxWaitTime(5 * time.Second),
+	}
+	assert.NoError(t, Init(initOpts...))
+
+	doRequest := func(query string) error {
+		r := httptest.NewRequest("GET", "http://localhost/sleep.php?"+query, nil)
+		w := httptest.NewRecorder()
+		req, err := NewRequestWithContext(r, WithRequestDocumentRoot(testDataPath, false))
+		if err != nil {
+			return err
+		}
+
+		return ServeHTTP(w, req)
+	}
+
+	// Occupy the single PHP thread so the next request has to wait in the queue.
+	started := make(chan struct{})
+	go func() {
+		close(started)
+		_ = doRequest("sleep=800")
+	}()
+	<-started
+	time.Sleep(100 * time.Millisecond)
+
+	queued := make(chan error, 1)
+	go func() {
+		queued <- doRequest("sleep=0")
+	}()
+
+	// Wait until the second request is genuinely queued waiting for a thread.
+	deadline := time.Now().Add(2 * time.Second)
+	for queuedRegularThreads.Load() == 0 {
+		if !assert.True(t, time.Now().Before(deadline), "request was never queued") {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	// Reload while the request is queued, exactly like the Caddy module does.
+	Shutdown()
+	assert.NoError(t, Init(initOpts...))
+
+	select {
+	case err := <-queued:
+		assert.NoError(t, err, "a queued request must not be rejected by a reload")
+	case <-time.After(15 * time.Second):
+		t.Fatal("the queued request never completed after the reload")
+	}
 }
 
 func TestFinishBootingAWorkerScript(t *testing.T) {

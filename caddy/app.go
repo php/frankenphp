@@ -66,7 +66,7 @@ type FrankenPHPApp struct {
 	logger  *slog.Logger
 }
 
-var iniError = errors.New(`"php_ini" must be in the format: php_ini "<key>" "<value>"`)
+var errIni = errors.New(`"php_ini" must be in the format: php_ini "<key>" "<value>"`)
 
 // CaddyModule returns the Caddy module information.
 func (f FrankenPHPApp) CaddyModule() caddy.ModuleInfo {
@@ -126,17 +126,47 @@ func (f *FrankenPHPApp) addModuleWorkers(workers ...workerConfig) ([]workerConfi
 		if frankenphp.EmbeddedAppPath != "" && filepath.IsLocal(w.FileName) {
 			w.FileName = filepath.Join(frankenphp.EmbeddedAppPath, w.FileName)
 		}
+	}
 
-		if w.Name == "" {
-			w.Name = f.generateUniqueModuleWorkerName(w.FileName)
-		} else if !strings.HasPrefix(w.Name, "m#") {
-			w.Name = "m#" + w.Name
+	// A php_server directive is provisioned once per route it's embedded in. Only the first embed
+	// registers its pools; later embeds reuse them by position, never touching other directives (#2477).
+	var registered []workerConfig
+	if len(workers) > 0 && workers[0].routeGroup != "" {
+		registered = f.moduleWorkersInRouteGroup(workers[0].routeGroup)
+	}
+
+	for i := range workers {
+		if i < len(registered) {
+			workers[i].Name = registered[i].Name
+			continue
 		}
 
-		f.Workers = append(f.Workers, *w)
+		f.registerModuleWorker(&workers[i])
 	}
 
 	return workers, nil
+}
+
+func (f *FrankenPHPApp) registerModuleWorker(w *workerConfig) {
+	if w.Name == "" {
+		w.Name = f.generateUniqueModuleWorkerName(w.FileName)
+	} else if !strings.HasPrefix(w.Name, "m#") {
+		w.Name = "m#" + w.Name
+	}
+
+	f.Workers = append(f.Workers, *w)
+}
+
+// moduleWorkersInRouteGroup returns the registered workers of one directive, in registration order.
+func (f *FrankenPHPApp) moduleWorkersInRouteGroup(routeGroup string) []workerConfig {
+	var group []workerConfig
+	for _, w := range f.Workers {
+		if w.routeGroup == routeGroup {
+			group = append(group, w)
+		}
+	}
+
+	return group
 }
 
 func (f *FrankenPHPApp) Start() error {
@@ -274,14 +304,14 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				parseIniLine := func(d *caddyfile.Dispenser) error {
 					key := d.Val()
 					if !d.NextArg() {
-						return d.WrapErr(iniError)
+						return d.WrapErr(errIni)
 					}
 					if f.PhpIni == nil {
 						f.PhpIni = make(map[string]string)
 					}
 					f.PhpIni[key] = d.Val()
 					if d.NextArg() {
-						return d.WrapErr(iniError)
+						return d.WrapErr(errIni)
 					}
 
 					return nil
@@ -298,7 +328,7 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 
 				if !isBlock {
 					if !d.NextArg() {
-						return d.WrapErr(iniError)
+						return d.WrapErr(errIni)
 					}
 					err := parseIniLine(d)
 					if err != nil {
