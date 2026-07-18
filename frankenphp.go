@@ -150,12 +150,12 @@ func (p *PHPThread) Pin(pointer any) {
 
 // Thread retrieves a PHP thread by its index.
 // Returns nil and false if the system is not running or no thread exists at the given index.
-func Thread(index int) (*PHPThread, bool) {
+func Thread(index uint) (*PHPThread, bool) {
 	if !isRunning {
 		return nil, false
 	}
 
-	if index >= len(phpThreads) {
+	if index >= uint(len(phpThreads)) {
 		return nil, false
 	}
 
