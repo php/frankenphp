@@ -47,10 +47,13 @@ func TestSplitRemoteAddr(t *testing.T) {
 		{"ipv6 zone bracketed with port", "[fe80::1%eth0]:443", "fe80::1%eth0", "443"},
 		{"ipv4 without port", "192.168.0.1", "192.168.0.1", ""},
 		{"empty", "", "", ""},
+		{"only colon", ":", "", ""},
 		// Must not panic: would crash the process via the cgo callback.
 		{"lone open bracket", "[", "[", ""},
 		{"open bracket with port", "[:9000", "[", "9000"},
 		{"empty brackets", "[]", "", ""},
+		{"opening bracket with colon", "[:", "[", ""},
+		{"unterminated bracket with port", "[::1:80", "[::1", "80"},
 	}
 
 	for _, tt := range tests {
