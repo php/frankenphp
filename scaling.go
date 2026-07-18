@@ -35,8 +35,12 @@ var (
 )
 
 func initAutoScaling(mainThread *phpMainThread) {
+	// reused across reloads so queued requests aren't orphaned on a stale channel
+	if scaleChan == nil {
+		scaleChan = make(chan *frankenPHPContext)
+	}
+
 	if mainThread.maxThreads <= mainThread.numThreads {
-		scaleChan = nil
 		return
 	}
 
@@ -44,7 +48,6 @@ func initAutoScaling(mainThread *phpMainThread) {
 	mstate := mainThread.state
 
 	scalingMu.Lock()
-	scaleChan = make(chan *frankenPHPContext)
 	maxScaledThreads := mainThread.maxThreads - mainThread.numThreads
 	autoScaledThreads = make([]*phpThread, 0, maxScaledThreads)
 	scalingMu.Unlock()
@@ -53,23 +56,14 @@ func initAutoScaling(mainThread *phpMainThread) {
 	go startDownScalingThreads(done)
 }
 
-func drainAutoScaling() {
-	scalingMu.Lock()
-
-	if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
-		globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "shutting down autoscaling", slog.Int("autoScaledThreads", len(autoScaledThreads)))
-	}
-
-	scalingMu.Unlock()
-}
-
 func addRegularThread() (*phpThread, error) {
 	thread := getInactivePHPThread()
 	if thread == nil {
 		return nil, ErrMaxThreadsReached
 	}
 	convertToRegularThread(thread)
-	thread.state.WaitFor(state.Ready, state.ShuttingDown, state.Reserved)
+	thread.state.WaitFor(state.Ready, state.Inactive, state.Reserved) // stable states
+
 	return thread, nil
 }
 
@@ -79,7 +73,8 @@ func addWorkerThread(worker *worker) (*phpThread, error) {
 		return nil, ErrMaxThreadsReached
 	}
 	convertToWorkerThread(thread, worker)
-	thread.state.WaitFor(state.Ready, state.ShuttingDown, state.Reserved)
+	thread.state.WaitFor(state.Ready, state.Inactive, state.Reserved) // stable states
+
 	return thread, nil
 }
 

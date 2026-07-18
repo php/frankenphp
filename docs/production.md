@@ -1,6 +1,6 @@
 ---
-title: Deploying FrankenPHP in production with Docker Compose
-description: Deploy a PHP application to production with FrankenPHP and Docker Compose on a single Linux server, including TLS, reverse proxy, and multi-node setups.
+title: Deploying FrankenPHP in production
+description: Deploy a PHP application to production with FrankenPHP and Docker Compose on a single Linux server, including TLS, reverse proxy, and multi-node setups, or natively on Windows.
 ---
 
 # Deploying in production
@@ -171,3 +171,66 @@ which can cause issues like incorrect HTTPS detection or wrong client IP address
 If you want to deploy your app on a cluster of machines, you can use [Docker Swarm](https://docs.docker.com/engine/swarm/stack-deploy/),
 which is compatible with the provided Compose files.
 To deploy on Kubernetes, take a look at [the Helm chart provided with API Platform](https://api-platform.com/docs/deployment/kubernetes/), which uses FrankenPHP.
+
+## Deploying on macOS
+
+FrankenPHP also runs natively on macOS.
+
+Install it with [Homebrew](https://brew.sh):
+
+```console
+brew install dunglas/frankenphp/frankenphp
+```
+
+To run FrankenPHP in the background and start it automatically at boot, use [`brew services`](https://github.com/Homebrew/homebrew-services):
+
+```console
+brew services start dunglas/frankenphp/frankenphp
+```
+
+The service runs FrankenPHP with the configuration file located at `$(brew --prefix)/etc/Caddyfile`.
+
+## Deploying on Windows
+
+FrankenPHP runs natively on Windows, with full support for [the worker mode](worker.md) and [hot reloading](hot-reload.md).
+
+To install it, run this in PowerShell:
+
+```powershell
+irm https://frankenphp.dev/install.ps1 | iex
+```
+
+Alternatively, [download the Windows archive from the releases page](https://github.com/php/frankenphp/releases).
+It contains the FrankenPHP executable as well as the official PHP binary for Windows.
+
+To run FrankenPHP in the background and start it automatically at boot, register it as a Windows service.
+As [recommended by the Caddy documentation](https://caddyserver.com/docs/running#windows-service), use [WinSW](https://github.com/winsw/winsw):
+
+1. Download [the latest version of WinSW](https://github.com/winsw/winsw/releases) as `frankenphp-service.exe` in the directory containing `frankenphp.exe`
+2. In the same directory, create a `frankenphp-service.xml` file:
+
+   ```xml
+   <service>
+     <id>frankenphp</id>
+     <name>FrankenPHP</name>
+     <description>The modern PHP app server (https://frankenphp.dev)</description>
+     <executable>%BASE%\frankenphp.exe</executable>
+     <arguments>run --config %BASE%\Caddyfile</arguments>
+     <log mode="roll-by-time">
+       <pattern>yyyy-MM-dd</pattern>
+     </log>
+   </service>
+   ```
+
+3. Install and start the service:
+
+   ```powershell
+   .\frankenphp-service.exe install
+   .\frankenphp-service.exe start
+   ```
+
+Windows services cannot be reloaded. To apply configuration changes gracefully, without restarting the service, run:
+
+```powershell
+.\frankenphp.exe reload --config Caddyfile
+```

@@ -767,6 +767,69 @@ func TestEnvIsNotResetInWorkerMode(t *testing.T) {
 	}, &testOptions{workerScript: "env/remember-env.php"})
 }
 
+// reproduction of https://github.com/php/frankenphp/issues/1674
+func TestPreparedEnvIsVisibleToGetenv_module(t *testing.T) {
+	testPreparedEnvIsVisibleToGetenv(t, &testOptions{nbParallelRequests: 1})
+}
+func TestPreparedEnvIsVisibleToGetenv_worker(t *testing.T) {
+	testPreparedEnvIsVisibleToGetenv(t, &testOptions{
+		workerScript: "env/prepared-env-getenv.php",
+	})
+}
+func testPreparedEnvIsVisibleToGetenv(t *testing.T, opts *testOptions) {
+	if opts.phpIni == nil {
+		opts.phpIni = map[string]string{}
+	}
+	opts.phpIni["variables_order"] = "EGPCS"
+	opts.requestOpts = append(opts.requestOpts,
+		frankenphp.WithRequestEnv(map[string]string{"FRANKENPHP_TEST_PHP_SERVER_ENV_IN_GETENV": "hello"}),
+	)
+
+	expectedEnv := "'hello'"
+	if opts.workerScript != "" {
+		// workers don't populate $_ENV regardless of variables_order
+		expectedEnv = "NULL"
+	}
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/env/prepared-env-getenv.php", handler, t)
+		assert.Equal(t, fmt.Sprintf("getenv='hello'\nserver='hello'\nenv=%s\n", expectedEnv), body)
+	}, opts)
+}
+
+// $_ENV mustn't be filled with prepared_env without E in variables_order
+func TestPreparedEnvIsNotInEnvWithoutVariablesOrderE(t *testing.T) {
+	opts := &testOptions{
+		nbParallelRequests: 1,
+		phpIni:             map[string]string{"variables_order": "GPCS"},
+	}
+	opts.requestOpts = append(opts.requestOpts,
+		frankenphp.WithRequestEnv(map[string]string{"FRANKENPHP_TEST_PHP_SERVER_ENV_IN_GETENV": "hello"}),
+	)
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/env/prepared-env-getenv.php", handler, t)
+		assert.Equal(t, "getenv='hello'\nserver='hello'\nenv=NULL\n", body)
+	}, opts)
+}
+
+func TestPreparedEnvSurvivesPutenv_module(t *testing.T) {
+	testPreparedEnvSurvivesPutenv(t, &testOptions{nbParallelRequests: 1})
+}
+func TestPreparedEnvSurvivesPutenv_worker(t *testing.T) {
+	testPreparedEnvSurvivesPutenv(t, &testOptions{
+		workerScript: "env/prepared-env-survives-putenv.php",
+	})
+}
+func testPreparedEnvSurvivesPutenv(t *testing.T, opts *testOptions) {
+	opts.requestOpts = append(opts.requestOpts,
+		frankenphp.WithRequestEnv(map[string]string{"FRANKENPHP_PREPARED": "prepared_value"}),
+	)
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/env/prepared-env-survives-putenv.php", handler, t)
+		assert.Equal(t, "before='prepared_value'\nprepared='prepared_value'\nput='put_value'\n", body)
+	}, opts)
+}
+
 // reproduction of https://github.com/php/frankenphp/issues/1061
 func TestModificationsToEnvPersistAcrossRequests(t *testing.T) {
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
@@ -810,6 +873,16 @@ func ExampleServeHTTP() {
 	defer frankenphp.Shutdown()
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// Drop headers whose name contains an underscore: CGI maps dashes to
+		// underscores, so "Foo_Bar" would be indistinguishable from "Foo-Bar"
+		// in $_SERVER and could spoof any header an app or proxy trusts.
+		// Whitelist any you genuinely need.
+		for name := range r.Header {
+			if strings.ContainsRune(name, '_') {
+				delete(r.Header, name)
+			}
+		}
+
 		req, err := frankenphp.NewRequestWithContext(r, frankenphp.WithRequestDocumentRoot("/path/to/document/root", false))
 		if err != nil {
 			panic(err)

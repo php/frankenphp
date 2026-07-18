@@ -20,9 +20,9 @@ func TestRestartWorkersForceKillsStuckThread(t *testing.T) {
 		t.Skipf("force-kill cannot interrupt blocking syscalls on %s", runtime.GOOS)
 	}
 
-	prev := drainGracePeriod
-	drainGracePeriod = 500 * time.Millisecond
-	t.Cleanup(func() { drainGracePeriod = prev })
+	prev := rebootGracePeriod
+	rebootGracePeriod = 500 * time.Millisecond
+	t.Cleanup(func() { rebootGracePeriod = prev })
 
 	cwd, _ := os.Getwd()
 	testDataDir := cwd + "/testdata/"

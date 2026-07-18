@@ -1,11 +1,103 @@
 package caddy
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/stretchr/testify/require"
 )
+
+func TestPhpServerWorkerMatchNoDuplicatePools(t *testing.T) {
+	const config = `
+	{
+		php {
+			worker {
+				file ../testdata/worker-with-env.php
+				num 2
+				match /index.php/*
+			}
+			worker {
+				file ../testdata/worker-with-counter.php
+				num 1
+			}
+		}
+	}`
+
+	// a fresh copy per call mirrors the two module instances Caddy provisions for one directive
+	parseWorkers := func(routeGroup string) []workerConfig {
+		d := caddyfile.NewTestDispenser(config)
+		module := &FrankenPHPModule{}
+		require.NoError(t, module.UnmarshalCaddyfile(d))
+		require.Len(t, module.Workers, 2, "block should parse to two workers")
+		for i := range module.Workers {
+			module.Workers[i].routeGroup = routeGroup
+		}
+
+		return module.Workers
+	}
+
+	app := &FrankenPHPApp{}
+
+	first, err := app.addModuleWorkers(parseWorkers("g1")...)
+	require.NoError(t, err)
+	second, err := app.addModuleWorkers(parseWorkers("g1")...)
+	require.NoError(t, err)
+
+	require.Len(t, app.Workers, 2, "each worker must be registered exactly once")
+
+	for _, w := range app.Workers {
+		require.False(t, strings.HasSuffix(w.Name, "_0"),
+			"no _0-suffixed duplicate pool may exist, got %q", w.Name)
+	}
+
+	// both embeds must resolve to the same pools for serve-time matching
+	require.Len(t, first, 2)
+	require.Len(t, second, 2)
+	for i := range first {
+		require.Equal(t, first[i].Name, second[i].Name,
+			"both routes must reference the same pool name for worker %d", i)
+	}
+}
+
+func TestPhpServerSeparateDirectivesKeepDistinctPools(t *testing.T) {
+	worker := func(routeGroup string) workerConfig {
+		return workerConfig{FileName: "../testdata/worker-with-env.php", Num: 2, routeGroup: routeGroup}
+	}
+
+	app := &FrankenPHPApp{}
+	site1, err := app.addModuleWorkers(worker("g1"))
+	require.NoError(t, err)
+	site2, err := app.addModuleWorkers(worker("g2"))
+	require.NoError(t, err)
+
+	require.Len(t, app.Workers, 2, "identical workers from separate directives must stay separate pools")
+	require.NotEqual(t, site1[0].Name, site2[0].Name, "separate directives must not share a pool name")
+	require.True(t, strings.HasSuffix(site2[0].Name, "_0"),
+		"the second directive's pool must take a unique _0 name, got %q", site2[0].Name)
+}
+
+func TestPhpServerEmbedReuseIsPositional(t *testing.T) {
+	embed := func() []workerConfig {
+		return []workerConfig{
+			{FileName: "../testdata/worker-with-env.php", Num: 1, MatchPath: []string{"/x/*"}, routeGroup: "g1"},
+			{FileName: "../testdata/worker-with-env.php", Num: 1, MatchPath: []string{"/x/*"}, routeGroup: "g1"},
+		}
+	}
+
+	app := &FrankenPHPApp{}
+	first, err := app.addModuleWorkers(embed()...)
+	require.NoError(t, err)
+	second, err := app.addModuleWorkers(embed()...)
+	require.NoError(t, err)
+
+	require.Len(t, app.Workers, 2, "two identical workers in one block stay two pools, just as without the duplicate embed")
+	require.NotEqual(t, first[0].Name, first[1].Name, "the second identical worker must take its own _0 pool")
+	require.True(t, strings.HasSuffix(first[1].Name, "_0"), "got %q", first[1].Name)
+	for i := range first {
+		require.Equal(t, first[i].Name, second[i].Name, "the duplicate embed must reuse pools by position for worker %d", i)
+	}
+}
 
 func TestModuleWorkerDuplicateFilenamesFail(t *testing.T) {
 	// Create a test configuration with duplicate worker filenames

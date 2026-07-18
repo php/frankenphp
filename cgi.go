@@ -4,10 +4,12 @@ package frankenphp
 // #cgo nocallback frankenphp_register_variable_safe
 // #cgo nocallback frankenphp_register_known_variable
 // #cgo nocallback frankenphp_init_persistent_string
+// #cgo nocallback frankenphp_add_to_prepared_env
 // #cgo noescape frankenphp_register_server_vars
 // #cgo noescape frankenphp_register_variable_safe
 // #cgo noescape frankenphp_register_known_variable
 // #cgo noescape frankenphp_init_persistent_string
+// #cgo noescape frankenphp_add_to_prepared_env
 // #include "frankenphp.h"
 // #include <php_variables.h>
 import "C"
@@ -45,18 +47,7 @@ var cStringHTTPMethods = map[string]*C.char{
 func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 	request := fc.request
 	// Separate remote IP and port; more lenient than net.SplitHostPort
-	var ip, port string
-	if idx := strings.LastIndex(request.RemoteAddr, ":"); idx > -1 {
-		ip = request.RemoteAddr[:idx]
-		port = request.RemoteAddr[idx+1:]
-	} else {
-		ip = request.RemoteAddr
-	}
-
-	// Remove [] from IPv6 addresses
-	if len(ip) > 0 && ip[0] == '[' {
-		ip = ip[1 : len(ip)-1]
-	}
+	ip, port := splitRemoteAddr(request.RemoteAddr)
 
 	var rs, https, sslProtocol *C.zend_string
 	var sslCipher string
@@ -173,11 +164,12 @@ func addHeadersToServer(ctx context.Context, request *http.Request, trackVarsArr
 	}
 }
 
-func addPreparedEnvToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
-	for k, v := range fc.env {
-		C.frankenphp_register_variable_safe(toUnsafeChar(k), toUnsafeChar(v), C.size_t(len(v)), trackVarsArray)
+// registerPreparedEnv exposes fc.env to getenv() before any PHP code runs.
+func registerPreparedEnv(env PreparedEnv) {
+	size := C.size_t(len(env))
+	for k, v := range env {
+		C.frankenphp_add_to_prepared_env(toUnsafeChar(k), C.size_t(len(k)-1), toUnsafeChar(v), C.size_t(len(v)), size)
 	}
-	fc.env = nil
 }
 
 //export go_register_server_variables
@@ -191,7 +183,9 @@ func go_register_server_variables(threadIndex C.uintptr_t, trackVarsArray *C.zva
 	}
 
 	// The Prepared Environment is registered last and can overwrite any previous values
-	addPreparedEnvToServer(fc, trackVarsArray)
+	if len(fc.env) != 0 {
+		C.frankenphp_merge_with_prepared_env(trackVarsArray)
+	}
 }
 
 // splitCgiPath splits the request path into SCRIPT_NAME, SCRIPT_FILENAME, PATH_INFO, DOCUMENT_URI
@@ -298,6 +292,10 @@ func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) 
 		return nil
 	}
 
+	if len(fc.env) != 0 {
+		registerPreparedEnv(fc.env)
+	}
+
 	if m, ok := cStringHTTPMethods[request.Method]; ok {
 		info.request_method = m
 	} else {
@@ -352,6 +350,28 @@ func sanitizedPathJoin(root, reqPath string) string {
 	}
 
 	return path
+}
+
+// splitRemoteAddr splits "host:port" leniently: a missing port is accepted.
+// A malformed value such as "[" must not panic, as that would unwind out of
+// the go_register_server_variables cgo callback and crash the whole process.
+func splitRemoteAddr(remoteAddr string) (ip, port string) {
+	if host, p, err := net.SplitHostPort(remoteAddr); err == nil {
+		return host, p
+	}
+
+	if idx := strings.LastIndex(remoteAddr, ":"); idx > -1 {
+		ip = remoteAddr[:idx]
+		port = remoteAddr[idx+1:]
+	} else {
+		ip = remoteAddr
+	}
+
+	if len(ip) >= 2 && ip[0] == '[' && ip[len(ip)-1] == ']' {
+		ip = ip[1 : len(ip)-1]
+	}
+
+	return ip, port
 }
 
 const separator = string(filepath.Separator)
