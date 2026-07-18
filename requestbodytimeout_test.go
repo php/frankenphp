@@ -36,13 +36,14 @@ func TestRequestBodyTimeout(t *testing.T) {
 
 	conn, err := net.Dial("tcp", ts.Addr())
 	require.NoError(t, err)
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Announce a 1 MiB body, then send nothing: a classic slow POST.
-	fmt.Fprintf(conn,
+	_, err = fmt.Fprintf(conn,
 		"POST /read-input.php HTTP/1.1\r\nHost: %s\r\nContent-Type: application/octet-stream\r\nContent-Length: 1048576\r\nConnection: close\r\n\r\n",
 		ts.Addr(),
 	)
+	require.NoError(t, err)
 
 	require.NoError(t, conn.SetReadDeadline(time.Now().Add(5*time.Second)))
 	start := time.Now()
