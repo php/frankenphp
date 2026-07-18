@@ -9,6 +9,7 @@ const SLEEP_SECONDS_BETWEEN_REQUESTS = 10;
 const LANGUAGES = [
     'cn' => 'Chinese',
     'fr' => 'French',
+    'it' => 'Italian',
     'ja' => 'Japanese',
     'pt-br' => 'Portuguese (Brazilian)',
     'ru' => 'Russian',
