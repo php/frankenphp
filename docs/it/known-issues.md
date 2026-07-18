@@ -115,7 +115,7 @@ composer install
 
 ## Risoluzione dei problemi TLS/SSL con file binari statici
 
-Quando si utilizzano i file binari statici, è possibile che si verifichino i seguenti errori relativi a TLS, ad esempio quando si inviano e-mail utilizzando STARTTLS:
+Quando si utilizzano i file binari statici, è possibile che si verifichino i seguenti errori relativi a TLS, ad esempio quando si inviano email utilizzando STARTTLS:
 
 ```text
 Unable to connect with STARTTLS: stream_socket_enable_crypto(): SSL operation failed with code 5. OpenSSL Error messages:

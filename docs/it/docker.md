@@ -203,7 +203,7 @@ Esempio: `:8000`
 Le immagini Docker vengono create:
 
 - quando viene rilasciata una nuova versione
-- tutti i giorni alle 4:00 UTC, se sono disponibili nuove versioni delle immagini ufficiali di PHP 
+- tutti i giorni alle 4:00 UTC, se sono disponibili nuove versioni delle immagini ufficiali di PHP
 
 ## Rafforzamento delle immagini
 

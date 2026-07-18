@@ -22,7 +22,7 @@ brew install shivammathur/php/php-zts brotli watcher
 brew link --overwrite --force shivammathur/php/php-zts
 ```
 
-### Compilare PHP
+### Compilando PHP
 
 In alternativa, si può compilare PHP dai sorgenti con le opzioni necessarie a FrankenPHP, seguendo questi passaggi.
 

@@ -267,7 +267,7 @@ I passaggi presuppongono il seguente ambiente:
 
 1. Installare CLion (sul sistema operativo host)
 
-- Scaricare da [JetBrains](https://www.jetbrains.com/clion/download/)
+   - Scaricare da [JetBrains](https://www.jetbrains.com/clion/download/)
    - Avviare (se su Windows, in WSL):
 
      ```bash
@@ -276,7 +276,7 @@ I passaggi presuppongono il seguente ambiente:
 
 2. Aprire il progetto in CLion
 
-- Aprire CLion → Open → Selezionare la cartella `~/frankenphp`
+   - Aprire CLion → Open → Selezionare la cartella `~/frankenphp`
    - Aggiungere una catena di build: Settings → Build, Execution, Deployment → Custom Build Targets
    - Selezionare un target di build qualsiasi, in `Build` impostare uno strumento esterno (chiamalo ad esempio go build)
    - Impostare uno script wrapper che crei frankenphp, chiamato `go_compile_frankenphp.sh`
@@ -285,13 +285,13 @@ I passaggi presuppongono il seguente ambiente:
    CGO_CFLAGS="-O0 -g" ./go.sh
    ```
 
-- In Program, selezionare `go_compile_frankenphp.sh`
+   - In Program, selezionare `go_compile_frankenphp.sh`
    - Lasciare gli argomenti vuoti
    - Cartella di lavoro: `~/frankenphp/caddy/frankenphp`
 
 3. Configurare le destinazioni della corsa
 
-- Andare su Run → Edit Configurations
+   - Andare su Run → Edit Configurations
    - Creare:
      - frankenphp:
        - Type: applicazione nativa
@@ -301,7 +301,7 @@ I passaggi presuppongono il seguente ambiente:
 
 4. Eseguire il debug dei file Go da CLion
 
-- Fare clic con il tasto destro su un file \*.go nella vista Progetto a sinistra
+   - Fare clic con il tasto destro su un file \*.go nella vista Progetto a sinistra
    - Sostituire il tipo di file → C/C++
 
 Ora si possono inserire breakpoint nei file C, C++ e Go.
@@ -323,7 +323,7 @@ Utilizzare GoLand per lo sviluppo Go primario, ma il debugger non può eseguire 
 
 1. Installare GoLand (sul sistema operativo host)
 
-- Scaricare da [JetBrains](https://www.jetbrains.com/go/download/)
+   - Scaricare da [JetBrains](https://www.jetbrains.com/go/download/)
 
      ```bash
      goland &>/dev/null
@@ -331,7 +331,7 @@ Utilizzare GoLand per lo sviluppo Go primario, ma il debugger non può eseguire 
 
 2. Aprire in GoLand
 
-- Avviare GoLand → Open → Selezionare la cartella `~/frankenphp`
+   - Avviare GoLand → Open → Selezionare la cartella `~/frankenphp`
 
 ---
 
@@ -363,16 +363,16 @@ Ora si possono inserire breakpoint nei file C, C++ e Go.
 
 2. Installare GoLand
 
-- Scaricare da [JetBrains](https://www.jetbrains.com/go/download/)
+   - Scaricare da [JetBrains](https://www.jetbrains.com/go/download/)
    - Avviare GoLand
 
 3. Aprire in GoLand
 
-- Selezionare **Open** → Scegliere la cartella in cui `frankenphp` è stato clonato
+   - Selezionare **Open** → Scegliere la cartella in cui `frankenphp` è stato clonato
 
 4. Configurare Go Build
 
-- Andare a **Run** → **Edit Configurations**
+   - Andare a **Run** → **Edit Configurations**
    - Fare clic su **++** e seleziona **Go Build**
    - Name: `frankenphp`
    - Run kind: **Directory**
