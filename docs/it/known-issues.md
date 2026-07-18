@@ -6,7 +6,7 @@ Le seguenti estensioni non sono compatibili con FrankenPHP:
 
 | Nome | Motivo | Alternative |
 | ----------------------------------------------------------------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------- |
-| [imap](https://www.php.net/manual/en/imap.installation.php) | Non thread-safe | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap) |
+| [imap](https://www.php.net/manual/imap.installation.php) | Non thread-safe | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap) |
 | [newrelic](https://docs.newrelic.com/docs/apm/agents/php-agent/getting-started/introduction-new-relic-php/) | Non thread-safe | - |
 
 ## Estensioni PHP difettose
@@ -15,17 +15,17 @@ Le seguenti estensioni presentano bug noti e comportamenti imprevisti se utilizz
 
 | Nome | Problema |
 | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [ext-openssl](https://www.php.net/manual/en/book.openssl.php) | Quando si utilizza musl libc, l'estensione OpenSSL potrebbe bloccarsi in caso di carichi pesanti. Il problema non si verifica quando si utilizza la più popolare libc GNU. Questo bug è [monitorato da PHP](https://github.com/php/php-src/issues/13648). |
+| [ext-openssl](https://www.php.net/manual/book.openssl.php) | Quando si utilizza musl libc, l'estensione OpenSSL potrebbe bloccarsi in caso di carichi pesanti. Il problema non si verifica quando si utilizza la più popolare libc GNU. Questo bug è [monitorato da PHP](https://github.com/php/php-src/issues/13648). |
 
 ## get_browser
 
-La funzione [get_browser()](https://www.php.net/manual/en/function.get-browser.php) sembra funzionare male dopo un po'. Una soluzione alternativa consiste nel memorizzare nella cache (ad esempio con [APCu](https://www.php.net/manual/en/book.apcu.php)) i risultati per agente utente, poiché sono statici.
+La funzione [get_browser()](https://www.php.net/manual/function.get-browser.php) sembra funzionare male dopo un po'. Una soluzione alternativa consiste nel memorizzare nella cache (ad esempio con [APCu](https://www.php.net/manual/book.apcu.php)) i risultati per agente utente, poiché sono statici.
 
 ## Immagini Docker binarie autonome e basate su Alpine
 
 Le immagini Docker binarie completamente statiche e basate su Alpine (`dunglas/frankenphp:*-alpine`) utilizzano [musl libc](https://musl.libc.org/) invece di [glibc e amici](https://www.etalabs.net/compare_libcs.html), per mantenere una dimensione binaria più piccola.
 Ciò potrebbe portare ad alcuni problemi di compatibilità.
-In particolare, il flag glob `GLOB_BRACE` [non è disponibile](https://www.php.net/manual/en/function.glob.php)
+In particolare, il flag glob `GLOB_BRACE` [non è disponibile](https://www.php.net/manual/function.glob.php)
 
 Se si riscontrano problemi, utilizzare la variante GNU del binario statico e delle immagini Docker basate su Debian.
 
@@ -127,7 +127,7 @@ error:0A000086:SSL routines::certificate verify failed
 
 Poiché il file binario statico non include i certificati TLS, è necessario indirizzare OpenSSL all'installazione dei certificati della CA locale.
 
-Esaminare l'output di [`openssl_get_cert_locations()`](https://www.php.net/manual/en/function.openssl-get-cert-locations.php),
+Esaminare l'output di [`openssl_get_cert_locations()`](https://www.php.net/manual/function.openssl-get-cert-locations.php),
 per trovare dove devono essere installati i certificati CA e archiviarli in questa posizione.
 
 > [!WARNING]

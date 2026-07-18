@@ -23,7 +23,7 @@ imprevedibili. La [configurazione](config.md#caddyfile-config) `max_threads` con
 `max_threads` può aiutare a capire quanti thread sono necessari per gestire il traffico e può rendere il server più resistente ai picchi di latenza.
 Se impostato su `auto`, il limite verrà stimato in base a `memory_limit` in `php.ini`. Se non è in grado di farlo,
 `auto` verrà invece impostato per impostazione predefinita sul doppio di `num_threads`. Si tenga presente che `auto` potrebbe sottostimare fortemente il numero di thread necessari.
-`max_threads` è simile a [pm.max_children](https://www.php.net/manual/en/install.fpm.configuration.php#pm.max-children) di PHP FPM. La differenza principale è che FrankenPHP utilizza i thread invece di
+`max_threads` è simile a [pm.max_children](https://www.php.net/manual/install.fpm.configuration.php#pm.max-children) di PHP FPM. La differenza principale è che FrankenPHP utilizza i thread invece di
 processi e li delega automaticamente tra diversi worker e "modalità classica" in base alle esigenze.
 
 ## Modalità worker per una velocità maggiore
@@ -161,10 +161,10 @@ Tutte le consuete ottimizzazioni delle prestazioni relative a PHP si applicano a
 
 In particolare:
 
-- controllare che [OPcache](https://www.php.net/manual/en/book.opcache.php) sia installato, abilitato e configurato correttamente
+- controllare che [OPcache](https://www.php.net/manual/book.opcache.php) sia installato, abilitato e configurato correttamente
 - attivare le [ottimizzazioni del caricatore automatico Composer](https://getcomposer.org/doc/articles/autoloader-optimization.md)
 - assicurarsi che la cache di `realpath` sia sufficientemente grande per le esigenze dell'applicazione
-- utilizzare il [preloading](https://www.php.net/manual/en/opcache.preloading.php)
+- utilizzare il [preloading](https://www.php.net/manual/opcache.preloading.php)
 
 Per maggiori dettagli, leggere [la documentazione sull'ottimizzazione delle prestazioni di Symfony](https://symfony.com/doc/current/performance.html)
 (la maggior parte dei suggerimenti sono utili anche senza utilizzare Symfony).

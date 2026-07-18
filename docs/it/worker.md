@@ -148,7 +148,7 @@ frankenphp {
 
 ## Comportamento dei superglobali
 
-[I superglobali PHP](https://www.php.net/manual/en/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...)
+[I superglobali PHP](https://www.php.net/manual/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...)
 si comportano come segue:
 
 - prima della prima chiamata a `frankenphp_handle_request()`, i superglobali contengono valori legati allo script worker stesso
