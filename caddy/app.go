@@ -65,6 +65,7 @@ type FrankenPHPApp struct {
 	logger          *slog.Logger
 	modules         []*FrankenPHPModule
 	usedWorkerNames map[string]bool
+	httpApp         *caddyhttp.App
 }
 
 var errIni = errors.New(`"php_ini" must be in the format: php_ini "<key>" "<value>"`)
@@ -86,7 +87,8 @@ func (f *FrankenPHPApp) Provision(ctx caddy.Context) error {
 	f.opts = make([]frankenphp.Option, 0, 7+len(options))
 
 	if httpApp, err := ctx.AppIfConfigured("http"); err == nil {
-		if httpApp.(*caddyhttp.App).Metrics != nil {
+		f.httpApp = httpApp.(*caddyhttp.App)
+		if f.httpApp.Metrics != nil {
 			f.metrics = frankenphp.NewPrometheusMetrics(ctx.GetMetricsRegistry())
 		}
 	} else {
@@ -176,6 +178,7 @@ func (f *FrankenPHPApp) reset() {
 	f.ctx = nil
 	f.metrics = nil
 	f.usedWorkerNames = nil
+	f.httpApp = nil
 }
 
 // register workers and servers for "php" and "php_server" modules
@@ -208,7 +211,8 @@ func (f *FrankenPHPApp) registerModules(repl *caddy.Replacer) error {
 
 // register a server instance and its workers for a single caddy module
 func (f *FrankenPHPApp) registerModule(repl *caddy.Replacer, module *FrankenPHPModule) error {
-	server, err := frankenphp.NewServer(module.resolvedDocumentRoot, module.SplitPath, module.resolvedEnv, module.logger)
+	serverName := f.resolveServerName(module)
+	server, err := frankenphp.NewServer(serverName, module.resolvedDocumentRoot, module.SplitPath, module.resolvedEnv, module.logger)
 	if err != nil {
 		return err
 	}
