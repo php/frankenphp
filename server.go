@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync/atomic"
 
 	"github.com/dunglas/frankenphp/internal/fastabs"
 )
@@ -20,7 +21,10 @@ type Server struct {
 	workersByPath             map[string]*worker
 	workersWithRequestMatcher []*worker
 	workerOpts                []workerOpt
-	isRegistered              bool
+
+	// registered while FrankenPHP runs with this server; read by concurrent
+	// ServeHTTP calls while Init()/Shutdown() flip it, hence atomic
+	isRegistered atomic.Bool
 }
 
 var (
@@ -34,18 +38,18 @@ var (
 
 func registerServers(newServers []*Server) {
 	servers = newServers
-	fallbackServer.isRegistered = true
+	fallbackServer.isRegistered.Store(true)
 	fallbackServer.logger = globalLogger
 	for i, s := range servers {
-		s.isRegistered = true
+		s.isRegistered.Store(true)
 		s.idx = i
 	}
 }
 
 func unregisterServers() {
-	fallbackServer.isRegistered = false
+	fallbackServer.isRegistered.Store(false)
 	for _, server := range servers {
-		server.isRegistered = false
+		server.isRegistered.Store(false)
 	}
 }
 
@@ -102,7 +106,7 @@ func (s *Server) addWorker(w *worker) error {
 // The request will be scoped to the server instance that was registered via WithServer().
 // Otherwise, it is equivalent to calling ServeHTTP.
 func (s *Server) ServeHTTP(responseWriter http.ResponseWriter, request *http.Request, opts ...RequestOption) error {
-	if !s.isRegistered {
+	if !s.isRegistered.Load() {
 		return ErrNotRunning
 	}
 
