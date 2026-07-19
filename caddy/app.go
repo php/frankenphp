@@ -128,7 +128,7 @@ func (f *FrankenPHPApp) Start() error {
 	// register global workers
 	for _, w := range f.Workers {
 		w.FileName = repl.ReplaceKnown(w.FileName, "")
-		w.Name = f.createUniqueWorkerName(w)
+		w.Name = f.createUniqueWorkerName(w, "")
 		f.opts = append(f.opts, frankenphp.WithWorkers(w.Name, w.FileName, w.Num, w.toWorkerOptions()...))
 	}
 
@@ -222,7 +222,7 @@ func (f *FrankenPHPApp) registerModule(repl *caddy.Replacer, module *FrankenPHPM
 
 	for _, w := range module.Workers {
 		w.FileName = repl.ReplaceKnown(w.FileName, "")
-		w.Name = f.createUniqueWorkerName(w)
+		w.Name = f.createUniqueWorkerName(w, serverName)
 		workerOptions := append(w.toWorkerOptions(), frankenphp.WithWorkerServerScope(server))
 		f.opts = append(f.opts, frankenphp.WithWorkers(w.Name, w.FileName, w.Num, workerOptions...))
 	}
@@ -231,7 +231,9 @@ func (f *FrankenPHPApp) registerModule(repl *caddy.Replacer, module *FrankenPHPM
 }
 
 // avoid name collisions for workers
-func (f *FrankenPHPApp) createUniqueWorkerName(wc workerConfig) string {
+// on collision, a name is first qualified with the server name
+// ("<serverName>:<name>") before falling back to a numeric postfix
+func (f *FrankenPHPApp) createUniqueWorkerName(wc workerConfig, serverName string) string {
 	if f.usedWorkerNames == nil {
 		f.usedWorkerNames = make(map[string]bool)
 	}
@@ -246,6 +248,11 @@ func (f *FrankenPHPApp) createUniqueWorkerName(wc workerConfig) string {
 		if _, ok := f.usedWorkerNames[name]; !ok {
 			f.usedWorkerNames[name] = true
 			break
+		}
+		if serverName != "" {
+			name = serverName + ":" + wc.Name
+			serverName = ""
+			continue
 		}
 		suffix++
 		name = fmt.Sprintf("%s_%d", wc.Name, suffix)
