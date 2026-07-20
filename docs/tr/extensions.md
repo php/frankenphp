@@ -10,8 +10,8 @@ Caddy modülleri sayesinde, Go dilinde PHP uzantıları yazabilir ve bunları Fr
 
 FrankenPHP, Go dilinde PHP uzantıları oluşturmak için iki yol sunar:
 
-1.  **Uzantı Oluşturucuyu Kullanma** - Çoğu kullanım durumu için gerekli tüm boilerplate kodunu üreten, Go kodunuzu yazmaya odaklanmanızı sağlayan önerilen yaklaşım.
-2.  **Manuel Uygulama** - Gelişmiş kullanım durumları için uzantı yapısı üzerinde tam kontrol.
+1. **Uzantı Oluşturucuyu Kullanma** - Çoğu kullanım durumu için gerekli tüm boilerplate kodunu üreten, Go kodunuzu yazmaya odaklanmanızı sağlayan önerilen yaklaşım.
+2. **Manuel Uygulama** - Gelişmiş kullanım durumları için uzantı yapısı üzerinde tam kontrol.
 
 Başlamak için en kolay yol olduğu için oluşturucu yaklaşımıyla başlayacak, ardından tam kontrole ihtiyaç duyanlar için manuel uygulamayı göstereceğiz.
 
@@ -77,8 +77,8 @@ func repeat_this(s *C.zend_string, count int64, reverse bool) unsafe.Pointer {
 
 Burada dikkat edilmesi gereken iki önemli nokta var:
 
--   `//export_php:function` yönerge yorumu, PHP'deki işlev imzasını tanımlar. Oluşturucu, PHP işlevini doğru parametreler ve dönüş türüyle nasıl oluşturacağını bu şekilde bilir;
--   İşlev bir `unsafe.Pointer` döndürmelidir. FrankenPHP, C ve Go arasındaki tür dengeleme konusunda size yardımcı olacak bir API sağlar.
+- `//export_php:function` yönerge yorumu, PHP'deki işlev imzasını tanımlar. Oluşturucu, PHP işlevini doğru parametreler ve dönüş türüyle nasıl oluşturacağını bu şekilde bilir;
+- İşlev bir `unsafe.Pointer` döndürmelidir. FrankenPHP, C ve Go arasındaki tür dengeleme konusunda size yardımcı olacak bir API sağlar.
 
 İlk nokta kendini açıklarken, ikincisi kavranması daha zor olabilir. Bu kılavuzda tür dengeleme konusuna daha derinlemesine bakalım.
 
@@ -95,13 +95,13 @@ GEN_STUB_SCRIPT=php-src/build/gen_stub.php frankenphp extension-init my_extensio
 
 Her şey yolunda giderse, projenizin dizini uzantınız için aşağıdaki dosyaları içermelidir:
 
--   **`my_extension.go`** - Orijinal kaynak dosyanız (değişmeden kalır)
--   **`my_extension_generated.go`** - İşlevlerinizi çağıran CGO sarıcılarıyla oluşturulan dosya
--   **`my_extension.stub.php`** - IDE otomatik tamamlama için PHP stub dosyası
--   **`my_extension_arginfo.h`** - PHP argüman bilgisi
--   **`my_extension.h`** - C başlık dosyası
--   **`my_extension.c`** - C uygulama dosyası
--   **`README.md`** - Dokümantasyon
+- **`my_extension.go`** - Orijinal kaynak dosyanız (değişmeden kalır)
+- **`my_extension_generated.go`** - İşlevlerinizi çağıran CGO sarıcılarıyla oluşturulan dosya
+- **`my_extension.stub.php`** - IDE otomatik tamamlama için PHP stub dosyası
+- **`my_extension_arginfo.h`** - PHP argüman bilgisi
+- **`my_extension.h`** - C başlık dosyası
+- **`my_extension.c`** - C uygulama dosyası
+- **`README.md`** - Dokümantasyon
 
 > [!IMPORTANT]
 > **Kaynak dosyanız (`my_extension.go`) asla değiştirilmez.** Oluşturucu, orijinal işlevlerinizi çağıran CGO sarıcılarını içeren ayrı bir `_generated.go` dosyası oluşturur. Bu, kaynak dosyanızı oluşturulan kodun kirletmesi endişesi olmadan güvenle sürüm kontrolüne alabileceğiniz anlamına gelir.
@@ -256,21 +256,21 @@ func process_data_packed(arr *C.zend_array) unsafe.Pointer {
 
 **Dizi dönüştürmenin temel özellikleri:**
 
--   **Sıralı anahtar-değer çiftleri** - İlişkisel dizinin sırasını koruma seçeneği
--   **Birden fazla durum için optimize edildi** - Daha iyi performans için sırayı bırakma veya doğrudan bir dilime dönüştürme seçeneği
--   **Otomatik liste tespiti** - PHP'ye dönüştürürken, dizinin sıkıştırılmış bir liste mi yoksa karma harita mı olması gerektiğini otomatik olarak algılar
--   **İç içe diziler** - Diziler iç içe olabilir ve tüm desteklenen türleri otomatik olarak dönüştürecektir (`int64`, `float64`, `string`, `bool`, `nil`, `AssociativeArray`, `map[string]any`, `[]any`)
--   **Nesneler desteklenmiyor** - Şu anda yalnızca skaler türler ve diziler değer olarak kullanılabilir. Bir nesne sağlamak, PHP dizisinde `null` değeriyle sonuçlanacaktır.
+- **Sıralı anahtar-değer çiftleri** - İlişkisel dizinin sırasını koruma seçeneği
+- **Birden fazla durum için optimize edildi** - Daha iyi performans için sırayı bırakma veya doğrudan bir dilime dönüştürme seçeneği
+- **Otomatik liste tespiti** - PHP'ye dönüştürürken, dizinin sıkıştırılmış bir liste mi yoksa karma harita mı olması gerektiğini otomatik olarak algılar
+- **İç içe diziler** - Diziler iç içe olabilir ve tüm desteklenen türleri otomatik olarak dönüştürecektir (`int64`, `float64`, `string`, `bool`, `nil`, `AssociativeArray`, `map[string]any`, `[]any`)
+- **Nesneler desteklenmiyor** - Şu anda yalnızca skaler türler ve diziler değer olarak kullanılabilir. Bir nesne sağlamak, PHP dizisinde `null` değeriyle sonuçlanacaktır.
 
 ##### Mevcut metotlar: sıkıştırılmış ve ilişkisel
 
--   `frankenphp.PHPAssociativeArray(arr frankenphp.AssociativeArray) unsafe.Pointer` - Anahtar-değer çiftleri içeren sıralı bir PHP dizisine dönüştür
--   `frankenphp.PHPMap(arr map[string]any) unsafe.Pointer` - Bir haritayı anahtar-değer çiftleri içeren sırasız bir PHP dizisine dönüştür
--   `frankenphp.PHPPackedArray(slice []any) unsafe.Pointer` - Bir dilimi yalnızca indekslenmiş değerlere sahip bir PHP sıkıştırılmış dizisine dönüştür
--   `frankenphp.GoAssociativeArray(arr unsafe.Pointer, ordered bool) frankenphp.AssociativeArray` - Bir PHP dizisini sıralı bir Go `AssociativeArray`'e (sıralı harita) dönüştür
--   `frankenphp.GoMap(arr unsafe.Pointer) map[string]any` - Bir PHP dizisini sırasız bir Go haritasına dönüştür
--   `frankenphp.GoPackedArray(arr unsafe.Pointer) []any` - Bir PHP dizisini bir Go dilimine dönüştür
--   `frankenphp.IsPacked(zval *C.zend_array) bool` - Bir PHP dizisinin sıkıştırılmış (yalnızca indekslenmiş) mı yoksa ilişkisel (anahtar-değer çiftleri) mi olduğunu kontrol et
+- `frankenphp.PHPAssociativeArray(arr frankenphp.AssociativeArray) unsafe.Pointer` - Anahtar-değer çiftleri içeren sıralı bir PHP dizisine dönüştür
+- `frankenphp.PHPMap(arr map[string]any) unsafe.Pointer` - Bir haritayı anahtar-değer çiftleri içeren sırasız bir PHP dizisine dönüştür
+- `frankenphp.PHPPackedArray(slice []any) unsafe.Pointer` - Bir dilimi yalnızca indekslenmiş değerlere sahip bir PHP sıkıştırılmış dizisine dönüştür
+- `frankenphp.GoAssociativeArray(arr unsafe.Pointer, ordered bool) frankenphp.AssociativeArray` - Bir PHP dizisini sıralı bir Go `AssociativeArray`'e (sıralı harita) dönüştür
+- `frankenphp.GoMap(arr unsafe.Pointer) map[string]any` - Bir PHP dizisini sırasız bir Go haritasına dönüştür
+- `frankenphp.GoPackedArray(arr unsafe.Pointer) []any` - Bir PHP dizisini bir Go dilimine dönüştür
+- `frankenphp.IsPacked(zval *C.zend_array) bool` - Bir PHP dizisinin sıkıştırılmış (yalnızca indekslenmiş) mı yoksa ilişkisel (anahtar-değer çiftleri) mi olduğunu kontrol et
 
 ### Çağrılabilirlerle çalışma
 
@@ -326,11 +326,11 @@ type UserStruct struct {
 
 **Saydam sınıflar**, dahili yapının (özelliklerin) PHP kodundan gizlendiği sınıflardır. Bu şu anlama gelir:
 
--   **Doğrudan özellik erişimi yok**: PHP'den doğrudan özellik okuyamaz veya yazamazsınız (`$user->name` çalışmaz)
--   **Yalnızca metot arayüzü** - Tüm etkileşimler tanımladığınız metotlar aracılığıyla gerçekleşmelidir
--   **Daha iyi kapsülleme** - Dahili veri yapısı tamamen Go kodu tarafından kontrol edilir
--   **Tür güvenliği** - Yanlış türlerle dahili durumu bozan PHP kodu riski yok
--   **Daha temiz API** - Doğru bir genel arayüz tasarlamayı zorlar
+- **Doğrudan özellik erişimi yok**: PHP'den doğrudan özellik okuyamaz veya yazamazsınız (`$user->name` çalışmaz)
+- **Yalnızca metot arayüzü** - Tüm etkileşimler tanımladığınız metotlar aracılığıyla gerçekleşmelidir
+- **Daha iyi kapsülleme** - Dahili veri yapısı tamamen Go kodu tarafından kontrol edilir
+- **Tür güvenliği** - Yanlış türlerle dahili durumu bozan PHP kodu riski yok
+- **Daha temiz API** - Doğru bir genel arayüz tasarlamayı zorlar
 
 Bu yaklaşım, daha iyi kapsülleme sağlar ve PHP kodunun Go nesnelerinizin dahili durumunu yanlışlıkla bozmasını önler. Nesneyle tüm etkileşimler, açıkça tanımladığınız metotlar aracılığıyla gerçekleşmelidir.
 
@@ -412,10 +412,10 @@ func (us *UserStruct) UpdateInfo(name *C.zend_string, age *int64, active *bool) 
 
 **Null olabilir parametreler hakkında önemli noktalar:**
 
--   **Null olabilir ilkel türler** (`?int`, `?float`, `?bool`) Go'da işaretçilere (`*int64`, `*float64`, `*bool`) dönüşür
--   **Null olabilir dizeler** (`?string`) `*C.zend_string` olarak kalır ancak `nil` olabilir
--   İşaretçi değerlerini referans almadan önce **`nil` kontrolü yapın**
--   **PHP `null` Go `nil` olur** - PHP `null` geçirdiğinde, Go işleviniz `nil` bir işaretçi alır
+- **Null olabilir ilkel türler** (`?int`, `?float`, `?bool`) Go'da işaretçilere (`*int64`, `*float64`, `*bool`) dönüşür
+- **Null olabilir dizeler** (`?string`) `*C.zend_string` olarak kalır ancak `nil` olabilir
+- İşaretçi değerlerini referans almadan önce **`nil` kontrolü yapın**
+- **PHP `null` Go `nil` olur** - PHP `null` geçirdiğinde, Go işleviniz `nil` bir işaretçi alır
 
 > [!WARNING]
 >
@@ -633,10 +633,10 @@ echo My\Extension\STATUS_ACTIVE; // 1
 
 #### Önemli notlar
 
--   Dosya başına yalnızca **bir** ad alanı yönergesine izin verilir. Birden fazla ad alanı yönergesi bulunursa, oluşturucu bir hata döndürür.
--   Ad alanı, dosyadaki **tüm** dışa aktarılan sembollere (işlevler, sınıflar, metotlar ve sabitler) uygulanır.
--   Ad alanı adları, ayırıcı olarak ters eğik çizgi (`\`) kullanarak PHP ad alanı kurallarına uyar.
--   Hiçbir ad alanı bildirilmezse, semboller her zamanki gibi genel ad alanına aktarılır.
+- Dosya başına yalnızca **bir** ad alanı yönergesine izin verilir. Birden fazla ad alanı yönergesi bulunursa, oluşturucu bir hata döndürür.
+- Ad alanı, dosyadaki **tüm** dışa aktarılan sembollere (işlevler, sınıflar, metotlar ve sabitler) uygulanır.
+- Ad alanı adları, ayırıcı olarak ters eğik çizgi (`\`) kullanarak PHP ad alanı kurallarına uyar.
+- Hiçbir ad alanı bildirilmezse, semboller her zamanki gibi genel ad alanına aktarılır.
 
 ## Manuel uygulama
 
@@ -717,9 +717,9 @@ extern zend_module_entry ext_module_entry;
 
 Ardından, aşağıdaki adımları gerçekleştirecek `extension.c` adında bir dosya oluşturun:
 
--   PHP başlıklarını dahil et;
--   Yeni yerel PHP işlevimiz `go_print()`'i bildir;
--   Uzantı meta verilerini bildir.
+- PHP başlıklarını dahil et;
+- Yeni yerel PHP işlevimiz `go_print()`'i bildir;
+- Uzantı meta verilerini bildir.
 
 Gerekli başlıkları dahil ederek başlayalım:
 
