@@ -9,7 +9,7 @@ require (
 	github.com/dunglas/mercure v0.24.2
 	github.com/e-dant/watcher v0.0.0-20260223030516-06f84a1314be
 	github.com/maypok86/otter/v2 v2.3.0
-	github.com/prometheus/client_golang v1.23.2
+	github.com/prometheus/client_golang v1.24.0
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/net v0.57.0
 )
@@ -34,7 +34,6 @@ require (
 	github.com/gorilla/handlers v1.5.2 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
-	github.com/klauspost/compress v1.18.4 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
