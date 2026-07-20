@@ -363,7 +363,7 @@ docker run -v $PWD:/app/public \
     dunglas/frankenphp
 ```
 
-## Shell Completion
+## Shell completion
 
 FrankenPHPはBash、Zsh、Fish、およびPowerShell用のシェル補完機能を内蔵しています。これにより、すべてのコマンド（`php-server`、`php-cli`、`extension-init`などのカスタムコマンドを含む）とそのフラグのオートコンプリートが可能になります。
 

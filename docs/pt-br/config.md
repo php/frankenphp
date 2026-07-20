@@ -266,7 +266,7 @@ e, caso contrário, encaminhará a requisição para o worker que corresponde ao
 }
 ```
 
-## Reiniciando Threads Após Um Número de Requisições (Experimental)
+## Reiniciando threads após um número de requisições (experimental)
 
 FrankenPHP pode reiniciar automaticamente as threads PHP depois que elas tiverem manipulado um determinado número de requisições.
 Quando uma thread atinge o limite, ela é totalmente reiniciada,
@@ -330,7 +330,7 @@ Alternativamente, você pode usar todos os outros métodos descritos na [documen
 
 Se você quiser usar HTTPS com o endereço IP `127.0.0.1` em vez do nome de host `localhost`, por favor, leia a seção de [problemas conhecidos](known-issues.md#using-https127001-with-docker).
 
-### Full Duplex (HTTP/1)
+### Full duplex (HTTP/1)
 
 Ao usar HTTP/1.x, pode ser desejável habilitar o modo full-duplex para permitir a gravação de uma resposta antes que o corpo inteiro
 tenha sido lido. (por exemplo: [Mercure](mercure.md), WebSocket, Server-Sent Events, etc.)
@@ -369,7 +369,7 @@ docker run -v $PWD:/app/public \
     dunglas/frankenphp
 ```
 
-## Autocompletar do Shell
+## Autocompletar do shell
 
 FrankenPHP oferece suporte integrado de autocompletar do shell para Bash, Zsh, Fish e PowerShell. Isso permite o preenchimento automático para todos os comandos (incluindo comandos personalizados como `php-server`, `php-cli` e `extension-init`) e suas flags.
 

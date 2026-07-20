@@ -1,4 +1,4 @@
-# FrankenPHP: App Server moderno per PHP
+# FrankenPHP: app server moderno per PHP
 
 <h1 align="center"><a href="https://frankenphp.dev"><img src="../../frankenphp.png" alt="FrankenPHP" width="600"></a></h1>
 

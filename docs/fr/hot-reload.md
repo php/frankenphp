@@ -1,4 +1,4 @@
-# Hot Reload
+# Hot reload
 
 FrankenPHP inclut une fonctionnalité de **hot reload** intégrée, conçue pour améliorer considérablement l'expérience développeur.
 

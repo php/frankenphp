@@ -1,10 +1,10 @@
-# Workers de Extensão
+# Workers de extensão
 
 Os Workers de Extensão permitem que sua [extensão FrankenPHP](https://frankenphp.dev/docs/extensions/) gerencie um pool dedicado de threads PHP para executar tarefas em segundo plano, lidar com eventos assíncronos ou implementar protocolos personalizados. Útil para sistemas de fila, listeners de eventos, agendadores, etc.
 
-## Registrando o Worker
+## Registrando o worker
 
-### Registro Estático
+### Registro estático
 
 Se você não precisa que o worker seja configurável pelo usuário (caminho de script fixo, número de threads fixo), você pode simplesmente registrar o worker na função `init()`.
 
@@ -33,23 +33,23 @@ func init() {
 }
 ```
 
-### Em um Módulo Caddy (Configurável pelo usuário)
+### Em um módulo Caddy (configurável pelo usuário)
 
 Se você planeja compartilhar sua extensão (como uma fila genérica ou um listener de eventos), você deve encapsulá-la em um módulo Caddy. Isso permite que os usuários configurem o caminho do script e a contagem de threads através do seu `Caddyfile`. Isso exige a implementação da interface `caddy.Provisioner` e a análise do Caddyfile ([veja um exemplo](https://github.com/dunglas/frankenphp-queue/blob/989120d394d66dd6c8e2101cac73dd622fade334/caddy.go)).
 
-### Em uma Aplicação Go Pura (Incorporação)
+### Em uma aplicação Go pura (incorporação)
 
 Se você está [incorporando o FrankenPHP em uma aplicação Go padrão sem caddy](https://pkg.go.dev/github.com/dunglas/frankenphp#example-ServeHTTP), você pode registrar workers de extensão usando `frankenphp.WithExtensionWorkers` ao inicializar as opções.
 
-## Interagindo com Workers
+## Interagindo com workers
 
 Assim que o pool de workers estiver ativo, você pode despachar tarefas para ele. Isso pode ser feito dentro de [funções nativas exportadas para PHP](https://frankenphp.dev/docs/extensions/#writing-the-extension), ou de qualquer lógica Go, como um agendador cron, um listener de eventos (MQTT, Kafka), ou qualquer outra goroutine.
 
-### Modo Headless: `SendMessage`
+### Modo headless: `SendMessage`
 
 Use `SendMessage` para passar dados brutos diretamente para o seu script worker. Isso é ideal para filas ou comandos simples.
 
-#### Exemplo: Uma Extensão de Fila Assíncrona
+#### Exemplo: uma extensão de fila assíncrona
 
 ```go
 // #include <Zend/zend_types.h>
@@ -109,7 +109,7 @@ func my_worker_http_request(path *C.zend_string) unsafe.Pointer {
 }
 ```
 
-## Script do Worker
+## Script do worker
 
 O script PHP do worker é executado em um loop e pode lidar tanto com mensagens brutas quanto com requisições HTTP.
 
@@ -131,11 +131,11 @@ while (frankenphp_handle_request($handler)) {
 }
 ```
 
-## Hooks de Ciclo de Vida
+## Hooks de ciclo de vida
 
 FrankenPHP oferece hooks para executar código Go em pontos específicos do ciclo de vida.
 
-| Tipo de Hook | Nome da Opção                | Assinatura           | Contexto e Caso de Uso                                                           |
+| Tipo de hook | Nome da opção                | Assinatura           | Contexto e caso de uso                                                           |
 | :----------- | :--------------------------- | :------------------- | :------------------------------------------------------------------------------- |
 | **Servidor** | `WithWorkerOnServerStartup`  | `func()`             | Configuração global. Executado **Uma Vez**. Exemplo: Conectar ao NATS/Redis.     |
 | **Servidor** | `WithWorkerOnServerShutdown` | `func()`             | Limpeza global. Executado **Uma Vez**. Exemplo: Fechar conexões compartilhadas.  |
