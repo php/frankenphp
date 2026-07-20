@@ -120,7 +120,7 @@ docker run \
 If your app speaks [PSR-15](https://www.php-fig.org/psr/psr-15/) instead of superglobals, convert the request/response at the edges of the handler with [`nyholm/psr7`](https://github.com/Nyholm/psr7) and [`nyholm/psr7-server`](https://github.com/Nyholm/psr7-server):
 
 ```console
-composer require nyholm/psr7 nyholm/psr7-server
+composer require nyholm/psr7 nyholm/psr7-server psr/http-server-handler
 ```
 
 ```php
