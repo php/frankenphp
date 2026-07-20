@@ -64,7 +64,7 @@ func TestServer(t *testing.T) {
 
 		assert.Equal(t, "api", named.Name())
 		// an empty name defaults to the server index at registration
-		assert.Equal(t, "1", unnamed.Name())
+		assert.Equal(t, "server_1", unnamed.Name())
 	})
 
 	t.Run("root", func(t *testing.T) {
