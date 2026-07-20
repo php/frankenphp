@@ -48,7 +48,7 @@ func registerServers(newServers []*Server) {
 		s.isRegistered.Store(true)
 		s.idx = i
 		if s.name == "" {
-			s.name = strconv.Itoa(i)
+			s.name = "server_" + strconv.Itoa(i)
 		}
 	}
 }
