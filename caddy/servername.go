@@ -13,6 +13,10 @@ import (
 // Returns "" when the http app is not available or the module cannot be
 // located in any route tree.
 func (f *FrankenPHPApp) resolveServerName(module *FrankenPHPModule) string {
+	if module.Name != "" {
+		return module.Name
+	}
+
 	if f.httpApp == nil {
 		return ""
 	}

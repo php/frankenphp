@@ -51,6 +51,8 @@ type FrankenPHPModule struct {
 	ServerIdx int `json:"server_idx,omitempty"`
 	// RequestBodyTimeout is an idle timeout on request body reads: a stalled (slow POST) client is cut off while a steady upload of any size succeeds. Defaults to 60s when omitted; set to 0 to disable.
 	RequestBodyTimeout *caddy.Duration `json:"request_body_timeout,omitempty"`
+	// Name is the name of the php_server this module belongs to for logging purposes
+	Name string `json:"name,omitempty"`
 
 	resolvedDocumentRoot string
 	resolvedEnv          map[string]string
@@ -264,6 +266,12 @@ func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					return d.ArgErr()
 				}
 				f.ResolveRootSymlink = &v
+
+			case "name":
+				if !d.NextArg() {
+					return d.ArgErr()
+				}
+				f.Name = d.Val()
 
 			case "worker":
 				wc, err := unmarshalWorker(d)

@@ -12,6 +12,7 @@ func TestResolveServerName(t *testing.T) {
 	moduleWithoutHost := &FrankenPHPModule{}
 	moduleInSubroute := &FrankenPHPModule{}
 	unroutedModule := &FrankenPHPModule{}
+	namedModule := &FrankenPHPModule{Name: "custom name"}
 
 	host := caddyhttp.MatchHost{"api.example.com", "www.example.com"}
 
@@ -57,4 +58,7 @@ func TestResolveServerName(t *testing.T) {
 
 	// no http app configured
 	require.Equal(t, "", (&FrankenPHPApp{}).resolveServerName(moduleWithHost))
+
+	// module with a name
+	require.Equal(t, "custom name", app.resolveServerName(namedModule))
 }
