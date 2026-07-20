@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"sync/atomic"
-
 	"github.com/dunglas/frankenphp/internal/fastabs"
 )
 
@@ -13,6 +13,7 @@ import (
 // requests and workers can be scoped to a Server
 type Server struct {
 	idx                       int
+	name                      string
 	root                      string
 	splitPath                 []string
 	env                       PreparedEnv
@@ -46,6 +47,9 @@ func registerServers(newServers []*Server) {
 	for i, s := range servers {
 		s.isRegistered.Store(true)
 		s.idx = i
+		if s.name == "" {
+			s.name = strconv.Itoa(i)
+		}
 	}
 }
 
@@ -56,7 +60,11 @@ func unregisterServers() {
 	}
 }
 
-func NewServer(root string, splitPath []string, env map[string]string, logger *slog.Logger) (*Server, error) {
+// NewServer creates a Server that can be registered via WithServer().
+// name is a human-readable identifier used to attribute workers, metrics
+// and logs to this server; when empty, it defaults to the index the
+// server gets at registration time.
+func NewServer(name, root string, splitPath []string, env map[string]string, logger *slog.Logger) (*Server, error) {
 	root, err := fastabs.FastAbs(root)
 	if err != nil {
 		return nil, err
@@ -67,6 +75,7 @@ func NewServer(root string, splitPath []string, env map[string]string, logger *s
 	}
 
 	s := &Server{
+		name:          name,
 		root:          root,
 		splitPath:     splitPath,
 		env:           PrepareEnv(env),
@@ -88,6 +97,12 @@ func NewServer(root string, splitPath []string, env map[string]string, logger *s
 	}
 
 	return s, nil
+}
+
+// Name returns the human-readable name of the server.
+// It is empty until registration if none was passed to NewServer().
+func (s *Server) Name() string {
+	return s.name
 }
 
 func (s *Server) addWorker(w *worker) error {

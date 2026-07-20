@@ -243,10 +243,10 @@ func TestCreateUniqueWorkerNames(t *testing.T) {
 		names[i] = app.createUniqueWorkerName(workerConfig{
 			FileName: filename,
 			Name:     "custom-worker-name",
-		})
+		}, "")
 		names[i+3] = app.createUniqueWorkerName(workerConfig{
 			FileName: filename,
-		})
+		}, "")
 	}
 
 	require.Equal(t, "custom-worker-name", names[0])
@@ -255,4 +255,17 @@ func TestCreateUniqueWorkerNames(t *testing.T) {
 	require.Equal(t, absFileName, names[3])
 	require.Equal(t, absFileName+"_1", names[4])
 	require.Equal(t, absFileName+"_2", names[5])
+}
+
+func TestCreateUniqueWorkerNamesQualifiedByServer(t *testing.T) {
+	app := &FrankenPHPApp{}
+	wc := workerConfig{FileName: "../testdata/worker-with-env.php", Name: "queue"}
+
+	require.Equal(t, "queue", app.createUniqueWorkerName(wc, "one.example.com"))
+	// on collision, the name is qualified with the server name
+	require.Equal(t, "two.example.com:queue", app.createUniqueWorkerName(wc, "two.example.com"))
+	// when the qualified name is also taken, fall back to the numeric postfix
+	require.Equal(t, "queue_1", app.createUniqueWorkerName(wc, "two.example.com"))
+	// workers without a server keep the numeric postfix behavior
+	require.Equal(t, "queue_2", app.createUniqueWorkerName(wc, ""))
 }

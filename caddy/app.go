@@ -65,6 +65,7 @@ type FrankenPHPApp struct {
 	logger          *slog.Logger
 	modules         []*FrankenPHPModule
 	usedWorkerNames map[string]bool
+	httpApp         *caddyhttp.App
 }
 
 var errIni = errors.New(`"php_ini" must be in the format: php_ini "<key>" "<value>"`)
@@ -86,7 +87,8 @@ func (f *FrankenPHPApp) Provision(ctx caddy.Context) error {
 	f.opts = make([]frankenphp.Option, 0, 7+len(options))
 
 	if httpApp, err := ctx.AppIfConfigured("http"); err == nil {
-		if httpApp.(*caddyhttp.App).Metrics != nil {
+		f.httpApp = httpApp.(*caddyhttp.App)
+		if f.httpApp.Metrics != nil {
 			f.metrics = frankenphp.NewPrometheusMetrics(ctx.GetMetricsRegistry())
 		}
 	} else {
@@ -126,7 +128,7 @@ func (f *FrankenPHPApp) Start() error {
 	// register global workers
 	for _, w := range f.Workers {
 		w.FileName = repl.ReplaceKnown(w.FileName, "")
-		w.Name = f.createUniqueWorkerName(w)
+		w.Name = f.createUniqueWorkerName(w, "")
 		f.opts = append(f.opts, frankenphp.WithWorkers(w.Name, w.FileName, w.Num, w.toWorkerOptions()...))
 	}
 
@@ -176,6 +178,7 @@ func (f *FrankenPHPApp) reset() {
 	f.ctx = nil
 	f.metrics = nil
 	f.usedWorkerNames = nil
+	f.httpApp = nil
 }
 
 // register workers and servers for "php" and "php_server" modules
@@ -208,7 +211,8 @@ func (f *FrankenPHPApp) registerModules(repl *caddy.Replacer) error {
 
 // register a server instance and its workers for a single caddy module
 func (f *FrankenPHPApp) registerModule(repl *caddy.Replacer, module *FrankenPHPModule) error {
-	server, err := frankenphp.NewServer(module.resolvedDocumentRoot, module.SplitPath, module.resolvedEnv, module.logger)
+	serverName := f.resolveServerName(module)
+	server, err := frankenphp.NewServer(serverName, module.resolvedDocumentRoot, module.SplitPath, module.resolvedEnv, module.logger)
 	if err != nil {
 		return err
 	}
@@ -218,7 +222,7 @@ func (f *FrankenPHPApp) registerModule(repl *caddy.Replacer, module *FrankenPHPM
 
 	for _, w := range module.Workers {
 		w.FileName = repl.ReplaceKnown(w.FileName, "")
-		w.Name = f.createUniqueWorkerName(w)
+		w.Name = f.createUniqueWorkerName(w, serverName)
 		workerOptions := append(w.toWorkerOptions(), frankenphp.WithWorkerServerScope(server))
 		f.opts = append(f.opts, frankenphp.WithWorkers(w.Name, w.FileName, w.Num, workerOptions...))
 	}
@@ -227,7 +231,9 @@ func (f *FrankenPHPApp) registerModule(repl *caddy.Replacer, module *FrankenPHPM
 }
 
 // avoid name collisions for workers
-func (f *FrankenPHPApp) createUniqueWorkerName(wc workerConfig) string {
+// on collision, a name is first qualified with the server name
+// ("<serverName>:<name>") before falling back to a numeric postfix
+func (f *FrankenPHPApp) createUniqueWorkerName(wc workerConfig, serverName string) string {
 	if f.usedWorkerNames == nil {
 		f.usedWorkerNames = make(map[string]bool)
 	}
@@ -242,6 +248,11 @@ func (f *FrankenPHPApp) createUniqueWorkerName(wc workerConfig) string {
 		if _, ok := f.usedWorkerNames[name]; !ok {
 			f.usedWorkerNames[name] = true
 			break
+		}
+		if serverName != "" {
+			name = serverName + ":" + wc.Name
+			serverName = ""
+			continue
 		}
 		suffix++
 		name = fmt.Sprintf("%s_%d", wc.Name, suffix)
