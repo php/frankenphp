@@ -57,7 +57,7 @@ var (
 	contextKey   = contextKeyStruct{}
 	serverHeader = []string{"FrankenPHP"}
 
-	isRunning        bool
+	isRunning        atomic.Bool
 	onServerShutdown []func()
 
 	// Set default values to make Shutdown() idempotent
@@ -240,10 +240,9 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 
 // Init starts the PHP runtime and the configured workers.
 func Init(options ...Option) error {
-	if isRunning {
+	if !isRunning.CompareAndSwap(false, true) {
 		return ErrAlreadyStarted
 	}
-	isRunning = true
 
 	// Ignore all SIGPIPE signals to prevent weird issues with systemd: https://github.com/php/frankenphp/issues/1020
 	// Docker/Moby has a similar hack: https://github.com/moby/moby/blob/d828b032a87606ae34267e349bf7f7ccb1f6495a/cmd/dockerd/docker.go#L87-L90
@@ -367,7 +366,7 @@ func Init(options ...Option) error {
 
 // Shutdown stops the workers and the PHP runtime.
 func Shutdown() {
-	if !isRunning {
+	if !isRunning.Load() {
 		return
 	}
 
@@ -387,7 +386,7 @@ func Shutdown() {
 		_ = os.RemoveAll(EmbeddedAppPath)
 	}
 
-	isRunning = false
+	isRunning.Store(false)
 	if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
 		globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "FrankenPHP shut down")
 	}
@@ -606,12 +605,34 @@ func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (r
 		return 0
 	}
 
+	// The read deadline is set on the responseWriter, which is only valid until
+	// the response is finished. A script that finishes the request (e.g. via
+	// frankenphp_finish_request()) and then reads the body would otherwise set a
+	// deadline on a finalized HTTP/2 stream, dereferencing a nil pointer and
+	// crashing the process. See https://github.com/php/frankenphp/issues/2535.
+	var rc *http.ResponseController
+	if fc.requestBodyTimeout > 0 && !fc.isDone {
+		if fc.responseController == nil {
+			fc.responseController = http.NewResponseController(fc.responseWriter)
+		}
+		rc = fc.responseController
+	}
+
 	p := unsafe.Slice((*byte)(unsafe.Pointer(cBuf)), countBytes)
 	var err error
 	for readBytes < countBytes && err == nil {
+		if rc != nil {
+			// reset before each read: bound a stall, not a steady upload
+			_ = rc.SetReadDeadline(time.Now().Add(fc.requestBodyTimeout))
+		}
+
 		var n int
 		n, err = fc.request.Body.Read(p[readBytes:])
 		readBytes += C.size_t(n)
+	}
+
+	if rc != nil {
+		_ = rc.SetReadDeadline(time.Time{})
 	}
 
 	return

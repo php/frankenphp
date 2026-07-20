@@ -46,7 +46,6 @@ var cStringHTTPMethods = map[string]*C.char{
 // Inspired by https://github.com/caddyserver/caddy/blob/master/modules/caddyhttp/reverseproxy/fastcgi/fastcgi.go
 func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 	request := fc.request
-	// Separate remote IP and port; more lenient than net.SplitHostPort
 	ip, port := splitRemoteAddr(request.RemoteAddr)
 
 	var rs, https, sslProtocol *C.zend_string

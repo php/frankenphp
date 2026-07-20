@@ -1,6 +1,6 @@
-# Bilinen Sorunlar
+# Bilinen sorunlar
 
-## Desteklenmeyen PHP Eklentileri
+## Desteklenmeyen PHP eklentileri
 
 Aşağıdaki eklentilerin FrankenPHP ile uyumlu olmadığı bilinmektedir:
 
@@ -8,7 +8,7 @@ Aşağıdaki eklentilerin FrankenPHP ile uyumlu olmadığı bilinmektedir:
 | ----------------------------------------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | [imap](https://www.php.net/manual/imap.installation.php) | İş parçacığı güvenli değil | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap) |
 
-## Sorunlu PHP Eklentileri
+## Sorunlu PHP eklentileri
 
 Aşağıdaki eklentiler FrankenPHP ile kullanıldığında bilinen hatalara ve beklenmeyen davranışlara sahiptir:
 
@@ -19,11 +19,11 @@ Aşağıdaki eklentiler FrankenPHP ile kullanıldığında bilinen hatalara ve b
 
 [get_browser()](https://www.php.net/manual/function.get-browser.php) fonksiyonu bir süre sonra kötü performans gösteriyor gibi görünüyor. Geçici bir çözüm, statik oldukları için User-Agent başına sonuçları önbelleğe almaktır (örneğin [APCu](https://www.php.net/manual/book.apcu.php) ile).
 
-## Binary Çıktısı ve Alpine Tabanlı Docker İmajları
+## Binary çıktısı ve Alpine tabanlı Docker imajları
 
 Binary çıktısı ve Alpine tabanlı Docker imajları (dunglas/frankenphp:\*-alpine), daha küçük bir binary boyutu korumak için glibc ve arkadaşları yerine musl libc kullanır. Bu durum bazı uyumluluk sorunlarına yol açabilir. Özellikle, glob seçeneği GLOB_BRACE mevcut değildir.
 
-## Docker ile `https://127.0.0.1` Kullanımı
+## Docker ile `https://127.0.0.1` kullanımı
 
 FrankenPHP varsayılan olarak `localhost` için bir TLS sertifikası oluşturur.
 Bu, yerel geliştirme için en kolay ve önerilen seçenektir.
@@ -74,7 +74,7 @@ docker run \
     dunglas/frankenphp
 ```
 
-## `@php` Referanslı Composer Betikler
+## `@php` referanslı Composer betikler
 
 [Composer betikleri](https://getcomposer.org/doc/articles/scripts.md) bazı görevler için bir PHP binary çalıştırmak isteyebilir, örneğin [bir Laravel projesinde](laravel.md) `@php artisan package:discover --ansi` çalıştırmak. Bu [şu anda mümkün değil](https://github.com/php/frankenphp/issues/483#issuecomment-1899890915) ve 2 nedeni var:
 

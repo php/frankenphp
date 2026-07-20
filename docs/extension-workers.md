@@ -143,7 +143,7 @@ while (frankenphp_handle_request($handler)) {
 
 FrankenPHP provides hooks to execute Go code at specific points in the lifecycle.
 
-| Hook Type  | Option Name                  | Signature            | Context & Use Case                                                     |
+| Hook type  | Option name                  | Signature            | Context & use case                                                     |
 | :--------- | :--------------------------- | :------------------- | :--------------------------------------------------------------------- |
 | **Server** | `WithWorkerOnServerStartup`  | `func()`             | Global setup. Run **Once**. Example: Connect to NATS/Redis.            |
 | **Server** | `WithWorkerOnServerShutdown` | `func()`             | Global cleanup. Run **Once**. Example: Close shared connections.       |

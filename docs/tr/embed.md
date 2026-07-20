@@ -1,4 +1,4 @@
-# Binary Dosyası Olarak PHP Uygulamaları
+# Binary dosyası olarak PHP uygulamaları
 
 FrankenPHP, PHP uygulamalarının kaynak kodunu ve varlıklarını statik, kendi kendine yeten bir binary dosyaya yerleştirme yeteneğine sahiptir.
 
@@ -6,7 +6,7 @@ Bu özellik sayesinde PHP uygulamaları, uygulamanın kendisini, PHP yorumlayıc
 
 Bu özellik hakkında daha fazla bilgi almak için [Kévin tarafından SymfonyCon 2023'te yapılan sunuma](https://dunglas.dev/2023/12/php-and-symfony-apps-as-standalone-binaries/) göz atabilirsiniz.
 
-## Preparing Your App
+## Preparing your app
 
 Bağımsız binary dosyayı oluşturmadan önce uygulamanızın gömülmeye hazır olduğundan emin olun.
 
@@ -39,7 +39,7 @@ composer install --ignore-platform-reqs --no-dev -a
 composer dump-env prod
 ```
 
-## Linux Binary'si Oluşturma
+## Linux binary'si oluşturma
 
 Bir Linux binary çıktısı almanın en kolay yolu, sağladığımız Docker tabanlı derleyiciyi kullanmaktır.
 
@@ -78,7 +78,7 @@ Bir Linux binary çıktısı almanın en kolay yolu, sağladığımız Docker ta
 
 Elde edilen binary dosyası, geçerli dizindeki `my-app` adlı dosyadır.
 
-## Diğer İşletim Sistemleri için Binary Çıktısı Alma
+## Diğer işletim sistemleri için binary çıktısı alma
 
 Docker kullanmak istemiyorsanız veya bir macOS binary dosyası oluşturmak istiyorsanız, sağladığımız kabuk betiğini kullanın:
 
@@ -91,7 +91,7 @@ EMBED=/path/to/your/app \
 
 Elde edilen binary dosyası `dist/` dizinindeki `frankenphp-<os>-<arch>` adlı dosyadır.
 
-## Binary Dosyasını Kullanma
+## Binary dosyasını kullanma
 
 İşte bu kadar! `my-app` dosyası (veya diğer işletim sistemlerinde `dist/frankenphp-<os>-<arch>`) bağımsız uygulamanızı içerir!
 
@@ -119,11 +119,11 @@ Ayrıca binary dosyanıza gömülü PHP CLI betiklerini de çalıştırabilirsin
 ./my-app php-cli bin/console
 ```
 
-## Yapıyı Özelleştirme
+## Yapıyı özelleştirme
 
 Binary dosyasının nasıl özelleştirileceğini (uzantılar, PHP sürümü...) görmek için [Statik derleme dokümanını okuyun](static.md).
 
-## Binary Dosyasının Dağıtılması
+## Binary dosyasının dağıtılması
 
 Linux'ta, oluşturulan ikili dosya derleme sırasında `COMPRESS=1` ortam değişkeni ayarlanarak [UPX](https://upx.github.io) ile sıkıştırılabilir.
 

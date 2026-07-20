@@ -1,11 +1,42 @@
 package caddy
 
 import (
-	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
-	"github.com/stretchr/testify/require"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/caddyserver/caddy/v2"
+	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
+	"github.com/stretchr/testify/require"
 )
+
+func TestModuleRequestBodyTimeout(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`
+	{
+		php {
+			request_body_timeout 5s
+		}
+	}`)
+	module := &FrankenPHPModule{}
+
+	require.NoError(t, module.UnmarshalCaddyfile(d))
+	require.NotNil(t, module.RequestBodyTimeout)
+	require.Equal(t, caddy.Duration(5*time.Second), *module.RequestBodyTimeout)
+}
+
+func TestModuleRequestBodyTimeoutDisabled(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`
+	{
+		php {
+			request_body_timeout 0
+		}
+	}`)
+	module := &FrankenPHPModule{}
+
+	require.NoError(t, module.UnmarshalCaddyfile(d))
+	require.NotNil(t, module.RequestBodyTimeout)
+	require.Equal(t, caddy.Duration(0), *module.RequestBodyTimeout)
+}
 
 func TestModuleWorkerDuplicateFilenamesFail(t *testing.T) {
 	// Create a test configuration with duplicate worker filenames

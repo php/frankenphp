@@ -26,6 +26,9 @@ type frankenPHPContext struct {
 	worker       *worker
 	server       *Server
 
+	// idle timeout per body read; zero disables it
+	requestBodyTimeout time.Duration
+
 	docURI         string
 	pathInfo       string
 	scriptName     string
@@ -67,7 +70,7 @@ func newContextFromRequest(request *http.Request, responseWriter http.ResponseWr
 		startedAt:      time.Now(),
 		server:         s,
 		splitPath:      s.splitPath,
-		logger:         s.logger,
+		logger:         s.logger.Load(),
 		request:        request,
 		documentRoot:   s.root,
 		responseWriter: responseWriter,
