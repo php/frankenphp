@@ -606,12 +606,34 @@ func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (r
 		return 0
 	}
 
+	// The read deadline is set on the responseWriter, which is only valid until
+	// the response is finished. A script that finishes the request (e.g. via
+	// frankenphp_finish_request()) and then reads the body would otherwise set a
+	// deadline on a finalized HTTP/2 stream, dereferencing a nil pointer and
+	// crashing the process. See https://github.com/php/frankenphp/issues/2535.
+	var rc *http.ResponseController
+	if fc.requestBodyTimeout > 0 && !fc.isDone {
+		if fc.responseController == nil {
+			fc.responseController = http.NewResponseController(fc.responseWriter)
+		}
+		rc = fc.responseController
+	}
+
 	p := unsafe.Slice((*byte)(unsafe.Pointer(cBuf)), countBytes)
 	var err error
 	for readBytes < countBytes && err == nil {
+		if rc != nil {
+			// reset before each read: bound a stall, not a steady upload
+			_ = rc.SetReadDeadline(time.Now().Add(fc.requestBodyTimeout))
+		}
+
 		var n int
 		n, err = fc.request.Body.Read(p[readBytes:])
 		readBytes += C.size_t(n)
+	}
+
+	if rc != nil {
+		_ = rc.SetReadDeadline(time.Time{})
 	}
 
 	return

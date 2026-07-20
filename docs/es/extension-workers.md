@@ -1,4 +1,4 @@
-# Extension Workers
+# Extension workers
 
 Los Extension Workers permiten que tu [extensión FrankenPHP](https://frankenphp.dev/docs/extensions/) gestione un pool dedicado de hilos PHP para ejecutar tareas en segundo plano, manejar eventos asíncronos o implementar protocolos personalizados. Útil para sistemas de colas, listeners de eventos, programadores, etc.
 

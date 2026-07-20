@@ -26,6 +26,9 @@ type frankenPHPContext struct {
 	worker       *worker
 	server       *Server
 
+	// idle timeout per body read; zero disables it
+	requestBodyTimeout time.Duration
+
 	docURI         string
 	pathInfo       string
 	scriptName     string

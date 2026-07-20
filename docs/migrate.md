@@ -146,7 +146,7 @@ volumes:
   caddy_config:
 ```
 
-If you need additional PHP extensions, see [Building Custom Docker Image](docker.md#how-to-install-more-php-extensions).
+If you need additional PHP extensions, see [Building custom Docker image](docker.md#how-to-install-more-php-extensions).
 
 For framework-specific Docker setups, see [Symfony Docker](https://github.com/dunglas/symfony-docker) and [running Laravel with the FrankenPHP Docker image](laravel.md#running-laravel-with-the-frankenphp-docker-image).
 

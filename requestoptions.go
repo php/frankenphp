@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 	"unicode/utf8"
 
 	"github.com/dunglas/frankenphp/internal/fastabs"
@@ -187,6 +188,18 @@ func WithRequestLogger(logger *slog.Logger) RequestOption {
 		if o.logger == nil {
 			o.logger = globalLogger // fall back to global logger
 		}
+
+		return nil
+	}
+}
+
+// WithRequestBodyTimeout sets an idle timeout on request body reads: a stalled
+// (slow POST) client is cut off while a steady upload of any size succeeds.
+// Zero (the default) disables it. Requires a ResponseWriter that exposes a read
+// deadline (net/http and Caddy do); otherwise the read has no timeout.
+func WithRequestBodyTimeout(timeout time.Duration) RequestOption {
+	return func(o *frankenPHPContext) error {
+		o.requestBodyTimeout = timeout
 
 		return nil
 	}

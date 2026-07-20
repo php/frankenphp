@@ -1,9 +1,9 @@
-# Usando Workers do FrankenPHP
+# Usando workers do FrankenPHP
 
 Inicialize sua aplicação uma vez e mantenha-a na memória.
 O FrankenPHP processará as requisições recebidas em poucos milissegundos.
 
-## Iniciando Worker Scripts
+## Iniciando worker scripts
 
 ### Docker
 
@@ -129,14 +129,14 @@ docker run \
     dunglas/frankenphp
 ```
 
-### Reiniciar o Worker Após um Certo Número de Requisições
+### Reiniciar o worker após um certo número de requisições
 
 Como o PHP não foi originalmente projetado para processos de longa duração, ainda existem muitas bibliotecas e códigos legados que vazam memória.
 Uma solução alternativa para usar esse tipo de código no modo worker é reiniciar o worker script após processar um certo número de requisições:
 
 O trecho de código de worker anterior permite configurar um número máximo de requisições a serem processadas, definindo uma variável de ambiente chamada `MAX_REQUESTS`.
 
-### Reiniciar os Workers Manualmente
+### Reiniciar os workers manualmente
 
 Embora seja possível reiniciar os workers [em alterações de arquivo](config.md#watching-for-file-changes), também é possível reiniciar todos os workers graciosamente por meio da [API de administração do Caddy](https://caddyserver.com/docs/api). Se o administrador estiver habilitado no seu [Caddyfile](config.md#caddyfile-config), você pode acionar o endpoint de reinicialização com uma simples requisição POST como esta:
 
@@ -144,7 +144,7 @@ Embora seja possível reiniciar os workers [em alterações de arquivo](config.m
 curl -X POST http://localhost:2019/frankenphp/workers/restart
 ```
 
-### Falhas de Worker
+### Falhas de worker
 
 Se um worker script travar com um código de saída diferente de zero, o FrankenPHP o reiniciará com uma estratégia de backoff exponencial.
 Se o worker script permanecer ativo por mais tempo do que o último backoff × 2, ele não irá penalizar o worker script e reiniciá-lo novamente.
@@ -161,7 +161,7 @@ frankenphp {
 }
 ```
 
-## Comportamento das Superglobais
+## Comportamento das superglobais
 
 As [superglobais do PHP](https://www.php.net/manual/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...) se comportam da seguinte maneira:
 

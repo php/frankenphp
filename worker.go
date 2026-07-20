@@ -177,13 +177,6 @@ func newWorker(o workerOpt) (*worker, error) {
 	return w, nil
 }
 
-// EXPERIMENTAL: DrainWorkers initiates a graceful drain of all php threads.
-// Blocks until every drained thread yields. Force-kill is armed after a
-// grace period to wake threads parked in blocking syscalls (sleep, I/O).
-func DrainWorkers() {
-	drainPHPThreads()
-}
-
 // RestartWorkers attempts to restart all workers gracefully.
 // All workers must be restarted at the same time to prevent issues with
 // opcache resetting. Blocks until every worker thread has yielded;
