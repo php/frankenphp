@@ -1,7 +1,7 @@
 package caddy
 
 import (
-	"strings"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -37,9 +37,6 @@ func TestModuleRequestBodyTimeoutDisabled(t *testing.T) {
 	require.NotNil(t, module.RequestBodyTimeout)
 	require.Equal(t, caddy.Duration(0), *module.RequestBodyTimeout)
 }
-	"path/filepath"
-	"testing"
-)
 
 func TestModuleWorkerDuplicateFilenamesFail(t *testing.T) {
 	// Create a test configuration with duplicate worker filenames
