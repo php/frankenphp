@@ -53,6 +53,7 @@ var (
 	ErrInvalidRequestPath         = ErrRejected{"invalid request path", http.StatusBadRequest}
 	ErrInvalidContentLengthHeader = ErrRejected{"invalid Content-Length header", http.StatusBadRequest}
 	ErrMaxWaitTimeExceeded        = ErrRejected{"maximum request handling time exceeded", http.StatusServiceUnavailable}
+	ErrRequestBodyTooLarge        = ErrRejected{"request body too large", http.StatusRequestEntityTooLarge}
 
 	contextKey   = contextKeyStruct{}
 	serverHeader = []string{"FrankenPHP"}
@@ -649,7 +650,7 @@ func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (r
 	// deadline on a finalized HTTP/2 stream, dereferencing a nil pointer and
 	// crashing the process. See https://github.com/php/frankenphp/issues/2535.
 	var rc *http.ResponseController
-	if fc.requestBodyTimeout > 0 && !fc.isDone {
+	if fc.requestBodyTimeout > 0 && !fc.isDone && !fc.bodySpooled {
 		if fc.responseController == nil {
 			fc.responseController = http.NewResponseController(fc.responseWriter)
 		}

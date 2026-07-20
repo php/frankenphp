@@ -36,6 +36,11 @@ type frankenPHPContext struct {
 	// Whether the request is already closed by us
 	isDone bool
 
+	// Whether the request body has been drained into a buffer while queued
+	bodySpooled bool
+	// Releases the spooled body's backing temp file, if any
+	cleanupBody func()
+
 	responseWriter     http.ResponseWriter
 	responseController *http.ResponseController
 	handlerParameters  any
@@ -132,6 +137,11 @@ func (fc *frankenPHPContext) closeContext() {
 
 	close(fc.done)
 	fc.isDone = true
+
+	if fc.cleanupBody != nil {
+		fc.cleanupBody()
+		fc.cleanupBody = nil
+	}
 }
 
 // validate checks if the request should be outright rejected
