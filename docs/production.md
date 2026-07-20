@@ -35,7 +35,7 @@ COPY . /app/public
 #COPY . /app
 ```
 
-Refer to "[Building Custom Docker Image](docker.md)" for more details and options,
+Refer to "[Building custom Docker image](docker.md)" for more details and options,
 and to learn how to customize the configuration, install PHP extensions and Caddy modules.
 
 If your project uses Composer,

@@ -1,4 +1,4 @@
-# FrankenPHP: Modern App Server for PHP
+# FrankenPHP: modern app server for PHP
 
 <h1 align="center"><a href="https://frankenphp.dev"><img src="frankenphp.png" alt="FrankenPHP" width="600"></a></h1>
 
@@ -14,9 +14,9 @@ FrankenPHP can also be used as a standalone Go library to embed PHP in any app u
 
 <a href="https://dunglas.dev/2022/10/frankenphp-the-modern-php-app-server-written-in-go/"><img src="https://dunglas.dev/wp-content/uploads/2022/10/frankenphp.png" alt="Slides" width="600"></a>
 
-## Getting Started
+## Getting started
 
-### Install Script
+### Install script
 
 On Linux and macOS, copy this line into your terminal to automatically
 install an appropriate version for your platform:
@@ -31,7 +31,7 @@ On Windows, run this in PowerShell:
 irm https://frankenphp.dev/install.ps1 | iex
 ```
 
-### Standalone Binary
+### Standalone binary
 
 We provide FrankenPHP binaries for Linux, macOS and Windows
 containing [PHP 8.5](https://www.php.net/releases/8.5/).
@@ -42,7 +42,7 @@ Windows archives contain the official PHP binary for Windows.
 
 [Download FrankenPHP](https://github.com/php/frankenphp/releases)
 
-### rpm Packages
+### rpm packages
 
 Our maintainers offer rpm packages for all systems using `dnf`. To install, run:
 
@@ -61,7 +61,7 @@ sudo dnf install pie-zts
 sudo pie-zts install asgrim/example-pie-extension
 ```
 
-### deb Packages
+### deb packages
 
 Our maintainers offer deb packages for all systems using `apt`. To install, run:
 
@@ -82,7 +82,7 @@ sudo apt install pie-zts
 sudo pie-zts install asgrim/example-pie-extension
 ```
 
-### apk Packages
+### apk packages
 
 Our maintainers offer apk packages for all systems using `apk`. To install, run:
 
@@ -160,9 +160,9 @@ Go to `https://localhost`, and enjoy!
 - [Real-time](https://frankenphp.dev/docs/mercure/)
 - [Logging](https://frankenphp.dev/docs/logging/)
 - [Hot reloading](https://frankenphp.dev/docs/hot-reload/)
-- [Efficiently Serving Large Static Files](https://frankenphp.dev/docs/x-sendfile/)
+- [Efficiently serving large static files](https://frankenphp.dev/docs/x-sendfile/)
 - [Configuration](https://frankenphp.dev/docs/config/)
-- [Writing PHP Extensions in Go](https://frankenphp.dev/docs/extensions/)
+- [Writing PHP extensions in Go](https://frankenphp.dev/docs/extensions/)
 - [Docker images](https://frankenphp.dev/docs/docker/)
 - [Deploy in production](https://frankenphp.dev/docs/production/)
 - [Performance optimization](https://frankenphp.dev/docs/performance/)
@@ -179,7 +179,7 @@ Go to `https://localhost`, and enjoy!
 - [Contributing and debugging](https://frankenphp.dev/docs/contributing/)
 - [Internals (architecture overview)](docs/internals.md)
 
-## Examples and Skeletons
+## Examples and skeletons
 
 - [Symfony](https://frankenphp.dev/docs/symfony/)
 - [API Platform](https://api-platform.com/docs/symfony)

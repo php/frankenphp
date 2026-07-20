@@ -1,4 +1,4 @@
-# Go ile PHP Uzantıları Yazma
+# Go ile PHP uzantıları yazma
 
 FrankenPHP ile **Go dilinde PHP uzantıları yazabilir**, bu da doğrudan PHP'den çağrılabilen **yüksek performanslı yerel işlevler** oluşturmanıza olanak tanır. Uygulamalarınız, mevcut veya yeni herhangi bir Go kütüphanesini ve **goroutine'lerin meşhur eşzamanlılık modelini doğrudan PHP kodunuzdan** kullanabilir.
 
@@ -6,7 +6,7 @@ PHP uzantıları tipik olarak C dilinde yazılır, ancak biraz ek çalışma ile
 
 Caddy modülleri sayesinde, Go dilinde PHP uzantıları yazabilir ve bunları FrankenPHP'ye çok hızlı bir şekilde entegre edebilirsiniz.
 
-## İki Yaklaşım
+## İki yaklaşım
 
 FrankenPHP, Go dilinde PHP uzantıları oluşturmak için iki yol sunar:
 
@@ -15,7 +15,7 @@ FrankenPHP, Go dilinde PHP uzantıları oluşturmak için iki yol sunar:
 
 Başlamak için en kolay yol olduğu için oluşturucu yaklaşımıyla başlayacak, ardından tam kontrole ihtiyaç duyanlar için manuel uygulamayı göstereceğiz.
 
-## Uzantı Oluşturucuyu Kullanma
+## Uzantı oluşturucuyu kullanma
 
 FrankenPHP, yalnızca Go kullanarak **bir PHP uzantısı oluşturmanıza** olanak tanıyan bir araçla birlikte gelir. **C kodu yazmaya** veya doğrudan CGO kullanmaya gerek yok: FrankenPHP ayrıca, **PHP/C ve Go arasındaki tür dengeleme** konusunda endişelenmenize gerek kalmadan uzantılarınızı Go'da yazmanıza yardımcı olacak **genel bir tür API'si** içerir.
 
@@ -24,11 +24,11 @@ FrankenPHP, yalnızca Go kullanarak **bir PHP uzantısı oluşturmanıza** olana
 
 Bu aracın **tam teşekküllü bir uzantı oluşturucu olmadığını** unutmayın. Go'da basit uzantılar yazmanıza yardımcı olmak için tasarlanmıştır, ancak PHP uzantılarının en gelişmiş özelliklerini sağlamaz. Daha **karmaşık ve optimize edilmiş** bir uzantı yazmanız gerekiyorsa, doğrudan bazı C kodu yazmanız veya CGO kullanmanız gerekebilir.
 
-### Ön Koşullar
+### Ön koşullar
 
 Aşağıdaki manuel uygulama bölümünde de belirtildiği gibi, [PHP kaynaklarını edinmeniz](https://www.php.net/downloads.php) ve yeni bir Go modülü oluşturmanız gerekir.
 
-#### Yeni Bir Modül Oluşturun ve PHP Kaynaklarını Edinin
+#### Yeni bir modül oluşturun ve PHP kaynaklarını edinin
 
 Go'da bir PHP uzantısı yazmanın ilk adımı yeni bir Go modülü oluşturmaktır. Bunu aşağıdaki komutu kullanarak yapabilirsiniz:
 
@@ -42,7 +42,7 @@ go mod init example.com/example
 tar xf php-*
 ```
 
-### Uzantıyı Yazma
+### Uzantıyı yazma
 
 Yerel işlevinizi Go'da yazmak için her şey hazır. `stringext.go` adında yeni bir dosya oluşturun. İlk işlevimiz bir dizeyi argüman olarak, tekrar sayısını, dizeyi ters çevirip çevirmeyeceğini belirten bir boole değeri alacak ve sonuç dizeyi döndürecektir. Bu şöyle görünmelidir:
 
@@ -82,7 +82,7 @@ Burada dikkat edilmesi gereken iki önemli nokta var:
 
 İlk nokta kendini açıklarken, ikincisi kavranması daha zor olabilir. Bu kılavuzda tür dengeleme konusuna daha derinlemesine bakalım.
 
-### Uzantıyı Oluşturma
+### Uzantıyı oluşturma
 
 İşte sihrin gerçekleştiği yer ve uzantınız artık oluşturulabilir. Oluşturucuyu aşağıdaki komutla çalıştırabilirsiniz:
 
@@ -106,7 +106,7 @@ Her şey yolunda giderse, projenizin dizini uzantınız için aşağıdaki dosya
 > [!IMPORTANT]
 > **Kaynak dosyanız (`my_extension.go`) asla değiştirilmez.** Oluşturucu, orijinal işlevlerinizi çağıran CGO sarıcılarını içeren ayrı bir `_generated.go` dosyası oluşturur. Bu, kaynak dosyanızı oluşturulan kodun kirletmesi endişesi olmadan güvenle sürüm kontrolüne alabileceğiniz anlamına gelir.
 
-### Oluşturulan Uzantıyı FrankenPHP'ye Entegre Etme
+### Oluşturulan uzantıyı FrankenPHP'ye entegre etme
 
 Uzantımız artık derlenmeye ve FrankenPHP'ye entegre edilmeye hazır. Bunu yapmak için, FrankenPHP'yi nasıl derleyeceğinizi öğrenmek üzere FrankenPHP [derleme dokümantasyonuna](compile.md) bakın. Modülü `--with` bayrağını kullanarak ekleyin ve modülünüzün yolunu işaret edin:
 
@@ -122,7 +122,7 @@ xcaddy build \
 
 Oluşturma adımı sırasında oluşturulan `/build` alt dizinini işaret ettiğinize dikkat edin. Ancak bu zorunlu değildir: oluşturulan dosyaları modül dizininize de kopyalayabilir ve doğrudan ona işaret edebilirsiniz.
 
-### Oluşturulan Uzantınızı Test Etme
+### Oluşturulan uzantınızı test etme
 
 Oluşturduğunuz işlevleri ve sınıfları test etmek için bir PHP dosyası oluşturabilirsiniz. Örneğin, aşağıdaki içeriğe sahip bir `index.php` dosyası oluşturun:
 
@@ -140,12 +140,12 @@ echo $processor->process('Hello World', StringProcessor::MODE_UPPERCASE);  // "H
 
 Uzantınızı önceki bölümde gösterildiği gibi FrankenPHP'ye entegre ettikten sonra, bu test dosyasını `./frankenphp php-server` kullanarak çalıştırabilir ve uzantınızın çalıştığını görmelisiniz.
 
-### Tür Dengeleme
+### Tür dengeleme
 
 Bazı değişken türleri C/PHP ve Go arasında aynı bellek gösterimine sahipken, bazı türlerin doğrudan kullanılabilmesi için daha fazla mantık gerektirir. Uzantı yazarken belki de en zor kısım budur çünkü Zend Engine'in iç işleyişini ve değişkenlerin PHP'de dahili olarak nasıl saklandığını anlamayı gerektirir.
 Bu tablo, bilmeniz gerekenleri özetler:
 
-| PHP türü           | Go türü                       | Doğrudan dönüşüm | C'den Go'ya yardımcı                    | Go'dan C'ye yardımcı                     | Sınıf Metotları Desteği |
+| PHP türü           | Go türü                       | Doğrudan dönüşüm | C'den Go'ya yardımcı                    | Go'dan C'ye yardımcı                     | Sınıf metotları desteği |
 | :----------------- | :---------------------------- | :---------------- | :-------------------------------------- | :--------------------------------------- | :---------------------- |
 | `int`              | `int64`                       | ✅                | -                                       | -                                        | ✅                      |
 | `?int`             | `*int64`                      | ✅                | -                                       | -                                        | ✅                      |
@@ -169,7 +169,7 @@ Bu tablo, bilmeniz gerekenleri özetler:
 
 Önceki bölümdeki kod parçacığına bakarsanız, ilk parametreyi ve dönüş değerini dönüştürmek için yardımcıların kullanıldığını görebilirsiniz. `repeat_this()` işlevimizin ikinci ve üçüncü parametrelerinin dönüştürülmesi gerekmez, çünkü temel türlerin bellek gösterimi hem C hem de Go için aynıdır.
 
-#### Dizilerle Çalışma
+#### Dizilerle çalışma
 
 FrankenPHP, `frankenphp.AssociativeArray` aracılığıyla veya doğrudan bir haritaya veya dilime dönüştürülerek PHP dizileri için yerel destek sağlar.
 
@@ -262,7 +262,7 @@ func process_data_packed(arr *C.zend_array) unsafe.Pointer {
 -   **İç içe diziler** - Diziler iç içe olabilir ve tüm desteklenen türleri otomatik olarak dönüştürecektir (`int64`, `float64`, `string`, `bool`, `nil`, `AssociativeArray`, `map[string]any`, `[]any`)
 -   **Nesneler desteklenmiyor** - Şu anda yalnızca skaler türler ve diziler değer olarak kullanılabilir. Bir nesne sağlamak, PHP dizisinde `null` değeriyle sonuçlanacaktır.
 
-##### Mevcut metotlar: Sıkıştırılmış ve İlişkisel
+##### Mevcut metotlar: sıkıştırılmış ve ilişkisel
 
 -   `frankenphp.PHPAssociativeArray(arr frankenphp.AssociativeArray) unsafe.Pointer` - Anahtar-değer çiftleri içeren sıralı bir PHP dizisine dönüştür
 -   `frankenphp.PHPMap(arr map[string]any) unsafe.Pointer` - Bir haritayı anahtar-değer çiftleri içeren sırasız bir PHP dizisine dönüştür
@@ -272,7 +272,7 @@ func process_data_packed(arr *C.zend_array) unsafe.Pointer {
 -   `frankenphp.GoPackedArray(arr unsafe.Pointer) []any` - Bir PHP dizisini bir Go dilimine dönüştür
 -   `frankenphp.IsPacked(zval *C.zend_array) bool` - Bir PHP dizisinin sıkıştırılmış (yalnızca indekslenmiş) mı yoksa ilişkisel (anahtar-değer çiftleri) mi olduğunu kontrol et
 
-### Çağrılabilirlerle Çalışma
+### Çağrılabilirlerle çalışma
 
 FrankenPHP, `frankenphp.CallPHPCallable` yardımcısını kullanarak PHP çağrılabilirleriyle çalışmanın bir yolunu sunar. Bu, Go kodundan PHP işlevlerini veya metotlarını çağırmanıza olanak tanır.
 
@@ -308,7 +308,7 @@ $result = my_array_map(['hello', 'world'], 'strtoupper');
 // $result ['HELLO', 'WORLD'] olacaktır
 ```
 
-### Yerel Bir PHP Sınıfı Bildirme
+### Yerel bir PHP sınıfı bildirme
 
 Oluşturucu, Go struct'ları olarak **saydam sınıfları** bildirmeyi destekler, bunlar PHP nesneleri oluşturmak için kullanılabilir. Bir PHP sınıfı tanımlamak için `//export_php:class` yönerge yorumunu kullanabilirsiniz. Örneğin:
 
@@ -322,7 +322,7 @@ type UserStruct struct {
 }
 ```
 
-#### Saydam Sınıflar Nelerdir?
+#### Saydam sınıflar nelerdir?
 
 **Saydam sınıflar**, dahili yapının (özelliklerin) PHP kodundan gizlendiği sınıflardır. Bu şu anlama gelir:
 
@@ -334,7 +334,7 @@ type UserStruct struct {
 
 Bu yaklaşım, daha iyi kapsülleme sağlar ve PHP kodunun Go nesnelerinizin dahili durumunu yanlışlıkla bozmasını önler. Nesneyle tüm etkileşimler, açıkça tanımladığınız metotlar aracılığıyla gerçekleşmelidir.
 
-#### Sınıflara Metot Ekleme
+#### Sınıflara metot ekleme
 
 Özellikler doğrudan erişilemediği için, saydam sınıflarınızla etkileşim kurmak için **metotlar tanımlamanız gerekir**. Davranışı tanımlamak için `//export_php:method` yönergesini kullanın:
 
@@ -376,7 +376,7 @@ func (us *UserStruct) SetNamePrefix(prefix *C.zend_string) {
 }
 ```
 
-#### Null Olabilir Parametreler
+#### Null olabilir parametreler
 
 Oluşturucu, PHP imzalarında `?` önekini kullanarak null olabilir parametreleri destekler. Bir parametre null olabilir olduğunda, Go işlevinizde bir işaretçiye dönüşür ve PHP'de değerin `null` olup olmadığını kontrol etmenizi sağlar:
 
@@ -446,11 +446,11 @@ $user->updateInfo(null, 25, null);          // İsim ve aktif null
 
 Bu tasarım, Go kodunuzun nesnenin durumuna nasıl erişildiğini ve değiştirildiğini tamamen kontrol etmesini sağlayarak daha iyi kapsülleme ve tür güvenliği sunar.
 
-### Sabitleri Bildirme
+### Sabitleri bildirme
 
 Oluşturucu, Go sabitlerini PHP'ye aktarmayı iki yönerge kullanarak destekler: genel sabitler için `//export_php:const` ve sınıf sabitleri için `//export_php:classconst`. Bu, Go ve PHP kodu arasında yapılandırma değerleri, durum kodları ve diğer sabitleri paylaşmanıza olanak tanır.
 
-#### Genel Sabitler
+#### Genel sabitler
 
 Genel PHP sabitleri oluşturmak için `//export_php:const` yönergesini kullanın:
 
@@ -473,7 +473,7 @@ const (
 > [!NOTE]
 > PHP sabitleri, Go sabitinin adını alacaktır, bu nedenle büyük harfler kullanılması önerilir.
 
-#### Sınıf Sabitleri
+#### Sınıf sabitleri
 
 Belirli bir PHP sınıfına ait sabitler oluşturmak için `//export_php:classconst ClassName` yönergesini kullanın:
 
@@ -579,11 +579,11 @@ func (sp *StringProcessorStruct) Process(input *C.zend_string, mode int64) unsaf
 }
 ```
 
-### Ad Alanları Kullanma
+### Ad alanları kullanma
 
 Oluşturucu, PHP uzantınızın işlevlerini, sınıflarını ve sabitlerini `//export_php:namespace` yönergesini kullanarak bir ad alanı altında düzenlemeyi destekler. Bu, adlandırma çakışmalarını önlemeye yardımcı olur ve uzantınızın API'si için daha iyi bir organizasyon sağlar.
 
-#### Bir Ad Alanı Bildirme
+#### Bir ad alanı bildirme
 
 Tüm dışa aktarılan sembolleri belirli bir ad alanı altına yerleştirmek için Go dosyanızın en üstünde `//export_php:namespace` yönergesini kullanın:
 
@@ -616,7 +616,7 @@ func (u *UserStruct) GetName() unsafe.Pointer {
 const STATUS_ACTIVE = 1
 ```
 
-#### Ad Alanlı Uzantıyı PHP'de Kullanma
+#### Ad alanlı uzantıyı PHP'de kullanma
 
 Bir ad alanı bildirildiğinde, tüm işlevler, sınıflar ve sabitler PHP'de bu ad alanı altına yerleştirilir:
 
@@ -631,22 +631,22 @@ echo $user->getName(); // "John Doe"
 echo My\Extension\STATUS_ACTIVE; // 1
 ```
 
-#### Önemli Notlar
+#### Önemli notlar
 
 -   Dosya başına yalnızca **bir** ad alanı yönergesine izin verilir. Birden fazla ad alanı yönergesi bulunursa, oluşturucu bir hata döndürür.
 -   Ad alanı, dosyadaki **tüm** dışa aktarılan sembollere (işlevler, sınıflar, metotlar ve sabitler) uygulanır.
 -   Ad alanı adları, ayırıcı olarak ters eğik çizgi (`\`) kullanarak PHP ad alanı kurallarına uyar.
 -   Hiçbir ad alanı bildirilmezse, semboller her zamanki gibi genel ad alanına aktarılır.
 
-## Manuel Uygulama
+## Manuel uygulama
 
 Uzantıların nasıl çalıştığını anlamak veya uzantınız üzerinde tam kontrole sahip olmak istiyorsanız, bunları manuel olarak yazabilirsiniz. Bu yaklaşım size tam kontrol sağlar ancak daha fazla boilerplate kodu gerektirir.
 
-### Temel İşlev
+### Temel işlev
 
 Go'da yeni bir yerel işlev tanımlayan basit bir PHP uzantısının nasıl yazılacağını göreceğiz. Bu işlev PHP'den çağrılacak ve Caddy'nin günlüklerine bir mesaj kaydeden bir goroutine tetikleyecektir. Bu işlev herhangi bir parametre almaz ve hiçbir şey döndürmez.
 
-#### Go İşlevini Tanımla
+#### Go işlevini tanımla
 
 Modülünüzde, PHP'den çağrılacak yeni bir yerel işlev tanımlamanız gerekir. Bunu yapmak için, örneğin `extension.go` adında bir dosya oluşturun ve aşağıdaki kodu ekleyin:
 
@@ -678,7 +678,7 @@ func go_print_something() {
 
 Bu örnekte, yeni işlevimiz Caddy'nin günlüklerine bir mesaj kaydeden bir goroutine tetikleyecektir.
 
-#### PHP İşlevini Tanımla
+#### PHP işlevini tanımla
 
 PHP'nin işlevimizi çağırmasına izin vermek için karşılık gelen bir PHP işlevi tanımlamamız gerekir. Bunun için, örneğin `extension.stub.php` adında bir stub dosyası oluşturacağız ve bu dosya aşağıdaki kodu içerecektir:
 
@@ -700,7 +700,7 @@ php ../php-src/build/gen_stub.php extension.stub.php
 
 Bu betik, PHP'nin işlevimizi nasıl tanımlayacağını ve çağıracağını bilmesi için gerekli bilgileri içeren `extension_arginfo.h` adlı bir dosya oluşturacaktır.
 
-#### Go ve C Arasında Köprü Yazma
+#### Go ve C arasında köprü yazma
 
 Şimdi, Go ve C arasında köprü yazmamız gerekiyor. Modül dizininizde `extension.h` adında bir dosya oluşturun ve içine aşağıdaki içeriği ekleyin:
 
@@ -762,11 +762,11 @@ Son olarak, uzantının adını, sürümünü ve özelliklerini içeren `zend_mo
 
 Uzantı kaydı, Go kodumuzda çağırdığımız FrankenPHP'nin `RegisterExtension()` işlevi tarafından otomatik olarak ele alınır.
 
-### Gelişmiş Kullanım
+### Gelişmiş kullanım
 
 Artık Go'da temel bir PHP uzantısının nasıl oluşturulacağını bildiğimize göre, örneğimizi karmaşıklaştıralım. Şimdi bir dizeyi parametre olarak alan ve büyük harfli versiyonunu döndüren bir PHP işlevi oluşturacağız.
 
-#### PHP İşlev Stub'ını Tanımla
+#### PHP işlev stub'ını tanımla
 
 Yeni PHP işlevini tanımlamak için `extension.stub.php` dosyamızı yeni işlev imzasını içerecek şekilde değiştireceğiz:
 
@@ -804,7 +804,7 @@ static const zend_function_entry ext_functions[] = {
 
 `go_upper` işlevinin `string` türünde bir parametre ve `string` türünde bir dönüş değeriyle tanımlandığını görebiliriz.
 
-#### Go ve PHP/C Arasında Tür Dengeleme
+#### Go ve PHP/C arasında tür dengeleme
 
 Go işleviniz doğrudan bir PHP dizesini parametre olarak kabul edemez. Onu bir Go dizesine dönüştürmeniz gerekir. Neyse ki, FrankenPHP, oluşturucu yaklaşımında gördüğümüz gibi, PHP dizeleri ve Go dizeleri arasındaki dönüşümü yönetmek için yardımcı işlevler sağlar.
 
@@ -841,7 +841,7 @@ PHP_FUNCTION(go_upper)
 
 Yapılacak tek bir şey kaldı: `go_upper` işlevini Go'da uygulamak.
 
-#### Go İşlevini Uygula
+#### Go işlevini uygula
 
 Go işlevimiz parametre olarak bir `*C.zend_string` alacak, FrankenPHP'nin yardımcı işlevini kullanarak onu bir Go dizesine dönüştürecek, işleyecek ve sonucu yeni bir `*C.zend_string` olarak döndürecektir. Yardımcı işlevler, tüm bellek yönetimi ve dönüştürme karmaşıklığını bizim için halleder.
 
@@ -875,7 +875,7 @@ FrankenPHP'nin yardımcı işlevleri, PHP'nin `zend_string` formatı ile Go dize
 >
 > Bu örnekte herhangi bir hata işleme yapmıyoruz, ancak Go işlevlerinizde kullanmadan önce işaretçilerin `nil` olmadığını ve verilerin geçerli olduğunu her zaman kontrol etmelisiniz.
 
-### Uzantıyı FrankenPHP'ye Entegre Etme
+### Uzantıyı FrankenPHP'ye entegre etme
 
 Uzantımız artık derlenmeye ve FrankenPHP'ye entegre edilmeye hazır. Bunu yapmak için, FrankenPHP'yi nasıl derleyeceğinizi öğrenmek üzere FrankenPHP [derleme dokümantasyonuna](compile.md) bakın. Modülü `--with` bayrağını kullanarak ekleyin ve modülünüzün yolunu işaret edin:
 
@@ -891,7 +891,7 @@ xcaddy build \
 
 İşte bu kadar! Uzantınız artık FrankenPHP'ye entegre edilmiştir ve PHP kodunuzda kullanılabilir.
 
-### Uzantınızı Test Etme
+### Uzantınızı test etme
 
 Uzantınızı FrankenPHP'ye entegre ettikten sonra, uyguladığınız işlevler için örnekler içeren bir `index.php` dosyası oluşturabilirsiniz:
 

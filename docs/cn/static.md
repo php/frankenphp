@@ -91,7 +91,7 @@ docker buildx bake \
 
 参见：[自定义构建](#自定义构建)
 
-### GitHub Token
+### GitHub token
 
 如果遇到了 GitHub API 速率限制，请在 `GITHUB_TOKEN` 的环境变量中设置 GitHub Personal Access Token：
 

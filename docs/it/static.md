@@ -18,7 +18,7 @@ FrankenPHP supporta anche [l'incorporamento dell'app PHP nel file binario static
 
 Forniamo immagini Docker per creare binari Linux statici:
 
-### Build basata su Musl, completamente statica
+### Build basata su musl, completamente statica
 
 Per un file binario completamente statico che viene eseguito su qualsiasi distribuzione Linux senza dipendenze, ma non supporta il caricamento dinamico delle estensioni:
 

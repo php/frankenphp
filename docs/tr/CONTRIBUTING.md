@@ -1,6 +1,6 @@
-# Katkıda Bulunmak
+# Katkıda bulunmak
 
-## PHP Derleme
+## PHP derleme
 
 ### Docker ile (Linux)
 
@@ -82,7 +82,7 @@ Sunucu `127.0.0.1:8080` adresini dinliyor:
 curl -v http://127.0.0.1:8080/phpinfo.php
 ```
 
-## Docker İmajlarını Yerel Olarak Oluşturma
+## Docker imajlarını yerel olarak oluşturma
 
 Bake (pişirme) planını yazdırın:
 
@@ -108,7 +108,7 @@ FrankenPHP imajlarını arm64 ve amd64 için sıfırdan oluşturun ve Docker Hub
 docker buildx bake -f docker-bake.hcl --pull --no-cache --push
 ```
 
-## Statik Derlemelerle Segmentasyon Hatalarında Hata Ayıklama
+## Statik derlemelerle segmentasyon hatalarında hata ayıklama
 
 1. FrankenPHP binary dosyasının hata ayıklama sürümünü GitHub'dan indirin veya hata ayıklama seçeneklerini kullanarak özel statik derlemenizi oluşturun:
 
@@ -134,7 +134,7 @@ docker buildx bake -f docker-bake.hcl --pull --no-cache --push
 7. GDB kabuğuna `bt` yazın
 8. Çıktıyı kopyalayın
 
-## GitHub Eylemlerinde Segmentasyon Hatalarında Hata Ayıklama
+## GitHub eylemlerinde segmentasyon hatalarında hata ayıklama
 
 1. `.github/workflows/tests.yml` dosyasını açın
 2. PHP hata ayıklama seçeneklerini etkinleştirin
@@ -181,7 +181,7 @@ docker buildx bake -f docker-bake.hcl --pull --no-cache --push
 
 9. Hata düzeltildiğinde, tüm bu değişiklikleri geri alın
 
-## Misc Dev Resources
+## Misc dev resources
 
 - [uWSGI içine PHP gömme](https://github.com/unbit/uwsgi/blob/master/plugins/php/php_plugin.c)
 - [NGINX Unit'te PHP gömme](https://github.com/nginx/unit/blob/master/src/nxt_php_sapi.c)
@@ -193,12 +193,12 @@ docker buildx bake -f docker-bake.hcl --pull --no-cache --push
 - [Mac'te PHP gömme](https://gist.github.com/jonnywang/61427ffc0e8dde74fff40f479d147db4)
 - [SDL bağları](https://pkg.go.dev/github.com/veandco/go-sdl2@v0.4.21/sdl#Main)
 
-## Docker ile İlgili Kaynaklar
+## Docker ile ilgili kaynaklar
 
 - [Pişirme (bake) dosya tanımı](https://docs.docker.com/build/customize/bake/file-definition/)
 - [`docker buildx build`](https://docs.docker.com/engine/reference/commandline/buildx_build/)
 
-## Faydalı Komut
+## Faydalı komut
 
 ```console
 apk add strace util-linux gdb

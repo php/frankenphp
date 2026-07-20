@@ -203,7 +203,7 @@ func process_data_packed(arr *C.zend_array) unsafe.Pointer {
 - **ネストされた配列** - 配列はネストでき、サポートされているすべての型（`int64`、`float64`、`string`、`bool`、`nil`、`AssociativeArray`、`map[string]any`、`[]any`）を自動的に変換します
 - **オブジェクトはサポートされていません** - 現在、スカラー型と配列のみが値として使用できます。オブジェクトを提供すると、PHP配列では`null`値になります。
 
-##### 利用可能なメソッド：PackedとAssociative
+##### 利用可能なメソッド：packedとassociative
 
 - `frankenphp.PHPAssociativeArray(arr frankenphp.AssociativeArray) unsafe.Pointer` - キーと値のペアを持つ順序付けられたPHP配列に変換
 - `frankenphp.PHPMap(arr map[string]any) unsafe.Pointer` - マップを順序なしのキーと値のペアを持つPHP配列に変換
@@ -806,7 +806,7 @@ static const zend_function_entry ext_functions[] = {
 
 この出力から、`go_upper`関数が`string`型の引数を1つ受け取り、`string`型の戻り値を返すことが定義されているのがわかります。
 
-#### GoとPHP/C間の型変換（Type Juggling）
+#### GoとPHP/C間の型変換（type juggling）
 
 Go関数はPHPの文字列を引数として直接受け取ることはできません。そのためPHPの文字列をGoの文字列へ変換する必要があります。幸いなことに、FrankenPHPは、ジェネレーターアプローチで見たものと同様に、PHP文字列とGo文字列間の変換を処理するヘルパー関数を提供しています。
 

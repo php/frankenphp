@@ -70,7 +70,7 @@ PHP:
 - PHP uzantıları: yüklenemez, bunları doğrudan ikili dosyaya dahil edin
 - [PHP kaynak kodu](https://github.com/php/php-src/) ile birlikte verilen `php.ini-production` veya `php.ini-development` dosyalarından birini kopyalayın.
 
-## Caddyfile Konfigürasyonu
+## Caddyfile konfigürasyonu
 
 PHP uygulamanızı sunmak için site blokları içinde `php_server` veya `php` [HTTP yönergeleri](https://caddyserver.com/docs/caddyfile/concepts#directives) kullanılabilir.
 
@@ -191,7 +191,7 @@ php_server [<matcher>] {
 }
 ```
 
-### Dosya Değişikliklerini İzleme
+### Dosya değişikliklerini izleme
 
 Workers yalnızca uygulamanızı bir kez başlatır ve bellekte tutar, bu nedenle PHP dosyalarınızdaki herhangi bir değişiklik hemen yansımaz.
 
@@ -233,7 +233,7 @@ Eğer `watch` dizini belirtilmezse, FrankenPHP sürecinin başlatıldığı dizi
 
 Dosya izleyici [e-dant/watcher](https://github.com/e-dant/watcher) üzerine kuruludur.
 
-## İşçiyi Yola Eşleştirme
+## İşçiyi yola eşleştirme
 
 Geleneksel PHP uygulamalarında, betikler her zaman public dizininde bulunur. Bu, diğer tüm PHP betikleri gibi ele alınan işçi betikleri için de geçerlidir. İşçi betiğini public dizininin dışına koymak isterseniz, bunu `match` yönergesi aracılığıyla yapabilirsiniz.
 
@@ -252,7 +252,7 @@ Geleneksel PHP uygulamalarında, betikler her zaman public dizininde bulunur. Bu
 }
 ```
 
-## Ortam Değişkenleri
+## Ortam değişkenleri
 
 Aşağıdaki ortam değişkenleri `Caddyfile` içinde değişiklik yapmadan Caddy yönergelerini entegre etmek için kullanılabilir:
 
@@ -288,7 +288,7 @@ PHP yapılandırmasını `Caddyfile` içindeki `php_ini` yönergesini kullanarak
 }
 ```
 
-### HTTPS'i Devre Dışı Bırakma
+### HTTPS'i devre dışı bırakma
 
 Varsayılan olarak, FrankenPHP tüm ana bilgisayar adları için (localhost dahil) HTTPS'i otomatik olarak etkinleştirir. HTTPS'i devre dışı bırakmak isterseniz (örneğin bir geliştirme ortamında), `SERVER_NAME` ortam değişkenini `http://` veya `:80` olarak ayarlayabilirsiniz:
 
@@ -296,7 +296,7 @@ Alternatif olarak, [Caddy belgelerinde](https://caddyserver.com/docs/automatic-h
 
 Eğer `localhost` ana bilgisayar adı yerine `127.0.0.1` IP adresiyle HTTPS kullanmak isterseniz, lütfen [bilinen sorunlar](known-issues.md#using-https127001-with-docker) bölümünü okuyun.
 
-### Tam Çift Yönlü (HTTP/1)
+### Tam çift yönlü (HTTP/1)
 
 HTTP/1.x kullanırken, tüm gövde okunmadan önce bir yanıt yazmaya izin vermek için tam çift yönlü modun etkinleştirilmesi istenebilir. (örneğin: [Mercure](mercure.md), WebSocket, Sunucu Tarafından Gönderilen Olaylar vb.)
 
@@ -323,7 +323,7 @@ CADDY_GLOBAL_OPTIONS="servers {
 
 Bu ayar hakkında daha fazla bilgiyi [Caddy belgelerinde](https://caddyserver.com/docs/caddyfile/options#enable-full-duplex) bulabilirsiniz.
 
-## Hata Ayıklama Modunu Etkinleştirin
+## Hata ayıklama modunu etkinleştirin
 
 Docker imajını kullanırken, hata ayıklama modunu etkinleştirmek için `CADDY_GLOBAL_OPTIONS` ortam değişkenini `debug` olarak ayarlayın:
 
@@ -334,7 +334,7 @@ docker run -v $PWD:/app/public \
     dunglas/frankenphp
 ```
 
-## Shell Completion
+## Shell completion
 
 FrankenPHP, Bash, Zsh, Fish ve PowerShell için yerleşik kabuk tamamlama desteği sağlar. Bu, tüm komutlar ( `php-server`, `php-cli` ve `extension-init` gibi özel komutlar dahil) ve bunların bayrakları için otomatik tamamlama sağlar.
 

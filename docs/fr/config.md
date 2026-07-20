@@ -262,7 +262,7 @@ et transmettra sinon la requête au worker correspondant au modèle de chemin.
 }
 ```
 
-## Redémarrage des Threads après un certain nombre de requêtes (Expérimental)
+## Redémarrage des threads après un certain nombre de requêtes (expérimental)
 
 FrankenPHP peut redémarrer automatiquement les threads PHP après qu'ils aient géré un certain nombre de requêtes.
 Lorsqu'un thread atteint la limite, il est entièrement redémarré,
@@ -325,7 +325,7 @@ Alternativement, vous pouvez utiliser toutes les autres méthodes décrites dans
 
 Si vous souhaitez utiliser HTTPS avec l'adresse IP `127.0.0.1` au lieu du nom d'hôte `localhost`, veuillez lire la section [problèmes connus](known-issues.md#using-https127001-with-docker).
 
-### Full Duplex (HTTP/1)
+### Full duplex (HTTP/1)
 
 Lors de l'utilisation de HTTP/1.x, il peut être souhaitable d'activer le mode full-duplex pour permettre l'écriture d'une réponse avant que le corps entier
 n'ait été lu. (par exemple : [Mercure](mercure.md), WebSocket, Server-Sent Events, etc.)
@@ -364,7 +364,7 @@ docker run -v $PWD:/app/public \
     dunglas/frankenphp
 ```
 
-## Autocomplétion Shell
+## Autocomplétion shell
 
 FrankenPHP fournit un support d'autocomplétion intégré pour Bash, Zsh, Fish et PowerShell. Cela permet l'autocomplétion de toutes les commandes (y compris les commandes personnalisées comme `php-server`, `php-cli` et `extension-init`) ainsi que leurs options.
 
