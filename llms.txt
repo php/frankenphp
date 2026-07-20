@@ -25,6 +25,7 @@ This index points AI agents and crawlers at the canonical English documentation.
 - [FrankenPHP Worker Mode](https://frankenphp.dev/docs/worker/): supervisor configuration, restart policies, and integration with Symfony Runtime and Laravel Octane.
 - [Extension Workers](https://frankenphp.dev/docs/extension-workers/): dedicated PHP thread pool from a Go extension for queues, schedulers, and event listeners.
 - [Writing PHP Extensions in Go](https://frankenphp.dev/docs/extensions/): extension generator, types API, calling PHP from Go, classes, methods, and constants.
+- [Use as a Go library](https://frankenphp.dev/docs/library/): embed PHP in any Go program, serve scripts through net/http, and scope workers to server instances.
 
 ## Frameworks
 
