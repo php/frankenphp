@@ -15,8 +15,17 @@ import (
 	"github.com/dunglas/frankenphp"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 )
+
+// h2cServer builds an HTTP server that speaks cleartext HTTP/2 (h2c) using the
+// stdlib Protocols field, so a slow-body test drives the SetReadDeadline path
+// that only HTTP/2 exercises.
+func h2cServer(handler http.HandlerFunc) *http.Server {
+	protocols := new(http.Protocols)
+	protocols.SetUnencryptedHTTP2(true)
+
+	return &http.Server{Handler: handler, Protocols: protocols}
+}
 
 // TestRequestBodyTimeout proves that WithRequestBodyTimeout bounds a slow-POST
 // client: it announces a large Content-Length, then stalls without sending the
@@ -87,8 +96,7 @@ func TestRequestBodyTimeoutHTTP2(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 
-	h2s := &http2.Server{}
-	srv := &http.Server{Handler: h2c.NewHandler(http.HandlerFunc(handler), h2s)}
+	srv := h2cServer(handler)
 	go func() { _ = srv.Serve(ln) }()
 	defer func() { _ = srv.Close() }()
 
@@ -149,8 +157,7 @@ func TestFinishRequestThenReadBodyHTTP2(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 
-	h2s := &http2.Server{}
-	srv := &http.Server{Handler: h2c.NewHandler(http.HandlerFunc(handler), h2s)}
+	srv := h2cServer(handler)
 	go func() { _ = srv.Serve(ln) }()
 	defer func() { _ = srv.Close() }()
 
