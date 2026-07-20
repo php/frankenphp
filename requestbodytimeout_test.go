@@ -17,14 +17,33 @@ import (
 	"golang.org/x/net/http2"
 )
 
-// h2cServer builds an HTTP server that speaks cleartext HTTP/2 (h2c) using the
-// stdlib Protocols field, so a slow-body test drives the SetReadDeadline path
-// that only HTTP/2 exercises.
-func h2cServer(handler http.HandlerFunc) *http.Server {
+// newH2CServer starts a cleartext HTTP/2 (h2c) server for handler and returns
+// its address and a matching client. h2c drives the SetReadDeadline path that
+// only HTTP/2 exercises. The listener and server are closed via t.Cleanup.
+func newH2CServer(t *testing.T, handler http.HandlerFunc) (addr string, client *http.Client) {
+	t.Helper()
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+
 	protocols := new(http.Protocols)
 	protocols.SetUnencryptedHTTP2(true)
+	srv := &http.Server{Handler: handler, Protocols: protocols}
 
-	return &http.Server{Handler: handler, Protocols: protocols}
+	go func() { _ = srv.Serve(ln) }()
+	t.Cleanup(func() {
+		_ = srv.Close()
+		_ = ln.Close()
+	})
+
+	client = &http.Client{Transport: &http2.Transport{
+		AllowHTTP: true,
+		DialTLSContext: func(_ context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
+			return net.Dial(network, addr)
+		},
+	}}
+
+	return ln.Addr().String(), client
 }
 
 // TestRequestBodyTimeout proves that WithRequestBodyTimeout bounds a slow-POST
@@ -93,26 +112,14 @@ func TestRequestBodyTimeoutHTTP2(t *testing.T) {
 		require.NoError(t, frankenphp.ServeHTTP(w, req))
 	}
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-
-	srv := h2cServer(handler)
-	go func() { _ = srv.Serve(ln) }()
-	defer func() { _ = srv.Close() }()
-
-	client := &http.Client{Transport: &http2.Transport{
-		AllowHTTP: true,
-		DialTLSContext: func(_ context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
-			return net.Dial(network, addr)
-		},
-	}}
+	addr, client := newH2CServer(t, handler)
 
 	// A body that never sends data: the server blocks in Body.Read until the
 	// idle timeout fires. Close the writer once the request returns.
 	pr, pw := io.Pipe()
 	defer func() { _ = pw.Close() }()
 
-	req, err := http.NewRequest(http.MethodPost, "http://"+ln.Addr().String()+"/read-input.php", pr)
+	req, err := http.NewRequest(http.MethodPost, "http://"+addr+"/read-input.php", pr)
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/octet-stream")
 
@@ -154,21 +161,9 @@ func TestFinishRequestThenReadBodyHTTP2(t *testing.T) {
 		require.NoError(t, frankenphp.ServeHTTP(w, req))
 	}
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
+	addr, client := newH2CServer(t, handler)
 
-	srv := h2cServer(handler)
-	go func() { _ = srv.Serve(ln) }()
-	defer func() { _ = srv.Close() }()
-
-	client := &http.Client{Transport: &http2.Transport{
-		AllowHTTP: true,
-		DialTLSContext: func(_ context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
-			return net.Dial(network, addr)
-		},
-	}}
-
-	req, err := http.NewRequest(http.MethodPost, "http://"+ln.Addr().String()+"/finish-then-read-input.php", strings.NewReader("hello world"))
+	req, err := http.NewRequest(http.MethodPost, "http://"+addr+"/finish-then-read-input.php", strings.NewReader("hello world"))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/octet-stream")
 
