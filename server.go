@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync/atomic"
 
 	"github.com/dunglas/frankenphp/internal/fastabs"
 )
@@ -15,12 +16,18 @@ type Server struct {
 	root                      string
 	splitPath                 []string
 	env                       PreparedEnv
-	logger                    *slog.Logger
 	workers                   []*worker
 	workersByPath             map[string]*worker
 	workersWithRequestMatcher []*worker
 	workerOpts                []workerOpt
-	isRegistered              bool
+
+	// registered while FrankenPHP runs with this server; read by concurrent
+	// ServeHTTP calls while Init()/Shutdown() flip it, hence atomic
+	isRegistered atomic.Bool
+
+	// atomic for the same reason: the fallback server's logger is replaced
+	// at registration time while in-flight requests may read it
+	logger atomic.Pointer[slog.Logger]
 }
 
 var (
@@ -34,18 +41,18 @@ var (
 
 func registerServers(newServers []*Server) {
 	servers = newServers
-	fallbackServer.isRegistered = true
-	fallbackServer.logger = globalLogger
+	fallbackServer.logger.Store(globalLogger)
+	fallbackServer.isRegistered.Store(true)
 	for i, s := range servers {
-		s.isRegistered = true
+		s.isRegistered.Store(true)
 		s.idx = i
 	}
 }
 
 func unregisterServers() {
-	fallbackServer.isRegistered = false
+	fallbackServer.isRegistered.Store(false)
 	for _, server := range servers {
-		server.isRegistered = false
+		server.isRegistered.Store(false)
 	}
 }
 
@@ -63,10 +70,14 @@ func NewServer(root string, splitPath []string, env map[string]string, logger *s
 		root:          root,
 		splitPath:     splitPath,
 		env:           PrepareEnv(env),
-		logger:        logger,
 		workersByPath: make(map[string]*worker),
 		workerOpts:    make([]workerOpt, 0),
 	}
+
+	if logger == nil {
+		logger = globalLogger
+	}
+	s.logger.Store(logger)
 
 	if len(s.splitPath) == 0 {
 		s.splitPath = []string{".php"}
@@ -74,10 +85,6 @@ func NewServer(root string, splitPath []string, env map[string]string, logger *s
 
 	if s.env == nil {
 		s.env = PrepareEnv(nil)
-	}
-
-	if s.logger == nil {
-		s.logger = globalLogger
 	}
 
 	return s, nil
@@ -102,7 +109,7 @@ func (s *Server) addWorker(w *worker) error {
 // The request will be scoped to the server instance that was registered via WithServer().
 // Otherwise, it is equivalent to calling ServeHTTP.
 func (s *Server) ServeHTTP(responseWriter http.ResponseWriter, request *http.Request, opts ...RequestOption) error {
-	if !s.isRegistered {
+	if !s.isRegistered.Load() {
 		return ErrNotRunning
 	}
 

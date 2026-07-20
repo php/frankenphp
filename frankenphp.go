@@ -57,7 +57,7 @@ var (
 	contextKey   = contextKeyStruct{}
 	serverHeader = []string{"FrankenPHP"}
 
-	isRunning        bool
+	isRunning        atomic.Bool
 	onServerShutdown []func()
 
 	// Set default values to make Shutdown() idempotent
@@ -240,10 +240,9 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 
 // Init starts the PHP runtime and the configured workers.
 func Init(options ...Option) error {
-	if isRunning {
+	if !isRunning.CompareAndSwap(false, true) {
 		return ErrAlreadyStarted
 	}
-	isRunning = true
 
 	// Ignore all SIGPIPE signals to prevent weird issues with systemd: https://github.com/php/frankenphp/issues/1020
 	// Docker/Moby has a similar hack: https://github.com/moby/moby/blob/d828b032a87606ae34267e349bf7f7ccb1f6495a/cmd/dockerd/docker.go#L87-L90
@@ -367,7 +366,7 @@ func Init(options ...Option) error {
 
 // Shutdown stops the workers and the PHP runtime.
 func Shutdown() {
-	if !isRunning {
+	if !isRunning.Load() {
 		return
 	}
 
@@ -387,7 +386,7 @@ func Shutdown() {
 		_ = os.RemoveAll(EmbeddedAppPath)
 	}
 
-	isRunning = false
+	isRunning.Store(false)
 	if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
 		globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "FrankenPHP shut down")
 	}
