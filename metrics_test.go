@@ -10,13 +10,34 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	totalThreadsMetricName      = "frankenphp_total_threads"
+	initialTotalThreadsMetric   = 3
+	reconfiguredThreadsMetric   = 2
+	expectedTotalThreadsMetrics = `
+		# HELP frankenphp_total_threads Total number of PHP threads
+		# TYPE frankenphp_total_threads gauge
+		frankenphp_total_threads 2
+	`
+)
+
 func createPrometheusMetrics() *PrometheusMetrics {
 	return &PrometheusMetrics{
 		registry:     prometheus.NewRegistry(),
-		totalThreads: prometheus.NewCounter(prometheus.CounterOpts{Name: "frankenphp_total_threads"}),
+		totalThreads: prometheus.NewGauge(prometheus.GaugeOpts{Name: "frankenphp_total_threads"}),
 		busyThreads:  prometheus.NewGauge(prometheus.GaugeOpts{Name: "frankenphp_busy_threads"}),
 		queueDepth:   prometheus.NewGauge(prometheus.GaugeOpts{Name: "frankenphp_queue_depth"}),
 	}
+}
+
+func TestPrometheusMetrics_TotalThreadsReportsCurrentValue(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := NewPrometheusMetrics(registry)
+
+	m.TotalThreads(initialTotalThreadsMetric)
+	m.TotalThreads(reconfiguredThreadsMetric)
+
+	require.NoError(t, testutil.GatherAndCompare(registry, strings.NewReader(expectedTotalThreadsMetrics), totalThreadsMetricName))
 }
 
 func TestPrometheusMetrics_TotalWorkers(t *testing.T) {
