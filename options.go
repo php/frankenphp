@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"time"
 )
 
@@ -32,6 +33,7 @@ type opt struct {
 	maxWaitTime time.Duration
 	maxIdleTime time.Duration
 	maxRequests int
+	servers     []*Server
 }
 
 type workerOpt struct {
@@ -44,12 +46,14 @@ type workerOpt struct {
 	env                    PreparedEnv
 	requestOptions         []RequestOption
 	watch                  []string
+	matchRequest           func(*http.Request) bool
 	maxConsecutiveFailures int
 	extensionWorkers       *extensionWorkers
 	onThreadReady          func(int)
 	onThreadShutdown       func(int)
 	onServerStartup        func()
 	onServerShutdown       func()
+	server                 *Server
 }
 
 // WithContext sets the main context to use.
@@ -212,6 +216,26 @@ func WithWorkerWatchMode(watch []string) WorkerOption {
 	}
 }
 
+// WithWorkerMatcher sets a request matcher for this worker
+// if the matcher returns true, the worker will be used to handle the request
+// if no request matcher is set, matching happens only by path (filename == root + request path)
+func WithWorkerMatcher(matcherFunc func(*http.Request) bool) WorkerOption {
+	return func(w *workerOpt) error {
+		w.matchRequest = matcherFunc
+		return nil
+	}
+}
+
+// WithWorkerServerScope scopes the worker to a server instance.
+// Only requests that are handled by the server instance will reach the worker.
+func WithWorkerServerScope(s *Server) WorkerOption {
+	return func(w *workerOpt) error {
+		w.server = s
+
+		return nil
+	}
+}
+
 // WithWorkerMaxFailures sets the maximum number of consecutive failures before panicking
 func WithWorkerMaxFailures(maxFailures int) WorkerOption {
 	return func(w *workerOpt) error {
@@ -261,6 +285,16 @@ func WithWorkerOnServerShutdown(f func()) WorkerOption {
 func withExtensionWorkers(w *extensionWorkers) WorkerOption {
 	return func(wo *workerOpt) error {
 		wo.extensionWorkers = w
+
+		return nil
+	}
+}
+
+// WithServer starts FrankenPHP with the given Server instance.
+// After registering, it will be possible to call Server.ServeHTTP()
+func WithServer(s *Server) Option {
+	return func(o *opt) error {
+		o.servers = append(o.servers, s)
 
 		return nil
 	}

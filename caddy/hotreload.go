@@ -49,7 +49,12 @@ func (f *FrankenPHPModule) configureHotReload(app *FrankenPHPApp) error {
 	}
 
 	app.opts = append(app.opts, frankenphp.WithHotReload(f.HotReload.Topic, f.mercureHub, f.HotReload.Watch))
-	f.preparedEnv["FRANKENPHP_HOT_RELOAD\x00"] = "/.well-known/mercure?topic=" + url.QueryEscape(f.HotReload.Topic)
+
+	// add the hot reload to the env variables
+	if f.Env == nil {
+		f.Env = make(map[string]string)
+	}
+	f.Env["FRANKENPHP_HOT_RELOAD"] = "/.well-known/mercure?topic=" + url.QueryEscape(f.HotReload.Topic)
 
 	return nil
 }

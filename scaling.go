@@ -35,13 +35,13 @@ var (
 )
 
 func initAutoScaling(mainThread *phpMainThread) {
+	if mainThread.maxThreads <= mainThread.numThreads {
+		return
+	}
+
 	// reused across reloads so queued requests aren't orphaned on a stale channel
 	if scaleChan == nil {
 		scaleChan = make(chan *frankenPHPContext)
-	}
-
-	if mainThread.maxThreads <= mainThread.numThreads {
-		return
 	}
 
 	done := mainThread.done

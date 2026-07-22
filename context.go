@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -16,13 +17,14 @@ import (
 type frankenPHPContext struct {
 	mercureContext
 
-	documentRoot    string
-	splitPath       []string
-	env             PreparedEnv
-	logger          *slog.Logger
-	request         *http.Request
-	originalRequest *http.Request
-	worker          *worker
+	ctx          context.Context
+	documentRoot string
+	splitPath    []string
+	env          PreparedEnv
+	logger       *slog.Logger
+	request      *http.Request
+	worker       *worker
+	server       *Server
 
 	// idle timeout per body read; zero disables it
 	requestBodyTimeout time.Duration
@@ -45,24 +47,6 @@ type frankenPHPContext struct {
 	startedAt time.Time
 }
 
-type contextHolder struct {
-	ctx               context.Context
-	frankenPHPContext *frankenPHPContext
-}
-
-// fromContext extracts the frankenPHPContext from a context.
-func fromContext(ctx context.Context) (fctx *frankenPHPContext, ok bool) {
-	fctx, ok = ctx.Value(contextKey).(*frankenPHPContext)
-	return
-}
-
-func newFrankenPHPContext() *frankenPHPContext {
-	return &frankenPHPContext{
-		done:      make(chan any),
-		startedAt: time.Now(),
-	}
-}
-
 // NewRequestWithContext creates a new FrankenPHP request context.
 //
 // FrankenPHP does not strip request headers whose name contains an underscore.
@@ -74,8 +58,23 @@ func newFrankenPHPContext() *frankenPHPContext {
 // you explicitly need (and whitelist) them. The Caddy-based server and reverse
 // proxies such as nginx (underscores_in_headers off) already do this.
 func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Request, error) {
-	fc := newFrankenPHPContext()
-	fc.request = r
+	c := context.WithValue(r.Context(), contextKey, opts)
+
+	return r.WithContext(c), nil
+}
+
+func newContextFromRequest(request *http.Request, responseWriter http.ResponseWriter, s *Server, opts ...RequestOption) (*frankenPHPContext, error) {
+	fc := &frankenPHPContext{
+		ctx:            request.Context(),
+		done:           make(chan any),
+		startedAt:      time.Now(),
+		server:         s,
+		splitPath:      s.splitPath,
+		logger:         s.logger.Load(),
+		request:        request,
+		documentRoot:   s.root,
+		responseWriter: responseWriter,
+	}
 
 	for _, o := range opts {
 		if err := o(fc); err != nil {
@@ -83,8 +82,14 @@ func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Reques
 		}
 	}
 
-	if fc.logger == nil {
-		fc.logger = globalLogger
+	// assign a worker directly if it has a request matcher
+	if fc.worker == nil {
+		for _, w := range s.workersWithRequestMatcher {
+			if w.matchRequest(request) {
+				fc.worker = w
+				break
+			}
+		}
 	}
 
 	if fc.documentRoot == "" {
@@ -98,30 +103,73 @@ func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Reques
 		}
 	}
 
+	// if no originalRequest was passed, use the URI from the actual request
+	// when using Caddy's http module, the original unchanged uri will be used here
+	// request.URL is often already rewritten to match a PHP script path
+	if fc.requestURI == "" {
+		fc.requestURI = fc.request.URL.RequestURI()
+	}
+
 	splitCgiPath(fc)
 
-	fc.requestURI = r.URL.RequestURI()
-
-	c := context.WithValue(r.Context(), contextKey, fc)
-
-	return r.WithContext(c), nil
+	return fc, nil
 }
 
-// newDummyContext creates a fake context from a request path
-func newDummyContext(requestPath string, opts ...RequestOption) (*frankenPHPContext, error) {
-	r, err := http.NewRequestWithContext(globalCtx, http.MethodGet, requestPath, nil)
+// newWorkerDummyContext creates a context for worker startup
+func newWorkerDummyContext(w *worker) (*frankenPHPContext, error) {
+	r, err := http.NewRequestWithContext(globalCtx, http.MethodGet, filepath.Base(w.fileName), nil)
 	if err != nil {
 		return nil, err
 	}
 
-	fr, err := NewRequestWithContext(r, opts...)
-	if err != nil {
-		return nil, err
+	fc := &frankenPHPContext{
+		done:      make(chan any),
+		ctx:       r.Context(),
+		server:    w.server,
+		request:   r,
+		startedAt: time.Now(),
+		logger:    globalLogger,
+		worker:    w,
 	}
 
-	fc, _ := fromContext(fr.Context())
+	for _, o := range w.requestOptions {
+		if err := o(fc); err != nil {
+			return nil, err
+		}
+	}
+
+	if fc.server == nil {
+		// global worker, not associated with a server
+		fc.server = fallbackServer
+	}
+
+	splitCgiPath(fc)
 
 	return fc, nil
+}
+
+// newContextFromMessage creates a context from a message (external workers)
+func newContextFromMessage(message any, rw http.ResponseWriter, ctx context.Context, w *worker) *frankenPHPContext {
+	fc := &frankenPHPContext{
+		done:              make(chan any),
+		startedAt:         time.Now(),
+		server:            w.server,
+		worker:            w,
+		logger:            globalLogger,
+		responseWriter:    rw,
+		handlerParameters: message,
+		ctx:               ctx,
+	}
+
+	if fc.server == nil {
+		fc.server = fallbackServer
+	}
+
+	if fc.ctx == nil {
+		fc.ctx = globalCtx
+	}
+
+	return fc
 }
 
 // closeContext sends the response to the client
@@ -158,11 +206,11 @@ func (fc *frankenPHPContext) validate() error {
 
 func (fc *frankenPHPContext) clientHasClosed() bool {
 	if fc.request == nil {
-		return false
+		return false // not in HTTP context
 	}
 
 	select {
-	case <-fc.request.Context().Done():
+	case <-fc.ctx.Done():
 		return true
 	default:
 		return false

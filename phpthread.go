@@ -4,7 +4,6 @@ package frankenphp
 // #include "frankenphp.h"
 import "C"
 import (
-	"context"
 	"log/slog"
 	"runtime"
 	"sync"
@@ -19,7 +18,7 @@ import (
 type phpThread struct {
 	runtime.Pinner
 	threadIndex  int
-	requestChan  chan contextHolder
+	requestChan  chan *frankenPHPContext
 	drainChan    chan struct{}
 	handlerMu    sync.RWMutex
 	handler      threadHandler
@@ -39,7 +38,6 @@ type threadHandler interface {
 	name() string
 	beforeScriptExecution() string
 	afterScriptExecution(exitStatus int)
-	context() context.Context
 	frankenPHPContext() *frankenPHPContext
 	// drain is a hook called by drainWorkerThreads right before drainChan is
 	// closed. Handlers that need to wake up a thread parked in a blocking C
@@ -52,7 +50,7 @@ type threadHandler interface {
 func newPHPThread(threadIndex int) *phpThread {
 	return &phpThread{
 		threadIndex: threadIndex,
-		requestChan: make(chan contextHolder),
+		requestChan: make(chan *frankenPHPContext),
 		state:       state.NewThreadState(),
 	}
 }
@@ -175,19 +173,6 @@ func (thread *phpThread) transitionToNewHandler() string {
 
 	// execute beforeScriptExecution of the new handler
 	return thread.handler.beforeScriptExecution()
-}
-
-func (thread *phpThread) frankenPHPContext() *frankenPHPContext {
-	return thread.handler.frankenPHPContext()
-}
-
-func (thread *phpThread) context() context.Context {
-	if thread.handler == nil {
-		// handler can be nil when using opcache.preload
-		return globalCtx
-	}
-
-	return thread.handler.context()
 }
 
 func (thread *phpThread) name() string {

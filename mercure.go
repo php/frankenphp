@@ -20,12 +20,11 @@ type mercureContext struct {
 //export go_mercure_publish
 func go_mercure_publish(threadIndex C.uintptr_t, topics *C.struct__zval_struct, data *C.zend_string, private bool, id, typ *C.zend_string, retry uint64) (generatedID *C.zend_string, error C.short) {
 	thread := phpThreads[threadIndex]
-	ctx := thread.context()
-	fc := thread.frankenPHPContext()
+	fc := thread.handler.frankenPHPContext()
 
 	if fc.mercureHub == nil {
-		if fc.logger.Enabled(ctx, slog.LevelError) {
-			fc.logger.LogAttrs(ctx, slog.LevelError, "No Mercure hub configured")
+		if fc.logger.Enabled(fc.ctx, slog.LevelError) {
+			fc.logger.LogAttrs(fc.ctx, slog.LevelError, "No Mercure hub configured")
 		}
 
 		return nil, 1
@@ -39,7 +38,7 @@ func go_mercure_publish(threadIndex C.uintptr_t, topics *C.struct__zval_struct, 
 			Type:  GoString(unsafe.Pointer(typ)),
 		},
 		Private: private,
-		Debug:   fc.logger.Enabled(ctx, slog.LevelDebug),
+		Debug:   fc.logger.Enabled(fc.ctx, slog.LevelDebug),
 	}
 
 	zvalType := C.zval_get_type(topics)
@@ -49,8 +48,8 @@ func go_mercure_publish(threadIndex C.uintptr_t, topics *C.struct__zval_struct, 
 	case C.IS_ARRAY:
 		ts, err := GoPackedArray[string](unsafe.Pointer(*(**C.zend_array)(unsafe.Pointer(&topics.value[0]))))
 		if err != nil {
-			if fc.logger.Enabled(ctx, slog.LevelError) {
-				fc.logger.LogAttrs(ctx, slog.LevelError, "invalid topics type", slog.Any("error", err))
+			if fc.logger.Enabled(fc.ctx, slog.LevelError) {
+				fc.logger.LogAttrs(fc.ctx, slog.LevelError, "invalid topics type", slog.Any("error", err))
 			}
 
 			return nil, 1
@@ -62,9 +61,9 @@ func go_mercure_publish(threadIndex C.uintptr_t, topics *C.struct__zval_struct, 
 		panic("invalid topics type")
 	}
 
-	if err := fc.mercureHub.Publish(ctx, u); err != nil {
-		if fc.logger.Enabled(ctx, slog.LevelError) {
-			fc.logger.LogAttrs(ctx, slog.LevelError, "Unable to publish Mercure update", slog.Any("error", err))
+	if err := fc.mercureHub.Publish(fc.ctx, u); err != nil {
+		if fc.logger.Enabled(fc.ctx, slog.LevelError) {
+			fc.logger.LogAttrs(fc.ctx, slog.LevelError, "Unable to publish Mercure update", slog.Any("error", err))
 		}
 
 		return nil, 2

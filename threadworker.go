@@ -3,10 +3,8 @@ package frankenphp
 // #include "frankenphp.h"
 import "C"
 import (
-	"context"
 	"fmt"
 	"log/slog"
-	"path/filepath"
 	"time"
 	"unsafe"
 
@@ -21,9 +19,7 @@ type workerThread struct {
 	thread                  *phpThread
 	worker                  *worker
 	dummyFrankenPHPContext  *frankenPHPContext
-	dummyContext            context.Context
 	workerFrankenPHPContext *frankenPHPContext
-	workerContext           context.Context
 	isBootingScript         bool // true if the worker has not reached frankenphp_handle_request yet
 	failureCount            int  // number of consecutive startup failures
 	requestCount            int  // number of requests handled since last restart
@@ -86,13 +82,6 @@ func (handler *workerThread) frankenPHPContext() *frankenPHPContext {
 
 	return handler.dummyFrankenPHPContext
 }
-func (handler *workerThread) context() context.Context {
-	if handler.workerContext != nil {
-		return handler.workerContext
-	}
-
-	return handler.dummyContext
-}
 
 func (handler *workerThread) name() string {
 	return "Worker PHP Thread - " + handler.worker.fileName
@@ -104,31 +93,23 @@ func setupWorkerScript(handler *workerThread, worker *worker) {
 	metrics.StartWorker(worker.name)
 
 	// Create a dummy request to set up the worker
-	fc, err := newDummyContext(
-		filepath.Base(worker.fileName),
-		worker.requestOptions...,
-	)
+	fc, err := newWorkerDummyContext(worker)
 	if err != nil {
 		panic(err)
 	}
 
-	ctx := context.WithValue(globalCtx, contextKey, fc)
-
-	fc.worker = worker
 	handler.dummyFrankenPHPContext = fc
-	handler.dummyContext = ctx
 	handler.isBootingScript = true
 	handler.requestCount = 0
 
-	if globalLogger.Enabled(ctx, slog.LevelDebug) {
-		globalLogger.LogAttrs(ctx, slog.LevelDebug, "starting", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex))
+	if fc.logger.Enabled(fc.ctx, slog.LevelDebug) {
+		fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "starting", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex))
 	}
 }
 
 func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 	worker := handler.worker
 	handler.dummyFrankenPHPContext = nil
-	handler.dummyContext = nil
 
 	// if the worker request is not nil, the script might have crashed
 	// make sure to close the worker request context
@@ -136,7 +117,6 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 		handler.workerFrankenPHPContext.closeContext()
 		handler.thread.contextMu.Lock()
 		handler.workerFrankenPHPContext = nil
-		handler.workerContext = nil
 		handler.thread.contextMu.Unlock()
 	}
 
@@ -237,7 +217,7 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 
 	handler.state.MarkAsWaiting(true)
 
-	var requestCH contextHolder
+	var fc *frankenPHPContext
 	select {
 	case <-handler.thread.drainChan:
 		if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
@@ -245,22 +225,21 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 		}
 
 		return false, nil
-	case requestCH = <-handler.thread.requestChan:
-	case requestCH = <-handler.worker.requestChan:
+	case fc = <-handler.thread.requestChan:
+	case fc = <-handler.worker.requestChan:
 	}
 
 	handler.requestCount++
 	handler.thread.contextMu.Lock()
-	handler.workerContext = requestCH.ctx
-	handler.workerFrankenPHPContext = requestCH.frankenPHPContext
+	handler.workerFrankenPHPContext = fc
 	handler.thread.contextMu.Unlock()
 	handler.state.MarkAsWaiting(false)
 
-	if globalLogger.Enabled(requestCH.ctx, slog.LevelDebug) {
+	if fc.logger.Enabled(fc.ctx, slog.LevelDebug) {
 		if handler.workerFrankenPHPContext.request == nil {
-			globalLogger.LogAttrs(requestCH.ctx, slog.LevelDebug, "request handling started", slog.String("worker", handler.worker.name), slog.Int("thread", handler.thread.threadIndex))
+			fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "request handling started", slog.String("worker", handler.worker.name), slog.Int("thread", handler.thread.threadIndex))
 		} else {
-			globalLogger.LogAttrs(requestCH.ctx, slog.LevelDebug, "request handling started", slog.String("worker", handler.worker.name), slog.Int("thread", handler.thread.threadIndex), slog.String("url", handler.workerFrankenPHPContext.request.RequestURI))
+			fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "request handling started", slog.String("worker", handler.worker.name), slog.Int("thread", handler.thread.threadIndex), slog.String("url", handler.workerFrankenPHPContext.request.RequestURI))
 		}
 	}
 
@@ -297,13 +276,12 @@ func go_frankenphp_worker_handle_request_start(threadIndex C.uintptr_t) (C.bool,
 //export go_frankenphp_finish_worker_request
 func go_frankenphp_finish_worker_request(threadIndex C.uintptr_t, retval *C.zval) {
 	thread := phpThreads[threadIndex]
-	ctx := thread.context()
-	fc := ctx.Value(contextKey).(*frankenPHPContext)
+	fc := thread.handler.frankenPHPContext()
 
 	if retval != nil {
 		r, err := GoValue[any](unsafe.Pointer(retval))
-		if err != nil && globalLogger.Enabled(ctx, slog.LevelError) {
-			globalLogger.LogAttrs(ctx, slog.LevelError, "cannot convert return value", slog.Any("error", err), slog.Int("thread", thread.threadIndex))
+		if err != nil && fc.logger.Enabled(fc.ctx, slog.LevelError) {
+			fc.logger.LogAttrs(fc.ctx, slog.LevelError, "cannot convert return value", slog.Any("error", err), slog.Int("thread", thread.threadIndex))
 		}
 
 		fc.handlerReturn = r
@@ -314,14 +292,13 @@ func go_frankenphp_finish_worker_request(threadIndex C.uintptr_t, retval *C.zval
 	fc.closeContext()
 	thread.contextMu.Lock()
 	thread.handler.(*workerThread).workerFrankenPHPContext = nil
-	thread.handler.(*workerThread).workerContext = nil
 	thread.contextMu.Unlock()
 
-	if globalLogger.Enabled(ctx, slog.LevelDebug) {
+	if fc.logger.Enabled(fc.ctx, slog.LevelDebug) {
 		if fc.request == nil {
-			fc.logger.LogAttrs(ctx, slog.LevelDebug, "request handling finished", slog.String("worker", fc.worker.name), slog.Int("thread", thread.threadIndex))
+			fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "request handling finished", slog.String("worker", fc.worker.name), slog.Int("thread", thread.threadIndex))
 		} else {
-			fc.logger.LogAttrs(ctx, slog.LevelDebug, "request handling finished", slog.String("worker", fc.worker.name), slog.Int("thread", thread.threadIndex), slog.String("url", fc.request.RequestURI))
+			fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "request handling finished", slog.String("worker", fc.worker.name), slog.Int("thread", thread.threadIndex), slog.String("url", fc.request.RequestURI))
 		}
 	}
 }
@@ -331,12 +308,11 @@ func go_frankenphp_finish_worker_request(threadIndex C.uintptr_t, retval *C.zval
 //export go_frankenphp_finish_php_request
 func go_frankenphp_finish_php_request(threadIndex C.uintptr_t) {
 	thread := phpThreads[threadIndex]
-	fc := thread.frankenPHPContext()
+	fc := thread.handler.frankenPHPContext()
 
 	fc.closeContext()
 
-	ctx := thread.context()
-	if fc.logger.Enabled(ctx, slog.LevelDebug) {
-		fc.logger.LogAttrs(ctx, slog.LevelDebug, "request handling finished", slog.Int("thread", thread.threadIndex), slog.String("url", fc.request.RequestURI))
+	if fc.logger.Enabled(fc.ctx, slog.LevelDebug) {
+		fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "request handling finished", slog.Int("thread", thread.threadIndex), slog.String("url", fc.request.RequestURI))
 	}
 }

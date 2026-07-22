@@ -92,13 +92,6 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 	serverPort := reqPort
 	contentLength := request.Header.Get("Content-Length")
 
-	var requestURI string
-	if fc.originalRequest != nil {
-		requestURI = fc.originalRequest.URL.RequestURI()
-	} else {
-		requestURI = fc.requestURI
-	}
-
 	phpSelf := fc.scriptName + fc.pathInfo
 
 	C.frankenphp_register_server_vars(trackVarsArray, C.frankenphp_server_vars{
@@ -135,8 +128,8 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		server_protocol_len: C.size_t(len(request.Proto)),
 		http_host:           toUnsafeChar(request.Host),
 		http_host_len:       C.size_t(len(request.Host)),
-		request_uri:         toUnsafeChar(requestURI),
-		request_uri_len:     C.size_t(len(requestURI)),
+		request_uri:         toUnsafeChar(fc.requestURI),
+		request_uri_len:     C.size_t(len(fc.requestURI)),
 		ssl_cipher:          toUnsafeChar(sslCipher),
 		ssl_cipher_len:      C.size_t(len(sslCipher)),
 
@@ -163,26 +156,28 @@ func addHeadersToServer(ctx context.Context, request *http.Request, trackVarsArr
 	}
 }
 
-// registerPreparedEnv exposes fc.env to getenv() before any PHP code runs.
-func registerPreparedEnv(env PreparedEnv) {
-	size := C.size_t(len(env))
-	for k, v := range env {
-		C.frankenphp_add_to_prepared_env(toUnsafeChar(k), C.size_t(len(k)-1), toUnsafeChar(v), C.size_t(len(v)), size)
+// registerPreparedEnv exposes fc.env and fc.server.env to getenv() before any PHP code runs.
+func registerPreparedEnv(fc *frankenPHPContext, preparedEnvLen int) {
+	for k, v := range fc.server.env {
+		C.frankenphp_add_to_prepared_env(toUnsafeChar(k), C.size_t(len(k)-1), toUnsafeChar(v), C.size_t(len(v)), C.size_t(preparedEnvLen))
+	}
+	for k, v := range fc.env {
+		C.frankenphp_add_to_prepared_env(toUnsafeChar(k), C.size_t(len(k)-1), toUnsafeChar(v), C.size_t(len(v)), C.size_t(preparedEnvLen))
 	}
 }
 
 //export go_register_server_variables
 func go_register_server_variables(threadIndex C.uintptr_t, trackVarsArray *C.zval) {
 	thread := phpThreads[threadIndex]
-	fc := thread.frankenPHPContext()
+	fc := thread.handler.frankenPHPContext()
 
 	if fc.request != nil {
 		addKnownVariablesToServer(fc, trackVarsArray)
-		addHeadersToServer(thread.context(), fc.request, trackVarsArray)
+		addHeadersToServer(fc.ctx, fc.request, trackVarsArray)
 	}
 
 	// The Prepared Environment is registered last and can overwrite any previous values
-	if len(fc.env) != 0 {
+	if len(fc.env) != 0 || len(fc.server.env) != 0 {
 		C.frankenphp_merge_with_prepared_env(trackVarsArray)
 	}
 }
@@ -222,7 +217,13 @@ func splitCgiPath(fc *frankenPHPContext) {
 	// TODO: is it possible to delay this and avoid saving everything in the context?
 	// SCRIPT_FILENAME is the absolute path of SCRIPT_NAME
 	fc.scriptFilename = sanitizedPathJoin(fc.documentRoot, fc.scriptName)
-	fc.worker = workersByPath[fc.scriptFilename]
+
+	// see if a php_server worker or global worker matches the request path
+	// aka: root + request path == worker.filename
+	fc.worker = fc.server.workersByPath[fc.scriptFilename]
+	if fc.worker == nil {
+		fc.worker = globalWorkersByPath[fc.scriptFilename]
+	}
 }
 
 // splitPos returns the index where path should be split based on splitPath.
@@ -284,15 +285,16 @@ func splitPos(path string, splitPath []string) int {
 //export go_update_request_info
 func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) *C.char {
 	thread := phpThreads[threadIndex]
-	fc := thread.frankenPHPContext()
+	fc := thread.handler.frankenPHPContext()
 	request := fc.request
 
 	if request == nil {
 		return nil
 	}
 
-	if len(fc.env) != 0 {
-		registerPreparedEnv(fc.env)
+	preparedEnvLen := len(fc.env) + len(fc.server.env)
+	if preparedEnvLen != 0 {
+		registerPreparedEnv(fc, preparedEnvLen)
 	}
 
 	if m, ok := cStringHTTPMethods[request.Method]; ok {

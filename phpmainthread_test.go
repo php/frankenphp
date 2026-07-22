@@ -92,7 +92,7 @@ func TestTransitionAThreadBetween2DifferentWorkers(t *testing.T) {
 // try all possible handler transitions
 // takes around 200ms and is supposed to force race conditions
 func TestTransitionThreadsWhileDoingRequests(t *testing.T) {
-	t.Cleanup(Shutdown)
+	setupGlobals(t)
 
 	var (
 		isDone        atomic.Bool
@@ -236,8 +236,10 @@ func TestFinishBootingAWorkerScript(t *testing.T) {
 	convertToWorkerThread(phpThreads[0], worker)
 	phpThreads[0].state.WaitFor(state.Ready)
 
-	assert.NotNil(t, phpThreads[0].handler.(*workerThread).dummyContext)
-	assert.Nil(t, phpThreads[0].handler.(*workerThread).workerContext)
+	dummyFC := phpThreads[0].handler.(*workerThread).dummyFrankenPHPContext
+	assert.NotNil(t, dummyFC)
+	assert.NotNil(t, dummyFC.ctx)
+	assert.Nil(t, phpThreads[0].handler.(*workerThread).workerFrankenPHPContext)
 	assert.False(
 		t,
 		phpThreads[0].handler.(*workerThread).isBootingScript,
@@ -249,27 +251,27 @@ func TestFinishBootingAWorkerScript(t *testing.T) {
 }
 
 func TestReturnAnErrorIf2WorkersHaveTheSameFileName(t *testing.T) {
+	resetGlobals()
 	workers = []*worker{}
 	workersByName = map[string]*worker{}
-	workersByPath = map[string]*worker{}
+	globalWorkersByPath = map[string]*worker{}
 	w, err1 := newWorker(workerOpt{fileName: testDataPath + "/index.php"})
 	assert.NoError(t, err1)
 	workers = append(workers, w)
 	workersByName[w.name] = w
-	workersByPath[w.fileName] = w
+	globalWorkersByPath[w.fileName] = w
 	_, err2 := newWorker(workerOpt{fileName: testDataPath + "/index.php"})
 	assert.Error(t, err2, "two workers cannot have the same filename")
 }
 
 func TestReturnAnErrorIf2ModuleWorkersHaveTheSameName(t *testing.T) {
+	resetGlobals()
 	workers = []*worker{}
 	workersByName = map[string]*worker{}
-	workersByPath = map[string]*worker{}
 	w, err1 := newWorker(workerOpt{fileName: testDataPath + "/index.php", name: "workername"})
 	assert.NoError(t, err1)
 	workers = append(workers, w)
 	workersByName[w.name] = w
-	workersByPath[w.fileName] = w
 	_, err2 := newWorker(workerOpt{fileName: testDataPath + "/hello.php", name: "workername"})
 	assert.Error(t, err2, "two workers cannot have the same name")
 }
@@ -313,9 +315,9 @@ func allPossibleTransitions(worker1Path string, worker2Path string) []func(*phpT
 				thread.boot()
 			}
 		},
-		func(thread *phpThread) { convertToWorkerThread(thread, workersByPath[worker1Path]) },
+		func(thread *phpThread) { convertToWorkerThread(thread, globalWorkersByPath[worker1Path]) },
 		convertToInactiveThread,
-		func(thread *phpThread) { convertToWorkerThread(thread, workersByPath[worker2Path]) },
+		func(thread *phpThread) { convertToWorkerThread(thread, globalWorkersByPath[worker2Path]) },
 		convertToInactiveThread,
 	}
 }
@@ -380,4 +382,23 @@ func testThreadCalculationError(t *testing.T, o *opt) {
 
 	_, err := calculateMaxThreads(o)
 	assert.Error(t, err, "configuration must error")
+}
+
+func TestContextAndLoggerMustNotBeNil(t *testing.T) {
+	log, ctx := getLogger(0)
+	assert.NotNil(t, log, "logger is defined if all threads are inactive")
+	assert.NotNil(t, ctx, "context is defined if all threads are inactive")
+
+	fc := newContextFromMessage(nil, nil, nil, &worker{})
+	assert.NotNil(t, fc.logger, "logger is defined for message context")
+	assert.NotNil(t, fc.ctx, "context is defined for message context")
+
+	r := httptest.NewRequest("GET", "http://localhost/index.php", nil)
+	fc, _ = newContextFromRequest(r, nil, fallbackServer)
+	assert.NotNil(t, fc.logger, "logger is defined for request context")
+	assert.NotNil(t, fc.ctx, "context is defined for request context")
+
+	fc, _ = newWorkerDummyContext(&worker{})
+	assert.NotNil(t, fc.logger, "logger is defined for worker dummy context")
+	assert.NotNil(t, fc.ctx, "context is defined for worker dummy context")
 }

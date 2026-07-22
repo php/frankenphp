@@ -37,6 +37,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var testDataDir = ""
+
 type testOptions struct {
 	workerScript       string
 	watch              []string
@@ -148,6 +150,9 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
+	cwd, _ := os.Getwd()
+	testDataDir = cwd + strings.Clone("/testdata/")
+
 	os.Exit(m.Run())
 }
 
@@ -230,8 +235,6 @@ func TestPathInfo_worker(t *testing.T) {
 	testPathInfo(t, &testOptions{workerScript: "server-variable.php"})
 }
 func testPathInfo(t *testing.T, opts *testOptions) {
-	cwd, _ := os.Getwd()
-	testDataDir := cwd + strings.Clone("/testdata/")
 	path := strings.Clone("/server-variable.php/pathinfo")
 
 	runTest(t, func(_ func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
