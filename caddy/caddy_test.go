@@ -744,7 +744,7 @@ func TestMetrics(t *testing.T) {
 	// Check metrics
 	expectedMetrics := `
 	# HELP frankenphp_total_threads Total number of PHP threads
-	# TYPE frankenphp_total_threads counter
+	# TYPE frankenphp_total_threads gauge
 	frankenphp_total_threads ` + cpus + `
 
 	# HELP frankenphp_busy_threads Number of busy PHP threads
@@ -820,7 +820,7 @@ func TestWorkerMetrics(t *testing.T) {
 	// Check metrics
 	expectedMetrics := `
 	# HELP frankenphp_total_threads Total number of PHP threads
-	# TYPE frankenphp_total_threads counter
+	# TYPE frankenphp_total_threads gauge
 	frankenphp_total_threads ` + cpus + `
 
 	# HELP frankenphp_busy_threads Number of busy PHP threads
@@ -977,7 +977,7 @@ func TestNamedWorkerMetrics(t *testing.T) {
 	// Check metrics
 	expectedMetrics := `
 	# HELP frankenphp_total_threads Total number of PHP threads
-	# TYPE frankenphp_total_threads counter
+	# TYPE frankenphp_total_threads gauge
 	frankenphp_total_threads ` + cpus + `
 
 	# HELP frankenphp_busy_threads Number of busy PHP threads
@@ -1073,7 +1073,7 @@ func TestAutoWorkerConfig(t *testing.T) {
 	// Check metrics
 	expectedMetrics := `
 	# HELP frankenphp_total_threads Total number of PHP threads
-	# TYPE frankenphp_total_threads counter
+	# TYPE frankenphp_total_threads gauge
 	frankenphp_total_threads ` + cpus + `
 
 	# HELP frankenphp_busy_threads Number of busy PHP threads
@@ -1440,7 +1440,7 @@ func TestMultiWorkersMetrics(t *testing.T) {
 	// Check metrics
 	expectedMetrics := `
 	# HELP frankenphp_total_threads Total number of PHP threads
-	# TYPE frankenphp_total_threads counter
+	# TYPE frankenphp_total_threads gauge
 	frankenphp_total_threads ` + cpus + `
 
 	# HELP frankenphp_busy_threads Number of busy PHP threads

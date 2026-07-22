@@ -83,7 +83,7 @@ func (n nullMetrics) DequeuedRequest() {}
 
 type PrometheusMetrics struct {
 	registry           prometheus.Registerer
-	totalThreads       prometheus.Counter
+	totalThreads       prometheus.Gauge
 	busyThreads        prometheus.Gauge
 	totalWorkers       *prometheus.GaugeVec
 	busyWorkers        *prometheus.GaugeVec
@@ -258,7 +258,7 @@ func (m *PrometheusMetrics) TotalThreads(num int) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	m.totalThreads.Add(float64(num))
+	m.totalThreads.Set(float64(num))
 }
 
 func (m *PrometheusMetrics) StartRequest() {
@@ -380,7 +380,7 @@ func NewPrometheusMetrics(registry prometheus.Registerer) *PrometheusMetrics {
 
 	m := &PrometheusMetrics{
 		registry: registry,
-		totalThreads: prometheus.NewCounter(prometheus.CounterOpts{
+		totalThreads: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "frankenphp_total_threads",
 			Help: "Total number of PHP threads",
 		}),
