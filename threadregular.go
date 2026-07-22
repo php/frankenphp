@@ -156,7 +156,15 @@ func handleRequestWithRegularPHPThreads(ch contextHolder) error {
 		regularThreadMu.RUnlock()
 	}
 
-	// if no thread was available, mark the request as queued and fan it out to all threads
+	// no thread was available: drain the body so a stalled request does not
+	// hold its HTTP/2 flow-control window open while queued (see #1074)
+	if err := ch.frankenPHPContext.spoolRequestBody(); err != nil {
+		metrics.StopRequest()
+
+		return err
+	}
+
+	// mark the request as queued and fan it out to all threads
 	queuedRegularThreads.Add(1)
 	metrics.QueuedRequest()
 
