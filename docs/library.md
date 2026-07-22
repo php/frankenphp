@@ -25,7 +25,7 @@ import (
 )
 
 func main() {
-	server, err := frankenphp.NewServer("public/", nil, nil, nil)
+	server, err := frankenphp.NewServer("", "public/", nil, nil, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func main() {
 }
 ```
 
-`NewServer()` takes the document root, the split path suffixes (defaults to `[".php"]`), environment variables made available to every request, and a `*slog.Logger` (defaults to the global logger).
+`NewServer()` takes a human-readable name used to attribute workers, metrics and logs to the server (defaults to `server_<idx>` at registration when empty), the document root, the split path suffixes (defaults to `[".php"]`), environment variables made available to every request, and a `*slog.Logger` (defaults to the global logger).
 
 `Init()` starts the PHP runtime and must be called exactly once before serving requests; `Shutdown()` stops it. Calling `Server.ServeHTTP()` before `Init()` or after `Shutdown()` returns `ErrNotRunning`.
 
@@ -54,8 +54,8 @@ Several servers can be registered at once, each with its own document root, envi
 
 ```go
 // Registering two servers with separate document roots
-api, _ := frankenphp.NewServer("api/public/", nil, nil, nil)
-admin, _ := frankenphp.NewServer("admin/public/", nil, nil, nil)
+api, _ := frankenphp.NewServer("api", "api/public/", nil, nil, nil)
+admin, _ := frankenphp.NewServer("admin", "admin/public/", nil, nil, nil)
 
 err := frankenphp.Init(
 	frankenphp.WithServer(api),
@@ -71,7 +71,7 @@ Requests served through `api.ServeHTTP()` only see the configuration (and, see b
 
 ```go
 // Scoping workers to a server
-server, _ := frankenphp.NewServer("public/", nil, nil, nil)
+server, _ := frankenphp.NewServer("", "public/", nil, nil, nil)
 
 err := frankenphp.Init(
 	frankenphp.WithServer(server),
