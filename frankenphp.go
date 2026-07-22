@@ -37,7 +37,7 @@ import (
 	"time"
 	"unsafe"
 	// debug on Linux
-	//_ "github.com/ianlancetaylor/cgosymbolizer"
+	// _ "github.com/ianlancetaylor/cgosymbolizer"
 )
 
 type contextKeyStruct struct{}
@@ -657,7 +657,7 @@ func go_read_cookies(threadIndex C.uintptr_t) *C.char {
 	return C.CString(cookie)
 }
 
-// getLogger returns the logger and context savely even if phpThreads have not been created yet
+// getLogger returns the logger and context safely even if phpThreads have not been created yet
 func getLogger(threadIndex C.uintptr_t) (*slog.Logger, context.Context) {
 	if threadIndex >= C.uintptr_t(len(phpThreads)) {
 		return globalLogger, globalCtx
