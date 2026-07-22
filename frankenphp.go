@@ -131,6 +131,48 @@ type PHPConfig struct {
 	ZendMaxExecutionTimers bool
 }
 
+// EXPERIMENTAL: PHPThread exposes a PHP thread's request context.
+type PHPThread struct {
+	Request *http.Request
+	thread  *phpThread
+}
+
+// EXPERIMENTAL: IsRequestDone determines whether the request associated with the PHPThread has been closed.
+func (p *PHPThread) IsRequestDone() bool {
+	return p.thread.frankenPHPContext().isDone
+}
+
+// EXPERIMENTAL: Pin pins a Go object, preventing it from being moved or freed by the garbage
+// collector until the Pinner.Unpin method has been called.
+func (p *PHPThread) Pin(pointer any) {
+	p.thread.Pin(pointer)
+}
+
+// EXPERIMENTAL: Thread retrieves a PHP thread by its index.
+// Returns nil and false if the system is not running or no thread exists at the given index.
+func Thread(index uint) (*PHPThread, bool) {
+	if !isRunning {
+		return nil, false
+	}
+
+	if index >= uint(len(phpThreads)) {
+		return nil, false
+	}
+
+	thread := phpThreads[index]
+	if thread == nil {
+		return nil, false
+	}
+
+	fc := thread.frankenPHPContext()
+	var request *http.Request
+	if fc != nil {
+		request = fc.request
+	}
+
+	return &PHPThread{request, thread}, true
+}
+
 // Version returns infos about the PHP version.
 func Version() PHPVersion {
 	cVersion := C.frankenphp_get_version()
