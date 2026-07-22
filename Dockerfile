@@ -12,7 +12,8 @@ RUN apt-get update && \
 		libcap2-bin \
 	&& \
 	apt-get clean && \
-	rm -rf /var/lib/apt/lists/*
+	# Remove files with non-deterministic content (embedded timestamps and mtimes) to keep image digests reproducible
+	rm -rf /var/lib/apt/lists/* /var/log/apt /var/log/dpkg.log /var/log/alternatives.log /var/cache/ldconfig/aux-cache
 
 RUN set -eux; \
 	mkdir -p \
@@ -139,7 +140,9 @@ COPY --from=builder /usr/local/lib/libwatcher* /usr/local/lib/
 # fix for the file watcher on arm
 RUN apt-get install -y --no-install-recommends libstdc++6 && \
 	apt-get clean && \
-	ldconfig
+	ldconfig && \
+	# Remove files with non-deterministic content (embedded timestamps and mtimes) to keep image digests reproducible
+	rm -rf /var/log/apt /var/log/dpkg.log /var/log/alternatives.log /var/cache/ldconfig/aux-cache
 
 COPY --from=builder /usr/local/bin/frankenphp /usr/local/bin/frankenphp
 RUN setcap cap_net_bind_service=+ep /usr/local/bin/frankenphp && \

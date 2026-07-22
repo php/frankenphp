@@ -50,7 +50,12 @@ jobs:
       php85_version: ${{ steps.check.outputs.php85_version }}
       skip: ${{ steps.check.outputs.skip }}
       ref: ${{ steps.check.outputs.ref || (github.ref_type == 'tag' && github.ref_name) || (github.event_name == 'workflow_dispatch' && inputs.version) || '' }}
+      sha: ${{ steps.check.outputs.sha }}
+      source_date_epoch: ${{ steps.check.outputs.source_date_epoch }}
+      created: ${{ steps.check.outputs.created }}
       base_fingerprint: ${{ steps.check.outputs.base_fingerprint }}
+      base_fingerprints: ${{ steps.check.outputs.base_fingerprints }}
+      rebuild_variants: ${{ steps.check.outputs.rebuild_variants }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -58,7 +63,13 @@ jobs:
           persist-credentials: false
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
-      - name: Check PHP versions and base image fingerprint
+      - name: Login to DockerHub
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }} # zizmor: ignore[secrets-outside-env] TODO: drop once super-linter ships zizmor >=1.24.0, then the allowlist in zizmor.yaml takes over
+      - name: Check PHP versions and base image fingerprints
         id: check
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -70,15 +81,21 @@ jobs:
         run: |
           set -e
           METADATA="$(docker buildx bake --print | jq -c)"
+          variants="$(jq -c '.group.default.targets|map(sub("runner-|builder-"; ""))|unique' <<< "${METADATA}")"
+          # On scheduled rebuilds, only build the variants whose base images changed
+          if [[ -n "${REBUILD_VARIANTS}" && "${REBUILD_VARIANTS}" != "[]" ]]; then
+            variants="$(jq -c --argjson rebuild "${REBUILD_VARIANTS}" 'map(select(. as $v | $rebuild | index($v)))' <<< "${variants}")"
+          fi
           {
             echo metadata="${METADATA}"
-            echo variants="$(jq -c '.group.default.targets|map(sub("runner-|builder-"; ""))|unique' <<< "${METADATA}")"
+            echo variants="${variants}"
             echo platforms="$(jq -c 'first(.target[]) | .platforms' <<< "${METADATA}")"
           } >> "${GITHUB_OUTPUT}"
         env:
           SHA: ${{ github.sha }}
           VERSION: ${{ (github.ref_type == 'tag' && github.ref_name) || steps.check.outputs.ref || 'dev' }}
           PHP_VERSION: ${{ steps.check.outputs.php_version }}
+          REBUILD_VARIANTS: ${{ steps.check.outputs.rebuild_variants }}
   build:
     runs-on: ${{ startsWith(matrix.platform, 'linux/arm') && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     needs:
@@ -142,21 +159,26 @@ jobs:
             builder-${{ matrix.variant }}
             runner-${{ matrix.variant }}
           # Remove tags to prevent "can't push tagged ref [...] by digest" error
+          # Provenance attestations embed build timestamps, which would prevent reproducible images
           set: |
             *.tags=
             *.platform=${{ matrix.platform }}
+            *.attest=type=provenance,disabled=true
             ${{ fromJson(needs.prepare.outputs.push) && '' || format('builder-{0}.cache-from=type=gha,scope=builder-{0}-{1}-{2}', matrix.variant, needs.prepare.outputs.ref || github.ref, matrix.platform) }}
             ${{ fromJson(needs.prepare.outputs.push) && '' || format('builder-{0}.cache-from=type=gha,scope=refs/heads/main-builder-{0}-{1}', matrix.variant, matrix.platform) }}
             ${{ fromJson(needs.prepare.outputs.push) && '' || format('builder-{0}.cache-to=type=gha,scope=builder-{0}-{1}-{2},ignore-error=true', matrix.variant, needs.prepare.outputs.ref || github.ref, matrix.platform) }}
             ${{ fromJson(needs.prepare.outputs.push) && '' || format('runner-{0}.cache-from=type=gha,scope=runner-{0}-{1}-{2}', matrix.variant, needs.prepare.outputs.ref || github.ref, matrix.platform) }}
             ${{ fromJson(needs.prepare.outputs.push) && '' || format('runner-{0}.cache-from=type=gha,scope=refs/heads/main-runner-{0}-{1}', matrix.variant, matrix.platform) }}
             ${{ fromJson(needs.prepare.outputs.push) && '' || format('runner-{0}.cache-to=type=gha,scope=runner-{0}-{1}-{2},ignore-error=true', matrix.variant, needs.prepare.outputs.ref || github.ref, matrix.platform) }}
-            ${{ fromJson(needs.prepare.outputs.push) && format('*.output=type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME) || '' }}
+            ${{ fromJson(needs.prepare.outputs.push) && format('*.output=type=image,name={0},push-by-digest=true,name-canonical=true,push=true,rewrite-timestamp=true', env.IMAGE_NAME) || '' }}
         env:
-          SHA: ${{ github.sha }}
+          SHA: ${{ needs.prepare.outputs.sha || github.sha }}
           VERSION: ${{ (github.ref_type == 'tag' && github.ref_name) || needs.prepare.outputs.ref || 'dev' }}
           PHP_VERSION: ${{ needs.prepare.outputs.php_version }}
           BASE_FINGERPRINT: ${{ needs.prepare.outputs.base_fingerprint }}
+          BASE_FINGERPRINTS: ${{ needs.prepare.outputs.base_fingerprints }}
+          CREATED: ${{ needs.prepare.outputs.created }}
+          SOURCE_DATE_EPOCH: ${{ needs.prepare.outputs.source_date_epoch }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - # Workaround for https://github.com/actions/runner/pull/2477#issuecomment-1501003600
         name: Export metadata
