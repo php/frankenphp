@@ -33,24 +33,31 @@ type Server struct {
 }
 
 var (
-	servers        = []*Server{} // currently unused, but useful down the line
-	fallbackServer = &Server{
+	servers        []*Server
+	fallbackServer = newFallbackServer()
+)
+
+func newFallbackServer() *Server {
+	s := &Server{
 		idx:           -1,
 		workersByPath: make(map[string]*worker),
 		env:           make(map[string]string),
 	}
-)
+	s.logger.Store(globalLogger)
+
+	return s
+}
 
 func registerServers(newServers []*Server) {
 	servers = newServers
 	fallbackServer.logger.Store(globalLogger)
 	fallbackServer.isRegistered.Store(true)
 	for i, s := range servers {
-		s.isRegistered.Store(true)
 		s.idx = i
 		if s.name == "" {
 			s.name = "server_" + strconv.Itoa(i)
 		}
+		s.isRegistered.Store(true)
 	}
 }
 
