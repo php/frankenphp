@@ -269,3 +269,57 @@ func TestCreateUniqueWorkerNamesQualifiedByServer(t *testing.T) {
 	// workers without a server keep the numeric postfix behavior
 	require.Equal(t, "queue_2", app.createUniqueWorkerName(wc, ""))
 }
+
+func TestWorkerBackgroundConfig(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`
+	{
+		php_server {
+			worker {
+				name jobs
+				file ../testdata/worker-with-env.php
+				num 2
+				background
+			}
+		}
+	}`)
+	module := &FrankenPHPModule{}
+
+	require.NoError(t, module.UnmarshalCaddyfile(d))
+	require.Len(t, module.Workers, 1)
+	require.True(t, module.Workers[0].Background)
+	require.Equal(t, "jobs", module.Workers[0].Name)
+}
+
+func TestWorkerBackgroundRequiresName(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`
+	{
+		php_server {
+			worker {
+				file ../testdata/worker-with-env.php
+				background
+			}
+		}
+	}`)
+	module := &FrankenPHPModule{}
+
+	err := module.UnmarshalCaddyfile(d)
+	require.ErrorContains(t, err, `background workers must have an explicit "name"`)
+}
+
+func TestWorkerBackgroundRejectsMatch(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`
+	{
+		php_server {
+			worker {
+				name jobs
+				file ../testdata/worker-with-env.php
+				match /jobs/*
+				background
+			}
+		}
+	}`)
+	module := &FrankenPHPModule{}
+
+	err := module.UnmarshalCaddyfile(d)
+	require.ErrorContains(t, err, `"match" is not supported for background workers`)
+}

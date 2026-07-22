@@ -34,6 +34,8 @@ type worker struct {
 	onThreadShutdown       func(int)
 	queuedRequests         atomic.Int32
 	server                 *Server
+	// isBackgroundWorker marks this as a background (non-HTTP) worker
+	isBackgroundWorker bool
 }
 
 var (
@@ -67,6 +69,11 @@ func initWorkers(opts []workerOpt) error {
 		totalThreadsToStart += w.num
 		workers = append(workers, w)
 		workersByName[w.name] = w
+		// background workers never serve HTTP requests, so they stay out
+		// of the path-matching maps used to route requests to workers
+		if w.isBackgroundWorker {
+			continue
+		}
 		if w.server == nil {
 			globalWorkersByPath[w.fileName] = w
 		} else if err := w.server.addWorker(w); err != nil {
@@ -79,7 +86,11 @@ func initWorkers(opts []workerOpt) error {
 	for _, w := range workers {
 		for i := 0; i < w.num; i++ {
 			thread := getInactivePHPThread()
-			convertToWorkerThread(thread, w)
+			if w.isBackgroundWorker {
+				convertToBackgroundWorkerThread(thread, w)
+			} else {
+				convertToWorkerThread(thread, w)
+			}
 
 			workersReady.Go(func() {
 				thread.state.WaitFor(state.Ready, state.ShuttingDown, state.Done)
@@ -119,11 +130,22 @@ func newWorker(o workerOpt) (*worker, error) {
 		return nil, fmt.Errorf("worker file not found %q: %w", absFileName, err)
 	}
 
+	if o.isBackgroundWorker {
+		// the name is the script's identity (exposed via FRANKENPHP_WORKER);
+		// empty names are reserved for the catch-all workers of a future build
+		if o.name == "" {
+			return nil, fmt.Errorf("background worker %q must have an explicit name", o.fileName)
+		}
+		if o.matchRequest != nil {
+			return nil, fmt.Errorf("background worker %q cannot match requests", o.name)
+		}
+	}
+
 	if o.name == "" {
 		o.name = absFileName
 	}
 
-	if o.server == nil && globalWorkersByPath[absFileName] != nil {
+	if o.server == nil && !o.isBackgroundWorker && globalWorkersByPath[absFileName] != nil {
 		return nil, fmt.Errorf("two global workers cannot have the same filename: %q", absFileName)
 	}
 
@@ -145,7 +167,14 @@ func newWorker(o workerOpt) (*worker, error) {
 		}
 	}
 
-	o.env["FRANKENPHP_WORKER\x00"] = "1"
+	// $_SERVER['FRANKENPHP_WORKER'] is "1" for HTTP workers (existing
+	// behavior) and the worker name for background workers, so a bg
+	// script can know which declaration it runs for
+	if o.isBackgroundWorker {
+		o.env["FRANKENPHP_WORKER\x00"] = o.name
+	} else {
+		o.env["FRANKENPHP_WORKER\x00"] = "1"
+	}
 
 	w := &worker{
 		name:                   o.name,
@@ -160,6 +189,7 @@ func newWorker(o workerOpt) (*worker, error) {
 		onThreadReady:          o.onThreadReady,
 		onThreadShutdown:       o.onThreadShutdown,
 		server:                 o.server,
+		isBackgroundWorker:     o.isBackgroundWorker,
 	}
 
 	w.configureMercure(&o)

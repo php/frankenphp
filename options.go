@@ -54,6 +54,7 @@ type workerOpt struct {
 	onServerStartup        func()
 	onServerShutdown       func()
 	server                 *Server
+	isBackgroundWorker     bool
 }
 
 // WithContext sets the main context to use.
@@ -231,6 +232,20 @@ func WithWorkerMatcher(matcherFunc func(*http.Request) bool) WorkerOption {
 func WithWorkerServerScope(s *Server) WorkerOption {
 	return func(w *workerOpt) error {
 		w.server = s
+
+		return nil
+	}
+}
+
+// EXPERIMENTAL: WithWorkerBackground marks this worker as a background
+// (non-HTTP) worker. Background workers run outside the request cycle:
+// they share the PHP runtime with HTTP threads but never receive HTTP
+// requests. The script can park on the stream returned by
+// frankenphp_get_worker_handle(), which reaches EOF when FrankenPHP
+// drains the worker, to exit gracefully on shutdown or restart.
+func WithWorkerBackground() WorkerOption {
+	return func(w *workerOpt) error {
+		w.isBackgroundWorker = true
 
 		return nil
 	}

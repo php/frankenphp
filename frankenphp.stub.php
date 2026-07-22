@@ -54,3 +54,14 @@ function mercure_publish(string|array $topics, string $data = '', bool $private 
  * array<string, any> $context Values of the array will be converted to the corresponding Go type (if supported by FrankenPHP) and added to the context of the structured logs using https://pkg.go.dev/log/slog#Attr
  */
 function frankenphp_log(string $message, int $level = 0, array $context = []): void {}
+
+/**
+ * Returns a stop-signal stream for the current background worker. The
+ * stream reaches EOF when FrankenPHP drains the worker, so the script can
+ * park on stream_select() and exit its loop gracefully. Each call returns
+ * a fresh stream over the same underlying pipe. Only callable from inside
+ * a background worker.
+ *
+ * @return resource
+ */
+function frankenphp_get_worker_handle(): mixed {}
