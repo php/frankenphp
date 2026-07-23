@@ -3,6 +3,9 @@
 package watcher
 
 import (
+	"bytes"
+	"context"
+	"log/slog"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -353,6 +356,29 @@ func TestAnAssociatedEventTriggersTheWatcher(t *testing.T) {
 	go w.handle(e)
 
 	assert.Equal(t, e, (<-w.events).event)
+}
+
+func TestAcceptedEventLogsChangedPathAtDebugLevel(t *testing.T) {
+	var logs bytes.Buffer
+	previousCtx := globalCtx
+	previousLogger := globalLogger
+	globalCtx = context.Background()
+	globalLogger = slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	t.Cleanup(func() {
+		globalCtx = previousCtx
+		globalLogger = previousLogger
+	})
+
+	w := newPattern(t, "/**/*.php")
+	w.events = make(chan eventHolder, 1)
+
+	changedPath := normalizePath(t, "/path/file.php")
+	e := &watcher.Event{PathName: changedPath}
+
+	w.handle(e)
+
+	assert.Equal(t, e, (<-w.events).event)
+	assert.Contains(t, logs.String(), changedPath)
 }
 
 func relativeDir(t *testing.T, relativePath string) string {
