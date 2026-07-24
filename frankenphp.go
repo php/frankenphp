@@ -18,6 +18,9 @@ package frankenphp
 // #include <php_variables.h>
 // #include <zend_llist.h>
 // #include <SAPI.h>
+// static inline const char *frankenphp_get_build_version() {
+//   return TOSTRING(FRANKENPHP_VERSION);
+// }
 import "C"
 import (
 	"bytes"
@@ -143,6 +146,10 @@ func Version() PHPVersion {
 		C.GoString(cVersion.version),
 		int(cVersion.version_id),
 	}
+}
+
+func frankenPHPVersion() string {
+	return C.GoString(C.frankenphp_get_build_version())
 }
 
 func Config() PHPConfig {
@@ -342,7 +349,7 @@ func Init(options ...Option) error {
 	initAutoScaling(mainThread)
 
 	if globalLogger.Enabled(globalCtx, slog.LevelInfo) {
-		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "FrankenPHP started 🐘", slog.String("php_version", Version().Version), slog.Int("num_threads", mainThread.numThreads), slog.Int("max_threads", mainThread.maxThreads), slog.Int("max_requests", maxRequestsPerThread))
+		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, startupLogMessage, startupLogAttrs(Version().Version, mainThread.numThreads, mainThread.maxThreads, maxRequestsPerThread)...)
 
 		if EmbeddedAppPath != "" {
 			globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "embedded PHP app 📦", slog.String("path", EmbeddedAppPath))
