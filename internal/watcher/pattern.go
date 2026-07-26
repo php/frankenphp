@@ -11,14 +11,7 @@ import (
 	"github.com/e-dant/watcher/watcher-go"
 )
 
-const (
-	sep                           = string(filepath.Separator)
-	changedFileLogMessage         = "filesystem change detected"
-	changedFilePathLogAttr        = "path"
-	changedFileAssociatedLogAttr  = "associated_path"
-	specialWatcherEventLogMessage = "special e-dant/watcher event"
-	watcherEventLogAttr           = "event"
-)
+const sep = string(filepath.Separator)
 
 type pattern struct {
 	patternGroup *PatternGroup
@@ -123,7 +116,7 @@ func isValidEventType(effectType watcher.EffectType) bool {
 
 func isValidPathType(event *watcher.Event) bool {
 	if event.PathType == watcher.PathTypeWatcher && globalLogger != nil && globalLogger.Enabled(globalCtx, slog.LevelDebug) {
-		globalLogger.LogAttrs(globalCtx, slog.LevelDebug, specialWatcherEventLogMessage, slog.Any(watcherEventLogAttr, event))
+		globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "special e-dant/watcher event", slog.Any("event", event))
 	}
 
 	return event.PathType <= watcher.PathTypeHardLink
@@ -134,12 +127,12 @@ func logChangedFile(event *watcher.Event) {
 		return
 	}
 
-	attrs := []slog.Attr{slog.String(changedFilePathLogAttr, event.PathName)}
+	attrs := []slog.Attr{slog.String("path", event.PathName)}
 	if event.AssociatedPathName != "" {
-		attrs = append(attrs, slog.String(changedFileAssociatedLogAttr, event.AssociatedPathName))
+		attrs = append(attrs, slog.String("associated_path", event.AssociatedPathName))
 	}
 
-	globalLogger.LogAttrs(globalCtx, slog.LevelDebug, changedFileLogMessage, attrs...)
+	globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "filesystem change detected", attrs...)
 }
 
 func (p *pattern) isValidPattern(fileName string) bool {
