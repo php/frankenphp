@@ -2,6 +2,8 @@ package frankenphp
 
 import (
 	"errors"
+	"io"
+	"log/slog"
 	"runtime/debug"
 	"testing"
 )
@@ -16,6 +18,7 @@ const (
 	startupLogTestMaxRequests       = 0
 	startupLogTestExecutableError   = "executable error"
 	startupLogTestBuildInfoError    = "build info error"
+	startupLogTestVersionError      = "version error"
 )
 
 func TestFrankenPHPVersionFromBuildInfoDependency(t *testing.T) {
@@ -43,6 +46,12 @@ func TestFrankenPHPVersionFromBuildInfoMainModule(t *testing.T) {
 
 	if got := frankenPHPVersionFromBuildInfo(info); got != startupLogTestMainVersion {
 		t.Fatalf("expected FrankenPHP main module version %q, got %q", startupLogTestMainVersion, got)
+	}
+}
+
+func TestFrankenPHPVersionFromBuildInfoNil(t *testing.T) {
+	if got := frankenPHPVersionFromBuildInfo(nil); got != "" {
+		t.Fatalf("expected empty FrankenPHP version, got %q", got)
 	}
 }
 
@@ -110,5 +119,18 @@ func TestStartupLogAttrsIncludeFrankenPHPVersion(t *testing.T) {
 	}
 	if got := attrs[0].Value.String(); got != startupLogTestDependencyVersion {
 		t.Fatalf("expected startup log version %q, got %q", startupLogTestDependencyVersion, got)
+	}
+}
+
+func TestStartupLogAttrsWithVersionError(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	attrs := startupLogAttrsWithVersion(logger, startupLogTestPHPVersion, startupLogTestNumThreads, startupLogTestMaxThreads, startupLogTestMaxRequests, func() (string, error) {
+		return "", errors.New(startupLogTestVersionError)
+	})
+	if len(attrs) == 0 {
+		t.Fatal("expected startup log attrs")
+	}
+	if attrs[0].Key == startupLogAttrVersion {
+		t.Fatalf("expected startup log version to be omitted, got %q", attrs[0].Value.String())
 	}
 }

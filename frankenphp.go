@@ -211,6 +211,16 @@ func startupLogAttrs(frankenPHPVersion string, phpVersion string, numThreads int
 	return append(attrs, slog.String(startupLogAttrPHPVersion, phpVersion), slog.Int(startupLogAttrNumThreads, numThreads), slog.Int(startupLogAttrMaxThreads, maxThreads), slog.Int(startupLogAttrMaxRequests, maxRequests))
 }
 
+func startupLogAttrsWithVersion(logger *slog.Logger, phpVersion string, numThreads int, maxThreads int, maxRequests int, versionFunc func() (string, error)) []slog.Attr {
+	frankenPHPVersion, err := versionFunc()
+	if err != nil {
+		logger.LogAttrs(globalCtx, slog.LevelDebug, startupLogVersionUnavailableMessage, slog.Any(startupLogAttrError, err))
+		frankenPHPVersion = ""
+	}
+
+	return startupLogAttrs(frankenPHPVersion, phpVersion, numThreads, maxThreads, maxRequests)
+}
+
 func Config() PHPConfig {
 	cConfig := C.frankenphp_get_config()
 
@@ -408,13 +418,7 @@ func Init(options ...Option) error {
 	initAutoScaling(mainThread)
 
 	if globalLogger.Enabled(globalCtx, slog.LevelInfo) {
-		frankenPHPBuildVersion := ""
-		if version, err := frankenPHPVersion(); err != nil {
-			globalLogger.LogAttrs(globalCtx, slog.LevelDebug, startupLogVersionUnavailableMessage, slog.Any(startupLogAttrError, err))
-		} else {
-			frankenPHPBuildVersion = version
-		}
-		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, startupLogMessage, startupLogAttrs(frankenPHPBuildVersion, Version().Version, mainThread.numThreads, mainThread.maxThreads, maxRequestsPerThread)...)
+		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, startupLogMessage, startupLogAttrsWithVersion(globalLogger, Version().Version, mainThread.numThreads, mainThread.maxThreads, maxRequestsPerThread, frankenPHPVersion)...)
 
 		if EmbeddedAppPath != "" {
 			globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "embedded PHP app 📦", slog.String("path", EmbeddedAppPath))
