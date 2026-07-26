@@ -106,8 +106,8 @@ The recommended way is to use [xcaddy](https://github.com/caddyserver/xcaddy) to
 ```console
 CGO_ENABLED=1 \
 XCADDY_GO_BUILD_FLAGS="-ldflags='-w -s' -tags=nobadger,nomysql,nopgx" \
-CGO_CFLAGS=$(php-config --includes) \
-CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)" \
+CGO_CFLAGS="$(php-config --includes)" \
+CGO_LDFLAGS="$(php-config --ldflags) -L$(php-config --prefix)/lib $(php-config --libs)" \
 xcaddy build \
     --output frankenphp \
     --with github.com/dunglas/frankenphp/caddy \
@@ -120,6 +120,8 @@ xcaddy build \
     # --with github.com/dunglas/frankenphp/caddy=$(pwd)/caddy
 
 ```
+
+If your distribution provides a versioned command such as `php-config-zts` or `php-config8.4`, use that command consistently in the `CGO_CFLAGS` and `CGO_LDFLAGS` values.
 
 > [!TIP]
 >
@@ -138,5 +140,5 @@ Alternatively, it's possible to compile FrankenPHP without `xcaddy` by using the
 ```console
 curl -L https://github.com/php/frankenphp/archive/refs/heads/main.tar.gz | tar xz
 cd frankenphp-main/caddy/frankenphp
-CGO_CFLAGS=$(php-config --includes) CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)" go build -tags=nobadger,nomysql,nopgx
+../../go.sh build
 ```
