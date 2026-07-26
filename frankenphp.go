@@ -18,13 +18,11 @@ package frankenphp
 // #include <php_variables.h>
 // #include <zend_llist.h>
 // #include <SAPI.h>
-// static inline const char *frankenphp_get_build_version() {
-//   return TOSTRING(FRANKENPHP_VERSION);
-// }
 import "C"
 import (
 	"bytes"
 	"context"
+	"debug/buildinfo"
 	"errors"
 	"fmt"
 	"io"
@@ -33,6 +31,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	runtimeDebug "runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -73,6 +72,10 @@ var (
 	// atomic: read by in-flight requests while a reload may rewrite it
 	maxWaitTime          atomic.Int64
 	maxRequestsPerThread int
+
+	frankenPHPVersion = sync.OnceValues(func() (string, error) {
+		return frankenPHPVersionFromExecutable(os.Executable, buildinfo.ReadFile)
+	})
 )
 
 type ErrRejected struct {
@@ -95,6 +98,24 @@ const (
 	syslogLevelNotice                    // normal but significant condition
 	syslogLevelInfo                      // informational
 	syslogLevelDebug                     // debug-level messages
+)
+
+const (
+	frankenPHPModulePath = "github.com/dunglas/frankenphp"
+	unknownModuleVersion = "(devel)"
+
+	startupLogMessage                   = "FrankenPHP started 🐘"
+	startupLogVersionUnavailableMessage = "FrankenPHP version unavailable"
+	startupLogAttrVersion               = "version"
+	startupLogAttrPHPVersion            = "php_version"
+	startupLogAttrNumThreads            = "num_threads"
+	startupLogAttrMaxThreads            = "max_threads"
+	startupLogAttrMaxRequests           = "max_requests"
+	startupLogAttrError                 = "error"
+	startupLogAttrCapacity              = 5
+
+	executablePathErrorMessage = "getting executable path: %w"
+	buildInfoReadErrorMessage  = "reading build info: %w"
 )
 
 func (l syslogLevel) String() string {
@@ -148,8 +169,46 @@ func Version() PHPVersion {
 	}
 }
 
-func frankenPHPVersion() string {
-	return C.GoString(C.frankenphp_get_build_version())
+func frankenPHPVersionFromExecutable(executablePathFunc func() (string, error), readBuildInfoFunc func(string) (*runtimeDebug.BuildInfo, error)) (string, error) {
+	executablePath, err := executablePathFunc()
+	if err != nil {
+		return "", fmt.Errorf(executablePathErrorMessage, err)
+	}
+
+	info, err := readBuildInfoFunc(executablePath)
+	if err != nil {
+		return "", fmt.Errorf(buildInfoReadErrorMessage, err)
+	}
+
+	return frankenPHPVersionFromBuildInfo(info), nil
+}
+
+func frankenPHPVersionFromBuildInfo(info *runtimeDebug.BuildInfo) string {
+	if info == nil {
+		return ""
+	}
+	if info.Main.Path == frankenPHPModulePath && moduleVersionIsKnown(info.Main.Version) {
+		return info.Main.Version
+	}
+	for _, dep := range info.Deps {
+		if dep.Path == frankenPHPModulePath && moduleVersionIsKnown(dep.Version) {
+			return dep.Version
+		}
+	}
+	return ""
+}
+
+func moduleVersionIsKnown(version string) bool {
+	return version != "" && version != unknownModuleVersion
+}
+
+func startupLogAttrs(frankenPHPVersion string, phpVersion string, numThreads int, maxThreads int, maxRequests int) []slog.Attr {
+	attrs := make([]slog.Attr, 0, startupLogAttrCapacity)
+	if frankenPHPVersion != "" {
+		attrs = append(attrs, slog.String(startupLogAttrVersion, frankenPHPVersion))
+	}
+
+	return append(attrs, slog.String(startupLogAttrPHPVersion, phpVersion), slog.Int(startupLogAttrNumThreads, numThreads), slog.Int(startupLogAttrMaxThreads, maxThreads), slog.Int(startupLogAttrMaxRequests, maxRequests))
 }
 
 func Config() PHPConfig {
@@ -349,7 +408,13 @@ func Init(options ...Option) error {
 	initAutoScaling(mainThread)
 
 	if globalLogger.Enabled(globalCtx, slog.LevelInfo) {
-		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, startupLogMessage, startupLogAttrs(Version().Version, mainThread.numThreads, mainThread.maxThreads, maxRequestsPerThread)...)
+		frankenPHPBuildVersion := ""
+		if version, err := frankenPHPVersion(); err != nil {
+			globalLogger.LogAttrs(globalCtx, slog.LevelDebug, startupLogVersionUnavailableMessage, slog.Any(startupLogAttrError, err))
+		} else {
+			frankenPHPBuildVersion = version
+		}
+		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, startupLogMessage, startupLogAttrs(frankenPHPBuildVersion, Version().Version, mainThread.numThreads, mainThread.maxThreads, maxRequestsPerThread)...)
 
 		if EmbeddedAppPath != "" {
 			globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "embedded PHP app 📦", slog.String("path", EmbeddedAppPath))
