@@ -784,9 +784,24 @@ func go_is_context_done(threadIndex C.uintptr_t) C.bool {
 
 //export go_schedule_opcache_reset
 func go_schedule_opcache_reset(threadIndex C.uintptr_t) {
-	if mainThread != nil {
-		go mainThread.rebootAllThreads()
+	if mainThread == nil {
+		return
 	}
+
+	// Application code (e.g. some WordPress plugins) can call opcache_reset()
+	// on every request. Since a reboot pauses request handling for every
+	// thread, coalesce calls that arrive within the cooldown into a single
+	// reboot instead of pausing the whole pool on every call.
+	mainThread.opcacheResetMu.Lock()
+	now := time.Now()
+	if now.Sub(mainThread.lastOpcacheResetAt) < opcacheResetCooldown {
+		mainThread.opcacheResetMu.Unlock()
+		return
+	}
+	mainThread.lastOpcacheResetAt = now
+	mainThread.opcacheResetMu.Unlock()
+
+	go mainThread.rebootAllThreads()
 }
 
 func convertArgs(args []string) (C.int, []*C.char) {
