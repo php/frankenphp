@@ -165,6 +165,9 @@ func (wc *workerConfig) toWorkerOptions() []frankenphp.WorkerOption {
 		frankenphp.WithWorkerRequestOptions(wc.requestOptions...),
 	}
 
+	// options collected while provisioning the module, e.g. the Mercure hub
+	opts = append(opts, wc.options...)
+
 	// copy the caddy match logic and create a unique matcher function for this worker
 	// inject the matcher into frankenphp
 	if len(wc.MatchPath) > 0 {
