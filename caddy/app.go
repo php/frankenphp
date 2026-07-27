@@ -83,6 +83,10 @@ func (f *FrankenPHPApp) Provision(ctx caddy.Context) error {
 	f.ctx = ctx
 	f.logger = ctx.Slogger()
 
+	// drop the modules of a config that failed to provision, reset() only runs in Start()
+	f.modules = nil
+	f.usedWorkerNames = nil
+
 	// We have at least 7 hardcoded options
 	f.opts = make([]frankenphp.Option, 0, 7+len(options))
 
@@ -370,6 +374,10 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				}
 				if frankenphp.EmbeddedAppPath != "" && filepath.IsLocal(wc.FileName) {
 					wc.FileName = filepath.Join(frankenphp.EmbeddedAppPath, wc.FileName)
+				}
+				// a global worker has no php_server, so no set of requests to match against
+				if len(wc.MatchPath) != 0 {
+					return d.Errf(`"match" can only be used in a php_server worker block, not in a global one: %q`, wc.FileName)
 				}
 				// check for duplicate workers
 				for _, existingWorker := range f.Workers {

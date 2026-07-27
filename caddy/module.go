@@ -47,7 +47,7 @@ type FrankenPHPModule struct {
 	Env map[string]string `json:"env,omitempty"`
 	// Workers configures the worker scripts to start.
 	Workers []workerConfig `json:"workers,omitempty"`
-	// ServerIdx is the idx of the php_server this module belongs to
+	// ServerIdx is set automatically to pair the route embeds of one php_server directive. Do not set it manually: modules sharing an index share one server, defined by the first of them.
 	ServerIdx int `json:"server_idx,omitempty"`
 	// RequestBodyTimeout is an idle timeout on request body reads: a stalled (slow POST) client is cut off while a steady upload of any size succeeds. Defaults to 60s when omitted; set to 0 to disable.
 	RequestBodyTimeout *caddy.Duration `json:"request_body_timeout,omitempty"`
@@ -188,6 +188,11 @@ func needReplacement(s string) bool {
 
 // ServeHTTP implements caddyhttp.MiddlewareHandler.
 func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ caddyhttp.Handler) error {
+	// the server is assigned in FrankenPHPApp.Start(), which caddy may run after the http app started serving
+	if f.server == nil {
+		return caddyhttp.Error(http.StatusInternalServerError, frankenphp.ErrNotRunning)
+	}
+
 	ctx := r.Context()
 	repl := ctx.Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
 
