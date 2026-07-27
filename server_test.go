@@ -172,6 +172,42 @@ func TestServer(t *testing.T) {
 		assert.Contains(t, err.Error(), "two workers in a server cannot have the same filename")
 	})
 
+	t.Run("error_on_request_matcher_without_server_scope", func(t *testing.T) {
+		t.Cleanup(frankenphp.Shutdown)
+
+		err := frankenphp.Init(
+			frankenphp.WithWorkers("global", testDataDir+"worker-with-counter.php", 1,
+				frankenphp.WithWorkerMatcher(func(*http.Request) bool { return true }),
+			),
+		)
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "no server scope")
+	})
+
+	// re-registering a Server must not trip the duplicate filename check on its own workers
+	t.Run("reregistration_after_shutdown", func(t *testing.T) {
+		server, err := frankenphp.NewServer("", testDataDir, nil, nil, nil)
+		require.NoError(t, err)
+
+		opts := []frankenphp.Option{
+			frankenphp.WithServer(server),
+			frankenphp.WithWorkers("counter", testDataDir+"worker-with-counter.php", 1,
+				frankenphp.WithWorkerServerScope(server),
+			),
+		}
+
+		initServers(t, opts...)
+		assert.Equal(t, "requests:1", serverGet(t, server, "http://example.com/worker-with-counter.php"))
+		assert.Equal(t, "server_0", server.Name())
+
+		frankenphp.Shutdown()
+
+		initServers(t, opts...)
+		assert.Equal(t, "requests:1", serverGet(t, server, "http://example.com/worker-with-counter.php"))
+		assert.Equal(t, "server_0", server.Name())
+	})
+
 	t.Run("error_on_missing_registration", func(t *testing.T) {
 		server, _ := frankenphp.NewServer("", testDataDir, nil, nil, nil)
 
