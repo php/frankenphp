@@ -433,7 +433,15 @@ func go_ub_write(threadIndex C.uintptr_t, cBuf *C.char, length C.size_t) (C.size
 	fc := thread.frankenPHPContext()
 
 	if fc.isDone {
-		return 0, C.bool(true)
+		// The request already finished (e.g. via fastcgi_finish_request()), so
+		// the responseWriter may no longer be safe to write to (see #2535):
+		// discard the write, but still report a genuine client disconnect via
+		// fc.clientHasClosed() rather than hardcoding "aborted". Otherwise
+		// frankenphp_ub_write() calls php_handle_aborted_connection() for a
+		// request that finished normally, which marks connection_status() as
+		// aborted and, when ignore_user_abort is off (the default outside
+		// worker mode), bails out the rest of the script.
+		return C.size_t(length), C.bool(fc.clientHasClosed())
 	}
 
 	var writer io.Writer
