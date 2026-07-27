@@ -52,7 +52,7 @@ jobs:
       ref: ${{ steps.check.outputs.ref || (github.ref_type == 'tag' && github.ref_name) || (github.event_name == 'workflow_dispatch' && inputs.version) || '' }}
       base_fingerprint: ${{ steps.check.outputs.base_fingerprint }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -117,7 +117,7 @@ jobs:
         run: echo "sanitized_platform=${PLATFORM//\//-}" >> "${GITHUB_OUTPUT}"
         env:
           PLATFORM: ${{ matrix.platform }}
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.prepare.outputs.ref }}
           persist-credentials: false
@@ -257,7 +257,7 @@ jobs:
           METADATA: ${{ needs.prepare.outputs.metadata }}
           TARGET: ${{ matrix.target }}
           VARIANT: ${{ matrix.variant }}
-      - uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+      - uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
         with:
           # docker.io/ prefix is required: actions/attest splits subject-name
           # on the first '/' to find the registry. We only push to Docker Hub.
