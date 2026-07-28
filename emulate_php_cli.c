@@ -36,7 +36,6 @@
 #include <pthread_np.h>
 #endif
 
-
 cli_exec_args_t *cli_args;
 
 /* Function declaration to avoid implicit declaration error */
