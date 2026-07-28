@@ -1,4 +1,5 @@
 ﻿#include "frankenphp.h"
+#include "emulate_php_cli.h"
 #include <SAPI.h>
 #include <Zend/zend_alloc.h>
 #include <Zend/zend_exceptions.h>
@@ -35,12 +36,7 @@
 #include <pthread_np.h>
 #endif
 
-typedef struct {
-  char *script;
-  int argc;
-  char **argv;
-  bool eval;
-} cli_exec_args_t;
+
 cli_exec_args_t *cli_args;
 
 /* Function declaration to avoid implicit declaration error */
@@ -151,6 +147,7 @@ void *emulate_script_cli(void *arg) {
   }
 
   if (script == NULL) {
+    fprintf(stderr, "this functionality is not available in frankenphp php-cli with a php version lower than 8.6\n");
     return (void *)(intptr_t)1;
   }
 

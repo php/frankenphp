@@ -1,1 +1,8 @@
-﻿void *emulate_script_cli(void *arg);
+﻿typedef struct {
+  char *script;
+  int argc;
+  char **argv;
+  bool eval;
+} cli_exec_args_t;
+extern cli_exec_args_t *cli_args;
+void *emulate_script_cli(void *arg);
