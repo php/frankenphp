@@ -34,6 +34,13 @@ const (
 	RebootReady
 	// all threads are yielding for main thread reboot
 	YieldingForReboot
+
+	// thread failed to yield even after a force-kill (e.g. stuck in a
+	// blocking write to a stalled client, unreachable by force-kill, which
+	// only interrupts the Zend VM at the next opcode boundary). Terminal:
+	// the underlying OS thread may still be alive, so its slot is abandoned
+	// rather than reused, permanently excluding it from dispatch.
+	Abandoned
 )
 
 func (s State) String() string {
@@ -66,6 +73,8 @@ func (s State) String() string {
 		return "reboot ready"
 	case YieldingForReboot:
 		return "yielding for reboot"
+	case Abandoned:
+		return "abandoned"
 	default:
 		return "unknown"
 	}
@@ -201,8 +210,9 @@ func (ts *ThreadState) WaitForStateWithTimeout(timeout time.Duration, states ...
 func (ts *ThreadState) RequestSafeStateChange(nextState State) bool {
 	ts.mu.Lock()
 	switch ts.currentState {
-	// disallow state changes when already shutting down or done
-	case Reserved, ShuttingDown, Done:
+	// disallow state changes when already shutting down, done, or abandoned
+	// (abandoned is terminal: the thread never reaches a stable state again)
+	case Reserved, ShuttingDown, Done, Abandoned:
 		ts.mu.Unlock()
 
 		return false

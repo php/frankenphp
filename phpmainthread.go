@@ -159,6 +159,12 @@ func (mainThread *phpMainThread) rebootAllThreads() bool {
 		}
 	}
 
+	// force_kill_thread only interrupts the Zend VM at the next opcode
+	// boundary (see frankenphp_force_kill_thread): a thread parked in a
+	// blocking write to a stalled client (e.g. an unresponsive HTTP/2 peer)
+	// has already left PHP execution and can't be reached by it. Give up on
+	// such threads instead of waiting on them forever, so one stuck thread
+	// can't wedge the reboot of every other thread.
 	for _, thread := range rebootingThreads {
 		rebootWg.Go(func() {
 			close(thread.drainChan)
@@ -176,7 +182,24 @@ func (mainThread *phpMainThread) rebootAllThreads() bool {
 				slog.String("timeout", rebootGracePeriod.String()),
 			)
 			thread.sendKillSignal()
-			thread.state.WaitFor(state.YieldingForReboot)
+			if thread.state.WaitForStateWithTimeout(rebootGracePeriod, state.YieldingForReboot) {
+				return
+			}
+
+			// still hasn't yielded: the underlying OS thread may still be alive
+			// (e.g. stuck in a blocking write), so its slot can't be reused
+			// without risking two OS threads sharing the same TSRM slot.
+			// Abandon it permanently rather than block every other thread's
+			// reboot on it; it stays out of Ready/Inactive forever, so
+			// dispatch naturally stops routing requests to it.
+			globalLogger.LogAttrs(
+				globalCtx,
+				slog.LevelError,
+				"thread unresponsive after force-kill, abandoning it permanently",
+				slog.String("name", thread.name()),
+				slog.String("state", thread.state.Name()),
+			)
+			thread.state.Set(state.Abandoned)
 		})
 	}
 
@@ -189,11 +212,19 @@ func (mainThread *phpMainThread) rebootAllThreads() bool {
 	}
 	mainThread.state.WaitFor(state.Ready)
 
+	rebootedThreads := 0
+	abandonedThreads := 0
 	for _, thread := range rebootingThreads {
+		if thread.state.Is(state.Abandoned) {
+			abandonedThreads++
+			continue
+		}
+
 		thread.drainChan = make(chan struct{})
 		if thread.state.CompareAndSwap(state.YieldingForReboot, state.RebootReady) {
 			// wait for any of the stable states
 			thread.state.WaitFor(state.Ready, state.Inactive, state.Reserved)
+			rebootedThreads++
 		} else {
 			panic("unexpected state on reboot: " + thread.state.Name() + " for thread " + thread.name())
 		}
@@ -204,7 +235,8 @@ func (mainThread *phpMainThread) rebootAllThreads() bool {
 		slog.LevelInfo,
 		"thread reboot finished",
 		slog.String("duration", time.Since(rebootStart).String()),
-		slog.Int("num_threads", len(rebootingThreads)),
+		slog.Int("num_threads", rebootedThreads),
+		slog.Int("abandoned_threads", abandonedThreads),
 	)
 
 	return true

@@ -34,7 +34,7 @@ func (handler *inactiveThread) beforeScriptExecution() string {
 		thread.state.MarkAsWaiting(false)
 
 		return handler.beforeScriptExecution()
-	case state.Rebooting, state.ForceRebooting:
+	case state.Rebooting, state.ForceRebooting, state.Abandoned:
 		return ""
 	case state.RebootReady:
 		thread.state.Set(state.Inactive)

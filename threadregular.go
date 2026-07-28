@@ -53,7 +53,10 @@ func (handler *regularThread) beforeScriptExecution() string {
 		return handler.waitForRequest()
 	case state.Ready:
 		return handler.waitForRequest()
-	case state.Rebooting, state.ForceRebooting:
+	case state.Rebooting, state.ForceRebooting, state.Abandoned:
+		// Abandoned: this thread failed to yield during a reboot and was
+		// given up on (see rebootAllThreads); if the blocking call it was
+		// stuck in ever does return, just let the underlying thread exit.
 		return ""
 	case state.RebootReady:
 		handler.requestCount = 0
