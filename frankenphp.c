@@ -1365,14 +1365,6 @@ void frankenphp_register_variable_safe(char *key, char *val, size_t val_len,
   }
 }
 
-void register_server_variable_filtered(const char *key, char **val,
-                                       size_t *val_len,
-                                       zval *track_vars_array) {
-  if (sapi_module.input_filter(PARSE_SERVER, key, val, *val_len, val_len)) {
-    php_register_variable_safe(key, *val, *val_len, track_vars_array);
-  }
-}
-
 static void frankenphp_register_variables(zval *track_vars_array) {
   /* https://www.php.net/manual/en/reserved.variables.server.php */
 
