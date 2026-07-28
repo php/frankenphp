@@ -1,5 +1,5 @@
-﻿#include "frankenphp.h"
-#include "emulate_php_cli.h"
+﻿#include "emulate_php_cli.h"
+#include "frankenphp.h"
 #include <SAPI.h>
 #include <Zend/zend_alloc.h>
 #include <Zend/zend_exceptions.h>
@@ -38,9 +38,9 @@
 
 cli_exec_args_t *cli_args;
 
-void register_server_variable_filtered(const char *key, char **val,
-                                       size_t *val_len,
-                                       zval *track_vars_array) {
+static void register_server_variable_filtered(const char *key, char **val,
+                                              size_t *val_len,
+                                              zval *track_vars_array) {
   if (sapi_module.input_filter(PARSE_SERVER, key, val, *val_len, val_len)) {
     php_register_variable_safe(key, *val, *val_len, track_vars_array);
   }
@@ -150,7 +150,8 @@ void *emulate_script_cli(void *arg) {
   }
 
   if (script == NULL) {
-    fprintf(stderr, "this functionality is not available in frankenphp php-cli with a php version lower than 8.6\n");
+    fprintf(stderr, "this functionality is not available in frankenphp php-cli "
+                    "with a php version lower than 8.6\n");
     return (void *)(intptr_t)1;
   }
 
