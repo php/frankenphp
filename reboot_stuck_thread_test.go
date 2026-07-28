@@ -93,3 +93,59 @@ func TestRebootDoesNotHangOnUnkillableThread(t *testing.T) {
 	}, t)
 	require.Contains(t, body, "I am by birth a Genevese")
 }
+
+// TestShutdownDoesNotHangWithAbandonedThread proves that Shutdown() itself
+// bounds its wait once a thread has been abandoned: before Abandoned was a
+// real terminal state, RequestSafeStateChange's unbounded
+// WaitFor(Ready, Inactive, Reserved) fallback (and thread.shutdown()'s own
+// unbounded WaitFor(Done) after a failed force-kill) would recurse/block
+// forever on the same stuck thread that rebootAllThreads() gave up on.
+func TestShutdownDoesNotHangWithAbandonedThread(t *testing.T) {
+	require.NoError(t, frankenphp.Init(frankenphp.WithNumThreads(2), frankenphp.WithMaxThreads(2)))
+
+	cwd, _ := os.Getwd()
+
+	w := newBlockingResponseWriter()
+	go func() {
+		req := httptest.NewRequest("GET", "http://example.com/index.php", nil)
+		fr, err := frankenphp.NewRequestWithContext(req, frankenphp.WithRequestDocumentRoot(cwd+"/testdata/", false))
+		if err != nil {
+			t.Errorf("NewRequestWithContext: %v", err)
+			return
+		}
+		_ = frankenphp.ServeHTTP(w, fr)
+	}()
+
+	select {
+	case <-w.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the stuck request never started writing")
+	}
+	time.Sleep(100 * time.Millisecond)
+
+	// Reboot first: this is what actually abandons the stuck thread.
+	rebootDone := make(chan struct{})
+	go func() {
+		frankenphp.RestartWorkers()
+		close(rebootDone)
+	}()
+
+	select {
+	case <-rebootDone:
+	case <-time.After(20 * time.Second):
+		t.Fatal("RestartWorkers() hung")
+	}
+
+	// Shutdown() must not wait forever on the now-abandoned thread.
+	shutdownDone := make(chan struct{})
+	go func() {
+		frankenphp.Shutdown()
+		close(shutdownDone)
+	}()
+
+	select {
+	case <-shutdownDone:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Shutdown() hung forever on the abandoned thread")
+	}
+}
