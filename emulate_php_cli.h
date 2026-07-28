@@ -1,8 +1,6 @@
 ﻿#ifndef _EMULATE_PHP_CLI_H
 #define _EMULATE_PHP_CLI_H
 
-#include "frankenphp.h"
-
 typedef struct {
   char *script;
   int argc;

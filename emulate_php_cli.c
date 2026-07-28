@@ -1,4 +1,6 @@
-﻿#include <SAPI.h>
+﻿#include "emulate_php_cli.h"
+#include "frankenphp.h"
+#include <SAPI.h>
 #include <Zend/zend_alloc.h>
 #include <Zend/zend_exceptions.h>
 #include <Zend/zend_interfaces.h>
@@ -33,7 +35,6 @@
 #elif defined(__FreeBSD__) || defined(__OpenBSD__)
 #include <pthread_np.h>
 #endif
-#include "emulate_php_cli.h"
 
 cli_exec_args_t *cli_args;
 
