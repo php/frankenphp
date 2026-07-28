@@ -34,7 +34,6 @@
 #include <pthread_np.h>
 #endif
 #include "emulate_php_cli.h"
-#include "frankenphp.h"
 
 cli_exec_args_t *cli_args;
 
