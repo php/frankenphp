@@ -68,7 +68,7 @@ go mod init github.com/<minha-conta>/<meu-modulo>
 O segundo passo é
 [obter o código-fonte do PHP](https://www.php.net/downloads.php) para os
 próximos passos.
-Depois de obtê-los, descompacte-os no diretório de sua escolha, não dentro do
+Depois de obtê-lo, descompacte-o no diretório de sua escolha, não dentro do
 seu módulo Go:
 
 ```console

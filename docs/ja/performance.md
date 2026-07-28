@@ -23,7 +23,7 @@
 `max_threads`はトラフィックを処理するために必要なスレッド数を把握するのに役立ち、レイテンシのスパイクに対してサーバーをより回復力のあるものにできます。
 `auto`に設定すると、制限は`php.ini`の`memory_limit`に基づいて推定されます。推定できない場合、
 `auto`は代わりに`num_threads`の2倍がデフォルトになります。`auto`は必要なスレッド数を大幅に過小評価する可能性があることに留意してください。
-`max_threads`はPHP FPMの[pm.max_children](https://www.php.net/manual/en/install.fpm.configuration.php#pm.max-children)に似ています。主な違いは、FrankenPHPがプロセスではなくスレッドを使用し、
+`max_threads`はPHP FPMの[pm.max_children](https://www.php.net/manual/install.fpm.configuration.php#pm.max-children)に似ています。主な違いは、FrankenPHPがプロセスではなくスレッドを使用し、
 必要に応じて異なるワーカースクリプトと「クラシックモード」間で自動的に委譲することです。
 
 ## ワーカーモード
@@ -43,11 +43,11 @@ PHPは、従来のGNUライブラリの代わりにこの代替Cライブラリ�
 
 本番環境では、glibcにリンクされたFrankenPHPを使用することをお勧めします。
 
-これは、Debian Dockerイメージ（デフォルト）を使用するか、[リリースページ](https://github.com/php/frankenphp/releases)から -gnu サフィックス付きバイナリをダウンロードするか、あるいは[FrankenPHPをソースからコンパイル](compile.md)することで実現できます。
+これは、Debian Dockerイメージを使用するか、[公式パッケージ (.deb, .rpm, .apk)](https://pkgs.henderkes.com) を使用するか、あるいは[FrankenPHPをソースからコンパイル](compile.md)することで実現できます。
 
-または、[mimalloc allocator](https://github.com/microsoft/mimalloc)でコンパイルされた静的muslバイナリも提供しており、これによりスレッド環境での問題を軽減できます。
+より軽量で安全なコンテナのためには、Alpineよりも[強化されたDebianイメージ](docker.md#hardening-images)を検討することをお勧めします。
 
-## Go Runtime設定
+## Go runtime設定
 
 FrankenPHPはGoで書かれています。
 
@@ -89,6 +89,18 @@ php_server {
 ```
 
 これにより、不要なファイルの操作の回数を大幅に削減できます。
+上記の構成をワーカーモードに相当させると、次のようになります:
+
+```caddyfile
+route {
+    php_server { # file server が全く不要な場合は "php_server" の代わりに "php" を使用します
+        root /root/to/your/app
+        worker /path/to/worker.php {
+            match * # すべてのリクエストを直接ワーカーに送信します
+        }
+    }
+}
+```
 
 ファイルシステムへの不要な操作を完全にゼロにする代替アプローチとして、`php`ディレクティブを使用し、
 パスによってPHPファイルとそれ以外を分ける方法があります。アプリケーション全体が1つのエントリーファイルで提供される場合、この方法は有効です。
@@ -148,10 +160,36 @@ FrankenPHPは公式のPHPインタープリターを使用しています。
 
 特に以下の点を確認してください：
 
-- [OPcache](https://www.php.net/manual/en/book.opcache.php)がインストールされ、有効化され、適切に設定されていること
+- [OPcache](https://www.php.net/manual/book.opcache.php)がインストールされ、有効化され、適切に設定されていること
 - [Composer autoloader optimizations](https://getcomposer.org/doc/articles/autoloader-optimization.md)を有効にすること
 - `realpath`キャッシュがアプリケーションのニーズに合わせて十分な大きさであること
-- [preloading](https://www.php.net/manual/en/opcache.preloading.php)を使用すること
+- [preloading](https://www.php.net/manual/opcache.preloading.php)を使用すること
 
 詳細については、[Symfonyの専用ドキュメントエントリ](https://symfony.com/doc/current/performance.html)をお読みください
 （Symfonyを使用していなくても、多くのヒントが役立ちます）。
+
+## スレッドプールの分割
+
+アプリケーションが、高負荷時に不安定になったり、常に10秒以上応答にかかるAPIのような遅い外部サービスと連携することはよくあります。
+このような場合、スレッドプールを分割して専用の「遅い」プールを持つことが有益です。
+これにより、遅いエンドポイントがすべてのサーバーリソース/スレッドを消費するのを防ぎ、コネクションプールと同様に、遅いエンドポイントへのリクエストの同時実行数を制限できます。
+
+```caddyfile
+example.com {
+    php_server {
+        root /app/public # アプリケーションのルート
+        worker index.php {
+            match /slow-endpoint/* # パスが /slow-endpoint/* のすべてリクエストはこのスレッドプールによって処理されます
+            num 1 # /slow-endpoint/* に一致するリクエストに対しては最低1スレッド
+            max_threads 20 # 必要に応じて、/slow-endpoint/* に一致するリクエストに対して最大20スレッドまで許可します
+        }
+        worker index.php {
+            match * # 他のすべてのリクエストは個別に処理されます
+            num 1 # 遅いエンドポイントがハングし始めても、他のリクエストには最低1スレッド
+            max_threads 20 # 必要に応じて、他のリクエストに対して最大20スレッドまで許可します
+        }
+    }
+}
+```
+
+一般的に、メッセージキューなどの適切なメカニズムを使用して、非常に遅いエンドポイントを非同期的に処理することも推奨されます。

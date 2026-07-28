@@ -32,6 +32,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 	"unsafe"
@@ -66,7 +67,9 @@ var (
 
 	metrics Metrics = nullMetrics{}
 
-	maxWaitTime time.Duration
+	// atomic: read by in-flight requests while a reload may rewrite it
+	maxWaitTime          atomic.Int64
+	maxRequestsPerThread int
 )
 
 type ErrRejected struct {
@@ -211,7 +214,7 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 		return numWorkers, nil
 	}
 
-	if !maxThreadsIsSet && !numThreadsIsSet {
+	if !numThreadsIsSet {
 		if numWorkers >= maxProcs {
 			// Start at least as many threads as workers, and keep a free thread to handle requests in non-worker mode
 			opt.numThreads = numWorkers + 1
@@ -274,7 +277,12 @@ func Init(options ...Option) error {
 		metrics = opt.metrics
 	}
 
-	maxWaitTime = opt.maxWaitTime
+	maxWaitTime.Store(int64(opt.maxWaitTime))
+	maxRequestsPerThread = opt.maxRequests
+
+	if opt.maxIdleTime > 0 {
+		maxIdleTime = opt.maxIdleTime
+	}
 
 	workerThreadCount, err := calculateMaxThreads(opt)
 	if err != nil {
@@ -311,7 +319,10 @@ func Init(options ...Option) error {
 		return err
 	}
 
-	regularRequestChan = make(chan contextHolder)
+	// reused across reloads so queued requests aren't orphaned on a stale channel
+	if regularRequestChan == nil {
+		regularRequestChan = make(chan contextHolder)
+	}
 	regularThreads = make([]*phpThread, 0, opt.numThreads-workerThreadCount)
 	for i := 0; i < opt.numThreads-workerThreadCount; i++ {
 		convertToRegularThread(getInactivePHPThread())
@@ -331,7 +342,7 @@ func Init(options ...Option) error {
 	initAutoScaling(mainThread)
 
 	if globalLogger.Enabled(globalCtx, slog.LevelInfo) {
-		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "FrankenPHP started 🐘", slog.String("php_version", Version().Version), slog.Int("num_threads", mainThread.numThreads), slog.Int("max_threads", mainThread.maxThreads))
+		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "FrankenPHP started 🐘", slog.String("php_version", Version().Version), slog.Int("num_threads", mainThread.numThreads), slog.Int("max_threads", mainThread.maxThreads), slog.Int("max_requests", maxRequestsPerThread))
 
 		if EmbeddedAppPath != "" {
 			globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "embedded PHP app 📦", slog.String("path", EmbeddedAppPath))
@@ -364,7 +375,6 @@ func Shutdown() {
 	}
 
 	drainWatchers()
-	drainAutoScaling()
 	drainPHPThreads()
 
 	metrics.Shutdown()
@@ -633,12 +643,34 @@ func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (r
 		return 0
 	}
 
+	// The read deadline is set on the responseWriter, which is only valid until
+	// the response is finished. A script that finishes the request (e.g. via
+	// frankenphp_finish_request()) and then reads the body would otherwise set a
+	// deadline on a finalized HTTP/2 stream, dereferencing a nil pointer and
+	// crashing the process. See https://github.com/php/frankenphp/issues/2535.
+	var rc *http.ResponseController
+	if fc.requestBodyTimeout > 0 && !fc.isDone {
+		if fc.responseController == nil {
+			fc.responseController = http.NewResponseController(fc.responseWriter)
+		}
+		rc = fc.responseController
+	}
+
 	p := unsafe.Slice((*byte)(unsafe.Pointer(cBuf)), countBytes)
 	var err error
 	for readBytes < countBytes && err == nil {
+		if rc != nil {
+			// reset before each read: bound a stall, not a steady upload
+			_ = rc.SetReadDeadline(time.Now().Add(fc.requestBodyTimeout))
+		}
+
 		var n int
 		n, err = fc.request.Body.Read(p[readBytes:])
 		readBytes += C.size_t(n)
+	}
+
+	if rc != nil {
+		_ = rc.SetReadDeadline(time.Time{})
 	}
 
 	return
@@ -750,6 +782,13 @@ func go_is_context_done(threadIndex C.uintptr_t) C.bool {
 	return C.bool(phpThreads[threadIndex].frankenPHPContext().isDone)
 }
 
+//export go_schedule_opcache_reset
+func go_schedule_opcache_reset(threadIndex C.uintptr_t) {
+	if mainThread != nil {
+		go mainThread.rebootAllThreads()
+	}
+}
+
 func convertArgs(args []string) (C.int, []*C.char) {
 	argc := C.int(len(args))
 	argv := make([]*C.char, argc)
@@ -781,5 +820,7 @@ func resetGlobals() {
 	workersByName = nil
 	workersByPath = nil
 	watcherIsEnabled = false
+	maxIdleTime = defaultMaxIdleTime
+	maxRequestsPerThread = 0
 	globalMu.Unlock()
 }

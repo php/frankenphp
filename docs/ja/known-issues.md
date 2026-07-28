@@ -6,7 +6,7 @@
 
 | 名前                                                                                                        | 理由                 | 代替手段                                                                                                             |
 | ----------------------------------------------------------------------------------------------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| [imap](https://www.php.net/manual/en/imap.installation.php)                                                 | スレッドセーフでない | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap) |
+| [imap](https://www.php.net/manual/imap.installation.php)                                                 | スレッドセーフでない | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap) |
 | [newrelic](https://docs.newrelic.com/docs/apm/agents/php-agent/getting-started/introduction-new-relic-php/) | スレッドセーフでない | -                                                                                                                    |
 
 ## バグのあるPHP拡張モジュール
@@ -15,15 +15,15 @@
 
 | 名前                                                          | 問題                                                                                                                                                                                                                                                                                 |
 | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [ext-openssl](https://www.php.net/manual/en/book.openssl.php) | FrankenPHPの静的ビルド（musl libcでビルド）を使用した場合、高負荷時にOpenSSL拡張がクラッシュすることがあります。回避策として動的リンクのビルド（Dockerイメージで使用されているもの）を使用してください。このバグは[PHP側で追跡中](https://github.com/php/php-src/issues/13648)です。 |
+| [ext-openssl](https://www.php.net/manual/book.openssl.php) | FrankenPHPの静的ビルド（musl libcでビルド）を使用した場合、高負荷時にOpenSSL拡張がクラッシュすることがあります。回避策として動的リンクのビルド（Dockerイメージで使用されているもの）を使用してください。このバグは[PHP側で追跡中](https://github.com/php/php-src/issues/13648)です。 |
 
 ## get_browser
 
-[get_browser()](https://www.php.net/manual/en/function.get-browser.php)関数は継続使用するとパフォーマンスが悪化することが確認されています。回避策として、User Agentごとの結果をキャッシュ（例：[APCu](https://www.php.net/manual/en/book.apcu.php)を利用）してください。User Agentごとの結果は静的なためです。
+[get_browser()](https://www.php.net/manual/function.get-browser.php)関数は継続使用するとパフォーマンスが悪化することが確認されています。回避策として、User Agentごとの結果をキャッシュ（例：[APCu](https://www.php.net/manual/book.apcu.php)を利用）してください。User Agentごとの結果は静的なためです。
 
 ## スタンドアロンバイナリおよびAlpineベースのDockerイメージ
 
-スタンドアロンバイナリおよびAlpineベースのDockerイメージ（`dunglas/frankenphp:*-alpine`）は、バイナリサイズを小さく保つために[glibc and friends](https://www.etalabs.net/compare_libcs.html)ではなく[musl libc](https://musl.libc.org/)を使用しています。これによりいくつかの互換性問題が発生する可能性があります。特に、globフラグ`GLOB_BRACE`は [サポートされていません](https://www.php.net/manual/en/function.glob.php) 。
+スタンドアロンバイナリおよびAlpineベースのDockerイメージ（`dunglas/frankenphp:*-alpine`）は、バイナリサイズを小さく保つために[glibc and friends](https://www.etalabs.net/compare_libcs.html)ではなく[musl libc](https://musl.libc.org/)を使用しています。これによりいくつかの互換性問題が発生する可能性があります。特に、globフラグ`GLOB_BRACE`は [サポートされていません](https://www.php.net/manual/function.glob.php) 。
 
 ## Dockerで`https://127.0.0.1`を使用する
 
@@ -122,7 +122,7 @@ error:0A000086:SSL routines::certificate verify failed
 
 静的バイナリにはTLS証明書がバンドルされていないため、OpenSSLにローカルのCA証明書の位置を明示する必要があります。
 
-[`openssl_get_cert_locations()`](https://www.php.net/manual/en/function.openssl-get-cert-locations.php)の出力を調べて、
+[`openssl_get_cert_locations()`](https://www.php.net/manual/function.openssl-get-cert-locations.php)の出力を調べて、
 CA証明書をどこにインストールすべきか確認し、その場所に保存してください。
 
 > [!WARNING]

@@ -1,10 +1,10 @@
-# FrankenPHP: Modern App Server for PHP
+# FrankenPHP: modern app server for PHP
 
 <h1 align="center"><a href="https://frankenphp.dev"><img src="frankenphp.png" alt="FrankenPHP" width="600"></a></h1>
 
 FrankenPHP is a modern application server for PHP built on top of the [Caddy](https://caddyserver.com/) web server.
 
-FrankenPHP gives superpowers to your PHP apps thanks to its stunning features: [_Early Hints_](https://frankenphp.dev/docs/early-hints/), [worker mode](https://frankenphp.dev/docs/worker/), [real-time capabilities](https://frankenphp.dev/docs/mercure/), automatic HTTPS, HTTP/2, and HTTP/3 support...
+FrankenPHP gives superpowers to your PHP apps thanks to its stunning features: [_Early Hints_](https://frankenphp.dev/docs/early-hints/), [worker mode](https://frankenphp.dev/docs/worker/), [real-time capabilities](https://frankenphp.dev/docs/mercure/), [hot reloading](https://frankenphp.dev/docs/hot-reload/), automatic HTTPS, HTTP/2, and HTTP/3 support...
 
 FrankenPHP works with any PHP app and makes your Laravel and Symfony projects faster than ever thanks to their official integrations with the worker mode.
 
@@ -14,35 +14,41 @@ FrankenPHP can also be used as a standalone Go library to embed PHP in any app u
 
 <a href="https://dunglas.dev/2022/10/frankenphp-the-modern-php-app-server-written-in-go/"><img src="https://dunglas.dev/wp-content/uploads/2022/10/frankenphp.png" alt="Slides" width="600"></a>
 
-## Getting Started
+## Getting started
 
-On Windows, use [WSL](https://learn.microsoft.com/windows/wsl/) to run FrankenPHP.
+### Install script
 
-### Install Script
-
-You can copy this line into your terminal to automatically
+On Linux and macOS, copy this line into your terminal to automatically
 install an appropriate version for your platform:
 
 ```console
 curl https://frankenphp.dev/install.sh | sh
 ```
 
-### Standalone Binary
+On Windows, run this in PowerShell:
 
-We provide static FrankenPHP binaries for development purposes on Linux and macOS
-containing [PHP 8.4](https://www.php.net/releases/8.4/en.php) and most popular PHP extensions.
+```powershell
+irm https://frankenphp.dev/install.ps1 | iex
+```
+
+### Standalone binary
+
+We provide FrankenPHP binaries for Linux, macOS and Windows
+containing [PHP 8.5](https://www.php.net/releases/8.5/).
+
+Linux binaries are statically linked, so they can be used on any Linux distribution without installing any dependency. macOS binaries are also self-contained.
+They contain most popular PHP extensions.
+Windows archives contain the official PHP binary for Windows.
 
 [Download FrankenPHP](https://github.com/php/frankenphp/releases)
 
-**Installing extensions:** Most common extensions are bundled. It's not possible to install more extensions.
-
-### rpm Packages
+### rpm packages
 
 Our maintainers offer rpm packages for all systems using `dnf`. To install, run:
 
 ```console
 sudo dnf install https://rpm.henderkes.com/static-php-1-0.noarch.rpm
-sudo dnf module enable php-zts:static-8.4 # 8.2-8.5 available
+sudo dnf module enable php-zts:static-8.5 # 8.2-8.5 available
 sudo dnf install frankenphp
 ```
 
@@ -55,7 +61,7 @@ sudo dnf install pie-zts
 sudo pie-zts install asgrim/example-pie-extension
 ```
 
-### deb Packages
+### deb packages
 
 Our maintainers offer deb packages for all systems using `apt`. To install, run:
 
@@ -76,7 +82,7 @@ sudo apt install pie-zts
 sudo pie-zts install asgrim/example-pie-extension
 ```
 
-### apk Packages
+### apk packages
 
 Our maintainers offer apk packages for all systems using `apk`. To install, run:
 
@@ -84,8 +90,8 @@ Our maintainers offer apk packages for all systems using `apk`. To install, run:
 VERSION=85 # 82-85 available
 echo "https://pkg.henderkes.com/api/packages/${VERSION}/alpine/main/php-zts" | sudo tee -a /etc/apk/repositories
 KEYFILE=$(curl -sJOw '%{filename_effective}' https://pkg.henderkes.com/api/packages/${VERSION}/alpine/key)
-sudo mv ${KEYFILE} /etc/apk/keys/ && 
-sudo apk update && 
+sudo mv ${KEYFILE} /etc/apk/keys/ &&
+sudo apk update &&
 sudo apk add frankenphp
 ```
 
@@ -149,30 +155,33 @@ Go to `https://localhost`, and enjoy!
 
 - [Classic mode](https://frankenphp.dev/docs/classic/)
 - [Worker mode](https://frankenphp.dev/docs/worker/)
+- [Migrating from Nginx/PHP-FPM](https://frankenphp.dev/docs/migrate/)
 - [Early Hints support (103 HTTP status code)](https://frankenphp.dev/docs/early-hints/)
 - [Real-time](https://frankenphp.dev/docs/mercure/)
 - [Logging](https://frankenphp.dev/docs/logging/)
 - [Hot reloading](https://frankenphp.dev/docs/hot-reload/)
-- [Efficiently Serving Large Static Files](https://frankenphp.dev/docs/x-sendfile/)
+- [Efficiently serving large static files](https://frankenphp.dev/docs/x-sendfile/)
 - [Configuration](https://frankenphp.dev/docs/config/)
-- [Writing PHP Extensions in Go](https://frankenphp.dev/docs/extensions/)
+- [Writing PHP extensions in Go](https://frankenphp.dev/docs/extensions/)
 - [Docker images](https://frankenphp.dev/docs/docker/)
 - [Deploy in production](https://frankenphp.dev/docs/production/)
 - [Performance optimization](https://frankenphp.dev/docs/performance/)
 - [Create **standalone**, self-executable PHP apps](https://frankenphp.dev/docs/embed/)
 - [Create static binaries](https://frankenphp.dev/docs/static/)
 - [Compile from sources](https://frankenphp.dev/docs/compile/)
-- [Monitoring FrankenPHP](https://frankenphp.dev/docs/metrics/)
+- [Observability](https://frankenphp.dev/docs/observability/)
 - [WordPress integration](https://frankenphp.dev/docs/wordpress/)
+- [Symfony integration](https://frankenphp.dev/docs/symfony/)
 - [Laravel integration](https://frankenphp.dev/docs/laravel/)
 - [Known issues](https://frankenphp.dev/docs/known-issues/)
 - [Demo app (Symfony) and benchmarks](https://github.com/dunglas/frankenphp-demo)
 - [Go library documentation](https://pkg.go.dev/github.com/dunglas/frankenphp)
 - [Contributing and debugging](https://frankenphp.dev/docs/contributing/)
+- [Internals (architecture overview)](docs/internals.md)
 
-## Examples and Skeletons
+## Examples and skeletons
 
-- [Symfony](https://github.com/dunglas/symfony-docker)
+- [Symfony](https://frankenphp.dev/docs/symfony/)
 - [API Platform](https://api-platform.com/docs/symfony)
 - [Laravel](https://frankenphp.dev/docs/laravel/)
 - [Sulu](https://sulu.io/blog/running-sulu-with-frankenphp)
@@ -181,3 +190,4 @@ Go to `https://localhost`, and enjoy!
 - [Joomla](https://github.com/alexandreelise/frankenphp-joomla)
 - [TYPO3](https://github.com/ochorocho/franken-typo3)
 - [Magento2](https://github.com/ekino/frankenphp-magento2)
+- [WoltLab Suite](https://github.com/SoftCreatRMedia/frankenphp-woltlab-suite)

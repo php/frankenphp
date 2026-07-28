@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 	"unicode/utf8"
 
 	"github.com/dunglas/frankenphp/internal/fastabs"
@@ -130,11 +131,36 @@ func WithRequestEnv(env map[string]string) RequestOption {
 }
 
 func WithRequestPreparedEnv(env PreparedEnv) RequestOption {
+	env = ensurePreparedEnv(env)
+
 	return func(o *frankenPHPContext) error {
 		o.env = env
 
 		return nil
 	}
+}
+
+// ensurePreparedEnv ensures every key is NUL-terminated
+// Empty keys are dropped
+func ensurePreparedEnv(env PreparedEnv) PreparedEnv {
+	for k := range env {
+		if k == "" || k[len(k)-1] != '\x00' {
+			fixed := make(PreparedEnv, len(env))
+			for k, v := range env {
+				if k == "" {
+					continue
+				}
+				if k[len(k)-1] != '\x00' {
+					k += "\x00"
+				}
+				fixed[k] = v
+			}
+
+			return fixed
+		}
+	}
+
+	return env
 }
 
 func WithOriginalRequest(r *http.Request) RequestOption {
@@ -149,6 +175,18 @@ func WithOriginalRequest(r *http.Request) RequestOption {
 func WithRequestLogger(logger *slog.Logger) RequestOption {
 	return func(o *frankenPHPContext) error {
 		o.logger = logger
+
+		return nil
+	}
+}
+
+// WithRequestBodyTimeout sets an idle timeout on request body reads: a stalled
+// (slow POST) client is cut off while a steady upload of any size succeeds.
+// Zero (the default) disables it. Requires a ResponseWriter that exposes a read
+// deadline (net/http and Caddy do); otherwise the read has no timeout.
+func WithRequestBodyTimeout(timeout time.Duration) RequestOption {
+	return func(o *frankenPHPContext) error {
+		o.requestBodyTimeout = timeout
 
 		return nil
 	}

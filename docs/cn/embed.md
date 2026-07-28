@@ -125,7 +125,7 @@ EMBED=/path/to/your/app ./build-static.sh
 ./my-app php-cli bin/console
 ```
 
-## PHP Extensions
+## PHP extensions
 
 默认情况下，脚本将构建您项目的 `composer.json` 文件中所需的扩展（如果有的话）。
 如果 `composer.json` 文件不存在，将构建默认扩展，如 [静态构建条目](static.md) 中所述。
@@ -138,7 +138,7 @@ EMBED=/path/to/your/app ./build-static.sh
 
 ## 分发二进制文件
 
-在Linux上，创建的二进制文件使用[UPX](https://upx.github.io)进行压缩。
+在 Linux 上，可以通过在构建时设置环境变量 `COMPRESS=1` 来使用 [UPX](https://upx.github.io) 压缩生成的二进制文件。
 
 在Mac上，您可以在发送文件之前压缩它以减小文件大小。
 我们推荐使用 `xz`。

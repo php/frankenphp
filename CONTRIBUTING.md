@@ -1,5 +1,7 @@
 # Contributing
 
+For an overview of FrankenPHP's architecture (thread types, state machine, CGO boundary, request flow), see the [Internals documentation](docs/internals.md).
+
 ## Compiling PHP
 
 ### With Docker (Linux)
@@ -30,14 +32,14 @@ If your Docker version is lower than 23.0, the build will fail due to dockerigno
 
 [Follow the instructions to compile from sources](https://frankenphp.dev/docs/compile/) and pass the `--debug` configuration flag.
 
-## Running the Test Suite
+## Running the test suite
 
 ```console
 export CGO_CFLAGS=-O0 -g $(php-config --includes) CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)"
 go test -race -v ./...
 ```
 
-## Caddy Module
+## Caddy module
 
 Build Caddy with the FrankenPHP Caddy module:
 
@@ -63,7 +65,7 @@ The server is listening on `127.0.0.1:80`:
 curl -vk http://127.0.0.1/phpinfo.php
 ```
 
-## Minimal Test Server
+## Minimal test server
 
 Build the minimal test server:
 
@@ -86,64 +88,64 @@ The server is listening on `127.0.0.1:8080`:
 curl -v http://127.0.0.1:8080/phpinfo.php
 ```
 
-## Windows Development
+## Windows development
 
 1. Configure Git to always use `lf` line endings
 
-    ```powershell
-    git config --global core.autocrlf false
-    git config --global core.eol lf
-    ```
+   ```powershell
+   git config --global core.autocrlf false
+   git config --global core.eol lf
+   ```
 
 2. Install Visual Studio, Git, and Go:
 
-    ```powershell
-    winget install -e --id Microsoft.VisualStudio.2022.Community --override "--passive --wait --add Microsoft.VisualStudio.Workload.NativeDesktop --add Microsoft.VisualStudio.Component.VC.Llvm.Clang --includeRecommended"
-    winget install -e --id GoLang.Go
-    winget install -e --id Git.Git
-    ```
+   ```powershell
+   winget install -e --id Microsoft.VisualStudio.2022.Community --override "--passive --wait --add Microsoft.VisualStudio.Workload.NativeDesktop --add Microsoft.VisualStudio.Component.VC.Llvm.Clang --includeRecommended"
+   winget install -e --id GoLang.Go
+   winget install -e --id Git.Git
+   ```
 
 3. Install vcpkg:
 
-    ```powershell
-    cd C:\
-    git clone https://github.com/microsoft/vcpkg
-    .\vcpkg\bootstrap-vcpkg.bat
-    ```
+   ```powershell
+   cd C:\
+   git clone https://github.com/microsoft/vcpkg
+   .\vcpkg\bootstrap-vcpkg.bat
+   ```
 
 4. [Download the latest version of the watcher library for Windows](https://github.com/e-dant/watcher/releases) and extract it to a directory named `C:\watcher`
 5. [Download the latest **Thread Safe** version of PHP and of the PHP SDK for Windows](https://windows.php.net/download/), extract them in directories named `C:\php` and `C:\php-devel`
 6. Clone the FrankenPHP Git repository:
 
-    ```powershell
-    git clone https://github.com/php/frankenphp C:\frankenphp
-    cd C:\frankenphp
-    ```
+   ```powershell
+   git clone https://github.com/php/frankenphp C:\frankenphp
+   cd C:\frankenphp
+   ```
 
 7. Install the dependencies:
 
-    ```powershell
-    C:\vcpkg\vcpkg.exe install
-    ```
+   ```powershell
+   C:\vcpkg\vcpkg.exe install
+   ```
 
 8. Configure the needed environment variables (PowerShell):
 
-    ```powershell
-    $env:PATH += ';C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\Llvm\bin'
-    $env:CC = 'clang'
-    $env:CXX = 'clang++'
-    $env:CGO_CFLAGS = "-O0 -g -IC:\frankenphp\vcpkg_installed\x64-windows\include -IC:\watcher -IC:\php-devel\include -IC:\php-devel\include\main -IC:\php-devel\include\TSRM -IC:\php-devel\include\Zend -IC:\php-devel\include\ext"
-    $env:CGO_LDFLAGS = '-LC:\frankenphp\vcpkg_installed\x64-windows\lib -lbrotlienc -LC:\watcher -llibwatcher-c -LC:\php -LC:\php-devel\lib -lphp8ts -lphp8embed'
-    ```
+   ```powershell
+   $env:PATH += ';C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\Llvm\bin'
+   $env:CC = 'clang'
+   $env:CXX = 'clang++'
+   $env:CGO_CFLAGS = "-O0 -g -IC:\frankenphp\vcpkg_installed\x64-windows\include -IC:\watcher -IC:\php-devel\include -IC:\php-devel\include\main -IC:\php-devel\include\TSRM -IC:\php-devel\include\Zend -IC:\php-devel\include\ext"
+   $env:CGO_LDFLAGS = '-LC:\frankenphp\vcpkg_installed\x64-windows\lib -lbrotlienc -LC:\watcher -llibwatcher-c -LC:\php -LC:\php-devel\lib -lphp8ts -lphp8embed'
+   ```
 
 9. Run the tests:
 
-    ```powershell
-    go test -race -ldflags '-extldflags="-fuse-ld=lld"' ./...
-    cd caddy
-    go test -race -ldflags '-extldflags="-fuse-ld=lld"' -tags nobadger,nomysql,nopgx ./...
-    cd ..
-    ```
+   ```powershell
+   go test -race -ldflags '-extldflags="-fuse-ld=lld"' ./...
+   cd caddy
+   go test -race -ldflags '-extldflags="-fuse-ld=lld"' -tags nobadger,nomysql,nopgx ./...
+   cd ..
+   ```
 
 10. Build the binary:
 
@@ -153,7 +155,7 @@ curl -v http://127.0.0.1:8080/phpinfo.php
     cd ../..
     ```
 
-## Building Docker Images Locally
+## Building Docker images locally
 
 Print Bake plan:
 
@@ -179,7 +181,7 @@ Build FrankenPHP images from scratch for arm64 & amd64 and push to Docker Hub:
 docker buildx bake -f docker-bake.hcl --pull --no-cache --push
 ```
 
-## Debugging Segmentation Faults With Static Builds
+## Debugging segmentation faults with static builds
 
 1. Download the debug version of the FrankenPHP binary from GitHub or create your custom static build including debug symbols:
 
@@ -205,7 +207,7 @@ docker buildx bake -f docker-bake.hcl --pull --no-cache --push
 7. Type `bt` in the GDB shell
 8. Copy the output
 
-## Debugging Segmentation Faults in GitHub Actions
+## Debugging segmentation faults in GitHub Actions
 
 1. Open `.github/workflows/tests.yml`
 2. Enable PHP debug symbols
@@ -249,7 +251,147 @@ docker buildx bake -f docker-bake.hcl --pull --no-cache --push
 
 9. When the bug is fixed, revert all these changes
 
-## Misc Dev Resources
+## Development environment setup (WSL/Unix)
+
+### Initial setup
+
+Follow the instructions in [compiling from sources](https://frankenphp.dev/docs/compile/).
+The steps assume the following environment:
+
+- Go installed at `/usr/local/go`
+- PHP source cloned to `~/php-src`
+- PHP built at: `/usr/local/bin/php`
+- FrankenPHP source cloned to `~/frankenphp`
+
+### CLion setup for CGO glue/PHP source development
+
+1. Install CLion (on your host OS)
+
+   - Download from [JetBrains](https://www.jetbrains.com/clion/download/)
+   - Launch (if on Windows, in WSL):
+
+     ```bash
+     clion &>/dev/null
+     ```
+
+2. Open Project in CLion
+
+   - Open CLion → Open → Select the `~/frankenphp` directory
+   - Add a build chain: Settings → Build, Execution, Deployment → Custom Build Targets
+   - Select any Build Target, under `Build` set up an External Tool (call it e.g. go build)
+   - Set up a wrapper script that builds frankenphp for you, called `go_compile_frankenphp.sh`
+
+   ```bash
+   CGO_CFLAGS="-O0 -g" ./go.sh
+   ```
+
+   - Under Program, select `go_compile_frankenphp.sh`
+   - Leave Arguments blank
+   - Working Directory: `~/frankenphp/caddy/frankenphp`
+
+3. Configure Run Targets
+
+   - Go to Run → Edit Configurations
+   - Create:
+     - frankenphp:
+       - Type: Native Application
+       - Target: select the `go build` target you created
+       - Executable: `~/frankenphp/caddy/frankenphp/frankenphp`
+       - Arguments: the arguments you want to start frankenphp with, e.g. `php-cli test.php`
+
+4. Debug Go files from CLion
+
+   - Right click on a \*.go file in the Project view on the left
+   - Override file type → C/C++
+
+   Now you can place breakpoints in C, C++ and Go files.
+   To get syntax highlighting for imports from php-src, you may need to tell CLion about the include paths. Create a
+   `compile_flags.txt` file in `~/frankenphp` with the following contents:
+
+   ```gcc
+   -I/usr/local/include/php
+   -I/usr/local/include/php/Zend
+   -I/usr/local/include/php/main
+   -I/usr/local/include/php/TSRM
+   ```
+
+---
+
+### GoLand setup for FrankenPHP development
+
+Use GoLand for primary Go development, but the debugger cannot debug C code.
+
+1. Install GoLand (on your host OS)
+
+   - Download from [JetBrains](https://www.jetbrains.com/go/download/)
+
+     ```bash
+     goland &>/dev/null
+     ```
+
+2. Open in GoLand
+
+   - Launch GoLand → Open → Select the `~/frankenphp` directory
+
+---
+
+### Go configuration
+
+- Select Go Build
+  - Name `frankenphp`
+  - Run kind: Directory
+- Directory: `~/frankenphp/caddy/frankenphp`
+- Output directory: `~/frankenphp/caddy/frankenphp`
+- Working directory: `~/frankenphp/caddy/frankenphp`
+- Environment (adjust for your $(php-config ...) output):
+  `CGO_CFLAGS=-O0 -g -I/usr/local/include/php -I/usr/local/include/php/main -I/usr/local/include/php/TSRM -I/usr/local/include/php/Zend -I/usr/local/include/php/ext -I/usr/local/include/php/ext/date/lib;CGO_LDFLAGS=-lm -lpthread -lsqlite3 -lxml2 -lbrotlienc -lbrotlidec -lbrotlicommon -lwatcher`
+- Go tool arguments: `-tags=nobadger,nomysql,nopgx`
+- Program arguments: e.g. `php-cli -i`
+
+To debug C files from GoLand
+
+- Right click on a \*.c file in the Project view on the left
+- Override file type → Go
+
+Now you can place breakpoints in C, C++ and Go files.
+
+---
+
+### GoLand setup on Windows
+
+1. Follow the [Windows Development section](#windows-development)
+
+2. Install GoLand
+
+   - Download from [JetBrains](https://www.jetbrains.com/go/download/)
+   - Launch GoLand
+
+3. Open in GoLand
+
+   - Select **Open** → Choose the directory where you cloned `frankenphp`
+
+4. Configure Go Build
+
+   - Go to **Run** → **Edit Configurations**
+   - Click **+** and select **Go Build**
+   - Name: `frankenphp`
+   - Run kind: **Directory**
+   - Directory: `.\caddy\frankenphp`
+   - Output directory: `.\caddy\frankenphp`
+   - Working directory: `.\caddy\frankenphp`
+   - Go tool arguments: `-tags=nobadger,nomysql,nopgx`
+   - Environment variables: see the [Windows Development section](#windows-development)
+   - Program arguments: e.g. `php-server`
+
+---
+
+### Debugging and integration notes
+
+- Use CLion for debugging PHP internals and `cgo` glue code
+- Use GoLand for primary Go development and debugging
+- FrankenPHP can be added as a run configuration in CLion for unified C/Go debugging if needed, but syntax highlighting won't work in Go files
+
+## Misc dev resources
 
 - [PHP embedding in uWSGI](https://github.com/unbit/uwsgi/blob/master/plugins/php/php_plugin.c)
 - [PHP embedding in NGINX Unit](https://github.com/nginx/unit/blob/master/src/nxt_php_sapi.c)
@@ -260,19 +402,19 @@ docker buildx bake -f docker-bake.hcl --pull --no-cache --push
 - [What the heck is TSRMLS_CC, anyway?](http://blog.golemon.com/2006/06/what-heck-is-tsrmlscc-anyway.html)
 - [SDL bindings](https://pkg.go.dev/github.com/veandco/go-sdl2@v0.4.21/sdl#Main)
 
-## Docker-Related Resources
+## Docker-related resources
 
 - [Bake file definition](https://docs.docker.com/build/customize/bake/file-definition/)
 - [`docker buildx build`](https://docs.docker.com/engine/reference/commandline/buildx_build/)
 
-## Useful Command
+## Useful command
 
 ```console
 apk add strace util-linux gdb
 strace -e 'trace=!futex,epoll_ctl,epoll_pwait,tgkill,rt_sigreturn' -p 1
 ```
 
-## Translating the Documentation
+## Translating the documentation
 
 To translate the documentation and the site into a new language,
 follow these steps:

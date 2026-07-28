@@ -33,7 +33,7 @@ Alternativamente, você pode compilar o PHP a partir do código-fonte com as
 opções necessárias para o FrankenPHP seguindo estes passos.
 
 Primeiro, [obtenha o código-fonte do PHP](https://www.php.net/downloads.php) e
-extraia-os:
+extraia-o:
 
 ```console
 tar xf php-*

@@ -1,4 +1,4 @@
-# Despliegue en Producción
+# Despliegue en producción
 
 En este tutorial, aprenderemos cómo desplegar una aplicación PHP en un único servidor usando Docker Compose.
 
@@ -6,7 +6,7 @@ Si estás usando Symfony, consulta la documentación "[Despliegue en producción
 
 Si estás usando API Platform (que también usa FrankenPHP), consulta [la documentación de despliegue del framework](https://api-platform.com/docs/deployment/).
 
-## Preparando tu Aplicación
+## Preparando tu aplicación
 
 Primero, crea un archivo `Dockerfile` en el directorio raíz de tu proyecto PHP:
 
@@ -30,7 +30,7 @@ COPY . /app/public
 #COPY . /app
 ```
 
-Consulta "[Construyendo una Imagen Docker Personalizada](docker.md)" para más detalles y opciones,
+Consulta "[Construyendo una imagen Docker personalizada](docker.md)" para más detalles y opciones,
 y para aprender cómo personalizar la configuración, instalar extensiones PHP y módulos de Caddy.
 
 Si tu proyecto usa Composer,
@@ -68,7 +68,7 @@ volumes:
 
 Finalmente, si usas Git, haz commit de estos archivos y haz push.
 
-## Preparando un Servidor
+## Preparando un servidor
 
 Para desplegar tu aplicación en producción, necesitas un servidor.
 En este tutorial, usaremos una máquina virtual proporcionada por DigitalOcean, pero cualquier servidor Linux puede funcionar.
@@ -93,7 +93,7 @@ Cuando tu Droplet esté listo, usa SSH para conectarte:
 ssh root@<ip-del-droplet>
 ```
 
-## Configurando un Nombre de Dominio
+## Configurando un nombre de dominio
 
 En la mayoría de los casos, querrás asociar un nombre de dominio a tu sitio.
 Si aún no tienes un nombre de dominio, deberás comprar uno a través de un registrador.
@@ -137,7 +137,7 @@ Ve a `https://tu-dominio.ejemplo.com` y ¡disfruta!
 >
 > Docker puede tener una capa de caché, asegúrate de tener la compilación correcta para cada despliegue o vuelve a compilar tu proyecto con la opción `--no-cache` para evitar problemas de caché.
 
-## Despliegue en Múltiples Nodos
+## Despliegue en múltiples nodos
 
 Si deseas desplegar tu aplicación en un clúster de máquinas, puedes usar [Docker Swarm](https://docs.docker.com/engine/swarm/stack-deploy/),
 que es compatible con los archivos Compose proporcionados.

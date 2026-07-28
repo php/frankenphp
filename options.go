@@ -30,6 +30,8 @@ type opt struct {
 	metrics     Metrics
 	phpIni      map[string]string
 	maxWaitTime time.Duration
+	maxIdleTime time.Duration
+	maxRequests int
 }
 
 type workerOpt struct {
@@ -151,6 +153,24 @@ func WithPhpIni(overrides map[string]string) Option {
 func WithMaxWaitTime(maxWaitTime time.Duration) Option {
 	return func(o *opt) error {
 		o.maxWaitTime = maxWaitTime
+
+		return nil
+	}
+}
+
+// WithMaxIdleTime configures the max time an autoscaled thread may be idle before being deactivated.
+func WithMaxIdleTime(maxIdleTime time.Duration) Option {
+	return func(o *opt) error {
+		o.maxIdleTime = maxIdleTime
+
+		return nil
+	}
+}
+
+// EXPERIMENTAL: WithMaxRequests sets the default max requests before restarting a PHP thread (0 = unlimited). Applies to regular and worker threads.
+func WithMaxRequests(maxRequests int) Option {
+	return func(o *opt) error {
+		o.maxRequests = maxRequests
 
 		return nil
 	}

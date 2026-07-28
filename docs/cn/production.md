@@ -13,7 +13,7 @@
 ```dockerfile
 FROM dunglas/frankenphp
 
-# 请将 "your-domain-name.example.com" 替换为你的域名
+# 请务必将 "your-domain-name.example.com" 替换为你的域名
 ENV SERVER_NAME=your-domain-name.example.com
 # 如果要禁用 HTTPS，请改用以下值：
 #ENV SERVER_NAME=:80
@@ -30,8 +30,8 @@ COPY . /app/public
 #COPY . /app
 ```
 
-有关更多详细信息和选项，请参阅 [构建自定义 Docker 镜像](docker.md)。
-要了解如何自定义配置，请安装 PHP 扩展和 Caddy 模块。
+有关更多详细信息和选项，请参阅 [构建自定义 Docker 镜像](docker.md)，
+并了解如何自定义配置，安装 PHP 扩展和 Caddy 模块。
 
 如果你的项目使用 Composer，
 请务必将其包含在 Docker 镜像中并安装你的依赖。
@@ -51,7 +51,7 @@ services:
       - caddy_data:/data
       - caddy_config:/config
 
-# Caddy 证书和配置所需的挂载目录
+# Caddy 证书和配置所需的卷
 volumes:
   caddy_data:
   caddy_config:
@@ -60,9 +60,9 @@ volumes:
 > [!NOTE]
 >
 > 前面的示例适用于生产用途。
-> 在开发中，你可能希望使用挂载目录，不同的 PHP 配置和不同的 `SERVER_NAME` 环境变量值。
+> 在开发中，你可能希望使用卷、不同的 PHP 配置和不同的 `SERVER_NAME` 环境变量值。
 >
-> 见 [Symfony Docker](https://github.com/dunglas/symfony-docker) 项目
+> 请查看 [Symfony Docker](https://github.com/dunglas/symfony-docker) 项目
 > （使用 FrankenPHP）作为使用多阶段镜像的更高级示例，
 > Composer、额外的 PHP 扩展等。
 
@@ -78,13 +78,13 @@ volumes:
 然后，单击“Choose an image”部分下的“Marketplace”选项卡，然后搜索名为“Docker”的应用程序。
 这将配置已安装最新版本的 Docker 和 Docker Compose 的 Ubuntu 服务器！
 
-出于测试目的，最便宜的就足够了。
+出于测试目的，最便宜的计划就足够了。
 对于实际的生产用途，你可能需要在“general purpose”部分中选择一个计划来满足你的需求。
 
-![使用 Docker 在 DigitalOcean 上部署 FrankenPHP](../digitalocean-droplet.png)
+![使用 Docker 在 DigitalOcean 上部署 FrankenPHP](digitalocean-droplet.png)
 
 你可以保留其他设置的默认值，也可以根据需要进行调整。
-不要忘记添加你的 SSH 密钥或创建密码，然后点击“完成并创建”按钮。
+不要忘记添加你的 SSH 密钥或创建密码，然后点击“Finalize and create”按钮。
 
 然后，在 Droplet 预配时等待几秒钟。
 Droplet 准备就绪后，使用 SSH 进行连接：
@@ -136,6 +136,29 @@ docker compose up --wait
 > [!CAUTION]
 >
 > Docker 有一个缓存层，请确保每个部署都有正确的构建，或者使用 `--no-cache` 选项重新构建项目以避免缓存问题。
+
+## 在反向代理后运行
+
+如果 FrankenPHP 运行在反向代理或负载均衡器（例如 Nginx、AWS ELB、Google Cloud LB）之后，
+你必须在 Caddyfile 中配置 [`trusted_proxies` 全局选项](https://caddyserver.com/docs/caddyfile/options#trusted-proxies)，
+以便 Caddy 信任传入的 `X-Forwarded-*` 头：
+
+```caddyfile
+{
+	servers {
+		trusted_proxies static <your-IPs>
+	}
+}
+```
+
+如果需要，请将 `<your-IPs>` 替换为你的代理的实际 IP 范围。
+
+此外，你的 PHP 框架也必须配置为信任该代理。
+例如，为 Symfony 设置 [`TRUSTED_PROXIES` 环境变量](https://symfony.com/doc/current/deployment/proxies.html)，
+或为 Laravel 设置 [`trustedproxies` 中间件](https://laravel.com/docs/trustedproxy)。
+
+如果缺少这两项配置，`X-Forwarded-For` 和 `X-Forwarded-Proto` 等头将被忽略，
+这可能导致 HTTPS 检测不正确或客户端 IP 地址错误等问题。
 
 ## 在多个节点上部署
 

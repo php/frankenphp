@@ -13,9 +13,9 @@ docker run --cap-add=SYS_PTRACE --security-opt seccomp=unconfined -p 8080:8080 -
 
 L'image contient les outils de développement habituels (Go, GDB, Valgrind, Neovim...) et utilise les emplacements de configuration PHP suivants
 
-- php.ini: `/etc/frankenphp/php.ini` Un fichier php.ini avec des préréglages de développement est fourni par défaut.
-- fichiers de configuration supplémentaires: `/etc/frankenphp/php.d/*.ini`
-- extensions php: `/usr/lib/frankenphp/modules/`
+- php.ini : `/etc/frankenphp/php.ini` Un fichier php.ini avec des préréglages de développement est fourni par défaut.
+- fichiers de configuration supplémentaires : `/etc/frankenphp/php.d/*.ini`
+- extensions php : `/usr/lib/frankenphp/modules/`
 
 Si votre version de Docker est inférieure à 23.0, la construction échouera à cause d'un [problème de pattern](https://github.com/moby/moby/pull/42676) dans `.dockerignore`. Ajoutez les répertoires à `.dockerignore`.
 
@@ -53,7 +53,7 @@ cd testdata/
 ../caddy/frankenphp/frankenphp run
 ```
 
-Le serveur est configuré pour écouter à l'adresse `127.0.0.1:80`:
+Le serveur est configuré pour écouter à l'adresse `127.0.0.1:80` :
 
 > [!NOTE]
 >
@@ -73,14 +73,14 @@ go build
 cd ../../
 ```
 
-Lancer le test serveur :
+Lancer le serveur de test :
 
 ```console
 cd testdata/
 ../internal/testserver/testserver
 ```
 
-Le serveur est configuré pour écouter à l'adresse `127.0.0.1:8080`:
+Le serveur est configuré pour écouter à l'adresse `127.0.0.1:8080` :
 
 ```console
 curl -v http://127.0.0.1:8080/phpinfo.php
@@ -182,7 +182,7 @@ docker buildx bake -f docker-bake.hcl --pull --no-cache --push
 
 9. Quand le bug est corrigé, annulez tous les changements.
 
-## Ressources Diverses pour le Développement
+## Ressources diverses pour le développement
 
 - [Intégration de PHP dans uWSGI](https://github.com/unbit/uwsgi/blob/master/plugins/php/php_plugin.c)
 - [Intégration de PHP dans NGINX Unit](https://github.com/nginx/unit/blob/master/src/nxt_php_sapi.c)
@@ -194,7 +194,7 @@ docker buildx bake -f docker-bake.hcl --pull --no-cache --push
 - [Intégration de PHP sur Mac](https://gist.github.com/jonnywang/61427ffc0e8dde74fff40f479d147db4)
 - [Bindings SDL](https://pkg.go.dev/github.com/veandco/go-sdl2@v0.4.21/sdl#Main)
 
-## Ressources Liées à Docker
+## Ressources liées à Docker
 
 - [Définition du fichier Bake](https://docs.docker.com/build/customize/bake/file-definition/)
 - [`docker buildx build`](https://docs.docker.com/engine/reference/commandline/buildx_build/)

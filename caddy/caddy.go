@@ -5,6 +5,7 @@ package caddy
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
@@ -13,6 +14,11 @@ import (
 const (
 	defaultDocumentRoot = "public"
 	defaultWatchPattern = "./**/*.{env,php,twig,yaml,yml}"
+
+	// defaultRequestBodyTimeout is the idle timeout applied to request body
+	// reads when the directive is omitted; mirrors nginx's client_body_timeout.
+	// Set request_body_timeout to 0 to disable.
+	defaultRequestBodyTimeout = caddy.Duration(60 * time.Second)
 )
 
 func init() {

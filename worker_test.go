@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/dunglas/frankenphp"
@@ -168,4 +170,95 @@ func TestKeepRunningOnConnectionAbort(t *testing.T) {
 
 		assert.Equal(t, "requests:2", body2, "should not have stopped execution after the first request was aborted")
 	}, &testOptions{workerScript: "worker-with-counter.php", nbWorkers: 1, nbParallelRequests: 1})
+}
+
+// TestWorkerMaxRequests verifies that a worker restarts after reaching max_requests.
+func TestWorkerMaxRequests(t *testing.T) {
+	const maxRequests = 5
+	const totalRequests = 20
+
+	var buf syncBuffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		instanceIDs := make(map[string]int)
+
+		for i := 0; i < totalRequests; i++ {
+			body, resp := testGet("http://example.com/worker-counter-persistent.php", handler, t)
+			assert.Equal(t, 200, resp.StatusCode)
+
+			parts := strings.Split(body, ",")
+			if len(parts) == 2 {
+				instanceID := strings.TrimPrefix(parts[0], "instance:")
+				instanceIDs[instanceID]++
+			}
+		}
+
+		t.Logf("Unique worker instances seen: %d (expected >= %d)", len(instanceIDs), totalRequests/maxRequests)
+		for id, count := range instanceIDs {
+			t.Logf("  instance %s: handled %d requests", id, count)
+		}
+
+		assert.GreaterOrEqual(t, len(instanceIDs), totalRequests/maxRequests)
+
+		for id, count := range instanceIDs {
+			assert.LessOrEqual(t, count, maxRequests,
+				fmt.Sprintf("instance %s handled %d requests, exceeding max_requests=%d", id, count, maxRequests))
+		}
+
+		restartCount := strings.Count(buf.String(), "max requests reached, restarting")
+		t.Logf("Worker restarts observed: %d", restartCount)
+		assert.GreaterOrEqual(t, restartCount, 2)
+	}, &testOptions{
+		workerScript:       "worker-counter-persistent.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		logger:             logger,
+		initOpts:           []frankenphp.Option{frankenphp.WithNumThreads(2), frankenphp.WithMaxRequests(maxRequests)},
+	})
+}
+
+// TestWorkerMaxRequestsHighConcurrency verifies max_requests works under concurrent load.
+func TestWorkerMaxRequestsHighConcurrency(t *testing.T) {
+	const maxRequests = 10
+	const totalRequests = 200
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		var (
+			mu          sync.Mutex
+			instanceIDs = make(map[string]int)
+		)
+		var wg sync.WaitGroup
+
+		for i := 0; i < totalRequests; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				body, resp := testGet("http://example.com/worker-counter-persistent.php", handler, t)
+				assert.Equal(t, 200, resp.StatusCode)
+
+				mu.Lock()
+				parts := strings.Split(body, ",")
+				if len(parts) == 2 {
+					instanceID := strings.TrimPrefix(parts[0], "instance:")
+					instanceIDs[instanceID]++
+				}
+				mu.Unlock()
+			}()
+		}
+		wg.Wait()
+
+		t.Logf("instances: %d", len(instanceIDs))
+		assert.Greater(t, len(instanceIDs), 4, "workers should have restarted multiple times")
+
+		for id, count := range instanceIDs {
+			assert.LessOrEqual(t, count, maxRequests,
+				fmt.Sprintf("instance %s handled %d requests, exceeding max_requests=%d", id, count, maxRequests))
+		}
+	}, &testOptions{
+		workerScript:       "worker-counter-persistent.php",
+		nbWorkers:          4,
+		nbParallelRequests: 1,
+		initOpts:           []frankenphp.Option{frankenphp.WithNumThreads(5), frankenphp.WithMaxRequests(maxRequests)},
+	})
 }

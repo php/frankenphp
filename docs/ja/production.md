@@ -2,9 +2,9 @@
 
 このチュートリアルでは、Docker Composeを使用して単一サーバーにPHPアプリケーションをデプロイする方法を学びます。
 
-Symfonyを使用している場合は、Symfony Dockerプロジェクトの「[本番環境へのデプロイ](https://github.com/dunglas/symfony-docker/blob/main/docs/production.md)」ドキュメントを参照してください。
+Symfonyを使用している場合は、FrankenPHPを使用しているSymfony Dockerプロジェクトの「[本番環境へのデプロイ](https://github.com/dunglas/symfony-docker/blob/main/docs/production.md)」ドキュメントを参照してください。
 
-API Platformを使用している場合は、[フレームワークのデプロイドキュメント](https://api-platform.com/docs/deployment/)を参照してください。
+API Platform（FrankenPHPも使用）を使用している場合は、[フレームワークのデプロイドキュメント](https://api-platform.com/docs/deployment/)を参照してください。
 
 ## アプリの準備
 
@@ -136,6 +136,25 @@ docker compose up --wait
 > [!CAUTION]
 >
 > Dockerはキャッシュレイヤーを持つ可能性があるため、各デプロイメントで正しいビルドを持っているか確認するか、キャッシュの問題を避けるために`--no-cache`オプションでプロジェクトを再ビルドしてください。
+
+## リバースプロキシの背後で実行する
+
+FrankenPHPがリバースプロキシまたはロードバランサー（例：Nginx、AWS ELB、Google Cloud LB）の背後で実行されている場合、Caddyが受信する`X-Forwarded-*`ヘッダーを信頼するように、Caddyfileで[`trusted_proxies`グローバルオプション](https://caddyserver.com/docs/caddyfile/options#trusted-proxies)を設定する必要があります：
+
+```caddyfile
+{
+	servers {
+		trusted_proxies static <your-IPs>
+	}
+}
+```
+
+`<your-IPs>`を必要に応じてプロキシの実際のIP範囲に置き換えてください。
+
+さらに、PHPフレームワークもプロキシを信頼するように設定する必要があります。
+例えば、Symfonyでは[`TRUSTED_PROXIES`環境変数](https://symfony.com/doc/current/deployment/proxies.html)を設定するか、Laravelでは[`trustedproxies`ミドルウェア](https://laravel.com/docs/trustedproxy)を設定します。
+
+これらの両方の設定がない場合、`X-Forwarded-For`や`X-Forwarded-Proto`のようなヘッダーは無視され、HTTPS検出の誤りや不正なクライアントIPアドレスなどの問題を引き起こす可能性があります。
 
 ## 複数ノードへのデプロイ
 

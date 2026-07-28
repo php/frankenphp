@@ -19,28 +19,30 @@ docker run \
 
 ### Binaire autonome
 
-Utilisez l'option --worker de la commande php-server pour servir le contenu du répertoire courant en utilisant un worker :
+Utilisez l'option `--worker` de la commande `php-server` pour servir le contenu du répertoire courant en utilisant un worker :
 
 ```console
 frankenphp php-server --worker /path/to/your/worker/script.php
 ```
 
-Si votre application PHP est [intégrée dans le binaire](embed.md), vous pouvez également ajouter un `Caddyfile` personnalisé dans le répertoire racine de l'application.
+Si votre application PHP est [intégrée dans le binaire](embed.md), vous pouvez ajouter un `Caddyfile` personnalisé dans le répertoire racine de l'application.
 Il sera utilisé automatiquement.
 
-Il est également possible de [redémarrer le worker en cas de changement de fichier](config.md#surveillance-des-modifications-de-fichier) avec l'option `--watch`.
+Il est également possible de [redémarrer le worker en cas de changement de fichier](config.md#watching-for-file-changes) avec l'option `--watch`.
 La commande suivante déclenchera un redémarrage si un fichier se terminant par `.php` dans le répertoire `/path/to/your/app/` ou ses sous-répertoires est modifié :
 
 ```console
 frankenphp php-server --worker /path/to/your/worker/script.php --watch="/path/to/your/app/**/*.php"
 ```
 
+Cette fonctionnalité se combine très bien avec le [rechargement à chaud](hot-reload.md).
+
 ## Runtime Symfony
 
 > [!TIP]
 > La section suivante est nécessaire uniquement avant Symfony 7.4, où le support natif du mode worker de FrankenPHP a été introduit.
 
-Le mode worker de FrankenPHP est pris en charge par le [Composant Runtime de Symfony](https://symfony.com/doc/current/components/runtime.html).
+Le mode worker de FrankenPHP est pris en charge par le [composant Runtime de Symfony](https://symfony.com/doc/current/components/runtime.html).
 Pour démarrer une application Symfony dans un worker, installez le package FrankenPHP de [PHP Runtime](https://github.com/php-runtime/runtime) :
 
 ```console
@@ -62,7 +64,7 @@ docker run \
 
 Voir [la documentation dédiée](laravel.md#laravel-octane).
 
-## Applications Personnalisées
+## Applications personnalisées
 
 L'exemple suivant montre comment créer votre propre script worker sans dépendre d'une bibliothèque tierce :
 
@@ -70,20 +72,23 @@ L'exemple suivant montre comment créer votre propre script worker sans dépendr
 <?php
 // public/index.php
 
-// Empêcher la terminaison du script worker lorsqu'une connexion client est interrompue
-ignore_user_abort(true);
-
 // Démarrer votre application
 require __DIR__.'/vendor/autoload.php';
 
 $myApp = new \App\Kernel();
 $myApp->boot();
 
-// En dehors de la boucle pour de meilleures performances (moins de travail effectué)
+// Déclarer le handler en dehors de la boucle pour de meilleures performances (moins de travail effectué)
 $handler = static function () use ($myApp) {
-    // Appelé lorsqu'une requête est reçue,
-    // les superglobales, php://input, etc., sont réinitialisés
-    echo $myApp->handle($_GET, $_POST, $_COOKIE, $_FILES, $_SERVER);
+    try {
+        // Appelé lorsqu'une requête est reçue,
+        // les superglobales, php://input, etc., sont réinitialisés
+        echo $myApp->handle($_GET, $_POST, $_COOKIE, $_FILES, $_SERVER);
+    } catch (\Throwable $exception) {
+        // `set_exception_handler` est appelé uniquement lorsque le script worker se termine,
+        // ce qui peut ne pas être ce que vous attendez, alors interceptez et gérez les exceptions ici
+        (new \MyCustomExceptionHandler)->handleException($exception);
+    }
 };
 
 $maxRequests = (int)($_SERVER['MAX_REQUESTS'] ?? 0);
@@ -133,27 +138,23 @@ Le code du worker précédent permet de configurer un nombre maximal de requête
 
 ### Redémarrer les workers manuellement
 
-Bien qu'il soit possible de redémarrer les workers [en cas de changement de fichier](config.md#surveillance-des-modifications-de-fichier),
+Bien qu'il soit possible de redémarrer les workers [en cas de changement de fichier](config.md#watching-for-file-changes),
 il est également possible de redémarrer tous les workers de manière élégante via l'[API Admin de Caddy](https://caddyserver.com/docs/api).
-Si l'administration est activée dans votre [Caddyfile](config.md#configuration-du-caddyfile), vous pouvez envoyer un ping
+Si l'administration est activée dans votre [Caddyfile](config.md#caddyfile-config), vous pouvez envoyer un ping
 à l'endpoint de redémarrage avec une simple requête POST comme celle-ci :
 
 ```console
 curl -X POST http://localhost:2019/frankenphp/workers/restart
 ```
 
-> [!NOTE]
->
-> C'est une fonctionnalité expérimentale et peut être modifiée ou supprimée dans le futur.
-
-### Worker Failures
+### Échecs des workers
 
 Si un script de worker se plante avec un code de sortie non nul, FrankenPHP le redémarre avec une stratégie de backoff exponentielle.
-Si le script worker reste en place plus longtemps que le dernier backoff \* 2, FrankenPHP ne pénalisera pas le script et le redémarrera à nouveau.
+Si le script worker reste en place plus longtemps que le dernier backoff × 2, FrankenPHP ne pénalisera pas le script et le redémarrera à nouveau.
 Toutefois, si le script de worker continue d'échouer avec un code de sortie non nul dans un court laps de temps
 (par exemple, une faute de frappe dans un script), FrankenPHP plantera avec l'erreur : `too many consecutive failures` (trop d'échecs consécutifs).
 
-Le nombre d'échecs consécutifs peut être configuré dans votre [Caddyfile](config.md#configuration-du-caddyfile) avec l'option `max_consecutive_failures` :
+Le nombre d'échecs consécutifs peut être configuré dans votre [Caddyfile](config.md#caddyfile-config) avec l'option `max_consecutive_failures` :
 
 ```caddyfile
 frankenphp {
@@ -166,7 +167,7 @@ frankenphp {
 
 ## Comportement des superglobales
 
-[Les superglobales PHP](https://www.php.net/manual/fr/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...)
+[Les superglobales PHP](https://www.php.net/manual/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...)
 se comportent comme suit :
 
 - avant le premier appel à `frankenphp_handle_request()`, les superglobales contiennent des valeurs liées au script worker lui-même

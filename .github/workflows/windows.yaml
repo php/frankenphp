@@ -33,6 +33,7 @@ permissions:
 
 env:
   GOTOOLCHAIN: local
+  GOTESTSUM_FORMAT: pkgname-and-test-fails
   GOFLAGS: "-ldflags=-extldflags=-fuse-ld=lld -tags=nobadger,nomysql,nopgx"
   PHP_DOWNLOAD_BASE: "https://downloads.php.net/~windows/releases/"
   CC: clang
@@ -40,40 +41,46 @@ env:
 
 jobs:
   build:
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     runs-on: windows-latest
     steps:
+      - name: Determine ref
+        run: |
+          $ref = $env:REF
+          if (-not $ref -and $env:GITHUB_EVENT_NAME -eq "schedule") {
+            $ref = (gh release view --repo php/frankenphp --json tagName --jq '.tagName')
+          }
+
+          "REF=$ref" >> $env:GITHUB_ENV
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REF: ${{ (github.ref_type == 'tag' && github.ref_name) || (github.event_name == 'workflow_dispatch' && inputs.version) || '' }}
+
       - name: Configure Git
         run: |
           git config --global core.autocrlf false
           git config --global core.eol lf
 
       - name: Checkout Code
-        uses: actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
+          ref: ${{ env.REF || '' }}
           path: frankenphp
           persist-credentials: false
 
-      - name: Set FRANKENPHP_VERSION
-        run: |
-          if ($env:GITHUB_REF_TYPE -eq "tag") {
-            $frankenphpVersion = $env:GITHUB_REF_NAME.Substring(1)
-          } elseif ($env:GITHUB_EVENT_NAME -eq "schedule") {
-            $frankenphpVersion = $env:GITHUB_REF
-          } else {
-            $frankenphpVersion = $env:GITHUB_SHA
-          }
-
-          "FRANKENPHP_VERSION=$frankenphpVersion" >> $env:GITHUB_ENV
+      - id: version
+        uses: ./frankenphp/.github/actions/version
+        with:
+          ref: ${{ env.REF }}
 
       - name: Setup Go
-        uses: actions/setup-go@v6
-        with: # zizmor: ignore[cache-poisoning]
-          go-version: "1.26"
-          cache-dependency-path: |
-            frankenphp/go.sum
-            frankenphp/caddy/go.sum
-          cache: ${{ github.event_name != 'release' }}
-          check-latest: true
+        uses: ./frankenphp/.github/actions/setup-go
+        with:
+          working-directory: frankenphp
 
       - name: Install Vcpkg Libraries
         working-directory: frankenphp
@@ -108,7 +115,7 @@ jobs:
           $phpZip = "php-$version-Win32-vs17-x64.zip"
           $develZip = "php-devel-pack-$version-Win32-vs17-x64.zip"
 
-          $dirName = "frankenphp-$env:FRANKENPHP_VERSION-php-$version-Win32-vs17-x64"
+          $dirName = "frankenphp-windows-x86_64"
 
           "DIR_NAME=$dirName" >> $env:GITHUB_ENV
 
@@ -132,6 +139,8 @@ jobs:
 
           "CGO_CFLAGS=-DFRANKENPHP_VERSION=$env:FRANKENPHP_VERSION -I$vcpkgRoot\include -I$watcherRoot -I$phpDevel\include -I$phpDevel\include\main -I$phpDevel\include\TSRM -I$phpDevel\include\Zend -I$phpDevel\include\ext" >> $env:GITHUB_ENV
           "CGO_LDFLAGS=-L$vcpkgRoot\lib -lbrotlienc -L$watcherRoot -llibwatcher-c -L$phpBin -L$phpDevel\lib -lphp8ts -lphp8embed" >> $env:GITHUB_ENV
+        env:
+          FRANKENPHP_VERSION: ${{ steps.version.outputs.version }}
 
       - name: Embed Windows icon and metadata
         working-directory: frankenphp\caddy\frankenphp
@@ -168,12 +177,16 @@ jobs:
           $json | Set-Content "versioninfo.json"
 
           goversioninfo -64 -icon ..\..\frankenphp.ico versioninfo.json -o resource.syso
+        env:
+          FRANKENPHP_VERSION: ${{ steps.version.outputs.version }}
 
       - name: Build FrankenPHP
         run: |
           $customVersion = "FrankenPHP $env:FRANKENPHP_VERSION PHP $env:PHP_VERSION Caddy"
-          go build -ldflags="-extldflags=-fuse-ld=lld -X 'github.com/caddyserver/caddy/v2.CustomVersion=$customVersion' -X 'github.com/caddyserver/caddy/v2/modules/caddyhttp.ServerHeader=FrankenPHP Caddy'"
+          go build -ldflags="-extldflags=-fuse-ld=lld -X 'github.com/caddyserver/caddy/v2.CustomVersion=$customVersion' -X 'github.com/caddyserver/caddy/v2.CustomBinaryName=frankenphp' -X 'github.com/caddyserver/caddy/v2/modules/caddyhttp.ServerHeader=FrankenPHP Caddy'"
         working-directory: frankenphp\caddy\frankenphp
+        env:
+          FRANKENPHP_VERSION: ${{ steps.version.outputs.version }}
 
       - name: Create Directory
         run: |
@@ -185,30 +198,37 @@ jobs:
           Copy-Item frankenphp\vcpkg_installed\x64-windows\bin\pthreadVC3.dll $env:DIR_NAME
 
       - name: Upload Artifact
-        if: github.event_name != 'release'
-        uses: actions/upload-artifact@v6
+        if: ${{ !env.REF }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ env.DIR_NAME }}
           path: ${{ env.DIR_NAME }}
           if-no-files-found: error
 
       - name: Zip Release Artifact
-        if: github.event_name == 'release'
+        if: ${{ env.REF }}
         run: Compress-Archive -Path "$env:DIR_NAME\*" -DestinationPath "$env:DIR_NAME.zip"
 
       - name: Upload Release Asset
-        if: github.event_name == 'release'
-        run: gh release upload $env:GITHUB_EVENT_RELEASE_TAG_NAME "$env:DIR_NAME.zip" --clobber
+        if: ${{ env.REF }}
+        run: gh release upload "$env:REF" "$env:DIR_NAME.zip" --repo php/frankenphp --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_EVENT_RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
+
+      - if: ${{ env.REF }}
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        with:
+          subject-path: ${{ github.workspace }}\${{ env.DIR_NAME }}.zip
 
       - name: Run Tests
         run: |
           "opcache.enable=0`r`nopcache.enable_cli=0" | Out-File php.ini
           $env:PHPRC = Get-Location
 
-          go test -race ./...
+          go install gotest.tools/gotestsum@latest
+          gotestsum -- -race ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cd caddy
-          go test -race ./...
+          gotestsum -- -race ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         working-directory: ${{ github.workspace }}\frankenphp

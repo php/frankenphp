@@ -4,7 +4,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -58,8 +57,7 @@ func main() {}`,
 			tmpfile, err := os.CreateTemp("", "test_namespace_*.go")
 			require.NoError(t, err, "Failed to create temp file")
 			defer func() {
-				err := os.Remove(tmpfile.Name())
-				assert.NoError(t, err, "Failed to remove temp file: %v", err)
+				require.NoError(t, os.Remove(tmpfile.Name()), "Failed to remove temp file")
 			}()
 
 			_, err = tmpfile.Write([]byte(tt.content))
@@ -98,9 +96,7 @@ const TEST_CONSTANT = "test_value"
 	tmpfile, err := os.CreateTemp("", "test_generator_namespace_*.go")
 	require.NoError(t, err, "Failed to create temp file")
 	defer func() {
-		if err := os.Remove(tmpfile.Name()); err != nil {
-			t.Logf("Failed to remove temp file: %v", err)
-		}
+		require.NoError(t, os.Remove(tmpfile.Name()), "Failed to remove temp file")
 	}()
 
 	_, err = tmpfile.Write([]byte(content))

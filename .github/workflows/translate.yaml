@@ -13,23 +13,26 @@ permissions:
   pull-requests: write
 jobs:
   build:
+    environment: translate
     name: Translate Docs
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
-          persist-credentials: false
+          # zizmor: ignore[artipacked]
+          # persist-credentials is intentionally left enabled (unlike other workflows)
+          # because this workflow needs to push a branch via git push
       - id: md_files
         run: |
-          FILES=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" -- 'docs/*.md')
+          FILES=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" -- 'docs/*.md' ':(exclude)docs/*/*.md')
           FILES=$(echo "$FILES" | xargs -n1 basename | tr '\n' ' ')
           [ -z "$FILES" ] && echo "found=false" >> "$GITHUB_OUTPUT" || echo "found=true" >> "$GITHUB_OUTPUT"
           echo "files=$FILES" >> "$GITHUB_OUTPUT"
       - name: Set up PHP
         if: steps.md_files.outputs.found == 'true'
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
           php-version: "8.5"
       - name: run translation script
@@ -42,28 +45,32 @@ jobs:
       - name: Run Linter
         if: steps.md_files.outputs.found == 'true'
         continue-on-error: true
-        uses: super-linter/super-linter/slim@v8
+        uses: super-linter/super-linter/slim@4ce20838b8ab83717e78138c5b3a1407148e0918 # v8.7.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LINTER_RULES_PATH: /
           MARKDOWN_CONFIG_FILE: .markdown-lint.yaml
-          FIX_NATURAL_LANGUAGE: true
+          VALIDATE_NATURAL_LANGUAGE: false
           FIX_MARKDOWN: true
       - name: Create Pull Request
         if: steps.md_files.outputs.found == 'true'
-        uses: peter-evans/create-pull-request@v8
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          title: "docs: update translations"
-          commit-message: "docs: update translations"
-          committer: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
-          author: ${{ github.actor }} <${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com>
-          branch: translations/${{ github.run_id }}
-          delete-branch: true
-          body: |
-            Translation updates for: ${{ steps.md_files.outputs.files }}.
-          labels: |
-            translations
-            bot
-          draft: false
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+          ACTOR_ID: ${{ github.actor_id }}
+          RUN_ID: ${{ github.run_id }}
+          MD_FILES_LIST: ${{ steps.md_files.outputs.files }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          BRANCH="translations/$RUN_ID"
+          git checkout -b "$BRANCH"
+          git add docs/
+          git diff --cached --quiet && exit 0
+          git commit -m "docs: update translations" --author="$ACTOR <$ACTOR_ID+$ACTOR@users.noreply.github.com>"
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "docs: update translations" \
+            --body "Translation updates for: $MD_FILES_LIST." \
+            --label "translations" \
+            --label "bot"

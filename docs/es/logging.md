@@ -18,9 +18,9 @@ function frankenphp_log(string $message, int $level = FRANKENPHP_LOG_LEVEL_INFO,
 
 ### Parámetros
 
-- **`message`**: El string del mensaje de registro.
-- **`level`**: El nivel de gravedad del registro. Puede ser cualquier entero arbitrario. Se proporcionan constantes de conveniencia para niveles comunes: `FRANKENPHP_LOG_LEVEL_DEBUG` (`-4`), `FRANKENPHP_LOG_LEVEL_INFO` (`0`), `FRANKENPHP_LOG_LEVEL_WARN` (`4`) y `FRANKENPHP_LOG_LEVEL_ERROR` (`8`)). Por omisión es `FRANKENPHP_LOG_LEVEL_INFO`.
-- **`context`**: Un array asociativo de datos adicionales para incluir en la entrada del registro.
+- **`message`**: el string del mensaje de registro.
+- **`level`**: el nivel de gravedad del registro. Puede ser cualquier entero arbitrario. Se proporcionan constantes de conveniencia para niveles comunes: `FRANKENPHP_LOG_LEVEL_DEBUG` (`-4`), `FRANKENPHP_LOG_LEVEL_INFO` (`0`), `FRANKENPHP_LOG_LEVEL_WARN` (`4`) y `FRANKENPHP_LOG_LEVEL_ERROR` (`8`). Por omisión es `FRANKENPHP_LOG_LEVEL_INFO`.
+- **`context`**: un array asociativo de datos adicionales para incluir en la entrada del registro.
 
 ### Ejemplo
 

@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig"
@@ -45,6 +46,10 @@ type FrankenPHPModule struct {
 	Env map[string]string `json:"env,omitempty"`
 	// Workers configures the worker scripts to start.
 	Workers []workerConfig `json:"workers,omitempty"`
+	// RouteGroup is set automatically to pair the route embeds of one php_server directive (#2477). Do not set it manually.
+	RouteGroup string `json:"route_group,omitempty"`
+	// RequestBodyTimeout is an idle timeout on request body reads: a stalled (slow POST) client is cut off while a steady upload of any size succeeds. Defaults to 60s when omitted; set to 0 to disable.
+	RequestBodyTimeout *caddy.Duration `json:"request_body_timeout,omitempty"`
 
 	resolvedDocumentRoot        string
 	preparedEnv                 frankenphp.PreparedEnv
@@ -92,6 +97,7 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		}
 
 		wc.requestOptions = append(wc.requestOptions, loggerOpt)
+		wc.routeGroup = f.RouteGroup
 		f.Workers[i] = wc
 	}
 
@@ -117,10 +123,18 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		f.SplitPath = []string{".php"}
 	}
 
-	if opt, err := frankenphp.WithRequestSplitPath(f.SplitPath); err == nil {
-		f.requestOptions = append(f.requestOptions, opt)
-	} else {
-		f.requestOptions = append(f.requestOptions, opt)
+	opt, err := frankenphp.WithRequestSplitPath(f.SplitPath)
+	if err != nil {
+		return fmt.Errorf("invalid split_path: %w", err)
+	}
+	f.requestOptions = append(f.requestOptions, opt)
+
+	if f.RequestBodyTimeout == nil {
+		f.RequestBodyTimeout = new(defaultRequestBodyTimeout)
+	}
+
+	if *f.RequestBodyTimeout > 0 {
+		f.requestOptions = append(f.requestOptions, frankenphp.WithRequestBodyTimeout(time.Duration(*f.RequestBodyTimeout)))
 	}
 
 	if f.ResolveRootSymlink == nil {
@@ -310,8 +324,21 @@ func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					return err
 				}
 
+			case "request_body_timeout":
+				if !d.NextArg() {
+					return d.ArgErr()
+				}
+				v, err := caddy.ParseDuration(d.Val())
+				if err != nil {
+					return err
+				}
+				if d.NextArg() {
+					return d.ArgErr()
+				}
+				f.RequestBodyTimeout = new(caddy.Duration(v))
+
 			default:
-				return wrongSubDirectiveError("php or php_server", "hot_reload, name, root, split, env, resolve_root_symlink, worker", d.Val())
+				return wrongSubDirectiveError("php or php_server", "hot_reload, name, root, split, env, resolve_root_symlink, request_body_timeout, worker", d.Val())
 			}
 		}
 	}
@@ -338,6 +365,8 @@ func parseCaddyfile(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error)
 
 	return m, err
 }
+
+const routeGroupStateKey = "frankenphp.worker_route_group_seq"
 
 // parsePhpServer parses the php_server directive, which has a similar syntax
 // to the php_fastcgi directive. A line such as this:
@@ -370,6 +399,12 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 	if !h.Next() {
 		return nil, h.ArgErr()
 	}
+
+	// per-adaptation counter: identical for both embeds of this directive, distinct for every other
+	// (including separate snippet imports), and stable across re-adaptation since State resets each time
+	seq, _ := h.State[routeGroupStateKey].(int)
+	h.State[routeGroupStateKey] = seq + 1
+	routeGroup := strconv.Itoa(seq)
 
 	// set up FrankenPHP
 	phpsrv := FrankenPHPModule{}
@@ -481,6 +516,8 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 		}
 	}
 
+	phpsrv.RouteGroup = routeGroup
+
 	// set up a route list that we'll append to
 	routes := caddyhttp.RouteList{}
 
@@ -559,7 +596,7 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 			}),
 		}
 		rewriteHandler := rewrite.Rewrite{
-			URI: "{http.matchers.file.relative}",
+			URI: "{http.matchers.file.relative}{http.matchers.file.remainder}",
 		}
 		rewriteRoute := caddyhttp.Route{
 			MatcherSetsRaw: []caddy.ModuleMap{rewriteMatcherSet},
@@ -573,7 +610,7 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 	// match only requests that are for PHP files
 	var pathList []string
 	for _, ext := range extensions {
-		pathList = append(pathList, "*"+ext)
+		pathList = append(pathList, "*"+ext, "*"+ext+"/*")
 	}
 	phpMatcherSet := caddy.ModuleMap{
 		"path": h.JSON(pathList),

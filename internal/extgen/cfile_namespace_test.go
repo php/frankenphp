@@ -66,8 +66,7 @@ func (m *MySuperClass) Test() string {
 	tmpfile, err := os.CreateTemp("", "test_cfile_namespace_*.go")
 	require.NoError(t, err, "Failed to create temp file")
 	defer func() {
-		err := os.Remove(tmpfile.Name())
-		assert.NoError(t, err, "Failed to remove temp file: %v", err)
+		require.NoError(t, os.Remove(tmpfile.Name()), "Failed to remove temp file")
 	}()
 
 	_, err = tmpfile.Write([]byte(content))

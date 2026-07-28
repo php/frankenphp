@@ -12,24 +12,28 @@ type State int
 
 const (
 	// lifecycle States of a thread
-	Reserved State = iota
+	Reserved State = iota // stable
 	Booting
 	BootRequested
 	ShuttingDown
 	Done
 
 	// these States are 'stable' and safe to transition from at any time
-	Inactive
-	Ready
-
-	// States necessary for restarting workers
-	Restarting
-	Yielding
+	Inactive // stable
+	Ready    // stable
 
 	// States necessary for transitioning between different handlers
 	TransitionRequested
 	TransitionInProgress
 	TransitionComplete
+
+	// thread is exiting the C loop for a full ZTS restart (max_requests)
+	Rebooting
+	ForceRebooting
+	// C thread has exited and ZTS state is cleaned up, ready to spawn a new C thread
+	RebootReady
+	// all threads are yielding for main thread reboot
+	YieldingForReboot
 )
 
 func (s State) String() string {
@@ -48,16 +52,20 @@ func (s State) String() string {
 		return "inactive"
 	case Ready:
 		return "ready"
-	case Restarting:
-		return "restarting"
-	case Yielding:
-		return "yielding"
 	case TransitionRequested:
 		return "transition requested"
 	case TransitionInProgress:
 		return "transition in progress"
 	case TransitionComplete:
 		return "transition complete"
+	case Rebooting:
+		return "rebooting"
+	case ForceRebooting:
+		return "rebooting (force)"
+	case RebootReady:
+		return "reboot ready"
+	case YieldingForReboot:
+		return "yielding for reboot"
 	default:
 		return "unknown"
 	}
@@ -159,16 +167,46 @@ func (ts *ThreadState) WaitFor(states ...State) {
 	<-sub.ch
 }
 
+func (ts *ThreadState) WaitForStateWithTimeout(timeout time.Duration, states ...State) bool {
+	ts.mu.Lock()
+	if slices.Contains(states, ts.currentState) {
+		ts.mu.Unlock()
+
+		return true
+	}
+
+	sub := stateSubscriber{
+		states: states,
+		ch:     make(chan struct{}),
+	}
+	ts.subscribers = append(ts.subscribers, sub)
+	ts.mu.Unlock()
+
+	select {
+	case <-sub.ch:
+		return true
+	case <-time.After(timeout):
+		ts.mu.Lock()
+		// remove subscriber so there is no leak potential
+		ts.subscribers = slices.DeleteFunc(ts.subscribers, func(s stateSubscriber) bool {
+			return sub.ch == s.ch
+		})
+		ts.mu.Unlock()
+		return false
+	}
+}
+
 // RequestSafeStateChange safely requests a state change from a different goroutine
+// returns false if the thread is already reserved, shutting down, or done
 func (ts *ThreadState) RequestSafeStateChange(nextState State) bool {
 	ts.mu.Lock()
 	switch ts.currentState {
-	// disallow state changes if shutting down or done
-	case ShuttingDown, Done, Reserved:
+	// disallow state changes when already shutting down or done
+	case Reserved, ShuttingDown, Done:
 		ts.mu.Unlock()
 
 		return false
-	// ready and inactive are safe states to transition from
+	// ready and inactive are stable states to transition from
 	case Ready, Inactive:
 		ts.currentState = nextState
 		ts.notifySubscribers(nextState)
@@ -178,8 +216,8 @@ func (ts *ThreadState) RequestSafeStateChange(nextState State) bool {
 	}
 	ts.mu.Unlock()
 
-	// wait for the state to change to a safe state
-	ts.WaitFor(Ready, Inactive, ShuttingDown)
+	// wait for the state to change to a stable state
+	ts.WaitFor(Ready, Inactive, Reserved)
 
 	return ts.RequestSafeStateChange(nextState)
 }

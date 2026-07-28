@@ -22,7 +22,9 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -140,8 +142,8 @@ func TestMain(m *testing.M) {
 		slog.SetDefault(slog.New(slog.DiscardHandler))
 	}
 
-	// setup custom environment var for TestWorkerHasOSEnvironmentVariableInSERVER
-	if os.Setenv("CUSTOM_OS_ENV_VARIABLE", "custom_env_variable_value") != nil {
+	// setup custom environment var for TestWorkerHasOSEnvironmentVariableInSERVER and TestPhpIni
+	if os.Setenv("CUSTOM_OS_ENV_VARIABLE", "custom_env_variable_value") != nil || os.Setenv("LITERAL_ZERO", "0") != nil {
 		fmt.Println("Failed to set environment variable for tests")
 		os.Exit(1)
 	}
@@ -158,6 +160,17 @@ func testHelloWorld(t *testing.T, opts *testOptions) {
 		body, _ := testGet(fmt.Sprintf("http://example.com/index.php?i=%d", i), handler, t)
 		assert.Equal(t, fmt.Sprintf("I am by birth a Genevese (%d)", i), body)
 	}, opts)
+}
+
+func TestEnvVarsInPhpIni(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/ini.php?key=opcache.enable", handler, t)
+		assert.Equal(t, "opcache.enable:0", body)
+	}, &testOptions{
+		phpIni: map[string]string{
+			"opcache.enable": "${LITERAL_ZERO}",
+		},
+	})
 }
 
 func TestFinishRequest_module(t *testing.T) { testFinishRequest(t, nil) }
@@ -754,6 +767,69 @@ func TestEnvIsNotResetInWorkerMode(t *testing.T) {
 	}, &testOptions{workerScript: "env/remember-env.php"})
 }
 
+// reproduction of https://github.com/php/frankenphp/issues/1674
+func TestPreparedEnvIsVisibleToGetenv_module(t *testing.T) {
+	testPreparedEnvIsVisibleToGetenv(t, &testOptions{nbParallelRequests: 1})
+}
+func TestPreparedEnvIsVisibleToGetenv_worker(t *testing.T) {
+	testPreparedEnvIsVisibleToGetenv(t, &testOptions{
+		workerScript: "env/prepared-env-getenv.php",
+	})
+}
+func testPreparedEnvIsVisibleToGetenv(t *testing.T, opts *testOptions) {
+	if opts.phpIni == nil {
+		opts.phpIni = map[string]string{}
+	}
+	opts.phpIni["variables_order"] = "EGPCS"
+	opts.requestOpts = append(opts.requestOpts,
+		frankenphp.WithRequestEnv(map[string]string{"FRANKENPHP_TEST_PHP_SERVER_ENV_IN_GETENV": "hello"}),
+	)
+
+	expectedEnv := "'hello'"
+	if opts.workerScript != "" {
+		// workers don't populate $_ENV regardless of variables_order
+		expectedEnv = "NULL"
+	}
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/env/prepared-env-getenv.php", handler, t)
+		assert.Equal(t, fmt.Sprintf("getenv='hello'\nserver='hello'\nenv=%s\n", expectedEnv), body)
+	}, opts)
+}
+
+// $_ENV mustn't be filled with prepared_env without E in variables_order
+func TestPreparedEnvIsNotInEnvWithoutVariablesOrderE(t *testing.T) {
+	opts := &testOptions{
+		nbParallelRequests: 1,
+		phpIni:             map[string]string{"variables_order": "GPCS"},
+	}
+	opts.requestOpts = append(opts.requestOpts,
+		frankenphp.WithRequestEnv(map[string]string{"FRANKENPHP_TEST_PHP_SERVER_ENV_IN_GETENV": "hello"}),
+	)
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/env/prepared-env-getenv.php", handler, t)
+		assert.Equal(t, "getenv='hello'\nserver='hello'\nenv=NULL\n", body)
+	}, opts)
+}
+
+func TestPreparedEnvSurvivesPutenv_module(t *testing.T) {
+	testPreparedEnvSurvivesPutenv(t, &testOptions{nbParallelRequests: 1})
+}
+func TestPreparedEnvSurvivesPutenv_worker(t *testing.T) {
+	testPreparedEnvSurvivesPutenv(t, &testOptions{
+		workerScript: "env/prepared-env-survives-putenv.php",
+	})
+}
+func testPreparedEnvSurvivesPutenv(t *testing.T, opts *testOptions) {
+	opts.requestOpts = append(opts.requestOpts,
+		frankenphp.WithRequestEnv(map[string]string{"FRANKENPHP_PREPARED": "prepared_value"}),
+	)
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/env/prepared-env-survives-putenv.php", handler, t)
+		assert.Equal(t, "before='prepared_value'\nprepared='prepared_value'\nput='put_value'\n", body)
+	}, opts)
+}
+
 // reproduction of https://github.com/php/frankenphp/issues/1061
 func TestModificationsToEnvPersistAcrossRequests(t *testing.T) {
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
@@ -797,6 +873,16 @@ func ExampleServeHTTP() {
 	defer frankenphp.Shutdown()
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// Drop headers whose name contains an underscore: CGI maps dashes to
+		// underscores, so "Foo_Bar" would be indistinguishable from "Foo-Bar"
+		// in $_SERVER and could spoof any header an app or proxy trusts.
+		// Whitelist any you genuinely need.
+		for name := range r.Header {
+			if strings.ContainsRune(name, '_') {
+				delete(r.Header, name)
+			}
+		}
+
 		req, err := frankenphp.NewRequestWithContext(r, frankenphp.WithRequestDocumentRoot("/path/to/document/root", false))
 		if err != nil {
 			panic(err)
@@ -1288,4 +1374,41 @@ func TestSessionNoLeakAfterExit_worker(t *testing.T) {
 		nbParallelRequests: 1,
 		realServer:         true,
 	})
+}
+
+func TestOpcachePreload_module(t *testing.T) {
+	testOpcachePreload(t, &testOptions{env: map[string]string{"TEST": "123"}, realServer: true})
+}
+
+func TestOpcachePreload_worker(t *testing.T) {
+	testOpcachePreload(t, &testOptions{workerScript: "preload-check.php", env: map[string]string{"TEST": "123"}, realServer: true})
+}
+
+func testOpcachePreload(t *testing.T, opts *testOptions) {
+	if frankenphp.Version().VersionID <= 80300 {
+		t.Skip("This test is only supported in PHP 8.3 and above")
+		return
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("opcache.preload is not supported on Windows")
+		return
+	}
+
+	cwd, _ := os.Getwd()
+	preloadScript := cwd + "/testdata/preload.php"
+
+	u, err := user.Current()
+	require.NoError(t, err)
+
+	// use opcache.log_verbosity_level:4 for debugging
+	opts.phpIni = map[string]string{
+		"opcache.enable":       "1",
+		"opcache.preload":      preloadScript,
+		"opcache.preload_user": u.Username,
+	}
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		body, _ := testGet("http://example.com/preload-check.php", handler, t)
+		assert.Equal(t, "I am preloaded", body)
+	}, opts)
 }

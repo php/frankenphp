@@ -4,10 +4,10 @@ root = true
 end_of_line = lf
 insert_final_newline = true
 
-[*.sh]
+[*.{sh,Dockerfile}]
 indent_style = tab
 tab_width = 4
 
-[*.Dockerfile]
-indent_style = tab
-tab_width = 4
+[*.{yaml,yml}]
+indent_style = space
+tab_width = 2

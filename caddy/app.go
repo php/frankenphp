@@ -55,6 +55,10 @@ type FrankenPHPApp struct {
 	PhpIni map[string]string `json:"php_ini,omitempty"`
 	// The maximum amount of time a request may be stalled waiting for a thread
 	MaxWaitTime time.Duration `json:"max_wait_time,omitempty"`
+	// The maximum amount of time an autoscaled thread may be idle before being deactivated
+	MaxIdleTime time.Duration `json:"max_idle_time,omitempty"`
+	// EXPERIMENTAL: MaxRequests sets the maximum number of requests a PHP thread handles before restarting (0 = unlimited)
+	MaxRequests int `json:"max_requests,omitempty"`
 
 	opts    []frankenphp.Option
 	metrics frankenphp.Metrics
@@ -62,7 +66,7 @@ type FrankenPHPApp struct {
 	logger  *slog.Logger
 }
 
-var iniError = errors.New(`"php_ini" must be in the format: php_ini "<key>" "<value>"`)
+var errIni = errors.New(`"php_ini" must be in the format: php_ini "<key>" "<value>"`)
 
 // CaddyModule returns the Caddy module information.
 func (f FrankenPHPApp) CaddyModule() caddy.ModuleInfo {
@@ -122,17 +126,47 @@ func (f *FrankenPHPApp) addModuleWorkers(workers ...workerConfig) ([]workerConfi
 		if frankenphp.EmbeddedAppPath != "" && filepath.IsLocal(w.FileName) {
 			w.FileName = filepath.Join(frankenphp.EmbeddedAppPath, w.FileName)
 		}
+	}
 
-		if w.Name == "" {
-			w.Name = f.generateUniqueModuleWorkerName(w.FileName)
-		} else if !strings.HasPrefix(w.Name, "m#") {
-			w.Name = "m#" + w.Name
+	// A php_server directive is provisioned once per route it's embedded in. Only the first embed
+	// registers its pools; later embeds reuse them by position, never touching other directives (#2477).
+	var registered []workerConfig
+	if len(workers) > 0 && workers[0].routeGroup != "" {
+		registered = f.moduleWorkersInRouteGroup(workers[0].routeGroup)
+	}
+
+	for i := range workers {
+		if i < len(registered) {
+			workers[i].Name = registered[i].Name
+			continue
 		}
 
-		f.Workers = append(f.Workers, *w)
+		f.registerModuleWorker(&workers[i])
 	}
 
 	return workers, nil
+}
+
+func (f *FrankenPHPApp) registerModuleWorker(w *workerConfig) {
+	if w.Name == "" {
+		w.Name = f.generateUniqueModuleWorkerName(w.FileName)
+	} else if !strings.HasPrefix(w.Name, "m#") {
+		w.Name = "m#" + w.Name
+	}
+
+	f.Workers = append(f.Workers, *w)
+}
+
+// moduleWorkersInRouteGroup returns the registered workers of one directive, in registration order.
+func (f *FrankenPHPApp) moduleWorkersInRouteGroup(routeGroup string) []workerConfig {
+	var group []workerConfig
+	for _, w := range f.Workers {
+		if w.routeGroup == routeGroup {
+			group = append(group, w)
+		}
+	}
+
+	return group
 }
 
 func (f *FrankenPHPApp) Start() error {
@@ -150,6 +184,8 @@ func (f *FrankenPHPApp) Start() error {
 		frankenphp.WithMetrics(f.metrics),
 		frankenphp.WithPhpIni(f.PhpIni),
 		frankenphp.WithMaxWaitTime(f.MaxWaitTime),
+		frankenphp.WithMaxIdleTime(f.MaxIdleTime),
+		frankenphp.WithMaxRequests(f.MaxRequests),
 	)
 
 	for _, w := range f.Workers {
@@ -173,23 +209,23 @@ func (f *FrankenPHPApp) Start() error {
 }
 
 func (f *FrankenPHPApp) Stop() error {
-	ctx := caddy.ActiveContext()
-
-	if f.logger.Enabled(caddy.ActiveContext(), slog.LevelInfo) {
-		f.logger.LogAttrs(ctx, slog.LevelInfo, "FrankenPHP stopped 🐘")
+	if f.logger.Enabled(f.ctx, slog.LevelInfo) {
+		f.logger.LogAttrs(f.ctx, slog.LevelInfo, "FrankenPHP stopped 🐘")
 	}
 
 	// attempt a graceful shutdown if caddy is exiting
 	// note: Exiting() is currently marked as 'experimental'
 	// https://github.com/caddyserver/caddy/blob/e76405d55058b0a3e5ba222b44b5ef00516116aa/caddy.go#L810
 	if caddy.Exiting() {
-		frankenphp.DrainWorkers()
+		frankenphp.Shutdown()
 	}
 
 	// reset the configuration so it doesn't bleed into later tests
 	f.Workers = nil
 	f.NumThreads = 0
 	f.MaxWaitTime = 0
+	f.MaxIdleTime = 0
+	f.MaxRequests = 0
 
 	optionsMU.Lock()
 	options = nil
@@ -242,18 +278,40 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				}
 
 				f.MaxWaitTime = v
+			case "max_idle_time":
+				if !d.NextArg() {
+					return d.ArgErr()
+				}
+
+				v, err := time.ParseDuration(d.Val())
+				if err != nil {
+					return d.Err("max_idle_time must be a valid duration (example: 30s)")
+				}
+
+				f.MaxIdleTime = v
+			case "max_requests":
+				if !d.NextArg() {
+					return d.ArgErr()
+				}
+
+				v, err := strconv.ParseUint(d.Val(), 10, 32)
+				if err != nil {
+					return d.WrapErr(err)
+				}
+
+				f.MaxRequests = int(v)
 			case "php_ini":
 				parseIniLine := func(d *caddyfile.Dispenser) error {
 					key := d.Val()
 					if !d.NextArg() {
-						return d.WrapErr(iniError)
+						return d.WrapErr(errIni)
 					}
 					if f.PhpIni == nil {
 						f.PhpIni = make(map[string]string)
 					}
 					f.PhpIni[key] = d.Val()
 					if d.NextArg() {
-						return d.WrapErr(iniError)
+						return d.WrapErr(errIni)
 					}
 
 					return nil
@@ -270,7 +328,7 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 
 				if !isBlock {
 					if !d.NextArg() {
-						return d.WrapErr(iniError)
+						return d.WrapErr(errIni)
 					}
 					err := parseIniLine(d)
 					if err != nil {
@@ -298,7 +356,7 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 
 				f.Workers = append(f.Workers, wc)
 			default:
-				return wrongSubDirectiveError("frankenphp", "num_threads, max_threads, php_ini, worker, max_wait_time", d.Val())
+				return wrongSubDirectiveError("frankenphp", "num_threads, max_threads, php_ini, worker, max_wait_time, max_idle_time, max_requests", d.Val())
 			}
 		}
 	}

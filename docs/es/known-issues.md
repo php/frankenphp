@@ -1,31 +1,31 @@
-# Problemas Conocidos
+# Problemas conocidos
 
-## Extensiones PHP no Soportadas
+## Extensiones PHP no soportadas
 
 Las siguientes extensiones se sabe que no son compatibles con FrankenPHP:
 
-| Nombre                                                                                                        | Razón               | Alternativas                                                                                                         |
-| ----------------------------------------------------------------------------------------------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| [imap](https://www.php.net/manual/es/imap.installation.php)                                                 | No es thread-safe   | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap) |
-| [newrelic](https://docs.newrelic.com/docs/apm/agents/php-agent/getting-started/introduction-new-relic-php/) | No es thread-safe   | -                                                                                                                    |
+| Nombre                                                                                                      | Razón             | Alternativas                                                                                                         |
+| ----------------------------------------------------------------------------------------------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------- |
+| [imap](https://www.php.net/manual/imap.installation.php)                                                 | No es thread-safe | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap) |
+| [newrelic](https://docs.newrelic.com/docs/apm/agents/php-agent/getting-started/introduction-new-relic-php/) | No es thread-safe | -                                                                                                                    |
 
-## Extensiones PHP con Errores
+## Extensiones PHP con errores
 
 Las siguientes extensiones tienen errores conocidos y comportamientos inesperados cuando se usan con FrankenPHP:
 
-| Nombre                                                          | Problema                                                                                                                                                                                                                   |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [ext-openssl](https://www.php.net/manual/es/book.openssl.php) | Cuando se usa musl libc, la extensión OpenSSL puede fallar bajo cargas pesadas. El problema no ocurre cuando se usa la más popular GNU libc. Este error está [siendo rastreado por PHP](https://github.com/php/php-src/issues/13648). |
+| Nombre                                                        | Problema                                                                                                                                                                                                                              |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [ext-openssl](https://www.php.net/manual/book.openssl.php) | Cuando se usa musl libc, la extensión OpenSSL puede fallar bajo cargas pesadas. El problema no ocurre cuando se usa la más popular GNU libc. Este error está [siendo rastreado por PHP](https://github.com/php/php-src/issues/13648). |
 
 ## get_browser
 
-La función [get_browser()](https://www.php.net/manual/es/function.get-browser.php) parece funcionar mal después de un tiempo. Una solución es almacenar en caché (por ejemplo, con [APCu](https://www.php.net/manual/es/book.apcu.php)) los resultados por User Agent, ya que son estáticos.
+La función [get_browser()](https://www.php.net/manual/function.get-browser.php) parece funcionar mal después de un tiempo. Una solución es almacenar en caché (por ejemplo, con [APCu](https://www.php.net/manual/book.apcu.php)) los resultados por User Agent, ya que son estáticos.
 
-## Binario Autónomo e Imágenes Docker Basadas en Alpine
+## Binario autónomo e imágenes Docker basadas en Alpine
 
 Los binarios completamente estáticos y las imágenes Docker basadas en Alpine (`dunglas/frankenphp:*-alpine`) usan [musl libc](https://musl.libc.org/) en lugar de [glibc](https://www.etalabs.net/compare_libcs.html), para mantener un tamaño de binario más pequeño.
 Esto puede llevar a algunos problemas de compatibilidad.
-En particular, la bandera glob `GLOB_BRACE` [no está disponible](https://www.php.net/manual/es/function.glob.php).
+En particular, la bandera glob `GLOB_BRACE` [no está disponible](https://www.php.net/manual/function.glob.php).
 
 Se recomienda usar la variante GNU del binario estático y las imágenes Docker basadas en Debian si encuentras problemas.
 
@@ -80,7 +80,7 @@ docker run \
     dunglas/frankenphp
 ```
 
-## Scripts de Composer que Referencian `@php`
+## Scripts de Composer que referencian `@php`
 
 Los [scripts de Composer](https://getcomposer.org/doc/articles/scripts.md) pueden querer ejecutar un binario PHP para algunas tareas, por ejemplo, en [un proyecto Laravel](laravel.md) para ejecutar `@php artisan package:discover --ansi`. Esto [actualmente falla](https://github.com/php/frankenphp/issues/483#issuecomment-1899890915) por dos razones:
 
@@ -112,7 +112,7 @@ export PHP_BINARY=/usr/local/bin/php
 composer install
 ```
 
-## Solución de Problemas de TLS/SSL con Binarios Estáticos
+## Solución de problemas de TLS/SSL con binarios estáticos
 
 Al usar los binarios estáticos, puedes encontrar los siguientes errores relacionados con TLS, por ejemplo, al enviar correos electrónicos usando STARTTLS:
 
@@ -126,7 +126,7 @@ error:0A000086:rutinas de SSL::falló la verificación del certificado
 
 Dado que el binario estático no incluye certificados TLS, necesitas indicar a OpenSSL la ubicación de tu instalación local de certificados CA.
 
-Inspecciona la salida de [`openssl_get_cert_locations()`](https://www.php.net/manual/es/function.openssl-get-cert-locations.php),
+Inspecciona la salida de [`openssl_get_cert_locations()`](https://www.php.net/manual/function.openssl-get-cert-locations.php),
 para encontrar dónde deben instalarse los certificados CA y guárdalos en esa ubicación.
 
 > [!CAUTION]

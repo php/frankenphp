@@ -165,59 +165,15 @@ func newWorker(o workerOpt) (*worker, error) {
 	return w, nil
 }
 
-// EXPERIMENTAL: DrainWorkers finishes all worker scripts before a graceful shutdown
-func DrainWorkers() {
-	_ = drainWorkerThreads()
-}
-
-func drainWorkerThreads() []*phpThread {
-	var (
-		ready          sync.WaitGroup
-		drainedThreads []*phpThread
-	)
-
-	for _, worker := range workers {
-		worker.threadMutex.RLock()
-		ready.Add(len(worker.threads))
-
-		for _, thread := range worker.threads {
-			if !thread.state.RequestSafeStateChange(state.Restarting) {
-				ready.Done()
-
-				// no state change allowed == thread is shutting down
-				// we'll proceed to restart all other threads anyway
-				continue
-			}
-
-			close(thread.drainChan)
-			drainedThreads = append(drainedThreads, thread)
-
-			go func(thread *phpThread) {
-				thread.state.WaitFor(state.Yielding)
-				ready.Done()
-			}(thread)
-		}
-
-		worker.threadMutex.RUnlock()
-	}
-
-	ready.Wait()
-
-	return drainedThreads
-}
-
-// RestartWorkers attempts to restart all workers gracefully
-// All workers must be restarted at the same time to prevent issues with opcache resetting.
+// RestartWorkers attempts to restart all workers gracefully.
+// All workers must be restarted at the same time to prevent issues with
+// opcache resetting. Blocks until every worker thread has yielded;
+// force-kill is armed after a grace period to wake threads parked in
+// blocking syscalls so a stuck sleep doesn't make this hang for the
+// full duration of the syscall.
 func RestartWorkers() {
-	// disallow scaling threads while restarting workers
-	scalingMu.Lock()
-	defer scalingMu.Unlock()
-
-	threadsToRestart := drainWorkerThreads()
-
-	for _, thread := range threadsToRestart {
-		thread.drainChan = make(chan struct{})
-		thread.state.Set(state.Ready)
+	if mainThread != nil {
+		mainThread.rebootAllThreads()
 	}
 }
 
@@ -302,7 +258,7 @@ func (worker *worker) handleRequest(ch contextHolder) error {
 			return nil
 		case workerScaleChan <- ch.frankenPHPContext:
 			// the request has triggered scaling, continue to wait for a thread
-		case <-timeoutChan(maxWaitTime):
+		case <-timeoutChan(time.Duration(maxWaitTime.Load())):
 			// the request has timed out stalling
 			worker.queuedRequests.Add(-1)
 			metrics.DequeuedWorkerRequest(worker.name)

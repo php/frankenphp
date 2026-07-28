@@ -1,4 +1,4 @@
-# Problèmes Connus
+# Problèmes connus
 
 ## Extensions PHP non prises en charge
 
@@ -6,7 +6,7 @@ Les extensions suivantes sont connues pour ne pas être compatibles avec Franken
 
 | Nom                                                                                                         | Raison          | Alternatives                                                                                                         |
 | ----------------------------------------------------------------------------------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------- |
-| [imap](https://www.php.net/manual/en/imap.installation.php)                                                 | Non thread-safe | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap) |
+| [imap](https://www.php.net/manual/imap.installation.php)                                                 | Non thread-safe | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap) |
 | [newrelic](https://docs.newrelic.com/docs/apm/agents/php-agent/getting-started/introduction-new-relic-php/) | Non thread-safe | -                                                                                                                    |
 
 ## Extensions PHP boguées
@@ -15,15 +15,15 @@ Les extensions suivantes ont des bugs connus ou des comportements inattendus lor
 
 | Nom                                                           | Problème                                                                                                                                                                                                                                                                                                                                      |
 | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [ext-openssl](https://www.php.net/manual/fr/book.openssl.php) | Lors de l'utilisation d'une version statique de FrankenPHP (construite avec la libc musl), l'extension OpenSSL peut planter sous de fortes charges. Une solution consiste à utiliser une version liée dynamiquement (comme celle utilisée dans les images Docker). Ce bogue est [suivi par PHP](https://github.com/php/php-src/issues/13648). |
+| [ext-openssl](https://www.php.net/manual/book.openssl.php) | Lors de l'utilisation d'une version statique de FrankenPHP (construite avec la libc musl), l'extension OpenSSL peut planter sous de fortes charges. Une solution consiste à utiliser une version liée dynamiquement (comme celle utilisée dans les images Docker). Ce bogue est [suivi par PHP](https://github.com/php/php-src/issues/13648). |
 
 ## get_browser
 
-La fonction [get_browser()](https://www.php.net/manual/fr/function.get-browser.php) semble avoir de mauvaises performances après un certain temps. Une solution est de mettre en cache (par exemple, avec [APCu](https://www.php.net/manual/en/book.apcu.php)) les résultats par agent utilisateur, car ils sont statiques.
+La fonction [get_browser()](https://www.php.net/manual/function.get-browser.php) semble avoir de mauvaises performances après un certain temps. Une solution est de mettre en cache (par exemple, avec [APCu](https://www.php.net/manual/book.apcu.php)) les résultats par agent utilisateur, car ils sont statiques.
 
 ## Binaire autonome et images Docker basées sur Alpine
 
-Le binaire autonome et les images Docker basées sur Alpine (`dunglas/frankenphp:*-alpine`) utilisent [musl libc](https://musl.libc.org/) au lieu de [glibc et ses amis](https://www.etalabs.net/compare_libcs.html), pour garder une taille de binaire plus petite. Cela peut entraîner des problèmes de compatibilité. En particulier, le drapeau glob `GLOB_BRACE` n'est [pas disponible](https://www.php.net/manual/fr/function.glob.php).
+Le binaire autonome et les images Docker basées sur Alpine (`dunglas/frankenphp:*-alpine`) utilisent [musl libc](https://musl.libc.org/) au lieu de [glibc et ses amis](https://www.etalabs.net/compare_libcs.html), pour garder une taille de binaire plus petite. Cela peut entraîner des problèmes de compatibilité. En particulier, le drapeau glob `GLOB_BRACE` n'est [pas disponible](https://www.php.net/manual/function.glob.php).
 
 ## Utilisation de `https://127.0.0.1` avec Docker
 
@@ -47,7 +47,7 @@ docker run \
 
 Le pilote de réseau "hôte" n'est pas pris en charge sur Mac et Windows. Sur ces plateformes, vous devrez deviner l'adresse IP du conteneur et l'inclure dans les noms de serveur.
 
-Exécutez la commande `docker network inspect bridge` et inpectez la clef `Containers` pour identifier la dernière adresse IP attribuée sous la clef `IPv4Address`, puis incrémentez-la d'un. Si aucun conteneur n'est en cours d'exécution, la première adresse IP attribuée est généralement `172.17.0.2`.
+Exécutez la commande `docker network inspect bridge` et inspectez la clef `Containers` pour identifier la dernière adresse IP attribuée sous la clef `IPv4Address`, puis incrémentez-la d'un. Si aucun conteneur n'est en cours d'exécution, la première adresse IP attribuée est généralement `172.17.0.2`.
 
 Ensuite, incluez ceci dans la variable d'environnement `SERVER_NAME` :
 
@@ -76,9 +76,9 @@ docker run \
     dunglas/frankenphp
 ```
 
-## Scripts Composer Faisant Références à `@php`
+## Scripts Composer faisant référence à `@php`
 
-Les [scripts Composer](https://getcomposer.org/doc/articles/scripts.md) peuvent vouloir exécuter un binaire PHP pour certaines tâches, par exemple dans [un projet Laravel](laravel.md) pour exécuter `@php artisan package:discover --ansi`. Cela [echoue actuellement](https://github.com/php/frankenphp/issues/483#issuecomment-1899890915) pour deux raisons :
+Les [scripts Composer](https://getcomposer.org/doc/articles/scripts.md) peuvent vouloir exécuter un binaire PHP pour certaines tâches, par exemple dans [un projet Laravel](laravel.md) pour exécuter `@php artisan package:discover --ansi`. Cela [échoue actuellement](https://github.com/php/frankenphp/issues/483#issuecomment-1899890915) pour deux raisons :
 
 - Composer ne sait pas comment appeler le binaire FrankenPHP ;
 - Composer peut ajouter des paramètres PHP en utilisant le paramètre `-d` dans la commande, ce que FrankenPHP ne supporte pas encore.
@@ -122,7 +122,7 @@ error:0A000086:SSL routines::certificate verify failed
 
 Comme le binaire statique ne contient pas de certificats TLS, vous devez indiquer à OpenSSL l'installation de vos certificats CA locaux.
 
-Inspectez la sortie de [`openssl_get_cert_locations()`](https://www.php.net/manual/en/function.openssl-get-cert-locations.php),
+Inspectez la sortie de [`openssl_get_cert_locations()`](https://www.php.net/manual/function.openssl-get-cert-locations.php),
 pour trouver l'endroit où les certificats CA doivent être installés et stockez-les à cet endroit.
 
 > [!WARNING]

@@ -40,12 +40,12 @@ func (f *FrankenPHPModule) assignMercureHub(ctx caddy.Context) {
 func createMercureRoute() (caddyhttp.Route, error) {
 	mercurePublisherJwtKey := os.Getenv("MERCURE_PUBLISHER_JWT_KEY")
 	if mercurePublisherJwtKey == "" {
-		return caddyhttp.Route{}, errors.New(`The "MERCURE_PUBLISHER_JWT_KEY" environment variable must be set to use the Mercure.rocks hub`)
+		return caddyhttp.Route{}, errors.New(`the "MERCURE_PUBLISHER_JWT_KEY" environment variable must be set to use the Mercure.rocks hub`)
 	}
 
 	mercureSubscriberJwtKey := os.Getenv("MERCURE_SUBSCRIBER_JWT_KEY")
 	if mercureSubscriberJwtKey == "" {
-		return caddyhttp.Route{}, errors.New(`The "MERCURE_SUBSCRIBER_JWT_KEY" environment variable must be set to use the Mercure.rocks hub`)
+		return caddyhttp.Route{}, errors.New(`the "MERCURE_SUBSCRIBER_JWT_KEY" environment variable must be set to use the Mercure.rocks hub`)
 	}
 
 	mercureRoute := caddyhttp.Route{

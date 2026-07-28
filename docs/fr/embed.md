@@ -72,7 +72,7 @@ La manière la plus simple de créer un binaire Linux est d'utiliser le builder 
    > Certains fichiers `.dockerignore` (par exemple celui fourni par défaut par [Symfony Docker](https://github.com/dunglas/symfony-docker/blob/main/.dockerignore))
    > empêchent la copie du dossier `vendor/` et des fichiers `.env`. Assurez-vous d'ajuster ou de supprimer le fichier `.dockerignore` avant le build.
 
-2. Construisez:
+2. Construisez :
 
    ```console
    docker build -t static-app -f static-build.Dockerfile .
@@ -145,7 +145,7 @@ PHP_EXTENSIONS=ctype,iconv,pdo_sqlite \
 
 ## Distribuer le binaire
 
-Sous Linux, le binaire est compressé par défaut à l'aide de [UPX](https://upx.github.io).
+Sous Linux, le binaire peut être compressé à l'aide de [UPX](https://upx.github.io) en définissant la variable d'environnement `COMPRESS=1` au moment de la compilation.
 
 Sous Mac, pour réduire la taille du fichier avant de l'envoyer, vous pouvez le compresser.
 Nous recommandons `xz`.

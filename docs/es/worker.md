@@ -1,9 +1,9 @@
-# Usando los Workers de FrankenPHP
+# Usando los workers de FrankenPHP
 
 Inicia tu aplicación una vez y manténla en memoria.
 FrankenPHP gestionará las peticiones entrantes en unos pocos milisegundos.
 
-## Iniciando Scripts de Worker
+## Iniciando scripts de worker
 
 ### Docker
 
@@ -17,7 +17,7 @@ docker run \
     dunglas/frankenphp
 ```
 
-### Binario Autónomo
+### Binario autónomo
 
 Usa la opción `--worker` del comando `php-server` para servir el contenido del directorio actual usando un worker:
 
@@ -42,14 +42,14 @@ Esta función se utiliza frecuentemente en combinación con [hot reloading](hot-
 > [!TIP]
 > La siguiente sección es necesaria solo para versiones anteriores a Symfony 7.4, donde se introdujo soporte nativo para el modo worker de FrankenPHP.
 
-El modo worker de FrankenPHP es soportado por el [Componente Runtime de Symfony](https://symfony.com/doc/current/components/runtime.html).
+El modo worker de FrankenPHP es soportado por el [componente Runtime de Symfony](https://symfony.com/doc/current/components/runtime.html).
 Para iniciar cualquier aplicación Symfony en un worker, instala el paquete FrankenPHP de [PHP Runtime](https://github.com/php-runtime/runtime):
 
 ```console
 composer require runtime/frankenphp-symfony
 ```
 
-Inicia tu servidor de aplicación definiendo la variable de entorno `APP_RUNTIME` para usar el Runtime de FrankenPHP Symfony:
+Inicia tu servidor de aplicación definiendo la variable de entorno `APP_RUNTIME` para usar el runtime de FrankenPHP Symfony:
 
 ```console
 docker run \
@@ -64,7 +64,7 @@ docker run \
 
 Consulta [la documentación dedicada](laravel.md#laravel-octane).
 
-## Aplicaciones Personalizadas
+## Aplicaciones personalizadas
 
 El siguiente ejemplo muestra cómo crear tu propio script de worker sin depender de una biblioteca de terceros:
 
@@ -132,14 +132,14 @@ docker run \
     dunglas/frankenphp
 ```
 
-### Reiniciar el Worker Después de un Número Determinado de Peticiones
+### Reiniciar el worker después de un número determinado de peticiones
 
 Como PHP no fue diseñado originalmente para procesos de larga duración, aún hay muchas bibliotecas y códigos heredados que generan fugas de memoria.
 Una solución para usar este tipo de código en modo worker es reiniciar el script de worker después de procesar un cierto número de peticiones:
 
 El fragmento de worker anterior permite configurar un número máximo de peticiones a manejar estableciendo una variable de entorno llamada `MAX_REQUESTS`.
 
-### Reiniciar Workers Manualmente
+### Reiniciar workers manualmente
 
 Aunque es posible reiniciar workers [al detectar cambios en archivos](config.md#watching-for-file-changes), también es posible reiniciar todos los workers
 de manera controlada a través de la [API de administración de Caddy](https://caddyserver.com/docs/api). Si el admin está habilitado en tu
@@ -149,10 +149,10 @@ de manera controlada a través de la [API de administración de Caddy](https://c
 curl -X POST http://localhost:2019/frankenphp/workers/restart
 ```
 
-### Fallos en Workers
+### Fallos en workers
 
 Si un script de worker falla con un código de salida distinto de cero, FrankenPHP lo reiniciará con una estrategia de retroceso exponencial.
-Si el script de worker permanece activo más tiempo que el último retroceso * 2,
+Si el script de worker permanece activo más tiempo que el último retroceso × 2,
 no penalizará al script de worker y lo reiniciará nuevamente.
 Sin embargo, si el script de worker continúa fallando con un código de salida distinto de cero en un corto período de tiempo
 (por ejemplo, tener un error tipográfico en un script), FrankenPHP fallará con el error: `too many consecutive failures`.
@@ -168,9 +168,9 @@ frankenphp {
 }
 ```
 
-## Comportamiento de las Superglobales
+## Comportamiento de las superglobales
 
-Las [superglobales de PHP](https://www.php.net/manual/es/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...)
+Las [superglobales de PHP](https://www.php.net/manual/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...)
 se comportan de la siguiente manera:
 
 - antes de la primera llamada a `frankenphp_handle_request()`, las superglobales contienen valores vinculados al script de worker en sí

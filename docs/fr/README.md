@@ -10,11 +10,11 @@ FrankenPHP fonctionne avec n'importe quelle application PHP et rend vos projets 
 
 FrankenPHP peut également être utilisé comme une bibliothèque Go autonome qui permet d'intégrer PHP dans n'importe quelle application en utilisant `net/http`.
 
-Découvrez plus de détails sur ce serveur d’application dans le replay de cette conférence donnée au Forum PHP 2022 :
+Découvrez plus de détails sur ce serveur d'application dans le replay de cette conférence donnée au Forum PHP 2022 :
 
 <a href="https://dunglas.dev/2022/10/frankenphp-the-modern-php-app-server-written-in-go/"><img src="https://dunglas.dev/wp-content/uploads/2022/10/frankenphp.png" alt="Diapositives" width="600"></a>
 
-## Pour Commencer
+## Pour commencer
 
 Sur Windows, utilisez [WSL](https://learn.microsoft.com/windows/wsl/) pour exécuter FrankenPHP.
 

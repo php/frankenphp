@@ -8,7 +8,7 @@ Esta función proporciona un flujo de trabajo similar a **Hot Module Replacement
 En lugar de actualizar manualmente el navegador después de cada cambio de archivo (código PHP, plantillas, archivos JavaScript y CSS...),
 FrankenPHP actualiza el contenido en tiempo real.
 
-La Hot Reload funciona de forma nativa con WordPress, Laravel, Symfony y cualquier otra aplicación o framework PHP.
+El hot reload funciona de forma nativa con WordPress, Laravel, Symfony y cualquier otra aplicación o framework PHP.
 
 Cuando está activada, FrankenPHP vigila el directorio de trabajo actual en busca de cambios en el sistema de archivos.
 Cuando se modifica un archivo, envía una actualización [Mercure](mercure.md) al navegador.
@@ -20,7 +20,7 @@ Dependiendo de la configuración, el navegador:
 
 ## Configuración
 
-Para habilitar la Hot Reload, active Mercure y luego agregue la subdirectiva `hot_reload` a la directiva `php_server` en su `Caddyfile`.
+Para habilitar el hot reload, active Mercure y luego agregue la subdirectiva `hot_reload` a la directiva `php_server` en su `Caddyfile`.
 
 > [!WARNING]
 > Esta función está destinada **únicamente a entornos de desarrollo**.
@@ -77,12 +77,12 @@ php_server {
 }
 ```
 
-## Integración Lado-Cliente
+## Integración del lado del cliente
 
 Mientras el servidor detecta los cambios, el navegador necesita suscribirse a estos eventos para actualizar la página.
 FrankenPHP expone la URL del Mercure Hub a utilizar para suscribirse a los cambios de archivos a través de la variable de entorno `$_SERVER['FRANKENPHP_HOT_RELOAD']`.
 
-Una biblioteca JavaScript de conveniencia, [frankenphp-hot-reload](https://www.npmjs.com/package/frankenphp-hot-reload), también está disponible para manejar la lógica lado-cliente.
+Una biblioteca JavaScript de conveniencia, [frankenphp-hot-reload](https://www.npmjs.com/package/frankenphp-hot-reload), también está disponible para manejar la lógica del lado del cliente.
 Para usarla, agregue lo siguiente a su diseño principal:
 
 ```php
@@ -98,11 +98,11 @@ Para usarla, agregue lo siguiente a su diseño principal:
 La biblioteca se suscribirá automáticamente al hub de Mercure, obtendrá la URL actual en segundo plano cuando se detecte un cambio en un archivo y transformará el DOM.
 Está disponible como un paquete [npm](https://www.npmjs.com/package/frankenphp-hot-reload) y en [GitHub](https://github.com/dunglas/frankenphp-hot-reload).
 
-Alternativamente, puede implementar su propia lógica lado-cliente suscribiéndose directamente al hub de Mercure usando la clase nativa de JavaScript `EventSource`.
+Alternativamente, puede implementar su propia lógica del lado del cliente suscribiéndose directamente al hub de Mercure usando la clase nativa de JavaScript `EventSource`.
 
-### Modo Worker
+### Modo worker
 
-Si está ejecutando su aplicación en [Modo Worker](https://frankenphp.dev/docs/worker/), el script de su aplicación permanece en memoria.
+Si está ejecutando su aplicación en [modo worker](https://frankenphp.dev/docs/worker/), el script de su aplicación permanece en memoria.
 Esto significa que los cambios en su código PHP no se reflejarán inmediatamente, incluso si el navegador se recarga.
 
 Para la mejor experiencia de desarrollador, debe combinar `hot_reload` con [la subdirectiva `watch` en la directiva `worker`](config.md#watching-for-file-changes).
@@ -130,7 +130,7 @@ php_server {
 ### Funcionamiento
 
 1. **Vigilancia**: FrankenPHP monitorea el sistema de archivos en busca de modificaciones usando [la biblioteca `e-dant/watcher`](https://github.com/e-dant/watcher) internamente (contribuimos con el binding de Go).
-2. **Reinicio (Modo Worker)**: si `watch` está habilitado en la configuración del worker, el worker de PHP se reinicia para cargar el nuevo código.
+2. **Reinicio (modo worker)**: si `watch` está habilitado en la configuración del worker, el worker de PHP se reinicia para cargar el nuevo código.
 3. **Envío**: se envía una carga útil JSON que contiene la lista de archivos modificados al [hub de Mercure](https://mercure.rocks) integrado.
 4. **Recepción**: El navegador, escuchando a través de la biblioteca JavaScript, recibe el evento de Mercure.
 5. **Actualización**:

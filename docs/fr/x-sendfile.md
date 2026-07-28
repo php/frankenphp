@@ -53,7 +53,7 @@ Tout d'abord, ajoutez la configuration suivante à votre `Caddyfile` pour active
 Définissez le chemin relatif du fichier (à partir de `private-files/`) comme valeur de l'en-tête `X-Accel-Redirect` :
 
 ```php
-header('X-Accel-Redirect: file.txt') ;
+header('X-Accel-Redirect: file.txt');
 ```
 
 ## Projets utilisant le composant Symfony HttpFoundation (Symfony, Laravel, Drupal...)

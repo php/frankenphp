@@ -93,7 +93,7 @@ Se proporcionan [imágenes de constructor](https://hub.docker.com/r/dunglas/fran
 > Si está usando Alpine Linux y Symfony,
 > es posible que deba [aumentar el tamaño de pila predeterminado](compile.md#using-xcaddy).
 
-## Habilitar el modo Worker por defecto
+## Habilitar el modo worker por defecto
 
 Establezca la variable de entorno `FRANKENPHP_CONFIG` para iniciar FrankenPHP con un script de worker:
 
@@ -200,7 +200,7 @@ Las imágenes Docker se construyen:
 - Cuando se etiqueta una nueva versión
 - Diariamente a las 4 am UTC, si hay nuevas versiones de las imágenes oficiales de PHP disponibles
 
-## Endurecimiento de Imágenes
+## Endurecimiento de imágenes
 
 Para reducir aún más la superficie de ataque y el tamaño de tus imágenes Docker de FrankenPHP, también es posible construirlas sobre una imagen
 [Google distroless](https://github.com/GoogleContainerTools/distroless) o
@@ -260,7 +260,7 @@ COPY --from=builder /tmp/libs /usr/lib
 COPY --from=builder /usr/local/etc/php/conf.d /usr/local/etc/php/conf.d
 COPY --from=builder /usr/local/etc/php/php.ini-production /usr/local/etc/php/php.ini
 
-# Directorios de datos de Caddy — deben ser escribibles para nonroot, incluso en un sistema de archivos raíz de solo lectura
+# Directorios de datos de Caddy: deben ser escribibles para nonroot, incluso en un sistema de archivos raíz de solo lectura
 ENV XDG_CONFIG_HOME=/config \
     XDG_DATA_HOME=/data
 COPY --from=builder --chown=nonroot:nonroot /data/caddy /data/caddy

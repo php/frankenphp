@@ -36,7 +36,7 @@ Adicione diretórios ao `.dockerignore`.
 [Siga as instruções para compilar a partir do código-fonte](compile.md) e passe
 a flag de configuração `--debug`.
 
-## Executando a suite de testes
+## Executando a suíte de testes
 
 ```console
 go test -race -v ./...

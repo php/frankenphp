@@ -1,4 +1,4 @@
-# Statik Yapı Oluşturun
+# Statik yapı oluşturun
 
 PHP kütüphanesinin yerel kurulumunu kullanmak yerine,
 harika [static-php-cli projesi](https://github.com/crazywhalecc/static-php-cli) sayesinde FrankenPHP'nin statik bir yapısını oluşturmak mümkündür (adına rağmen, bu proje sadece CLI'yi değil, tüm SAPI'leri destekler).
@@ -20,7 +20,7 @@ Elde edilen statik binary `frankenphp` olarak adlandırılır ve geçerli dizind
 
 Statik binary dosyasını Docker olmadan oluşturmak istiyorsanız, Linux için de çalışan macOS talimatlarına bir göz atın.
 
-### Özel Eklentiler
+### Özel eklentiler
 
 Varsayılan olarak, en popüler PHP eklentileri zaten derlenir.
 
@@ -43,7 +43,7 @@ docker buildx bake \
   static-builder
 ```
 
-### Ekstra Caddy Modülleri
+### Ekstra Caddy modülleri
 
 Ekstra Caddy modülleri eklemek veya [xcaddy](https://github.com/caddyserver/xcaddy) adresine başka argümanlar iletmek için `XCADDY_ARGS` Docker ARG'sini kullanın:
 
@@ -63,7 +63,7 @@ Bu örnekte, Caddy için [Souin](https://souin.io) HTTP önbellek modülünün y
 
 Derlemeyi nasıl [özelleştireceğinize](#yapıyı-özelleştirme) de bakın.
 
-### GitHub Token
+### GitHub token
 
 GitHub API kullanım limitine ulaşırsanız, `GITHUB_TOKEN` adlı bir ortam değişkeninde bir GitHub Personal Access Token ayarlayın:
 
@@ -84,7 +84,7 @@ cd frankenphp
 
 Not: Bu betik Linux'ta (ve muhtemelen diğer Unix'lerde) da çalışır ve sağladığımız Docker tabanlı statik derleyici tarafından dahili olarak kullanılır.
 
-## Yapıyı Özelleştirme
+## Yapıyı özelleştirme
 
 Aşağıdaki ortam değişkenleri `docker build` ve `build-static.sh` dosyalarına aktarılabilir
 statik derlemeyi özelleştirmek için betik:

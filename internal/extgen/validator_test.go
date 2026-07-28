@@ -911,3 +911,29 @@ func TestPhpReturnTypeToGoType(t *testing.T) {
 		})
 	}
 }
+
+func TestIsCompatibleGoType(t *testing.T) {
+	tests := []struct {
+		name       string
+		expected   string
+		actual     string
+		compatible bool
+	}{
+		{"exact match int64", "int64", "int64", true},
+		{"int accepted for int64", "int64", "int", true},
+		{"int64 accepted for int (symmetric)", "int", "int64", true},
+		{"pointer int alias symmetric a->b", "*int64", "*int", true},
+		{"pointer int alias symmetric b->a", "*int", "*int64", true},
+		{"float32 not compatible with float64", "float64", "float32", false},
+		{"pointer float32 not compatible with *float64", "*float64", "*float32", false},
+		{"unrelated types", "int64", "string", false},
+		{"bool vs int", "bool", "int64", false},
+	}
+
+	validator := Validator{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.compatible, validator.isCompatibleGoType(tt.expected, tt.actual))
+		})
+	}
+}

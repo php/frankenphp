@@ -11,9 +11,10 @@ import (
 
 func TestClassParser(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
-		expected int
+		name   string
+		input  string
+		expect int
+		assert func(t *testing.T, classes []phpClass)
 	}{
 		{
 			name: "single class",
@@ -24,7 +25,13 @@ type UserStruct struct {
 	name string
 	Age  int
 }`,
-			expected: 1,
+			expect: 1,
+			assert: func(t *testing.T, classes []phpClass) {
+				c := classes[0]
+				assert.Equal(t, "User", c.Name)
+				assert.Equal(t, "UserStruct", c.GoStruct)
+				assert.Len(t, c.Properties, 2)
+			},
 		},
 		{
 			name: "multiple classes",
@@ -41,7 +48,7 @@ type ProductStruct struct {
 	Title string
 	Price float64
 }`,
-			expected: 2,
+			expect: 2,
 		},
 		{
 			name: "no php classes",
@@ -50,7 +57,7 @@ type ProductStruct struct {
 type RegularStruct struct {
 	Data string
 }`,
-			expected: 0,
+			expect: 0,
 		},
 		{
 			name: "class with nullable fields",
@@ -62,7 +69,14 @@ type OptionalStruct struct {
 	Optional *string
 	Count    *int
 }`,
-			expected: 1,
+			expect: 1,
+			assert: func(t *testing.T, classes []phpClass) {
+				require.Len(t, classes[0].Properties, 3)
+				props := classes[0].Properties
+				assert.False(t, props[0].IsNullable, "Required field should not be nullable")
+				assert.True(t, props[1].IsNullable, "Optional field should be nullable")
+				assert.True(t, props[2].IsNullable, "Count field should be nullable")
+			},
 		},
 		{
 			name: "class with methods",
@@ -83,7 +97,7 @@ func GetUserName(u UserStruct) string {
 func SetUserAge(u *UserStruct, age int) {
 	u.Age = age
 }`,
-			expected: 1,
+			expect: 1,
 		},
 	}
 
@@ -96,23 +110,10 @@ func SetUserAge(u *UserStruct, age int) {
 			parser := classParser{}
 			classes, err := parser.parse(fileName)
 			require.NoError(t, err)
+			require.Len(t, classes, tt.expect)
 
-			assert.Len(t, classes, tt.expected, "parse() got wrong number of classes")
-
-			if tt.name == "single class" && len(classes) > 0 {
-				class := classes[0]
-				assert.Equal(t, "User", class.Name, "Expected class name 'User'")
-				assert.Equal(t, "UserStruct", class.GoStruct, "Expected Go struct 'UserStruct'")
-				assert.Len(t, class.Properties, 2, "Expected 2 properties")
-			}
-
-			if tt.name == "class with nullable fields" && len(classes) > 0 {
-				class := classes[0]
-				if len(class.Properties) >= 3 {
-					assert.False(t, class.Properties[0].IsNullable, "Required field should not be nullable")
-					assert.True(t, class.Properties[1].IsNullable, "Optional field should be nullable")
-					assert.True(t, class.Properties[2].IsNullable, "Count field should be nullable")
-				}
+			if tt.assert != nil {
+				tt.assert(t, classes)
 			}
 		})
 	}
@@ -244,10 +245,9 @@ func TestMethodParameterParsing(t *testing.T) {
 		},
 	}
 
-	parser := classParser{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			param, err := parser.parseMethodParameter(tt.paramStr)
+			param, err := parseParameter(tt.paramStr)
 
 			if tt.expectError {
 				assert.Error(t, err, "Expected error for parameter '%s', but got none", tt.paramStr)
