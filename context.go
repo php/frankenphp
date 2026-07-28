@@ -35,6 +35,14 @@ type frankenPHPContext struct {
 
 	// Whether the request is already closed by us
 	isDone bool
+	// The client's connection state as of the moment isDone was set. Captured
+	// once in closeContext, before close(fc.done): that unblocks the request
+	// dispatcher, which lets the handler return, which is itself what cancels
+	// request.Context() (see the net/http docs - this happens whether or not
+	// the client is actually still connected). Checking clientHasClosed()
+	// again after isDone would therefore read true for virtually any write
+	// following a normal fastcgi_finish_request(), not just a real abort.
+	clientHadClosed bool
 
 	responseWriter     http.ResponseWriter
 	responseController *http.ResponseController
@@ -130,6 +138,10 @@ func (fc *frankenPHPContext) closeContext() {
 		return
 	}
 
+	// Snapshot before close(fc.done): that call is what eventually lets the
+	// handler return and cancels request.Context(), so clientHasClosed()
+	// must be read before it, not after.
+	fc.clientHadClosed = fc.clientHasClosed()
 	close(fc.done)
 	fc.isDone = true
 }
