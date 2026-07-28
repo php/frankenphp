@@ -165,6 +165,16 @@ func (mainThread *phpMainThread) rebootAllThreads() bool {
 	// has already left PHP execution and can't be reached by it. Give up on
 	// such threads instead of waiting on them forever, so one stuck thread
 	// can't wedge the reboot of every other thread.
+	//
+	// Do NOT escalate to sendKillSignal() here: on Linux/FreeBSD that's a
+	// real pthread_kill, which is only safe against a thread blocked in a
+	// PHP-recognized C syscall. A thread that ignored a full grace period
+	// has almost certainly already left PHP execution entirely and is
+	// parked inside Go's own runtime (e.g. go_ub_write's netpoller wait) -
+	// delivering an async signal there doesn't unstick it (Go's scheduler
+	// isn't a syscall the signal can interrupt) and, confirmed on Linux/
+	// amd64 CI, can corrupt shared process state and crash the whole
+	// server. That's strictly worse than losing one thread's capacity.
 	for _, thread := range rebootingThreads {
 		rebootWg.Go(func() {
 			close(thread.drainChan)
@@ -172,16 +182,14 @@ func (mainThread *phpMainThread) rebootAllThreads() bool {
 				return
 			}
 
-			// thread has not shut down in time, force kill the thread on the PHP side
 			globalLogger.LogAttrs(
 				globalCtx,
 				slog.LevelWarn,
-				"force-killing thread on reboot timeout",
+				"thread did not yield within the grace period, waiting once more before giving up",
 				slog.String("name", thread.name()),
 				slog.String("state", thread.state.Name()),
 				slog.String("timeout", rebootGracePeriod.String()),
 			)
-			thread.sendKillSignal()
 			if thread.state.WaitForStateWithTimeout(rebootGracePeriod, state.YieldingForReboot) {
 				return
 			}
@@ -195,7 +203,7 @@ func (mainThread *phpMainThread) rebootAllThreads() bool {
 			globalLogger.LogAttrs(
 				globalCtx,
 				slog.LevelError,
-				"thread unresponsive after force-kill, abandoning it permanently",
+				"thread still unresponsive after grace periods, abandoning it permanently",
 				slog.String("name", thread.name()),
 				slog.String("state", thread.state.Name()),
 			)
