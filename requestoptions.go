@@ -192,6 +192,20 @@ func WithRequestBodyTimeout(timeout time.Duration) RequestOption {
 	}
 }
 
+// WithResponseWriteTimeout sets an idle timeout on response writes: a client
+// that stops reading (a stalled or dead peer) is cut off instead of blocking
+// the PHP thread forever, since frankenphp_force_kill_thread cannot interrupt
+// a write parked in Go's non-blocking netpoller. Zero (the default) disables
+// it. Requires a ResponseWriter that exposes a write deadline (net/http and
+// Caddy do); otherwise the write has no timeout.
+func WithResponseWriteTimeout(timeout time.Duration) RequestOption {
+	return func(o *frankenPHPContext) error {
+		o.responseWriteTimeout = timeout
+
+		return nil
+	}
+}
+
 // WithWorkerName sets the worker that should handle the request
 func WithWorkerName(name string) RequestOption {
 	return func(o *frankenPHPContext) error {

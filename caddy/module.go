@@ -50,6 +50,8 @@ type FrankenPHPModule struct {
 	RouteGroup string `json:"route_group,omitempty"`
 	// RequestBodyTimeout is an idle timeout on request body reads: a stalled (slow POST) client is cut off while a steady upload of any size succeeds. Defaults to 60s when omitted; set to 0 to disable.
 	RequestBodyTimeout *caddy.Duration `json:"request_body_timeout,omitempty"`
+	// ResponseWriteTimeout is an idle timeout on response writes: a stalled or dead client is cut off instead of blocking the PHP thread forever. Defaults to 60s when omitted; set to 0 to disable.
+	ResponseWriteTimeout *caddy.Duration `json:"response_write_timeout,omitempty"`
 
 	resolvedDocumentRoot        string
 	preparedEnv                 frankenphp.PreparedEnv
@@ -135,6 +137,14 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 
 	if *f.RequestBodyTimeout > 0 {
 		f.requestOptions = append(f.requestOptions, frankenphp.WithRequestBodyTimeout(time.Duration(*f.RequestBodyTimeout)))
+	}
+
+	if f.ResponseWriteTimeout == nil {
+		f.ResponseWriteTimeout = new(defaultResponseWriteTimeout)
+	}
+
+	if *f.ResponseWriteTimeout > 0 {
+		f.requestOptions = append(f.requestOptions, frankenphp.WithResponseWriteTimeout(time.Duration(*f.ResponseWriteTimeout)))
 	}
 
 	if f.ResolveRootSymlink == nil {
@@ -337,8 +347,21 @@ func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				}
 				f.RequestBodyTimeout = new(caddy.Duration(v))
 
+			case "response_write_timeout":
+				if !d.NextArg() {
+					return d.ArgErr()
+				}
+				v, err := caddy.ParseDuration(d.Val())
+				if err != nil {
+					return err
+				}
+				if d.NextArg() {
+					return d.ArgErr()
+				}
+				f.ResponseWriteTimeout = new(caddy.Duration(v))
+
 			default:
-				return wrongSubDirectiveError("php or php_server", "hot_reload, name, root, split, env, resolve_root_symlink, request_body_timeout, worker", d.Val())
+				return wrongSubDirectiveError("php or php_server", "hot_reload, name, root, split, env, resolve_root_symlink, request_body_timeout, response_write_timeout, worker", d.Val())
 			}
 		}
 	}

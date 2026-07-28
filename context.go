@@ -26,6 +26,8 @@ type frankenPHPContext struct {
 
 	// idle timeout per body read; zero disables it
 	requestBodyTimeout time.Duration
+	// idle timeout per response write; zero disables it
+	responseWriteTimeout time.Duration
 
 	docURI         string
 	pathInfo       string

@@ -437,22 +437,45 @@ func go_ub_write(threadIndex C.uintptr_t, cBuf *C.char, length C.size_t) (C.size
 	}
 
 	var writer io.Writer
+	var rc *http.ResponseController
 	if fc.responseWriter == nil {
 		var b bytes.Buffer
 		// log the output of the worker
 		writer = &b
 	} else {
 		writer = fc.responseWriter
+
+		if fc.responseWriteTimeout > 0 {
+			if fc.responseController == nil {
+				fc.responseController = http.NewResponseController(fc.responseWriter)
+			}
+			rc = fc.responseController
+			_ = rc.SetWriteDeadline(time.Now().Add(fc.responseWriteTimeout))
+		}
 	}
 
 	var ctx context.Context
 
 	i, e := writer.Write(unsafe.Slice((*byte)(unsafe.Pointer(cBuf)), length))
+
+	if rc != nil {
+		_ = rc.SetWriteDeadline(time.Time{})
+	}
+
 	if e != nil {
 		ctx = thread.context()
 
 		if fc.logger.Enabled(ctx, slog.LevelWarn) {
 			fc.logger.LogAttrs(ctx, slog.LevelWarn, "write error", slog.Any("error", e))
+		}
+
+		if errors.Is(e, os.ErrDeadlineExceeded) {
+			// The peer stopped reading and the write timeout fired: treat this
+			// exactly like a genuine disconnect (rather than fc.clientHasClosed(),
+			// which only reflects the request context and won't have fired yet) so
+			// php_handle_aborted_connection() runs instead of the script quietly
+			// continuing to write into a stalled connection on every future write.
+			return C.size_t(i), C.bool(true)
 		}
 	}
 

@@ -129,6 +129,34 @@ func TestModuleRequestBodyTimeoutDisabled(t *testing.T) {
 	require.Equal(t, caddy.Duration(0), *module.RequestBodyTimeout)
 }
 
+func TestModuleResponseWriteTimeout(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`
+	{
+		php {
+			response_write_timeout 5s
+		}
+	}`)
+	module := &FrankenPHPModule{}
+
+	require.NoError(t, module.UnmarshalCaddyfile(d))
+	require.NotNil(t, module.ResponseWriteTimeout)
+	require.Equal(t, caddy.Duration(5*time.Second), *module.ResponseWriteTimeout)
+}
+
+func TestModuleResponseWriteTimeoutDisabled(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`
+	{
+		php {
+			response_write_timeout 0
+		}
+	}`)
+	module := &FrankenPHPModule{}
+
+	require.NoError(t, module.UnmarshalCaddyfile(d))
+	require.NotNil(t, module.ResponseWriteTimeout)
+	require.Equal(t, caddy.Duration(0), *module.ResponseWriteTimeout)
+}
+
 func TestModuleWorkerDuplicateFilenamesFail(t *testing.T) {
 	// Create a test configuration with duplicate worker filenames
 	configWithDuplicateFilenames := `

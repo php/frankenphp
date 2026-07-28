@@ -19,6 +19,11 @@ const (
 	// reads when the directive is omitted; mirrors nginx's client_body_timeout.
 	// Set request_body_timeout to 0 to disable.
 	defaultRequestBodyTimeout = caddy.Duration(60 * time.Second)
+
+	// defaultResponseWriteTimeout is the idle timeout applied to response
+	// writes when the directive is omitted; mirrors nginx's send_timeout.
+	// Set response_write_timeout to 0 to disable.
+	defaultResponseWriteTimeout = caddy.Duration(60 * time.Second)
 )
 
 func init() {
