@@ -37,7 +37,7 @@ import (
 	"time"
 	"unsafe"
 	// debug on Linux
-	//_ "github.com/ianlancetaylor/cgosymbolizer"
+	// _ "github.com/ianlancetaylor/cgosymbolizer"
 )
 
 type contextKeyStruct struct{}
@@ -156,6 +156,22 @@ func Config() PHPConfig {
 	}
 }
 
+var phpinfoEntries []*C.char
+
+func AddPhpinfoEntry(key, value string) {
+	cKey := C.CString(key)
+	cValue := C.CString(value)
+	phpinfoEntries = append(phpinfoEntries, cKey, cValue)
+}
+
+func initPhpinfoEntries() {
+	if len(phpinfoEntries) == 0 {
+		return
+	}
+	phpinfoEntries = append(phpinfoEntries, nil)
+	C.frankenphp_phpinfo_entries = (**C.char)(unsafe.Pointer(&phpinfoEntries[0]))
+}
+
 func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 	maxProcs := runtime.GOMAXPROCS(0) * 2
 	maxThreadsFromWorkers := 0
@@ -250,6 +266,7 @@ func Init(options ...Option) error {
 	signal.Ignore(syscall.SIGPIPE)
 
 	registerExtensions()
+	initPhpinfoEntries()
 
 	opt := &opt{}
 	for _, o := range options {

@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <ext/spl/spl_exceptions.h>
 #include <ext/standard/head.h>
+#include <ext/standard/info.h>
 #ifdef HAVE_PHP_SESSION
 #include <ext/session/php_session.h>
 #endif
@@ -106,6 +107,8 @@ frankenphp_config frankenphp_get_config() {
 #endif
   };
 }
+
+const char **frankenphp_phpinfo_entries = NULL;
 
 bool should_filter_var = 0;
 bool original_user_abort_setting = 0;
@@ -1101,6 +1104,17 @@ PHP_MINIT_FUNCTION(frankenphp) {
   return SUCCESS;
 }
 
+PHP_MINFO_FUNCTION(frankenphp) {
+  php_info_print_table_start();
+  php_info_print_table_row(2, "Version", TOSTRING(FRANKENPHP_VERSION));
+  if (frankenphp_phpinfo_entries) {
+    for (int i = 0; frankenphp_phpinfo_entries[i] != NULL; i += 2) {
+      php_info_print_table_row(2, frankenphp_phpinfo_entries[i], frankenphp_phpinfo_entries[i + 1]);
+    }
+  }
+  php_info_print_table_end();
+}
+
 static zend_module_entry frankenphp_module = {
     STANDARD_MODULE_HEADER,
     "frankenphp",
@@ -1109,7 +1123,7 @@ static zend_module_entry frankenphp_module = {
     NULL,                  /* shutdown */
     NULL,                  /* request initialization */
     NULL,                  /* request shutdown */
-    NULL,                  /* information */
+    PHP_MINFO(frankenphp), /* information */
     TOSTRING(FRANKENPHP_VERSION),
     STANDARD_MODULE_PROPERTIES};
 
