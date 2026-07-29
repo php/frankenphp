@@ -190,10 +190,12 @@ func newWorker(o workerOpt) (*worker, error) {
 // force-kill is armed after a grace period to wake threads parked in
 // blocking syscalls so a stuck sleep doesn't make this hang for the
 // full duration of the syscall.
-func RestartWorkers() {
+func RestartWorkers() bool {
 	if mainThread != nil {
-		mainThread.rebootAllThreads()
+		return mainThread.rebootAllThreads()
 	}
+
+	return false
 }
 
 func (worker *worker) attachThread(thread *phpThread) {
