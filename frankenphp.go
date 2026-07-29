@@ -427,6 +427,16 @@ func ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) error 
 	return handleRequestWithRegularPHPThreads(ch)
 }
 
+// responseWriteChunkSize bounds how much go_ub_write hands to a single
+// underlying Write() call while a write deadline is active. SetWriteDeadline
+// bounds the whole call it wraps, not idle time within it - and with
+// output_buffering=0, PHP hands an entire echo() to go_ub_write in one call.
+// Without chunking, a large-but-steady transfer to a slow (not stalled)
+// client would be truncated once it merely takes longer than the timeout to
+// finish. Resetting the deadline once per chunk instead bounds a stall, not
+// the whole transfer, mirroring go_read_post's per-read reset.
+const responseWriteChunkSize = 64 * 1024
+
 //export go_ub_write
 func go_ub_write(threadIndex C.uintptr_t, cBuf *C.char, length C.size_t) (C.size_t, C.bool) {
 	thread := phpThreads[threadIndex]
@@ -450,15 +460,28 @@ func go_ub_write(threadIndex C.uintptr_t, cBuf *C.char, length C.size_t) (C.size
 				fc.responseController = http.NewResponseController(fc.responseWriter)
 			}
 			rc = fc.responseController
-			_ = rc.SetWriteDeadline(time.Now().Add(fc.responseWriteTimeout))
 		}
 	}
 
 	var ctx context.Context
 
-	i, e := writer.Write(unsafe.Slice((*byte)(unsafe.Pointer(cBuf)), length))
+	p := unsafe.Slice((*byte)(unsafe.Pointer(cBuf)), length)
 
-	if rc != nil {
+	var i int
+	var e error
+	if rc == nil {
+		i, e = writer.Write(p)
+	} else {
+		for i < len(p) && e == nil {
+			end := min(i+responseWriteChunkSize, len(p))
+
+			_ = rc.SetWriteDeadline(time.Now().Add(fc.responseWriteTimeout))
+
+			var n int
+			n, e = writer.Write(p[i:end])
+			i += n
+		}
+
 		_ = rc.SetWriteDeadline(time.Time{})
 	}
 
