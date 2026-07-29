@@ -1106,7 +1106,7 @@ PHP_MINIT_FUNCTION(frankenphp) {
 
 PHP_MINFO_FUNCTION(frankenphp) {
   php_info_print_table_start();
-  php_info_print_table_row(2, "Version", TOSTRING(FRANKENPHP_VERSION));
+  php_info_print_table_row(2, "frankenphp", TOSTRING(FRANKENPHP_VERSION));
   if (frankenphp_phpinfo_entries) {
     for (int i = 0; frankenphp_phpinfo_entries[i] != NULL; i += 2) {
       php_info_print_table_row(2, frankenphp_phpinfo_entries[i], frankenphp_phpinfo_entries[i + 1]);

@@ -30,6 +30,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -156,20 +157,47 @@ func Config() PHPConfig {
 	}
 }
 
-var phpinfoEntries []*C.char
+type phpinfoEntry struct {
+	key, value string
+}
+
+var (
+	phpinfoEntries []phpinfoEntry
+	cPhpinfoArr    []*C.char
+)
 
 func AddPhpinfoEntry(key, value string) {
-	cKey := C.CString(key)
-	cValue := C.CString(value)
-	phpinfoEntries = append(phpinfoEntries, cKey, cValue)
+	phpinfoEntries = append(phpinfoEntries, phpinfoEntry{key, value})
 }
 
 func initPhpinfoEntries() {
+	for _, cstr := range cPhpinfoArr {
+		if cstr != nil {
+			C.free(unsafe.Pointer(cstr))
+		}
+	}
+	if cPhpinfoArr != nil {
+		C.free(unsafe.Pointer(&cPhpinfoArr[0]))
+		cPhpinfoArr = nil
+		C.frankenphp_phpinfo_entries = nil
+	}
+
 	if len(phpinfoEntries) == 0 {
 		return
 	}
-	phpinfoEntries = append(phpinfoEntries, nil)
-	C.frankenphp_phpinfo_entries = (**C.char)(unsafe.Pointer(&phpinfoEntries[0]))
+
+	sort.Slice(phpinfoEntries, func(i, j int) bool {
+		return phpinfoEntries[i].key < phpinfoEntries[j].key
+	})
+
+	n := 2*len(phpinfoEntries) + 1
+	cPhpinfoArr = (*[1 << 28]*C.char)(C.malloc(C.size_t(n) * C.size_t(unsafe.Sizeof(uintptr(0)))))[:n:n]
+	for i, e := range phpinfoEntries {
+		cPhpinfoArr[2*i] = C.CString(e.key)
+		cPhpinfoArr[2*i+1] = C.CString(e.value)
+	}
+	cPhpinfoArr[n-1] = nil
+	C.frankenphp_phpinfo_entries = &cPhpinfoArr[0]
 }
 
 func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
