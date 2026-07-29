@@ -784,24 +784,81 @@ func go_is_context_done(threadIndex C.uintptr_t) C.bool {
 
 //export go_schedule_opcache_reset
 func go_schedule_opcache_reset(threadIndex C.uintptr_t) {
-	if mainThread == nil {
+	// Capture the current *phpMainThread once: this goroutine can outlive
+	// this specific instance (e.g. Shutdown() runs while it's still holding
+	// the trailing cooldown below). mainThread is reassigned to a brand new
+	// instance by the next Init(), and phpThreads is reset with it; a stale
+	// goroutine that read the package-level mainThread var again later would
+	// operate on a different, unrelated, possibly concurrently-running
+	// instance instead of quietly becoming a no-op.
+	mt := mainThread
+	if mt == nil {
 		return
 	}
 
 	// Application code (e.g. some WordPress plugins) can call opcache_reset()
-	// on every request. Since a reboot pauses request handling for every
+	// on every request, and the same hook fires on an internal opcache
+	// restart (OOM, etc.). Since a reboot pauses request handling for every
 	// thread, coalesce calls that arrive within the cooldown into a single
 	// reboot instead of pausing the whole pool on every call.
-	mainThread.opcacheResetMu.Lock()
-	now := time.Now()
-	if now.Sub(mainThread.lastOpcacheResetAt) < opcacheResetCooldown {
-		mainThread.opcacheResetMu.Unlock()
+	//
+	// A call inside the cooldown must still result in a reboot once the
+	// cooldown ends, not be dropped: frankenphp_opcache_reset() always
+	// reports success to PHP regardless of what happens here, and a dropped
+	// OOM-triggered restart would leave the accelerator disabled until
+	// threads happen to reboot for an unrelated reason. opcacheResetScheduled
+	// coalesces any calls arriving while one is already pending, in flight,
+	// or in its post-reboot cooldown hold into that single reboot, rather
+	// than silently discarding them.
+	mt.opcacheResetMu.Lock()
+	if mt.opcacheResetScheduled {
+		mt.opcacheResetMu.Unlock()
 		return
 	}
-	mainThread.lastOpcacheResetAt = now
-	mainThread.opcacheResetMu.Unlock()
+	mt.opcacheResetScheduled = true
+	wait := opcacheResetCooldown - time.Since(mt.lastOpcacheResetAt)
+	mt.opcacheResetMu.Unlock()
 
-	go mainThread.rebootAllThreads()
+	go func() {
+		defer func() {
+			mt.opcacheResetMu.Lock()
+			mt.opcacheResetScheduled = false
+			mt.opcacheResetMu.Unlock()
+		}()
+
+		if wait > 0 {
+			select {
+			case <-time.After(wait):
+			case <-mt.done:
+				// This instance is shutting down: give up rather than call
+				// rebootAllThreads on a stopped pool after an arbitrary delay.
+				return
+			}
+		}
+
+		// rebootAllThreads can no-op (already rebooting from an unrelated
+		// trigger, or the pool isn't Ready, e.g. mid-shutdown): only hold
+		// the cooldown, and only stamp lastOpcacheResetAt, when a reboot
+		// actually happened. Charging a cooldown against a reset that never
+		// occurred would silently swallow the next legitimate request too.
+		if !mt.rebootAllThreads() {
+			return
+		}
+
+		// Keep coalescing calls through a full cooldown measured from here,
+		// not just until the reboot itself finishes: threads can yield well
+		// within a grace period, so a call landing in the gap between
+		// "reboot done" and "cooldown elapsed" would otherwise open a brand
+		// new window instead of joining this one, turning one burst into
+		// two reboots.
+		select {
+		case <-time.After(opcacheResetCooldown):
+			mt.opcacheResetMu.Lock()
+			mt.lastOpcacheResetAt = time.Now()
+			mt.opcacheResetMu.Unlock()
+		case <-mt.done:
+		}
+	}()
 }
 
 func convertArgs(args []string) (C.int, []*C.char) {

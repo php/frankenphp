@@ -29,9 +29,13 @@ type phpMainThread struct {
 
 	// throttles opcache_reset()-triggered reboots (see go_schedule_opcache_reset):
 	// application code can call opcache_reset() on every request, and each call
-	// would otherwise pause request handling for a full thread pool reboot
-	opcacheResetMu     sync.Mutex
-	lastOpcacheResetAt time.Time
+	// would otherwise pause request handling for a full thread pool reboot.
+	// lastOpcacheResetAt is only ever set after a reboot actually happens, and
+	// opcacheResetScheduled coalesces (rather than drops) calls that arrive
+	// while one is already pending or in flight.
+	opcacheResetMu        sync.Mutex
+	lastOpcacheResetAt    time.Time
+	opcacheResetScheduled bool
 }
 
 var (
