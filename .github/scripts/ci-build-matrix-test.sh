@@ -17,28 +17,28 @@ assert_output() {
 }
 
 TEST_METADATA='{
-  "group": {
-    "default": {
-      "targets": [
-        "builder-php-8-2-bookworm",
-        "builder-php-8-2-trixie",
-        "builder-php-8-3-bookworm",
-        "builder-php-8-3-trixie",
-        "runner-php-8-2-bookworm",
-        "runner-php-8-2-trixie",
-        "runner-php-8-3-bookworm",
-        "runner-php-8-3-trixie"
-      ]
-    }
-  },
-  "target": {
-    "builder-php-8-2-bookworm": {
-      "platforms": ["linux/amd64", "linux/arm64"]
-    },
-    "static-builder-musl": {
-      "platforms": ["linux/amd64", "linux/arm64"]
-    }
-  }
+	"group": {
+		"default": {
+			"targets": [
+				"builder-php-8-2-bookworm",
+				"builder-php-8-2-trixie",
+				"builder-php-8-3-bookworm",
+				"builder-php-8-3-trixie",
+				"runner-php-8-2-bookworm",
+				"runner-php-8-2-trixie",
+				"runner-php-8-3-bookworm",
+				"runner-php-8-3-trixie"
+			]
+		}
+	},
+	"target": {
+		"builder-php-8-2-bookworm": {
+			"platforms": ["linux/amd64", "linux/arm64"]
+		},
+		"static-builder-musl": {
+			"platforms": ["linux/amd64", "linux/arm64"]
+		}
+	}
 }'
 
 assert_output docker false $'variants=["php-8-2-bookworm","php-8-3-bookworm"]\nplatforms=["linux/amd64"]'

@@ -63,6 +63,7 @@ jobs:
         id: check
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FULL_BUILD_MATRIX: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-build-matrix') }}
         run: ./.github/scripts/docker-compute-fingerprints.sh
       - name: Create variants matrix
         if: ${{ !fromJson(steps.check.outputs.skip) }}

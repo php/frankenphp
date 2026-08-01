@@ -35,6 +35,14 @@ if [[ "${GITHUB_EVENT_NAME:-}" == "schedule" ]]; then
 fi
 
 METADATA="$(PHP_VERSION="${PHP_VERSION}" docker buildx bake --print | jq -c)"
+if [[ "${FULL_BUILD_MATRIX:-true}" != "true" ]]; then
+	METADATA="$(
+		jq -c '
+			.group.default.targets |= map(select(endswith("-bookworm")))
+			| .target |= with_entries(select(.key | endswith("-bookworm")))
+		' <<<"${METADATA}"
+	)"
+fi
 
 BASE_IMAGES=()
 while IFS= read -r image; do
