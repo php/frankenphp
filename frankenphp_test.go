@@ -188,8 +188,9 @@ func testFinishRequest(t *testing.T, opts *testOptions) {
 		// The write after frankenphp_finish_request() must be silently
 		// discarded, not treated as an aborted connection that bails out the
 		// script: the log line after it must still be reached.
-		for !strings.Contains(buf.String(), fmt.Sprintf("reached after finish_request %d", i)) {
-		}
+		require.Eventually(t, func() bool {
+			return strings.Contains(buf.String(), fmt.Sprintf("reached after finish_request %d", i))
+		}, 2*time.Second, 10*time.Millisecond)
 	}, opts)
 }
 
