@@ -631,8 +631,9 @@ func go_sapi_flush(threadIndex C.uintptr_t) bool {
 			if globalLogger.Enabled(ctx, slog.LevelWarn) {
 				globalLogger.LogAttrs(ctx, slog.LevelWarn, "the current responseWriter is not a flusher, if you are not using a custom build, please report this issue", slog.Any("error", err))
 			}
-		} else if globalLogger.Enabled(ctx, slog.LevelWarn) {
-			globalLogger.LogAttrs(ctx, slog.LevelWarn, "flush error", slog.Any("error", err))
+		} else if globalLogger.Enabled(ctx, slog.LevelDebug) {
+			// e.g. a client disconnecting mid-flush: expected, not actionable
+			globalLogger.LogAttrs(ctx, slog.LevelDebug, "flush error", slog.Any("error", err))
 		}
 	}
 
