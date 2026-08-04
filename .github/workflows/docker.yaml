@@ -9,6 +9,7 @@ on:
       - main
     paths:
       - "docker-bake.hcl"
+      - ".github/scripts/ci-build-matrix.sh"
       - ".github/workflows/docker.yaml"
       - "**cgo.go"
       - "**Dockerfile"
@@ -62,6 +63,7 @@ jobs:
         id: check
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FULL_BUILD_MATRIX: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-build-matrix') }}
         run: ./.github/scripts/docker-compute-fingerprints.sh
       - name: Create variants matrix
         if: ${{ !fromJson(steps.check.outputs.skip) }}
@@ -70,15 +72,13 @@ jobs:
         run: |
           set -e
           METADATA="$(docker buildx bake --print | jq -c)"
-          {
-            echo metadata="${METADATA}"
-            echo variants="$(jq -c '.group.default.targets|map(sub("runner-|builder-"; ""))|unique' <<< "${METADATA}")"
-            echo platforms="$(jq -c 'first(.target[]) | .platforms' <<< "${METADATA}")"
-          } >> "${GITHUB_OUTPUT}"
+          echo metadata="${METADATA}" >> "${GITHUB_OUTPUT}"
+          METADATA="${METADATA}" ./.github/scripts/ci-build-matrix.sh docker "${FULL_BUILD_MATRIX}"
         env:
           SHA: ${{ github.sha }}
           VERSION: ${{ (github.ref_type == 'tag' && github.ref_name) || steps.check.outputs.ref || 'dev' }}
           PHP_VERSION: ${{ steps.check.outputs.php_version }}
+          FULL_BUILD_MATRIX: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-build-matrix') }}
   build:
     runs-on: ${{ startsWith(matrix.platform, 'linux/arm') && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     needs:
