@@ -173,14 +173,24 @@ func TestEnvVarsInPhpIni(t *testing.T) {
 	})
 }
 
-func TestFinishRequest_module(t *testing.T) { testFinishRequest(t, nil) }
+func TestFinishRequest_module(t *testing.T) { testFinishRequest(t, &testOptions{}) }
 func TestFinishRequest_worker(t *testing.T) {
 	testFinishRequest(t, &testOptions{workerScript: "finish-request.php"})
 }
 func testFinishRequest(t *testing.T, opts *testOptions) {
+	var buf fmt.Stringer
+	opts.logger, buf = newTestLogger(t)
+
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
 		body, _ := testGet(fmt.Sprintf("http://example.com/finish-request.php?i=%d", i), handler, t)
 		assert.Equal(t, fmt.Sprintf("This is output %d\n", i), body)
+
+		// The write after frankenphp_finish_request() must be silently
+		// discarded, not treated as an aborted connection that bails out the
+		// script: the log line after it must still be reached.
+		require.Eventually(t, func() bool {
+			return strings.Contains(buf.String(), fmt.Sprintf("reached after finish_request %d", i))
+		}, 2*time.Second, 10*time.Millisecond)
 	}, opts)
 }
 
