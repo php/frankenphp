@@ -30,9 +30,9 @@ func init() {
 	// Report Caddy version in phpinfo()
 	simpleVersion, fullVersion := caddy.Version()
 	if fullVersion != "" {
-		frankenphp.AddPhpinfoEntry("caddy", fullVersion)
+		frankenphp.AddPHPInfoEntry("caddy", fullVersion)
 	} else if simpleVersion != "" {
-		frankenphp.AddPhpinfoEntry("caddy", simpleVersion)
+		frankenphp.AddPHPInfoEntry("caddy", simpleVersion)
 	}
 
 	httpcaddyfile.RegisterGlobalOption("frankenphp", parseGlobalOption)

@@ -18,7 +18,7 @@ func init() {
 	if buildInfo, ok := debug.ReadBuildInfo(); ok {
 		for _, dep := range buildInfo.Deps {
 			if dep.Path == "github.com/dunglas/mercure" {
-				AddPhpinfoEntry("dunglas/mercure", dep.Version)
+				AddPHPInfoEntry("dunglas/mercure", dep.Version)
 				break
 			}
 		}

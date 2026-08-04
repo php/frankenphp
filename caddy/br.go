@@ -14,7 +14,7 @@ func init() {
 	if buildInfo, ok := debug.ReadBuildInfo(); ok {
 		for _, dep := range buildInfo.Deps {
 			if dep.Path == "github.com/dunglas/caddy-cbrotli" {
-				frankenphp.AddPhpinfoEntry("dunglas/caddy-cbrotli", dep.Version)
+				frankenphp.AddPHPInfoEntry("dunglas/caddy-cbrotli", dep.Version)
 				break
 			}
 		}

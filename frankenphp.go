@@ -166,11 +166,11 @@ var (
 	cPhpinfoArr    []*C.char
 )
 
-func AddPhpinfoEntry(key, value string) {
+func AddPHPInfoEntry(key, value string) {
 	phpinfoEntries = append(phpinfoEntries, phpinfoEntry{key, value})
 }
 
-func initPhpinfoEntries() {
+func initPHPInfoEntries() {
 	for _, cstr := range cPhpinfoArr {
 		if cstr != nil {
 			C.free(unsafe.Pointer(cstr))
@@ -294,7 +294,7 @@ func Init(options ...Option) error {
 	signal.Ignore(syscall.SIGPIPE)
 
 	registerExtensions()
-	initPhpinfoEntries()
+	initPHPInfoEntries()
 
 	opt := &opt{}
 	for _, o := range options {
