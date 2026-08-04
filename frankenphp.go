@@ -627,8 +627,12 @@ func go_sapi_flush(threadIndex C.uintptr_t) bool {
 	if err := fc.responseController.Flush(); err != nil {
 		ctx := thread.context()
 
-		if globalLogger.Enabled(ctx, slog.LevelWarn) {
-			globalLogger.LogAttrs(ctx, slog.LevelWarn, "the current responseWriter is not a flusher, if you are not using a custom build, please report this issue", slog.Any("error", err))
+		if errors.Is(err, http.ErrNotSupported) {
+			if globalLogger.Enabled(ctx, slog.LevelWarn) {
+				globalLogger.LogAttrs(ctx, slog.LevelWarn, "the current responseWriter is not a flusher, if you are not using a custom build, please report this issue", slog.Any("error", err))
+			}
+		} else if globalLogger.Enabled(ctx, slog.LevelWarn) {
+			globalLogger.LogAttrs(ctx, slog.LevelWarn, "flush error", slog.Any("error", err))
 		}
 	}
 
