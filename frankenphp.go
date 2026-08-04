@@ -451,8 +451,8 @@ func go_ub_write(threadIndex C.uintptr_t, cBuf *C.char, length C.size_t) (C.size
 	if e != nil {
 		ctx = thread.context()
 
-		if fc.logger.Enabled(ctx, slog.LevelWarn) {
-			fc.logger.LogAttrs(ctx, slog.LevelWarn, "write error", slog.Any("error", e))
+		if fc.logger.Enabled(ctx, slog.LevelDebug) {
+			fc.logger.LogAttrs(ctx, slog.LevelDebug, "write error", slog.Any("error", e))
 		}
 	}
 
@@ -624,12 +624,20 @@ func go_sapi_flush(threadIndex C.uintptr_t) bool {
 	if fc.responseController == nil {
 		fc.responseController = http.NewResponseController(fc.responseWriter)
 	}
-	if err := fc.responseController.Flush(); err != nil {
-		ctx := thread.context()
 
+	err := fc.responseController.Flush()
+	if err == nil {
+		return false
+	}
+
+	ctx := thread.context()
+
+	if errors.Is(err, http.ErrNotSupported) {
 		if globalLogger.Enabled(ctx, slog.LevelWarn) {
 			globalLogger.LogAttrs(ctx, slog.LevelWarn, "the current responseWriter is not a flusher, if you are not using a custom build, please report this issue", slog.Any("error", err))
 		}
+	} else if globalLogger.Enabled(ctx, slog.LevelDebug) {
+		globalLogger.LogAttrs(ctx, slog.LevelDebug, "flush error", slog.Any("error", err))
 	}
 
 	return false
