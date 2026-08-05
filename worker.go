@@ -123,12 +123,19 @@ func newWorker(o workerOpt) (*worker, error) {
 		o.name = absFileName
 	}
 
-	if o.server == nil && globalWorkersByPath[absFileName] != nil {
-		return nil, fmt.Errorf("two global workers cannot have the same filename: %q", absFileName)
+	if o.server == nil {
+		if globalWorkersByPath[absFileName] != nil {
+			return nil, fmt.Errorf("two global workers cannot have the same filename: %q", absFileName)
+		}
+
+		// no server means no set of requests to match against, the matcher would never run
+		if o.matchRequest != nil {
+			return nil, fmt.Errorf("worker %q has a request matcher but no server scope, use WithWorkerServerScope()", o.name)
+		}
 	}
 
-	if w := workersByName[o.name]; w != nil {
-		return w, fmt.Errorf("two workers cannot have the same name: %q", o.name)
+	if workersByName[o.name] != nil {
+		return nil, fmt.Errorf("two workers cannot have the same name: %q", o.name)
 	}
 
 	// env should always contain FRANKENPHP_WORKER and the parent php_server env

@@ -7,8 +7,19 @@ import (
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
+	"github.com/dunglas/frankenphp"
 	"github.com/stretchr/testify/require"
 )
+
+// options collected while provisioning a module, like the Mercure hub, must reach frankenphp
+func TestWorkerOptionsKeepProvisionedOptions(t *testing.T) {
+	wc := workerConfig{FileName: "../testdata/worker-with-env.php"}
+	base := len(wc.toWorkerOptions())
+
+	wc.options = append(wc.options, frankenphp.WithWorkerMaxThreads(3))
+
+	require.Len(t, wc.toWorkerOptions(), base+1, "worker options set during provisioning must be forwarded")
+}
 
 func TestModuleRequestBodyTimeout(t *testing.T) {
 	d := caddyfile.NewTestDispenser(`

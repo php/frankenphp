@@ -171,10 +171,13 @@ func go_register_server_variables(threadIndex C.uintptr_t, trackVarsArray *C.zva
 	thread := phpThreads[threadIndex]
 	fc := thread.handler.frankenPHPContext()
 
-	if fc.request != nil {
-		addKnownVariablesToServer(fc, trackVarsArray)
-		addHeadersToServer(fc.ctx, fc.request, trackVarsArray)
+	if fc.request == nil {
+		// go_update_request_info() never ran, the thread-local prepared env still holds the previous request
+		return
 	}
+
+	addKnownVariablesToServer(fc, trackVarsArray)
+	addHeadersToServer(fc.ctx, fc.request, trackVarsArray)
 
 	// The Prepared Environment is registered last and can overwrite any previous values
 	if len(fc.env) != 0 || len(fc.server.env) != 0 {

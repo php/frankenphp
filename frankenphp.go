@@ -342,6 +342,9 @@ func Init(options ...Option) error {
 
 	initAutoScaling(mainThread)
 
+	// only now that the workers and threads are up may requests reach a server
+	activateServers()
+
 	if globalLogger.Enabled(globalCtx, slog.LevelInfo) {
 		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "FrankenPHP started 🐘", slog.String("php_version", Version().Version), slog.Int("num_threads", mainThread.numThreads), slog.Int("max_threads", mainThread.maxThreads), slog.Int("max_requests", maxRequestsPerThread))
 
@@ -782,6 +785,8 @@ func resetGlobals() {
 	workers = nil
 	workersByName = nil
 	globalWorkersByPath = nil
+	servers = nil
+	fallbackServer.logger.Store(globalLogger)
 	watcherIsEnabled = false
 	maxIdleTime = defaultMaxIdleTime
 	maxRequestsPerThread = 0

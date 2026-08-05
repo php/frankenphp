@@ -13,7 +13,9 @@ import (
 // Server represents a preconfigured server block
 // requests and workers can be scoped to a Server
 type Server struct {
-	idx                       int
+	idx int
+	// name passed to NewServer(), kept so re-registering resolves the default anew
+	configuredName            string
 	name                      string
 	root                      string
 	splitPath                 []string
@@ -21,7 +23,6 @@ type Server struct {
 	workers                   []*worker
 	workersByPath             map[string]*worker
 	workersWithRequestMatcher []*worker
-	workerOpts                []workerOpt
 
 	// registered while FrankenPHP runs with this server; read by concurrent
 	// ServeHTTP calls while Init()/Shutdown() flip it, hence atomic
@@ -48,15 +49,29 @@ func newFallbackServer() *Server {
 	return s
 }
 
+// registerServers assigns the identity of every server and clears the workers of a previous run,
+// so the same *Server can be passed to Init() again after a Shutdown()
+// servers do not accept requests yet at this point, see activateServers()
 func registerServers(newServers []*Server) {
 	servers = newServers
 	fallbackServer.logger.Store(globalLogger)
-	fallbackServer.isRegistered.Store(true)
+	fallbackServer.resetWorkers()
+
 	for i, s := range servers {
 		s.idx = i
+		s.name = s.configuredName
 		if s.name == "" {
 			s.name = "server_" + strconv.Itoa(i)
 		}
+		s.resetWorkers()
+	}
+}
+
+// activateServers lets registered servers accept requests
+// it runs once workers and threads are up, so a request cannot reach a server before them
+func activateServers() {
+	fallbackServer.isRegistered.Store(true)
+	for _, s := range servers {
 		s.isRegistered.Store(true)
 	}
 }
@@ -66,6 +81,14 @@ func unregisterServers() {
 	for _, server := range servers {
 		server.isRegistered.Store(false)
 	}
+	servers = nil
+}
+
+// resetWorkers drops the workers of a previous run; initWorkers() adds them back
+func (s *Server) resetWorkers() {
+	s.workers = nil
+	s.workersByPath = make(map[string]*worker)
+	s.workersWithRequestMatcher = nil
 }
 
 // NewServer creates a Server that can be registered via WithServer().
@@ -83,12 +106,12 @@ func NewServer(name, root string, splitPath []string, env map[string]string, log
 	}
 
 	s := &Server{
-		name:          name,
-		root:          root,
-		splitPath:     splitPath,
-		env:           PrepareEnv(env),
-		workersByPath: make(map[string]*worker),
-		workerOpts:    make([]workerOpt, 0),
+		configuredName: name,
+		name:           name,
+		root:           root,
+		splitPath:      splitPath,
+		env:            PrepareEnv(env),
+		workersByPath:  make(map[string]*worker),
 	}
 
 	if logger == nil {

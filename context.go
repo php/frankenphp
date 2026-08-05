@@ -122,25 +122,27 @@ func newWorkerDummyContext(w *worker) (*frankenPHPContext, error) {
 		return nil, err
 	}
 
+	server := w.server
+	if server == nil {
+		// global worker, not associated with a server
+		server = fallbackServer
+	}
+
 	fc := &frankenPHPContext{
 		done:      make(chan any),
 		ctx:       r.Context(),
-		server:    w.server,
+		server:    server,
 		request:   r,
 		startedAt: time.Now(),
-		logger:    globalLogger,
-		worker:    w,
+		// startup output of a scoped worker belongs to its server's logger
+		logger: server.logger.Load(),
+		worker: w,
 	}
 
 	for _, o := range w.requestOptions {
 		if err := o(fc); err != nil {
 			return nil, err
 		}
-	}
-
-	if fc.server == nil {
-		// global worker, not associated with a server
-		fc.server = fallbackServer
 	}
 
 	splitCgiPath(fc)
@@ -150,26 +152,25 @@ func newWorkerDummyContext(w *worker) (*frankenPHPContext, error) {
 
 // newContextFromMessage creates a context from a message (external workers)
 func newContextFromMessage(message any, rw http.ResponseWriter, ctx context.Context, w *worker) *frankenPHPContext {
-	fc := &frankenPHPContext{
+	server := w.server
+	if server == nil {
+		server = fallbackServer
+	}
+
+	if ctx == nil {
+		ctx = globalCtx
+	}
+
+	return &frankenPHPContext{
 		done:              make(chan any),
 		startedAt:         time.Now(),
-		server:            w.server,
+		server:            server,
 		worker:            w,
-		logger:            globalLogger,
+		logger:            server.logger.Load(),
 		responseWriter:    rw,
 		handlerParameters: message,
 		ctx:               ctx,
 	}
-
-	if fc.server == nil {
-		fc.server = fallbackServer
-	}
-
-	if fc.ctx == nil {
-		fc.ctx = globalCtx
-	}
-
-	return fc
 }
 
 // closeContext sends the response to the client
