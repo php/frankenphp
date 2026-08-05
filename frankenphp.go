@@ -415,7 +415,23 @@ func go_ub_write(threadIndex C.uintptr_t, cBuf *C.char, length C.size_t) (C.size
 	fc := thread.handler.frankenPHPContext()
 
 	if fc.isDone {
-		return 0, C.bool(true)
+		// The request already finished (e.g. via fastcgi_finish_request()), so
+		// the responseWriter may no longer be safe to write to (see #2535):
+		// discard the write, but still report a genuine client disconnect via
+		// fc.clientHadClosed rather than hardcoding "aborted". Otherwise
+		// frankenphp_ub_write() calls php_handle_aborted_connection() for a
+		// request that finished normally, which marks connection_status() as
+		// aborted and, when ignore_user_abort is off (the default outside
+		// worker mode), bails out the rest of the script.
+		//
+		// This must be the cached fc.clientHadClosed, not a fresh
+		// fc.clientHasClosed() call: request.Context() gets canceled as soon
+		// as the handler returns (standard net/http behavior, independent of
+		// whether the client is still connected), and the handler returns as
+		// a direct consequence of isDone becoming true. A fresh check here
+		// would read true for virtually every write after a normal
+		// fastcgi_finish_request(), reintroducing the original bug.
+		return C.size_t(length), C.bool(fc.clientHadClosed)
 	}
 
 	var writer io.Writer
@@ -428,8 +444,8 @@ func go_ub_write(threadIndex C.uintptr_t, cBuf *C.char, length C.size_t) (C.size
 	}
 
 	i, e := writer.Write(unsafe.Slice((*byte)(unsafe.Pointer(cBuf)), length))
-	if e != nil && fc.logger.Enabled(fc.ctx, slog.LevelWarn) {
-		fc.logger.LogAttrs(fc.ctx, slog.LevelWarn, "write error", slog.Any("error", e))
+	if e != nil && fc.logger.Enabled(fc.ctx, slog.LevelDebug) {
+		fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "write error", slog.Any("error", e))
 	}
 
 	if fc.responseWriter == nil && fc.logger.Enabled(fc.ctx, slog.LevelInfo) {
@@ -591,10 +607,19 @@ func go_sapi_flush(threadIndex C.uintptr_t) bool {
 	if fc.responseController == nil {
 		fc.responseController = http.NewResponseController(fc.responseWriter)
 	}
-	if err := fc.responseController.Flush(); err != nil {
-		if fc.logger.Enabled(fc.ctx, slog.LevelWarn) {
-			fc.logger.LogAttrs(fc.ctx, slog.LevelWarn, "the current responseWriter is not a flusher, if you are not using a custom build, please report this issue", slog.Any("error", err))
+	err := fc.responseController.Flush()
+	if err == nil {
+		return false
+	}
+
+	ctx := thread.context()
+
+	if errors.Is(err, http.ErrNotSupported) {
+		if globalLogger.Enabled(fc.ctx, slog.LevelWarn) {
+			globalLogger.LogAttrs(fc.ctx, slog.LevelWarn, "the current responseWriter is not a flusher, if you are not using a custom build, please report this issue", slog.Any("error", err))
 		}
+	} else if globalLogger.Enabled(fc.ctx, slog.LevelDebug) {
+		globalLogger.LogAttrs(fc.ctx, slog.LevelDebug, "flush error", slog.Any("error", err))
 	}
 
 	return false
