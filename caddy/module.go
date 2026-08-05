@@ -60,6 +60,7 @@ type FrankenPHPModule struct {
 	requestOptions       []frankenphp.RequestOption
 	server               *frankenphp.Server
 	logger               *slog.Logger
+	app                  *FrankenPHPApp
 }
 
 // CaddyModule returns the Caddy module information.
@@ -86,6 +87,7 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		return fmt.Errorf(`expected ctx.App("frankenphp") to return *FrankenPHPApp, got nil`)
 	}
 
+	f.app = fapp
 	f.assignMercureHub(ctx)
 
 	for i, wc := range f.Workers {
@@ -188,9 +190,9 @@ func needReplacement(s string) bool {
 
 // ServeHTTP implements caddyhttp.MiddlewareHandler.
 func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ caddyhttp.Handler) error {
-	// the server is assigned in FrankenPHPApp.Start(), which caddy may run after the http app started serving
-	if f.server == nil {
-		return caddyhttp.Error(http.StatusInternalServerError, frankenphp.ErrNotRunning)
+	// stall any incoming request if FrankenPHP is not started yet (atomic bool for efficiency)
+	if !f.app.hasStarted.Load() {
+		f.app.startupLock.Lock()
 	}
 
 	ctx := r.Context()

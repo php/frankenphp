@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/caddyserver/caddy/v2"
@@ -66,6 +67,8 @@ type FrankenPHPApp struct {
 	modules         []*FrankenPHPModule
 	usedWorkerNames map[string]bool
 	httpApp         *caddyhttp.App
+	hasStarted      atomic.Bool
+	startupLock     sync.Mutex
 }
 
 var errIni = errors.New(`"php_ini" must be in the format: php_ini "<key>" "<value>"`)
@@ -80,6 +83,7 @@ func (f FrankenPHPApp) CaddyModule() caddy.ModuleInfo {
 
 // Provision sets up the module.
 func (f *FrankenPHPApp) Provision(ctx caddy.Context) error {
+	f.startupLock.Lock()
 	f.ctx = ctx
 	f.logger = ctx.Slogger()
 
@@ -109,7 +113,10 @@ func (f *FrankenPHPApp) Provision(ctx caddy.Context) error {
 }
 
 func (f *FrankenPHPApp) Start() error {
-	defer f.reset() // reset after startup since the app persists across reloads
+	defer func() {
+		f.reset() // reset after startup since the app persists across reloads
+		f.startupLock.Unlock()
+	}()
 
 	repl := caddy.NewReplacer()
 
@@ -146,6 +153,8 @@ func (f *FrankenPHPApp) Start() error {
 	if err := frankenphp.Init(f.opts...); err != nil {
 		return err
 	}
+
+	f.hasStarted.Store(true)
 
 	return nil
 }

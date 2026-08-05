@@ -61,7 +61,7 @@ var (
 	onServerShutdown []func()
 
 	// Set default values to make Shutdown() idempotent
-	globalMu     sync.Mutex
+	startupMu    sync.Mutex
 	globalCtx    = context.Background()
 	globalLogger = slog.Default()
 
@@ -244,6 +244,9 @@ func Init(options ...Option) error {
 		return ErrAlreadyStarted
 	}
 
+	startupMu.Lock()
+	defer startupMu.Unlock()
+
 	// Ignore all SIGPIPE signals to prevent weird issues with systemd: https://github.com/php/frankenphp/issues/1020
 	// Docker/Moby has a similar hack: https://github.com/moby/moby/blob/d828b032a87606ae34267e349bf7f7ccb1f6495a/cmd/dockerd/docker.go#L87-L90
 	signal.Ignore(syscall.SIGPIPE)
@@ -253,12 +256,10 @@ func Init(options ...Option) error {
 	opt := &opt{}
 	for _, o := range options {
 		if err := o(opt); err != nil {
-			Shutdown()
+			shutdown()
 			return err
 		}
 	}
-
-	globalMu.Lock()
 
 	if opt.ctx != nil {
 		globalCtx = opt.ctx
@@ -269,8 +270,6 @@ func Init(options ...Option) error {
 		globalLogger = opt.logger
 		opt.logger = nil
 	}
-
-	globalMu.Unlock()
 
 	if opt.metrics != nil {
 		metrics = opt.metrics
@@ -287,7 +286,7 @@ func Init(options ...Option) error {
 
 	workerThreadCount, err := calculateMaxThreads(opt)
 	if err != nil {
-		Shutdown()
+		shutdown()
 		return err
 	}
 
@@ -296,7 +295,7 @@ func Init(options ...Option) error {
 	config := Config()
 
 	if config.Version.MajorVersion < 8 || (config.Version.MajorVersion == 8 && config.Version.MinorVersion < 2) {
-		Shutdown()
+		shutdown()
 		return ErrInvalidPHPVersion
 	}
 
@@ -316,7 +315,7 @@ func Init(options ...Option) error {
 
 	mainThread, err := initPHPThreads(opt.numThreads, opt.maxThreads, opt.phpIni)
 	if err != nil {
-		Shutdown()
+		shutdown()
 		return err
 	}
 
@@ -330,13 +329,13 @@ func Init(options ...Option) error {
 	}
 
 	if err := initWorkers(opt.workers); err != nil {
-		Shutdown()
+		shutdown()
 
 		return err
 	}
 
 	if err := initWatchers(opt); err != nil {
-		Shutdown()
+		shutdown()
 		return err
 	}
 
@@ -373,6 +372,13 @@ func Shutdown() {
 		return
 	}
 
+	startupMu.Lock()
+	shutdown()
+	startupMu.Unlock()
+}
+
+// shutdown without any locking (for internal use)
+func shutdown() {
 	// call the shutdown hooks (mainly useful for extensions)
 	for _, fn := range onServerShutdown {
 		fn()
@@ -612,8 +618,6 @@ func go_sapi_flush(threadIndex C.uintptr_t) bool {
 		return false
 	}
 
-	ctx := thread.context()
-
 	if errors.Is(err, http.ErrNotSupported) {
 		if globalLogger.Enabled(fc.ctx, slog.LevelWarn) {
 			globalLogger.LogAttrs(fc.ctx, slog.LevelWarn, "the current responseWriter is not a flusher, if you are not using a custom build, please report this issue", slog.Any("error", err))
@@ -804,16 +808,13 @@ func timeoutChan(timeout time.Duration) <-chan time.Time {
 }
 
 func resetGlobals() {
-	globalMu.Lock()
 	globalCtx = context.Background()
 	globalLogger = slog.Default()
 	workers = nil
 	workersByName = nil
 	globalWorkersByPath = nil
 	servers = nil
-	fallbackServer.logger.Store(globalLogger)
 	watcherIsEnabled = false
 	maxIdleTime = defaultMaxIdleTime
 	maxRequestsPerThread = 0
-	globalMu.Unlock()
 }

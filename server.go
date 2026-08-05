@@ -27,10 +27,7 @@ type Server struct {
 	// registered while FrankenPHP runs with this server; read by concurrent
 	// ServeHTTP calls while Init()/Shutdown() flip it, hence atomic
 	isRegistered atomic.Bool
-
-	// atomic for the same reason: the fallback server's logger is replaced
-	// at registration time while in-flight requests may read it
-	logger atomic.Pointer[slog.Logger]
+	logger       *slog.Logger
 }
 
 var (
@@ -43,8 +40,8 @@ func newFallbackServer() *Server {
 		idx:           -1,
 		workersByPath: make(map[string]*worker),
 		env:           make(map[string]string),
+		logger:        globalLogger,
 	}
-	s.logger.Store(globalLogger)
 
 	return s
 }
@@ -54,7 +51,7 @@ func newFallbackServer() *Server {
 // servers do not accept requests yet at this point, see activateServers()
 func registerServers(newServers []*Server) {
 	servers = newServers
-	fallbackServer.logger.Store(globalLogger)
+	fallbackServer.logger = globalLogger
 	fallbackServer.resetWorkers()
 
 	for i, s := range servers {
@@ -105,6 +102,10 @@ func NewServer(name, root string, splitPath []string, env map[string]string, log
 		return nil, err
 	}
 
+	if logger == nil {
+		logger = globalLogger
+	}
+
 	s := &Server{
 		configuredName: name,
 		name:           name,
@@ -112,12 +113,8 @@ func NewServer(name, root string, splitPath []string, env map[string]string, log
 		splitPath:      splitPath,
 		env:            PrepareEnv(env),
 		workersByPath:  make(map[string]*worker),
+		logger:         logger,
 	}
-
-	if logger == nil {
-		logger = globalLogger
-	}
-	s.logger.Store(logger)
 
 	if len(s.splitPath) == 0 {
 		s.splitPath = []string{".php"}
