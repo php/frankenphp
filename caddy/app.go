@@ -68,7 +68,7 @@ type FrankenPHPApp struct {
 	usedWorkerNames map[string]bool
 	httpApp         *caddyhttp.App
 	hasStarted      atomic.Bool
-	startupLock     sync.Mutex
+	started         chan any
 }
 
 var errIni = errors.New(`"php_ini" must be in the format: php_ini "<key>" "<value>"`)
@@ -83,9 +83,9 @@ func (f FrankenPHPApp) CaddyModule() caddy.ModuleInfo {
 
 // Provision sets up the module.
 func (f *FrankenPHPApp) Provision(ctx caddy.Context) error {
-	f.startupLock.Lock()
 	f.ctx = ctx
 	f.logger = ctx.Slogger()
+	f.started = make(chan any)
 
 	// drop the modules of a config that failed to provision, reset() only runs in Start()
 	f.modules = nil
@@ -115,7 +115,7 @@ func (f *FrankenPHPApp) Provision(ctx caddy.Context) error {
 func (f *FrankenPHPApp) Start() error {
 	defer func() {
 		f.reset() // reset after startup since the app persists across reloads
-		f.startupLock.Unlock()
+		close(f.started)
 	}()
 
 	repl := caddy.NewReplacer()

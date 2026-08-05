@@ -190,9 +190,13 @@ func needReplacement(s string) bool {
 
 // ServeHTTP implements caddyhttp.MiddlewareHandler.
 func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ caddyhttp.Handler) error {
-	// stall any incoming request if FrankenPHP is not started yet (atomic bool for efficiency)
 	if !f.app.hasStarted.Load() {
-		f.app.startupLock.Lock()
+		// stall any incoming request if FrankenPHP has not started yet, blocking for up to 10 seconds
+		select {
+		case <-f.app.started:
+		case <-time.After(10 * time.Second):
+			return caddyhttp.Error(http.StatusServiceUnavailable, frankenphp.ErrNotRunning)
+		}
 	}
 
 	ctx := r.Context()
