@@ -74,10 +74,10 @@ type FrankenPHPApp struct {
 var errIni = errors.New(`"php_ini" must be in the format: php_ini "<key>" "<value>"`)
 
 // CaddyModule returns the Caddy module information.
-func (f FrankenPHPApp) CaddyModule() caddy.ModuleInfo {
+func (*FrankenPHPApp) CaddyModule() caddy.ModuleInfo {
 	return caddy.ModuleInfo{
 		ID:  "frankenphp",
-		New: func() caddy.Module { return &f },
+		New: func() caddy.Module { return &FrankenPHPApp{} },
 	}
 }
 
@@ -86,10 +86,6 @@ func (f *FrankenPHPApp) Provision(ctx caddy.Context) error {
 	f.ctx = ctx
 	f.logger = ctx.Slogger()
 	f.started = make(chan any)
-
-	// drop the modules of a config that failed to provision, reset() only runs in Start()
-	f.modules = nil
-	f.usedWorkerNames = nil
 
 	// We have at least 7 hardcoded options
 	f.opts = make([]frankenphp.Option, 0, 7+len(options))
@@ -114,7 +110,6 @@ func (f *FrankenPHPApp) Provision(ctx caddy.Context) error {
 
 func (f *FrankenPHPApp) Start() error {
 	defer func() {
-		f.reset() // reset after startup since the app persists across reloads
 		close(f.started)
 	}()
 
@@ -177,21 +172,6 @@ func (f *FrankenPHPApp) Stop() error {
 	optionsMU.Unlock()
 
 	return nil
-}
-
-func (f *FrankenPHPApp) reset() {
-	f.Workers = nil
-	f.NumThreads = 0
-	f.MaxWaitTime = 0
-	f.MaxIdleTime = 0
-	f.MaxRequests = 0
-	f.PhpIni = nil
-	f.modules = nil
-	f.opts = nil
-	f.ctx = nil
-	f.metrics = nil
-	f.usedWorkerNames = nil
-	f.httpApp = nil
 }
 
 // register workers and servers for "php" and "php_server" modules

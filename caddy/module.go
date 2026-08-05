@@ -64,10 +64,10 @@ type FrankenPHPModule struct {
 }
 
 // CaddyModule returns the Caddy module information.
-func (FrankenPHPModule) CaddyModule() caddy.ModuleInfo {
+func (*FrankenPHPModule) CaddyModule() caddy.ModuleInfo {
 	return caddy.ModuleInfo{
 		ID:  "http.handlers.php",
-		New: func() caddy.Module { return new(FrankenPHPModule) },
+		New: func() caddy.Module { return &FrankenPHPModule{} },
 	}
 }
 
