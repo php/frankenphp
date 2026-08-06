@@ -46,6 +46,34 @@ func TestExecuteCLICode(t *testing.T) {
 	assert.Equal(t, stdoutStderrStr, `Hello World`)
 }
 
+// `-i` (and any other invocation without a script) is only supported since PHP
+// 8.6, where the real CLI SAPI is reused. older versions must fail cleanly.
+func TestExecuteCLIPHPInfo(t *testing.T) {
+	if _, err := os.Stat("internal/testcli/testcli"); err != nil {
+		t.Skip("internal/testcli/testcli has not been compiled, run `cd internal/testcli/ && go build`")
+	}
+
+	cmd := exec.Command("internal/testcli/testcli", "-i")
+	stdoutStderr, err := cmd.CombinedOutput()
+	stdoutStderrStr := string(stdoutStderr)
+
+	if frankenphp.Version().VersionID < 80600 {
+		assert.Error(t, err)
+
+		var exitError *exec.ExitError
+		if errors.As(err, &exitError) {
+			assert.Equal(t, 1, exitError.ExitCode())
+		}
+
+		assert.Contains(t, stdoutStderrStr, "this functionality is not available in frankenphp php-cli")
+
+		return
+	}
+
+	assert.NoError(t, err, "output: %s", stdoutStderrStr)
+	assert.Contains(t, stdoutStderrStr, "PHP Version => "+frankenphp.Version().Version)
+}
+
 // Regression test for https://github.com/php/frankenphp/issues/1902. A
 // long-running CLI script that installs pcntl_signal handlers must
 // receive its own signals reliably
@@ -73,5 +101,5 @@ func ExampleExecuteScriptCLI() {
 		os.Exit(1)
 	}
 
-	os.Exit(frankenphp.ExecuteScriptCLI(os.Args[1], os.Args))
+	os.Exit(frankenphp.ExecuteScriptCLI(os.Args[0], os.Args))
 }
