@@ -238,7 +238,15 @@ func (worker *worker) handleRequest(ch contextHolder) error {
 		worker.threadMutex.RUnlock()
 	}
 
-	// if no thread was available, mark the request as queued and apply the scaling strategy
+	// no thread was available: drain the body so a stalled request does not
+	// hold its HTTP/2 flow-control window open while queued (see #1074)
+	if err := ch.frankenPHPContext.spoolRequestBody(); err != nil {
+		metrics.StopWorkerRequest(worker.name, time.Since(ch.frankenPHPContext.startedAt))
+
+		return err
+	}
+
+	// mark the request as queued and apply the scaling strategy
 	worker.queuedRequests.Add(1)
 	metrics.QueuedWorkerRequest(worker.name)
 

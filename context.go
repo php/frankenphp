@@ -44,6 +44,11 @@ type frankenPHPContext struct {
 	// following a normal fastcgi_finish_request(), not just a real abort.
 	clientHadClosed bool
 
+	// Whether the request body has been drained into a buffer while queued
+	bodySpooled bool
+	// Releases the spooled body's backing temp file, if any
+	cleanupBody func()
+
 	responseWriter     http.ResponseWriter
 	responseController *http.ResponseController
 	handlerParameters  any
@@ -144,6 +149,11 @@ func (fc *frankenPHPContext) closeContext() {
 	fc.clientHadClosed = fc.clientHasClosed()
 	close(fc.done)
 	fc.isDone = true
+
+	if fc.cleanupBody != nil {
+		fc.cleanupBody()
+		fc.cleanupBody = nil
+	}
 }
 
 // validate checks if the request should be outright rejected
