@@ -26,6 +26,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #ifndef PHP_WIN32
 #include <unistd.h>
 #endif
@@ -1945,14 +1946,24 @@ int register_internal_extensions(void) {
     }
   }
 
-  modules = NULL;
-  modules_len = 0;
-
   return SUCCESS;
 }
 
 void register_extensions(zend_module_entry **m, int len) {
-  modules = m;
+  if (len <= 0 || original_php_register_internal_extensions_func != NULL) {
+    return;
+  }
+
+  zend_module_entry **persistent_modules =
+      malloc(sizeof(zend_module_entry *) * len);
+
+  if (persistent_modules == NULL) {
+    return;
+  }
+
+  memcpy(persistent_modules, m, sizeof(zend_module_entry *) * len);
+
+  modules = persistent_modules;
   modules_len = len;
 
   original_php_register_internal_extensions_func =

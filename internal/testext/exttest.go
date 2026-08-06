@@ -28,13 +28,28 @@ func testRegisterExtension(t *testing.T) {
 
 	err := frankenphp.Init()
 	require.Nil(t, err)
-	defer frankenphp.Shutdown()
+
+	assertRegisteredExtensions(t)
+
+	require.True(t, frankenphp.RestartWorkers())
+
+	assertRegisteredExtensions(t)
+
+	frankenphp.Shutdown()
+
+	require.PanicsWithValue(t, frankenphp.ErrExtensionRegistrationStarted, func() {
+		frankenphp.RegisterExtension(unsafe.Pointer(&C.module1_entry))
+	})
+}
+
+func assertRegisteredExtensions(t *testing.T) {
+	t.Helper()
 
 	req := httptest.NewRequest("GET", "http://example.com/index.php", nil)
 	w := httptest.NewRecorder()
 
-	req, err = frankenphp.NewRequestWithContext(req, frankenphp.WithRequestDocumentRoot("./testdata", false))
-	assert.NoError(t, err)
+	req, err := frankenphp.NewRequestWithContext(req, frankenphp.WithRequestDocumentRoot("./testdata", false))
+	require.NoError(t, err)
 
 	err = frankenphp.ServeHTTP(w, req)
 	assert.NoError(t, err)
@@ -43,4 +58,5 @@ func testRegisterExtension(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	assert.Contains(t, string(body), "ext1")
 	assert.Contains(t, string(body), "ext2")
+	assert.Contains(t, string(body), "EXT2_MINIT_COUNT=1")
 }
