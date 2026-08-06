@@ -13,36 +13,7 @@ The compilation requirements are the same as for [building FrankenPHP from sourc
 
 Create a `Server`, register it while initializing FrankenPHP, and use it as an `http.Handler`:
 
-```go
-// Minimal FrankenPHP library usage
-package main
-
-import (
-	"log"
-	"net/http"
-
-	"github.com/dunglas/frankenphp"
-)
-
-func main() {
-	server, err := frankenphp.NewServer("", "public/", nil, nil, nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if err := frankenphp.Init(frankenphp.WithServer(server)); err != nil {
-		log.Fatal(err)
-	}
-	defer frankenphp.Shutdown()
-
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if err := server.ServeHTTP(w, r); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-	})
-	log.Fatal(http.ListenAndServe(":8080", nil))
-}
-```
+For a minimal example see [https://pkg.go.dev](https://pkg.go.dev/github.com/dunglas/frankenphp#example-ServeHTTP)
 
 `NewServer()` takes a human-readable name used to attribute workers, metrics and logs to the server (defaults to `server_<idx>` at registration when empty), the document root, the split path suffixes (defaults to `[".php"]`), environment variables made available to every request, and a `*slog.Logger` (defaults to the global logger).
 
