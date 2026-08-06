@@ -1,7 +1,6 @@
 package frankenphp
 
 import (
-	"context"
 	"sync"
 
 	"github.com/dunglas/frankenphp/internal/state"
@@ -68,10 +67,6 @@ func (handler *taskThread) afterScriptExecution(_ int) {
 }
 
 func (handler *taskThread) frankenPHPContext() *frankenPHPContext {
-	return nil
-}
-
-func (handler *taskThread) context() context.Context {
 	return nil
 }
 

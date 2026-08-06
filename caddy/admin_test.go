@@ -348,3 +348,49 @@ func TestAddModuleWorkerViaAdminApi(t *testing.T) {
 	// Make a request to the worker to verify it's working
 	tester.AssertGetResponse("http://localhost:"+testPort+"/worker-with-counter.php", http.StatusOK, "requests:1")
 }
+
+func TestRegisteredModuleWorkerPoolsMustBeCorrect(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+
+			frankenphp {
+				num_threads 4
+				worker ../testdata/worker-with-env.php 1
+			}
+		}
+
+		http://localhost:`+testPort+` {
+			route {
+				php {
+					root ../testdata
+					worker worker-with-counter.php 1 {
+						match /matched*
+					}
+				}
+				php {
+					root ../testdata
+					worker worker.php 1
+				}
+			}
+		}
+		`, "caddyfile")
+
+	debugState := getDebugState(t, tester)
+
+	worker1Path, _ := fastabs.FastAbs("../testdata/worker-with-env.php")
+	worker2Path, _ := fastabs.FastAbs("../testdata/worker-with-counter.php")
+	worker3Path, _ := fastabs.FastAbs("../testdata/worker.php")
+	receivedThreadNames := make([]string, 0)
+	for _, thread := range debugState.ThreadDebugStates {
+		receivedThreadNames = append(receivedThreadNames, thread.Name)
+	}
+
+	assert.Len(t, receivedThreadNames, 4, "expected 4 threads to be present")
+	assert.Contains(t, receivedThreadNames, "Regular PHP Thread", "expected a regular thread to be present")
+	assert.Contains(t, receivedThreadNames, "Worker PHP Thread - "+worker1Path, "expected global worker to be present")
+	assert.Contains(t, receivedThreadNames, "Worker PHP Thread - "+worker2Path, "expected module worker with \"match\" directive to be present")
+	assert.Contains(t, receivedThreadNames, "Worker PHP Thread - "+worker3Path, "expected module worker without \"match\" directive to be present")
+}
