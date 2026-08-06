@@ -86,7 +86,7 @@ func TestExecuteScriptCLIWhileRunning(t *testing.T) {
 
 	// The process must exit cleanly, not be killed by a signal (before the fix
 	// it crashed with SIGSEGV, reported by ProcessState.Exited() == false).
-	assert.True(t, exitError.ProcessState.Exited(),
+	assert.True(t, exitError.Exited(),
 		"process was killed by a signal instead of exiting cleanly: %s\noutput: %s", exitError, stdoutStderr)
 	assert.Equal(t, 1, exitError.ExitCode(), "output: %s", stdoutStderr)
 }
