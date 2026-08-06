@@ -223,8 +223,7 @@ func splitCgiPath(fc *frankenPHPContext) {
 
 	// see if a php_server worker or global worker matches the request path
 	// aka: root + request path == worker.filename
-	fc.worker = fc.server.workersByPath[fc.scriptFilename]
-	if fc.worker == nil {
+	if fc.worker = fc.server.workersByPath[fc.scriptFilename]; fc.worker == nil {
 		fc.worker = globalWorkersByPath[fc.scriptFilename]
 	}
 }

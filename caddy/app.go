@@ -91,8 +91,7 @@ func (f *FrankenPHPApp) Provision(ctx caddy.Context) error {
 	f.opts = make([]frankenphp.Option, 0, 7+len(options))
 
 	if httpApp, err := ctx.AppIfConfigured("http"); err == nil {
-		f.httpApp = httpApp.(*caddyhttp.App)
-		if f.httpApp.Metrics != nil {
+		if f.httpApp = httpApp.(*caddyhttp.App); f.httpApp.Metrics != nil {
 			f.metrics = frankenphp.NewPrometheusMetrics(ctx.GetMetricsRegistry())
 		}
 	} else {
@@ -135,7 +134,11 @@ func (f *FrankenPHPApp) Start() error {
 	for _, w := range f.Workers {
 		w.FileName = repl.ReplaceKnown(w.FileName, "")
 		w.Name = f.createUniqueWorkerName(w, "")
-		f.opts = append(f.opts, frankenphp.WithWorkers(w.Name, w.FileName, w.Num, w.toWorkerOptions()...))
+		opts, err := w.toWorkerOptions()
+		if err != nil {
+			return err
+		}
+		f.opts = append(f.opts, frankenphp.WithWorkers(w.Name, w.FileName, w.Num, opts...))
 	}
 
 	if err := f.registerModules(repl); err != nil {
@@ -176,9 +179,9 @@ func (f *FrankenPHPApp) Stop() error {
 
 // register workers and servers for "php" and "php_server" modules
 func (f *FrankenPHPApp) registerModules(repl *caddy.Replacer) error {
-	modulesByIndex := make(map[int]*FrankenPHPModule)
+	modulesByIndex := make(map[int]*FrankenPHPModule, len(f.modules))
 	for _, module := range f.modules {
-		if module.ServerIdx == 0 {
+		if module.ServerIndex == 0 {
 			if err := f.registerModule(repl, module); err != nil {
 				return err
 			}
@@ -188,12 +191,12 @@ func (f *FrankenPHPApp) registerModules(repl *caddy.Replacer) error {
 		// modules with the same server_idx should share the same server instance
 		// example: the worker { match * } rule adds 2 "php" subroutes to the caddy handler
 		// the 2 handlers belong to the same "php_server" and must therefore share workers
-		if existingModule, ok := modulesByIndex[module.ServerIdx]; ok {
+		if existingModule, ok := modulesByIndex[module.ServerIndex]; ok {
 			module.server = existingModule.server
 			continue
 		}
 
-		modulesByIndex[module.ServerIdx] = module
+		modulesByIndex[module.ServerIndex] = module
 		if err := f.registerModule(repl, module); err != nil {
 			return err
 		}
@@ -202,7 +205,7 @@ func (f *FrankenPHPApp) registerModules(repl *caddy.Replacer) error {
 	return nil
 }
 
-// register a server instance and its workers for a single caddy module
+// register a server instance and its workers for a single Caddy module
 func (f *FrankenPHPApp) registerModule(repl *caddy.Replacer, module *FrankenPHPModule) error {
 	serverName := f.resolveServerName(module)
 	server, err := frankenphp.NewServer(serverName, module.resolvedDocumentRoot, module.SplitPath, module.resolvedEnv, module.logger)
@@ -216,7 +219,11 @@ func (f *FrankenPHPApp) registerModule(repl *caddy.Replacer, module *FrankenPHPM
 	for _, w := range module.Workers {
 		w.FileName = repl.ReplaceKnown(w.FileName, "")
 		w.Name = f.createUniqueWorkerName(w, serverName)
-		workerOptions := append(w.toWorkerOptions(), frankenphp.WithWorkerServerScope(server))
+		workerOptions, err := w.toWorkerOptions()
+		if err != nil {
+			return err
+		}
+		workerOptions = append(workerOptions, frankenphp.WithWorkerServerScope(server))
 		f.opts = append(f.opts, frankenphp.WithWorkers(w.Name, w.FileName, w.Num, workerOptions...))
 	}
 

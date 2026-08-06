@@ -47,8 +47,8 @@ type FrankenPHPModule struct {
 	Env map[string]string `json:"env,omitempty"`
 	// Workers configures the worker scripts to start.
 	Workers []workerConfig `json:"workers,omitempty"`
-	// ServerIdx is set automatically to pair the route embeds of one php_server directive. Do not set it manually: modules sharing an index share one server, defined by the first of them.
-	ServerIdx int `json:"server_idx,omitempty"`
+	// ServerIndex is set automatically to pair the route embeds of one php_server directive. Do not set it manually: modules sharing an index share one server, defined by the first of them.
+	ServerIndex int `json:"server_index,omitempty"`
 	// RequestBodyTimeout is an idle timeout on request body reads: a stalled (slow POST) client is cut off while a steady upload of any size succeeds. Defaults to 60s when omitted; set to 0 to disable.
 	RequestBodyTimeout *caddy.Duration `json:"request_body_timeout,omitempty"`
 	// Name is the name of the php_server this module belongs to for logging purposes
@@ -167,8 +167,8 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		return err
 	}
 
-	f.resolvedEnv = make(map[string]string) // env variables that do not need replacement
-	f.requestEnv = make(map[string]string)  // env variables that need replacement, e.g. {http.vars.root}
+	f.resolvedEnv = make(map[string]string, len(f.Env)) // env variables that do not need replacement
+	f.requestEnv = make(map[string]string, len(f.Env))  // env variables that need replacement, e.g. {http.vars.root}
 
 	for k, e := range f.Env {
 		if needReplacement(e) {
@@ -331,9 +331,9 @@ func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	return nil
 }
 
-func (f *FrankenPHPModule) assignServerIdx(h httpcaddyfile.Helper) {
+func (f *FrankenPHPModule) assignServerIndex(h httpcaddyfile.Helper) {
 	counter, _ := h.State["php_server_count"].(int)
-	f.ServerIdx = counter + 1
+	f.ServerIndex = counter + 1
 	h.State["php_server_count"] = counter + 1
 }
 
@@ -342,7 +342,7 @@ func parseCaddyfile(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error)
 	m := &FrankenPHPModule{}
 	err := m.UnmarshalCaddyfile(h.Dispenser)
 
-	m.assignServerIdx(h)
+	m.assignServerIndex(h)
 
 	return m, err
 }
@@ -479,7 +479,7 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 	}
 
 	// assign a unique index to the php server
-	phpsrv.assignServerIdx(h)
+	phpsrv.assignServerIndex(h)
 
 	if frankenphp.EmbeddedAppPath != "" {
 		if phpsrv.Root == "" {

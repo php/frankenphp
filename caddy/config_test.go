@@ -14,11 +14,15 @@ import (
 // options collected while provisioning a module, like the Mercure hub, must reach frankenphp
 func TestWorkerOptionsKeepProvisionedOptions(t *testing.T) {
 	wc := workerConfig{FileName: "../testdata/worker-with-env.php"}
-	base := len(wc.toWorkerOptions())
+	opts, err := wc.toWorkerOptions()
+	require.NoError(t, err)
+	base := len(opts)
 
 	wc.options = append(wc.options, frankenphp.WithWorkerMaxThreads(3))
+	opts, err = wc.toWorkerOptions()
 
-	require.Len(t, wc.toWorkerOptions(), base+1, "worker options set during provisioning must be forwarded")
+	require.NoError(t, err)
+	require.Len(t, opts, base+1, "worker options set during provisioning must be forwarded")
 }
 
 func TestModuleRequestBodyTimeout(t *testing.T) {

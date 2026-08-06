@@ -156,7 +156,7 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 	return wc, nil
 }
 
-func (wc *workerConfig) toWorkerOptions() []frankenphp.WorkerOption {
+func (wc *workerConfig) toWorkerOptions() ([]frankenphp.WorkerOption, error) {
 	opts := []frankenphp.WorkerOption{
 		frankenphp.WithWorkerEnv(wc.Env),
 		frankenphp.WithWorkerWatchMode(wc.Watch),
@@ -172,8 +172,10 @@ func (wc *workerConfig) toWorkerOptions() []frankenphp.WorkerOption {
 	// inject the matcher into frankenphp
 	if len(wc.MatchPath) > 0 {
 		matchFunc := caddyhttp.MatchPath(append([]string(nil), wc.MatchPath...))
-		_ = matchFunc.Provision(caddy.Context{})
+		if err := matchFunc.Provision(caddy.Context{}); err != nil {
+			return nil, err
+		}
 		opts = append(opts, frankenphp.WithWorkerMatcher(matchFunc.Match))
 	}
-	return opts
+	return opts, nil
 }
