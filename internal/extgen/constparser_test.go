@@ -796,3 +796,31 @@ func TestConstantParserRawStringConstant(t *testing.T) {
 	assert.Equal(t, `"raw \"quoted\" value"`, constants[0].Value)
 	assert.Equal(t, `"raw \"quoted\" value"`, constants[0].CValue())
 }
+
+func TestConstantParserTypedConstants(t *testing.T) {
+	input := `package main
+
+//export_php:const
+const PERM os.FileMode = 0o755
+
+//export_php:const
+const (
+	SMALL int64 = 1
+	LARGE       = 2
+)`
+
+	tmpFile := filepath.Join(t.TempDir(), "typed.go")
+	require.NoError(t, os.WriteFile(tmpFile, []byte(input), 0644))
+
+	parser := &ConstantParser{}
+	constants, err := parser.parse(tmpFile)
+	require.NoError(t, err)
+	require.Len(t, constants, 3)
+
+	assert.Equal(t, "PERM", constants[0].Name)
+	assert.Equal(t, "493", constants[0].CValue())
+	assert.Equal(t, "SMALL", constants[1].Name)
+	assert.Equal(t, "1", constants[1].Value)
+	assert.Equal(t, "LARGE", constants[2].Name)
+	assert.Equal(t, "2", constants[2].Value)
+}
