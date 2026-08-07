@@ -35,6 +35,8 @@ jobs:
           VALIDATE_JSCPD: false
           VALIDATE_GO: false
           VALIDATE_GO_MODULES: false
+          # re-enable once actionlint supports the "parallel" step key: https://github.com/rhysd/actionlint/issues/693
+          VALIDATE_GITHUB_ACTIONS: false
           VALIDATE_PHP_PHPCS: false
           VALIDATE_PHP_PHPSTAN: false
           VALIDATE_PHP_PSALM: false
