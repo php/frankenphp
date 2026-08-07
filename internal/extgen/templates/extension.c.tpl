@@ -132,22 +132,22 @@ PHP_METHOD({{namespacedClassName $.Namespace .ClassName}}, {{.PhpName}}) {
     
     {{- if ne .ReturnType "void"}}
     {{- if eq .ReturnType "string"}}
-    zend_string* result = {{.Name}}_wrapper(intern->go_handle{{range .Params}}, {{template "methodCallArg" .}}{{end}});
+    zend_string* result = {{.ClassName}}_{{.Name}}_wrapper(intern->go_handle{{range .Params}}, {{template "methodCallArg" .}}{{end}});
     if (result) {
         RETURN_STR(result);
     }
     RETURN_EMPTY_STRING();
     {{- else if eq .ReturnType "int"}}
-    zend_long result = {{.Name}}_wrapper(intern->go_handle{{range .Params}}, {{template "methodCallArg" .}}{{end}});
+    zend_long result = {{.ClassName}}_{{.Name}}_wrapper(intern->go_handle{{range .Params}}, {{template "methodCallArg" .}}{{end}});
     RETURN_LONG(result);
     {{- else if eq .ReturnType "float"}}
-    double result = {{.Name}}_wrapper(intern->go_handle{{range .Params}}, {{template "methodCallArg" .}}{{end}});
+    double result = {{.ClassName}}_{{.Name}}_wrapper(intern->go_handle{{range .Params}}, {{template "methodCallArg" .}}{{end}});
     RETURN_DOUBLE(result);
     {{- else if eq .ReturnType "bool"}}
-    int result = {{.Name}}_wrapper(intern->go_handle{{range .Params}}, {{template "methodCallArg" .}}{{end}});
+    int result = {{.ClassName}}_{{.Name}}_wrapper(intern->go_handle{{range .Params}}, {{template "methodCallArg" .}}{{end}});
     RETURN_BOOL(result);
     {{- else if eq .ReturnType "array"}}
-    void* result = {{.Name}}_wrapper(intern->go_handle{{range .Params}}, {{template "methodCallArg" .}}{{end}});
+    void* result = {{.ClassName}}_{{.Name}}_wrapper(intern->go_handle{{range .Params}}, {{template "methodCallArg" .}}{{end}});
     if (result != NULL) {
         HashTable *ht = (HashTable*)result;
         RETURN_ARR(ht);
@@ -156,7 +156,7 @@ PHP_METHOD({{namespacedClassName $.Namespace .ClassName}}, {{.PhpName}}) {
     }
     {{- end}}
     {{- else}}
-    {{.Name}}_wrapper(intern->go_handle{{range .Params}}, {{template "methodCallArg" .}}{{end}});
+    {{.ClassName}}_{{.Name}}_wrapper(intern->go_handle{{range .Params}}, {{template "methodCallArg" .}}{{end}});
     {{- end}}
 }
 {{end}}{{end}}
