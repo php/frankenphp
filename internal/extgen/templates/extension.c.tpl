@@ -114,7 +114,7 @@ PHP_METHOD({{namespacedClassName $.Namespace .ClassName}}, {{.PhpName}}) {
     {{- else if eq $param.PhpType "array"}}
     zend_array *{{$param.Name}} = NULL;
     {{- else if eq $param.PhpType "callable"}}
-    zval *{{$param.Name}}_callback;
+    zval *{{$param.Name}}_callback = NULL;
     {{- end}}
     {{- end}}
     
