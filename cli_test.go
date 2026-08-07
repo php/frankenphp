@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
@@ -76,31 +77,84 @@ func TestCThreadSegfaultAsPID1(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("PID namespaces are only available on Linux")
 	}
-	if _, err := os.Stat("internal/testcli/testcli"); err != nil {
+	useSudo := os.Getenv("FRANKENPHP_TEST_PID_NAMESPACE_WITH_SUDO") == "1"
+	testCLIPath, err := filepath.Abs("internal/testcli/testcli")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(testCLIPath); err != nil {
+		if useSudo {
+			t.Fatalf("internal/testcli/testcli must be compiled for the PID namespace test: %v", err)
+		}
 		t.Skip("internal/testcli/testcli has not been compiled, run `cd internal/testcli/ && go build`")
 	}
-	if _, err := exec.LookPath("unshare"); err != nil {
+	unsharePath, err := exec.LookPath("unshare")
+	if err != nil {
+		if useSudo {
+			t.Fatal("unshare is required for the PID namespace test")
+		}
 		t.Skip("unshare is not available")
 	}
-
-	probe := exec.Command("unshare", "--user", "--map-root-user", "--pid", "--fork", "true")
-	if output, err := probe.CombinedOutput(); err != nil {
-		t.Skipf("unprivileged PID namespaces are not available: %s", output)
+	truePath, err := exec.LookPath("true")
+	if err != nil {
+		t.Fatal("true is required for the PID namespace test probe")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(
-		ctx,
-		"unshare",
+	command := unsharePath
+	args := []string{
 		"--user",
 		"--map-root-user",
 		"--pid",
 		"--fork",
 		"--kill-child=KILL",
-		"internal/testcli/testcli",
+		testCLIPath,
 		"--segfault",
+	}
+	rootlessOutput, rootlessErr := runPIDNamespaceProbe(
+		unsharePath,
+		"--user",
+		"--map-root-user",
+		"--pid",
+		"--fork",
+		"--kill-child=KILL",
+		truePath,
 	)
+	if rootlessErr != nil {
+		if !useSudo {
+			t.Skipf("unprivileged PID namespaces are not available: %v: %s", rootlessErr, rootlessOutput)
+		}
+
+		sudoPath, sudoErr := exec.LookPath("sudo")
+		if sudoErr != nil {
+			t.Fatal("sudo was requested for the PID namespace test but was not found")
+		}
+		sudoOutput, sudoErr := runPIDNamespaceProbe(
+			sudoPath,
+			"-n",
+			unsharePath,
+			"--pid",
+			"--fork",
+			"--kill-child=KILL",
+			truePath,
+		)
+		if sudoErr != nil {
+			t.Fatalf("failed to create a PID namespace with sudo: %v: %s", sudoErr, sudoOutput)
+		}
+		command = sudoPath
+		args = []string{
+			"-n",
+			unsharePath,
+			"--pid",
+			"--fork",
+			"--kill-child=KILL",
+			testCLIPath,
+			"--segfault",
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, command, args...)
 	output, err := cmd.CombinedOutput()
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		t.Fatalf("FrankenPHP did not exit after the PHP thread segfaulted: %s", output)
@@ -111,6 +165,16 @@ func TestCThreadSegfaultAsPID1(t *testing.T) {
 		t.Fatalf("expected FrankenPHP to exit with an error, got %v: %s", err, output)
 	}
 	assert.Equal(t, 2, exitError.ExitCode(), "output: %s", output)
+}
+
+func runPIDNamespaceProbe(command string, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	output, err := exec.CommandContext(ctx, command, args...).CombinedOutput()
+	if ctx.Err() != nil {
+		return output, ctx.Err()
+	}
+	return output, err
 }
 
 func ExampleExecuteScriptCLI() {
