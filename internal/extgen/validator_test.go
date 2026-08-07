@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestValidateFunction(t *testing.T) {
@@ -686,7 +687,7 @@ func TestValidateGoFunctionSignature(t *testing.T) {
 }`,
 			},
 			expectError: true,
-			errorMsg:    "parameter count mismatch: PHP function has 2 parameters (expecting 2 Go parameters) but Go function has 1",
+			errorMsg:    "parameter count mismatch: PHP function has 2 parameters but Go function has 1",
 		},
 		{
 			name: "parameter type mismatch",
@@ -934,6 +935,68 @@ func TestIsCompatibleGoType(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.compatible, validator.isCompatibleGoType(tt.expected, tt.actual))
+		})
+	}
+}
+
+func TestValidateGoFunctionSignature_GroupedParameters(t *testing.T) {
+	validator := Validator{}
+
+	tests := []struct {
+		name       string
+		phpFunc    phpFunction
+		wantErrMsg string
+	}{
+		{
+			name: "grouped parameters sharing a type are counted individually",
+			phpFunc: phpFunction{
+				Name:       "add",
+				ReturnType: phpInt,
+				Params: []phpParameter{
+					{Name: "a", PhpType: phpInt},
+					{Name: "b", PhpType: phpInt},
+				},
+				GoFunction: "func add(a, b int64) int64 { return a + b }",
+			},
+		},
+		{
+			name: "grouped parameters of the wrong type are still rejected",
+			phpFunc: phpFunction{
+				Name:       "concat",
+				ReturnType: phpInt,
+				Params: []phpParameter{
+					{Name: "a", PhpType: phpInt},
+					{Name: "b", PhpType: phpInt},
+				},
+				GoFunction: "func concat(a, b string) int64 { return 0 }",
+			},
+			wantErrMsg: `parameter 1 type mismatch`,
+		},
+		{
+			name: "grouped parameters declaring too many arguments are rejected",
+			phpFunc: phpFunction{
+				Name:       "add",
+				ReturnType: phpInt,
+				Params: []phpParameter{
+					{Name: "a", PhpType: phpInt},
+				},
+				GoFunction: "func add(a, b int64) int64 { return a + b }",
+			},
+			wantErrMsg: "parameter count mismatch: PHP function has 1 parameters but Go function has 2",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validator.validateGoFunctionSignatureWithOptions(tt.phpFunc, false)
+			if tt.wantErrMsg == "" {
+				require.NoError(t, err)
+
+				return
+			}
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErrMsg)
 		})
 	}
 }
