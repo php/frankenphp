@@ -1216,38 +1216,6 @@ func (cs *CallableStruct) ProcessOptionalCallback(callback *C.zval) string {
 	assert.Contains(t, content, "//export CallableClass_ProcessOptionalCallback_wrapper", "Generated content should contain ProcessOptionalCallback export directive")
 }
 
-func TestGoFileGenerator_phpTypeToGoType(t *testing.T) {
-	generator := &Generator{}
-	goGen := GoFileGenerator{generator}
-
-	tests := []struct {
-		phpType  phpType
-		expected string
-	}{
-		{phpString, "string"},
-		{phpInt, "int64"},
-		{phpFloat, "float64"},
-		{phpBool, "bool"},
-		{phpArray, "*frankenphp.Array"},
-		{phpMixed, "any"},
-		{phpVoid, ""},
-		{phpCallable, "*C.zval"},
-	}
-
-	for _, tt := range tests {
-		t.Run(string(tt.phpType), func(t *testing.T) {
-			result := goGen.phpTypeToGoType(tt.phpType)
-			assert.Equal(t, tt.expected, result, "phpTypeToGoType(%s) should return %s", tt.phpType, tt.expected)
-		})
-	}
-
-	t.Run("unknown_type", func(t *testing.T) {
-		unknownType := phpType("unknown")
-		result := goGen.phpTypeToGoType(unknownType)
-		assert.Equal(t, "any", result, "phpTypeToGoType should fallback to interface{} for unknown types")
-	})
-}
-
 func testGeneratedFileBasicStructure(t *testing.T, content, expectedPackage, baseName string) {
 	requiredElements := []string{
 		"package " + expectedPackage,

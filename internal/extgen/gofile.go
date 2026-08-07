@@ -76,11 +76,11 @@ func (gg *GoFileGenerator) buildContent() (string, error) {
 
 func (gg *GoFileGenerator) getTemplateContent(data goTemplateData) (string, error) {
 	funcMap := sprig.FuncMap()
-	funcMap["phpTypeToGoType"] = gg.phpTypeToGoType
-	// Values PHP owns as pointers cross the cgo boundary as unsafe.Pointer.
-	funcMap["isPointerReturn"] = func(t phpType) bool {
-		return t == phpString || t == phpArray || t == phpMixed
-	}
+	// Reuse the validator's mapping so the signatures the generator emits cannot
+	// drift from the ones it accepts.
+	validator := &Validator{}
+	funcMap["goParamType"] = validator.phpTypeToGoType
+	funcMap["goReturnType"] = validator.phpReturnTypeToGoType
 	funcMap["isVoid"] = func(t phpType) bool {
 		return t == phpVoid
 	}
@@ -97,36 +97,6 @@ func (gg *GoFileGenerator) getTemplateContent(data goTemplateData) (string, erro
 	}
 
 	return buf.String(), nil
-}
-
-type GoMethodSignature struct {
-	MethodName string
-	Params     []GoParameter
-	ReturnType string
-}
-
-type GoParameter struct {
-	Name string
-	Type string
-}
-
-var phpToGoTypeMap = map[phpType]string{
-	phpString:   "string",
-	phpInt:      "int64",
-	phpFloat:    "float64",
-	phpBool:     "bool",
-	phpArray:    "*frankenphp.Array",
-	phpMixed:    "any",
-	phpVoid:     "",
-	phpCallable: "*C.zval",
-}
-
-func (gg *GoFileGenerator) phpTypeToGoType(phpT phpType) string {
-	if goType, exists := phpToGoTypeMap[phpT]; exists {
-		return goType
-	}
-
-	return "any"
 }
 
 // extractGoFunctionName extracts the Go function or method name from a Go
