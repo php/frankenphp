@@ -34,8 +34,10 @@ func refuseCLIWhileRunning() bool {
 //
 // It must not be called while FrankenPHP is running in the same process (that is,
 // after a successful [Init] and before [Shutdown]): the embedded PHP CLI SAPI
-// cannot coexist with the running FrankenPHP SAPI. In that case the call is
-// refused, an error is logged, and a non-zero exit status is returned.
+// cannot coexist with the running FrankenPHP SAPI. Run it before [Init], after
+// [Shutdown], or in a separate process (for example the same binary in "php-cli"
+// mode) instead. While FrankenPHP is running the call is refused: an error is
+// logged and a non-zero exit status is returned.
 func ExecuteScriptCLI(script string, args []string) int {
 	if refuseCLIWhileRunning() {
 		return cliUsageErrorExitCode
