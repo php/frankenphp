@@ -35,6 +35,8 @@ jobs:
           VALIDATE_JSCPD: false
           VALIDATE_GO: false
           VALIDATE_GO_MODULES: false
+          # actionlint (super-linter v8.7.0) doesn't know the "parallel" step key yet; re-enable once it does
+          VALIDATE_GITHUB_ACTIONS: false
           VALIDATE_PHP_PHPCS: false
           VALIDATE_PHP_PHPSTAN: false
           VALIDATE_PHP_PSALM: false
