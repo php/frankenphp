@@ -23,9 +23,6 @@ type goTemplateData struct {
 	PackageName       string
 	BaseName          string
 	SanitizedBaseName string
-	Constants         []phpConstant
-	Variables         []string
-	InternalFunctions []string
 	Functions         []phpFunction
 	Classes           []phpClass
 }
@@ -43,23 +40,17 @@ func (gg *GoFileGenerator) generate() error {
 
 func (gg *GoFileGenerator) buildContent() (string, error) {
 	sourceAnalyzer := SourceAnalyzer{}
-	packageName, variables, internalFunctions, err := sourceAnalyzer.analyze(gg.generator.SourceFile)
+	packageName, err := sourceAnalyzer.analyze(gg.generator.SourceFile)
 	if err != nil {
 		return "", fmt.Errorf("analyzing source file: %w", err)
 	}
-
-	classes := make([]phpClass, len(gg.generator.Classes))
-	copy(classes, gg.generator.Classes)
 
 	templateContent, err := gg.getTemplateContent(goTemplateData{
 		PackageName:       packageName,
 		BaseName:          gg.generator.BaseName,
 		SanitizedBaseName: SanitizePackageName(gg.generator.BaseName),
-		Constants:         gg.generator.Constants,
-		Variables:         variables,
-		InternalFunctions: internalFunctions,
 		Functions:         gg.generator.Functions,
-		Classes:           classes,
+		Classes:           gg.generator.Classes,
 	})
 
 	if err != nil {
