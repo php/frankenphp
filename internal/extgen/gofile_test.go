@@ -242,6 +242,7 @@ func (ts *TestStruct) GetValue() string {
 						{
 							Name:       "GetValue",
 							ReturnType: phpString,
+							GoFunction: "func (ts *TestStruct) GetValue() unsafe.Pointer {\n\treturn nil\n}",
 						},
 					},
 				},
@@ -740,6 +741,16 @@ func TestExtractGoFunctionName(t *testing.T) {
 			name:     "function with whitespace",
 			input:    "func  spacedName  () {}",
 			expected: "spacedName",
+		},
+		{
+			name:     "method with a pointer receiver",
+			input:    "func (s *MyStruct) getValue() string {}",
+			expected: "getValue",
+		},
+		{
+			name:     "method with a value receiver",
+			input:    "func (s MyStruct) get_value() string {}",
+			expected: "get_value",
 		},
 		{
 			name:     "no func keyword",
@@ -1324,4 +1335,36 @@ func TestGoFileGenerator_MethodWrappersAreClassQualified(t *testing.T) {
 	assert.Contains(t, content, "//export User_getName_wrapper")
 	assert.Contains(t, content, "//export Group_getName_wrapper")
 	assert.NotContains(t, content, "//export getName_wrapper")
+}
+
+func TestGoFileGenerator_MethodWrapperUsesActualGoName(t *testing.T) {
+	tmpDir := t.TempDir()
+	sourceFile := filepath.Join(tmpDir, "source.go")
+	require.NoError(t, os.WriteFile(sourceFile, []byte("package main\n"), 0644))
+
+	generator := &Generator{
+		BaseName:   "snake_test",
+		SourceFile: sourceFile,
+		BuildDir:   tmpDir,
+		Classes: []phpClass{{
+			Name:     "SnakeClass",
+			GoStruct: "SnakeStruct",
+			Methods: []phpClassMethod{
+				{
+					Name:       "get_value",
+					PhpName:    "get_value",
+					ClassName:  "SnakeClass",
+					ReturnType: phpInt,
+					GoFunction: "func (s *SnakeStruct) GetValue() int64 {\n\treturn 42\n}",
+				},
+			},
+		}},
+	}
+
+	goGen := GoFileGenerator{generator}
+	content, err := goGen.buildContent()
+	require.NoError(t, err)
+
+	assert.Contains(t, content, "return structObj.GetValue()")
+	assert.NotContains(t, content, "structObj.Get_Value(")
 }

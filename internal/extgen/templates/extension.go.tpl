@@ -74,7 +74,7 @@ func {{.ClassName}}_{{.Name}}_wrapper(handle C.uintptr_t{{range .Params}}{{if eq
 {{- end}}
 	}
 	structObj := obj.(*{{$class.GoStruct}})
-	{{if not (isVoid .ReturnType)}}return {{end}}structObj.{{.Name | title}}({{range $i, $param := .Params}}{{if $i}}, {{end}}{{$param.Name}}{{end}})
+	{{if not (isVoid .ReturnType)}}return {{end}}structObj.{{extractGoFunctionName .GoFunction}}({{range $i, $param := .Params}}{{if $i}}, {{end}}{{$param.Name}}{{end}})
 }
 {{end}}
 {{- end}}

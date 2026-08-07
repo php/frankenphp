@@ -129,25 +129,30 @@ func (gg *GoFileGenerator) phpTypeToGoType(phpT phpType) string {
 	return "any"
 }
 
-// extractGoFunctionName extracts the Go function name from a Go function signature string.
+// extractGoFunctionName extracts the Go function or method name from a Go
+// function signature string.
 func extractGoFunctionName(goFunction string) string {
 	idx := strings.Index(goFunction, "func ")
 	if idx == -1 {
 		return ""
 	}
 
-	start := idx + len("func ")
-
-	end := start
-	for end < len(goFunction) && goFunction[end] != '(' {
-		end++
+	rest := strings.TrimLeft(goFunction[idx+len("func "):], " \t")
+	if strings.HasPrefix(rest, "(") {
+		// method: skip the receiver so the name, not the receiver, is returned
+		closing := strings.IndexByte(rest, ')')
+		if closing == -1 {
+			return ""
+		}
+		rest = rest[closing+1:]
 	}
 
-	if end >= len(goFunction) {
+	end := strings.IndexByte(rest, '(')
+	if end == -1 {
 		return ""
 	}
 
-	return strings.TrimSpace(goFunction[start:end])
+	return strings.TrimSpace(rest[:end])
 }
 
 // extractGoFunctionSignatureParams extracts the parameters from a Go function signature.
