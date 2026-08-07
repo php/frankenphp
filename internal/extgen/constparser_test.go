@@ -744,3 +744,38 @@ func TestPHPConstantCValue(t *testing.T) {
 		})
 	}
 }
+
+func TestConstantParserGoOnlyIntLiterals(t *testing.T) {
+	input := `package main
+
+//export_php:const
+const UNDERSCORED = 1_000_000
+
+//export_php:const
+const BINARY = 0b1010
+
+//export_php:const
+const HEXADECIMAL = 0xFF`
+
+	tmpFile := filepath.Join(t.TempDir(), "literals.go")
+	require.NoError(t, os.WriteFile(tmpFile, []byte(input), 0644))
+
+	parser := &ConstantParser{}
+	constants, err := parser.parse(tmpFile)
+	require.NoError(t, err)
+	require.Len(t, constants, 3)
+
+	byName := make(map[string]phpConstant, len(constants))
+	for _, c := range constants {
+		byName[c.Name] = c
+	}
+
+	// PHP understands Go's digit separators and base prefixes, C does not.
+	assert.Equal(t, "1_000_000", byName["UNDERSCORED"].Value)
+	assert.Equal(t, "1000000", byName["UNDERSCORED"].CValue())
+	assert.Equal(t, "0b1010", byName["BINARY"].Value)
+	assert.Equal(t, "10", byName["BINARY"].CValue())
+
+	// hexadecimal is valid C and is left alone
+	assert.Equal(t, "0xFF", byName["HEXADECIMAL"].CValue())
+}
