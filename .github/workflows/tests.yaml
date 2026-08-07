@@ -75,24 +75,25 @@ jobs:
         run: sudo ../caddy/frankenphp/frankenphp start
       - name: Run integrations tests
         run: ./reload_test.sh
-      - name: Lint Go code
-        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
-        if: matrix.php-versions == '8.5'
-        with:
-          version: latest
-      - name: Lint Caddy module Go code
-        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
-        if: matrix.php-versions == '8.5'
-        with:
-          version: latest
-          working-directory: caddy/
-      - name: Ensure go.mod is tidy
-        if: matrix.php-versions == '8.5'
-        run: go mod tidy -diff
-      - name: Ensure caddy/go.mod is tidy
-        if: matrix.php-versions == '8.5'
-        run: go mod tidy -diff
-        working-directory: caddy/
+      - parallel:
+          - name: Lint Go code
+            uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+            if: matrix.php-versions == '8.5'
+            with:
+              version: latest
+          - name: Lint Caddy module Go code
+            uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+            if: matrix.php-versions == '8.5'
+            with:
+              version: latest
+              working-directory: caddy/
+          - name: Ensure go.mod is tidy
+            if: matrix.php-versions == '8.5'
+            run: go mod tidy -diff
+          - name: Ensure caddy/go.mod is tidy
+            if: matrix.php-versions == '8.5'
+            run: go mod tidy -diff
+            working-directory: caddy/
   integration-tests:
     name: Integration Tests (Linux, PHP ${{ matrix.php-versions }})
     runs-on: ubuntu-latest
