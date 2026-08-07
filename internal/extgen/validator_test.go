@@ -1000,3 +1000,27 @@ func TestValidateGoFunctionSignature_GroupedParameters(t *testing.T) {
 		})
 	}
 }
+
+func TestPhpTypeToGoType_NullablePointerTypes(t *testing.T) {
+	// Types PHP already hands over as a pointer carry null in the pointer itself,
+	// so they must not gain a second level of indirection when nullable.
+	tests := []struct {
+		phpType  phpType
+		expected string
+	}{
+		{phpString, "*C.zend_string"},
+		{phpArray, "*C.zend_array"},
+		{phpMixed, "*C.zval"},
+		{phpCallable, "*C.zval"},
+		{phpInt, "*int64"},
+		{phpFloat, "*float64"},
+		{phpBool, "*bool"},
+	}
+
+	validator := Validator{}
+	for _, tt := range tests {
+		t.Run(string(tt.phpType), func(t *testing.T) {
+			assert.Equal(t, tt.expected, validator.phpTypeToGoType(tt.phpType, true))
+		})
+	}
+}

@@ -196,7 +196,9 @@ func (v *Validator) phpTypeToGoType(t phpType, isNullable bool) string {
 		baseType = "any"
 	}
 
-	if isNullable && t != phpString && t != phpArray && t != phpCallable {
+	// Types already passed as a pointer carry PHP null in the pointer itself,
+	// so they never gain an extra level of indirection when nullable.
+	if isNullable && t != phpString && t != phpArray && t != phpMixed && t != phpCallable {
 		return "*" + baseType
 	}
 
