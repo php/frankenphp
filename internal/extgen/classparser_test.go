@@ -639,3 +639,54 @@ func validFloat(tc *TestClass, value float64) float64 {
 		})
 	}
 }
+
+func TestClassParserMethodOnUnknownClass(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+	}{
+		{
+			name: "method targeting an exported class is accepted",
+			input: `package main
+
+//export_php:class Known
+type Known struct{}
+
+//export_php:method Known::getName(): string
+func (k *Known) getName() unsafe.Pointer { return nil }`,
+		},
+		{
+			name: "method targeting a class nobody exports is rejected",
+			input: `package main
+
+//export_php:class Known
+type Known struct{}
+
+//export_php:method Unknown::getName(): string
+func (u *Unknown) getName() unsafe.Pointer { return nil }`,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpFile := filepath.Join(t.TempDir(), "class.go")
+			require.NoError(t, os.WriteFile(tmpFile, []byte(tt.input), 0644))
+
+			parser := classParser{}
+			classes, err := parser.parse(tmpFile)
+
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), `targets class "Unknown"`)
+
+				return
+			}
+
+			require.NoError(t, err)
+			require.Len(t, classes, 1)
+			assert.Len(t, classes[0].Methods, 1)
+		})
+	}
+}

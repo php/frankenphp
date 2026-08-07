@@ -23,9 +23,6 @@ type goTemplateData struct {
 	PackageName       string
 	BaseName          string
 	SanitizedBaseName string
-	Constants         []phpConstant
-	Variables         []string
-	InternalFunctions []string
 	Functions         []phpFunction
 	Classes           []phpClass
 }
@@ -43,23 +40,17 @@ func (gg *GoFileGenerator) generate() error {
 
 func (gg *GoFileGenerator) buildContent() (string, error) {
 	sourceAnalyzer := SourceAnalyzer{}
-	packageName, variables, internalFunctions, err := sourceAnalyzer.analyze(gg.generator.SourceFile)
+	packageName, err := sourceAnalyzer.analyze(gg.generator.SourceFile)
 	if err != nil {
 		return "", fmt.Errorf("analyzing source file: %w", err)
 	}
-
-	classes := make([]phpClass, len(gg.generator.Classes))
-	copy(classes, gg.generator.Classes)
 
 	templateContent, err := gg.getTemplateContent(goTemplateData{
 		PackageName:       packageName,
 		BaseName:          gg.generator.BaseName,
 		SanitizedBaseName: SanitizePackageName(gg.generator.BaseName),
-		Constants:         gg.generator.Constants,
-		Variables:         variables,
-		InternalFunctions: internalFunctions,
 		Functions:         gg.generator.Functions,
-		Classes:           classes,
+		Classes:           gg.generator.Classes,
 	})
 
 	if err != nil {
@@ -76,10 +67,11 @@ func (gg *GoFileGenerator) buildContent() (string, error) {
 
 func (gg *GoFileGenerator) getTemplateContent(data goTemplateData) (string, error) {
 	funcMap := sprig.FuncMap()
-	funcMap["phpTypeToGoType"] = gg.phpTypeToGoType
-	funcMap["isStringOrArray"] = func(t phpType) bool {
-		return t == phpString || t == phpArray
-	}
+	// Reuse the validator's mapping so the signatures the generator emits cannot
+	// drift from the ones it accepts.
+	validator := &Validator{}
+	funcMap["goParamType"] = validator.phpTypeToGoType
+	funcMap["goReturnType"] = validator.phpReturnTypeToGoType
 	funcMap["isVoid"] = func(t phpType) bool {
 		return t == phpVoid
 	}
@@ -98,55 +90,30 @@ func (gg *GoFileGenerator) getTemplateContent(data goTemplateData) (string, erro
 	return buf.String(), nil
 }
 
-type GoMethodSignature struct {
-	MethodName string
-	Params     []GoParameter
-	ReturnType string
-}
-
-type GoParameter struct {
-	Name string
-	Type string
-}
-
-var phpToGoTypeMap = map[phpType]string{
-	phpString:   "string",
-	phpInt:      "int64",
-	phpFloat:    "float64",
-	phpBool:     "bool",
-	phpArray:    "*frankenphp.Array",
-	phpMixed:    "any",
-	phpVoid:     "",
-	phpCallable: "*C.zval",
-}
-
-func (gg *GoFileGenerator) phpTypeToGoType(phpT phpType) string {
-	if goType, exists := phpToGoTypeMap[phpT]; exists {
-		return goType
-	}
-
-	return "any"
-}
-
-// extractGoFunctionName extracts the Go function name from a Go function signature string.
+// extractGoFunctionName extracts the Go function or method name from a Go
+// function signature string.
 func extractGoFunctionName(goFunction string) string {
 	idx := strings.Index(goFunction, "func ")
 	if idx == -1 {
 		return ""
 	}
 
-	start := idx + len("func ")
-
-	end := start
-	for end < len(goFunction) && goFunction[end] != '(' {
-		end++
+	rest := strings.TrimLeft(goFunction[idx+len("func "):], " \t")
+	if strings.HasPrefix(rest, "(") {
+		// method: skip the receiver so the name, not the receiver, is returned
+		closing := strings.IndexByte(rest, ')')
+		if closing == -1 {
+			return ""
+		}
+		rest = rest[closing+1:]
 	}
 
-	if end >= len(goFunction) {
+	end := strings.IndexByte(rest, '(')
+	if end == -1 {
 		return ""
 	}
 
-	return strings.TrimSpace(goFunction[start:end])
+	return strings.TrimSpace(rest[:end])
 }
 
 // extractGoFunctionSignatureParams extracts the parameters from a Go function signature.
