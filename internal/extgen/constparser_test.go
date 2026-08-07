@@ -779,3 +779,20 @@ const HEXADECIMAL = 0xFF`
 	// hexadecimal is valid C and is left alone
 	assert.Equal(t, "0xFF", byName["HEXADECIMAL"].CValue())
 }
+
+func TestConstantParserRawStringConstant(t *testing.T) {
+	input := "package main\n\n//export_php:const\nconst RAW = `raw \"quoted\" value`"
+
+	tmpFile := filepath.Join(t.TempDir(), "raw.go")
+	require.NoError(t, os.WriteFile(tmpFile, []byte(input), 0644))
+
+	parser := &ConstantParser{}
+	constants, err := parser.parse(tmpFile)
+	require.NoError(t, err)
+	require.Len(t, constants, 1)
+
+	// backticks delimit a string in Go only: both C and PHP need double quotes
+	assert.Equal(t, phpString, constants[0].PhpType)
+	assert.Equal(t, `"raw \"quoted\" value"`, constants[0].Value)
+	assert.Equal(t, `"raw \"quoted\" value"`, constants[0].CValue())
+}
