@@ -98,15 +98,15 @@ C/PHPとGoの間でメモリ表現が同じ変数型もありますが、直接�
 | `array`            | `frankenphp.AssociativeArray` | ❌       | `frankenphp.GoAssociativeArray()` | `frankenphp.PHPAssociativeArray()` | ✅                     |
 | `array`            | `map[string]any`              | ❌       | `frankenphp.GoMap()`              | `frankenphp.PHPMap()`              | ✅                     |
 | `array`            | `[]any`                       | ❌       | `frankenphp.GoPackedArray()`      | `frankenphp.PHPPackedArray()`      | ✅                     |
-| `mixed`            | `any`                         | ❌       | `GoValue()`                       | `PHPValue()`                       | ❌                     |
-| `callable`         | `*C.zval`                     | ❌       | -                                 | `frankenphp.CallPHPCallable()`     | ❌                     |
+| `mixed`            | `*C.zval`                     | ❌       | `frankenphp.GoValue()`            | `frankenphp.PHPValue()`            | ✅                     |
+| `callable`         | `*C.zval`                     | ❌       | -                                 | `frankenphp.CallPHPCallable()`     | ✅                     |
 | `object`           | `struct`                      | ❌       | _未実装_                          | _未実装_                           | ❌                     |
 
 > [!NOTE]
 >
 > この表はまだ完全ではなく、FrankenPHPの型APIがより完全になるにつれて完成されます。
 >
-> クラスメソッドについては、現在プリミティブ型と配列がサポートされています。オブジェクトはまだメソッドパラメータや戻り値の型として使用できません。
+> クラスメソッドについては、現在プリミティブ型、配列、`mixed`、`callable` がサポートされています。オブジェクトはまだメソッドパラメータや戻り値の型として使用できません。
 
 前のセクションのコードスニペットを参照すると、最初のパラメータと戻り値の変換にヘルパーが使用されていることがわかります。 `repeat_this()`関数の2番目と3番目の引数は、基礎となる型のメモリ表現がCとGoで同じであるため、変換する必要がありません。
 
