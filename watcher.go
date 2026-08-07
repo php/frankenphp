@@ -3,11 +3,24 @@
 package frankenphp
 
 import (
+	"runtime/debug"
 	"sync/atomic"
 
 	"github.com/dunglas/frankenphp/internal/watcher"
 	watcherGo "github.com/e-dant/watcher/watcher-go"
 )
+
+func init() {
+	// watcher doesn't expose the version, so get it from go.mod
+	if buildInfo, ok := debug.ReadBuildInfo(); ok {
+		for _, dep := range buildInfo.Deps {
+			if dep.Path == "github.com/e-dant/watcher" {
+				AddPHPInfoEntry("e-dant/watcher", dep.Version)
+				break
+			}
+		}
+	}
+}
 
 type hotReloadOpt struct {
 	hotReload []*watcher.PatternGroup

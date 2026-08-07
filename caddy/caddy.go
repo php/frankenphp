@@ -9,6 +9,7 @@ import (
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
+	"github.com/dunglas/frankenphp"
 )
 
 const (
@@ -25,6 +26,14 @@ func init() {
 	caddy.RegisterModule(FrankenPHPApp{})
 	caddy.RegisterModule(FrankenPHPModule{})
 	caddy.RegisterModule(FrankenPHPAdmin{})
+
+	// Report Caddy version in phpinfo()
+	simpleVersion, fullVersion := caddy.Version()
+	if fullVersion != "" {
+		frankenphp.AddPHPInfoEntry("caddy", fullVersion)
+	} else if simpleVersion != "" {
+		frankenphp.AddPHPInfoEntry("caddy", simpleVersion)
+	}
 
 	httpcaddyfile.RegisterGlobalOption("frankenphp", parseGlobalOption)
 
