@@ -77,8 +77,9 @@ func (gg *GoFileGenerator) buildContent() (string, error) {
 func (gg *GoFileGenerator) getTemplateContent(data goTemplateData) (string, error) {
 	funcMap := sprig.FuncMap()
 	funcMap["phpTypeToGoType"] = gg.phpTypeToGoType
-	funcMap["isStringOrArray"] = func(t phpType) bool {
-		return t == phpString || t == phpArray
+	// Values PHP owns as pointers cross the cgo boundary as unsafe.Pointer.
+	funcMap["isPointerReturn"] = func(t phpType) bool {
+		return t == phpString || t == phpArray || t == phpMixed
 	}
 	funcMap["isVoid"] = func(t phpType) bool {
 		return t == phpVoid

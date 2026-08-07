@@ -3,6 +3,7 @@ package extgen
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -337,4 +338,32 @@ func TestCFile_ClassMethodParamCastsByParamType(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCFileGenerator_MethodMixedParamAndReturn(t *testing.T) {
+	tmpDir := t.TempDir()
+	generator := &Generator{
+		BaseName: "mixed_ext",
+		BuildDir: tmpDir,
+		Classes: []phpClass{{
+			Name:     "Box",
+			GoStruct: "Box",
+			Methods: []phpClassMethod{{
+				Name:       "swap",
+				PhpName:    "swap",
+				ClassName:  "Box",
+				ReturnType: phpMixed,
+				Params:     []phpParameter{{Name: "value", PhpType: phpMixed}},
+			}},
+		}},
+	}
+
+	cGen := cFileGenerator{generator}
+	content, err := cGen.buildContent()
+	require.NoError(t, err)
+
+	assert.Contains(t, content, "zval *value = NULL;", "mixed parameter must be declared as a zval")
+	assert.Contains(t, content, "Z_PARAM_ZVAL(value)", "mixed parameter must be parsed as a zval")
+	assert.Contains(t, content, "Box_swap_wrapper(intern->go_handle, value)", "mixed parameter must be forwarded to the Go wrapper")
+	assert.Contains(t, content, "RETURN_COPY_VALUE(result);", "mixed return value must reach PHP")
 }

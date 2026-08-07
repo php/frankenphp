@@ -156,6 +156,13 @@ PHP_METHOD({{namespacedClassName $.Namespace .ClassName}}, {{.PhpName}}) {
     } else {
         RETURN_NULL();
     }
+    {{- else if eq .ReturnType "mixed"}}
+    zval* result = {{.ClassName}}_{{.Name}}_wrapper(intern->go_handle{{range .Params}}, {{template "methodCallArg" .}}{{end}});
+    if (result != NULL) {
+        RETURN_COPY_VALUE(result);
+    } else {
+        RETURN_NULL();
+    }
     {{- end}}
     {{- else}}
     {{.ClassName}}_{{.Name}}_wrapper(intern->go_handle{{range .Params}}, {{template "methodCallArg" .}}{{end}});

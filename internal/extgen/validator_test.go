@@ -901,6 +901,7 @@ func TestPhpReturnTypeToGoType(t *testing.T) {
 		{"bool", "bool"},
 		{"array", "unsafe.Pointer"},
 		{"array", "unsafe.Pointer"},
+		{"mixed", "unsafe.Pointer"},
 		{"unknown", "any"},
 	}
 

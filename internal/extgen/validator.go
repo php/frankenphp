@@ -233,7 +233,7 @@ func (v *Validator) phpReturnTypeToGoType(phpReturnType phpType) string {
 		return "float64"
 	case phpBool:
 		return "bool"
-	case phpArray:
+	case phpArray, phpMixed:
 		return "unsafe.Pointer"
 	default:
 		return "any"
