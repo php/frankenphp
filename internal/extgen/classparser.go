@@ -7,6 +7,7 @@ import (
 	"go/token"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -94,6 +95,15 @@ func (cp *classParser) parse(filename string) (classes []phpClass, err error) {
 	for _, directive := range exportDirectives {
 		if !matchedDirectives[directive.line] {
 			return nil, fmt.Errorf("//export_php class directive at line %d is not followed by a struct declaration", directive.line)
+		}
+	}
+
+	// Match against the declared directives rather than the classes that survived
+	// validation, so an invalid class does not turn its methods into a misleading
+	// "never exported" error.
+	for _, method := range methods {
+		if !slices.ContainsFunc(exportDirectives, func(d exportDirective) bool { return d.className == method.ClassName }) {
+			return nil, fmt.Errorf("//export_php:method directive at line %d targets class %q, which is not exported by any //export_php:class directive", method.lineNumber, method.ClassName)
 		}
 	}
 
