@@ -26,8 +26,13 @@ func (cp *classParser) Parse(filename string) ([]phpClass, error) {
 }
 
 func (cp *classParser) parse(filename string) (classes []phpClass, err error) {
+	src, err := os.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+
 	fset := token.NewFileSet()
-	node, err := parser.ParseFile(fset, filename, nil, parser.ParseComments)
+	node, err := parser.ParseFile(fset, filename, src, parser.ParseComments)
 	if err != nil {
 		return nil, fmt.Errorf("parsing file: %w", err)
 	}
@@ -35,7 +40,7 @@ func (cp *classParser) parse(filename string) (classes []phpClass, err error) {
 	validator := Validator{}
 
 	exportDirectives := cp.collectExportDirectives(node, fset)
-	methods, err := cp.parseMethods(filename)
+	methods, err := cp.parseMethods(src, node, fset)
 	if err != nil {
 		return nil, fmt.Errorf("parsing methods: %w", err)
 	}
@@ -211,18 +216,7 @@ func (cp *classParser) goTypeToPHPType(goType string) phpType {
 	return phpMixed
 }
 
-func (cp *classParser) parseMethods(filename string) ([]phpClassMethod, error) {
-	src, err := os.ReadFile(filename)
-	if err != nil {
-		return nil, err
-	}
-
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, filename, src, parser.ParseComments)
-	if err != nil {
-		return nil, fmt.Errorf("parsing file: %w", err)
-	}
-
+func (cp *classParser) parseMethods(src []byte, file *ast.File, fset *token.FileSet) ([]phpClassMethod, error) {
 	validator := Validator{}
 	var methods []phpClassMethod
 	consumed := make(map[int]bool)
@@ -233,16 +227,18 @@ func (cp *classParser) parseMethods(filename string) ([]phpClassMethod, error) {
 			continue
 		}
 
-		directive, directiveLine := findDirective(funcDecl.Doc, fset, phpMethodRegex)
-		if directive == "" {
+		comment := findMatchingComment(funcDecl.Doc, phpMethodRegex)
+		if comment == nil {
 			continue
 		}
-		rawMatch := phpMethodRegex.FindStringSubmatch(findMatchingComment(funcDecl.Doc, phpMethodRegex))
+
+		rawMatch := phpMethodRegex.FindStringSubmatch(comment.Text)
 		if len(rawMatch) != 3 {
 			continue
 		}
 		className := strings.TrimSpace(rawMatch[1])
 		signature := strings.TrimSpace(rawMatch[2])
+		directiveLine := fset.Position(comment.Pos()).Line
 		consumed[directiveLine] = true
 
 		method, err := cp.parseMethodSignature(className, signature)
@@ -282,17 +278,17 @@ func (cp *classParser) parseMethods(filename string) ([]phpClassMethod, error) {
 	return methods, nil
 }
 
-// findMatchingComment returns the raw comment text whose line matches re.
-func findMatchingComment(group *ast.CommentGroup, re *regexp.Regexp) string {
+// findMatchingComment returns the first comment of the group matching re.
+func findMatchingComment(group *ast.CommentGroup, re *regexp.Regexp) *ast.Comment {
 	if group == nil {
-		return ""
+		return nil
 	}
 	for _, comment := range group.List {
 		if re.MatchString(comment.Text) {
-			return comment.Text
+			return comment
 		}
 	}
-	return ""
+	return nil
 }
 
 func (cp *classParser) parseMethodSignature(className, signature string) (*phpClassMethod, error) {
