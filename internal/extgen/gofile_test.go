@@ -604,10 +604,10 @@ func (as *ArrayStruct) FilterData(data frankenphp.AssociativeArray, filter strin
 	content, err := goGen.buildContent()
 	require.NoError(t, err)
 
-	expectedArrayWrapperSignature := "func ArrayClass_ProcessArray_wrapper(handle C.uintptr_t, items *C.zval) unsafe.Pointer"
+	expectedArrayWrapperSignature := "func ArrayClass_ProcessArray_wrapper(handle C.uintptr_t, items *C.zend_array) unsafe.Pointer"
 	assert.Contains(t, content, expectedArrayWrapperSignature, "Generated content should contain array wrapper signature: %s", expectedArrayWrapperSignature)
 
-	expectedMixedWrapperSignature := "func ArrayClass_FilterData_wrapper(handle C.uintptr_t, data *C.zval, filter *C.zend_string) unsafe.Pointer"
+	expectedMixedWrapperSignature := "func ArrayClass_FilterData_wrapper(handle C.uintptr_t, data *C.zend_array, filter *C.zend_string) unsafe.Pointer"
 	assert.Contains(t, content, expectedMixedWrapperSignature, "Generated content should contain mixed wrapper signature: %s", expectedMixedWrapperSignature)
 
 	expectedArrayCall := "structObj.ProcessArray(items)"
@@ -1100,7 +1100,7 @@ func (nas *NullableArrayStruct) ProcessOptionalArray(items frankenphp.Associativ
 	content, err := goGen.buildContent()
 	require.NoError(t, err)
 
-	expectedWrapperSignature := "func NullableArrayClass_ProcessOptionalArray_wrapper(handle C.uintptr_t, items *C.zval, name *C.zend_string) unsafe.Pointer"
+	expectedWrapperSignature := "func NullableArrayClass_ProcessOptionalArray_wrapper(handle C.uintptr_t, items *C.zend_array, name *C.zend_string) unsafe.Pointer"
 	assert.Contains(t, content, expectedWrapperSignature, "Generated content should contain nullable array wrapper signature: %s", expectedWrapperSignature)
 
 	expectedCall := "structObj.ProcessOptionalArray(items, name)"

@@ -59,7 +59,7 @@ func create_{{.GoStruct}}_object() C.uintptr_t {
 
 {{- range .Methods}}
 //export {{.ClassName}}_{{.Name}}_wrapper
-func {{.ClassName}}_{{.Name}}_wrapper(handle C.uintptr_t{{range .Params}}{{if eq .PhpType "string"}}, {{.Name}} *C.zend_string{{else if eq .PhpType "array"}}, {{.Name}} *C.zval{{else if eq .PhpType "callable"}}, {{.Name}} *C.zval{{else}}, {{.Name}} {{if .IsNullable}}*{{end}}{{phpTypeToGoType .PhpType}}{{end}}{{end}}){{if not (isVoid .ReturnType)}}{{if isStringOrArray .ReturnType}} unsafe.Pointer{{else}} {{phpTypeToGoType .ReturnType}}{{end}}{{end}} {
+func {{.ClassName}}_{{.Name}}_wrapper(handle C.uintptr_t{{range .Params}}{{if eq .PhpType "string"}}, {{.Name}} *C.zend_string{{else if eq .PhpType "array"}}, {{.Name}} *C.zend_array{{else if eq .PhpType "mixed"}}, {{.Name}} *C.zval{{else if eq .PhpType "callable"}}, {{.Name}} *C.zval{{else}}, {{.Name}} {{if .IsNullable}}*{{end}}{{phpTypeToGoType .PhpType}}{{end}}{{end}}){{if not (isVoid .ReturnType)}}{{if isStringOrArray .ReturnType}} unsafe.Pointer{{else}} {{phpTypeToGoType .ReturnType}}{{end}}{{end}} {
 	obj := getGoObject(handle)
 	if obj == nil {
 {{- if not (isVoid .ReturnType)}}
