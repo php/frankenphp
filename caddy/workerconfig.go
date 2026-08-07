@@ -39,8 +39,7 @@ type workerConfig struct {
 	// MaxConsecutiveFailures sets the maximum number of consecutive failures before panicking (defaults to 6, set to -1 to never panick)
 	MaxConsecutiveFailures int `json:"max_consecutive_failures,omitempty"`
 
-	options        []frankenphp.WorkerOption
-	requestOptions []frankenphp.RequestOption
+	options []frankenphp.WorkerOption
 }
 
 func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
@@ -162,7 +161,6 @@ func (wc *workerConfig) toWorkerOptions() ([]frankenphp.WorkerOption, error) {
 		frankenphp.WithWorkerWatchMode(wc.Watch),
 		frankenphp.WithWorkerMaxFailures(wc.MaxConsecutiveFailures),
 		frankenphp.WithWorkerMaxThreads(wc.MaxThreads),
-		frankenphp.WithWorkerRequestOptions(wc.requestOptions...),
 	}
 
 	// options collected while provisioning the module, e.g. the Mercure hub

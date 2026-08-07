@@ -116,10 +116,6 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		f.Root = filepath.Join(frankenphp.EmbeddedAppPath, f.Root)
 	}
 
-	if len(f.SplitPath) == 0 {
-		f.SplitPath = []string{".php"}
-	}
-
 	opt, err := frankenphp.WithRequestSplitPath(f.SplitPath)
 	if err != nil {
 		return fmt.Errorf("invalid split_path: %w", err)
