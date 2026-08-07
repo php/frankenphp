@@ -21,10 +21,6 @@ type exportDirective struct {
 
 type classParser struct{}
 
-func (cp *classParser) Parse(filename string) ([]phpClass, error) {
-	return cp.parse(filename)
-}
-
 func (cp *classParser) parse(filename string) (classes []phpClass, err error) {
 	src, err := os.ReadFile(filename)
 	if err != nil {
