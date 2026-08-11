@@ -78,6 +78,10 @@ typedef struct {
  * ... */
 extern const char **frankenphp_phpinfo_entries;
 
+/* Go modules linked into the binary, same layout, displayed in a section
+ * collapsed by default */
+extern const char **frankenphp_go_modules;
+
 typedef struct go_string {
   size_t len;
   char *data;

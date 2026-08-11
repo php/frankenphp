@@ -109,6 +109,7 @@ frankenphp_config frankenphp_get_config() {
 }
 
 const char **frankenphp_phpinfo_entries = NULL;
+const char **frankenphp_go_modules = NULL;
 
 bool should_filter_var = 0;
 bool original_user_abort_setting = 0;
@@ -1104,16 +1105,43 @@ PHP_MINIT_FUNCTION(frankenphp) {
   return SUCCESS;
 }
 
+static void frankenphp_print_info_rows(const char **entries) {
+  for (int i = 0; entries[i] != NULL; i += 2) {
+    php_info_print_table_row(2, entries[i], entries[i + 1]);
+  }
+}
+
 PHP_MINFO_FUNCTION(frankenphp) {
   php_info_print_table_start();
   php_info_print_table_row(2, "frankenphp", TOSTRING(FRANKENPHP_VERSION));
   if (frankenphp_phpinfo_entries) {
-    for (int i = 0; frankenphp_phpinfo_entries[i] != NULL; i += 2) {
-      php_info_print_table_row(2, frankenphp_phpinfo_entries[i],
-                               frankenphp_phpinfo_entries[i + 1]);
-    }
+    frankenphp_print_info_rows(frankenphp_phpinfo_entries);
   }
   php_info_print_table_end();
+
+  if (frankenphp_go_modules == NULL) {
+    return;
+  }
+
+  /* The list of Go modules is long, collapse it by default when rendering
+   * HTML */
+  if (sapi_module.phpinfo_as_text) {
+    php_info_print_table_start();
+    php_info_print_table_header(1, "Go modules");
+    php_info_print_table_end();
+  } else {
+    php_printf("<details><summary style=\"cursor: pointer\">Go "
+               "modules</summary>\n");
+  }
+
+  php_info_print_table_start();
+  php_info_print_table_header(2, "Module", "Version");
+  frankenphp_print_info_rows(frankenphp_go_modules);
+  php_info_print_table_end();
+
+  if (!sapi_module.phpinfo_as_text) {
+    php_printf("</details>\n");
+  }
 }
 
 static zend_module_entry frankenphp_module = {

@@ -454,6 +454,7 @@ func testPhpInfo(t *testing.T, opts *testOptions) {
 
 		assert.Contains(t, body, "frankenphp")
 		assert.Contains(t, body, fmt.Sprintf("i=%d", i))
+		assert.Contains(t, body, runtime.Version())
 	}, opts)
 }
 

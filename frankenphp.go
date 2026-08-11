@@ -30,6 +30,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"sync"
@@ -162,42 +163,101 @@ type phpinfoEntry struct {
 }
 
 var (
-	phpinfoEntries []phpinfoEntry
-	cPhpinfoArr    []*C.char
+	phpinfoEntries  []phpinfoEntry
+	goModuleEntries []phpinfoEntry
+	cPhpinfoArr     []*C.char
+	cGoModulesArr   []*C.char
 )
 
+// Report the Go toolchain and every Go module linked into the binary. Caddy
+// modules, FrankenPHP extensions written in Go and even the standard library
+// itself. The list is verbose, so it's displayed in a collapsed section.
+func init() {
+	buildInfo, ok := debug.ReadBuildInfo()
+	if !ok {
+		return
+	}
+
+	AddPHPInfoEntry("Go", buildInfo.GoVersion)
+
+	goModuleEntries = make([]phpinfoEntry, 0, len(buildInfo.Deps))
+	for _, dep := range buildInfo.Deps {
+		goModuleEntries = append(goModuleEntries, phpinfoEntry{dep.Path, goModuleVersion(dep)})
+	}
+}
+
+// goModuleVersion returns the version of the given module, taking "replace"
+// directives into account.
+func goModuleVersion(module *debug.Module) string {
+	if module.Replace == nil {
+		return module.Version
+	}
+
+	if module.Replace.Version == "" {
+		// Replaced by a local directory
+		return module.Replace.Path
+	}
+
+	return module.Replace.Path + " " + module.Replace.Version
+}
+
+// AddPHPInfoEntry adds an entry to the frankenphp section of phpinfo().
 func AddPHPInfoEntry(key, value string) {
 	phpinfoEntries = append(phpinfoEntries, phpinfoEntry{key, value})
 }
 
 func initPHPInfoEntries() {
-	for _, cstr := range cPhpinfoArr {
+	freeCEntries(cPhpinfoArr)
+	freeCEntries(cGoModulesArr)
+
+	cPhpinfoArr = newCEntries(phpinfoEntries)
+	cGoModulesArr = newCEntries(goModuleEntries)
+
+	C.frankenphp_phpinfo_entries = firstCEntry(cPhpinfoArr)
+	C.frankenphp_go_modules = firstCEntry(cGoModulesArr)
+}
+
+// newCEntries converts entries to a null-terminated C array of key, value, key,
+// value, ... sorted by key. The returned slice is backed by memory allocated by
+// C, free it with freeCEntries().
+func newCEntries(entries []phpinfoEntry) []*C.char {
+	if len(entries) == 0 {
+		return nil
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].key < entries[j].key
+	})
+
+	n := 2*len(entries) + 1
+	arr := (*[1 << 28]*C.char)(C.malloc(C.size_t(n) * C.size_t(unsafe.Sizeof(uintptr(0)))))[:n:n]
+	for i, e := range entries {
+		arr[2*i] = C.CString(e.key)
+		arr[2*i+1] = C.CString(e.value)
+	}
+	arr[n-1] = nil
+
+	return arr
+}
+
+func freeCEntries(arr []*C.char) {
+	for _, cstr := range arr {
 		if cstr != nil {
 			C.free(unsafe.Pointer(cstr))
 		}
 	}
-	if cPhpinfoArr != nil {
-		C.free(unsafe.Pointer(&cPhpinfoArr[0]))
-		cPhpinfoArr = nil
-		C.frankenphp_phpinfo_entries = nil
+
+	if arr != nil {
+		C.free(unsafe.Pointer(&arr[0]))
+	}
+}
+
+func firstCEntry(arr []*C.char) **C.char {
+	if arr == nil {
+		return nil
 	}
 
-	if len(phpinfoEntries) == 0 {
-		return
-	}
-
-	sort.Slice(phpinfoEntries, func(i, j int) bool {
-		return phpinfoEntries[i].key < phpinfoEntries[j].key
-	})
-
-	n := 2*len(phpinfoEntries) + 1
-	cPhpinfoArr = (*[1 << 28]*C.char)(C.malloc(C.size_t(n) * C.size_t(unsafe.Sizeof(uintptr(0)))))[:n:n]
-	for i, e := range phpinfoEntries {
-		cPhpinfoArr[2*i] = C.CString(e.key)
-		cPhpinfoArr[2*i+1] = C.CString(e.value)
-	}
-	cPhpinfoArr[n-1] = nil
-	C.frankenphp_phpinfo_entries = &cPhpinfoArr[0]
+	return &arr[0]
 }
 
 func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
