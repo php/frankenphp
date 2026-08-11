@@ -91,8 +91,8 @@ $handler = static function () use ($myApp) {
     }
 };
 
-$maxRequests = (int)($_SERVER['MAX_REQUESTS'] ?? 0);
-for ($nbRequests = 0; !$maxRequests || $nbRequests < $maxRequests; ++$nbRequests) {
+$maxRequests = (isset($_SERVER['MAX_REQUESTS']) && $_SERVER['MAX_REQUESTS'] > 0) ? (int)$_SERVER['MAX_REQUESTS'] : PHP_INT_MAX;
+for ($nbRequests = 0; $nbRequests < $maxRequests; ++$nbRequests) {
     $keepRunning = \frankenphp_handle_request($handler);
 
     // 在发送 HTTP 响应后做一些事情
