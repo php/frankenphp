@@ -178,7 +178,7 @@ func init() {
 		return
 	}
 
-	AddPHPInfoEntry("Go", buildInfo.GoVersion)
+	AddPHPInfoEntry("go", buildInfo.GoVersion)
 
 	goModuleEntries = make([]phpinfoEntry, 0, len(buildInfo.Deps))
 	for _, dep := range buildInfo.Deps {
