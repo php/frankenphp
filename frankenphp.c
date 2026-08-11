@@ -1872,6 +1872,7 @@ static void *execute_script_cli(void *arg) {
   php_embed_module.name = "cli";
   php_embed_module.pretty_name = "PHP CLI embedded in FrankenPHP";
   php_embed_module.register_server_variables = sapi_cli_register_variables;
+  php_embed_module.phpinfo_as_text = 1;
 
   php_embed_init(cli_argc, cli_argv);
 
