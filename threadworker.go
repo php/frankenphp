@@ -160,8 +160,10 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 
 	if !handler.isBootingScript {
 		// fatal error (could be due to exit(1), timeouts, etc.)
-		if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
-			globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "restarting", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex), slog.Int("exit_status", exitStatus))
+		// unlike a clean restart, this took down any in-flight request, so
+		// surface it above debug level, with the exit status needed to triage it
+		if globalLogger.Enabled(globalCtx, slog.LevelWarn) {
+			globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "unexpected termination, restarting", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex), slog.Int("exit_status", exitStatus))
 		}
 
 		return
@@ -175,7 +177,7 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 
 	if watcherIsEnabled {
 		// worker script has probably failed due to script changes while watcher is enabled
-		if globalLogger.Enabled(globalCtx, slog.LevelError) {
+		if globalLogger.Enabled(globalCtx, slog.LevelWarn) {
 			globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "(watcher enabled) worker script has not reached frankenphp_handle_request()", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex))
 		}
 	} else {
