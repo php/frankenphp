@@ -177,8 +177,8 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 
 	if watcherIsEnabled {
 		// worker script has probably failed due to script changes while watcher is enabled
-		if globalLogger.Enabled(globalCtx, slog.LevelWarn) {
-			globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "(watcher enabled) worker script has not reached frankenphp_handle_request()", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex))
+		if globalLogger.Enabled(globalCtx, slog.LevelError) {
+			globalLogger.LogAttrs(globalCtx, slog.LevelError, "(watcher enabled) worker script has not reached frankenphp_handle_request()", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex))
 		}
 	} else {
 		// rare case where worker script has failed on a restart during normal operation
