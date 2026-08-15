@@ -71,6 +71,17 @@ main() {
 	local METADATA
 	METADATA="$(PHP_VERSION="${PHP_VERSION}" docker buildx bake --print | jq -c)"
 
+	# On reduced pull-request runs only the Bookworm variants are built, so restrict the
+	# metadata to them and avoid fingerprinting (and failing on) base images we never build.
+	if [[ "${FULL_BUILD_MATRIX:-true}" != "true" ]]; then
+		METADATA="$(
+			jq -c '
+				.group.default.targets |= map(select(endswith("-bookworm")))
+				| .target |= with_entries(select(.key | endswith("-bookworm")))
+			' <<<"${METADATA}"
+		)"
+	fi
+
 	# Collect the base images (docker-image:// contexts) of each variant. The variant key
 	# is derived from the php-base ref (e.g. "php:8.4.23-zts-trixie" -> "8.4.23-trixie") and
 	# matches the "${php-version}-${os}" keys expected by docker-bake.hcl for BASE_FINGERPRINTS.

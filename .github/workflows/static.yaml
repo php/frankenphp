@@ -10,6 +10,7 @@ on:
       - main
     paths:
       - "docker-bake.hcl"
+      - ".github/scripts/ci-build-matrix.sh"
       - ".github/workflows/static.yaml"
       - "**cgo.go"
       - "**Dockerfile"
@@ -74,14 +75,13 @@ jobs:
         run: |
           METADATA="$(docker buildx bake --print static-builder-musl | jq -c)"
           GNU_METADATA="$(docker buildx bake --print static-builder-gnu | jq -c)"
-          {
-            echo metadata="${METADATA}"
-            echo platforms="$(jq -c 'first(.target[]) | .platforms' <<< "${METADATA}")"
-            echo gnu_metadata="${GNU_METADATA}"
-          } >> "${GITHUB_OUTPUT}"
+          echo metadata="${METADATA}" >> "${GITHUB_OUTPUT}"
+          METADATA="${METADATA}" ./.github/scripts/ci-build-matrix.sh static "${FULL_BUILD_MATRIX}"
+          echo gnu_metadata="${GNU_METADATA}" >> "${GITHUB_OUTPUT}"
         env:
           SHA: ${{ github.sha }}
           VERSION: ${{ steps.check.outputs.ref || 'dev' }}
+          FULL_BUILD_MATRIX: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-build-matrix') }}
 
   build-linux-musl:
     permissions:
