@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/dunglas/frankenphp/internal/fastabs"
 
@@ -345,6 +346,24 @@ func TestAddModuleWorkerViaAdminApi(t *testing.T) {
 	assert.Greater(t, updatedWorkerCount, initialWorkerCount, "Worker count should have increased")
 	assert.True(t, workerFound, fmt.Sprintf("Worker with name %q should be found", "Worker PHP Thread - "+filename))
 
-	// Make a request to the worker to verify it's working
-	tester.AssertGetResponse("http://localhost:"+testPort+"/worker-with-counter.php", http.StatusOK, "requests:1")
+	// The /load above swaps the HTTP listener for the new config; a request
+	// racing that swap can see a reset connection before the worker ever
+	// receives it, so retry on connection-level failures only (a request
+	// that reaches the worker always counts, so retrying past that point
+	// would throw off the "requests:1" assertion below).
+	workerURL := "http://localhost:" + testPort + "/worker-with-counter.php"
+	var getResp *http.Response
+	for i := 0; i < 20; i++ {
+		getResp, err = http.Get(workerURL)
+		if err == nil {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	require.NoError(t, err)
+	defer func() { require.NoError(t, getResp.Body.Close()) }()
+	body, err := io.ReadAll(getResp.Body)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, getResp.StatusCode)
+	assert.Equal(t, "requests:1", string(body))
 }
