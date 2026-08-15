@@ -353,14 +353,10 @@ func TestAddModuleWorkerViaAdminApi(t *testing.T) {
 	// would throw off the "requests:1" assertion below).
 	workerURL := "http://localhost:" + testPort + "/worker-with-counter.php"
 	var getResp *http.Response
-	for i := 0; i < 20; i++ {
+	require.Eventually(t, func() bool {
 		getResp, err = http.Get(workerURL)
-		if err == nil {
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	require.NoError(t, err)
+		return err == nil
+	}, 1*time.Second, 50*time.Millisecond)
 	defer func() { require.NoError(t, getResp.Body.Close()) }()
 	body, err := io.ReadAll(getResp.Body)
 	require.NoError(t, err)
