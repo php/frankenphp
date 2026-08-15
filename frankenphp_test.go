@@ -100,8 +100,10 @@ func runTest(t *testing.T, test func(func(http.ResponseWriter, *http.Request), *
 	wg.Add(opts.nbParallelRequests)
 	for i := 0; i < opts.nbParallelRequests; i++ {
 		go func(i int) {
+			// Deferred so a t.Skip/t.Fatalf from a non-main goroutine (which
+			// triggers runtime.Goexit) still decrements the WaitGroup.
+			defer wg.Done()
 			test(handler, ts, i)
-			wg.Done()
 		}(i)
 	}
 
