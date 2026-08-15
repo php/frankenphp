@@ -3,7 +3,13 @@
  * Provides a small, self-contained toolkit for moving zval trees across
  * thread boundaries. The supported shape is a whitelist: scalars, arrays,
  * and enums. Everything else is rejected by persistent_zval_validate so
- * callers can fail fast before allocating.
+ * callers can fail fast before allocating. Nesting is also capped there
+ * (PERSISTENT_ZVAL_MAX_DEPTH): persist/free/to_request below recurse once
+ * per nesting level with no guard of their own, so every caller MUST run
+ * persistent_zval_validate first, on the full tree, before calling any of
+ * them - it's the only thing standing between attacker-controlled nesting
+ * depth and a native stack overflow (crashes the whole process, not just
+ * one request).
  *
  * Fast paths:
  *   - Interned strings: shared memory, no copy.
@@ -16,6 +22,14 @@
 
 #include <Zend/zend_enum.h>
 
+/* Conservative on purpose: comfortably below the depth that overflows the
+ * native stack even under sanitizer builds (larger per-frame redzones), far
+ * above any depth a legitimate config/state value would ever need. Matches
+ * the same order of magnitude as PHP's own default nesting caps (e.g.
+ * json_decode()'s default $depth of 512, Xdebug's max_nesting_level of
+ * 256). */
+#define PERSISTENT_ZVAL_MAX_DEPTH 256
+
 /* Enum payload stored in persistent memory: the class name + case name
  * are kept as persistent zend_strings and the case object is re-resolved
  * via zend_lookup_class + zend_enum_get_case_cstr on each read. */
@@ -26,8 +40,13 @@ typedef struct {
 
 /* Whitelist check: only scalars, arrays of allowed values, and enum
  * instances pass. Returns false for objects other than enums, resources,
- * closures, references, etc. */
-static bool persistent_zval_validate(zval *z) {
+ * closures, references, etc. Also enforces PERSISTENT_ZVAL_MAX_DEPTH,
+ * bailing out before recursing further once hit - see the file header for
+ * why this is the only place that's safe to do so. */
+static bool persistent_zval_validate_depth(zval *z, int depth) {
+  if (depth > PERSISTENT_ZVAL_MAX_DEPTH) {
+    return false;
+  }
   switch (Z_TYPE_P(z)) {
   case IS_NULL:
   case IS_FALSE:
@@ -47,7 +66,7 @@ static bool persistent_zval_validate(zval *z) {
       return true;
     zval *val;
     ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(z), val) {
-      if (!persistent_zval_validate(val))
+      if (!persistent_zval_validate_depth(val, depth + 1))
         return false;
     }
     ZEND_HASH_FOREACH_END();
@@ -56,6 +75,10 @@ static bool persistent_zval_validate(zval *z) {
   default:
     return false;
   }
+}
+
+static bool persistent_zval_validate(zval *z) {
+  return persistent_zval_validate_depth(z, 0);
 }
 
 /* Deep-copy a zval from request memory into persistent (pemalloc) memory.

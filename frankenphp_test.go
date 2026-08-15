@@ -1218,6 +1218,35 @@ func FuzzResponseHeaders(f *testing.F) {
 	})
 }
 
+// FuzzPersistZvalRoundtrip exercises zval.h's persistent_zval_persist/
+// _to_request/_free recursive tree walk: FrankenPHP's own mechanism for
+// carrying values across the request/persistent memory boundary (used by
+// worker state), not php-src itself. Nesting depth and width are
+// fuzzer-controlled, since unbounded native recursion (no depth guard) is
+// the interesting bug class here, not the value shapes themselves.
+func FuzzPersistZvalRoundtrip(f *testing.F) {
+	f.Add(0, 1)
+	f.Add(1, 1)
+	f.Add(10, 2)
+	f.Add(100, 1)
+	f.Add(1000, 1)
+	f.Add(-1, -1)
+
+	f.Fuzz(func(t *testing.T, depth, width int) {
+		runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+			req := httptest.NewRequest("GET", fmt.Sprintf("http://example.com/fuzz-persist-roundtrip.php?depth=%d&width=%d", depth, width), nil)
+			body, resp := testRequest(req, handler, t)
+
+			if body == "SKIP" {
+				t.Skip("FRANKENPHP_TEST not set; skipping persistent_zval roundtrip fuzzing")
+			}
+
+			assert.Equal(t, 200, resp.StatusCode)
+			assert.NotContains(t, body, "MISMATCH", "roundtrip changed the value for depth=%d width=%d", depth, width)
+		}, nil)
+	})
+}
+
 func TestSessionHandlerReset_worker(t *testing.T) {
 	runTest(t, func(_ func(http.ResponseWriter, *http.Request), ts *httptest.Server, i int) {
 		// Request 1: Set a custom session handler and start session
