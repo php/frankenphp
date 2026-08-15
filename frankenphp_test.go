@@ -7,6 +7,8 @@ package frankenphp_test
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -1188,6 +1190,31 @@ func FuzzRequest(f *testing.F) {
 			assert.Contains(t, body, fmt.Sprintf("[CONTENT_TYPE] => %s", fuzzedString))
 			assert.Contains(t, body, fmt.Sprintf("[HTTP_FUZZED] => %s", fuzzedString))
 		}, &testOptions{workerScript: "request-headers.php"})
+	})
+}
+
+// FuzzResponseHeaders exercises add_response_header (frankenphp.c), FrankenPHP's
+// own copy of the response header list into a PHP array. The header line is
+// base64-encoded so arbitrary bytes reach it unmangled by HTTP transport.
+func FuzzResponseHeaders(f *testing.F) {
+	f.Add("X-Foo: bar")
+	f.Add("X-Foo:bar")
+	f.Add("X-Foo :  bar  ")
+	f.Add(":no-name")
+	f.Add("no-colon-at-all")
+	f.Add("X-Foo: ")
+	f.Add("")
+	f.Add(strings.Repeat("X-Foo: bar", 1000))
+
+	f.Fuzz(func(t *testing.T, headerLine string) {
+		runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+			encoded := base64.StdEncoding.EncodeToString([]byte(headerLine))
+			req := httptest.NewRequest("GET", "http://example.com/fuzz-response-header.php?h="+url.QueryEscape(encoded), nil)
+			body, resp := testRequest(req, handler, t)
+
+			assert.Equal(t, 200, resp.StatusCode)
+			assert.True(t, json.Valid([]byte(body)), "frankenphp_response_headers() must always return valid JSON, got: %s", body)
+		}, nil)
 	})
 }
 
