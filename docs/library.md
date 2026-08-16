@@ -25,8 +25,8 @@ Several servers can be registered at once, each with its own document root, envi
 
 ```go
 // Registering two servers with separate document roots
-api, _ := frankenphp.NewServer("api", "api/public/", nil, nil, nil)
-admin, _ := frankenphp.NewServer("admin", "admin/public/", nil, nil, nil)
+api, _ := frankenphp.NewServer("api/public/")
+admin, _ := frankenphp.NewServer("admin/public/")
 
 err := frankenphp.Init(
 	frankenphp.WithServer(api),
@@ -42,7 +42,7 @@ Requests served through `api.ServeHTTP()` only see the configuration (and, see b
 
 ```go
 // Scoping workers to a server
-server, _ := frankenphp.NewServer("", "public/", nil, nil, nil)
+server, _ := frankenphp.NewServer("public/")
 
 err := frankenphp.Init(
 	frankenphp.WithServer(server),
