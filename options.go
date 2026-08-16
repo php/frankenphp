@@ -17,6 +17,9 @@ type Option func(h *opt) error
 // WorkerOption instances allow configuring FrankenPHP worker.
 type WorkerOption func(*workerOpt) error
 
+// ServerOption instances allow configuring a server.
+type ServerOption func(*Server) error
+
 // opt contains the available options.
 //
 // If you change this, also update the Caddy module and the documentation.
@@ -295,6 +298,47 @@ func withExtensionWorkers(w *extensionWorkers) WorkerOption {
 func WithServer(s *Server) Option {
 	return func(o *opt) error {
 		o.servers = append(o.servers, s)
+
+		return nil
+	}
+}
+
+// WithServerName sets the name of the server.
+func WithServerName(name string) ServerOption {
+	return func(s *Server) error {
+		s.name = name
+		s.configuredName = name
+
+		return nil
+	}
+}
+
+// WithServerLogger sets the logger for the server.
+func WithServerLogger(l *slog.Logger) ServerOption {
+	return func(s *Server) error {
+		s.logger = l
+
+		return nil
+	}
+}
+
+// WIthServerSplitPath sets the split path for the server.
+func WithServerSplitPath(splitPath []string) ServerOption {
+	return func(s *Server) error {
+		if err := normalizeSplitPath(splitPath); err != nil {
+			return err
+		}
+
+		s.splitPath = splitPath
+
+		return nil
+	}
+}
+
+// WithServerEnv sets the env for the server.
+func WithServerEnv(env map[string]string) ServerOption {
+	return func(s *Server) error {
+		s.env = PrepareEnv(env)
 
 		return nil
 	}

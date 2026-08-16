@@ -92,28 +92,25 @@ func (s *Server) resetWorkers() {
 // name is a human-readable identifier used to attribute workers, metrics
 // and logs to this server; when empty, it defaults to the index the
 // server gets at registration time.
-func NewServer(name, root string, splitPath []string, env map[string]string, logger *slog.Logger) (*Server, error) {
+func NewServer(root string, options ...ServerOption) (*Server, error) {
 	root, err := fastabs.FastAbs(root)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := normalizeSplitPath(splitPath); err != nil {
-		return nil, err
-	}
-
-	if logger == nil {
-		logger = globalLogger
-	}
-
 	s := &Server{
-		configuredName: name,
-		name:           name,
-		root:           root,
-		splitPath:      splitPath,
-		env:            PrepareEnv(env),
-		workersByPath:  make(map[string]*worker),
-		logger:         logger,
+		root:          root,
+		workersByPath: make(map[string]*worker),
+	}
+
+	for _, option := range options {
+		if err := option(s); err != nil {
+			return nil, err
+		}
+	}
+
+	if s.logger == nil {
+		s.logger = globalLogger
 	}
 
 	if len(s.splitPath) == 0 {

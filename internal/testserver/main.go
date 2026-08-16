@@ -13,7 +13,7 @@ func main() {
 		root = "public"
 	}
 
-	server, err := frankenphp.NewServer("my server", root, nil, nil, nil)
+	server, err := frankenphp.NewServer(root)
 
 	if err != nil {
 		panic(err)
