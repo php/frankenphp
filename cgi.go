@@ -339,13 +339,21 @@ func sanitizedPathJoin(root, reqPath string) string {
 		root = "."
 	}
 
-	// reqPath is an HTTP request path: always "/"-separated, regardless of
-	// host OS. It must be cleaned with the "path" package (POSIX-only),
-	// not "path/filepath": on Windows, filepath.Clean does not treat a
+	// reqPath is an HTTP request path: nominally "/"-separated, regardless
+	// of host OS, but an attacker can smuggle literal "\" bytes in it too
+	// (e.g. via %5C). Normalize those to "/" before cleaning: filepath.Join
+	// below runs with the host's native separator semantics, and on
+	// Windows it treats "\" as a separator, so any ".." hidden behind a
+	// backslash must already be collapsed here or it survives path.Clean
+	// (POSIX-only, "\" is just an ordinary byte to it) and escapes root
+	// once filepath.Join resolves it.
+	//
+	// It must be cleaned with the "path" package (POSIX-only), not
+	// "path/filepath": on Windows, filepath.Clean does not treat a
 	// driveless "/"-rooted path as absolute, so a leading ".." isn't
 	// collapsed at the root the way it is on POSIX - it survives into the
-	// joined path instead, escaping root.
-	cleanedReqPath := filepath.FromSlash(path.Clean("/" + reqPath))
+	// joined path instead, also escaping root.
+	cleanedReqPath := filepath.FromSlash(path.Clean("/" + strings.ReplaceAll(reqPath, `\`, "/")))
 
 	joined := filepath.Join(root, cleanedReqPath)
 
