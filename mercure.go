@@ -18,7 +18,7 @@ type mercureContext struct {
 }
 
 //export go_mercure_publish
-func go_mercure_publish(threadIndex C.uintptr_t, topics *C.struct__zval_struct, data *C.zend_string, private bool, id, typ *C.zend_string, retry uint64) (generatedID *C.zend_string, error C.short) {
+func go_mercure_publish(threadIndex C.uintptr_t, topics *C.struct__zval_struct, data *C.zend_string, private bool, id, typ *C.zend_string, retry uint64) (generatedID *C.zend_string, errorMessage *C.char, status C.frankenphp_mercure_status) {
 	thread := phpThreads[threadIndex]
 	ctx := thread.context()
 	fc := thread.frankenPHPContext()
@@ -28,7 +28,7 @@ func go_mercure_publish(threadIndex C.uintptr_t, topics *C.struct__zval_struct, 
 			fc.logger.LogAttrs(ctx, slog.LevelError, "No Mercure hub configured")
 		}
 
-		return nil, 1
+		return nil, nil, C.FRANKENPHP_MERCURE_NO_HUB
 	}
 
 	u := &mercure.Update{
@@ -49,11 +49,7 @@ func go_mercure_publish(threadIndex C.uintptr_t, topics *C.struct__zval_struct, 
 	case C.IS_ARRAY:
 		ts, err := GoPackedArray[string](unsafe.Pointer(*(**C.zend_array)(unsafe.Pointer(&topics.value[0]))))
 		if err != nil {
-			if fc.logger.Enabled(ctx, slog.LevelError) {
-				fc.logger.LogAttrs(ctx, slog.LevelError, "invalid topics type", slog.Any("error", err))
-			}
-
-			return nil, 1
+			return nil, C.CString(err.Error()), C.FRANKENPHP_MERCURE_INVALID_UPDATE
 		}
 
 		u.Topics = ts
@@ -62,15 +58,21 @@ func go_mercure_publish(threadIndex C.uintptr_t, topics *C.struct__zval_struct, 
 		panic("invalid topics type")
 	}
 
+	// The protocol constrains topics, id, type and data: report the violations
+	// as argument errors instead of as a failed publication.
+	if err := u.Validate(); err != nil {
+		return nil, C.CString(err.Error()), C.FRANKENPHP_MERCURE_INVALID_UPDATE
+	}
+
 	if err := fc.mercureHub.Publish(ctx, u); err != nil {
 		if fc.logger.Enabled(ctx, slog.LevelError) {
 			fc.logger.LogAttrs(ctx, slog.LevelError, "Unable to publish Mercure update", slog.Any("error", err))
 		}
 
-		return nil, 2
+		return nil, C.CString(err.Error()), C.FRANKENPHP_MERCURE_PUBLISH_FAILED
 	}
 
-	return (*C.zend_string)(PHPString(u.ID, false)), 0
+	return (*C.zend_string)(PHPString(u.ID, false)), nil, C.FRANKENPHP_MERCURE_OK
 }
 
 func (w *worker) configureMercure(o *workerOpt) {

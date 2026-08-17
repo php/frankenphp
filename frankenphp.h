@@ -201,6 +201,16 @@ size_t frankenphp_get_thread_memory_usage(uintptr_t thread_index);
 void frankenphp_force_kill_thread(force_kill_slot slot);
 void frankenphp_release_thread_for_kill(force_kill_slot slot);
 
+/* Outcome of go_mercure_publish(). INVALID_UPDATE and PUBLISH_FAILED carry a
+ * malloc'ed message the caller must free. */
+typedef enum {
+  FRANKENPHP_MERCURE_OK = 0,
+  FRANKENPHP_MERCURE_NO_HUB = 1,
+  FRANKENPHP_MERCURE_INVALID_UPDATE = 2,
+  FRANKENPHP_MERCURE_PUBLISH_FAILED = 3,
+  FRANKENPHP_MERCURE_UNSUPPORTED = 4,
+} frankenphp_mercure_status;
+
 void register_extensions(zend_module_entry **m, int len);
 
 #endif
