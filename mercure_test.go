@@ -28,5 +28,8 @@ func testMercurePublish(t *testing.T, opts *testOptions) {
 		body, _ := testGet(fmt.Sprintf("https://example.com/mercure-publish.php?i=%d", i), handler, t)
 		assert.Contains(t, body, "update 1: ")
 		assert.Contains(t, body, "update 2: ")
+		// Updates rejected by the protocol are reported as argument errors.
+		assert.Contains(t, body, `error 1: "/.well-known/mercure/subscriptions"`)
+		assert.Contains(t, body, "error 2: mercure_publish(): Argument #6 ($retry) must be greater than or equal to 0")
 	}, opts)
 }

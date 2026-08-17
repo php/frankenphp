@@ -45,7 +45,7 @@ function frankenphp_response_headers(): array|bool {}
 function apache_response_headers(): array|bool {}
 
 /**
- * @param string|string[] $topics
+ * @param string|string[] $topics The first topic is the canonical one, the others are alternate topics
  */
 function mercure_publish(string|array $topics, string $data = '', bool $private = false, ?string $id = null, ?string $type = null, ?int $retry = null): string {}
 
