@@ -1,7 +1,6 @@
 package frankenphp
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -38,15 +37,15 @@ func TestRequestsQueuedBeforeThreadsAreReadyAreHandedOver(t *testing.T) {
 		fc := &frankenPHPContext{done: make(chan any)}
 		errChan := make(chan error, 1)
 		go func() {
-			errChan <- handleRequestWithRegularPHPThreads(contextHolder{ctx: context.Background(), frankenPHPContext: fc})
+			errChan <- handleRequestWithRegularPHPThreads(fc)
 		}()
 		errChans[i] = errChan
 	}
 
 	for i := 0; i < requests; i++ {
 		select {
-		case ch := <-regularRequestChan:
-			ch.frankenPHPContext.closeContext()
+		case fc := <-regularRequestChan:
+			fc.closeContext()
 		case <-time.After(5 * time.Second):
 			t.Fatalf("only %d of %d queued requests were handed over", i, requests)
 		}
