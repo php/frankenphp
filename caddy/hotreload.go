@@ -49,7 +49,9 @@ func (f *FrankenPHPModule) configureHotReload(app *FrankenPHPApp) error {
 	}
 
 	app.opts = append(app.opts, frankenphp.WithHotReload(f.HotReload.Topic, f.mercureHub, f.HotReload.Watch))
-	f.preparedEnv["FRANKENPHP_HOT_RELOAD\x00"] = "/.well-known/mercure?topic=" + url.QueryEscape(f.HotReload.Topic)
+	// "match" is the exact topic matcher of the Mercure protocol, the "topic"
+	// parameter it replaces is only honored in compatibility mode.
+	f.preparedEnv["FRANKENPHP_HOT_RELOAD\x00"] = "/.well-known/mercure?match=" + url.QueryEscape(f.HotReload.Topic)
 
 	return nil
 }

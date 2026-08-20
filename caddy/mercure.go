@@ -48,16 +48,32 @@ func createMercureRoute() (caddyhttp.Route, error) {
 		return caddyhttp.Route{}, errors.New(`the "MERCURE_SUBSCRIBER_JWT_KEY" environment variable must be set to use the Mercure.rocks hub`)
 	}
 
+	// The protocol requires access tokens to name their issuer, so the keys are
+	// bound to one trusted issuer instead of being set globally.
+	issuer := os.Getenv("MERCURE_TRUSTED_ISSUERS")
+	if issuer == "" {
+		issuer = "https://localhost"
+	}
+
 	mercureRoute := caddyhttp.Route{
 		HandlersRaw: []json.RawMessage{caddyconfig.JSONModuleObject(
 			mercureCaddy.Mercure{
-				PublisherJWT: mercureCaddy.JWTConfig{
-					Alg: os.Getenv("MERCURE_PUBLISHER_JWT_ALG"),
-					Key: mercurePublisherJwtKey,
-				},
-				SubscriberJWT: mercureCaddy.JWTConfig{
-					Alg: os.Getenv("MERCURE_SUBSCRIBER_JWT_ALG"),
-					Key: mercureSubscriberJwtKey,
+				Issuers: []mercureCaddy.IssuerConfig{
+					{
+						Identifier: issuer,
+						Publisher: mercureCaddy.VerifierConfig{
+							JWT: mercureCaddy.JWTConfig{
+								Alg: os.Getenv("MERCURE_PUBLISHER_JWT_ALG"),
+								Key: mercurePublisherJwtKey,
+							},
+						},
+						Subscriber: mercureCaddy.VerifierConfig{
+							JWT: mercureCaddy.JWTConfig{
+								Alg: os.Getenv("MERCURE_SUBSCRIBER_JWT_ALG"),
+								Key: mercureSubscriberJwtKey,
+							},
+						},
+					},
 				},
 			},
 			"handler",

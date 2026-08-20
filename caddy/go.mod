@@ -11,8 +11,8 @@ require (
 	github.com/caddyserver/certmagic v0.25.4
 	github.com/dunglas/caddy-cbrotli v1.0.1
 	github.com/dunglas/frankenphp v1.12.7
-	github.com/dunglas/mercure v0.24.2
-	github.com/dunglas/mercure/caddy v0.24.2
+	github.com/dunglas/mercure v1.0.0-alpha.3
+	github.com/dunglas/mercure/caddy v1.0.0-alpha.3
 	github.com/dunglas/vulcain/caddy v1.4.2
 	github.com/prometheus/client_golang v1.24.1
 	github.com/spf13/cobra v1.10.2
@@ -60,6 +60,7 @@ require (
 	github.com/dgraph-io/ristretto v0.2.0 // indirect
 	github.com/dgryski/go-farm v0.0.0-20240924180020-3414d57e47da // indirect
 	github.com/dlclark/regexp2/v2 v2.1.1 // indirect
+	github.com/dunglas/go-urlpattern v0.0.0-20260716093037-fb05c4998526 // indirect
 	github.com/dunglas/httpsfv v1.1.0 // indirect
 	github.com/dunglas/skipfilter v1.0.0 // indirect
 	github.com/dunglas/vulcain v1.4.2 // indirect
@@ -117,6 +118,7 @@ require (
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/nlnwa/whatwg-url v0.6.2 // indirect
 	github.com/oasdiff/yaml v0.1.0 // indirect
 	github.com/oasdiff/yaml3 v0.0.13 // indirect
 	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58 // indirect
@@ -214,7 +216,7 @@ require (
 	google.golang.org/api v0.283.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
-	google.golang.org/grpc v1.81.1 // indirect
+	google.golang.org/grpc v1.82.1 // indirect
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.6.2 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
