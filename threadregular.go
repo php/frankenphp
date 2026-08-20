@@ -27,7 +27,7 @@ type regularThread struct {
 var (
 	regularThreads       []*phpThread
 	regularThreadMu      = &sync.RWMutex{}
-	regularRequestChan   chan contextHolder
+	regularRequestChan   = make(chan contextHolder)
 	queuedRegularThreads = atomic.Int32{}
 )
 
