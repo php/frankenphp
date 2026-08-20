@@ -319,10 +319,6 @@ func Init(options ...Option) error {
 		return err
 	}
 
-	// reused across reloads so queued requests aren't orphaned on a stale channel
-	if regularRequestChan == nil {
-		regularRequestChan = make(chan *frankenPHPContext)
-	}
 	regularThreads = make([]*phpThread, 0, opt.numThreads-workerThreadCount)
 	for i := 0; i < opt.numThreads-workerThreadCount; i++ {
 		convertToRegularThread(getInactivePHPThread())
