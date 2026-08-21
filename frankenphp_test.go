@@ -576,6 +576,11 @@ func TestException_worker(t *testing.T) {
 	testException(t, &testOptions{workerScript: "exception.php"})
 }
 func testException(t *testing.T, opts *testOptions) {
+	if opts.phpIni == nil {
+		opts.phpIni = map[string]string{}
+	}
+	opts.phpIni["display_errors"] = "1"
+
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
 		body, _ := testGet(fmt.Sprintf("http://example.com/exception.php?i=%d", i), handler, t)
 

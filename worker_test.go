@@ -76,7 +76,7 @@ func TestCannotCallHandleRequestInNonWorkerMode(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 
 		assert.Contains(t, string(body), "<b>Fatal error</b>:  Uncaught RuntimeException: frankenphp_handle_request() called while not in worker mode")
-	}, nil)
+	}, &testOptions{phpIni: map[string]string{"display_errors": "1", "html_errors": "1"}})
 }
 
 func TestWorkerEnv(t *testing.T) {
