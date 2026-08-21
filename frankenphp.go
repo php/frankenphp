@@ -156,11 +156,38 @@ func Config() PHPConfig {
 	}
 }
 
-func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
+func calculateMaxThreads(opt *opt) (numWorkers int, err error) {
 	maxProcs := runtime.GOMAXPROCS(0) * 2
 	maxThreadsFromWorkers := 0
 
+	// background workers reserve their thread budget separately so they
+	// don't count against the HTTP-oriented admission checks below; the
+	// bump is applied on top of the calculated totals at the end
+	reservedThreads := 0
+	defer func() {
+		if err != nil {
+			return
+		}
+		opt.numThreads += reservedThreads
+		if opt.maxThreads > 0 {
+			// in auto mode (maxThreads < 0), the resolved value is floored
+			// to numThreads later, which already includes the reservation
+			opt.maxThreads += reservedThreads
+		}
+		numWorkers += reservedThreads
+	}()
+
 	for i, w := range opt.workers {
+		if w.isBackgroundWorker {
+			if w.num < 1 {
+				return 0, fmt.Errorf("background worker %q must declare num >= 1", w.name)
+			}
+			metrics.TotalWorkers(w.name, w.num)
+			reservedThreads += w.num
+
+			continue
+		}
+
 		if w.num <= 0 {
 			// https://github.com/php/frankenphp/issues/126
 			opt.workers[i].num = maxProcs
