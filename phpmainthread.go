@@ -26,6 +26,16 @@ type phpMainThread struct {
 	maxThreads  int
 	phpIni      map[string]string
 	isRebooting atomic.Bool
+
+	// throttles opcache_reset()-triggered reboots (see go_schedule_opcache_reset):
+	// application code can call opcache_reset() on every request, and each call
+	// would otherwise pause request handling for a full thread pool reboot.
+	// lastOpcacheResetAt is only ever set after a reboot actually happens, and
+	// opcacheResetScheduled coalesces (rather than drops) calls that arrive
+	// while one is already pending or in flight.
+	opcacheResetMu        sync.Mutex
+	lastOpcacheResetAt    time.Time
+	opcacheResetScheduled bool
 }
 
 var (
@@ -36,6 +46,9 @@ var (
 	// timeouts to wait for threads to yield before arming force-kill
 	shutDownGracePeriod = 30 * time.Second
 	rebootGracePeriod   = 6 * time.Second
+
+	// minimum interval between two opcache_reset()-triggered reboots
+	opcacheResetCooldown = 5 * time.Second
 )
 
 // initPHPThreads starts the main PHP thread,

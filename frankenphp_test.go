@@ -199,6 +199,35 @@ func testFinishRequest(t *testing.T, opts *testOptions) {
 	}, opts)
 }
 
+// TestOpcacheResetIsThrottled reproduces https://github.com/php/frankenphp/issues/2553:
+// application code (e.g. some WordPress plugins) can call opcache_reset() on
+// every request, and each call reboots the whole PHP thread pool. Without a
+// cooldown, a burst of concurrent calls reboots the pool once per call,
+// pausing request handling for the whole site on every one of them.
+func TestOpcacheResetIsThrottled(t *testing.T) {
+	var buf fmt.Stringer
+	opts := &testOptions{nbParallelRequests: 1}
+	opts.logger, buf = newTestLogger(t)
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		// Calls spaced out enough that, without a cooldown, each one lands
+		// after the previous reboot already finished (so each would trigger
+		// its own reboot), but still well within the cooldown window.
+		for n := 0; n < 10; n++ {
+			body, _ := testGet("http://example.com/opcache_reset.php", handler, t)
+			assert.Equal(t, "opcache reset done", body)
+			time.Sleep(50 * time.Millisecond)
+		}
+	}, opts)
+
+	require.Eventually(t, func() bool {
+		return strings.Contains(buf.String(), "thread reboot finished")
+	}, 2*time.Second, 10*time.Millisecond, "the throttled reboot should still eventually run")
+
+	count := strings.Count(buf.String(), "rebooting all PHP threads")
+	assert.Equal(t, 1, count, "opcache_reset() calls within the cooldown must be coalesced into a single reboot")
+}
+
 func TestServerVariable_module(t *testing.T) {
 	testServerVariable(t, nil)
 }
