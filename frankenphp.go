@@ -359,6 +359,8 @@ func Init(options ...Option) error {
 		}
 	}
 
+	initPings()
+
 	return nil
 }
 
@@ -380,6 +382,7 @@ func shutdown() {
 		fn()
 	}
 
+	shutdownPings()
 	drainWatchers()
 	drainPHPThreads()
 	unregisterServers()
@@ -629,7 +632,7 @@ func go_sapi_flush(threadIndex C.uintptr_t) bool {
 func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (readBytes C.size_t) {
 	fc := phpThreads[threadIndex].handler.frankenPHPContext()
 
-	if fc.responseWriter == nil {
+	if fc.responseWriter == nil || fc.request == nil {
 		return 0
 	}
 

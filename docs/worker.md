@@ -256,3 +256,46 @@ while (\frankenphp_handle_request($handler)) {
 
 When writing worker scripts, make sure to reset any request-specific state between requests.
 Frameworks like [Symfony](symfony.md) and [Laravel Octane](laravel.md) take care of resetting most state for you, but you may still need to reset your own services. With Symfony, services that hold request-specific state should implement [`Symfony\Contracts\Service\ResetInterface`](https://github.com/symfony/contracts/blob/main/Service/ResetInterface.php) so they're reset by the kernel between requests.
+
+## Pinging
+
+Workers can also be pinged repeatedly with a message.
+
+```caddyfile
+worker /path/to/worker.php {
+    ping 1s "Hello Worker" # send a single ping with message "Hello Worker" each second
+}
+```
+
+In the worker script, the function passed to `frankenphp_handle_request()` will receive the message directly as an argument:
+
+```php
+$handler = function(string $message = "") {
+    echo $message; # "Hello Worker"
+}
+
+while(frankenphp_handle_request($handler)){}
+```
+
+### Ping modes
+
+Available modes for pinging are: "sync", "overlap", "each" and "idle".
+
+```caddyfile
+worker /path/to/worker {
+    ping sync 10s "message" # send a single ping each 10s, wait for completion in-between pings
+    ping overlap 10s "message" # send a single ping each 10s, don't wait for completion
+    ping each 10s "message" # send pings to each active thread every 10s, don't wait for completion
+    ping idle 10s "message" # send pings to each active thread every 10s if the thread has been idle for more than 10s
+}
+```
+
+### Aligned pings
+
+A ping can also be aligned to the start of each interval with the `aligned` keyword (cron-like).
+
+```caddyfile
+worker /path/to/worker {
+    ping overlap 1m aligned "message" # send the ping at the exact start of each minute
+}
+```

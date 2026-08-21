@@ -284,3 +284,96 @@ func TestCreateUniqueWorkerNamesQualifiedByServer(t *testing.T) {
 	// workers without a server keep the numeric postfix behavior
 	require.Equal(t, "queue_2", app.createUniqueWorkerName(wc, ""))
 }
+
+func TestModuleWorkerWithPingConfiguration(t *testing.T) {
+	configWithPing := `
+	{
+		php {
+			worker ../testdata/worker-with-counter.php {
+				ping 60s health
+				ping each 1m aligned message
+				ping overlap 1h aligned message
+				ping idle 3s "HELLO THERE!!!!"
+			}
+		}
+	}`
+
+	d := caddyfile.NewTestDispenser(configWithPing)
+	module := &FrankenPHPModule{}
+
+	err := module.UnmarshalCaddyfile(d)
+	require.NoError(t, err)
+	require.Len(t, module.Workers, 1)
+
+	pings := module.Workers[0].Pings
+	require.Len(t, pings, 4)
+	require.Equal(t, 60*time.Second, pings[0].Interval)
+	require.Equal(t, "health", pings[0].Message)
+	require.False(t, pings[0].Aligned)
+	require.Equal(t, frankenphp.PingModeSynchronous, pings[0].Mode)
+
+	require.Equal(t, time.Minute, pings[1].Interval)
+	require.Equal(t, "message", pings[1].Message)
+	require.True(t, pings[1].Aligned)
+	require.Equal(t, frankenphp.PingModeEach, pings[1].Mode)
+
+	require.Equal(t, time.Hour, pings[2].Interval)
+	require.Equal(t, "message", pings[2].Message)
+	require.True(t, pings[2].Aligned)
+	require.Equal(t, frankenphp.PingModeOverlapping, pings[2].Mode)
+
+	require.Equal(t, "HELLO THERE!!!!", pings[3].Message)
+	require.False(t, pings[3].Aligned)
+	require.Equal(t, frankenphp.PingModeIdle, pings[3].Mode)
+	require.Equal(t, 3*time.Second, pings[3].Interval)
+}
+
+func TestModuleWorkerWithInvalidPingConfiguration(t *testing.T) {
+	tests := []struct {
+		name   string
+		config string
+	}{
+		{
+			name: "missing message",
+			config: `{
+				php {
+					worker {
+						file ../testdata/worker-with-counter.php
+						ping 60s
+					}
+				}
+			}`,
+		},
+		{
+			name: "invalid interval",
+			config: `{
+				php {
+					worker {
+						file ../testdata/worker-with-counter.php
+						ping not-a-duration health
+					}
+				}
+			}`,
+		},
+		{
+			name: "each must come first",
+			config: `{
+				php {
+					worker {
+						file ../testdata/worker-with-counter.php
+						ping 60s health each
+					}
+				}
+			}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := caddyfile.NewTestDispenser(tt.config)
+			module := &FrankenPHPModule{}
+			err := module.UnmarshalCaddyfile(d)
+			require.Error(t, err)
+		})
+	}
+}

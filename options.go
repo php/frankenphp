@@ -50,6 +50,7 @@ type workerOpt struct {
 	requestOptions         []RequestOption
 	watch                  []string
 	matchRequest           func(*http.Request) bool
+	pings                  []*ping
 	maxConsecutiveFailures int
 	extensionWorkers       *extensionWorkers
 	onThreadReady          func(int)
@@ -234,6 +235,20 @@ func WithWorkerMatcher(matcherFunc func(*http.Request) bool) WorkerOption {
 func WithWorkerServerScope(s *Server) WorkerOption {
 	return func(w *workerOpt) error {
 		w.server = s
+
+		return nil
+	}
+}
+
+// WithWorkerPings configures a periodic message sent to the worker via frankenphp_handle_request().
+func WithWorkerPings(mode PingMode, interval time.Duration, message string, aligned bool) WorkerOption {
+	return func(w *workerOpt) error {
+		w.pings = append(w.pings, &ping{
+			interval: interval,
+			message:  message,
+			aligned:  aligned,
+			mode:     mode,
+		})
 
 		return nil
 	}
