@@ -9,6 +9,7 @@ on:
     branches:
       - main
     paths:
+      - "craft.yml"
       - "docker-bake.hcl"
       - ".github/workflows/static.yaml"
       - "**cgo.go"
@@ -37,7 +38,6 @@ permissions:
 
 env:
   IMAGE_NAME: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.version) || startsWith(github.ref, 'refs/tags/')) && 'dunglas/frankenphp' || 'dunglas/frankenphp-dev' }}
-  SPC_OPT_BUILD_ARGS: --debug
   GOTOOLCHAIN: local
 
 jobs:
@@ -142,21 +142,49 @@ jobs:
         uses: docker/bake-action@d3418bd7d0e9324001bca92fa8ba175ea7e6dc9b # v7.3.0
         with:
           pull: true
-          load: ${{ !fromJson(needs.prepare.outputs.push) || matrix.debug || matrix.mimalloc }}
+          load: true
           source: .
           targets: static-builder-musl
           set: |
             ${{ matrix.debug && 'static-builder-musl.args.DEBUG_SYMBOLS=1' || '' }}
             ${{ matrix.mimalloc && 'static-builder-musl.args.MIMALLOC=1' || '' }}
-            *.tags=
+            *.tags=frankenphp-static-builder-musl:ci
             *.platform=${{ matrix.platform }}
             ${{ fromJson(needs.prepare.outputs.push) && '' || format('*.cache-from=type=gha,scope={0}-static-builder-musl{1}{2}', needs.prepare.outputs.ref || github.ref, matrix.debug && '-debug' || '', matrix.mimalloc && '-mimalloc' || '') }}
             ${{ fromJson(needs.prepare.outputs.push) && '' || format('*.cache-from=type=gha,scope=refs/heads/main-static-builder-musl{0}{1}', matrix.debug && '-debug' || '', matrix.mimalloc && '-mimalloc' || '') }}
             ${{ fromJson(needs.prepare.outputs.push) && '' || format('*.cache-to=type=gha,scope={0}-static-builder-musl{1}{2},ignore-error=true', needs.prepare.outputs.ref || github.ref, matrix.debug && '-debug' || '', matrix.mimalloc && '-mimalloc' || '') }}
-            ${{ (fromJson(needs.prepare.outputs.push) && !matrix.debug && !matrix.mimalloc) && format('*.output=type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME) || '' }}
         env:
           SHA: ${{ github.sha }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build FrankenPHP
+        run: |
+          mkdir -p output
+          docker run --rm --platform="${PLATFORM}" --ulimit nofile=8192:8192 -v "${PWD}/output:/output" -e OUTPUT_DIR=/output -e SPC_LOGS_DIR=/output/log -e GITHUB_TOKEN ${DEBUG_SYMBOLS:+-e DEBUG_SYMBOLS} ${MIMALLOC:+-e MIMALLOC} frankenphp-static-builder-musl:ci
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PLATFORM: ${{ matrix.platform }}
+          DEBUG_SYMBOLS: ${{ matrix.debug && '1' || '' }}
+          MIMALLOC: ${{ matrix.mimalloc && '1' || '' }}
+      - name: Upload static-php-cli logs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: static-php-cli-log-musl-${{ steps.prepare.outputs.sanitized_platform }}-${{ github.sha }}
+          path: output/log
+          if-no-files-found: warn
+      - name: Push the builder image
+        id: push
+        if: fromJson(needs.prepare.outputs.push) && !matrix.debug && !matrix.mimalloc
+        uses: docker/bake-action@d3418bd7d0e9324001bca92fa8ba175ea7e6dc9b # v7.3.0
+        with:
+          source: .
+          targets: static-builder-musl
+          set: |
+            *.tags=
+            *.platform=${{ matrix.platform }}
+            *.output=type=image,name=${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+        env:
+          SHA: ${{ github.sha }}
       - # Workaround for https://github.com/actions/runner/pull/2477#issuecomment-1501003600
         name: Export metadata
         if: fromJson(needs.prepare.outputs.push) && !matrix.debug && !matrix.mimalloc
@@ -164,10 +192,10 @@ jobs:
           mkdir -p /tmp/metadata
 
           # shellcheck disable=SC2086
-          digest=$(jq -r '."static-builder-musl"."containerimage.digest"' <<< ${METADATA})
+          digest=$(jq -r '."static-builder-musl"."containerimage.digest"' <<< "${METADATA}")
           touch "/tmp/metadata/${digest#sha256:}"
         env:
-          METADATA: ${{ steps.build.outputs.metadata }}
+          METADATA: ${{ steps.push.outputs.metadata }}
       - name: Upload metadata
         if: fromJson(needs.prepare.outputs.push) && !matrix.debug && !matrix.mimalloc
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -178,16 +206,9 @@ jobs:
           retention-days: 1
       - name: Copy binary
         run: |
-          # shellcheck disable=SC2034
-          # TODO: remove "containerimage.config.digest" fallback once all runners use buildx v0.18+
-          # which replaced it with "containerimage.digest" and "containerimage.descriptor"
-          digest=$(jq -r '."static-builder-musl" | ${{ (fromJson(needs.prepare.outputs.push) && !matrix.debug && !matrix.mimalloc) && '."containerimage.digest"' || '(."containerimage.config.digest" // ."containerimage.digest")' }}' <<< "${METADATA}")
-          docker create --platform="${PLATFORM}" --name static-builder-musl "${{ (fromJson(needs.prepare.outputs.push) && !matrix.debug && !matrix.mimalloc) && '${IMAGE_NAME}@${digest}' || '${digest}' }}"
-          docker cp "static-builder-musl:/go/src/app/dist/${BINARY}" "${BINARY}${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }}"
+          cp "output/${BINARY}" "${BINARY}${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }}"
         env:
-          METADATA: ${{ steps.build.outputs.metadata }}
           BINARY: frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}
-          PLATFORM: ${{ matrix.platform }}
       - name: Upload artifact
         if: ${{ !fromJson(needs.prepare.outputs.push) }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -297,19 +318,45 @@ jobs:
         uses: docker/bake-action@d3418bd7d0e9324001bca92fa8ba175ea7e6dc9b # v7.3.0
         with:
           pull: true
-          load: ${{ !fromJson(needs.prepare.outputs.push) }}
+          load: true
+          source: .
+          targets: static-builder-gnu
+          set: |
+            *.tags=frankenphp-static-builder-gnu:ci
+            *.platform=${{ matrix.platform }}
+            ${{ fromJson(needs.prepare.outputs.push) && '' || format('*.cache-from=type=gha,scope={0}-static-builder-gnu', needs.prepare.outputs.ref || github.ref) }}
+            ${{ fromJson(needs.prepare.outputs.push) && '' || '*.cache-from=type=gha,scope=refs/heads/main-static-builder-gnu' }}
+            ${{ fromJson(needs.prepare.outputs.push) && '' || format('*.cache-to=type=gha,scope={0}-static-builder-gnu,ignore-error=true', needs.prepare.outputs.ref || github.ref) }}
+        env:
+          SHA: ${{ github.sha }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build FrankenPHP
+        run: |
+          mkdir -p output
+          docker run --rm --platform="${PLATFORM}" --ulimit nofile=8192:8192 -v "${PWD}/output:/output" -e OUTPUT_DIR=/output -e SPC_LOGS_DIR=/output/log -e GITHUB_TOKEN frankenphp-static-builder-gnu:ci
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PLATFORM: ${{ matrix.platform }}
+      - name: Upload static-php-cli logs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: static-php-cli-log-gnu-${{ steps.prepare.outputs.sanitized_platform }}-${{ github.sha }}
+          path: output/log
+          if-no-files-found: warn
+      - name: Push the builder image
+        id: push
+        if: fromJson(needs.prepare.outputs.push)
+        uses: docker/bake-action@d3418bd7d0e9324001bca92fa8ba175ea7e6dc9b # v7.3.0
+        with:
           source: .
           targets: static-builder-gnu
           set: |
             *.tags=
             *.platform=${{ matrix.platform }}
-            ${{ fromJson(needs.prepare.outputs.push) && '' || format('*.cache-from=type=gha,scope={0}-static-builder-gnu', needs.prepare.outputs.ref || github.ref) }}
-            ${{ fromJson(needs.prepare.outputs.push) && '' || '*.cache-from=type=gha,scope=refs/heads/main-static-builder-gnu' }}
-            ${{ fromJson(needs.prepare.outputs.push) && '' || format('*.cache-to=type=gha,scope={0}-static-builder-gnu,ignore-error=true', needs.prepare.outputs.ref || github.ref) }}
-            ${{ fromJson(needs.prepare.outputs.push) && format('*.output=type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME) || '' }}
+            *.output=type=image,name=${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
         env:
           SHA: ${{ github.sha }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - # Workaround for https://github.com/actions/runner/pull/2477#issuecomment-1501003600
         name: Export metadata
         if: fromJson(needs.prepare.outputs.push)
@@ -317,10 +364,10 @@ jobs:
           mkdir -p /tmp/metadata-gnu
 
           # shellcheck disable=SC2086
-          digest=$(jq -r '."static-builder-gnu"."containerimage.digest"' <<< ${METADATA})
+          digest=$(jq -r '."static-builder-gnu"."containerimage.digest"' <<< "${METADATA}")
           touch "/tmp/metadata-gnu/${digest#sha256:}"
         env:
-          METADATA: ${{ steps.build.outputs.metadata }}
+          METADATA: ${{ steps.push.outputs.metadata }}
       - name: Upload metadata
         if: fromJson(needs.prepare.outputs.push)
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -331,22 +378,11 @@ jobs:
           retention-days: 1
       - name: Copy all frankenphp* files
         run: |
-          # shellcheck disable=SC2034
-          # TODO: remove "containerimage.config.digest" fallback once all runners use buildx v0.18+
-          # which replaced it with "containerimage.digest" and "containerimage.descriptor"
-          digest=$(jq -r '."static-builder-gnu" | ${{ fromJson(needs.prepare.outputs.push) && '."containerimage.digest"' || '(."containerimage.config.digest" // ."containerimage.digest")' }}' <<< "${METADATA}")
-          container_id=$(docker create --platform="${PLATFORM}" "${{ fromJson(needs.prepare.outputs.push) && '${IMAGE_NAME}@${digest}' || '${digest}' }}")
           mkdir -p gh-output
-          cd gh-output
-          for file in $(docker run --rm "${{ fromJson(needs.prepare.outputs.push) && '${IMAGE_NAME}@${digest}' || '${digest}' }}" sh -c "ls /go/src/app/dist | grep '^frankenphp'"); do
-            docker cp "${container_id}:/go/src/app/dist/${file}" "./${file}"
-          done
-          docker rm "${container_id}"
-          mv "${BINARY}" "${BINARY}-gnu"
+          cp output/frankenphp* gh-output/
+          mv "gh-output/${BINARY}" "gh-output/${BINARY}-gnu"
         env:
-          METADATA: ${{ steps.build.outputs.metadata }}
           BINARY: frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}
-          PLATFORM: ${{ matrix.platform }}
       - name: Upload artifact
         if: ${{ !fromJson(needs.prepare.outputs.push) }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -468,7 +504,7 @@ jobs:
         if: ${{ failure() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          path: dist/static-php-cli/log
+          path: dist/log
           name: static-php-cli-log-${{ matrix.platform }}-${{ github.sha }}
       - if: needs.prepare.outputs.ref || github.ref_type == 'tag'
         uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
