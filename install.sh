@@ -111,9 +111,17 @@ Linux*)
 		;;
 	esac
 
-	if getconf GNU_LIBC_VERSION >/dev/null 2>&1; then
-		THE_ARCH_BIN="${THE_ARCH_BIN}-gnu"
-		GNU=" (glibc)"
+	# The glibc binaries need glibc 2.28 or later (RHEL 8, Debian 10, Ubuntu 18.10).
+	# Older systems get the fully static musl binary instead, which runs anywhere.
+	if libc_version=$(getconf GNU_LIBC_VERSION 2>/dev/null); then
+		libc_version=${libc_version##* }
+		libc_major=${libc_version%%.*}
+		libc_minor=${libc_version#*.}
+		libc_minor=${libc_minor%%.*}
+		if [ "${libc_major}" -gt 2 ] || { [ "${libc_major}" -eq 2 ] && [ "${libc_minor}" -ge 28 ]; }; then
+			THE_ARCH_BIN="${THE_ARCH_BIN}-gnu"
+			GNU=" (glibc)"
+		fi
 	fi
 	;;
 Darwin*)
