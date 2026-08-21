@@ -286,7 +286,7 @@ worker /path/to/worker {
     ping sync 10s "message" # send a single ping each 10s, wait for completion in-between pings
     ping overlap 10s "message" # send a single ping each 10s, don't wait for completion
     ping each 10s "message" # send pings to each active thread every 10s, don't wait for completion
-    ping idle 10s "message" # send pings to each active thread every 10s if the thread has been idle for more than 10s
+    ping idle 10s "message" # send pings to each active thread that has been idle for more than 10s (worst case staleness up to 33% higher due to polling)
 }
 ```
 
