@@ -18,6 +18,17 @@ variable "BASE_FINGERPRINT" {
     default = ""
 }
 
+# JSON map of "<php-version>-<os>" (e.g. "8.4.23-trixie") to the fingerprint of this variant's base images
+variable "BASE_FINGERPRINTS" {
+    default = "{}"
+}
+
+# RFC 3339 date used for the org.opencontainers.image.created label, defaults to the build time.
+# Set it to the commit date to keep image digests reproducible.
+variable "CREATED" {
+    default = ""
+}
+
 variable "SPC_OPT_BUILD_ARGS" {
     default = ""
 }
@@ -120,12 +131,19 @@ target "default" {
             VERSION == "dev" ? [] : [for v in semver(VERSION) : tag(v, os, pv, tgt)]
         ])
     ]))
-    labels = {
-        "org.opencontainers.image.created" = "${timestamp()}"
-        "org.opencontainers.image.version" = VERSION
-        "org.opencontainers.image.revision" = SHA
-        "dev.frankenphp.base.fingerprint" = BASE_FINGERPRINT
-    }
+    labels = merge(
+        {
+            "org.opencontainers.image.created" = CREATED != "" ? CREATED : timestamp()
+            "org.opencontainers.image.version" = VERSION
+            "org.opencontainers.image.revision" = SHA
+        },
+        # The base image fingerprint is only stored on builder images: both targets are always
+        # built and pushed together, and keeping it out of runner images makes their digests
+        # depend on their actual content only (a fingerprint change alone won't move them)
+        tgt == "builder" ? {
+            "dev.frankenphp.base.fingerprint" = contains(keys(jsondecode(BASE_FINGERPRINTS)), "${php-version}-${os}") ? jsondecode(BASE_FINGERPRINTS)["${php-version}-${os}"] : BASE_FINGERPRINT
+        } : {}
+    )
     args = {
         FRANKENPHP_VERSION = VERSION
     }
@@ -148,7 +166,7 @@ target "static-builder-musl" {
         VERSION == "dev" ? [] : [for v in semver(VERSION) : "${IMAGE_NAME}:static-builder-musl-${v}"]
     ]))
     labels = {
-        "org.opencontainers.image.created" = "${timestamp()}"
+        "org.opencontainers.image.created" = CREATED != "" ? CREATED : timestamp()
         "org.opencontainers.image.version" = VERSION
         "org.opencontainers.image.revision" = SHA
         "dev.frankenphp.base.fingerprint" = BASE_FINGERPRINT
@@ -174,7 +192,7 @@ target "static-builder-gnu" {
         VERSION == "dev" ? [] : [for v in semver(VERSION) : "${IMAGE_NAME}:static-builder-gnu-${v}"]
     ]))
     labels = {
-        "org.opencontainers.image.created" = "${timestamp()}"
+        "org.opencontainers.image.created" = CREATED != "" ? CREATED : timestamp()
         "org.opencontainers.image.version" = VERSION
         "org.opencontainers.image.revision" = SHA
         "dev.frankenphp.base.fingerprint" = BASE_FINGERPRINT

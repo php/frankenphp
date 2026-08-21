@@ -176,6 +176,24 @@ func (mainThread *phpMainThread) rebootAllThreads() bool {
 				slog.String("timeout", rebootGracePeriod.String()),
 			)
 			thread.sendKillSignal()
+			// This wait is intentionally unbounded. force_kill_thread only
+			// interrupts the Zend VM at the next opcode boundary or wakes a
+			// real blocking syscall via EINTR (see frankenphp_force_kill_thread);
+			// a thread parked in a blocking Go/cgo call (e.g. go_ub_write to a
+			// stalled client) can't be reached by either and may never yield.
+			// It's tempting to bound this wait and give up on the thread
+			// instead of blocking the whole reboot forever, but that's unsafe:
+			// php_main() in frankenphp.c runs this same teardown on every
+			// reboot, not just final shutdown, and calls tsrm_shutdown() as
+			// soon as mainThread.state becomes Rebooting. tsrm_shutdown()
+			// requires every PHP thread to have already exited - giving up on
+			// one while its OS thread is still alive and registered in TSRM
+			// tears down global engine state out from under a thread that's
+			// still using it, a use-after-free confirmed by CI when this was
+			// tried (see the discussion on php/frankenphp#2573). The safe
+			// mitigations are reducing how often a thread ever gets stuck like
+			// this in the first place (see WithResponseWriteTimeout and the
+			// opcache_reset throttle), not recovering from it after the fact.
 			thread.state.WaitFor(state.YieldingForReboot)
 		})
 	}

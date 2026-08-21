@@ -112,6 +112,18 @@ func TestWorkerGetOpt(t *testing.T) {
 	assert.NotRegexp(t, buf.String(), "exit_status=[1-9]")
 }
 
+func TestWorkerCrashIsLoggedAboveDebugLevel(t *testing.T) {
+	logger, buf := newTestLogger(t)
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		req := httptest.NewRequest("GET", "http://example.com/crashing-worker.php", nil)
+		w := httptest.NewRecorder()
+		handler(w, req)
+	}, &testOptions{logger: logger, workerScript: "crashing-worker.php", nbWorkers: 1, nbParallelRequests: 4})
+
+	assert.Regexp(t, `level=WARN msg="unexpected termination, restarting" worker=\S+ thread=\d+ exit_status=1`, buf.String())
+}
+
 func ExampleServeHTTP_workers() {
 	if err := frankenphp.Init(
 		frankenphp.WithWorkers("worker1", "worker1.php", 4,

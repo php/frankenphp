@@ -23,9 +23,9 @@ const (
 )
 
 func init() {
-	caddy.RegisterModule(FrankenPHPApp{})
-	caddy.RegisterModule(FrankenPHPModule{})
-	caddy.RegisterModule(FrankenPHPAdmin{})
+	caddy.RegisterModule(&FrankenPHPApp{})
+	caddy.RegisterModule(&FrankenPHPModule{})
+	caddy.RegisterModule(&FrankenPHPAdmin{})
 
 	// Report Caddy version in phpinfo()
 	simpleVersion, fullVersion := caddy.Version()
