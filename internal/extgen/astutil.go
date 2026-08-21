@@ -33,6 +33,24 @@ func extractNodeSource(src []byte, fset *token.FileSet, node ast.Node) string {
 	return string(src[start:end])
 }
 
+// flattenParamTypes expands a parameter list into one entry per parameter.
+// A single ast.Field can declare several parameters at once ("func f(a, b int)"),
+// so the field list length is not the parameter count.
+func flattenParamTypes(params *ast.FieldList) []ast.Expr {
+	if params == nil {
+		return nil
+	}
+
+	var types []ast.Expr
+	for _, field := range params.List {
+		for range max(len(field.Names), 1) {
+			types = append(types, field.Type)
+		}
+	}
+
+	return types
+}
+
 // checkOrphanDirectives returns an error for the first comment that matches re
 // but whose source line was not consumed by a declaration.
 func checkOrphanDirectives(file *ast.File, fset *token.FileSet, re *regexp.Regexp, consumed map[int]bool, directiveLabel string) error {
