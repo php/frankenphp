@@ -46,6 +46,28 @@ func TestExecuteCLICode(t *testing.T) {
 	assert.Equal(t, stdoutStderrStr, `Hello World`)
 }
 
+// The CLI must print phpinfo() as plain text, like the CLI SAPI does.
+func TestExecuteCLICodePHPInfoAsText(t *testing.T) {
+	if _, err := os.Stat("internal/testcli/testcli"); err != nil {
+		t.Skip("internal/testcli/testcli has not been compiled, run `cd internal/testcli/ && go build`")
+	}
+
+	cmd := exec.Command("internal/testcli/testcli", "-r", "phpinfo();")
+	stdoutStderr, err := cmd.CombinedOutput()
+	assert.NoError(t, err)
+
+	stdoutStderrStr := string(stdoutStderr)
+
+	assert.Contains(t, stdoutStderrStr, "PHP Version => ")
+	assert.Contains(t, stdoutStderrStr, "frankenphp => ")
+	assert.Contains(t, stdoutStderrStr, "go => go")
+	assert.Contains(t, stdoutStderrStr, "Go modules")
+	assert.Contains(t, stdoutStderrStr, "Module => Version")
+	assert.NotContains(t, stdoutStderrStr, "<!DOCTYPE")
+	assert.NotContains(t, stdoutStderrStr, "<table>")
+	assert.NotContains(t, stdoutStderrStr, "<details>")
+}
+
 // `-i` (and any other invocation without a script) is only supported since PHP
 // 8.6, where the real CLI SAPI is reused. older versions must fail cleanly.
 func TestExecuteCLIPHPInfo(t *testing.T) {

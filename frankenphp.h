@@ -47,6 +47,14 @@ typedef struct {
 #define STRINGIFY(x) #x
 #define TOSTRING(x) STRINGIFY(x)
 
+/* phpinfo entries from Go - null-terminated array of key, value, key, value,
+ * ... */
+extern const char **frankenphp_phpinfo_entries;
+
+/* Go modules linked into the binary, same layout, displayed in a section
+ * collapsed by default */
+extern const char **frankenphp_go_modules;
+
 typedef struct go_string {
   size_t len;
   char *data;

@@ -9,6 +9,7 @@ import "unsafe"
 func ExecuteScriptCLI(script string, args []string) int {
 	// Ensure extensions are registered before CLI execution
 	registerExtensions()
+	initPHPInfoEntries()
 
 	cScript := C.CString(script)
 	defer C.free(unsafe.Pointer(cScript))

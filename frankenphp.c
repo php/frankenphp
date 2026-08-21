@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <ext/spl/spl_exceptions.h>
 #include <ext/standard/head.h>
+#include <ext/standard/info.h>
 #ifdef HAVE_PHP_SESSION
 #include <ext/session/php_session.h>
 #endif
@@ -112,6 +113,9 @@ frankenphp_config frankenphp_get_config() {
 #endif
   };
 }
+
+const char **frankenphp_phpinfo_entries = NULL;
+const char **frankenphp_go_modules = NULL;
 
 bool should_filter_var = 0;
 bool original_user_abort_setting = 0;
@@ -1115,6 +1119,45 @@ PHP_MINIT_FUNCTION(frankenphp) {
   return SUCCESS;
 }
 
+static void frankenphp_print_info_rows(const char **entries) {
+  for (int i = 0; entries[i] != NULL; i += 2) {
+    php_info_print_table_row(2, entries[i], entries[i + 1]);
+  }
+}
+
+PHP_MINFO_FUNCTION(frankenphp) {
+  php_info_print_table_start();
+  php_info_print_table_row(2, "frankenphp", TOSTRING(FRANKENPHP_VERSION));
+  if (frankenphp_phpinfo_entries) {
+    frankenphp_print_info_rows(frankenphp_phpinfo_entries);
+  }
+  php_info_print_table_end();
+
+  if (frankenphp_go_modules == NULL) {
+    return;
+  }
+
+  /* The list of Go modules is long, collapse it by default when rendering
+   * HTML */
+  if (sapi_module.phpinfo_as_text) {
+    php_info_print_table_start();
+    php_info_print_table_header(1, "Go modules");
+    php_info_print_table_end();
+  } else {
+    php_printf("<details><summary style=\"cursor: pointer\">Go "
+               "modules</summary>\n");
+  }
+
+  php_info_print_table_start();
+  php_info_print_table_header(2, "Module", "Version");
+  frankenphp_print_info_rows(frankenphp_go_modules);
+  php_info_print_table_end();
+
+  if (!sapi_module.phpinfo_as_text) {
+    php_printf("</details>\n");
+  }
+}
+
 static zend_module_entry frankenphp_module = {
     STANDARD_MODULE_HEADER,
     "frankenphp",
@@ -1123,7 +1166,7 @@ static zend_module_entry frankenphp_module = {
     NULL,                  /* shutdown */
     NULL,                  /* request initialization */
     NULL,                  /* request shutdown */
-    NULL,                  /* information */
+    PHP_MINFO(frankenphp), /* information */
     TOSTRING(FRANKENPHP_VERSION),
     STANDARD_MODULE_PROPERTIES};
 
@@ -1772,6 +1815,19 @@ static void *execute_script_cli(void *arg) {
 #endif
 }
 
+static int (*previous_php_register_internal_extensions_func)(void) = NULL;
+
+/* frankenphp_module is passed to php_module_startup() by our own SAPI, but the
+ * CLI SAPIs take no additional modules: hook their module startup instead */
+static int register_frankenphp_module(void) {
+  if (previous_php_register_internal_extensions_func() != SUCCESS) {
+    return FAILURE;
+  }
+
+  return zend_register_internal_module(&frankenphp_module) == NULL ? FAILURE
+                                                                   : SUCCESS;
+}
+
 int frankenphp_execute_script_cli(char *script, int argc, char **argv,
                                   bool eval) {
   pthread_t thread;
@@ -1780,6 +1836,10 @@ int frankenphp_execute_script_cli(char *script, int argc, char **argv,
 
   cli_exec_args_t args = {
       .script = script, .argc = argc, .argv = argv, .eval = eval};
+
+  previous_php_register_internal_extensions_func =
+      php_register_internal_extensions_func;
+  php_register_internal_extensions_func = register_frankenphp_module;
 
   /*
    * Start the script in a dedicated thread to prevent conflicts between Go and
