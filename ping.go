@@ -67,7 +67,13 @@ func (w *worker) stopPings() {
 }
 
 func (p *ping) startLoop(ctx context.Context) {
-	ticker := time.NewTicker(p.interval)
+	interval := p.interval
+	if p.mode == PingModeIdle {
+		// reduce the interval when pinging for idle threads
+		// this way threads will be idle for at most 4/3 of the original interval
+		interval = p.interval / 3
+	}
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
@@ -95,15 +101,23 @@ func (p *ping) startAlignedLoop(ctx context.Context) {
 	}
 }
 
+// nextAlignedPing returns the next time that is a multiple of the given interval
+// e.g. interval=15m aligns to :00, :15, :30, :45
 func nextAlignedPing(interval time.Duration, now time.Time) time.Time {
-	switch interval {
-	case time.Minute:
-		return now.Truncate(time.Minute).Add(time.Minute)
-	case time.Hour:
-		return now.Truncate(time.Hour).Add(time.Hour)
+	var periodStart time.Time
+	switch {
+	case interval <= time.Minute:
+		periodStart = time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), now.Minute(), 0, 0, now.Location())
+	case interval <= time.Hour:
+		periodStart = time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), 0, 0, 0, now.Location())
+	case interval <= 24*time.Hour:
+		periodStart = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	default:
+		// multi-day intervals: fall back to epoch-based truncation
 		return now.Truncate(interval).Add(interval)
 	}
+
+	return periodStart.Add((now.Sub(periodStart)/interval + 1) * interval)
 }
 
 func (p *ping) send() {
