@@ -1815,6 +1815,19 @@ static void *execute_script_cli(void *arg) {
 #endif
 }
 
+static int (*previous_php_register_internal_extensions_func)(void) = NULL;
+
+/* frankenphp_module is passed to php_module_startup() by our own SAPI, but the
+ * CLI SAPIs take no additional modules: hook their module startup instead */
+static int register_frankenphp_module(void) {
+  if (previous_php_register_internal_extensions_func() != SUCCESS) {
+    return FAILURE;
+  }
+
+  return zend_register_internal_module(&frankenphp_module) == NULL ? FAILURE
+                                                                   : SUCCESS;
+}
+
 int frankenphp_execute_script_cli(char *script, int argc, char **argv,
                                   bool eval) {
   pthread_t thread;
@@ -1823,6 +1836,10 @@ int frankenphp_execute_script_cli(char *script, int argc, char **argv,
 
   cli_exec_args_t args = {
       .script = script, .argc = argc, .argv = argv, .eval = eval};
+
+  previous_php_register_internal_extensions_func =
+      php_register_internal_extensions_func;
+  php_register_internal_extensions_func = register_frankenphp_module;
 
   /*
    * Start the script in a dedicated thread to prevent conflicts between Go and
