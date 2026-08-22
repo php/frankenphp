@@ -773,11 +773,58 @@ func go_is_context_done(threadIndex C.uintptr_t) C.bool {
 	return C.bool(phpThreads[threadIndex].handler.frankenPHPContext().isDone)
 }
 
-//export go_schedule_opcache_reset
-func go_schedule_opcache_reset(threadIndex C.uintptr_t) {
-	if mainThread != nil {
-		go mainThread.rebootAllThreads()
+const (
+	// Bounds on how often opcache is expected to restart by itself. Beyond
+	// this the compiled code does not fit in the configured shared memory and
+	// opcache is thrashing, which only the operator can fix.
+	automaticOpcacheRestartWindow    = time.Minute
+	automaticOpcacheRestartThreshold = 5
+)
+
+var automaticOpcacheRestarts struct {
+	sync.Mutex
+	windowStart time.Time
+	count       int
+}
+
+// recordAutomaticOpcacheRestart counts the restarts opcache schedules on its
+// own and reports true the first time the threshold is crossed in a window,
+// so the caller logs once per window instead of on every restart.
+func recordAutomaticOpcacheRestart(now time.Time) bool {
+	automaticOpcacheRestarts.Lock()
+	defer automaticOpcacheRestarts.Unlock()
+
+	if now.Sub(automaticOpcacheRestarts.windowStart) > automaticOpcacheRestartWindow {
+		automaticOpcacheRestarts.windowStart = now
+		automaticOpcacheRestarts.count = 0
 	}
+
+	automaticOpcacheRestarts.count++
+
+	return automaticOpcacheRestarts.count == automaticOpcacheRestartThreshold
+}
+
+//export go_schedule_opcache_reset
+func go_schedule_opcache_reset(threadIndex C.uintptr_t, automatic C.bool) {
+	if mainThread == nil {
+		return
+	}
+
+	// A reboot is never skipped, not even when they pile up: opcache rewinds
+	// its shared memory whether or not the threads are ready for it, so
+	// declining to reboot brings back the crash the hook exists to prevent.
+	// Repeated automatic restarts are reported instead, since the fix is to
+	// give opcache more room. rebootAllThreads() already ignores a call made
+	// while a reboot is in flight.
+	if bool(automatic) && recordAutomaticOpcacheRestart(time.Now()) && globalLogger.Enabled(globalCtx, slog.LevelError) {
+		globalLogger.LogAttrs(globalCtx, slog.LevelError,
+			"opcache keeps restarting and PHP threads are rebooting each time, raise opcache.memory_consumption and opcache.max_accelerated_files",
+			slog.Int("restarts", automaticOpcacheRestartThreshold),
+			slog.Duration("window", automaticOpcacheRestartWindow),
+		)
+	}
+
+	go mainThread.rebootAllThreads()
 }
 
 func convertArgs(args []string) (C.int, []*C.char) {
