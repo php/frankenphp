@@ -19,6 +19,12 @@ When possible, we recommend using glibc-based, mostly static builds.
 
 FrankenPHP also supports [embedding the PHP app in the static binary](embed.md).
 
+> [!NOTE]
+>
+> Static builds are not available for Windows: on this platform, FrankenPHP links against the official PHP binaries,
+> which are included in [the provided archives](https://github.com/php/frankenphp/releases).
+> To create a static Linux binary from Windows, use the Docker-based builders or [WSL](https://learn.microsoft.com/windows/wsl/).
+
 ## Linux
 
 We provide Docker images to build static Linux binaries:
