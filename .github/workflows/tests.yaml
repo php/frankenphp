@@ -60,6 +60,8 @@ jobs:
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@latest
       - name: Run library tests
+        env:
+          FRANKENPHP_TEST_PID_NAMESPACE_WITH_SUDO: "1"
         run: gotestsum -- -race ./...
       - name: Run Caddy module tests
         working-directory: caddy/
