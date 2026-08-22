@@ -7,6 +7,8 @@ package frankenphp_test
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -102,8 +104,10 @@ func runTest(t *testing.T, test func(func(http.ResponseWriter, *http.Request), *
 	wg.Add(opts.nbParallelRequests)
 	for i := 0; i < opts.nbParallelRequests; i++ {
 		go func(i int) {
+			// Deferred so a t.Skip/t.Fatalf from a non-main goroutine (which
+			// triggers runtime.Goexit) still decrements the WaitGroup.
+			defer wg.Done()
 			test(handler, ts, i)
-			wg.Done()
 		}(i)
 	}
 
@@ -1189,6 +1193,60 @@ func FuzzRequest(f *testing.F) {
 			assert.Contains(t, body, fmt.Sprintf("[CONTENT_TYPE] => %s", fuzzedString))
 			assert.Contains(t, body, fmt.Sprintf("[HTTP_FUZZED] => %s", fuzzedString))
 		}, &testOptions{workerScript: "request-headers.php"})
+	})
+}
+
+// FuzzResponseHeaders exercises add_response_header (frankenphp.c), FrankenPHP's
+// own copy of the response header list into a PHP array. The header line is
+// base64-encoded so arbitrary bytes reach it unmangled by HTTP transport.
+func FuzzResponseHeaders(f *testing.F) {
+	f.Add("X-Foo: bar")
+	f.Add("X-Foo:bar")
+	f.Add("X-Foo :  bar  ")
+	f.Add(":no-name")
+	f.Add("no-colon-at-all")
+	f.Add("X-Foo: ")
+	f.Add("")
+	f.Add(strings.Repeat("X-Foo: bar", 1000))
+
+	f.Fuzz(func(t *testing.T, headerLine string) {
+		runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+			encoded := base64.StdEncoding.EncodeToString([]byte(headerLine))
+			req := httptest.NewRequest("GET", "http://example.com/fuzz-response-header.php?h="+url.QueryEscape(encoded), nil)
+			body, resp := testRequest(req, handler, t)
+
+			assert.Equal(t, 200, resp.StatusCode)
+			assert.True(t, json.Valid([]byte(body)), "frankenphp_response_headers() must always return valid JSON, got: %s", body)
+		}, nil)
+	})
+}
+
+// FuzzPersistZvalRoundtrip exercises zval.h's persistent_zval_persist/
+// _to_request/_free recursive tree walk: FrankenPHP's own mechanism for
+// carrying values across the request/persistent memory boundary (used by
+// worker state), not php-src itself. Nesting depth and width are
+// fuzzer-controlled, since unbounded native recursion (no depth guard) is
+// the interesting bug class here, not the value shapes themselves.
+func FuzzPersistZvalRoundtrip(f *testing.F) {
+	f.Add(0, 1)
+	f.Add(1, 1)
+	f.Add(10, 2)
+	f.Add(100, 1)
+	f.Add(1000, 1)
+	f.Add(-1, -1)
+
+	f.Fuzz(func(t *testing.T, depth, width int) {
+		runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+			req := httptest.NewRequest("GET", fmt.Sprintf("http://example.com/fuzz-persist-roundtrip.php?depth=%d&width=%d", depth, width), nil)
+			body, resp := testRequest(req, handler, t)
+
+			if body == "SKIP" {
+				t.Skip("FRANKENPHP_TEST not set; skipping persistent_zval roundtrip fuzzing")
+			}
+
+			assert.Equal(t, 200, resp.StatusCode)
+			assert.NotContains(t, body, "MISMATCH", "roundtrip changed the value for depth=%d width=%d", depth, width)
+		}, nil)
 	})
 }
 
