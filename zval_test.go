@@ -44,6 +44,8 @@ func TestPersistentZvalRoundtrip(t *testing.T) {
 	require.NotContains(t, out, "FAIL", "persist-roundtrip.php reported a failure:\n"+out)
 	require.Contains(t, out, "OK null")
 	require.Contains(t, out, "OK enum active")
+	require.Contains(t, out, "OK const array")
+	require.Contains(t, out, "OK interned key and value")
 	require.Contains(t, out, "OK stdClass rejected")
 	require.Contains(t, out, "OK resource rejected")
 	require.Contains(t, out, "OK nested stdClass rejected")

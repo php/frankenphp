@@ -4,6 +4,8 @@
 // FRANKENPHP_TEST_HOOKS is defined at build time). The script runs as a
 // plain non-worker request; the Go harness asserts the combined output.
 
+const CONST_ARR = ['a' => 1, 'b' => [2, 3], 'c' => 'literal'];
+
 enum Status: string {
     case Active = 'active';
     case Paused = 'paused';
@@ -64,6 +66,14 @@ same(
     ['status' => Status::Active, 'count' => 7],
     'array with enum',
 );
+
+// Compile-time constant array. Opcache marks these immutable and keeps them
+// in shared memory, so persist must copy instead of sharing the pointer.
+same($rt(CONST_ARR), CONST_ARR, 'const array');
+
+// Literal keys and values are interned strings, which also live in opcache
+// shared memory once the script is cached.
+same($rt(['literal_key' => 'literal_value']), ['literal_key' => 'literal_value'], 'interned key and value');
 
 // Invalid inputs throw LogicException.
 try {
