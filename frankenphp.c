@@ -1017,9 +1017,21 @@ PHP_FUNCTION(frankenphp_log) {
   }
 }
 
+/* Scheduled by opcache itself, on shared memory exhaustion or hash overflow.
+ * The reason is ignored: opcache_reset() is already intercepted below, so only
+ * the automatic reasons reach this hook. Guarded like the assignment in
+ * php_main(), which is its only caller, so builds without the hook do not trip
+ * -Werror=unused-function. */
+#if defined(ZTS) && PHP_VERSION_ID >= 80400
+static void frankenphp_opcache_restart_hook(int reason) {
+  (void)reason;
+  go_schedule_opcache_reset(frankenphp_thread_index(), true);
+}
+#endif
+
 /* {{{ thread-safe opcache reset */
 PHP_FUNCTION(frankenphp_opcache_reset) {
-  go_schedule_opcache_reset(frankenphp_thread_index());
+  go_schedule_opcache_reset(frankenphp_thread_index(), false);
 
   RETVAL_TRUE;
 } /* }}} */
@@ -1704,6 +1716,13 @@ static void *php_main(void *arg) {
   }
 
   frankenphp_sapi_module.startup(&frankenphp_sapi_module);
+
+#if defined(ZTS) && PHP_VERSION_ID >= 80400
+  /* Also restart everything on opcache memory overflow or similar events, the
+   * hook is triggered right before an opcache reset is scheduled
+   */
+  zend_accel_schedule_restart_hook = frankenphp_opcache_restart_hook;
+#endif
 
   /* check if a default filter is set in php.ini and only filter if
    * it is, this is deprecated and will be removed in PHP 9 */
