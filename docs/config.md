@@ -251,37 +251,6 @@ where the FrankenPHP process was started. You can instead also specify one or mo
 - If you have multiple workers defined, all of them will be restarted when a file changes
 - Be wary about watching files that are created at runtime (like logs) since they might cause unwanted worker restarts.
 
-### Pinging workers
-
-Workers can receive periodic messages via the `ping` directive.
-The message is passed as the first argument to the closure given to `frankenphp_handle_request()`, like [extension workers](extension-workers.md#headless-mode-sendmessage).
-This is useful to run scheduled tasks inside your worker script (for example, to flush queues or run cron jobs).
-
-```caddyfile
-worker /path/to/worker.php {
-	ping 60s run-tasks
-	ping each 1m aligned minutely
-}
-```
-
-```php
-while (frankenphp_handle_request(function ($message) {
-    match ($message) {
-        'run-tasks' => runTasks(),
-        'minutely' => runMinutelyTasks(),
-        default => handleRequest(),
-    };
-})) {
-}
-```
-
-The interval must be a [Go duration](https://pkg.go.dev/time#ParseDuration) such as `60s`, `1m`, or `5m`.
-Add the `aligned` keyword to align pings to the start of each interval (e.g. `ping 1m aligned minutely` runs at the start of every minute).
-
-By default, each ping is handled by a single worker thread. Prefix the interval with `each` to send the ping to every thread of the worker. This is useful when each thread maintains its own state and must run the scheduled task independently.
-
-You can specify multiple `ping` lines to schedule different messages at different intervals.
-
 The file watcher is based on [e-dant/watcher](https://github.com/e-dant/watcher).
 
 ## Matching the worker to a path

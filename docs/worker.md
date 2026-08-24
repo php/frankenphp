@@ -263,19 +263,23 @@ Workers can also be pinged repeatedly with a message.
 
 ```caddyfile
 worker /path/to/worker.php {
-    ping 1s "Hello Worker" # send a single ping with message "Hello Worker" each second
+    ping 10s "Hello Worker" # send "Hello Worker" every 10s
 }
 ```
 
 In the worker script, the function passed to `frankenphp_handle_request()` will receive the message directly as an argument:
 
 ```php
-$handler = function(string $message = "") {
-    echo $message; # "Hello Worker"
-}
-
-while(frankenphp_handle_request($handler)){}
+while(frankenphp_handle_request(function(string $message = "") {
+    match($message){
+        'Hello Worker' => handleMessage()
+        default => handleRequest() # if the worker also handles HTTP requests
+    }
+})){}
 ```
+
+The interval must be a [Go duration](https://pkg.go.dev/time#ParseDuration) such as `60s`, `1m`, or `5m`.
+Add the `aligned` keyword to align pings to the start of each interval (e.g. `ping 1m aligned minutely` runs at the start of every minute).
 
 ### Ping modes
 
@@ -286,16 +290,6 @@ worker /path/to/worker {
     ping sync 10s "message" # send a single ping each 10s, wait for completion in-between pings
     ping overlap 10s "message" # send a single ping each 10s, don't wait for completion
     ping each 10s "message" # send pings to each active thread every 10s, don't wait for completion
-    ping idle 10s "message" # send pings to each active thread that has been idle for more than 10s (worst case staleness up to 33% higher due to polling)
-}
-```
-
-### Aligned pings
-
-A ping can also be aligned to the start of each interval with the `aligned` keyword (cron-like).
-
-```caddyfile
-worker /path/to/worker {
-    ping overlap 1m aligned "message" # send the ping at the exact start of each minute
+    ping idle 10s "message" # send pings to each active thread that has been idle for more than 10s (worst case staleness up to 33% higher)
 }
 ```
