@@ -23,6 +23,7 @@ type Server struct {
 	workers                   []*worker
 	workersByPath             map[string]*worker
 	workersWithRequestMatcher []*worker
+	maxWaitTime               time.Duration
 
 	// registered while FrankenPHP runs with this server; read by concurrent
 	// ServeHTTP calls while Init()/Shutdown() flip it, hence atomic
@@ -49,14 +50,16 @@ func newFallbackServer() *Server {
 // registerServers assigns the identity of every server and clears the workers of a previous run,
 // so the same *Server can be passed to Init() again after a Shutdown()
 // servers do not accept requests yet at this point, see activateServers()
-func registerServers(newServers []*Server) {
-	servers = newServers
+func registerServers(o *opt) {
+	servers = o.servers
 	fallbackServer.logger = globalLogger
 	fallbackServer.resetWorkers()
+	fallbackServer.maxWaitTime = o.maxWaitTime
 
 	for i, s := range servers {
 		s.idx = i
 		s.name = s.configuredName
+		s.maxWaitTime = o.maxWaitTime
 		if s.name == "" {
 			s.name = "server_" + strconv.Itoa(i)
 		}

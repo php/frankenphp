@@ -108,9 +108,7 @@ func (f *FrankenPHPApp) Provision(ctx caddy.Context) error {
 }
 
 func (f *FrankenPHPApp) Start() error {
-	defer func() {
-		close(f.started)
-	}()
+	defer close(f.started)
 
 	repl := caddy.NewReplacer()
 

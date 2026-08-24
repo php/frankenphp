@@ -177,6 +177,10 @@ func newWorker(o workerOpt) (*worker, error) {
 		WithRequestPreparedEnv(o.env),
 	)
 
+	if w.server == nil {
+		w.server = fallbackServer
+	}
+
 	if o.extensionWorkers != nil {
 		o.extensionWorkers.internalWorker = w
 	}
@@ -277,7 +281,7 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) error {
 			return nil
 		case workerScaleChan <- fc:
 			// the request has triggered scaling, continue to wait for a thread
-		case <-timeoutChan(time.Duration(maxWaitTime.Load())):
+		case <-timeoutChan(worker.server.maxWaitTime):
 			// the request has timed out stalling
 			worker.queuedRequests.Add(-1)
 			metrics.DequeuedWorkerRequest(worker.name)

@@ -163,7 +163,7 @@ func handleRequestWithRegularPHPThreads(fc *frankenPHPContext) error {
 			return nil
 		case scaleChan <- fc:
 			// the request has triggered scaling, continue to wait for a thread
-		case <-timeoutChan(time.Duration(maxWaitTime.Load())):
+		case <-timeoutChan(fc.server.maxWaitTime):
 			// the request has timed out stalling
 			queuedRegularThreads.Add(-1)
 			metrics.DequeuedRequest()

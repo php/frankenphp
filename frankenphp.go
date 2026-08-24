@@ -67,8 +67,6 @@ var (
 
 	metrics Metrics = nullMetrics{}
 
-	// atomic: read by in-flight requests while a reload may rewrite it
-	maxWaitTime          atomic.Int64
 	maxRequestsPerThread int
 )
 
@@ -275,14 +273,13 @@ func Init(options ...Option) error {
 		metrics = opt.metrics
 	}
 
-	maxWaitTime.Store(int64(opt.maxWaitTime))
 	maxRequestsPerThread = opt.maxRequests
 
 	if opt.maxIdleTime > 0 {
 		maxIdleTime = opt.maxIdleTime
 	}
 
-	registerServers(opt.servers)
+	registerServers(opt)
 
 	workerThreadCount, err := calculateMaxThreads(opt)
 	if err != nil {
