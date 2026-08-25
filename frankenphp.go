@@ -359,7 +359,7 @@ func Init(options ...Option) error {
 		}
 	}
 
-	initPings()
+	initTicks()
 
 	return nil
 }
@@ -382,7 +382,7 @@ func shutdown() {
 		fn()
 	}
 
-	shutdownPings()
+	shutdownTicks()
 	drainWatchers()
 	drainPHPThreads()
 	unregisterServers()

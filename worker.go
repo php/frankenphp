@@ -32,7 +32,7 @@ type worker struct {
 	maxConsecutiveFailures int
 	onThreadReady          func(int)
 	onThreadShutdown       func(int)
-	pings                  []*ping
+	ticks                  []*tick
 	queuedRequests         atomic.Int32
 	server                 *Server
 }
@@ -168,7 +168,7 @@ func newWorker(o workerOpt) (*worker, error) {
 		onThreadReady:          o.onThreadReady,
 		onThreadShutdown:       o.onThreadShutdown,
 		server:                 o.server,
-		pings:                  o.pings,
+		ticks:                  o.ticks,
 	}
 
 	w.configureMercure(&o)

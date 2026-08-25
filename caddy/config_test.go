@@ -285,50 +285,50 @@ func TestCreateUniqueWorkerNamesQualifiedByServer(t *testing.T) {
 	require.Equal(t, "queue_2", app.createUniqueWorkerName(wc, ""))
 }
 
-func TestModuleWorkerWithPingConfiguration(t *testing.T) {
-	configWithPing := `
+func TestModuleWorkerWithTickConfiguration(t *testing.T) {
+	configWithTick := `
 	{
 		php {
 			worker ../testdata/worker-with-counter.php {
-				ping 60s health
-				ping each 1m aligned message
-				ping overlap 1h aligned message
-				ping idle 3s "HELLO THERE!!!!"
+				tick 60s health
+				tick each 1m aligned message
+				tick overlap 1h aligned message
+				tick idle 3s "HELLO THERE!!!!"
 			}
 		}
 	}`
 
-	d := caddyfile.NewTestDispenser(configWithPing)
+	d := caddyfile.NewTestDispenser(configWithTick)
 	module := &FrankenPHPModule{}
 
 	err := module.UnmarshalCaddyfile(d)
 	require.NoError(t, err)
 	require.Len(t, module.Workers, 1)
 
-	pings := module.Workers[0].Pings
-	require.Len(t, pings, 4)
-	require.Equal(t, 60*time.Second, pings[0].Interval)
-	require.Equal(t, "health", pings[0].Message)
-	require.False(t, pings[0].Aligned)
-	require.Equal(t, frankenphp.PingModeSynchronous, pings[0].Mode)
+	ticks := module.Workers[0].Ticks
+	require.Len(t, ticks, 4)
+	require.Equal(t, 60*time.Second, ticks[0].Interval)
+	require.Equal(t, "health", ticks[0].Message)
+	require.False(t, ticks[0].Aligned)
+	require.Equal(t, frankenphp.TickModeSynchronous, ticks[0].Mode)
 
-	require.Equal(t, time.Minute, pings[1].Interval)
-	require.Equal(t, "message", pings[1].Message)
-	require.True(t, pings[1].Aligned)
-	require.Equal(t, frankenphp.PingModeEach, pings[1].Mode)
+	require.Equal(t, time.Minute, ticks[1].Interval)
+	require.Equal(t, "message", ticks[1].Message)
+	require.True(t, ticks[1].Aligned)
+	require.Equal(t, frankenphp.TickModeEach, ticks[1].Mode)
 
-	require.Equal(t, time.Hour, pings[2].Interval)
-	require.Equal(t, "message", pings[2].Message)
-	require.True(t, pings[2].Aligned)
-	require.Equal(t, frankenphp.PingModeOverlapping, pings[2].Mode)
+	require.Equal(t, time.Hour, ticks[2].Interval)
+	require.Equal(t, "message", ticks[2].Message)
+	require.True(t, ticks[2].Aligned)
+	require.Equal(t, frankenphp.TickModeOverlapping, ticks[2].Mode)
 
-	require.Equal(t, "HELLO THERE!!!!", pings[3].Message)
-	require.False(t, pings[3].Aligned)
-	require.Equal(t, frankenphp.PingModeIdle, pings[3].Mode)
-	require.Equal(t, 3*time.Second, pings[3].Interval)
+	require.Equal(t, "HELLO THERE!!!!", ticks[3].Message)
+	require.False(t, ticks[3].Aligned)
+	require.Equal(t, frankenphp.TickModeIdle, ticks[3].Mode)
+	require.Equal(t, 3*time.Second, ticks[3].Interval)
 }
 
-func TestModuleWorkerWithInvalidPingConfiguration(t *testing.T) {
+func TestModuleWorkerWithInvalidTickConfiguration(t *testing.T) {
 	tests := []struct {
 		name   string
 		config string
@@ -339,7 +339,7 @@ func TestModuleWorkerWithInvalidPingConfiguration(t *testing.T) {
 				php {
 					worker {
 						file ../testdata/worker-with-counter.php
-						ping 60s
+						tick 60s
 					}
 				}
 			}`,
@@ -350,7 +350,7 @@ func TestModuleWorkerWithInvalidPingConfiguration(t *testing.T) {
 				php {
 					worker {
 						file ../testdata/worker-with-counter.php
-						ping not-a-duration health
+						tick not-a-duration health
 					}
 				}
 			}`,
@@ -361,7 +361,7 @@ func TestModuleWorkerWithInvalidPingConfiguration(t *testing.T) {
 				php {
 					worker {
 						file ../testdata/worker-with-counter.php
-						ping 60s health each
+						tick 60s health each
 					}
 				}
 			}`,

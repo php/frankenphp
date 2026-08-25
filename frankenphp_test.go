@@ -1426,12 +1426,12 @@ func testOpcachePreload(t *testing.T, opts *testOptions) {
 	}, opts)
 }
 
-func TestPings(t *testing.T) {
+func TestTicks(t *testing.T) {
 	logger, buf := newTestLogger(t)
 	require.NoError(t, frankenphp.Init(
 		frankenphp.WithLogger(logger),
-		frankenphp.WithWorkers("ping-worker", "testdata/worker-with-counter.php", 1,
-			frankenphp.WithWorkerPings(frankenphp.PingModeSynchronous, 100*time.Microsecond, "ping", false),
+		frankenphp.WithWorkers("tick-worker", "testdata/worker-with-counter.php", 1,
+			frankenphp.WithWorkerTicks(frankenphp.TickModeSynchronous, 100*time.Microsecond, "tick", false),
 		),
 	))
 	t.Cleanup(frankenphp.Shutdown)
@@ -1445,7 +1445,7 @@ func TestPings(t *testing.T) {
 		time.Sleep(500 * time.Microsecond)
 		i++
 		if i > 10000 { // 5s timeout
-			t.Fatal("timed out without recording a worker ping")
+			t.Fatal("timed out without recording a worker tick")
 		}
 	}
 }

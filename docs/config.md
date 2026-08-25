@@ -111,7 +111,7 @@ You can also explicitly configure FrankenPHP using the [global option](https://c
 			watch <path> # Sets the path to watch for file changes. Can be specified more than once for multiple paths.
 			name <name> # Sets the name of the worker, used in logs and metrics. Default: absolute path of worker file
 			max_consecutive_failures <num> # Sets the maximum number of consecutive failures before the worker is considered unhealthy, -1 means the worker will always restart. Default: 6.
-			ping <mode> <interval> [aligned] <message> # Sends a periodic message to the worker via frankenphp_handle_request(). Interval must be a duration (e.g. 60s, 1m). Use aligned to align pings to the start of each interval. Mode can be sync, overlap, each and idle. Can be specified more than once.
+			tick <mode> <interval> [aligned] <message> # Sends a periodic message to the worker via frankenphp_handle_request(). Interval must be a duration (e.g. 60s, 1m). Use aligned to align ticks to the start of each interval. Mode can be sync, overlap, each and idle. Can be specified more than once.
 		}
 	}
 }
@@ -199,8 +199,8 @@ php_server [<matcher>] {
 		watch <path> # Sets the path to watch for file changes. Can be specified more than once for multiple paths.
 		env <key> <value> # Sets an extra environment variable to the given value. Can be specified more than once for multiple environment variables. Environment variables for this worker are also inherited from the php_server parent, but can be overwritten here.
 		match <path> # match the worker to a path pattern. Overrides try_files and can only be used in the php_server directive.
-		ping <interval> [aligned] <message> # Sends a periodic message to the worker via frankenphp_handle_request(). Interval must be a duration (e.g. 60s, 1m). Use aligned to align pings to the start of each interval. Can be specified more than once.
-		ping <mode> <interval> [aligned] <message> # Like ping, with an explicit mode (sync, overlap, each, idle).
+		tick <interval> [aligned] <message> # Sends a periodic message to the worker via frankenphp_handle_request(). Interval must be a duration (e.g. 60s, 1m). Use aligned to align ticks to the start of each interval. Can be specified more than once.
+		tick <mode> <interval> [aligned] <message> # Like tick, with an explicit mode (sync, overlap, each, idle).
 	}
 	worker <other_file> <num> # Can also use the short form like in the global frankenphp block.
 }
