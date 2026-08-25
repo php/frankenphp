@@ -81,7 +81,7 @@ func (p *ping) startLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			p.send()
+			p.send(ctx)
 		}
 	}
 }
@@ -95,7 +95,7 @@ func (p *ping) startAlignedLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-timer.C:
-			p.send()
+			p.send(ctx)
 			timer.Reset(time.Until(nextAlignedPing(p.interval, time.Now())))
 		}
 	}
@@ -120,26 +120,26 @@ func nextAlignedPing(interval time.Duration, now time.Time) time.Time {
 	return periodStart.Add((now.Sub(periodStart)/interval + 1) * interval)
 }
 
-func (p *ping) send() {
+func (p *ping) send(ctx context.Context) {
 	switch p.mode {
 	case PingModeEach, PingModeIdle:
-		p.sendToEachThread()
+		p.sendToEachThread(ctx)
 	case PingModeOverlapping:
-		go p.sendOnce()
+		go p.sendOnce(ctx)
 	case PingModeSynchronous:
-		p.sendOnce()
+		p.sendOnce(ctx)
 	}
 }
 
-func (p *ping) sendOnce() {
-	fc := newContextFromMessage(p.message, nil, globalCtx, p.worker)
+func (p *ping) sendOnce(ctx context.Context) {
+	fc := newContextFromMessage(p.message, nil, ctx, p.worker)
 
-	if err := p.worker.handleRequest(fc); err != nil && globalLogger.Enabled(globalCtx, slog.LevelWarn) {
-		globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "worker ping failed", slog.String("worker", p.worker.name), slog.String("message", p.message), slog.Any("error", err))
+	if err := p.worker.handleRequest(fc); err != nil && globalLogger.Enabled(ctx, slog.LevelWarn) {
+		globalLogger.LogAttrs(ctx, slog.LevelWarn, "worker ping failed", slog.String("worker", p.worker.name), slog.String("message", p.message), slog.Any("error", err))
 	}
 }
 
-func (p *ping) sendToEachThread() {
+func (p *ping) sendToEachThread(ctx context.Context) {
 	w := p.worker
 	w.threadMutex.RLock()
 	for _, thread := range w.threads {
@@ -147,9 +147,9 @@ func (p *ping) sendToEachThread() {
 			continue
 		}
 		go func(thread *phpThread) {
-			fc := newContextFromMessage(p.message, nil, globalCtx, w)
-			if err := w.handleRequestOnThread(thread, fc); err != nil && globalLogger.Enabled(globalCtx, slog.LevelWarn) {
-				globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "worker ping failed", slog.String("worker", w.name), slog.String("message", p.message), slog.Any("error", err))
+			fc := newContextFromMessage(p.message, nil, ctx, w)
+			if err := w.handleRequestOnThread(thread, fc); err != nil && globalLogger.Enabled(ctx, slog.LevelWarn) {
+				globalLogger.LogAttrs(ctx, slog.LevelWarn, "worker ping failed", slog.String("worker", w.name), slog.String("message", p.message), slog.Any("error", err))
 			}
 		}(thread)
 	}
