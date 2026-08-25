@@ -3,7 +3,6 @@ package frankenphp
 // #include "frankenphp.h"
 import "C"
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -34,7 +33,6 @@ type worker struct {
 	onThreadReady          func(int)
 	onThreadShutdown       func(int)
 	pings                  []*ping
-	pingCancel             context.CancelFunc
 	queuedRequests         atomic.Int32
 	server                 *Server
 }

@@ -3,6 +3,7 @@ package frankenphp
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 )
 
@@ -19,6 +20,11 @@ const (
 	PingModeIdle
 )
 
+var (
+	pingCancel chan any
+	pingWg     sync.WaitGroup
+)
+
 // pings are periodic internal messages sent to the worker.
 // they are received via frankenphp_handle_request(fn(string $message) => ...).
 type ping struct {
@@ -31,39 +37,29 @@ type ping struct {
 
 func initPings() {
 	for _, w := range workers {
-		w.initPings()
-	}
-}
-
-func shutdownPings() {
-	for _, w := range workers {
-		w.stopPings()
-	}
-}
-
-func (w *worker) initPings() {
-	if len(w.pings) == 0 {
-		return
-	}
-
-	ctx, cancel := context.WithCancel(globalCtx)
-	w.pingCancel = cancel
-
-	for _, p := range w.pings {
-		p.worker = w
-		if p.aligned {
-			go p.startAlignedLoop(ctx)
-		} else {
-			go p.startLoop(ctx)
+		for _, p := range w.pings {
+			if pingCancel == nil {
+				pingCancel = make(chan any)
+				pingWg = sync.WaitGroup{}
+			}
+			pingWg.Add(1)
+			p.worker = w
+			if p.aligned {
+				go p.startAlignedLoop(globalCtx)
+			} else {
+				go p.startLoop(globalCtx)
+			}
 		}
 	}
 }
 
-func (w *worker) stopPings() {
-	if w.pingCancel != nil {
-		w.pingCancel()
-		w.pingCancel = nil
+func shutdownPings() {
+	if pingCancel == nil {
+		return
 	}
+	close(pingCancel)
+	pingWg.Wait()
+	pingCancel = nil
 }
 
 func (p *ping) startLoop(ctx context.Context) {
@@ -74,11 +70,12 @@ func (p *ping) startLoop(ctx context.Context) {
 		interval = p.interval / 3
 	}
 	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
 
 	for {
 		select {
-		case <-ctx.Done():
+		case <-pingCancel:
+			ticker.Stop()
+			pingWg.Done()
 			return
 		case <-ticker.C:
 			p.send(ctx)
@@ -88,11 +85,12 @@ func (p *ping) startLoop(ctx context.Context) {
 
 func (p *ping) startAlignedLoop(ctx context.Context) {
 	timer := time.NewTimer(time.Until(nextAlignedPing(p.interval, time.Now())))
-	defer timer.Stop()
 
 	for {
 		select {
-		case <-ctx.Done():
+		case <-pingCancel:
+			timer.Stop()
+			pingWg.Done()
 			return
 		case <-timer.C:
 			p.send(ctx)
@@ -132,11 +130,13 @@ func (p *ping) send(ctx context.Context) {
 }
 
 func (p *ping) sendOnce(ctx context.Context) {
+	pingWg.Add(1)
 	fc := newContextFromMessage(p.message, nil, ctx, p.worker)
 
 	if err := p.worker.handleRequest(fc); err != nil && globalLogger.Enabled(ctx, slog.LevelWarn) {
 		globalLogger.LogAttrs(ctx, slog.LevelWarn, "worker ping failed", slog.String("worker", p.worker.name), slog.String("message", p.message), slog.Any("error", err))
 	}
+	pingWg.Done()
 }
 
 func (p *ping) sendToEachThread(ctx context.Context) {
@@ -146,11 +146,13 @@ func (p *ping) sendToEachThread(ctx context.Context) {
 		if p.mode == PingModeIdle && thread.state.WaitTime() < p.interval.Milliseconds() {
 			continue
 		}
+		pingWg.Add(1)
 		go func(thread *phpThread) {
 			fc := newContextFromMessage(p.message, nil, ctx, w)
 			if err := w.handleRequestOnThread(thread, fc); err != nil && globalLogger.Enabled(ctx, slog.LevelWarn) {
 				globalLogger.LogAttrs(ctx, slog.LevelWarn, "worker ping failed", slog.String("worker", w.name), slog.String("message", p.message), slog.Any("error", err))
 			}
+			pingWg.Done()
 		}(thread)
 	}
 	w.threadMutex.RUnlock()
