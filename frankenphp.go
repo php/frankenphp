@@ -320,7 +320,7 @@ func Init(options ...Option) error {
 	}
 
 	regularThreads = make([]*phpThread, 0, opt.numThreads-workerThreadCount)
-	for i := 0; i < opt.numThreads-workerThreadCount; i++ {
+	for range opt.numThreads - workerThreadCount {
 		convertToRegularThread(getInactivePHPThread())
 	}
 
@@ -533,7 +533,7 @@ func splitRawHeader(rawHeader *C.char, length int) (string, string) {
 	}
 
 	// anything left is the header value
-	valuePtr := (*C.char)(unsafe.Pointer(uintptr(unsafe.Pointer(rawHeader)) + uintptr(j)))
+	valuePtr := (*C.char)(unsafe.Add(unsafe.Pointer(rawHeader), j))
 	headerValue := C.GoStringN(valuePtr, C.int(length-j))
 
 	return headerKey, headerValue

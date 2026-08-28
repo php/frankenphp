@@ -77,7 +77,7 @@ func initWorkers(opts []workerOpt) error {
 	startupFailChan = make(chan error, totalThreadsToStart)
 
 	for _, w := range workers {
-		for i := 0; i < w.num; i++ {
+		for range w.num {
 			thread := getInactivePHPThread()
 			convertToWorkerThread(thread, w)
 

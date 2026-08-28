@@ -474,8 +474,8 @@ func zendHashDestroy(p unsafe.Pointer) {
 }
 
 // EXPERIMENTAL: CallPHPCallable executes a PHP callable with the given parameters.
-// Returns the result of the callable as a Go interface{}, or nil if the call failed.
-func CallPHPCallable(cb unsafe.Pointer, params []interface{}) interface{} {
+// Returns the result of the callable as a Go any, or nil if the call failed.
+func CallPHPCallable(cb unsafe.Pointer, params []any) any {
 	if cb == nil {
 		return nil
 	}
@@ -494,15 +494,15 @@ func CallPHPCallable(cb unsafe.Pointer, params []interface{}) interface{} {
 	if paramCount > 0 {
 		paramStorage = (*C.zval)(C.__emalloc__(C.size_t(paramCount) * C.size_t(unsafe.Sizeof(C.zval{}))))
 		defer func() {
-			for i := 0; i < paramCount; i++ {
-				targetZval := (*C.zval)(unsafe.Pointer(uintptr(unsafe.Pointer(paramStorage)) + uintptr(i)*unsafe.Sizeof(C.zval{})))
+			for i := range paramCount {
+				targetZval := (*C.zval)(unsafe.Add(unsafe.Pointer(paramStorage), uintptr(i)*unsafe.Sizeof(C.zval{})))
 				C.zval_ptr_dtor(targetZval)
 			}
 			C.__efree__(unsafe.Pointer(paramStorage))
 		}()
 
 		for i, param := range params {
-			targetZval := (*C.zval)(unsafe.Pointer(uintptr(unsafe.Pointer(paramStorage)) + uintptr(i)*unsafe.Sizeof(C.zval{})))
+			targetZval := (*C.zval)(unsafe.Add(unsafe.Pointer(paramStorage), uintptr(i)*unsafe.Sizeof(C.zval{})))
 			sourceZval := phpValue(param)
 			*targetZval = *sourceZval
 			C.__efree__(unsafe.Pointer(sourceZval))

@@ -253,7 +253,7 @@ func splitPos(path string, splitPath []string) int {
 
 		for i := 0; i <= pathLen-splitLen; i++ {
 			match := true
-			for j := 0; j < splitLen; j++ {
+			for j := range splitLen {
 				c := path[i+j]
 				if c >= utf8.RuneSelf {
 					match = false
@@ -363,12 +363,8 @@ func splitRemoteAddr(remoteAddr string) (ip, port string) {
 		return host, p
 	}
 
-	if idx := strings.LastIndex(remoteAddr, ":"); idx > -1 {
-		ip = remoteAddr[:idx]
-		port = remoteAddr[idx+1:]
-	} else {
-		ip = remoteAddr
-	}
+	// CutLast yields (remoteAddr, "") when there is no colon, i.e. no port.
+	ip, port, _ = strings.CutLast(remoteAddr, ":")
 
 	if len(ip) >= 2 && ip[0] == '[' && ip[len(ip)-1] == ']' {
 		ip = ip[1 : len(ip)-1]
