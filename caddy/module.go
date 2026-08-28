@@ -227,7 +227,7 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 
 	err := f.server.ServeHTTP(w, r, opts...)
 
-	if err != nil && !errors.As(err, &frankenphp.ErrRejected{}) {
+	if _, rejected := errors.AsType[frankenphp.ErrRejected](err); err != nil && !rejected {
 		return caddyhttp.Error(http.StatusInternalServerError, err)
 	}
 

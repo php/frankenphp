@@ -87,7 +87,7 @@ func runTest(t *testing.T, test func(func(http.ResponseWriter, *http.Request), *
 		assert.NoError(t, err)
 
 		err = frankenphp.ServeHTTP(w, req)
-		if err != nil && !errors.As(err, &frankenphp.ErrRejected{}) {
+		if _, rejected := errors.AsType[frankenphp.ErrRejected](err); err != nil && !rejected {
 			assert.Fail(t, fmt.Sprintf("Received unexpected error:\n%+v", err))
 		}
 	}
