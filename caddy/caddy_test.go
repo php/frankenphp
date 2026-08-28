@@ -903,7 +903,7 @@ func TestPhpServerWorkerMatchPoolCount(t *testing.T) {
 	require.NoError(t, err, "failed to read metrics")
 
 	var pools []string
-	for _, line := range strings.Split(metrics.String(), "\n") {
+	for line := range strings.SplitSeq(metrics.String(), "\n") {
 		if !strings.HasPrefix(line, "frankenphp_total_workers{worker=") {
 			continue
 		}
@@ -1830,7 +1830,7 @@ func TestOpcacheReset(t *testing.T) {
 	wg := sync.WaitGroup{}
 	numRequests := 500
 	wg.Add(numRequests)
-	for i := 0; i < numRequests; i++ {
+	for i := range numRequests {
 
 		// introduce a delay every 10 requests
 		if i%10 == 0 {
@@ -2138,7 +2138,7 @@ func TestSymlinkWorkerBehavior(t *testing.T) {
 			`, "caddyfile")
 
 		// Make multiple requests - each should increment the counter
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			tester.AssertGetResponse("http://localhost:"+testPort+"/index.php", http.StatusOK, fmt.Sprintf("Request: %d\n", i))
 		}
 	})
