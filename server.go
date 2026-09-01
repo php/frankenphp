@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"sync/atomic"
+	"time"
 
 	"github.com/dunglas/frankenphp/internal/fastabs"
 )
@@ -13,7 +14,6 @@ import (
 // Server represents a preconfigured server block
 // requests and workers can be scoped to a Server
 type Server struct {
-	idx int
 	// name passed to NewServer(), kept so re-registering resolves the default anew
 	configuredName            string
 	name                      string
@@ -38,7 +38,6 @@ var (
 
 func newFallbackServer() *Server {
 	s := &Server{
-		idx:           -1,
 		workersByPath: make(map[string]*worker),
 		env:           make(map[string]string),
 		logger:        globalLogger,
@@ -57,7 +56,6 @@ func registerServers(o *opt) {
 	fallbackServer.maxWaitTime = o.maxWaitTime
 
 	for i, s := range servers {
-		s.idx = i
 		s.name = s.configuredName
 		s.maxWaitTime = o.maxWaitTime
 		if s.name == "" {
