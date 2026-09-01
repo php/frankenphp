@@ -14,8 +14,6 @@ import (
 // Server represents a preconfigured server block
 // requests and workers can be scoped to a Server
 type Server struct {
-	// name passed to NewServer(), kept so re-registering resolves the default anew
-	configuredName            string
 	name                      string
 	root                      string
 	splitPath                 []string
@@ -24,11 +22,9 @@ type Server struct {
 	workersByPath             map[string]*worker
 	workersWithRequestMatcher []*worker
 	maxWaitTime               time.Duration
-
-	// registered while FrankenPHP runs with this server; read by concurrent
-	// ServeHTTP calls while Init()/Shutdown() flip it, hence atomic
-	isRegistered atomic.Bool
-	logger       *slog.Logger
+	logger                    *slog.Logger
+	isRegistered              bool
+	isActive                  atomic.Bool
 }
 
 var (
@@ -41,52 +37,47 @@ func newFallbackServer() *Server {
 		workersByPath: make(map[string]*worker),
 		env:           make(map[string]string),
 		logger:        globalLogger,
+		workers: []*worker{},
+		workersWithRequestMatcher: []*worker{},
 	}
 
 	return s
 }
 
 // registerServers assigns the identity of every server and clears the workers of a previous run,
-// so the same *Server can be passed to Init() again after a Shutdown()
-// servers do not accept requests yet at this point, see activateServers()
-func registerServers(o *opt) {
+func registerServers(o *opt) error {
 	servers = o.servers
-	fallbackServer.logger = globalLogger
-	fallbackServer.resetWorkers()
 	fallbackServer.maxWaitTime = o.maxWaitTime
+	fallbackServer.logger = globalLogger
 
 	for i, s := range servers {
-		s.name = s.configuredName
+		if s.isRegistered {
+			return fmt.Errorf("server %q was registered previously and cannot be registered again", s.name)
+		}
+		s.isRegistered = true
 		s.maxWaitTime = o.maxWaitTime
 		if s.name == "" {
 			s.name = "server_" + strconv.Itoa(i)
 		}
-		s.resetWorkers()
 	}
+
+	return nil
 }
 
 // activateServers lets registered servers accept requests
-// it runs once workers and threads are up, so a request cannot reach a server before them
 func activateServers() {
-	fallbackServer.isRegistered.Store(true)
+	fallbackServer.isActive.Store(true)
 	for _, s := range servers {
-		s.isRegistered.Store(true)
+		s.isActive.Store(true)
 	}
 }
 
-func unregisterServers() {
-	fallbackServer.isRegistered.Store(false)
+func deactivateServers() {
+	fallbackServer.isActive.Store(false)
 	for _, server := range servers {
-		server.isRegistered.Store(false)
+		server.isActive.Store(false)
 	}
 	servers = nil
-}
-
-// resetWorkers drops the workers of a previous run; initWorkers() adds them back
-func (s *Server) resetWorkers() {
-	s.workers = nil
-	s.workersByPath = make(map[string]*worker)
-	s.workersWithRequestMatcher = nil
 }
 
 // NewServer creates a Server that can be registered via WithServer().
@@ -150,7 +141,7 @@ func (s *Server) addWorker(w *worker) error {
 // The request will be scoped to the server instance that was registered via WithServer().
 // Otherwise, it is equivalent to calling ServeHTTP.
 func (s *Server) ServeHTTP(responseWriter http.ResponseWriter, request *http.Request, opts ...RequestOption) error {
-	if !s.isRegistered.Load() {
+	if !s.isActive.Load() {
 		return ErrNotRunning
 	}
 

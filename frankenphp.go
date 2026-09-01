@@ -279,7 +279,10 @@ func Init(options ...Option) error {
 		maxIdleTime = opt.maxIdleTime
 	}
 
-	registerServers(opt)
+	if err := registerServers(opt); err != nil {
+		shutdown()
+		return err
+	}
 
 	workerThreadCount, err := calculateMaxThreads(opt)
 	if err != nil {
@@ -329,6 +332,7 @@ func Init(options ...Option) error {
 
 	if err := initWatchers(opt); err != nil {
 		shutdown()
+
 		return err
 	}
 
@@ -379,7 +383,7 @@ func shutdown() {
 
 	drainWatchers()
 	drainPHPThreads()
-	unregisterServers()
+	deactivateServers()
 
 	metrics.Shutdown()
 

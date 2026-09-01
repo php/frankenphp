@@ -307,7 +307,6 @@ func WithServer(s *Server) Option {
 func WithServerName(name string) ServerOption {
 	return func(s *Server) error {
 		s.name = name
-		s.configuredName = name
 
 		return nil
 	}

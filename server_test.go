@@ -185,8 +185,8 @@ func TestServer(t *testing.T) {
 		assert.Contains(t, err.Error(), "no server scope")
 	})
 
-	// re-registering a Server must not trip the duplicate filename check on its own workers
-	t.Run("reregistration_after_shutdown", func(t *testing.T) {
+	// re-registering a Server must return an error
+	t.Run("reregistration_after_shutdown_must_return_an_error", func(t *testing.T) {
 		server, err := frankenphp.NewServer(testDataDir)
 		require.NoError(t, err)
 
@@ -203,9 +203,9 @@ func TestServer(t *testing.T) {
 
 		frankenphp.Shutdown()
 
-		initServers(t, opts...)
-		assert.Equal(t, "requests:1", serverGet(t, server, "http://example.com/worker-with-counter.php"))
-		assert.Equal(t, "server_0", server.Name())
+		err = frankenphp.Init(opts...)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "server \"server_0\" was registered previously and cannot be registered again")
 	})
 
 	t.Run("error_on_missing_registration", func(t *testing.T) {
