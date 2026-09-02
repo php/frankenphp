@@ -170,3 +170,11 @@ func (s *Server) ServeHTTP(responseWriter http.ResponseWriter, request *http.Req
 	// If no worker was available, send the request to non-worker threads
 	return handleRequestWithRegularPHPThreads(fc)
 }
+
+func (s *Server) queueTimeout() <-chan time.Time {
+	if s.maxWaitTime == 0 {
+		return nil
+	}
+
+	return time.After(s.maxWaitTime)
+}

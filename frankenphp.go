@@ -796,14 +796,6 @@ func freeArgs(argv []*C.char) {
 	}
 }
 
-func timeoutChan(timeout time.Duration) <-chan time.Time {
-	if timeout == 0 {
-		return nil
-	}
-
-	return time.After(timeout)
-}
-
 func resetGlobals() {
 	globalCtx = context.Background()
 	globalLogger = slog.Default()
