@@ -133,7 +133,7 @@ func newWorkerDummyContext(w *worker) (*frankenPHPContext, error) {
 	server := w.server
 	if server == nil {
 		// global worker, not associated with a server
-		server = fallbackServer
+		server = fallbackServer.Load()
 	}
 
 	fc := &frankenPHPContext{
@@ -162,7 +162,7 @@ func newWorkerDummyContext(w *worker) (*frankenPHPContext, error) {
 func newContextFromMessage(message any, rw http.ResponseWriter, ctx context.Context, w *worker) *frankenPHPContext {
 	server := w.server
 	if server == nil {
-		server = fallbackServer
+		server = fallbackServer.Load()
 	}
 
 	if ctx == nil {

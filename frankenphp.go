@@ -339,7 +339,7 @@ func Init(options ...Option) error {
 	initAutoScaling(mainThread)
 
 	// only now that the workers and threads are up may requests reach a server
-	activateServers()
+	activateServers(opt)
 
 	if globalLogger.Enabled(globalCtx, slog.LevelInfo) {
 		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "FrankenPHP started 🐘", slog.String("php_version", Version().Version), slog.Int("num_threads", mainThread.numThreads), slog.Int("max_threads", mainThread.maxThreads), slog.Int("max_requests", maxRequestsPerThread))
@@ -409,7 +409,7 @@ func ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) error 
 		return ErrInvalidRequest
 	}
 
-	return fallbackServer.ServeHTTP(responseWriter, request, opts...)
+	return fallbackServer.Load().ServeHTTP(responseWriter, request, opts...)
 }
 
 //export go_ub_write

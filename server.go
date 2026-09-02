@@ -29,26 +29,32 @@ type Server struct {
 
 var (
 	servers        []*Server
-	fallbackServer = newFallbackServer()
+	fallbackServer = initFallbackServer()
 )
 
-func newFallbackServer() *Server {
+func initFallbackServer() atomic.Pointer[Server] {
+	p := atomic.Pointer[Server]{}
+	p.Store(resetFallbackServer(0))
+
+	return p
+}
+
+func resetFallbackServer(maxWaitTime time.Duration) *Server {
 	s := &Server{
-		workersByPath: make(map[string]*worker),
-		env:           make(map[string]string),
-		logger:        globalLogger,
-		workers: []*worker{},
+		workersByPath:             make(map[string]*worker),
+		env:                       make(map[string]string),
+		logger:                    globalLogger,
+		workers:                   []*worker{},
 		workersWithRequestMatcher: []*worker{},
+		maxWaitTime:               maxWaitTime,
 	}
 
 	return s
 }
 
-// registerServers assigns the identity of every server and clears the workers of a previous run,
 func registerServers(o *opt) error {
 	servers = o.servers
-	fallbackServer.maxWaitTime = o.maxWaitTime
-	fallbackServer.logger = globalLogger
+	fallbackServer.Store(resetFallbackServer(o.maxWaitTime))
 
 	for i, s := range servers {
 		if s.isRegistered {
@@ -65,25 +71,23 @@ func registerServers(o *opt) error {
 }
 
 // activateServers lets registered servers accept requests
-func activateServers() {
-	fallbackServer.isActive.Store(true)
+func activateServers(o *opt) {
+
+	fallbackServer.Load().isActive.Store(true)
 	for _, s := range servers {
 		s.isActive.Store(true)
 	}
 }
 
 func deactivateServers() {
-	fallbackServer.isActive.Store(false)
+	fallbackServer.Load().isActive.Store(false)
 	for _, server := range servers {
 		server.isActive.Store(false)
 	}
 	servers = nil
 }
 
-// NewServer creates a Server that can be registered via WithServer().
-// name is a human-readable identifier used to attribute workers, metrics
-// and logs to this server; when empty, it defaults to the index the
-// server gets at registration time.
+// NewServer creates a Server that can be registered via WithServer() on frankenphp.Init().
 func NewServer(root string, options ...ServerOption) (*Server, error) {
 	root, err := fastabs.FastAbs(root)
 	if err != nil {
@@ -117,7 +121,6 @@ func NewServer(root string, options ...ServerOption) (*Server, error) {
 }
 
 // Name returns the human-readable name of the server.
-// It is empty until registration if none was passed to NewServer().
 func (s *Server) Name() string {
 	return s.name
 }
