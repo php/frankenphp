@@ -195,7 +195,7 @@ func TestWorkerMaxRequests(t *testing.T) {
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
 		instanceIDs := make(map[string]int)
 
-		for i := 0; i < totalRequests; i++ {
+		for range totalRequests {
 			body, resp := testGet("http://example.com/worker-counter-persistent.php", handler, t)
 			assert.Equal(t, 200, resp.StatusCode)
 
@@ -242,10 +242,8 @@ func TestWorkerMaxRequestsHighConcurrency(t *testing.T) {
 		)
 		var wg sync.WaitGroup
 
-		for i := 0; i < totalRequests; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+		for range totalRequests {
+			wg.Go(func() {
 				body, resp := testGet("http://example.com/worker-counter-persistent.php", handler, t)
 				assert.Equal(t, 200, resp.StatusCode)
 
@@ -256,7 +254,7 @@ func TestWorkerMaxRequestsHighConcurrency(t *testing.T) {
 					instanceIDs[instanceID]++
 				}
 				mu.Unlock()
-			}()
+			})
 		}
 		wg.Wait()
 

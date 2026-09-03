@@ -97,6 +97,15 @@ type PrometheusMetrics struct {
 	mu                 sync.RWMutex
 }
 
+// mustRegister registers c, tolerating a collector that is already registered.
+func (m *PrometheusMetrics) mustRegister(c prometheus.Collector) {
+	if err := m.registry.Register(c); err != nil {
+		if _, ok := errors.AsType[prometheus.AlreadyRegisteredError](err); !ok {
+			panic(err)
+		}
+	}
+}
+
 func (m *PrometheusMetrics) StartWorker(name string) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -161,10 +170,7 @@ func (m *PrometheusMetrics) TotalWorkers(string, int) {
 			Name:      "total_workers",
 			Help:      "Total number of PHP workers for this worker",
 		}, basicLabels)
-		if err := m.registry.Register(m.totalWorkers); err != nil &&
-			!errors.As(err, &prometheus.AlreadyRegisteredError{}) {
-			panic(err)
-		}
+		m.mustRegister(m.totalWorkers)
 	}
 
 	if m.readyWorkers == nil {
@@ -173,10 +179,7 @@ func (m *PrometheusMetrics) TotalWorkers(string, int) {
 			Name:      "ready_workers",
 			Help:      "Running workers that have successfully called frankenphp_handle_request at least once",
 		}, basicLabels)
-		if err := m.registry.Register(m.readyWorkers); err != nil &&
-			!errors.As(err, &prometheus.AlreadyRegisteredError{}) {
-			panic(err)
-		}
+		m.mustRegister(m.readyWorkers)
 	}
 
 	if m.busyWorkers == nil {
@@ -185,10 +188,7 @@ func (m *PrometheusMetrics) TotalWorkers(string, int) {
 			Name:      "busy_workers",
 			Help:      "Number of busy PHP workers for this worker",
 		}, basicLabels)
-		if err := m.registry.Register(m.busyWorkers); err != nil &&
-			!errors.As(err, &prometheus.AlreadyRegisteredError{}) {
-			panic(err)
-		}
+		m.mustRegister(m.busyWorkers)
 	}
 
 	if m.workerCrashes == nil {
@@ -198,10 +198,7 @@ func (m *PrometheusMetrics) TotalWorkers(string, int) {
 			Name:      "crashes",
 			Help:      "Number of PHP worker crashes for this worker",
 		}, basicLabels)
-		if err := m.registry.Register(m.workerCrashes); err != nil &&
-			!errors.As(err, &prometheus.AlreadyRegisteredError{}) {
-			panic(err)
-		}
+		m.mustRegister(m.workerCrashes)
 	}
 
 	if m.workerRestarts == nil {
@@ -211,10 +208,7 @@ func (m *PrometheusMetrics) TotalWorkers(string, int) {
 			Name:      "restarts",
 			Help:      "Number of PHP worker restarts for this worker",
 		}, basicLabels)
-		if err := m.registry.Register(m.workerRestarts); err != nil &&
-			!errors.As(err, &prometheus.AlreadyRegisteredError{}) {
-			panic(err)
-		}
+		m.mustRegister(m.workerRestarts)
 	}
 
 	if m.workerRequestTime == nil {
@@ -223,10 +217,7 @@ func (m *PrometheusMetrics) TotalWorkers(string, int) {
 			Subsystem: sub,
 			Name:      "request_time",
 		}, basicLabels)
-		if err := m.registry.Register(m.workerRequestTime); err != nil &&
-			!errors.As(err, &prometheus.AlreadyRegisteredError{}) {
-			panic(err)
-		}
+		m.mustRegister(m.workerRequestTime)
 	}
 
 	if m.workerRequestCount == nil {
@@ -235,10 +226,7 @@ func (m *PrometheusMetrics) TotalWorkers(string, int) {
 			Subsystem: sub,
 			Name:      "request_count",
 		}, basicLabels)
-		if err := m.registry.Register(m.workerRequestCount); err != nil &&
-			!errors.As(err, &prometheus.AlreadyRegisteredError{}) {
-			panic(err)
-		}
+		m.mustRegister(m.workerRequestCount)
 	}
 
 	if m.workerQueueDepth == nil {
@@ -247,10 +235,7 @@ func (m *PrometheusMetrics) TotalWorkers(string, int) {
 			Subsystem: sub,
 			Name:      "queue_depth",
 		}, basicLabels)
-		if err := m.registry.Register(m.workerQueueDepth); err != nil &&
-			!errors.As(err, &prometheus.AlreadyRegisteredError{}) {
-			panic(err)
-		}
+		m.mustRegister(m.workerQueueDepth)
 	}
 }
 
@@ -402,20 +387,11 @@ func NewPrometheusMetrics(registry prometheus.Registerer) *PrometheusMetrics {
 		workerQueueDepth:   nil,
 	}
 
-	if err := m.registry.Register(m.totalThreads); err != nil &&
-		!errors.As(err, &prometheus.AlreadyRegisteredError{}) {
-		panic(err)
-	}
+	m.mustRegister(m.totalThreads)
 
-	if err := m.registry.Register(m.busyThreads); err != nil &&
-		!errors.As(err, &prometheus.AlreadyRegisteredError{}) {
-		panic(err)
-	}
+	m.mustRegister(m.busyThreads)
 
-	if err := m.registry.Register(m.queueDepth); err != nil &&
-		!errors.As(err, &prometheus.AlreadyRegisteredError{}) {
-		panic(err)
-	}
+	m.mustRegister(m.queueDepth)
 
 	return m
 }

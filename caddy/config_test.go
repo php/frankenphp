@@ -254,7 +254,7 @@ func TestCreateUniqueWorkerNames(t *testing.T) {
 	filename := "../testdata/worker-with-env.php"
 	absFileName, _ := filepath.Abs(filename)
 	names := make([]string, 6)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		names[i] = app.createUniqueWorkerName(workerConfig{
 			FileName: filename,
 			Name:     "custom-worker-name",

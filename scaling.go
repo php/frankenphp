@@ -3,6 +3,7 @@ package frankenphp
 import (
 	"errors"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
@@ -205,12 +206,10 @@ func deactivateThreads() {
 	stoppedThreadCount := 0
 	scalingMu.Lock()
 	defer scalingMu.Unlock()
-	for i := len(autoScaledThreads) - 1; i >= 0; i-- {
-		thread := autoScaledThreads[i]
-
+	for i, thread := range slices.Backward(autoScaledThreads) {
 		// the thread might have been stopped otherwise, remove it
 		if thread.state.Is(state.Reserved) {
-			autoScaledThreads = append(autoScaledThreads[:i], autoScaledThreads[i+1:]...)
+			autoScaledThreads = slices.Delete(autoScaledThreads, i, i+1)
 			continue
 		}
 
@@ -223,7 +222,7 @@ func deactivateThreads() {
 		if thread.state.Is(state.Ready) && waitTime > maxIdleTime.Milliseconds() {
 			convertToInactiveThread(thread)
 			stoppedThreadCount++
-			autoScaledThreads = append(autoScaledThreads[:i], autoScaledThreads[i+1:]...)
+			autoScaledThreads = slices.Delete(autoScaledThreads, i, i+1)
 
 			if globalLogger.Enabled(globalCtx, slog.LevelInfo) {
 				globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "downscaling thread", slog.Int("thread", thread.threadIndex), slog.Int64("wait_time", waitTime), slog.Int("num_threads", len(autoScaledThreads)))
@@ -239,7 +238,7 @@ func deactivateThreads() {
 		// 	logger.LogAttrs(nil, slog.LevelDebug, "auto-stopping thread", slog.Int("thread", thread.threadIndex))
 		// 	thread.shutdown()
 		// 	stoppedThreadCount++
-		// 	autoScaledThreads = append(autoScaledThreads[:i], autoScaledThreads[i+1:]...)
+		// 	autoScaledThreads = slices.Delete(autoScaledThreads, i, i+1)
 		// 	continue
 		// }
 	}

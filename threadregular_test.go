@@ -42,7 +42,7 @@ func TestRequestsQueuedBeforeThreadsAreReadyAreHandedOver(t *testing.T) {
 		errChans[i] = errChan
 	}
 
-	for i := 0; i < requests; i++ {
+	for i := range requests {
 		select {
 		case fc := <-regularRequestChan:
 			fc.closeContext()

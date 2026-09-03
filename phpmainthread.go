@@ -75,7 +75,7 @@ func initPHPThreads(numThreads int, numMaxThreads int, phpIni map[string]string)
 	// start the underlying C threads
 	var ready sync.WaitGroup
 
-	for i := 0; i < numThreads; i++ {
+	for i := range numThreads {
 		ready.Go(phpThreads[i].boot)
 	}
 
