@@ -180,10 +180,18 @@ func init() {
 
 	AddPHPInfoEntry("go", buildInfo.GoVersion)
 
-	goModuleEntries = make([]phpinfoEntry, 0, len(buildInfo.Deps))
-	for _, dep := range buildInfo.Deps {
-		goModuleEntries = append(goModuleEntries, phpinfoEntry{dep.Path, goModuleVersion(dep)})
+	goModuleEntries = buildGoModuleEntries(buildInfo)
+}
+
+func buildGoModuleEntries(buildInfo *debug.BuildInfo) []phpinfoEntry {
+	entries := make([]phpinfoEntry, 0, len(buildInfo.Deps)+1)
+	if buildInfo.Main.Path != "" {
+		entries = append(entries, phpinfoEntry{buildInfo.Main.Path, goModuleVersion(&buildInfo.Main)})
 	}
+	for _, dep := range buildInfo.Deps {
+		entries = append(entries, phpinfoEntry{dep.Path, goModuleVersion(dep)})
+	}
+	return entries
 }
 
 // goModuleVersion returns the version of the given module, taking "replace"
