@@ -73,7 +73,7 @@ func TestExecuteCLICodePHPInfoAsText(t *testing.T) {
 }
 
 // `-i` (and any other invocation without a script) is only supported since PHP
-// 8.6, where the real CLI SAPI is reused. older versions must fail cleanly.
+// 8.6, where the real CLI SAPI is reused. Older versions must fail cleanly.
 func TestExecuteCLIPHPInfo(t *testing.T) {
 	if _, err := os.Stat("internal/testcli/testcli"); err != nil {
 		t.Skip("internal/testcli/testcli has not been compiled, run `cd internal/testcli/ && go build`")

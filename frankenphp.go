@@ -169,9 +169,8 @@ var (
 	cGoModulesArr   []*C.char
 )
 
-// Report the Go toolchain and every Go module linked into the binary. Caddy
-// modules, FrankenPHP extensions written in Go and even the standard library
-// itself. The list is verbose, so it's displayed in a collapsed section.
+// Report the Go toolchain and Go module versions.
+// The list is verbose, so it's displayed in a collapsed section.
 func init() {
 	buildInfo, ok := debug.ReadBuildInfo()
 	if !ok {
