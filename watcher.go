@@ -11,11 +11,11 @@ import (
 )
 
 func init() {
-	// watcher doesn't expose the version, so get it from go.mod
+	// watcher doesn't expose the version, so get it from the build info.
 	if buildInfo, ok := debug.ReadBuildInfo(); ok {
 		for _, dep := range buildInfo.Deps {
 			if dep.Path == "github.com/e-dant/watcher" {
-				AddPHPInfoEntry("e-dant/watcher", dep.Version)
+				AddPHPInfoModule("e-dant/watcher", dep)
 				break
 			}
 		}

@@ -202,8 +202,15 @@ func goModuleVersion(module *debug.Module) string {
 }
 
 // AddPHPInfoEntry adds an entry to the frankenphp section of phpinfo().
+// Call it during package initialization before Init.
 func AddPHPInfoEntry(key, value string) {
 	phpinfoEntries = append(phpinfoEntries, phpinfoEntry{key, value})
+}
+
+// AddPHPInfoModule adds a component's Go module version to the frankenphp section
+// of phpinfo(). Call it during package initialization before Init.
+func AddPHPInfoModule(key string, module *debug.Module) {
+	AddPHPInfoEntry(key, goModuleVersion(module))
 }
 
 func initPHPInfoEntries() {
