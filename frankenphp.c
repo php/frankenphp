@@ -1171,6 +1171,20 @@ static zend_module_entry frankenphp_module = {
     TOSTRING(FRANKENPHP_VERSION),
     STANDARD_MODULE_PROPERTIES};
 
+/* CLI exposes the same metadata, but must keep PHP's native functions and
+ * avoid initializing hooks that depend on the server runtime. */
+static zend_module_entry frankenphp_cli_module = {
+    STANDARD_MODULE_HEADER,
+    "frankenphp",
+    NULL,                  /* function table */
+    NULL,                  /* initialization */
+    NULL,                  /* shutdown */
+    NULL,                  /* request initialization */
+    NULL,                  /* request shutdown */
+    PHP_MINFO(frankenphp), /* information */
+    TOSTRING(FRANKENPHP_VERSION),
+    STANDARD_MODULE_PROPERTIES};
+
 static int frankenphp_startup(sapi_module_struct *sapi_module) {
   php_import_environment_variables = get_full_env;
 
@@ -1825,8 +1839,9 @@ static int register_frankenphp_module(void) {
     return FAILURE;
   }
 
-  return zend_register_internal_module(&frankenphp_module) == NULL ? FAILURE
-                                                                   : SUCCESS;
+  return zend_register_internal_module(&frankenphp_cli_module) == NULL
+             ? FAILURE
+             : SUCCESS;
 }
 
 int frankenphp_execute_script_cli(char *script, int argc, char **argv,
