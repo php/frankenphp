@@ -27,6 +27,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -458,6 +459,17 @@ func testSession(t *testing.T, opts *testOptions) {
 	}, opts)
 }
 
+const phpInfoTestComponent = "test/component<&>"
+
+func init() {
+	// Register before any Init call, as required by AddPHPInfoModule's contract.
+	frankenphp.AddPHPInfoModule(phpInfoTestComponent, &debug.Module{
+		Path:    "example.com/component",
+		Version: "v1.0.0",
+		Replace: &debug.Module{Path: "example.com/fork<&>", Version: "v2.0.0"},
+	})
+}
+
 func TestPhpInfo_module(t *testing.T) { testPhpInfo(t, nil) }
 func TestPhpInfo_worker(t *testing.T) { testPhpInfo(t, &testOptions{workerScript: "phpinfo.php"}) }
 func testPhpInfo(t *testing.T, opts *testOptions) {
@@ -472,6 +484,7 @@ func testPhpInfo(t *testing.T, opts *testOptions) {
 		assert.Contains(t, body, "frankenphp")
 		assert.Contains(t, body, fmt.Sprintf("i=%d", i))
 		assert.Contains(t, body, runtime.Version())
+		assert.Contains(t, body, `<tr><td class="e">test/component&lt;&amp;&gt; </td><td class="v">example.com/fork&lt;&amp;&gt; v2.0.0 </td></tr>`)
 	}, opts)
 }
 
