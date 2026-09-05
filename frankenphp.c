@@ -1863,14 +1863,19 @@ int frankenphp_execute_script_cli(char *script, int argc, char **argv,
    */
   err = pthread_create(&thread, NULL, execute_script_cli, &args);
   if (err != 0) {
+    php_register_internal_extensions_func =
+        previous_php_register_internal_extensions_func;
     return err;
   }
 
   err = pthread_join(thread, &exit_status);
   if (err != 0) {
+    /* The CLI thread may still be using the hook; do not restore it yet. */
     return err;
   }
 
+  php_register_internal_extensions_func =
+      previous_php_register_internal_extensions_func;
   return (intptr_t)exit_status;
 }
 
