@@ -11,7 +11,7 @@ import (
 const (
 	StopReasonCrash = iota
 	StopReasonRestart
-	StopReasonBootFailure // worker crashed before reaching frankenphp_handle_request
+	StopReasonBootFailure // worker exited before reaching its ready point: frankenphp_handle_request, or frankenphp_get_worker_handle for background workers
 )
 
 type StopReason int
@@ -144,7 +144,7 @@ func (m *PrometheusMetrics) StopWorker(name string, reason StopReason) {
 
 	m.totalWorkers.WithLabelValues(name).Dec()
 
-	// only decrement readyWorkers if the worker actually reached frankenphp_handle_request
+	// only decrement readyWorkers if the worker actually reached its ready point
 	if reason != StopReasonBootFailure {
 		m.readyWorkers.WithLabelValues(name).Dec()
 	}
@@ -177,7 +177,7 @@ func (m *PrometheusMetrics) TotalWorkers(string, int) {
 		m.readyWorkers = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Namespace: ns,
 			Name:      "ready_workers",
-			Help:      "Running workers that have successfully called frankenphp_handle_request at least once",
+			Help:      "Running workers that have reached their ready point at least once: frankenphp_handle_request for HTTP workers, frankenphp_get_worker_handle for background workers",
 		}, basicLabels)
 		m.mustRegister(m.readyWorkers)
 	}

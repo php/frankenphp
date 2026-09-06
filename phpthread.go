@@ -39,11 +39,10 @@ type threadHandler interface {
 	beforeScriptExecution() string
 	afterScriptExecution(exitStatus int)
 	frankenPHPContext() *frankenPHPContext
-	// drain is a hook called by drainWorkerThreads right before drainChan is
-	// closed. Handlers that need to wake up a thread parked in a blocking C
-	// call (e.g. by closing a stop pipe) plug their signal in here. All
-	// current handlers are no-ops; this is the seam later handler types use
-	// without having to modify drainWorkerThreads.
+	// drain is a hook called right before drainChan is closed on shutdown
+	// and reboot. Handlers that need to wake up a thread parked in a
+	// blocking C call (background workers' stream_select on the stop socket)
+	// plug their signal in here; the other handlers are no-ops.
 	drain()
 }
 
@@ -119,6 +118,9 @@ func (thread *phpThread) shutdown() {
 		return
 	}
 
+	// wake up handlers parked in a blocking C call (background workers'
+	// stream_select on the stop socket); no-op for the other handlers
+	thread.handler.drain()
 	close(thread.drainChan)
 
 	// Arm force-kill after the grace period to wake any thread stuck in
@@ -157,6 +159,9 @@ func (thread *phpThread) setHandler(handler threadHandler) {
 		return
 	}
 
+	// wake up a handler parked in a blocking C call (background workers'
+	// stream_select on the stop socket) so it can yield for the transition
+	thread.handler.drain()
 	close(thread.drainChan)
 
 	thread.state.WaitFor(state.TransitionInProgress)

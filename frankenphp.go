@@ -216,26 +216,42 @@ func checkPHPConfig(config PHPConfig) error {
 	return nil
 }
 
-func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
+// calculateMaxThreads resolves num_threads and max_threads against the HTTP
+// workers and returns their thread count, plus the threads of the background
+// workers, which take no part in that budget: they come on top of it
+func calculateMaxThreads(opt *opt) (numWorkers, backgroundThreads int, _ error) {
 	maxProcs := runtime.GOMAXPROCS(0) * 2
 	maxThreadsFromWorkers := 0
 
 	for i, w := range opt.workers {
+		if w.isBackgroundWorker {
+			if w.num < 1 {
+				name := w.name
+				if name == "" {
+					name = w.fileName
+				}
+
+				return 0, 0, fmt.Errorf("background worker %q must declare num >= 1", name)
+			}
+			backgroundThreads += w.num
+
+			continue
+		}
+
 		if w.num <= 0 {
 			// https://github.com/php/frankenphp/issues/126
 			opt.workers[i].num = maxProcs
 		}
-		metrics.TotalWorkers(w.name, w.num)
 
 		numWorkers += opt.workers[i].num
 
 		if w.maxThreads > 0 {
 			if w.maxThreads < w.num {
-				return 0, fmt.Errorf("worker max_threads (%d) must be greater or equal to worker num (%d) (%q)", w.maxThreads, w.num, w.fileName)
+				return 0, 0, fmt.Errorf("worker max_threads (%d) must be greater or equal to worker num (%d) (%q)", w.maxThreads, w.num, w.fileName)
 			}
 
 			if w.maxThreads > opt.maxThreads && opt.maxThreads > 0 {
-				return 0, fmt.Errorf("worker max_threads (%d) cannot be greater than total max_threads (%d) (%q)", w.maxThreads, opt.maxThreads, w.fileName)
+				return 0, 0, fmt.Errorf("worker max_threads (%d) cannot be greater than total max_threads (%d) (%q)", w.maxThreads, opt.maxThreads, w.fileName)
 			}
 
 			maxThreadsFromWorkers += w.maxThreads - w.num
@@ -259,19 +275,19 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 	if numThreadsIsSet && !maxThreadsIsSet {
 		opt.maxThreads = opt.numThreads
 		if opt.numThreads <= numWorkers {
-			return 0, fmt.Errorf("num_threads (%d) must be greater than the number of worker threads (%d)", opt.numThreads, numWorkers)
+			return 0, 0, fmt.Errorf("num_threads (%d) must be greater than the number of worker threads (%d)", opt.numThreads, numWorkers)
 		}
 
-		return numWorkers, nil
+		return numWorkers, backgroundThreads, nil
 	}
 
 	if maxThreadsIsSet && !numThreadsIsSet {
 		opt.numThreads = numWorkers + 1
 		if !maxThreadsIsAuto && opt.numThreads > opt.maxThreads {
-			return 0, fmt.Errorf("max_threads (%d) must be greater than the number of worker threads (%d)", opt.maxThreads, numWorkers)
+			return 0, 0, fmt.Errorf("max_threads (%d) must be greater than the number of worker threads (%d)", opt.maxThreads, numWorkers)
 		}
 
-		return numWorkers, nil
+		return numWorkers, backgroundThreads, nil
 	}
 
 	if !numThreadsIsSet {
@@ -283,19 +299,19 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 		}
 		opt.maxThreads = opt.numThreads
 
-		return numWorkers, nil
+		return numWorkers, backgroundThreads, nil
 	}
 
 	// both num_threads and max_threads are set
 	if opt.numThreads <= numWorkers {
-		return 0, fmt.Errorf("num_threads (%d) must be greater than the number of worker threads (%d)", opt.numThreads, numWorkers)
+		return 0, 0, fmt.Errorf("num_threads (%d) must be greater than the number of worker threads (%d)", opt.numThreads, numWorkers)
 	}
 
 	if !maxThreadsIsAuto && opt.maxThreads < opt.numThreads {
-		return 0, fmt.Errorf("max_threads (%d) must be greater than or equal to num_threads (%d)", opt.maxThreads, opt.numThreads)
+		return 0, 0, fmt.Errorf("max_threads (%d) must be greater than or equal to num_threads (%d)", opt.maxThreads, opt.numThreads)
 	}
 
-	return numWorkers, nil
+	return numWorkers, backgroundThreads, nil
 }
 
 // Init starts the PHP runtime and the configured workers.
@@ -344,13 +360,15 @@ func Init(options ...Option) error {
 
 	registerServers(opt.servers)
 
-	workerThreadCount, err := calculateMaxThreads(opt)
+	workerThreadCount, backgroundThreads, err := calculateMaxThreads(opt)
 	if err != nil {
 		shutdown()
 		return err
 	}
 
-	metrics.TotalThreads(opt.numThreads)
+	// background workers run on threads of their own, on top of the budget
+	// num_threads and max_threads describe for HTTP traffic
+	metrics.TotalThreads(opt.numThreads + backgroundThreads)
 
 	config := Config()
 
@@ -368,13 +386,23 @@ func Init(options ...Option) error {
 		}
 	} else {
 		opt.numThreads = 1
+		if workerThreadCount > 1 || backgroundThreads > 0 {
+			shutdown()
+			return fmt.Errorf("%d worker threads are declared, but this PHP build is not ZTS and runs a single thread", workerThreadCount+backgroundThreads)
+		}
 
 		if globalLogger.Enabled(globalCtx, slog.LevelWarn) {
 			globalLogger.LogAttrs(globalCtx, slog.LevelWarn, `ZTS is not enabled, only 1 thread will be available, recompile PHP using the "--enable-zts" configuration option or performance will be degraded`)
 		}
 	}
 
-	mainThread, err := initPHPThreads(opt.numThreads, opt.maxThreads, opt.phpIni)
+	maxThreads := opt.maxThreads
+	if maxThreads > 0 {
+		// in auto mode (maxThreads < 0), the resolved value is floored to the
+		// thread count, background threads included
+		maxThreads += backgroundThreads
+	}
+	mainThread, err := initPHPThreads(opt.numThreads+backgroundThreads, maxThreads, opt.phpIni)
 	if err != nil {
 		shutdown()
 		return err
@@ -528,7 +556,7 @@ func go_apache_request_headers(threadIndex C.uintptr_t) (*C.go_string, C.size_t)
 		// worker mode, not handling a request
 
 		if fc.logger.Enabled(fc.ctx, slog.LevelDebug) {
-			fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "apache_request_headers() called in non-HTTP context", slog.String("worker", fc.worker.name))
+			fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "apache_request_headers() called in non-HTTP context", slog.String("worker", fc.worker.qualifiedName))
 		}
 
 		return nil, 0
@@ -868,8 +896,6 @@ func resetGlobals() {
 	globalCtx = context.Background()
 	globalLogger = slog.Default()
 	workers = nil
-	workersByName = nil
-	globalWorkersByPath = nil
 	servers = nil
 	watcherIsEnabled = false
 	maxIdleTime = defaultMaxIdleTime
