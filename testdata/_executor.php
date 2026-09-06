@@ -1,7 +1,7 @@
 <?php
 
 $fn = require $_SERVER['SCRIPT_FILENAME'];
-if ('1' !== ($_SERVER['FRANKENPHP_WORKER'] ?? null)) {
+if (!isset($_SERVER['FRANKENPHP_WORKER'])) {
     $fn();
     exit(0);
 }

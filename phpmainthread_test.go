@@ -26,7 +26,7 @@ func setupGlobals(t *testing.T) {
 }
 
 func TestStartAndStopTheMainThreadWithOneInactiveThread(t *testing.T) {
-	_, err := initPHPThreads(1, 1, nil) // boot 1 thread
+	_, err := initPHPThreads(1, 1, 0, nil) // boot 1 thread
 	assert.NoError(t, err)
 
 	assert.Len(t, phpThreads, 1)
@@ -41,7 +41,7 @@ func TestStartAndStopTheMainThreadWithOneInactiveThread(t *testing.T) {
 func TestTransitionRegularThreadToWorkerThread(t *testing.T) {
 	setupGlobals(t)
 
-	_, err := initPHPThreads(1, 1, nil)
+	_, err := initPHPThreads(1, 1, 0, nil)
 	assert.NoError(t, err)
 
 	// transition to regular thread
@@ -66,7 +66,7 @@ func TestTransitionRegularThreadToWorkerThread(t *testing.T) {
 func TestTransitionAThreadBetween2DifferentWorkers(t *testing.T) {
 	setupGlobals(t)
 
-	_, err := initPHPThreads(1, 1, nil)
+	_, err := initPHPThreads(1, 1, 0, nil)
 	assert.NoError(t, err)
 	firstWorker := getDummyWorker(t, "transition-worker-1.php")
 	secondWorker := getDummyWorker(t, "transition-worker-2.php")
@@ -228,7 +228,7 @@ func TestQueuedRequestSurvivesReload(t *testing.T) {
 func TestFinishBootingAWorkerScript(t *testing.T) {
 	setupGlobals(t)
 
-	_, err := initPHPThreads(1, 1, nil)
+	_, err := initPHPThreads(1, 1, 0, nil)
 	assert.NoError(t, err)
 
 	// boot the worker
@@ -252,28 +252,22 @@ func TestFinishBootingAWorkerScript(t *testing.T) {
 
 func TestReturnAnErrorIf2WorkersHaveTheSameFileName(t *testing.T) {
 	resetGlobals()
-	workers = []*worker{}
-	workersByName = map[string]*worker{}
-	globalWorkersByPath = map[string]*worker{}
-	w, err1 := newWorker(workerOpt{fileName: testDataPath + "/index.php"})
-	assert.NoError(t, err1)
-	workers = append(workers, w)
-	workersByName[w.name] = w
-	globalWorkersByPath[w.fileName] = w
-	_, err2 := newWorker(workerOpt{fileName: testDataPath + "/index.php"})
-	assert.Error(t, err2, "two workers cannot have the same filename")
+	fallbackServer.resetWorkers()
+	w1, err := newWorker(workerOpt{fileName: testDataPath + "/index.php"})
+	assert.NoError(t, err)
+	assert.NoError(t, fallbackServer.addWorker(w1))
+	_, err = newWorker(workerOpt{fileName: testDataPath + "/index.php", name: "other"})
+	assert.ErrorContains(t, err, "two global workers cannot have the same filename")
 }
 
 func TestReturnAnErrorIf2ModuleWorkersHaveTheSameName(t *testing.T) {
 	resetGlobals()
-	workers = []*worker{}
-	workersByName = map[string]*worker{}
-	w, err1 := newWorker(workerOpt{fileName: testDataPath + "/index.php", name: "workername"})
-	assert.NoError(t, err1)
-	workers = append(workers, w)
-	workersByName[w.name] = w
-	_, err2 := newWorker(workerOpt{fileName: testDataPath + "/hello.php", name: "workername"})
-	assert.Error(t, err2, "two workers cannot have the same name")
+	fallbackServer.resetWorkers()
+	w1, err := newWorker(workerOpt{fileName: testDataPath + "/index.php", name: "workername"})
+	assert.NoError(t, err)
+	assert.NoError(t, fallbackServer.addWorker(w1))
+	_, err = newWorker(workerOpt{fileName: testDataPath + "/hello.php", name: "workername"})
+	assert.ErrorContains(t, err, "two global workers cannot have the same name")
 }
 
 func getDummyWorker(t *testing.T, fileName string) *worker {
@@ -315,9 +309,9 @@ func allPossibleTransitions(worker1Path string, worker2Path string) []func(*phpT
 				thread.boot()
 			}
 		},
-		func(thread *phpThread) { convertToWorkerThread(thread, globalWorkersByPath[worker1Path]) },
+		func(thread *phpThread) { convertToWorkerThread(thread, fallbackServer.workersByPath[worker1Path]) },
 		convertToInactiveThread,
-		func(thread *phpThread) { convertToWorkerThread(thread, globalWorkersByPath[worker2Path]) },
+		func(thread *phpThread) { convertToWorkerThread(thread, fallbackServer.workersByPath[worker2Path]) },
 		convertToInactiveThread,
 	}
 }
@@ -375,7 +369,7 @@ func TestCorrectThreadCalculation(t *testing.T) {
 func testThreadCalculation(t *testing.T, expectedNumThreads int, expectedMaxThreads int, o *opt) {
 	t.Helper()
 
-	_, err := calculateMaxThreads(o)
+	_, _, err := calculateMaxThreads(o)
 	assert.NoError(t, err, "no error should be returned")
 	assert.Equal(t, expectedNumThreads, o.numThreads, "num_threads must be correct")
 	assert.Equal(t, expectedMaxThreads, o.maxThreads, "max_threads must be correct")
@@ -384,7 +378,7 @@ func testThreadCalculation(t *testing.T, expectedNumThreads int, expectedMaxThre
 func testThreadCalculationError(t *testing.T, o *opt) {
 	t.Helper()
 
-	_, err := calculateMaxThreads(o)
+	_, _, err := calculateMaxThreads(o)
 	assert.Error(t, err, "configuration must error")
 }
 
@@ -393,7 +387,8 @@ func TestContextAndLoggerMustNotBeNil(t *testing.T) {
 	assert.NotNil(t, log, "logger is defined if all threads are inactive")
 	assert.NotNil(t, ctx, "context is defined if all threads are inactive")
 
-	fc := newContextFromMessage(nil, nil, nil, &worker{})
+	// a worker always belongs to a server, see newWorker()
+	fc := newContextFromMessage(nil, nil, nil, &worker{server: fallbackServer})
 	assert.NotNil(t, fc.logger, "logger is defined for message context")
 	assert.NotNil(t, fc.ctx, "context is defined for message context")
 
@@ -402,7 +397,7 @@ func TestContextAndLoggerMustNotBeNil(t *testing.T) {
 	assert.NotNil(t, fc.logger, "logger is defined for request context")
 	assert.NotNil(t, fc.ctx, "context is defined for request context")
 
-	fc, _ = newWorkerDummyContext(&worker{})
+	fc, _ = newWorkerDummyContext(&worker{server: fallbackServer})
 	assert.NotNil(t, fc.logger, "logger is defined for worker dummy context")
 	assert.NotNil(t, fc.ctx, "context is defined for worker dummy context")
 }
