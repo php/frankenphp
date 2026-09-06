@@ -82,3 +82,20 @@ function frankenphp_get_worker_handle() {}
  * inside a background worker.
  */
 function frankenphp_worker_tick(): bool {}
+
+/**
+ * Publishes the vars of the current background worker: the array replaces
+ * the previous snapshot, atomically for readers, which get copies. Values
+ * must be null, scalars, arrays or enums. Only callable from inside a
+ * background worker.
+ */
+function frankenphp_set_vars(array $vars): void {}
+
+/**
+ * Returns a copy of the vars last published by the named background worker,
+ * resolved within the current php_server, then among global workers. Blocks
+ * until that worker reached its ready point. Throws if the worker is
+ * unknown, if it is ready but has not published any vars, or if background
+ * workers wait on each other in a cycle.
+ */
+function frankenphp_get_vars(string $name): array {}
