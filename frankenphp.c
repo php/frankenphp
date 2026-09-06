@@ -62,12 +62,7 @@
 
 #include "_cgo_export.h"
 #include "frankenphp_arginfo.h"
-#ifdef FRANKENPHP_TEST
-/* The persistent_zval helpers are only compiled in when a consumer needs
- * them. The step that lands the first real caller (background workers)
- * will drop this guard. */
 #include "zval.h"
-#endif
 
 #if defined(PHP_WIN32) && defined(ZTS)
 ZEND_TSRMLS_CACHE_DEFINE()
@@ -1642,12 +1637,19 @@ ZEND_METHOD(FrankenPHP_WorkerHandle, tick) {
   }
 
   if (!worker_ticked) {
+    /* refused while a declared vars namespace has no snapshot of this run */
+    char *error =
+        go_frankenphp_background_worker_ready(frankenphp_thread_index());
+    if (error != NULL) {
+      zend_throw_exception(spl_ce_LogicException, error, 0);
+      free(error);
+      RETURN_THROWS();
+    }
     worker_ticked = true;
     /* The bootstrap ran under max_execution_time like any request, the loop
      * that starts now has no time limit, like the CLI. Nothing re-arms the
      * timer past this point. */
     zend_unset_timeout();
-    go_frankenphp_background_worker_ready(frankenphp_thread_index());
   }
 
   /* consume the wake-ups without blocking; EOF is the drain */
@@ -1676,6 +1678,114 @@ ZEND_METHOD(FrankenPHP_WorkerHandle, tick) {
       /* a broken socket carries no drain anymore, stop the loop */
       RETURN_FALSE;
     }
+  }
+}
+
+/* Shared vars of background workers, see WorkerHandle::setVars() and
+ * frankenphp_get_vars(): the persistent tables live in slots owned by the
+ * Go side, which copies and frees them through these two helpers. */
+void frankenphp_vars_to_request(zval *return_value, HashTable *table) {
+  zval persistent;
+  ZVAL_ARR(&persistent, table);
+  persistent_zval_to_request(return_value, &persistent);
+}
+
+void frankenphp_vars_free(HashTable *table) {
+  zval persistent;
+  ZVAL_ARR(&persistent, table);
+  persistent_zval_free(&persistent);
+}
+
+void frankenphp_array_append_string(zval *array, char *str, size_t len) {
+  add_next_index_stringl(array, str, len);
+}
+
+ZEND_METHOD(FrankenPHP_WorkerHandle, getNamespaces) {
+  ZEND_PARSE_PARAMETERS_NONE();
+
+  if (!frankenphp_worker_handle_usable()) {
+    RETURN_THROWS();
+  }
+
+  zval vars;
+  array_init(&vars);
+  go_frankenphp_worker_vars(frankenphp_thread_index(), &vars);
+
+  array_init(return_value);
+  add_assoc_zval(return_value, "vars", &vars);
+}
+
+ZEND_METHOD(FrankenPHP_WorkerHandle, setVars) {
+  zend_string *namespace;
+  zval *vars;
+  ZEND_PARSE_PARAMETERS_START(2, 2)
+  Z_PARAM_STR(namespace)
+  Z_PARAM_ARRAY(vars)
+  ZEND_PARSE_PARAMETERS_END();
+
+  if (!frankenphp_worker_handle_usable()) {
+    RETURN_THROWS();
+  }
+
+  /* validate the whole tree first: persist and free recurse without a
+   * guard of their own */
+  if (!persistent_zval_validate(vars)) {
+    zend_value_error(
+        "FrankenPHP\\WorkerHandle::setVars(): values must be null, scalars, "
+        "arrays or enums, nested no deeper than %d levels",
+        PERSISTENT_ZVAL_MAX_DEPTH);
+    RETURN_THROWS();
+  }
+
+  zval persistent;
+  persistent_zval_persist(&persistent, vars);
+
+  HashTable *old = NULL;
+  char *error =
+      go_frankenphp_set_vars(frankenphp_thread_index(), ZSTR_VAL(namespace),
+                             ZSTR_LEN(namespace), Z_ARRVAL(persistent), &old);
+  if (error != NULL) {
+    frankenphp_vars_free(Z_ARRVAL(persistent));
+    zend_throw_exception(spl_ce_LogicException, error, 0);
+    free(error);
+    RETURN_THROWS();
+  }
+  if (old != NULL) {
+    frankenphp_vars_free(old);
+  }
+}
+
+PHP_FUNCTION(frankenphp_get_vars) {
+  zend_string *namespace;
+  ZEND_PARSE_PARAMETERS_START(1, 1)
+  Z_PARAM_STR(namespace)
+  ZEND_PARSE_PARAMETERS_END();
+
+  HashTable *table = NULL;
+  uintptr_t snapshot = 0;
+  char *error =
+      go_frankenphp_get_vars(frankenphp_thread_index(), ZSTR_VAL(namespace),
+                             ZSTR_LEN(namespace), &table, &snapshot);
+  if (error != NULL) {
+    zend_throw_exception(spl_ce_RuntimeException, error, 0);
+    free(error);
+    RETURN_THROWS();
+  }
+
+  /* the copy may bail out, past memory_limit or in an autoloader an enum
+   * triggers: the snapshot is let go of whatever happens, so its publisher
+   * can replace and free it */
+  bool bailed_out = false;
+  zend_try { frankenphp_vars_to_request(return_value, table); }
+  zend_catch { bailed_out = true; }
+  zend_end_try();
+
+  HashTable *unused = go_frankenphp_vars_done(snapshot);
+  if (unused != NULL) {
+    frankenphp_vars_free(unused);
+  }
+  if (bailed_out) {
+    zend_bailout();
   }
 }
 
