@@ -204,6 +204,8 @@ void frankenphp_release_thread_for_kill(force_kill_slot slot);
 /* Background worker primitives. */
 intptr_t frankenphp_set_background_worker_and_get_stop_sock(void);
 void frankenphp_worker_close_stop_sock(intptr_t s);
+void frankenphp_vars_to_request(zval *return_value, HashTable *table);
+void frankenphp_vars_free(HashTable *table);
 
 void register_extensions(zend_module_entry **m, int len);
 

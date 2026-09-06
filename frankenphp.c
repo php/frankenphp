@@ -72,12 +72,7 @@ zend_register_internal_class_with_flags(zend_class_entry *class_entry,
 #endif
 
 #include "frankenphp_arginfo.h"
-#ifdef FRANKENPHP_TEST
-/* The persistent_zval helpers are only compiled in when a consumer needs
- * them. The step that lands the first real caller (background workers)
- * will drop this guard. */
 #include "zval.h"
-#endif
 
 #if defined(PHP_WIN32) && defined(ZTS)
 ZEND_TSRMLS_CACHE_DEFINE()
@@ -1497,6 +1492,64 @@ ZEND_METHOD(FrankenPHP_WorkerHandle, tick) {
       /* a broken socket carries no drain anymore, stop the loop */
       RETURN_FALSE;
     }
+  }
+}
+
+/* Shared vars of background workers, see WorkerHandle::setVars() and
+ * frankenphp_get_vars(): the persistent tables live in slots owned by the
+ * Go side, which copies and frees them through these two helpers. */
+void frankenphp_vars_to_request(zval *return_value, HashTable *table) {
+  zval persistent;
+  ZVAL_ARR(&persistent, table);
+  persistent_zval_to_request(return_value, &persistent);
+}
+
+void frankenphp_vars_free(HashTable *table) {
+  zval persistent;
+  ZVAL_ARR(&persistent, table);
+  persistent_zval_free(&persistent);
+}
+
+/* Holding a handle means being a background worker: the constructor is the
+ * gate, so no caller check is needed here. */
+ZEND_METHOD(FrankenPHP_WorkerHandle, setVars) {
+  zval *vars;
+  ZEND_PARSE_PARAMETERS_START(1, 1)
+  Z_PARAM_ARRAY(vars)
+  ZEND_PARSE_PARAMETERS_END();
+
+  /* validate the whole tree first: persist and free recurse without a
+   * guard of their own */
+  if (!persistent_zval_validate(vars)) {
+    zend_value_error(
+        "FrankenPHP\\WorkerHandle::setVars(): values must be null, scalars, "
+        "arrays or enums, nested no deeper than %d levels",
+        PERSISTENT_ZVAL_MAX_DEPTH);
+    RETURN_THROWS();
+  }
+
+  zval persistent;
+  persistent_zval_persist(&persistent, vars);
+
+  HashTable *old =
+      go_frankenphp_set_vars(frankenphp_thread_index(), Z_ARRVAL(persistent));
+  if (old != NULL) {
+    frankenphp_vars_free(old);
+  }
+}
+
+PHP_FUNCTION(frankenphp_get_vars) {
+  zend_string *name;
+  ZEND_PARSE_PARAMETERS_START(1, 1)
+  Z_PARAM_STR(name)
+  ZEND_PARSE_PARAMETERS_END();
+
+  char *error = go_frankenphp_get_vars(
+      frankenphp_thread_index(), ZSTR_VAL(name), ZSTR_LEN(name), return_value);
+  if (error != NULL) {
+    zend_throw_exception(spl_ce_RuntimeException, error, 0);
+    free(error);
+    RETURN_THROWS();
   }
 }
 

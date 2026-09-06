@@ -42,6 +42,17 @@ type worker struct {
 	queuedRequests     atomic.Int32
 	server             *Server
 	isBackgroundWorker bool
+	// readyOnce is closed the first time a thread of a background worker
+	// reaches its ready point; frankenphp_get_vars() readers wait on it
+	readyOnce  chan struct{}
+	readyClose sync.Once
+	// vars is the snapshot published with WorkerHandle::setVars()
+	vars varsSlot
+}
+
+// markReady records that the background worker reached its ready point once
+func (worker *worker) markReady() {
+	worker.readyClose.Do(func() { close(worker.readyOnce) })
 }
 
 var (
@@ -282,6 +293,7 @@ func newWorker(o workerOpt) (*worker, error) {
 		onThreadShutdown:       o.onThreadShutdown,
 		server:                 scope,
 		isBackgroundWorker:     o.isBackgroundWorker,
+		readyOnce:              make(chan struct{}),
 	}
 
 	w.configureMercure(&o)
