@@ -278,6 +278,7 @@ func go_frankenphp_background_worker_ready(threadIndex C.uintptr_t) {
 		// the boot succeeded, only consecutive boot failures count
 		handler.failureCount = 0
 		handler.stopBootTimer()
+		handler.worker.markReady()
 		metrics.ReadyWorker(handler.worker.name, handler.worker.server.name)
 		// parked from now on as far as the threads state endpoint is concerned
 		handler.state.MarkAsWaiting(true)
