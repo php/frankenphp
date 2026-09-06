@@ -2,6 +2,7 @@ package frankenphp
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"path/filepath"
@@ -206,11 +207,21 @@ func WithRequestBodyTimeout(timeout time.Duration) RequestOption {
 }
 
 // WithWorkerName sets the worker that should handle the request
+// the name is resolved among the workers of the request's server first, then among global workers
 func WithWorkerName(name string) RequestOption {
 	return func(o *frankenPHPContext) error {
-		if name != "" {
-			o.worker = workersByName[name]
+		if name == "" {
+			return nil
 		}
+
+		w := o.server.workersByName[name]
+		if w == nil {
+			w = fallbackServer.workersByName[name]
+		}
+		if w != nil && w.isBackgroundWorker {
+			return fmt.Errorf("background worker %q cannot handle requests", name)
+		}
+		o.worker = w
 
 		return nil
 	}

@@ -59,12 +59,59 @@ func TestServer(t *testing.T) {
 	t.Run("name", func(t *testing.T) {
 		named, _ := frankenphp.NewServer(testDataDir, frankenphp.WithServerName("api"))
 		unnamed, _ := frankenphp.NewServer(testDataDir)
+		alsoNamed, _ := frankenphp.NewServer(testDataDir, frankenphp.WithServerName("api"))
+		explicit, _ := frankenphp.NewServer(testDataDir, frankenphp.WithServerName("api_1"))
 
-		initServers(t, frankenphp.WithServer(named), frankenphp.WithServer(unnamed))
+		initServers(t, frankenphp.WithServer(named), frankenphp.WithServer(unnamed), frankenphp.WithServer(alsoNamed), frankenphp.WithServer(explicit))
 
 		assert.Equal(t, "api", named.Name())
 		// an empty name defaults to the server index at registration
 		assert.Equal(t, "server_1", unnamed.Name())
+		// names qualify worker names in metrics, so they are made unique, and
+		// a generated suffix never takes a name another server configured
+		assert.Equal(t, "api_2", alsoNamed.Name())
+		assert.Equal(t, "api_1", explicit.Name())
+	})
+
+	t.Run("same_worker_name_in_two_servers", func(t *testing.T) {
+		server1, _ := frankenphp.NewServer(testDataDir, frankenphp.WithServerName("one"))
+		server2, _ := frankenphp.NewServer(testDataDir, frankenphp.WithServerName("two"))
+		initServers(
+			t,
+			frankenphp.WithServer(server1),
+			frankenphp.WithServer(server2),
+			frankenphp.WithWorkers("counter", testDataDir+"worker-with-counter.php", 1, frankenphp.WithWorkerServerScope(server1)),
+			frankenphp.WithWorkers("counter", testDataDir+"worker-with-counter.php", 1, frankenphp.WithWorkerServerScope(server2)),
+		)
+
+		// WithWorkerName resolves the name within the request's server
+		byName := func(server *frankenphp.Server) string {
+			t.Helper()
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "http://example.com/index.php", nil)
+			require.NoError(t, server.ServeHTTP(w, req, frankenphp.WithWorkerName("counter")))
+			body, err := io.ReadAll(w.Result().Body)
+			require.NoError(t, err)
+
+			return string(body)
+		}
+
+		assert.Equal(t, "requests:1", byName(server1))
+		assert.Equal(t, "requests:1", byName(server2), "server 2 must get its own worker, not server 1's")
+		assert.Equal(t, "requests:2", byName(server1))
+	})
+
+	t.Run("error_on_duplicate_worker_names", func(t *testing.T) {
+		t.Cleanup(frankenphp.Shutdown)
+
+		server, _ := frankenphp.NewServer(testDataDir)
+		err := frankenphp.Init(
+			frankenphp.WithServer(server),
+			frankenphp.WithWorkers("same", testDataDir+"worker-with-counter.php", 1, frankenphp.WithWorkerServerScope(server)),
+			frankenphp.WithWorkers("same", testDataDir+"index.php", 1, frankenphp.WithWorkerServerScope(server)),
+		)
+
+		assert.ErrorContains(t, err, "two workers in a server cannot have the same name")
 	})
 
 	t.Run("root", func(t *testing.T) {

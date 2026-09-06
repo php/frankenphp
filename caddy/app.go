@@ -17,7 +17,6 @@ import (
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 	"github.com/dunglas/frankenphp"
-	"github.com/dunglas/frankenphp/internal/fastabs"
 )
 
 var (
@@ -141,12 +140,9 @@ func (f *FrankenPHPApp) collectOptions(repl *caddy.Replacer, keep bool) ([]frank
 		frankenphp.WithMaxRequests(f.MaxRequests),
 	)
 
-	usedWorkerNames := make(map[string]bool, len(f.Workers))
-
 	// register global workers
 	for _, w := range f.Workers {
 		w.FileName = repl.ReplaceKnown(w.FileName, "")
-		w.Name = createUniqueWorkerName(usedWorkerNames, w, "")
 		workerOptions, err := w.toWorkerOptions()
 		if err != nil {
 			return nil, err
@@ -154,7 +150,7 @@ func (f *FrankenPHPApp) collectOptions(repl *caddy.Replacer, keep bool) ([]frank
 		opts = append(opts, frankenphp.WithWorkers(w.Name, w.FileName, w.Num, workerOptions...))
 	}
 
-	moduleOpts, err := f.collectModuleOptions(repl, usedWorkerNames, keep)
+	moduleOpts, err := f.collectModuleOptions(repl, keep)
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +209,7 @@ func (f *FrankenPHPApp) Stop() error {
 }
 
 // register workers and servers for "php" and "php_server" modules
-func (f *FrankenPHPApp) collectModuleOptions(repl *caddy.Replacer, usedWorkerNames map[string]bool, keep bool) ([]frankenphp.Option, error) {
+func (f *FrankenPHPApp) collectModuleOptions(repl *caddy.Replacer, keep bool) ([]frankenphp.Option, error) {
 	opts := make([]frankenphp.Option, 0, len(f.modules))
 	serversByIndex := make(map[int]*frankenphp.Server, len(f.modules))
 
@@ -231,7 +227,7 @@ func (f *FrankenPHPApp) collectModuleOptions(repl *caddy.Replacer, usedWorkerNam
 			}
 		}
 
-		server, moduleOpts, err := f.collectModule(repl, module, usedWorkerNames)
+		server, moduleOpts, err := f.collectModule(repl, module)
 		if err != nil {
 			return nil, err
 		}
@@ -248,7 +244,7 @@ func (f *FrankenPHPApp) collectModuleOptions(repl *caddy.Replacer, usedWorkerNam
 	return opts, nil
 }
 
-func (f *FrankenPHPApp) collectModule(repl *caddy.Replacer, module *FrankenPHPModule, usedWorkerNames map[string]bool) (*frankenphp.Server, []frankenphp.Option, error) {
+func (f *FrankenPHPApp) collectModule(repl *caddy.Replacer, module *FrankenPHPModule) (*frankenphp.Server, []frankenphp.Option, error) {
 	serverName := f.resolveServerName(module)
 	server, err := frankenphp.NewServer(
 		module.resolvedDocumentRoot,
@@ -265,7 +261,6 @@ func (f *FrankenPHPApp) collectModule(repl *caddy.Replacer, module *FrankenPHPMo
 
 	for _, w := range module.Workers {
 		w.FileName = repl.ReplaceKnown(w.FileName, "")
-		w.Name = createUniqueWorkerName(usedWorkerNames, w, serverName)
 		workerOptions, err := w.toWorkerOptions()
 		if err != nil {
 			return nil, nil, err
@@ -275,33 +270,6 @@ func (f *FrankenPHPApp) collectModule(repl *caddy.Replacer, module *FrankenPHPMo
 	}
 
 	return server, opts, nil
-}
-
-// avoid name collisions for workers
-// on collision, a name is first qualified with the server name
-// ("<serverName>:<name>") before falling back to a numeric postfix
-func createUniqueWorkerName(usedWorkerNames map[string]bool, wc workerConfig, serverName string) string {
-	if wc.Name == "" {
-		wc.Name, _ = fastabs.FastAbs(wc.FileName)
-	}
-
-	name := wc.Name
-	suffix := 0
-	for {
-		if _, ok := usedWorkerNames[name]; !ok {
-			usedWorkerNames[name] = true
-			break
-		}
-		if serverName != "" {
-			name = serverName + ":" + wc.Name
-			serverName = ""
-			continue
-		}
-		suffix++
-		name = fmt.Sprintf("%s_%d", wc.Name, suffix)
-	}
-
-	return name
 }
 
 // UnmarshalCaddyfile implements caddyfile.Unmarshaler.
@@ -418,10 +386,13 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				if len(wc.MatchPath) != 0 {
 					return d.Errf(`"match" can only be used in a php_server worker block, not in a global one: %q`, wc.FileName)
 				}
-				// check for duplicate workers
-				for _, existingWorker := range f.Workers {
-					if existingWorker.FileName == wc.FileName {
-						return d.Errf("global workers must not have duplicate filenames: %q", wc.FileName)
+				// check for duplicate workers; background workers are keyed
+				// by name, several may share a script
+				if !wc.Background {
+					for _, existingWorker := range f.Workers {
+						if !existingWorker.Background && existingWorker.FileName == wc.FileName {
+							return d.Errf("global workers must not have duplicate filenames: %q", wc.FileName)
+						}
 					}
 				}
 

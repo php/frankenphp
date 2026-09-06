@@ -22,7 +22,7 @@ import (
 type workerConfig struct {
 	mercureContext
 
-	// Name for the worker. Default: the absolute path of the worker file, postfixed with a number if the name is already used.
+	// Name for the worker, unique within its php_server (or among global workers). Default: the absolute path of the worker file.
 	Name string `json:"name,omitempty"`
 	// FileName sets the path to the worker script.
 	FileName string `json:"file_name,omitempty"`
@@ -38,6 +38,8 @@ type workerConfig struct {
 	MatchPath []string `json:"match_path,omitempty"`
 	// MaxConsecutiveFailures sets the maximum number of consecutive failures before panicking (defaults to 6, set to -1 to never panick)
 	MaxConsecutiveFailures int `json:"max_consecutive_failures,omitempty"`
+	// Background marks this worker as a background (non-HTTP) worker.
+	Background bool `json:"background,omitempty"`
 
 	options []frankenphp.WorkerOption
 }
@@ -139,13 +141,27 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 			}
 
 			wc.MaxConsecutiveFailures = v
+		case "background":
+			wc.Background = true
 		default:
-			return wc, wrongSubDirectiveError("worker", "name, file, num, env, watch, match, max_consecutive_failures, max_threads", v)
+			return wc, wrongSubDirectiveError("worker", "name, file, num, env, watch, match, max_consecutive_failures, max_threads, background", v)
 		}
 	}
 
 	if wc.FileName == "" {
 		return wc, d.Err(`the "file" argument must be specified`)
+	}
+
+	if wc.Background {
+		if wc.Name == "" {
+			return wc, d.Err(`background workers must have an explicit "name"`)
+		}
+		if len(wc.MatchPath) != 0 {
+			return wc, d.Err(`"match" is not supported for background workers`)
+		}
+		if wc.Num < 1 {
+			return wc, d.Err(`background workers must declare "num" >= 1`)
+		}
 	}
 
 	if frankenphp.EmbeddedAppPath != "" && filepath.IsLocal(wc.FileName) {
@@ -165,6 +181,10 @@ func (wc *workerConfig) toWorkerOptions() ([]frankenphp.WorkerOption, error) {
 
 	// options collected while provisioning the module, e.g. the Mercure hub
 	opts = append(opts, wc.options...)
+
+	if wc.Background {
+		opts = append(opts, frankenphp.WithWorkerBackground())
+	}
 
 	// copy the caddy match logic and create a unique matcher function for this worker
 	// inject the matcher into frankenphp
