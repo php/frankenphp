@@ -26,12 +26,20 @@ type extensionWorkers struct {
 
 // EXPERIMENTAL: SendRequest sends an HTTP request to the worker and writes the response to the provided ResponseWriter.
 func (w *extensionWorkers) SendRequest(rw http.ResponseWriter, r *http.Request) error {
-	fr, err := NewRequestWithContext(
-		r,
-		WithOriginalRequest(r),
-		WithWorkerName(w.name),
-	)
+	// the worker only exists between Init() and Shutdown()
+	if w.internalWorker == nil {
+		return ErrNotRunning
+	}
 
+	opts := []RequestOption{WithOriginalRequest(r), WithWorkerName(w.name)}
+
+	// worker names are resolved within a server, so a scoped worker is only
+	// reachable through its own server
+	if server := w.internalWorker.server; server != nil {
+		return server.ServeHTTP(rw, r, opts...)
+	}
+
+	fr, err := NewRequestWithContext(r, opts...)
 	if err != nil {
 		return err
 	}
@@ -40,11 +48,19 @@ func (w *extensionWorkers) SendRequest(rw http.ResponseWriter, r *http.Request) 
 }
 
 func (w *extensionWorkers) NumThreads() int {
+	if w.internalWorker == nil {
+		return 0
+	}
+
 	return w.internalWorker.countThreads()
 }
 
 // EXPERIMENTAL: SendMessage sends a message to the worker and waits for a response.
 func (w *extensionWorkers) SendMessage(ctx context.Context, message any, rw http.ResponseWriter) (any, error) {
+	if w.internalWorker == nil {
+		return nil, ErrNotRunning
+	}
+
 	fc := newContextFromMessage(message, rw, ctx, w.internalWorker)
 	err := w.internalWorker.handleRequest(fc)
 

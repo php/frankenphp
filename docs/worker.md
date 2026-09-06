@@ -199,6 +199,44 @@ frankenphp {
 }
 ```
 
+## Background workers
+
+This feature is experimental.
+
+A background worker runs its script in a loop outside the HTTP request cycle, on its own PHP thread. It is declared like any worker, with the `background` option; `name` is required and `num` must be at least 1:
+
+```caddyfile
+php_server {
+	worker {
+		file jobs.php
+		num 1
+		name jobs
+		background
+	}
+}
+```
+
+The script must wait on the stream returned by `frankenphp_get_worker_handle()`, which reaches EOF when FrankenPHP drains the worker on shutdown, reboot or restart. The first wait on it marks the worker ready: the server start waits for that point, and an exit before it counts as a failure. Polling `feof()` is not a wait, block in `stream_select()` or in a read:
+
+```php
+<?php
+
+$handle = frankenphp_get_worker_handle();
+
+while (true) {
+    $read = [$handle];
+    $write = $except = null;
+    if (stream_select($read, $write, $except, 1) > 0) {
+        // drained: return, FrankenPHP re-runs or stops the script
+        break;
+    }
+
+    doSomeWork();
+}
+```
+
+`$_SERVER['FRANKENPHP_WORKER']` holds the declared name, as it does in HTTP workers, and `$_SERVER['FRANKENPHP_WORKER_BACKGROUND']` is set, so a script serving both roles can tell them apart with `isset()`. Its value is unspecified, only its presence is part of the contract. `FRANKENPHP_WORKER` used to hold `1` in HTTP workers for the same reason: a script comparing it to that value must test its presence instead. Background threads come on top of `num_threads` and `max_threads`; they don't autoscale, so `max_threads` is not allowed on them. From Go, declare one with `WithWorkerBackground()`.
+
 ## Superglobals behavior
 
 [PHP superglobals](https://www.php.net/manual/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...)

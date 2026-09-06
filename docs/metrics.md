@@ -19,12 +19,12 @@ When [Caddy metrics](https://caddyserver.com/docs/metrics) are enabled, FrankenP
 - `frankenphp_busy_workers{worker="[worker_name]"}`: The number of workers currently processing a request.
 - `frankenphp_worker_request_time{worker="[worker_name]"}`: The time spent processing requests by all workers.
 - `frankenphp_worker_request_count{worker="[worker_name]"}`: The number of requests processed by all workers.
-- `frankenphp_ready_workers{worker="[worker_name]"}`: The number of workers that have called `frankenphp_handle_request` at least once.
+- `frankenphp_ready_workers{worker="[worker_name]"}`: The number of workers that have reached their ready point at least once: `frankenphp_handle_request()` for HTTP workers, `frankenphp_get_worker_handle()` for background workers.
 - `frankenphp_worker_crashes{worker="[worker_name]"}`: The number of times a worker has unexpectedly terminated.
 - `frankenphp_worker_restarts{worker="[worker_name]"}`: The number of times a worker has been deliberately restarted.
 - `frankenphp_worker_queue_depth{worker="[worker_name]"}`: The number of queued requests.
 
-For worker metrics, the `[worker_name]` placeholder is replaced by the worker name in the Caddyfile, otherwise the absolute path of the worker file will be used.
+`[worker_name]` is the worker name from the Caddyfile, or the absolute path of the worker file when it has none. Workers of a `php_server` block are prefixed with the name of that block: `<server name>:<worker name>`. They used to be reported under their bare name unless two blocks declared the same one, so dashboards and alerts built on those series need the prefix.
 
 ## Threads State Endpoint
 
