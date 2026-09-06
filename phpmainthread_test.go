@@ -357,6 +357,13 @@ func TestCorrectThreadCalculation(t *testing.T) {
 	testThreadCalculation(t, 2, 5, &opt{maxThreads: 5, workers: []workerOpt{{num: 1, maxThreads: 3}}})
 	testThreadCalculation(t, 3, 5, &opt{maxThreads: 5, workers: []workerOpt{{num: 1, maxThreads: 4}, {num: 1, maxThreads: 4}}})
 
+	// a background worker counts like any worker, with one thread unless told otherwise
+	oneBackgroundWorker := []workerOpt{{isBackgroundWorker: true}}
+	testThreadCalculation(t, maxProcs, maxProcs, &opt{workers: oneBackgroundWorker})
+	testThreadCalculation(t, 2, 2, &opt{numThreads: 1, workers: oneBackgroundWorker})
+	testThreadCalculation(t, 2, 4, &opt{maxThreads: 4, workers: oneBackgroundWorker})
+	testThreadCalculationError(t, &opt{numThreads: 1, maxThreads: 1, workers: oneBackgroundWorker})
+
 	// a worker never eats into num_threads, so there is no floor to miss;
 	// max_threads still has to fit what starts
 	testThreadCalculationError(t, &opt{numThreads: 1, maxThreads: 1, workers: oneWorkerThread})

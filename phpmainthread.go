@@ -167,7 +167,7 @@ func (mainThread *phpMainThread) rebootAllThreads() bool {
 
 	for _, thread := range rebootingThreads {
 		rebootWg.Go(func() {
-			close(thread.drainChan)
+			thread.drain()
 			if thread.state.WaitForStateWithTimeout(rebootGracePeriod, state.YieldingForReboot) {
 				return
 			}
