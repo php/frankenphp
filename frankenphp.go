@@ -845,6 +845,35 @@ func go_schedule_opcache_reset(threadIndex C.uintptr_t) {
 	}
 }
 
+// Restart reasons opcache reports to the hook, in the order of
+// zend_accel_restart_reason (ext/opcache/ZendAccelerator.h).
+var opcacheRestartReasons = [...]string{"out of memory", "hash overflow", "user"}
+
+// go_log_opcache_restart reports the restarts opcache schedules on its own.
+// Under ZTS they rewind shared memory that running threads still point into,
+// which surfaces as an unexplained crash or slowdown, so make the event
+// visible. The line is written inline even though opcache can be holding its
+// shared memory lock: that costs far less than the restart it precedes, and a
+// line deferred to a goroutine would be lost when the restart takes the
+// process down.
+//
+//export go_log_opcache_restart
+func go_log_opcache_restart(reason C.int) {
+	if !globalLogger.Enabled(globalCtx, slog.LevelWarn) {
+		return
+	}
+
+	reasonText := "unknown"
+	if i := int(reason); i >= 0 && i < len(opcacheRestartReasons) {
+		reasonText = opcacheRestartReasons[i]
+	}
+
+	globalLogger.LogAttrs(globalCtx, slog.LevelWarn,
+		"opcache restart scheduled, running PHP threads may hold stale references to its shared memory: raise opcache.memory_consumption and opcache.max_accelerated_files to make restarts less likely",
+		slog.String("reason", reasonText),
+	)
+}
+
 func convertArgs(args []string) (C.int, []*C.char) {
 	argc := C.int(len(args))
 	argv := make([]*C.char, argc)
