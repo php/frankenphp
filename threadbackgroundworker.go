@@ -7,6 +7,7 @@ import "C"
 import (
 	"fmt"
 	"log/slog"
+	"runtime"
 	"sync/atomic"
 	"time"
 
@@ -20,7 +21,8 @@ import (
 // can park on the stream returned by WorkerHandle::getStream(), which
 // reaches EOF when the thread is drained, and WorkerHandle::tick() then
 // returns false, so it exits gracefully on shutdown, reboot or handler
-// transition.
+// transition; the handle also carries a wake-up per task sent to the
+// worker, see SentTaskHandle.
 type backgroundWorkerThread struct {
 	workerLifecycle
 
@@ -51,9 +53,21 @@ type backgroundWorkerThread struct {
 	// stopSock holds the Go side's end of this thread's stop socket pair
 	// (per thread so pool workers drain independently); the other end is
 	// exposed to the script via WorkerHandle::getStream(). Wide enough
-	// for a Windows SOCKET, -1 when not held. Atomic because drain() closes
-	// it from another goroutine.
-	stopSock atomic.Int64
+	// for a Windows SOCKET, -1 when not held. Guarded by worker.tasks.mu:
+	// a sender writes its wake-up line to it.
+	stopSock int64
+
+	// parked is set by WorkerHandle::tick() when no task is queued, as
+	// the script is about to wait on its handle: senders wake one parked
+	// thread per task. Guarded by worker.tasks.mu.
+	parked bool
+
+	// signaling counts the senders writing to stopSock outside of
+	// worker.tasks.mu, so the socket is only closed once they are done: the
+	// write is a syscall, holding the mutex across it would make every
+	// contending thread park, and threads inside a cgo callback park at the
+	// price of a scheduler hand-off
+	signaling atomic.Int32
 }
 
 // backgroundBootWarnDelay is how long a run may go without calling
@@ -62,8 +76,10 @@ type backgroundWorkerThread struct {
 const backgroundBootWarnDelay = 10 * time.Second
 
 func convertToBackgroundWorkerThread(thread *phpThread, worker *worker) {
-	handler := &backgroundWorkerThread{workerLifecycle: newWorkerLifecycle(thread, worker)}
-	handler.stopSock.Store(-1)
+	handler := &backgroundWorkerThread{
+		workerLifecycle: newWorkerLifecycle(thread, worker),
+		stopSock:        -1,
+	}
 	thread.setHandler(handler)
 	worker.attachThread(thread)
 }
@@ -81,7 +97,18 @@ func (handler *backgroundWorkerThread) frankenPHPContext() *frankenPHPContext {
 // right before drainChan is closed on shutdown and reboot; also reused
 // internally to release the socket on the other exit paths.
 func (handler *backgroundWorkerThread) drain() {
-	if s := handler.stopSock.Swap(-1); s >= 0 {
+	q := &handler.worker.tasks
+	q.mu.Lock()
+	s := handler.stopSock
+	handler.stopSock = -1
+	handler.parked = false
+	q.mu.Unlock()
+
+	if s >= 0 {
+		// senders that took the socket before it was withdrawn finish their write first
+		for handler.signaling.Load() > 0 {
+			runtime.Gosched()
+		}
 		C.frankenphp_worker_close_stop_sock(C.intptr_t(s))
 	}
 }
@@ -126,7 +153,12 @@ func (handler *backgroundWorkerThread) setupScript() error {
 	if s < 0 {
 		return fmt.Errorf("failed to create the stop socket pair of background worker %q", handler.worker.qualifiedName)
 	}
-	handler.stopSock.Store(s)
+	// tasks queued meanwhile reach the new run when it parks, see
+	// go_frankenphp_background_worker_park
+	q := &handler.worker.tasks
+	q.mu.Lock()
+	handler.stopSock = s
+	q.mu.Unlock()
 
 	switch handler.state.Get() {
 	case state.ShuttingDown, state.Rebooting, state.ForceRebooting, state.TransitionRequested:

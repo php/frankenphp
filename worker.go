@@ -49,6 +49,9 @@ type worker struct {
 	readyClose sync.Once
 	// vars is the snapshot published with WorkerHandle::setVars()
 	vars varsSlot
+	// tasks holds the tasks sent with SentTaskHandle until a thread
+	// picks them up
+	tasks taskQueue
 }
 
 // markReady records that the background worker reached its ready point once
