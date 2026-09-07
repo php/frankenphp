@@ -16,6 +16,16 @@ const (
 
 type StopReason int
 
+// TaskOutcome is how a task sent to a background worker ended
+type TaskOutcome string
+
+const (
+	TaskOutcomeCompleted TaskOutcome = "completed" // the worker closed the task's stream
+	TaskOutcomeAborted   TaskOutcome = "aborted"   // the worker's script ended with the task open
+	TaskOutcomeAbandoned TaskOutcome = "abandoned" // the sender closed its stream first
+	TaskOutcomeTimeout   TaskOutcome = "timeout"   // no thread picked the task up in time
+)
+
 // Metrics reports what the workers and the threads of a FrankenPHP instance
 // are doing. A worker is identified by its name alone, where a worker scoped
 // to a server is reported as "<server name>:<name>". An implementation that
@@ -61,6 +71,14 @@ type ServerMetrics interface {
 	StartWorkerRequestOnServer(name, server string)
 	QueuedWorkerRequestOnServer(name, server string)
 	DequeuedWorkerRequestOnServer(name, server string)
+	// the tasks of background workers have no packed counterpart in
+	// Metrics, so they take the pair under their own name
+	// StartWorkerTask collects tasks picked up by a thread of a background worker
+	StartWorkerTask(name, server string)
+	// StopWorkerTask collects tasks a thread of a background worker is done with
+	StopWorkerTask(name, server string, duration time.Duration)
+	// WorkerTaskOutcome collects how tasks sent to a background worker ended
+	WorkerTaskOutcome(name, server string, outcome TaskOutcome)
 }
 
 // workerMetrics is what the runtime reports on: Metrics with the worker
@@ -80,6 +98,9 @@ type workerMetrics interface {
 	DequeuedWorkerRequest(name, server string)
 	QueuedRequest()
 	DequeuedRequest()
+	StartWorkerTask(name, server string)
+	StopWorkerTask(name, server string, duration time.Duration)
+	WorkerTaskOutcome(name, server string, outcome TaskOutcome)
 }
 
 // metricsAdapter routes the worker methods to ServerMetrics when the
@@ -102,6 +123,26 @@ func packedWorkerName(name, server string) string {
 	}
 
 	return server + ":" + name
+}
+
+// the task methods have no packed form: an implementation that does not
+// satisfy ServerMetrics simply does not collect them
+func (a metricsAdapter) StartWorkerTask(name, server string) {
+	if a.server != nil {
+		a.server.StartWorkerTask(name, server)
+	}
+}
+
+func (a metricsAdapter) StopWorkerTask(name, server string, duration time.Duration) {
+	if a.server != nil {
+		a.server.StopWorkerTask(name, server, duration)
+	}
+}
+
+func (a metricsAdapter) WorkerTaskOutcome(name, server string, outcome TaskOutcome) {
+	if a.server != nil {
+		a.server.WorkerTaskOutcome(name, server, outcome)
+	}
 }
 
 func (a metricsAdapter) StartWorker(name, server string) {
@@ -207,6 +248,12 @@ func (n nullMetrics) DequeuedWorkerRequest(string, string) {}
 func (n nullMetrics) QueuedRequest()   {}
 func (n nullMetrics) DequeuedRequest() {}
 
+func (n nullMetrics) StartWorkerTask(string, string) {}
+
+func (n nullMetrics) StopWorkerTask(string, string, time.Duration) {}
+
+func (n nullMetrics) WorkerTaskOutcome(string, string, TaskOutcome) {}
+
 type PrometheusMetrics struct {
 	registry           prometheus.Registerer
 	totalThreads       prometheus.Gauge
@@ -219,6 +266,8 @@ type PrometheusMetrics struct {
 	workerRequestTime  *prometheus.CounterVec
 	workerRequestCount *prometheus.CounterVec
 	workerQueueDepth   *prometheus.GaugeVec
+	workerTaskCount    *prometheus.CounterVec
+	workerTaskTime     *prometheus.CounterVec
 	queueDepth         prometheus.Gauge
 	mu                 sync.RWMutex
 }
@@ -341,7 +390,7 @@ func (m *PrometheusMetrics) TotalWorkersOnServer(string, string, int) {
 		m.busyWorkers = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Namespace: ns,
 			Name:      "busy_workers",
-			Help:      "Number of busy PHP workers for this worker",
+			Help:      "Number of busy PHP workers for this worker: processing a request, or a task for a background worker",
 		}, basicLabels)
 		m.mustRegister(m.busyWorkers)
 	}
@@ -389,8 +438,29 @@ func (m *PrometheusMetrics) TotalWorkersOnServer(string, string, int) {
 			Namespace: "frankenphp",
 			Subsystem: sub,
 			Name:      "queue_depth",
+			Help:      "Number of queued requests for this worker, or of tasks waiting for a thread of a background worker",
 		}, basicLabels)
 		m.mustRegister(m.workerQueueDepth)
+	}
+
+	if m.workerTaskCount == nil {
+		m.workerTaskCount = prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: ns,
+			Subsystem: sub,
+			Name:      "task_count",
+			Help:      "Number of tasks sent to this background worker, by outcome: completed, aborted (the script ended with the task open), abandoned (the sender closed its stream first) or timeout (no thread picked the task up in time)",
+		}, []string{"worker", "server", "outcome"})
+		m.mustRegister(m.workerTaskCount)
+	}
+
+	if m.workerTaskTime == nil {
+		m.workerTaskTime = prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: ns,
+			Subsystem: sub,
+			Name:      "task_time",
+			Help:      "Time spent on tasks by all threads of this background worker, from pickup to the close of the task's stream",
+		}, basicLabels)
+		m.mustRegister(m.workerTaskTime)
 	}
 }
 
@@ -472,6 +542,37 @@ func (m *PrometheusMetrics) DequeuedRequest() {
 	m.queueDepth.Dec()
 }
 
+func (m *PrometheusMetrics) StartWorkerTask(name, server string) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.busyWorkers == nil {
+		return
+	}
+	m.busyWorkers.WithLabelValues(name, server).Inc()
+}
+
+func (m *PrometheusMetrics) StopWorkerTask(name, server string, duration time.Duration) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.workerTaskTime == nil {
+		return
+	}
+	m.busyWorkers.WithLabelValues(name, server).Dec()
+	m.workerTaskTime.WithLabelValues(name, server).Add(duration.Seconds())
+}
+
+func (m *PrometheusMetrics) WorkerTaskOutcome(name, server string, outcome TaskOutcome) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.workerTaskCount == nil {
+		return
+	}
+	m.workerTaskCount.WithLabelValues(name, server, string(outcome)).Inc()
+}
+
 func (m *PrometheusMetrics) Shutdown() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -511,6 +612,14 @@ func (m *PrometheusMetrics) Shutdown() {
 	if m.workerQueueDepth != nil {
 		m.registry.Unregister(m.workerQueueDepth)
 	}
+
+	if m.workerTaskCount != nil {
+		m.registry.Unregister(m.workerTaskCount)
+	}
+
+	if m.workerTaskTime != nil {
+		m.registry.Unregister(m.workerTaskTime)
+	}
 }
 
 func NewPrometheusMetrics(registry prometheus.Registerer) *PrometheusMetrics {
@@ -540,6 +649,8 @@ func NewPrometheusMetrics(registry prometheus.Registerer) *PrometheusMetrics {
 		workerCrashes:      nil,
 		readyWorkers:       nil,
 		workerQueueDepth:   nil,
+		workerTaskCount:    nil,
+		workerTaskTime:     nil,
 	}
 
 	m.mustRegister(m.totalThreads)

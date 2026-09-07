@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"sync"
+	"time"
 )
 
 // taskUpdatesMax bounds the updates buffered per task: past it,
@@ -32,6 +33,10 @@ type workerTask struct {
 	cancelled           chan struct{}
 	abortReason         string
 	drainChan, shutdown <-chan struct{}
+	// receiver and pickedUpAt are set by the thread that picked the task
+	// up and read by its close, on the same thread
+	receiver   *backgroundWorkerThread
+	pickedUpAt time.Time
 	// fds[0] is the sender's descriptor, fds[1] the receiver's; the streams
 	// wait on them but the task owns them, until both sides closed and the
 	// pair goes back to the pool
@@ -283,6 +288,8 @@ func go_frankenphp_send_task(threadIndex C.uintptr_t, name *C.char, nameLen C.si
 	t.cond = sync.NewCond(&t.mu)
 	t.handle = cgo.NewHandle(t)
 
+	// queued like a request would be: a background worker has no other queue
+	metrics.QueuedWorkerRequest(w.name, w.server.name)
 	q := &w.tasks
 	q.mu.Lock()
 	q.pending = append(q.pending, t)
@@ -403,6 +410,12 @@ func go_frankenphp_task_cancel(handle C.uintptr_t, timedOut C.bool) C.bool {
 	}
 	close(t.cancelled)
 
+	name, server := t.worker.name, t.worker.server.name
+	metrics.DequeuedWorkerRequest(name, server)
+	if bool(timedOut) {
+		metrics.WorkerTaskOutcome(name, server, TaskOutcomeTimeout)
+	}
+
 	C.frankenphp_vars_free(t.payload)
 	t.payload = nil
 	t.mu.Lock()
@@ -465,10 +478,19 @@ func go_frankenphp_receive_task(threadIndex C.uintptr_t) (C.uintptr_t, *C.HashTa
 	payload := t.payload
 	t.payload = nil
 	q.mu.Unlock()
+	metrics.DequeuedWorkerRequest(handler.worker.name, handler.worker.server.name)
 	close(t.pickedUp)
 	// wakes the sender's wait for the pickup, see go_frankenphp_send_task;
 	// after the channel, so the sender finds it closed once woken
 	t.signalSender()
+
+	t.receiver = handler
+	t.pickedUpAt = time.Now()
+	metrics.StartWorkerTask(handler.worker.name, handler.worker.server.name)
+	// busy on the threads endpoint while it holds a task
+	if handler.openTasks++; handler.openTasks == 1 {
+		handler.state.MarkAsWaiting(false)
+	}
 
 	return C.uintptr_t(t.handle), payload, C.intptr_t(t.fds[1])
 }
@@ -601,14 +623,30 @@ func go_frankenphp_task_receiver_close(handle C.uintptr_t, aborted C.bool) {
 	t.mu.Lock()
 	t.closed = true
 	t.aborted = bool(aborted)
-	// the sender still waits, unless it closed first: wakeSenderLocked
-	// knows, a gone sender is never parked
+	// the first side to close settles the outcome; a gone sender is never
+	// parked, wakeSenderLocked knows
+	settled := !t.senderGone
 	signal := t.wakeSenderLocked()
 	t.cond.Broadcast()
 	t.mu.Unlock()
 	// the sender finds the end of the task behind the updates still queued
 	if signal {
 		t.signalSender()
+	}
+
+	name, server := t.worker.name, t.worker.server.name
+	metrics.StopWorkerTask(name, server, time.Since(t.pickedUpAt))
+	if settled {
+		outcome := TaskOutcomeCompleted
+		if aborted {
+			outcome = TaskOutcomeAborted
+		}
+		metrics.WorkerTaskOutcome(name, server, outcome)
+	}
+	handler := t.receiver
+	handler.openTasks--
+	if handler.openTasks == 0 && !handler.isBootingScript {
+		handler.state.MarkAsWaiting(true)
 	}
 
 	t.retire()
@@ -621,7 +659,7 @@ func go_frankenphp_task_sender_close(handle C.uintptr_t) {
 	t.mu.Lock()
 	t.senderGone = true
 	t.senderParked = false
-	// the receiver still holds the task, unless it closed first
+	// the first side to close settles the outcome
 	settled := !t.closed
 	updates := t.updates
 	t.updates = nil
@@ -632,6 +670,7 @@ func go_frankenphp_task_sender_close(handle C.uintptr_t) {
 		// the receiver's stream_select() and feof() see it; once the
 		// receiver closed, nobody waits on its descriptor
 		t.signalReceiver()
+		metrics.WorkerTaskOutcome(t.worker.name, t.worker.server.name, TaskOutcomeAbandoned)
 	}
 	for _, update := range updates {
 		C.frankenphp_vars_free(update)
