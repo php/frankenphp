@@ -1,9 +1,9 @@
-# FrankenPHP Worker'ları Kullanma
+# FrankenPHP worker'ları kullanma
 
 Uygulamanızı bir kez önyükleyin ve bellekte tutun.
 FrankenPHP gelen istekleri birkaç milisaniye içinde halledecektir.
 
-## Çalışan Komut Dosyalarının Başlatılması
+## Çalışan komut dosyalarının başlatılması
 
 ### Docker
 
@@ -17,7 +17,7 @@ docker run \
     dunglas/frankenphp
 ```
 
-### Bağımsız İkili
+### Bağımsız ikili
 
 Geçerli dizinin içeriğini bir worker kullanarak sunmak için `php-server` komutunun `--worker` seçeneğini kullanın:
 
@@ -37,7 +37,7 @@ frankenphp php-server --worker /path/to/your/worker/script.php --watch="/path/to
 
 Bu özellik genellikle [hot reloading](hot-reload.md) ile birlikte kullanılır.
 
-## Symfony Çalışma Zamanı
+## Symfony çalışma zamanı
 
 > [!TIP]
 > Bu bölüm, FrankenPHP worker moduna yerel desteğin sunulduğu Symfony 7.4 öncesi için gereklidir.
@@ -64,7 +64,7 @@ docker run \
 
 Bkz. [özel dokümantasyon](laravel.md#laravel-octane).
 
-## Özel Uygulamalar
+## Özel uygulamalar
 
 Aşağıdaki örnek, üçüncü taraf bir kütüphaneye güvenmeden kendi worker betiğinizi nasıl oluşturacağınızı göstermektedir:
 
@@ -129,14 +129,14 @@ docker run \
     dunglas/frankenphp
 ```
 
-### Belirli Sayıda İstekten Sonra Worker'ı Yeniden Başlatın
+### Belirli sayıda istekten sonra worker'ı yeniden başlatın
 
 PHP başlangıçta uzun süreli işlemler için tasarlanmadığından, hala bellek sızdıran birçok kütüphane ve eski kod vardır.
 Bu tür kodları worker modunda kullanmak için geçici bir çözüm, belirli sayıda isteği işledikten sonra worker betiğini yeniden başlatmaktır:
 
 Önceki worker kod parçacığı, `MAX_REQUESTS` adlı bir ortam değişkeni ayarlayarak işlenecek maksimum istek sayısını yapılandırmaya izin verir.
 
-### Worker'ları Manuel Olarak Yeniden Başlatma
+### Worker'ları manuel olarak yeniden başlatma
 
 Worker'ları [dosya değişikliklerinde](config.md#watching-for-file-changes) yeniden başlatmak mümkünken, tüm worker'ları [Caddy admin API](https://caddyserver.com/docs/api) aracılığıyla sorunsuz bir şekilde yeniden başlatmak da mümkündür. Yönetici [Caddyfile](config.md#caddyfile-config)'ınızda etkinleştirilmişse, yeniden başlatma uç noktasına aşağıdaki gibi basit bir POST isteği gönderebilirsiniz:
 
@@ -144,7 +144,7 @@ Worker'ları [dosya değişikliklerinde](config.md#watching-for-file-changes) ye
 curl -X POST http://localhost:2019/frankenphp/workers/restart
 ```
 
-### Worker Hataları
+### Worker hataları
 
 Bir worker betiği sıfır olmayan bir çıkış koduyla çökerse, FrankenPHP onu üstel bir geri çekilme (exponential backoff) stratejisiyle yeniden başlatacaktır. Worker betiği, son geri çekilme süresinin 2 katından daha uzun süre çalışır durumda kalırsa, worker betiğini cezalandırmayacak ve tekrar yeniden başlatacaktır. Ancak, worker betiği kısa bir süre içinde sıfır olmayan bir çıkış koduyla başarısız olmaya devam ederse (örneğin, bir betikte yazım hatası olması durumunda), FrankenPHP `too many consecutive failures` hatasıyla çökecektir.
 
@@ -159,7 +159,7 @@ frankenphp {
 }
 ```
 
-## Süper Küresel Değişkenlerin Davranışı
+## Süper küresel değişkenlerin davranışı
 
 [PHP süper küresel değişkenleri](https://www.php.net/manual/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...) aşağıdaki gibi davranır:
 

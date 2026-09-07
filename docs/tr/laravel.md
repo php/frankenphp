@@ -12,7 +12,7 @@ docker run -p 80:80 -p 443:443 -p 443:443/udp -v $PWD:/app dunglas/frankenphp
 
 Ve tadını çıkarın!
 
-## Yerel Kurulum
+## Yerel kurulum
 
 Alternatif olarak, Laravel projelerinizi FrankenPHP ile yerel makinenizden çalıştırabilirsiniz:
 
@@ -78,7 +78,7 @@ php artisan octane:frankenphp
 
 [Laravel Octane hakkında daha fazla bilgiyi resmi belgelerde bulabilirsiniz](https://laravel.com/docs/octane).
 
-## Laravel Uygulamalarını Bağımsız Çalıştırılabilir Dosyalar Olarak Dağıtma
+## Laravel uygulamalarını bağımsız çalıştırılabilir dosyalar olarak dağıtma
 
 [FrankenPHP'nin uygulama gömme özelliğini](embed.md) kullanarak, Laravel
 uygulamalarını bağımsız çalıştırılabilir dosyalar olarak dağıtmak mümkündür.
@@ -159,14 +159,14 @@ Uygulamanız artık hazır!
 Mevcut seçenekler hakkında daha fazla bilgi edinin ve diğer işletim sistemleri için nasıl ikili derleneceğini [uygulama gömme](embed.md)
 belgelerinde öğrenin.
 
-### Depolama Yolunu Değiştirme
+### Depolama yolunu değiştirme
 
 Varsayılan olarak, Laravel yüklenen dosyaları, önbellekleri, logları vb. uygulamanın `storage/` dizininde saklar.
 Gömülü uygulamalar için bu uygun değildir, çünkü her yeni sürüm farklı bir geçici dizine çıkarılacaktır.
 
 Geçici dizin dışında bir dizin kullanmak için `LARAVEL_STORAGE_PATH` ortam değişkenini ayarlayın (örneğin, `.env` dosyanızda) veya `Illuminate\Foundation\Application::useStoragePath()` metodunu çağırın.
 
-### Bağımsız Çalıştırılabilir Dosyalarla Octane'i Çalıştırma
+### Bağımsız çalıştırılabilir dosyalarla Octane'i çalıştırma
 
 Laravel Octane uygulamalarını bağımsız çalıştırılabilir dosyalar olarak paketlemek bile mümkündür!
 

@@ -115,6 +115,54 @@ docker run \
     dunglas/frankenphp
 ```
 
+### Using PSR-15
+
+If your app speaks [PSR-15](https://www.php-fig.org/psr/psr-15/) instead of superglobals, convert the request/response at the edges of the handler with [`nyholm/psr7`](https://github.com/Nyholm/psr7) and [`nyholm/psr7-server`](https://github.com/Nyholm/psr7-server):
+
+```console
+composer require nyholm/psr7 nyholm/psr7-server psr/http-server-handler
+```
+
+```php
+<?php
+// public/index.php
+
+require __DIR__.'/vendor/autoload.php';
+
+use Nyholm\Psr7\Factory\Psr17Factory;
+use Nyholm\Psr7Server\ServerRequestCreator;
+
+$myApp = new \App\Kernel(); // implements Psr\Http\Server\RequestHandlerInterface
+$myApp->boot();
+
+$psr17Factory = new Psr17Factory();
+$creator = new ServerRequestCreator(
+    $psr17Factory, // ServerRequestFactory
+    $psr17Factory, // UriFactory
+    $psr17Factory, // UploadedFileFactory
+    $psr17Factory, // StreamFactory
+);
+
+$handler = static function () use ($myApp, $creator) {
+    $response = $myApp->handle($creator->fromGlobals());
+
+    http_response_code($response->getStatusCode());
+    foreach ($response->getHeaders() as $name => $values) {
+        foreach ($values as $value) {
+            header("$name: $value", false);
+        }
+    }
+    echo $response->getBody();
+};
+
+$maxRequests = (int)($_SERVER['MAX_REQUESTS'] ?? 0);
+for ($nbRequests = 0; !$maxRequests || $nbRequests < $maxRequests; ++$nbRequests) {
+    $keepRunning = \frankenphp_handle_request($handler);
+    gc_collect_cycles();
+    if (!$keepRunning) break;
+}
+```
+
 ### Restart the worker after a certain number of requests
 
 As PHP was not originally designed for long-running processes, many libraries and legacy code still leak memory.

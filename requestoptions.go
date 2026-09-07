@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 	"unicode/utf8"
 
 	"github.com/dunglas/frankenphp/internal/fastabs"
@@ -83,15 +84,28 @@ func WithRequestResolvedDocumentRoot(documentRoot string) RequestOption {
 // which can be mitigated with use of a try_files-like behavior
 // that 404s if the FastCGI path info is not found.
 func WithRequestSplitPath(splitPath []string) (RequestOption, error) {
+	if err := normalizeSplitPath(splitPath); err != nil {
+		return nil, err
+	}
+
+	return func(o *frankenPHPContext) error {
+		o.splitPath = splitPath
+
+		return nil
+	}, nil
+}
+
+// normalize split path in-place to lowercase ASCII characters
+func normalizeSplitPath(splitPath []string) error {
 	var b strings.Builder
 
 	for i, split := range splitPath {
 		b.Grow(len(split))
 
-		for j := 0; j < len(split); j++ {
+		for j := range len(split) {
 			c := split[j]
 			if c >= utf8.RuneSelf {
-				return nil, ErrInvalidSplitPath
+				return ErrInvalidSplitPath
 			}
 
 			if 'A' <= c && c <= 'Z' {
@@ -105,11 +119,7 @@ func WithRequestSplitPath(splitPath []string) (RequestOption, error) {
 		b.Reset()
 	}
 
-	return func(o *frankenPHPContext) error {
-		o.splitPath = splitPath
-
-		return nil
-	}, nil
+	return nil
 }
 
 type PreparedEnv = map[string]string
@@ -130,6 +140,8 @@ func WithRequestEnv(env map[string]string) RequestOption {
 }
 
 func WithRequestPreparedEnv(env PreparedEnv) RequestOption {
+	env = ensurePreparedEnv(env)
+
 	return func(o *frankenPHPContext) error {
 		o.env = env
 
@@ -137,9 +149,32 @@ func WithRequestPreparedEnv(env PreparedEnv) RequestOption {
 	}
 }
 
+// ensurePreparedEnv ensures every key is NUL-terminated
+// Empty keys are dropped
+func ensurePreparedEnv(env PreparedEnv) PreparedEnv {
+	for k := range env {
+		if k == "" || k[len(k)-1] != '\x00' {
+			fixed := make(PreparedEnv, len(env))
+			for k, v := range env {
+				if k == "" {
+					continue
+				}
+				if k[len(k)-1] != '\x00' {
+					k += "\x00"
+				}
+				fixed[k] = v
+			}
+
+			return fixed
+		}
+	}
+
+	return env
+}
+
 func WithOriginalRequest(r *http.Request) RequestOption {
 	return func(o *frankenPHPContext) error {
-		o.originalRequest = r
+		o.requestURI = r.URL.RequestURI()
 
 		return nil
 	}
@@ -149,6 +184,22 @@ func WithOriginalRequest(r *http.Request) RequestOption {
 func WithRequestLogger(logger *slog.Logger) RequestOption {
 	return func(o *frankenPHPContext) error {
 		o.logger = logger
+
+		if o.logger == nil {
+			o.logger = globalLogger // fall back to global logger
+		}
+
+		return nil
+	}
+}
+
+// WithRequestBodyTimeout sets an idle timeout on request body reads: a stalled
+// (slow POST) client is cut off while a steady upload of any size succeeds.
+// Zero (the default) disables it. Requires a ResponseWriter that exposes a read
+// deadline (net/http and Caddy do); otherwise the read has no timeout.
+func WithRequestBodyTimeout(timeout time.Duration) RequestOption {
+	return func(o *frankenPHPContext) error {
+		o.requestBodyTimeout = timeout
 
 		return nil
 	}

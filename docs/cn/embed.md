@@ -125,7 +125,7 @@ EMBED=/path/to/your/app ./build-static.sh
 ./my-app php-cli bin/console
 ```
 
-## PHP Extensions
+## PHP extensions
 
 默认情况下，脚本将构建您项目的 `composer.json` 文件中所需的扩展（如果有的话）。
 如果 `composer.json` 文件不存在，将构建默认扩展，如 [静态构建条目](static.md) 中所述。

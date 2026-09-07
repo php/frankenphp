@@ -1,6 +1,7 @@
 package frankenphp
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -29,6 +30,40 @@ func TestEnsureLeadingSlash(t *testing.T) {
 			t.Parallel()
 
 			assert.Equal(t, tt.expected, ensureLeadingSlash(tt.input), "ensureLeadingSlash(%q)", tt.input)
+		})
+	}
+}
+
+func TestSplitRemoteAddr(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		addr     string
+		wantIP   string
+		wantPort string
+	}{
+		{"ipv4 with port", "1.2.3.4:5", "1.2.3.4", "5"},
+		{"ipv6 bracketed with port", "[::1]:443", "::1", "443"},
+		{"ipv6 zone bracketed with port", "[fe80::1%eth0]:443", "fe80::1%eth0", "443"},
+		{"ipv4 without port", "192.168.0.1", "192.168.0.1", ""},
+		{"empty", "", "", ""},
+		{"only colon", ":", "", ""},
+		// Must not panic: would crash the process via the cgo callback.
+		{"lone open bracket", "[", "[", ""},
+		{"open bracket with port", "[:9000", "[", "9000"},
+		{"empty brackets", "[]", "", ""},
+		{"opening bracket with colon", "[:", "[", ""},
+		{"unterminated bracket with port", "[::1:80", "[::1", "80"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ip, port := splitRemoteAddr(tt.addr)
+			assert.Equal(t, tt.wantIP, ip, "splitRemoteAddr(%q) ip", tt.addr)
+			assert.Equal(t, tt.wantPort, port, "splitRemoteAddr(%q) port", tt.addr)
 		})
 	}
 }
@@ -295,4 +330,66 @@ func TestSplitPosSecurityRegressionUnicodeBypass(t *testing.T) {
 	for _, p := range payloads {
 		assert.Equalf(t, -1, splitPos(p, split), "payload %q must not be detected as .php", p)
 	}
+}
+
+// FuzzSplitPos guards the byte/rune-boundary arithmetic behind the Unicode
+// case-folding bypasses above (GHSA-3g8v-8r37-cgjm, GHSA-v4h7-cj44-8fc8):
+// splitPos must never return an out-of-bounds position, whatever bytes are
+// thrown at it.
+func FuzzSplitPos(f *testing.F) {
+	f.Add("/path/to/script.php", ".php")
+	f.Add("/path/to/script.php/some/path", ".php")
+	f.Add("/ȺȺȺȺshell.php.txt.php", ".php")
+	f.Add("/shell﹒php", ".php")
+	f.Add("", "")
+
+	f.Fuzz(func(t *testing.T, path, splitMarker string) {
+		pos := splitPos(path, []string{splitMarker})
+		if pos < -1 || pos > len(path) {
+			t.Fatalf("splitPos(%q, %q) returned out-of-bounds position %d for a %d-byte path", path, splitMarker, pos, len(path))
+		}
+	})
+}
+
+// FuzzSanitizedPathJoin checks that the request path can never escape root,
+// however it's mangled.
+func FuzzSanitizedPathJoin(f *testing.F) {
+	f.Add("/var/www/html", "/index.php")
+	f.Add("/var/www/html", "../../etc/passwd")
+	f.Add("/var/www/html", "..\\..\\windows\\win.ini")
+	f.Add("", "/../../../etc/passwd")
+	f.Add("/var/www/html", "")
+
+	f.Fuzz(func(t *testing.T, root, reqPath string) {
+		result := sanitizedPathJoin(root, reqPath)
+
+		cleanRoot := root
+		if cleanRoot == "" {
+			cleanRoot = "."
+		}
+		rel, err := filepath.Rel(cleanRoot, result)
+		if err != nil {
+			// Different volumes on Windows and the like: not a traversal, just
+			// an unrelated path, but it must still not happen for a plain root.
+			return
+		}
+		if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			t.Fatalf("sanitizedPathJoin(%q, %q) = %q escapes root", root, reqPath, result)
+		}
+	})
+}
+
+// FuzzSplitRemoteAddr guards against panics: it's called from a cgo
+// callback, so a panic here would crash the process.
+func FuzzSplitRemoteAddr(f *testing.F) {
+	f.Add("1.2.3.4:5")
+	f.Add("[::1]:443")
+	f.Add("[fe80::1%eth0]:443")
+	f.Add("[")
+	f.Add("[:9000")
+	f.Add("")
+
+	f.Fuzz(func(t *testing.T, remoteAddr string) {
+		splitRemoteAddr(remoteAddr)
+	})
 }

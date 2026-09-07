@@ -7,38 +7,11 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 
-// Explicitly include Winsock2 BEFORE windows.h
+#include <intsafe.h>
 #include <windows.h>
 #include <winerror.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
-
-// Fix for missing IntSafe functions (LongLongAdd) when building with Clang
-#ifdef __clang__
-#ifndef INTSAFE_E_ARITHMETIC_OVERFLOW
-#define INTSAFE_E_ARITHMETIC_OVERFLOW ((HRESULT)0x80070216L)
-#endif
-
-#ifndef LongLongAdd
-static inline HRESULT LongLongAdd(LONGLONG llAugend, LONGLONG llAddend,
-                                  LONGLONG *pllResult) {
-  if (__builtin_add_overflow(llAugend, llAddend, pllResult)) {
-    return INTSAFE_E_ARITHMETIC_OVERFLOW;
-  }
-  return S_OK;
-}
-#endif
-
-#ifndef LongLongSub
-static inline HRESULT LongLongSub(LONGLONG llMinuend, LONGLONG llSubtrahend,
-                                  LONGLONG *pllResult) {
-  if (__builtin_sub_overflow(llMinuend, llSubtrahend, pllResult)) {
-    return INTSAFE_E_ARITHMETIC_OVERFLOW;
-  }
-  return S_OK;
-}
-#endif
-#endif
 #endif
 
 #include <Zend/zend_modules.h>
@@ -202,9 +175,11 @@ void frankenphp_register_variable_safe(char *key, char *var, size_t val_len,
                                        zval *track_vars_array);
 void frankenphp_register_server_vars(zval *track_vars_array,
                                      frankenphp_server_vars vars);
+void frankenphp_add_to_prepared_env(char *name, size_t name_len, char *val,
+                                    size_t val_len, size_t size);
+void frankenphp_merge_with_prepared_env(zval *track_vars_array);
 
 zend_string *frankenphp_init_persistent_string(const char *string, size_t len);
-int frankenphp_reset_opcache(void);
 int frankenphp_get_current_memory_limit();
 
 typedef struct {

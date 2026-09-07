@@ -50,15 +50,26 @@ jobs:
       php85_version: ${{ steps.check.outputs.php85_version }}
       skip: ${{ steps.check.outputs.skip }}
       ref: ${{ steps.check.outputs.ref || (github.ref_type == 'tag' && github.ref_name) || (github.event_name == 'workflow_dispatch' && inputs.version) || '' }}
+      sha: ${{ steps.check.outputs.sha }}
+      source_date_epoch: ${{ steps.check.outputs.source_date_epoch }}
+      created: ${{ steps.check.outputs.created }}
       base_fingerprint: ${{ steps.check.outputs.base_fingerprint }}
+      base_fingerprints: ${{ steps.check.outputs.base_fingerprints }}
+      rebuild_variants: ${{ steps.check.outputs.rebuild_variants }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-      - name: Check PHP versions and base image fingerprint
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - name: Login to DockerHub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }} # zizmor: ignore[secrets-outside-env] TODO: drop once super-linter ships zizmor >=1.24.0, then the allowlist in zizmor.yaml takes over
+      - name: Check PHP versions and base image fingerprints
         id: check
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -70,15 +81,21 @@ jobs:
         run: |
           set -e
           METADATA="$(docker buildx bake --print | jq -c)"
+          variants="$(jq -c '.group.default.targets|map(sub("runner-|builder-"; ""))|unique' <<< "${METADATA}")"
+          # On scheduled rebuilds, only build the variants whose base images changed
+          if [[ -n "${REBUILD_VARIANTS}" && "${REBUILD_VARIANTS}" != "[]" ]]; then
+            variants="$(jq -c --argjson rebuild "${REBUILD_VARIANTS}" 'map(select(. as $v | $rebuild | index($v)))' <<< "${variants}")"
+          fi
           {
             echo metadata="${METADATA}"
-            echo variants="$(jq -c '.group.default.targets|map(sub("runner-|builder-"; ""))|unique' <<< "${METADATA}")"
+            echo variants="${variants}"
             echo platforms="$(jq -c 'first(.target[]) | .platforms' <<< "${METADATA}")"
           } >> "${GITHUB_OUTPUT}"
         env:
           SHA: ${{ github.sha }}
           VERSION: ${{ (github.ref_type == 'tag' && github.ref_name) || steps.check.outputs.ref || 'dev' }}
           PHP_VERSION: ${{ steps.check.outputs.php_version }}
+          REBUILD_VARIANTS: ${{ steps.check.outputs.rebuild_variants }}
   build:
     runs-on: ${{ startsWith(matrix.platform, 'linux/arm') && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     needs:
@@ -117,23 +134,23 @@ jobs:
         run: echo "sanitized_platform=${PLATFORM//\//-}" >> "${GITHUB_OUTPUT}"
         env:
           PLATFORM: ${{ matrix.platform }}
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.prepare.outputs.ref }}
           persist-credentials: false
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
         with:
           platforms: ${{ matrix.platform }}
       - name: Login to DockerHub
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }} # zizmor: ignore[secrets-outside-env] TODO: drop once super-linter ships zizmor >=1.24.0, then the allowlist in zizmor.yaml takes over
       - name: Build
         id: build
-        uses: docker/bake-action@v7
+        uses: docker/bake-action@d3418bd7d0e9324001bca92fa8ba175ea7e6dc9b # v7.3.0
         with:
           pull: true
           load: ${{ !fromJson(needs.prepare.outputs.push) }}
@@ -142,21 +159,26 @@ jobs:
             builder-${{ matrix.variant }}
             runner-${{ matrix.variant }}
           # Remove tags to prevent "can't push tagged ref [...] by digest" error
+          # Provenance attestations embed build timestamps, which would prevent reproducible images
           set: |
             *.tags=
             *.platform=${{ matrix.platform }}
+            *.attest=type=provenance,disabled=true
             ${{ fromJson(needs.prepare.outputs.push) && '' || format('builder-{0}.cache-from=type=gha,scope=builder-{0}-{1}-{2}', matrix.variant, needs.prepare.outputs.ref || github.ref, matrix.platform) }}
             ${{ fromJson(needs.prepare.outputs.push) && '' || format('builder-{0}.cache-from=type=gha,scope=refs/heads/main-builder-{0}-{1}', matrix.variant, matrix.platform) }}
             ${{ fromJson(needs.prepare.outputs.push) && '' || format('builder-{0}.cache-to=type=gha,scope=builder-{0}-{1}-{2},ignore-error=true', matrix.variant, needs.prepare.outputs.ref || github.ref, matrix.platform) }}
             ${{ fromJson(needs.prepare.outputs.push) && '' || format('runner-{0}.cache-from=type=gha,scope=runner-{0}-{1}-{2}', matrix.variant, needs.prepare.outputs.ref || github.ref, matrix.platform) }}
             ${{ fromJson(needs.prepare.outputs.push) && '' || format('runner-{0}.cache-from=type=gha,scope=refs/heads/main-runner-{0}-{1}', matrix.variant, matrix.platform) }}
             ${{ fromJson(needs.prepare.outputs.push) && '' || format('runner-{0}.cache-to=type=gha,scope=runner-{0}-{1}-{2},ignore-error=true', matrix.variant, needs.prepare.outputs.ref || github.ref, matrix.platform) }}
-            ${{ fromJson(needs.prepare.outputs.push) && format('*.output=type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME) || '' }}
+            ${{ fromJson(needs.prepare.outputs.push) && format('*.output=type=image,name={0},push-by-digest=true,name-canonical=true,push=true,rewrite-timestamp=true', env.IMAGE_NAME) || '' }}
         env:
-          SHA: ${{ github.sha }}
+          SHA: ${{ needs.prepare.outputs.sha || github.sha }}
           VERSION: ${{ (github.ref_type == 'tag' && github.ref_name) || needs.prepare.outputs.ref || 'dev' }}
           PHP_VERSION: ${{ needs.prepare.outputs.php_version }}
           BASE_FINGERPRINT: ${{ needs.prepare.outputs.base_fingerprint }}
+          BASE_FINGERPRINTS: ${{ needs.prepare.outputs.base_fingerprints }}
+          CREATED: ${{ needs.prepare.outputs.created }}
+          SOURCE_DATE_EPOCH: ${{ needs.prepare.outputs.source_date_epoch }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - # Workaround for https://github.com/actions/runner/pull/2477#issuecomment-1501003600
         name: Export metadata
@@ -174,7 +196,7 @@ jobs:
           VARIANT: ${{ matrix.variant }}
       - name: Upload builder metadata
         if: fromJson(needs.prepare.outputs.push)
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: metadata-builder-${{ matrix.variant }}-${{ steps.prepare.outputs.sanitized_platform }}
           path: /tmp/metadata/builder/*
@@ -182,7 +204,7 @@ jobs:
           retention-days: 1
       - name: Upload runner metadata
         if: fromJson(needs.prepare.outputs.push)
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: metadata-runner-${{ matrix.variant }}-${{ steps.prepare.outputs.sanitized_platform }}
           path: /tmp/metadata/runner/*
@@ -221,15 +243,15 @@ jobs:
         target: ["builder", "runner"]
     steps:
       - name: Download metadata
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: metadata-${{ matrix.target }}-${{ matrix.variant }}-*
           path: /tmp/metadata
           merge-multiple: true
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
       - name: Login to DockerHub
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
@@ -257,7 +279,7 @@ jobs:
           METADATA: ${{ needs.prepare.outputs.metadata }}
           TARGET: ${{ matrix.target }}
           VARIANT: ${{ matrix.variant }}
-      - uses: actions/attest@v4
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           # docker.io/ prefix is required: actions/attest splits subject-name
           # on the first '/' to find the registry. We only push to Docker Hub.

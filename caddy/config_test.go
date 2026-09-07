@@ -1,13 +1,57 @@
 package caddy
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
+	"github.com/dunglas/frankenphp"
 	"github.com/stretchr/testify/require"
 )
+
+// options collected while provisioning a module, like the Mercure hub, must reach frankenphp
+func TestWorkerOptionsKeepProvisionedOptions(t *testing.T) {
+	wc := workerConfig{FileName: "../testdata/worker-with-env.php"}
+	opts, err := wc.toWorkerOptions()
+	require.NoError(t, err)
+	base := len(opts)
+
+	wc.options = append(wc.options, frankenphp.WithWorkerMaxThreads(3))
+	opts, err = wc.toWorkerOptions()
+
+	require.NoError(t, err)
+	require.Len(t, opts, base+1, "worker options set during provisioning must be forwarded")
+}
+
+func TestModuleRequestBodyTimeout(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`
+	{
+		php {
+			request_body_timeout 5s
+		}
+	}`)
+	module := &FrankenPHPModule{}
+
+	require.NoError(t, module.UnmarshalCaddyfile(d))
+	require.NotNil(t, module.RequestBodyTimeout)
+	require.Equal(t, caddy.Duration(5*time.Second), *module.RequestBodyTimeout)
+}
+
+func TestModuleRequestBodyTimeoutDisabled(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`
+	{
+		php {
+			request_body_timeout 0
+		}
+	}`)
+	module := &FrankenPHPModule{}
+
+	require.NoError(t, module.UnmarshalCaddyfile(d))
+	require.NotNil(t, module.RequestBodyTimeout)
+	require.Equal(t, caddy.Duration(0), *module.RequestBodyTimeout)
+}
 
 func TestModuleWorkerDuplicateFilenamesFail(t *testing.T) {
 	// Create a test configuration with duplicate worker filenames
@@ -78,7 +122,6 @@ func TestModuleWorkersDifferentNamesSucceed(t *testing.T) {
 
 	// Parse the first configuration
 	d1 := caddyfile.NewTestDispenser(configWithWorkerName1)
-	app := &FrankenPHPApp{}
 	module1 := &FrankenPHPModule{}
 
 	// Unmarshal the first configuration
@@ -106,16 +149,6 @@ func TestModuleWorkersDifferentNamesSucceed(t *testing.T) {
 
 	// Verify that no error was returned
 	require.NoError(t, err, "Expected no error when two workers have different names")
-
-	_, err = app.addModuleWorkers(module1.Workers...)
-	require.NoError(t, err, "Expected no error when adding the first module workers")
-	_, err = app.addModuleWorkers(module2.Workers...)
-	require.NoError(t, err, "Expected no error when adding the second module workers")
-
-	// Verify that both workers were added
-	require.Len(t, app.Workers, 2, "Expected two workers in the app")
-	require.Equal(t, "m#test-worker-1", app.Workers[0].Name, "First worker should have the correct name")
-	require.Equal(t, "m#test-worker-2", app.Workers[1].Name, "Second worker should have the correct name")
 }
 
 func TestModuleWorkerWithEnvironmentVariables(t *testing.T) {
@@ -204,7 +237,6 @@ func TestModuleWorkerWithCustomName(t *testing.T) {
 	// Parse the configuration
 	d := caddyfile.NewTestDispenser(configWithCustomName)
 	module := &FrankenPHPModule{}
-	app := &FrankenPHPApp{}
 
 	// Unmarshal the configuration
 	err := module.UnmarshalCaddyfile(d)
@@ -215,12 +247,42 @@ func TestModuleWorkerWithCustomName(t *testing.T) {
 	// Verify that the worker was added to the module
 	require.Len(t, module.Workers, 1, "Expected one worker to be added to the module")
 	require.Equal(t, "../testdata/worker-with-env.php", module.Workers[0].FileName, "Worker should have the correct filename")
+}
 
-	// Verify that the worker was added to app.Workers with the m# prefix
-	module.Workers, err = app.addModuleWorkers(module.Workers...)
-	require.NoError(t, err, "Expected no error when adding the worker to the app")
-	require.Equal(t, "m#custom-worker-name", module.Workers[0].Name, "Worker should have the custom name, prefixed with m#")
-	require.Equal(t, "m#custom-worker-name", app.Workers[0].Name, "Worker should have the custom name, prefixed with m#")
+func TestCreateUniqueWorkerNames(t *testing.T) {
+	app := &FrankenPHPApp{}
+	filename := "../testdata/worker-with-env.php"
+	absFileName, _ := filepath.Abs(filename)
+	names := make([]string, 6)
+	for i := range 3 {
+		names[i] = app.createUniqueWorkerName(workerConfig{
+			FileName: filename,
+			Name:     "custom-worker-name",
+		}, "")
+		names[i+3] = app.createUniqueWorkerName(workerConfig{
+			FileName: filename,
+		}, "")
+	}
+
+	require.Equal(t, "custom-worker-name", names[0])
+	require.Equal(t, "custom-worker-name_1", names[1])
+	require.Equal(t, "custom-worker-name_2", names[2])
+	require.Equal(t, absFileName, names[3])
+	require.Equal(t, absFileName+"_1", names[4])
+	require.Equal(t, absFileName+"_2", names[5])
+}
+
+func TestCreateUniqueWorkerNamesQualifiedByServer(t *testing.T) {
+	app := &FrankenPHPApp{}
+	wc := workerConfig{FileName: "../testdata/worker-with-env.php", Name: "queue"}
+
+	require.Equal(t, "queue", app.createUniqueWorkerName(wc, "one.example.com"))
+	// on collision, the name is qualified with the server name
+	require.Equal(t, "two.example.com:queue", app.createUniqueWorkerName(wc, "two.example.com"))
+	// when the qualified name is also taken, fall back to the numeric postfix
+	require.Equal(t, "queue_1", app.createUniqueWorkerName(wc, "two.example.com"))
+	// workers without a server keep the numeric postfix behavior
+	require.Equal(t, "queue_2", app.createUniqueWorkerName(wc, ""))
 }
 
 func TestParseWorkerRequestIdleTimeout(t *testing.T) {

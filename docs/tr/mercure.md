@@ -1,4 +1,4 @@
-# Gerçek Zamanlı
+# Gerçek zamanlı
 
 FrankenPHP yerleşik bir [Mercure](https://mercure.rocks) hub ile birlikte gelir!
 Mercure, olayları tüm bağlı cihazlara gerçek zamanlı olarak göndermeye olanak tanır: anında bir JavaScript olayı alırlar.

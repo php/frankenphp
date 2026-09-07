@@ -1,4 +1,0 @@
-WATCHER_C {
-  global: wtr_* ;
-  local: * ;
-};

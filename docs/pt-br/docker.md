@@ -1,4 +1,4 @@
-# Construindo Imagens Docker Personalizadas
+# Construindo imagens Docker personalizadas
 
 [As imagens Docker do FrankenPHP](https://hub.docker.com/r/dunglas/frankenphp) são baseadas em [imagens oficiais do PHP](https://hub.docker.com/_/php/).
 Variantes do Debian e do Alpine Linux são fornecidas para arquiteturas populares.
@@ -206,7 +206,7 @@ As imagens Docker são construídas:
 - quando uma nova release é marcada (tagueada)
 - diariamente às 4h UTC, se novas versões das imagens oficiais do PHP estiverem disponíveis
 
-## Endurecendo Imagens
+## Endurecendo imagens
 
 Para reduzir ainda mais a superfície de ataque e o tamanho das suas imagens Docker do FrankenPHP, também é possível construí-las sobre uma
 [imagem Google distroless](https://github.com/GoogleContainerTools/distroless) ou
@@ -280,7 +280,7 @@ WORKDIR /app
 ENTRYPOINT ["/usr/local/bin/frankenphp", "run", "-c", "/etc/caddy/Caddyfile"]
 ```
 
-## Versões de Desenvolvimento
+## Versões de desenvolvimento
 
 As versões de desenvolvimento estão disponíveis no repositório Docker [`dunglas/frankenphp-dev`](https://hub.docker.com/repository/docker/dunglas/frankenphp-dev).
 Uma nova construção é acionada sempre que um commit é enviado para o branch principal do repositório do GitHub.

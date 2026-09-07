@@ -1,6 +1,6 @@
 # GoでPHP拡張モジュールを作成する
 
-FrankenPHPでは、**GoでPHP拡張モジュールを作成する**ことができます。これにより、PHPから直接呼び出せる**高パフォーマンスなネイティブ関数**を作成できます。アプリケーションは既存または新しいGoライブラリを活用でき、**PHPコードから直接goroutineの**強力な並行性モデルを使用できます。
+FrankenPHPでは、**GoでPHP拡張モジュールを作成する**ことができます。これにより、PHPから直接呼び出せる**高パフォーマンスなネイティブ関数**を作成できます。アプリケーションは既存または新しいGoライブラリを活用でき、**PHPコードから直接goroutineの**定評のある並行性モデルを使用できます。
 
 PHP拡張モジュールの記述は通常Cで行われますが、少しの追加作業で他の言語でも作成可能です。PHP拡張モジュールは低レベル言語の力を活用してPHPの機能を拡張することができます。例えば、ネイティブ関数を追加したり、特定の操作を最適化したりできます。
 
@@ -33,7 +33,7 @@ FrankenPHPにはGoのみを使用して**PHP拡張モジュールを作成する
 GoでPHP拡張モジュールを書く最初のステップは、新しいGoモジュールの作成です。以下のコマンドを使用できます：
 
 ```console
-go mod init github.com/my-account/my-module
+go mod init example.com/example
 ```
 
 2番目のステップは、次のステップのために[PHPのソースを取得](https://www.php.net/downloads.php)することです。取得したら、Goモジュールのディレクトリ内ではなく、任意のディレクトリに展開します：
@@ -47,10 +47,15 @@ tar xf php-*
 これでGoでネイティブ関数を書く準備が整いました。`stringext.go`という名前の新しいファイルを作成します。最初の関数は文字列を引数として取り、それを指定された回数だけ繰り返し、文字列を逆転するかどうかを示すブール値を受け取り、結果の文字列を返します。これは以下のようになります：
 
 ```go
+package example
+
+// #include <Zend/zend_types.h>
+import "C"
 import (
-    "C"
-    "github.com/dunglas/frankenphp"
     "strings"
+	"unsafe"
+
+	"github.com/dunglas/frankenphp"
 )
 
 //export_php:function repeat_this(string $str, int $count, bool $reverse): string
@@ -75,37 +80,182 @@ func repeat_this(s *C.zend_string, count int64, reverse bool) unsafe.Pointer {
 - ディレクティブコメント`//export_php:function`はPHPでの関数シグネチャを定義します。これにより、ジェネレーターは適切なパラメータと戻り値の型でPHP関数を生成する方法を知ることができます。
 - 関数は`unsafe.Pointer`を返さなければなりません。FrankenPHPはCとGo間の型変換を支援するAPIを提供しています。
 
-前者は理解しやすいですが、後者は少し複雑かもしれません。次のセクションで型変換について詳しく説明します。
+前者は理解しやすいですが、後者は少し複雑かもしれません。このガイドの後半で型変換について詳しく説明します。
 
 ### 型変換
 
 C/PHPとGoの間でメモリ表現が同じ変数型もありますが、直接使用するにはより多くのロジックが必要な型もあります。これは拡張モジュールを書く際の最も挑戦的な部分かもしれません。Zendエンジンの内部仕組みや、変数がPHP内でどのように格納されているかを理解する必要があるためです。以下の表は、知っておくべき重要な情報をまとめています：
 
-| PHP型              | Go型             | 直接変換 | CからGoヘルパー       | GoからCヘルパー        | クラスメソッドサポート |
-| ------------------ | ---------------- | -------- | --------------------- | ---------------------- | ---------------------- |
-| `int`              | `int64`          | ✅       | -                     | -                      | ✅                     |
-| `?int`             | `*int64`         | ✅       | -                     | -                      | ✅                     |
-| `float`            | `float64`        | ✅       | -                     | -                      | ✅                     |
-| `?float`           | `*float64`       | ✅       | -                     | -                      | ✅                     |
-| `bool`             | `bool`           | ✅       | -                     | -                      | ✅                     |
-| `?bool`            | `*bool`          | ✅       | -                     | -                      | ✅                     |
-| `string`/`?string` | `*C.zend_string` | ❌       | frankenphp.GoString() | frankenphp.PHPString() | ✅                     |
-| `array`            | `slice`/`map`    | ❌       | _未実装_              | _未実装_               | ❌                     |
-| `mixed`            | `any`            | ❌       | `GoValue()`           | `PHPValue()`           | ❌                     |
-| `object`           | `struct`         | ❌       | _未実装_              | _未実装_               | ❌                     |
+| PHP型              | Go型                          | 直接変換 | CからGoヘルパー                   | GoからCヘルパー                    | クラスメソッドサポート |
+| :----------------- | :---------------------------- | :------- | :-------------------------------- | :--------------------------------- | :--------------------- |
+| `int`              | `int64`                       | ✅       | -                                 | -                                  | ✅                     |
+| `?int`             | `*int64`                      | ✅       | -                                 | -                                  | ✅                     |
+| `float`            | `float64`                     | ✅       | -                                 | -                                  | ✅                     |
+| `?float`           | `*float64`                    | ✅       | -                                 | -                                  | ✅                     |
+| `bool`             | `bool`                        | ✅       | -                                 | -                                  | ✅                     |
+| `?bool`            | `*bool`                       | ✅       | -                                 | -                                  | ✅                     |
+| `string`/`?string` | `*C.zend_string`              | ❌       | `frankenphp.GoString()`           | `frankenphp.PHPString()`           | ✅                     |
+| `array`            | `frankenphp.AssociativeArray` | ❌       | `frankenphp.GoAssociativeArray()` | `frankenphp.PHPAssociativeArray()` | ✅                     |
+| `array`            | `map[string]any`              | ❌       | `frankenphp.GoMap()`              | `frankenphp.PHPMap()`              | ✅                     |
+| `array`            | `[]any`                       | ❌       | `frankenphp.GoPackedArray()`      | `frankenphp.PHPPackedArray()`      | ✅                     |
+| `mixed`            | `any`                         | ❌       | `GoValue()`                       | `PHPValue()`                       | ❌                     |
+| `callable`         | `*C.zval`                     | ❌       | -                                 | `frankenphp.CallPHPCallable()`     | ❌                     |
+| `object`           | `struct`                      | ❌       | _未実装_                          | _未実装_                           | ❌                     |
 
 > [!NOTE]
+>
 > この表はまだ完全ではなく、FrankenPHPの型APIがより完全になるにつれて完成されます。
 >
-> クラスメソッドについては、現在プリミティブ型のみがサポートされています。配列とオブジェクトはまだメソッドパラメータや戻り値の型として使用できません。
+> クラスメソッドについては、現在プリミティブ型と配列がサポートされています。オブジェクトはまだメソッドパラメータや戻り値の型として使用できません。
 
 前のセクションのコードスニペットを参照すると、最初のパラメータと戻り値の変換にヘルパーが使用されていることがわかります。 `repeat_this()`関数の2番目と3番目の引数は、基礎となる型のメモリ表現がCとGoで同じであるため、変換する必要がありません。
+
+#### 配列の操作
+
+FrankenPHPは、`frankenphp.AssociativeArray`を介するか、またはマップやスライスへの直接変換によって、PHP配列のネイティブサポートを提供します。
+
+`AssociativeArray`は、`Map: map[string]any`フィールドとオプションの`Order: []string`フィールドで構成される[ハッシュマップ](https://ja.wikipedia.org/wiki/ハッシュマップ)を表します（PHPの「連想配列」とは異なり、Goのマップは順序付けられていません）。
+
+順序や関連付けが必要ない場合は、`[]any`スライスまたは順序なしの`map[string]any`マップに直接変換することも可能です。
+
+**Goでの配列の作成と操作:**
+
+```go
+package example
+
+// #include <Zend/zend_types.h>
+import "C"
+import (
+    "unsafe"
+
+    "github.com/dunglas/frankenphp"
+)
+
+// export_php:function process_data_ordered(array $input): array
+func process_data_ordered_map(arr *C.zend_array) unsafe.Pointer {
+	// PHPの連想配列をGoに変換し、順序を維持
+	associativeArray, err := frankenphp.GoAssociativeArray[any](unsafe.Pointer(arr))
+    if err != nil {
+        // エラーを処理
+    }
+
+	// エントリを順序通りにループ
+	for _, key := range associativeArray.Order {
+		value, _ := associativeArray.Map[key]
+		// キーと値に対して何か処理を行う
+	}
+
+	// 順序付けられた配列を返す
+	// 'Order'が空でない場合、'Order'内のキーと値のペアのみが考慮される
+	return frankenphp.PHPAssociativeArray[string](frankenphp.AssociativeArray[string]{
+		Map: map[string]string{
+			"key1": "value1",
+			"key2": "value2",
+		},
+		Order: []string{"key1", "key2"},
+	})
+}
+
+// export_php:function process_data_unordered(array $input): array
+func process_data_unordered_map(arr *C.zend_array) unsafe.Pointer {
+	// PHPの連想配列をGoマップに変換し、順序を維持しない
+	// 順序を無視するとパフォーマンスが向上する
+	goMap, err := frankenphp.GoMap[any](unsafe.Pointer(arr))
+    if err != nil {
+        // エラーを処理
+    }
+
+	// 特定の順序なしにエントリをループ
+	for key, value := range goMap {
+		// キーと値に対して何か処理を行う
+	}
+
+	// 順序なし配列を返す
+	return frankenphp.PHPMap(map[string]string {
+		"key1": "value1",
+		"key2": "value2",
+	})
+}
+
+// export_php:function process_data_packed(array $input): array
+func process_data_packed(arr *C.zend_array) unsafe.Pointer {
+	// PHPのpacked配列をGoに変換
+	goSlice, err := frankenphp.GoPackedArray(unsafe.Pointer(arr))
+    if err != nil {
+        // エラーを処理
+    }
+
+	// スライスを順序通りにループ
+	for index, value := range goSlice {
+		// インデックスと値に対して何か処理を行う
+	}
+
+	// packed配列を返す
+	return frankenphp.PHPPackedArray([]string{"value1", "value2", "value3"})
+}
+```
+
+**配列変換の主な機能：**
+
+- **順序付けられたキーと値のペア** - 連想配列の順序を維持するオプション
+- **複数のケースに最適化** - パフォーマンス向上のため順序を破棄したり、直接スライスに変換したりするオプション
+- **自動リスト検出** - PHPへの変換時に、配列がpackedリストまたはハッシュマップであるべきかを自動的に検出
+- **ネストされた配列** - 配列はネストでき、サポートされているすべての型（`int64`、`float64`、`string`、`bool`、`nil`、`AssociativeArray`、`map[string]any`、`[]any`）を自動的に変換します
+- **オブジェクトはサポートされていません** - 現在、スカラー型と配列のみが値として使用できます。オブジェクトを提供すると、PHP配列では`null`値になります。
+
+##### 利用可能なメソッド：packedとassociative
+
+- `frankenphp.PHPAssociativeArray(arr frankenphp.AssociativeArray) unsafe.Pointer` - キーと値のペアを持つ順序付けられたPHP配列に変換
+- `frankenphp.PHPMap(arr map[string]any) unsafe.Pointer` - マップを順序なしのキーと値のペアを持つPHP配列に変換
+- `frankenphp.PHPPackedArray(slice []any) unsafe.Pointer` - スライスをインデックス付きの値のみを持つPHP packed配列に変換
+- `frankenphp.GoAssociativeArray(arr unsafe.Pointer, ordered bool) frankenphp.AssociativeArray` - PHP配列を順序付けられたGo `AssociativeArray`（順序付きマップ）に変換
+- `frankenphp.GoMap(arr unsafe.Pointer) map[string]any` - PHP配列を順序なしのGoマップに変換
+- `frankenphp.GoPackedArray(arr unsafe.Pointer) []any` - PHP配列をGoスライスに変換
+- `frankenphp.IsPacked(zval *C.zend_array) bool` - PHP配列がpacked（インデックスのみ）かassociative（キーと値のペア）かを確認
+
+### Callablesの操作
+
+FrankenPHPは、`frankenphp.CallPHPCallable`ヘルパーを使用してPHPのcallableを扱う方法を提供します。これにより、GoコードからPHP関数やメソッドを呼び出すことができます。
+
+これを示すために、callableと配列を受け取り、配列の各要素にcallableを適用し、結果を新しい配列で返す独自の`array_map()`関数を作成してみましょう：
+
+```go
+// export_php:function my_array_map(array $data, callable $callback): array
+func my_array_map(arr *C.zend_array, callback *C.zval) unsafe.Pointer {
+	goSlice, err := frankenphp.GoPackedArray[any](unsafe.Pointer(arr))
+	if err != nil {
+		panic(err)
+	}
+
+	result := make([]any, len(goSlice))
+
+	for index, value := range goSlice {
+		result[index] = frankenphp.CallPHPCallable(unsafe.Pointer(callback), []interface{}{value})
+	}
+
+	return frankenphp.PHPPackedArray(result)
+}
+```
+
+パラメータとして渡されたPHPのcallableを呼び出すために`frankenphp.CallPHPCallable()`を使用している点に注目してください。この関数はcallableへのポインタと引数の配列を受け取り、callableの実行結果を返します。慣れ親しんだcallableの構文を使用できます：
+
+```php
+<?php
+
+$result = my_array_map([1, 2, 3], function($x) { return $x * 2; });
+// $result will be [2, 4, 6]
+
+$result = my_array_map(['hello', 'world'], 'strtoupper');
+// $result will be ['HELLO', 'WORLD']
+```
 
 ### ネイティブPHPクラスの宣言
 
 ジェネレーターは、PHPオブジェクトを作成するために使用できる**不透明クラス（opaque classes）**をGo構造体として宣言することをサポートしています。`//export_php:class`ディレクティブコメントを使用してPHPクラスを定義できます。例：
 
 ```go
+package example
+
 //export_php:class User
 type UserStruct struct {
     Name string
@@ -130,6 +280,16 @@ type UserStruct struct {
 プロパティは直接アクセスできないため、不透明クラスとやりとりするには **メソッドを定義する必要があります** 。`//export_php:method`ディレクティブを使用して動作を定義します：
 
 ```go
+package example
+
+// #include <Zend/zend_types.h>
+import "C"
+import (
+    "unsafe"
+
+    "github.com/dunglas/frankenphp"
+)
+
 //export_php:class User
 type UserStruct struct {
     Name string
@@ -159,9 +319,19 @@ func (us *UserStruct) SetNamePrefix(prefix *C.zend_string) {
 
 #### Nullableパラメータ
 
-ジェネレーターは、PHPシグネチャにおける`?`プレフィックスを使用ったnullableパラメータをサポートしています。パラメータがnullableの場合、Go関数内ではポインタとして扱われ、PHP側で値が`null`だったかどうかを確認できます：
+ジェネレーターは、PHPシグネチャにおける`?`プレフィックスを使用したnullableパラメータをサポートしています。パラメータがnullableの場合、Go関数内ではポインタとして扱われ、PHP側で値が`null`だったかどうかを確認できます：
 
 ```go
+package example
+
+// #include <Zend/zend_types.h>
+import "C"
+import (
+	"unsafe"
+
+	"github.com/dunglas/frankenphp"
+)
+
 //export_php:method User::updateInfo(?string $name, ?int $age, ?bool $active): void
 func (us *UserStruct) UpdateInfo(name *C.zend_string, age *int64, active *bool) {
     // nameが渡された（nullではない）かチェック
@@ -176,7 +346,10 @@ func (us *UserStruct) UpdateInfo(name *C.zend_string, age *int64, active *bool) 
 
     // activeが渡された（nullではない）かチェック
     if active != nil {
-        us.Active = *active
+        // us.Active は UserStruct のフィールドとして定義されていると仮定
+        // 実際のGoコードでは、UserStructにActiveフィールドを追加する必要があります
+        // 例: Active bool
+        // us.Active = *active
     }
 }
 ```
@@ -189,7 +362,8 @@ func (us *UserStruct) UpdateInfo(name *C.zend_string, age *int64, active *bool) 
 - **PHPの`null`はGoの`nil`になります** - PHPが`null`を渡すと、Go関数は`nil`ポインタを受け取ります
 
 > [!WARNING]
-> 現在、クラスメソッドには次の制限があります。**配列とオブジェクトはパラメータ型や戻り値の型としてサポートされていません**。サポートされるのは`string`、`int`、`float`、`bool`、`void`（戻り値の型）といったスカラー型のみです。**nullableなスカラー型はすべてサポートされています** （`?string`、`?int`、`?float`、`?bool`）。
+>
+> 現在、クラスメソッドには次の制限があります。**オブジェクトはパラメータ型や戻り値の型としてサポートされていません**。**配列はパラメータ型としても戻り値の型としても完全にサポートされています**。サポートされる型は`string`、`int`、`float`、`bool`、`array`、および`void`（戻り値の型）です。**nullableなパラメータ型は、すべてのスカラー型（`?string`、`?int`、`?float`、`?bool`）で完全にサポートされています**。
 
 拡張を生成した後、PHP側でクラスとそのメソッドを使用できるようになります。ただし**プロパティに直接アクセスできない**ことに注意してください：
 
@@ -225,6 +399,8 @@ $user->updateInfo(null, 25, null);          // Nameとactiveがnull
 `//export_php:const`ディレクティブを使用してグローバルなPHP定数を作成できます：
 
 ```go
+package example
+
 //export_php:const
 const MAX_CONNECTIONS = 100
 
@@ -232,17 +408,22 @@ const MAX_CONNECTIONS = 100
 const API_VERSION = "1.2.3"
 
 //export_php:const
-const STATUS_OK = iota
-
-//export_php:const
-const STATUS_ERROR = iota
+const (
+	STATUS_OK = iota
+	STATUS_ERROR
+)
 ```
+
+> [!NOTE]
+> PHP定数はGo定数の名前を引き継ぐため、大文字を使用することが推奨されます。
 
 #### クラス定数
 
 `//export_php:classconst ClassName`ディレクティブを使用して、特定のPHPクラスに属する定数を作成できます：
 
 ```go
+package example
+
 //export_php:classconst User
 const STATUS_ACTIVE = 1
 
@@ -253,14 +434,15 @@ const STATUS_INACTIVE = 0
 const ROLE_ADMIN = "admin"
 
 //export_php:classconst Order
-const STATE_PENDING = iota
-
-//export_php:classconst Order
-const STATE_PROCESSING = iota
-
-//export_php:classconst Order
-const STATE_COMPLETED = iota
+const (
+	STATE_PENDING = iota
+	STATE_PROCESSING
+	STATE_COMPLETED
+)
 ```
+
+> [!NOTE]
+> グローバル定数と同様に、クラス定数もGo定数の名前を引き継ぎます。
 
 クラス定数は、PHPでクラス名スコープを使用してアクセスできます：
 
@@ -282,17 +464,22 @@ echo Order::STATE_PENDING;   // 0
 Go側のコードでは、いつも通り定数を使用できます。例えば、先ほど作成した`repeat_this()`関数を取り上げ、最後の引数を整数に変更してみましょう：
 
 ```go
+package example
+
+// #include <Zend/zend_types.h>
+import "C"
 import (
-    "C"
-    "github.com/dunglas/frankenphp"
-    "strings"
+	"strings"
+	"unsafe"
+
+	"github.com/dunglas/frankenphp"
 )
 
 //export_php:const
-const STR_REVERSE = iota
-
-//export_php:const
-const STR_NORMAL = iota
+const (
+	STR_REVERSE = iota
+	STR_NORMAL
+)
 
 //export_php:classconst StringProcessor
 const MODE_LOWERCASE = 1
@@ -302,37 +489,37 @@ const MODE_UPPERCASE = 2
 
 //export_php:function repeat_this(string $str, int $count, int $mode): string
 func repeat_this(s *C.zend_string, count int64, mode int) unsafe.Pointer {
-    str := frankenphp.GoString(unsafe.Pointer(s))
+	str := frankenphp.GoString(unsafe.Pointer(s))
 
-    result := strings.Repeat(str, int(count))
-    if mode == STR_REVERSE {
-        // 文字列を逆転
-    }
+	result := strings.Repeat(str, int(count))
+	if mode == STR_REVERSE {
+		// 文字列を逆転
+	}
 
-    if mode == STR_NORMAL {
-        // 何もしない、定数を示すためのみ記載
-    }
+	if mode == STR_NORMAL {
+		// 何もしない、定数を示すためのみ記載
+	}
 
-    return frankenphp.PHPString(result, false)
+	return frankenphp.PHPString(result, false)
 }
 
 //export_php:class StringProcessor
 type StringProcessorStruct struct {
-    // 内部フィールド
+	// internal fields
 }
 
 //export_php:method StringProcessor::process(string $input, int $mode): string
 func (sp *StringProcessorStruct) Process(input *C.zend_string, mode int64) unsafe.Pointer {
-    str := frankenphp.GoString(unsafe.Pointer(input))
+	str := frankenphp.GoString(unsafe.Pointer(input))
 
-    switch mode {
-    case MODE_LOWERCASE:
-        str = strings.ToLower(str)
-    case MODE_UPPERCASE:
-        str = strings.ToUpper(str)
-    }
+	switch mode {
+	case MODE_LOWERCASE:
+		str = strings.ToLower(str)
+	case MODE_UPPERCASE:
+		str = strings.ToUpper(str)
+	}
 
-    return frankenphp.PHPString(str, false)
+	return frankenphp.PHPString(str, false)
 }
 ```
 
@@ -344,9 +531,21 @@ func (sp *StringProcessorStruct) Process(input *C.zend_string, mode int64) unsaf
 GEN_STUB_SCRIPT=php-src/build/gen_stub.php frankenphp extension-init my_extension.go
 ```
 
-> [!NOTE] > `GEN_STUB_SCRIPT`環境変数に、先ほどダウンロードしたPHPソースの`gen_stub.php`ファイルのパスを設定するのを忘れないでください。これは手動実装セクションで言及されているのと同じ`gen_stub.php`スクリプトです。
+> [!NOTE]
+> `GEN_STUB_SCRIPT`環境変数に、先ほどダウンロードしたPHPソースの`gen_stub.php`ファイルのパスを設定するのを忘れないでください。これは手動実装セクションで言及されているのと同じ`gen_stub.php`スクリプトです。
 
-すべてがうまくいけば、`build`という名前の新しいディレクトリが作成されているはずです。このディレクトリには、生成されたPHP関数スタブを含む`my_extension.go`ファイルなど、拡張用の生成されたファイルが含まれています。
+すべてがうまくいけば、プロジェクトディレクトリに拡張モジュール用の以下のファイルが含まれるはずです：
+
+- **`my_extension.go`** - 元のソースファイル（変更なし）
+- **`my_extension_generated.go`** - Go関数を呼び出すCGOラッパーを含む生成ファイル
+- **`my_extension.stub.php`** - IDEのオートコンプリート用PHPスタブファイル
+- **`my_extension_arginfo.h`** - PHP引数情報
+- **`my_extension.h`** - Cヘッダーファイル
+- **`my_extension.c`** - C実装ファイル
+- **`README.md`** - ドキュメント
+
+> [!IMPORTANT]
+> **元のソースファイル（`my_extension.go`）は一切変更されません。** ジェネレーターは、元の関数を呼び出すCGOラッパーを含む`_generated.go`ファイルを別途作成します。これにより、生成されたコードがソースファイルを汚染する心配なく、安全にバージョン管理を行うことができます。
 
 ### 生成された拡張モジュールをFrankenPHPへ統合する
 
@@ -382,6 +581,65 @@ echo $processor->process('Hello World', StringProcessor::MODE_UPPERCASE);  // "H
 
 前のセクションで示したように拡張モジュールをFrankenPHPに統合し、`./frankenphp php-server`を使用してこのテストファイルを実行することで、拡張モジュールが動作しているのを確認できるはずです。
 
+### 名前空間の使用
+
+ジェネレーターは、`//export_php:namespace`ディレクティブを使用して、PHP拡張の関数、クラス、定数を名前空間の下に整理することをサポートしています。これにより、名前の競合を回避し、拡張のAPIをより適切に整理できます。
+
+#### 名前空間の宣言
+
+Goファイルの先頭で`//export_php:namespace`ディレクティブを使用して、エクスポートされるすべてのシンボルを特定の名前空間の下に配置します：
+
+```go
+//export_php:namespace My\Extension
+package example
+
+import (
+    "unsafe"
+
+    "github.com/dunglas/frankenphp"
+)
+
+//export_php:function hello(): string
+func hello() string {
+    return "Hello from My\\Extension namespace!"
+}
+
+//export_php:class User
+type UserStruct struct {
+    // internal fields
+}
+
+//export_php:method User::getName(): string
+func (u *UserStruct) GetName() unsafe.Pointer {
+    return frankenphp.PHPString("John Doe", false)
+}
+
+//export_php:const
+const STATUS_ACTIVE = 1
+```
+
+#### PHPでの名前空間付き拡張の使用
+
+名前空間が宣言されると、すべての関数、クラス、定数がPHPでその名前空間の下に配置されます：
+
+```php
+<?php
+
+echo My\Extension\hello(); // "Hello from My\Extension namespace!"
+
+$user = new My\Extension\User();
+echo $user->getName(); // "John Doe"
+
+echo My\Extension\STATUS_ACTIVE; // 1
+```
+
+#### 重要な注意事項
+
+- 1つのファイルにつき、名前空間ディレクティブは**1つ**のみ許可されます。複数の名前空間ディレクティブが見つかった場合、ジェネレーターはエラーを返します。
+- 名前空間は、ファイル内の**すべて**のエクスポートされたシンボル（関数、クラス、メソッド、定数）に適用されます。
+- 名前空間の名前は、バックスラッシュ（`\`）を区切り文字として使用するPHPの名前空間規則に従います。
+- 名前空間が宣言されていない場合、シンボルは通常通りグローバル名前空間にエクスポートされます。
+
 ## 手動実装
 
 拡張モジュールの仕組みを理解したい、または拡張モジュールを完全に制御したい場合は、手動で書くこともできます。このアプローチは完全な制御を実現できますが、より多くのボイラープレートコードが必要になります。
@@ -395,25 +653,26 @@ echo $processor->process('Hello World', StringProcessor::MODE_UPPERCASE);  // "H
 モジュール内で、PHPから呼び出される新しいネイティブ関数を定義する必要があります。これを行うには、例えば`extension.go`のように任意の名前でファイルを作成し、以下のコードを追加します：
 
 ```go
-package ext_go
+package example
 
-//#include "extension.h"
+// #include "extension.h"
 import "C"
 import (
-    "unsafe"
-    "github.com/caddyserver/caddy/v2"
-    "github.com/dunglas/frankenphp"
+	"log/slog"
+	"unsafe"
+
+	"github.com/dunglas/frankenphp"
 )
 
 func init() {
-    frankenphp.RegisterExtension(unsafe.Pointer(&C.ext_module_entry))
+	frankenphp.RegisterExtension(unsafe.Pointer(&C.ext_module_entry))
 }
 
 //export go_print_something
 func go_print_something() {
-    go func() {
-        caddy.Log().Info("Hello from a goroutine!")
-    }()
+	go func() {
+		slog.Info("Hello from a goroutine!")
+	}()
 }
 ```
 
@@ -545,9 +804,9 @@ static const zend_function_entry ext_functions[] = {
 };
 ```
 
-この出力から、`go_upper`関数が`string`型の引数を1つ受け取り、`string`型の戻り値を返すことが定義されていのがわかります。
+この出力から、`go_upper`関数が`string`型の引数を1つ受け取り、`string`型の戻り値を返すことが定義されているのがわかります。
 
-#### GoとPHP/C間の型変換（Type Juggling）
+#### GoとPHP/C間の型変換（type juggling）
 
 Go関数はPHPの文字列を引数として直接受け取ることはできません。そのためPHPの文字列をGoの文字列へ変換する必要があります。幸いなことに、FrankenPHPは、ジェネレーターアプローチで見たものと同様に、PHP文字列とGo文字列間の変換を処理するヘルパー関数を提供しています。
 
@@ -589,7 +848,16 @@ PHP_FUNCTION(go_upper)
 Go側の関数では`*C.zend_string`を引数として受け取り、FrankenPHPのヘルパー関数を使用してGoの文字列に変換し、処理を行ったうえで、結果を新たな`*C.zend_string`として返します。メモリ管理と変換の複雑さは、ヘルパー関数がすべて対応してくれます。
 
 ```go
-import "strings"
+package example
+
+// #include <Zend/zend_types.h>
+import "C"
+import (
+    "unsafe"
+    "strings"
+
+    "github.com/dunglas/frankenphp"
+)
 
 //export go_upper
 func go_upper(s *C.zend_string) *C.zend_string {
@@ -604,6 +872,7 @@ func go_upper(s *C.zend_string) *C.zend_string {
 このアプローチは、手動メモリ管理よりもはるかにクリーンで安全です。FrankenPHPのヘルパー関数は、PHPの`zend_string`形式とGoの文字列間の変換を自動的に処理してくれます。`PHPString()`に`false`引数を指定していることで、新しい非永続文字列（リクエストの終了時に解放される）を作成したいことを示しています。
 
 > [!TIP]
+>
 > この例ではエラーハンドリングを省略していますが、Go関数内でポインタが`nil`ではないこと、渡されたデータが有効であることを常に確認するべきです。
 
 ### 拡張モジュールのFrankenPHPへの統合

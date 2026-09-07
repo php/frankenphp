@@ -1,9 +1,9 @@
-# 使用 FrankenPHP Workers
+# 使用 FrankenPHP workers
 
 启动一次应用程序并将其保存在内存中。
 FrankenPHP 将在几毫秒内处理传入请求。
 
-## 启动 Worker 脚本
+## 启动 worker 脚本
 
 ### Docker
 
@@ -129,14 +129,14 @@ docker run \
     dunglas/frankenphp
 ```
 
-### 在处理一定数量的请求后重启 Worker
+### 在处理一定数量的请求后重启 worker
 
 由于 PHP 最初不是为长时间运行的进程而设计的，仍有许多库和传统代码会泄漏内存。
 在 worker 模式下使用此类代码的一个解决方法是在处理一定数量的请求后重启 worker 脚本：
 
 前面的 worker 代码片段允许通过设置名为 `MAX_REQUESTS` 的环境变量来配置要处理的最大请求数。
 
-### 手动重启 Workers
+### 手动重启 workers
 
 虽然可以在[文件更改时重启 workers](config.md#watching-for-file-changes)，但也可以通过 [Caddy admin API](https://caddyserver.com/docs/api) 优雅地重启所有 workers。如果在你的 [Caddyfile](config.md#caddyfile-config) 中启用了 admin，你可以通过简单的 POST 请求 ping 重启端点，如下所示：
 

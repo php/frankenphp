@@ -51,6 +51,7 @@ These are the surfaces FrankenPHP owns. A vulnerability here is a FrankenPHP vul
 - **CGO memory boundary**: Go string pinning and `C.CString()` / `free()` lifetimes across the Go ↔ C boundary.
 - **Caddy admin API**: the `/frankenphp/workers/restart` and `/frankenphp/threads` endpoints, exposed through Caddy's admin API (which listens on `localhost:2019` by default). Exposing that endpoint beyond localhost is an operator decision.
 - **Trusted proxy handling**: incoming `X-Forwarded-*` headers always reach PHP as tainted `$_SERVER['HTTP_X_FORWARDED_*']` values; they are only trusted to derive the real client IP and scheme when [`trusted_proxies`](production.md#running-behind-a-reverse-proxy) is configured.
+- **Slow request bodies**: a client that announces a body then dribbles or stalls it holds the handling thread for the duration. With a bounded thread pool, enough such connections exhaust it (slow-POST DoS). FrankenPHP applies a 60s idle timeout on body reads by default ([`request_body_timeout`](config.md#caddyfile-config)), resetting the deadline before each read so a steady upload of any size succeeds while a stalled one is cut off and the thread released.
 
 ## Out of scope
 

@@ -112,6 +112,18 @@ func TestWorkerGetOpt(t *testing.T) {
 	assert.NotRegexp(t, buf.String(), "exit_status=[1-9]")
 }
 
+func TestWorkerCrashIsLoggedAboveDebugLevel(t *testing.T) {
+	logger, buf := newTestLogger(t)
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		req := httptest.NewRequest("GET", "http://example.com/crashing-worker.php", nil)
+		w := httptest.NewRecorder()
+		handler(w, req)
+	}, &testOptions{logger: logger, workerScript: "crashing-worker.php", nbWorkers: 1, nbParallelRequests: 4})
+
+	assert.Regexp(t, `level=WARN msg="unexpected termination, restarting" worker=\S+ thread=\d+ exit_status=1`, buf.String())
+}
+
 func ExampleServeHTTP_workers() {
 	if err := frankenphp.Init(
 		frankenphp.WithWorkers("worker1", "worker1.php", 4,
@@ -183,7 +195,7 @@ func TestWorkerMaxRequests(t *testing.T) {
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
 		instanceIDs := make(map[string]int)
 
-		for i := 0; i < totalRequests; i++ {
+		for range totalRequests {
 			body, resp := testGet("http://example.com/worker-counter-persistent.php", handler, t)
 			assert.Equal(t, 200, resp.StatusCode)
 
@@ -230,10 +242,8 @@ func TestWorkerMaxRequestsHighConcurrency(t *testing.T) {
 		)
 		var wg sync.WaitGroup
 
-		for i := 0; i < totalRequests; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+		for range totalRequests {
+			wg.Go(func() {
 				body, resp := testGet("http://example.com/worker-counter-persistent.php", handler, t)
 				assert.Equal(t, 200, resp.StatusCode)
 
@@ -244,7 +254,7 @@ func TestWorkerMaxRequestsHighConcurrency(t *testing.T) {
 					instanceIDs[instanceID]++
 				}
 				mu.Unlock()
-			}()
+			})
 		}
 		wg.Wait()
 

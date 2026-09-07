@@ -5,7 +5,7 @@ facilidade de uso.
 No entanto, é possível melhorar substancialmente o desempenho usando uma
 configuração apropriada.
 
-## Número de Threads e Workers
+## Número de threads e workers
 
 Por padrão, o FrankenPHP inicia 2 vezes mais threads e workers (no modo worker)
 do que o número de núcleos de CPU disponíveis.
@@ -221,7 +221,7 @@ Para mais detalhes, leia
 [a entrada dedicada na documentação do Symfony](https://symfony.com/doc/current/performance.html)
 (a maioria das dicas é útil mesmo se você não usa o Symfony).
 
-## Dividindo o Pool de Threads
+## Dividindo o pool de threads
 
 É comum que aplicações interajam com serviços externos lentos, como uma
 API que tende a ser instável sob alta carga ou que consistentemente leva mais de 10 segundos para responder.

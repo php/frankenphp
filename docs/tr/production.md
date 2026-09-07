@@ -1,4 +1,4 @@
-# Production Ortamına Dağıtım
+# Production ortamına dağıtım
 
 Bu eğitimde, Docker Compose kullanarak bir PHP uygulamasını tek bir sunucuya nasıl dağıtacağımızı öğreneceğiz.
 
@@ -6,7 +6,7 @@ Symfony kullanıyorsanız, Symfony Docker projesinin (FrankenPHP kullanan) "[Pro
 
 API Platform (FrankenPHP de kullanır) kullanıyorsanız, [çerçevenin dağıtım dokümanına](https://api-platform.com/docs/deployment/) başvurabilirsiniz.
 
-## Uygulamanızı Hazırlama
+## Uygulamanızı hazırlama
 
 İlk olarak, PHP projenizin kök dizininde bir `Dockerfile` oluşturun:
 
@@ -30,7 +30,7 @@ COPY . /app/public
 #COPY . /app
 ```
 
-Daha fazla ayrıntı ve seçenek için "[Özel Docker İmajı Oluşturma](docker.md)" bölümüne bakın,
+Daha fazla ayrıntı ve seçenek için "[Özel Docker imajı oluşturma](docker.md)" bölümüne bakın,
 ve yapılandırmayı nasıl özelleştireceğinizi, PHP eklentilerini ve Caddy modüllerini nasıl kuracağınızı öğrenin.
 
 Projeniz Composer kullanıyorsa,
@@ -66,7 +66,7 @@ volumes:
 
 Son olarak, eğer Git kullanıyorsanız, bu dosyaları commit edin ve push edin.
 
-## Sunucu Hazırlama
+## Sunucu hazırlama
 
 Uygulamanızı production ortamına dağıtmak için bir sunucuya ihtiyacınız vardır.
 Bu eğitimde, DigitalOcean tarafından sağlanan bir sanal makine kullanacağız, ancak herhangi bir Linux sunucusu çalışabilir.
@@ -91,7 +91,7 @@ Droplet'iniz hazır olduğunda, bağlanmak için SSH kullanın:
 ssh root@<droplet-ip>
 ```
 
-## Alan Adı Yapılandırma
+## Alan adı yapılandırma
 
 Çoğu durumda sitenizle bir alan adını ilişkilendirmek isteyeceksiniz.
 Henüz bir alan adınız yoksa, bir kayıt şirketi aracılığıyla bir alan adı satın almanız gerekir.
@@ -135,7 +135,7 @@ Sunucunuz aktif ve çalışıyor, ve sizin için otomatik olarak bir HTTPS serti
 >
 > Docker bir önbellek katmanına sahip olabilir, her dağıtım için doğru derlemeye sahip olduğunuzdan emin olun veya önbellek sorununu önlemek için projenizi `--no-cache` seçeneği ile yeniden oluşturun.
 
-## Ters Proxy Arkasında Çalıştırma
+## Ters proxy arkasında çalıştırma
 
 FrankenPHP bir ters proxy veya yük dengeleyicinin (örn. Nginx, AWS ELB, Google Cloud LB) arkasında çalışıyorsa,
 Caddy'nin gelen `X-Forwarded-*` başlıklarına güvenmesini sağlamak için Caddyfile dosyanızdaki [`trusted_proxies` genel seçeneğini](https://caddyserver.com/docs/caddyfile/options#trusted-proxies) yapılandırmanız gerekir:
@@ -157,7 +157,7 @@ veya Laravel için [`trustedproxies` ara yazılımını](https://laravel.com/doc
 Her iki yapılandırma da olmazsa, `X-Forwarded-For` ve `X-Forwarded-Proto` gibi başlıklar göz ardı edilecek,
 bu da yanlış HTTPS algılaması veya hatalı istemci IP adresleri gibi sorunlara neden olabilir.
 
-## Birden Fazla Düğümde Dağıtım
+## Birden fazla düğümde dağıtım
 
 Uygulamanızı bir makine kümesine dağıtmak istiyorsanız, sağlanan Compose dosyalarıyla uyumlu olan [Docker Swarm](https://docs.docker.com/engine/swarm/stack-deploy/) kullanabilirsiniz.
 Kubernetes üzerinde dağıtım yapmak için FrankenPHP kullanan [API Platformu ile sağlanan Helm grafiğini](https://api-platform.com/docs/deployment/kubernetes/) inceleyebilirsiniz.

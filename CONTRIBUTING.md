@@ -32,14 +32,14 @@ If your Docker version is lower than 23.0, the build will fail due to dockerigno
 
 [Follow the instructions to compile from sources](https://frankenphp.dev/docs/compile/) and pass the `--debug` configuration flag.
 
-## Running the Test Suite
+## Running the test suite
 
 ```console
 export CGO_CFLAGS=-O0 -g $(php-config --includes) CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)"
 go test -race -v ./...
 ```
 
-## Caddy Module
+## Caddy module
 
 Build Caddy with the FrankenPHP Caddy module:
 
@@ -65,7 +65,7 @@ The server is listening on `127.0.0.1:80`:
 curl -vk http://127.0.0.1/phpinfo.php
 ```
 
-## Minimal Test Server
+## Minimal test server
 
 Build the minimal test server:
 
@@ -88,7 +88,7 @@ The server is listening on `127.0.0.1:8080`:
 curl -v http://127.0.0.1:8080/phpinfo.php
 ```
 
-## Windows Development
+## Windows development
 
 1. Configure Git to always use `lf` line endings
 
@@ -155,7 +155,7 @@ curl -v http://127.0.0.1:8080/phpinfo.php
     cd ../..
     ```
 
-## Building Docker Images Locally
+## Building Docker images locally
 
 Print Bake plan:
 
@@ -181,7 +181,7 @@ Build FrankenPHP images from scratch for arm64 & amd64 and push to Docker Hub:
 docker buildx bake -f docker-bake.hcl --pull --no-cache --push
 ```
 
-## Debugging Segmentation Faults With Static Builds
+## Debugging segmentation faults with static builds
 
 1. Download the debug version of the FrankenPHP binary from GitHub or create your custom static build including debug symbols:
 
@@ -207,7 +207,7 @@ docker buildx bake -f docker-bake.hcl --pull --no-cache --push
 7. Type `bt` in the GDB shell
 8. Copy the output
 
-## Debugging Segmentation Faults in GitHub Actions
+## Debugging segmentation faults in GitHub Actions
 
 1. Open `.github/workflows/tests.yml`
 2. Enable PHP debug symbols
@@ -251,7 +251,7 @@ docker buildx bake -f docker-bake.hcl --pull --no-cache --push
 
 9. When the bug is fixed, revert all these changes
 
-## Development Environment Setup (WSL/Unix)
+## Development environment setup (WSL/Unix)
 
 ### Initial setup
 
@@ -263,7 +263,7 @@ The steps assume the following environment:
 - PHP built at: `/usr/local/bin/php`
 - FrankenPHP source cloned to `~/frankenphp`
 
-### CLion Setup for CGO glue/PHP Source Development
+### CLion setup for CGO glue/PHP source development
 
 1. Install CLion (on your host OS)
 
@@ -317,7 +317,7 @@ The steps assume the following environment:
 
 ---
 
-### GoLand Setup for FrankenPHP Development
+### GoLand setup for FrankenPHP development
 
 Use GoLand for primary Go development, but the debugger cannot debug C code.
 
@@ -335,7 +335,7 @@ Use GoLand for primary Go development, but the debugger cannot debug C code.
 
 ---
 
-### Go Configuration
+### Go configuration
 
 - Select Go Build
   - Name `frankenphp`
@@ -357,7 +357,7 @@ Now you can place breakpoints in C, C++ and Go files.
 
 ---
 
-### GoLand Setup on Windows
+### GoLand setup on Windows
 
 1. Follow the [Windows Development section](#windows-development)
 
@@ -385,13 +385,13 @@ Now you can place breakpoints in C, C++ and Go files.
 
 ---
 
-### Debugging and Integration Notes
+### Debugging and integration notes
 
 - Use CLion for debugging PHP internals and `cgo` glue code
 - Use GoLand for primary Go development and debugging
 - FrankenPHP can be added as a run configuration in CLion for unified C/Go debugging if needed, but syntax highlighting won't work in Go files
 
-## Misc Dev Resources
+## Misc dev resources
 
 - [PHP embedding in uWSGI](https://github.com/unbit/uwsgi/blob/master/plugins/php/php_plugin.c)
 - [PHP embedding in NGINX Unit](https://github.com/nginx/unit/blob/master/src/nxt_php_sapi.c)
@@ -402,19 +402,19 @@ Now you can place breakpoints in C, C++ and Go files.
 - [What the heck is TSRMLS_CC, anyway?](http://blog.golemon.com/2006/06/what-heck-is-tsrmlscc-anyway.html)
 - [SDL bindings](https://pkg.go.dev/github.com/veandco/go-sdl2@v0.4.21/sdl#Main)
 
-## Docker-Related Resources
+## Docker-related resources
 
 - [Bake file definition](https://docs.docker.com/build/customize/bake/file-definition/)
 - [`docker buildx build`](https://docs.docker.com/engine/reference/commandline/buildx_build/)
 
-## Useful Command
+## Useful command
 
 ```console
 apk add strace util-linux gdb
 strace -e 'trace=!futex,epoll_ctl,epoll_pwait,tgkill,rt_sigreturn' -p 1
 ```
 
-## Translating the Documentation
+## Translating the documentation
 
 To translate the documentation and the site into a new language,
 follow these steps:

@@ -4,11 +4,10 @@ package frankenphp
 // #include "frankenphp.h"
 import "C"
 import (
-	"context"
+	"log/slog"
 	"runtime"
 	"sync"
 	"sync/atomic"
-	"time"
 	"unsafe"
 
 	"github.com/dunglas/frankenphp/internal/state"
@@ -19,7 +18,7 @@ import (
 type phpThread struct {
 	runtime.Pinner
 	threadIndex  int
-	requestChan  chan contextHolder
+	requestChan  chan *frankenPHPContext
 	drainChan    chan struct{}
 	handlerMu    sync.RWMutex
 	handler      threadHandler
@@ -39,7 +38,6 @@ type threadHandler interface {
 	name() string
 	beforeScriptExecution() string
 	afterScriptExecution(exitStatus int)
-	context() context.Context
 	frankenPHPContext() *frankenPHPContext
 	// drain is a hook called by drainWorkerThreads right before drainChan is
 	// closed. Handlers that need to wake up a thread parked in a blocking C
@@ -52,7 +50,7 @@ type threadHandler interface {
 func newPHPThread(threadIndex int) *phpThread {
 	return &phpThread{
 		threadIndex: threadIndex,
-		requestChan: make(chan contextHolder),
+		requestChan: make(chan *frankenPHPContext),
 		state:       state.NewThreadState(),
 	}
 }
@@ -78,10 +76,27 @@ func (thread *phpThread) boot() {
 	thread.state.WaitFor(state.Inactive)
 }
 
-// reboot exits the C thread loop for full ZTS cleanup, then spawns a fresh C thread.
-// Returns false if the thread is no longer in Ready state (e.g. shutting down).
+// reboot the underlying C thread. Ignore the request if state is currently not Ready.
 func (thread *phpThread) reboot() bool {
 	if !thread.state.CompareAndSwap(state.Ready, state.Rebooting) {
+		return false // thread is not ready to reboot
+	}
+
+	go func() {
+		thread.state.WaitFor(state.RebootReady)
+
+		if !C.frankenphp_new_php_thread(C.uintptr_t(thread.threadIndex)) {
+			panic("unable to create thread")
+		}
+	}()
+
+	return true
+}
+
+// force the underlying C thread to reboot. Will always reboot unless already shutting down or done.
+func (thread *phpThread) forceReboot() bool {
+	if !thread.state.RequestSafeStateChange(state.ForceRebooting) {
+		// thread already shutting down or done
 		return false
 	}
 
@@ -99,9 +114,8 @@ func (thread *phpThread) reboot() bool {
 // shutdown the underlying PHP thread
 func (thread *phpThread) shutdown() {
 	if !thread.state.RequestSafeStateChange(state.ShuttingDown) {
-		// already shutting down or done, wait for the C thread to finish
-		thread.state.WaitFor(state.Done, state.Reserved)
-
+		// thread is already shutting down, prefer the stable reserved state over done
+		_ = thread.state.CompareAndSwap(state.Done, state.Reserved)
 		return
 	}
 
@@ -113,26 +127,23 @@ func (thread *phpThread) shutdown() {
 	// syscall (macOS, Windows non-alertable Sleep) the thread will exit
 	// when the syscall completes naturally; the operator's orchestrator
 	// is responsible for any harder timeout.
-	done := make(chan struct{})
-	go func() {
+	if !thread.state.WaitForStateWithTimeout(shutDownGracePeriod, state.Done) {
+		globalLogger.LogAttrs(
+			globalCtx,
+			slog.LevelWarn,
+			"force-killing thread on shutdown timeout",
+			slog.String("name", thread.name()),
+			slog.String("state", thread.state.Name()),
+			slog.String("timeout", shutDownGracePeriod.String()),
+		)
+		thread.sendKillSignal()
 		thread.state.WaitFor(state.Done)
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(drainGracePeriod):
-		thread.forceKillMu.RLock()
-		C.frankenphp_force_kill_thread(thread.forceKill)
-		thread.forceKillMu.RUnlock()
-		<-done
 	}
 
 	thread.drainChan = make(chan struct{})
 
 	// threads go back to the reserved state from which they can be booted again
-	if mainThread.state.Is(state.Ready) {
-		thread.state.Set(state.Reserved)
-	}
+	thread.state.Set(state.Reserved)
 }
 
 // setHandler changes the thread handler safely
@@ -164,19 +175,6 @@ func (thread *phpThread) transitionToNewHandler() string {
 	return thread.handler.beforeScriptExecution()
 }
 
-func (thread *phpThread) frankenPHPContext() *frankenPHPContext {
-	return thread.handler.frankenPHPContext()
-}
-
-func (thread *phpThread) context() context.Context {
-	if thread.handler == nil {
-		// handler can be nil when using opcache.preload
-		return globalCtx
-	}
-
-	return thread.handler.context()
-}
-
 func (thread *phpThread) name() string {
 	thread.handlerMu.RLock()
 	defer thread.handlerMu.RUnlock()
@@ -186,6 +184,14 @@ func (thread *phpThread) name() string {
 	}
 
 	return thread.handler.name()
+}
+
+// send a kill signal to PHP (ZTS compatible)
+// make sure to only call this if PHP is actively handling a request
+func (thread *phpThread) sendKillSignal() {
+	thread.forceKillMu.RLock()
+	C.frankenphp_force_kill_thread(thread.forceKill)
+	thread.forceKillMu.RUnlock()
 }
 
 // Pin a string that is not null-terminated
@@ -263,9 +269,13 @@ func go_frankenphp_clear_force_kill_slot(threadIndex C.uintptr_t) {
 func go_frankenphp_on_thread_shutdown(threadIndex C.uintptr_t) {
 	thread := phpThreads[threadIndex]
 	thread.Unpin()
-	if thread.state.Is(state.Rebooting) {
+
+	switch thread.state.Get() {
+	case state.Rebooting:
 		thread.state.Set(state.RebootReady)
-	} else {
+	case state.ForceRebooting:
+		thread.state.Set(state.YieldingForReboot)
+	default:
 		thread.state.Set(state.Done)
 	}
 }

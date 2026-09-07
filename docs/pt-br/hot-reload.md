@@ -1,4 +1,4 @@
-# Recarregamento Instantâneo
+# Recarregamento instantâneo
 
 FrankenPHP inclui um recurso de **recarregamento instantâneo** embutido, projetado para melhorar drasticamente a experiência do desenvolvedor.
 
@@ -76,7 +76,7 @@ php_server {
 }
 ```
 
-## Integração no Lado do Cliente
+## Integração no lado do cliente
 
 Enquanto o servidor detecta as alterações, o navegador precisa se inscrever nesses eventos para atualizar a página.
 O FrankenPHP expõe a URL do Hub Mercure a ser usada para se inscrever em alterações de arquivo através da variável de ambiente `$_SERVER['FRANKENPHP_HOT_RELOAD']`.
@@ -99,7 +99,7 @@ Está disponível como um pacote [npm](https://www.npmjs.com/package/frankenphp-
 
 Alternativamente, você pode implementar sua própria lógica do lado do cliente inscrevendo-se diretamente no hub Mercure usando a classe nativa `EventSource` do JavaScript.
 
-### Preservando Nós DOM Existentes
+### Preservando nós DOM existentes
 
 Em casos raros, como ao usar ferramentas de desenvolvimento [como a barra de depuração da web do Symfony](https://github.com/symfony/symfony/pull/62970), você pode querer preservar nós DOM específicos.
 Para fazer isso, adicione o atributo `data-frankenphp-hot-reload-preserve` ao elemento HTML relevante:
@@ -108,7 +108,7 @@ Para fazer isso, adicione o atributo `data-frankenphp-hot-reload-preserve` ao el
 <div data-frankenphp-hot-reload-preserve><!-- My debug bar --></div>
 ```
 
-## Modo Worker
+## Modo worker
 
 Se você estiver executando sua aplicação em [Modo Worker](https://frankenphp.dev/docs/worker/), seu script de aplicação permanece na memória.
 Isso significa que as alterações no seu código PHP não serão refletidas imediatamente, mesmo que o navegador recarregue.
@@ -135,7 +135,7 @@ php_server {
 }
 ```
 
-## Como Funciona
+## Como funciona
 
 1. **Monitoramento**: O FrankenPHP monitora o sistema de arquivos em busca de modificações usando a biblioteca [`e-dant/watcher`](https://github.com/e-dant/watcher) por baixo dos panos (contribuímos com o binding Go).
 2. **Reiniciar (Modo Worker)**: se `watch` estiver habilitado na configuração do worker, o worker PHP é reiniciado para carregar o novo código.

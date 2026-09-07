@@ -1,8 +1,8 @@
-# 扩展 Worker
+# 扩展 worker
 
 扩展 Worker 使您的 [FrankenPHP 扩展](https://frankenphp.dev/docs/extensions/) 能够管理专用的 PHP 线程池，用于执行后台任务、处理异步事件或实现自定义协议。适用于队列系统、事件监听器、调度器等。
 
-## 注册 Worker
+## 注册 worker
 
 ### 静态注册
 
@@ -41,7 +41,7 @@ func init() {
 
 如果您 [在没有 Caddy 的标准 Go 应用程序中嵌入 FrankenPHP](https://pkg.go.dev/github.com/dunglas/frankenphp#example-ServeHTTP)，您可以在初始化选项时使用 `frankenphp.WithExtensionWorkers` 注册扩展 worker。
 
-## 与 Worker 交互
+## 与 worker 交互
 
 一旦 worker 池激活，您就可以向其分派任务。这可以在 [导出到 PHP 的原生函数](https://frankenphp.dev/docs/extensions/#writing-the-extension) 中完成，也可以从任何 Go 逻辑中完成，例如 cron 调度器、事件监听器 (MQTT、Kafka) 或任何其他 goroutine。
 

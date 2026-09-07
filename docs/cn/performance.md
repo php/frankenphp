@@ -3,7 +3,7 @@
 默认情况下，FrankenPHP 尝试在性能和易用性之间提供良好的折衷。
 但是，通过使用适当的配置，可以大幅提高性能。
 
-## 线程和 Worker 数量
+## 线程和 worker 数量
 
 默认情况下，FrankenPHP 启动的线程和 worker（在 worker 模式下）数量是可用 CPU 核心数的 2 倍。
 

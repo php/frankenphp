@@ -1,10 +1,10 @@
-# Uzantı İşçileri
+# Uzantı işçileri
 
 Uzantı İşçileri, [FrankenPHP uzantınızın](https://frankenphp.dev/docs/extensions/) arka plan görevlerini yürütmek, eşzamansız olayları işlemek veya özel protokolleri uygulamak için özel bir PHP iş parçacığı havuzunu yönetmesini sağlar. Kuyruk sistemleri, olay dinleyicileri, zamanlayıcılar vb. için kullanışlıdır.
 
-## İşçiyi Kaydetme
+## İşçiyi kaydetme
 
-### Statik Kayıt
+### Statik kayıt
 
 İşçiyi kullanıcı tarafından yapılandırılabilir hale getirmeniz gerekmiyorsa (sabit komut dosyası yolu, sabit iş parçacığı sayısı), işçiyi `init()` fonksiyonunda basitçe kaydedebilirsiniz.
 
@@ -33,23 +33,23 @@ func init() {
 }
 ```
 
-### Bir Caddy Modülünde (Kullanıcı tarafından yapılandırılabilir)
+### Bir Caddy modülünde (kullanıcı tarafından yapılandırılabilir)
 
 Uzantınızı paylaşmayı planlıyorsanız (genel bir kuyruk veya olay dinleyici gibi), onu bir Caddy modülüne sarmalısınız. Bu, kullanıcıların `Caddyfile` aracılığıyla komut dosyası yolunu ve iş parçacığı sayısını yapılandırmasına olanak tanır. Bu, `caddy.Provisioner` arayüzünü uygulamayı ve Caddyfile'ı ayrıştırmayı gerektirir ([bir örnek görmek için](https://github.com/dunglas/frankenphp-queue/blob/989120d394d66dd6c8e2101cac73dd622fade334/caddy.go)).
 
-### Saf Bir Go Uygulamasında (Gömme)
+### Saf bir Go uygulamasında (gömme)
 
 FrankenPHP'yi [Caddy olmadan standart bir Go uygulamasına gömüyorsanız](https://pkg.go.dev/github.com/dunglas/frankenphp#example-ServeHTTP), seçenekleri başlatırken `frankenphp.WithExtensionWorkers` kullanarak uzantı işçilerini kaydedebilirsiniz.
 
-## İşçilerle Etkileşim Kurma
+## İşçilerle etkileşim kurma
 
 İşçi havuzu aktif hale geldiğinde, ona görevler gönderebilirsiniz. Bu, [PHP'ye dışa aktarılan yerel fonksiyonlar](https://frankenphp.dev/docs/extensions/#writing-the-extension) içinde veya bir cron zamanlayıcı, bir olay dinleyicisi (MQTT, Kafka) veya herhangi başka bir goroutine gibi herhangi bir Go mantığından yapılabilir.
 
-### Başsız Mod : `SendMessage`
+### Başsız mod : `SendMessage`
 
 Doğrudan işçi komut dosyanıza ham veri geçirmek için `SendMessage` kullanın. Bu, kuyruklar veya basit komutlar için idealdir.
 
-#### Örnek: Asenkron Bir Kuyruk Uzantısı
+#### Örnek: asenkron bir kuyruk uzantısı
 
 ```go
 // #include <Zend/zend_types.h>
@@ -78,7 +78,7 @@ func my_queue_push(data *C.zval) bool {
 }
 ```
 
-### HTTP Emülasyonu :`SendRequest`
+### HTTP emülasyonu :`SendRequest`
 
 Uzantınızın standart bir web ortamı bekleyen ( `$_SERVER`, `$_GET` vb. dolduran) bir PHP komut dosyasını çağırması gerekiyorsa `SendRequest` kullanın.
 
@@ -109,7 +109,7 @@ func my_worker_http_request(path *C.zend_string) unsafe.Pointer {
 }
 ```
 
-## İşçi Komut Dosyası
+## İşçi komut dosyası
 
 PHP işçi komut dosyası bir döngüde çalışır ve hem ham mesajları hem de HTTP isteklerini işleyebilir.
 
@@ -131,11 +131,11 @@ while (frankenphp_handle_request($handler)) {
 }
 ```
 
-## Yaşam Döngüsü Kancaları
+## Yaşam döngüsü kancaları
 
 FrankenPHP, yaşam döngüsünün belirli noktalarında Go kodunu yürütmek için kancalar sağlar.
 
-| Kanca Türü       | Seçenek Adı                  | İmza                 | Bağlam ve Kullanım Durumu                                                                         |
+| Kanca türü       | Seçenek adı                  | İmza                 | Bağlam ve kullanım durumu                                                                         |
 | :--------------- | :--------------------------- | :------------------- | :------------------------------------------------------------------------------------------------ |
 | **Sunucu**       | `WithWorkerOnServerStartup`  | `func()`             | Genel kurulum. **Bir Kez** çalışır. Örnek: NATS/Redis'e bağlanma.                                 |
 | **Sunucu**       | `WithWorkerOnServerShutdown` | `func()`             | Genel temizleme. **Bir Kez** çalışır. Örnek: Paylaşılan bağlantıları kapatma.                     |

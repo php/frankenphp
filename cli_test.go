@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"runtime"
 	"testing"
 
 	"github.com/dunglas/frankenphp"
@@ -20,8 +21,7 @@ func TestExecuteScriptCLI(t *testing.T) {
 	stdoutStderr, err := cmd.CombinedOutput()
 	assert.Error(t, err)
 
-	var exitError *exec.ExitError
-	if errors.As(err, &exitError) {
+	if exitError, ok := errors.AsType[*exec.ExitError](err); ok {
 		assert.Equal(t, 3, exitError.ExitCode())
 	}
 
@@ -45,11 +45,59 @@ func TestExecuteCLICode(t *testing.T) {
 	assert.Equal(t, stdoutStderrStr, `Hello World`)
 }
 
+// `-i` (and any other invocation without a script) is only supported since PHP
+// 8.6, where the real CLI SAPI is reused. older versions must fail cleanly.
+func TestExecuteCLIPHPInfo(t *testing.T) {
+	if _, err := os.Stat("internal/testcli/testcli"); err != nil {
+		t.Skip("internal/testcli/testcli has not been compiled, run `cd internal/testcli/ && go build`")
+	}
+
+	cmd := exec.Command("internal/testcli/testcli", "-i")
+	stdoutStderr, err := cmd.CombinedOutput()
+	stdoutStderrStr := string(stdoutStderr)
+
+	if frankenphp.Version().VersionID < 80600 {
+		assert.Error(t, err)
+
+		if exitError, ok := errors.AsType[*exec.ExitError](err); ok {
+			assert.Equal(t, 1, exitError.ExitCode())
+		}
+
+		assert.Contains(t, stdoutStderrStr, "this functionality is not available in frankenphp php-cli")
+
+		return
+	}
+
+	assert.NoError(t, err, "output: %s", stdoutStderrStr)
+	assert.Contains(t, stdoutStderrStr, "PHP Version => "+frankenphp.Version().Version)
+}
+
+// Regression test for https://github.com/php/frankenphp/issues/1902. A
+// long-running CLI script that installs pcntl_signal handlers must
+// receive its own signals reliably
+func TestExecuteScriptCLISignals(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("pcntl is not available on Windows")
+	}
+	if _, err := os.Stat("internal/testcli/testcli"); err != nil {
+		t.Skip("internal/testcli/testcli has not been compiled, run `cd internal/testcli/ && go build`")
+	}
+
+	cmd := exec.Command("internal/testcli/testcli", "testdata/command-pcntl.php")
+	stdoutStderr, err := cmd.CombinedOutput()
+	var exitError *exec.ExitError
+	if errors.As(err, &exitError) && exitError.ExitCode() == 2 {
+		t.Skipf("pcntl/posix not available: %s", stdoutStderr)
+	}
+	assert.NoError(t, err, "output: %s", stdoutStderr)
+	assert.Contains(t, string(stdoutStderr), "ok")
+}
+
 func ExampleExecuteScriptCLI() {
 	if len(os.Args) <= 1 {
 		log.Println("Usage: my-program script.php")
 		os.Exit(1)
 	}
 
-	os.Exit(frankenphp.ExecuteScriptCLI(os.Args[1], os.Args))
+	os.Exit(frankenphp.ExecuteScriptCLI(os.Args[0], os.Args))
 }

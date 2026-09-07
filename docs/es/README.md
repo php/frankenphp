@@ -14,7 +14,7 @@ Descubre más detalles sobre este servidor de aplicaciones en la grabación de e
 
 <a href="https://dunglas.dev/2022/10/frankenphp-the-modern-php-app-server-written-in-go/"><img src="https://dunglas.dev/wp-content/uploads/2022/10/frankenphp.png" alt="Diapositivas" width="600"></a>
 
-## Para Comenzar
+## Para comenzar
 
 En Windows, usa [WSL](https://learn.microsoft.com/es-es/windows/wsl/) para ejecutar FrankenPHP.
 

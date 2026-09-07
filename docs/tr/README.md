@@ -1,4 +1,4 @@
-# FrankenPHP: PHP için Modern Uygulama Sunucusu
+# FrankenPHP: PHP için modern uygulama sunucusu
 
 <h1 align="center"><a href="https://frankenphp.dev"><img src="../../frankenphp.png" alt="FrankenPHP" width="600"></a></h1>
 
@@ -18,7 +18,7 @@ FrankenPHP, PHP'yi `net/http` kullanarak herhangi bir uygulamaya yerleştirmek i
 
 Windows üzerinde FrankenPHP çalıştırmak için [WSL](https://learn.microsoft.com/windows/wsl/) kullanın.
 
-### Kurulum Betiği
+### Kurulum betiği
 
 Platformunuza uygun sürümü otomatik olarak kurmak için bu satırı terminalinize kopyalayabilirsiniz:
 
@@ -26,7 +26,7 @@ Platformunuza uygun sürümü otomatik olarak kurmak için bu satırı terminali
 curl https://frankenphp.dev/install.sh | sh
 ```
 
-### Binary Çıktısı
+### Binary çıktısı
 
 Docker kullanmayı tercih etmiyorsanız, Linux ve macOS için geliştirme amaçlı bağımsız (statik) FrankenPHP binary dosyaları sağlıyoruz;
 [PHP 8.4](https://www.php.net/releases/8.4/en.php) ve en popüler PHP eklentilerinin çoğu dahildir.
@@ -35,7 +35,7 @@ Docker kullanmayı tercih etmiyorsanız, Linux ve macOS için geliştirme amaçl
 
 **Eklenti kurulumu:** Yaygın eklentiler paketle birlikte gelir. Daha fazla eklenti yüklemek mümkün değildir.
 
-### rpm Paketleri
+### rpm paketleri
 
 Bakımcılarımız `dnf` kullanan tüm sistemler için rpm paketleri sunuyor. Kurulum için:
 
@@ -54,7 +54,7 @@ sudo dnf install pie-zts
 sudo pie-zts install asgrim/example-pie-extension
 ```
 
-### deb Paketleri
+### deb paketleri
 
 Bakımcılarımız `apt` kullanan tüm sistemler için deb paketleri sunuyor. Kurulum için:
 
@@ -136,7 +136,7 @@ sudo systemctl start frankenphp
 - [Go kütüphane dokümantasonu](https://pkg.go.dev/github.com/dunglas/frankenphp)
 - [Katkıda bulunma ve hata ayıklama](CONTRIBUTING.md)
 
-## Örnekler ve İskeletler
+## Örnekler ve iskeletler
 
 - [Symfony](https://github.com/dunglas/symfony-docker)
 - [API Platform](https://api-platform.com/docs/distribution/)

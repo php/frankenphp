@@ -1,8 +1,6 @@
 package frankenphp
 
 import (
-	"context"
-
 	"github.com/dunglas/frankenphp/internal/state"
 )
 
@@ -25,14 +23,19 @@ func (handler *inactiveThread) beforeScriptExecution() string {
 	case state.TransitionRequested:
 		return thread.transitionToNewHandler()
 
-	case state.Booting, state.TransitionComplete:
+	case state.Booting, state.TransitionComplete, state.Inactive:
 		thread.state.Set(state.Inactive)
 
 		// wait for external signal to start or shut down
 		thread.state.MarkAsWaiting(true)
-		thread.state.WaitFor(state.TransitionRequested, state.ShuttingDown)
+		thread.state.WaitFor(state.TransitionRequested, state.ShuttingDown, state.Rebooting, state.ForceRebooting)
 		thread.state.MarkAsWaiting(false)
 
+		return handler.beforeScriptExecution()
+	case state.Rebooting, state.ForceRebooting:
+		return ""
+	case state.RebootReady:
+		thread.state.Set(state.Inactive)
 		return handler.beforeScriptExecution()
 
 	case state.ShuttingDown:
@@ -49,10 +52,6 @@ func (handler *inactiveThread) afterScriptExecution(int) {
 
 func (handler *inactiveThread) frankenPHPContext() *frankenPHPContext {
 	return nil
-}
-
-func (handler *inactiveThread) context() context.Context {
-	return globalCtx
 }
 
 func (handler *inactiveThread) name() string {

@@ -151,7 +151,7 @@ Once you've integrated your extension into FrankenPHP as demonstrated in the pre
 While some variable types have the same memory representation between C/PHP and Go, some types require more logic to be directly used. This is probably the hardest part when it comes to writing extensions because it requires understanding the internals of the Zend Engine and how variables are stored internally in PHP.
 This table summarizes what you need to know:
 
-| PHP type           | Go type                       | Direct conversion | C to Go helper                    | Go to C helper                     | Class Methods Support |
+| PHP type           | Go type                       | Direct conversion | C to Go helper                    | Go to C helper                     | Class methods support |
 | ------------------ | ----------------------------- | ----------------- | --------------------------------- | ---------------------------------- | --------------------- |
 | `int`              | `int64`                       | ✅                | -                                 | -                                  | ✅                    |
 | `?int`             | `*int64`                      | ✅                | -                                 | -                                  | ✅                    |
@@ -175,7 +175,7 @@ This table summarizes what you need to know:
 
 If you refer to the code snippet of the previous section, you can see that helpers are used to convert the first parameter and the return value. The second and third parameters of our `repeat_this()` function don't need to be converted, as the memory representation of the underlying types is the same for both C and Go.
 
-#### Working with Arrays
+#### Working with arrays
 
 FrankenPHP provides native support for PHP arrays through `frankenphp.AssociativeArray` or direct conversion to a map or slice.
 
@@ -269,7 +269,7 @@ func process_data_packed(arr *C.zend_array) unsafe.Pointer {
 - **Nested Arrays** - Arrays can be nested and will convert all supported types automatically (`int64`, `float64`, `string`, `bool`, `nil`, `AssociativeArray`, `map[string]any`, `[]any`)
 - **Objects are not supported** - Currently, only scalar types and arrays can be used as values. Providing an object will result in a `null` value in the PHP array.
 
-##### Available methods: Packed and Associative
+##### Available methods: packed and associative
 
 - `frankenphp.PHPAssociativeArray(arr frankenphp.AssociativeArray) unsafe.Pointer` - Convert to an ordered PHP array with key-value pairs
 - `frankenphp.PHPMap(arr map[string]any) unsafe.Pointer` - Convert a map to an unordered PHP array with key-value pairs
@@ -599,7 +599,7 @@ func (sp *StringProcessorStruct) Process(input *C.zend_string, mode int64) unsaf
 
 The generator supports organizing your PHP extension's functions, classes, and constants under a namespace using the `//export_php:namespace` directive. This helps avoid naming conflicts and provides better organization for your extension's API.
 
-#### Declaring a Namespace
+#### Declaring a namespace
 
 Use the `//export_php:namespace` directive at the top of your Go file to place all exported symbols under a specific namespace:
 
@@ -696,7 +696,7 @@ The `frankenphp.RegisterExtension()` function simplifies the extension registrat
 
 In this example, our new function will trigger a goroutine that logs a message in Caddy's logs.
 
-#### Define the PHP Function
+#### Define the PHP function
 
 To allow PHP to call our function, we need to define a corresponding PHP function. For this, we will create a stub file, for example, `extension.stub.php`, which will contain the following code:
 

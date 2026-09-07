@@ -3,6 +3,7 @@ package frankenphp
 import (
 	"errors"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
@@ -36,15 +37,18 @@ var (
 
 func initAutoScaling(mainThread *phpMainThread) {
 	if mainThread.maxThreads <= mainThread.numThreads {
-		scaleChan = nil
 		return
+	}
+
+	// reused across reloads so queued requests aren't orphaned on a stale channel
+	if scaleChan == nil {
+		scaleChan = make(chan *frankenPHPContext)
 	}
 
 	done := mainThread.done
 	mstate := mainThread.state
 
 	scalingMu.Lock()
-	scaleChan = make(chan *frankenPHPContext)
 	maxScaledThreads := mainThread.maxThreads - mainThread.numThreads
 	autoScaledThreads = make([]*phpThread, 0, maxScaledThreads)
 	scalingMu.Unlock()
@@ -53,23 +57,14 @@ func initAutoScaling(mainThread *phpMainThread) {
 	go startDownScalingThreads(done)
 }
 
-func drainAutoScaling() {
-	scalingMu.Lock()
-
-	if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
-		globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "shutting down autoscaling", slog.Int("autoScaledThreads", len(autoScaledThreads)))
-	}
-
-	scalingMu.Unlock()
-}
-
 func addRegularThread() (*phpThread, error) {
 	thread := getInactivePHPThread()
 	if thread == nil {
 		return nil, ErrMaxThreadsReached
 	}
 	convertToRegularThread(thread)
-	thread.state.WaitFor(state.Ready, state.ShuttingDown, state.Reserved)
+	thread.state.WaitFor(state.Ready, state.Inactive, state.Reserved) // stable states
+
 	return thread, nil
 }
 
@@ -79,7 +74,8 @@ func addWorkerThread(worker *worker) (*phpThread, error) {
 		return nil, ErrMaxThreadsReached
 	}
 	convertToWorkerThread(thread, worker)
-	thread.state.WaitFor(state.Ready, state.ShuttingDown, state.Reserved)
+	thread.state.WaitFor(state.Ready, state.Inactive, state.Reserved) // stable states
+
 	return thread, nil
 }
 
@@ -210,12 +206,10 @@ func deactivateThreads() {
 	stoppedThreadCount := 0
 	scalingMu.Lock()
 	defer scalingMu.Unlock()
-	for i := len(autoScaledThreads) - 1; i >= 0; i-- {
-		thread := autoScaledThreads[i]
-
+	for i, thread := range slices.Backward(autoScaledThreads) {
 		// the thread might have been stopped otherwise, remove it
 		if thread.state.Is(state.Reserved) {
-			autoScaledThreads = append(autoScaledThreads[:i], autoScaledThreads[i+1:]...)
+			autoScaledThreads = slices.Delete(autoScaledThreads, i, i+1)
 			continue
 		}
 
@@ -228,7 +222,7 @@ func deactivateThreads() {
 		if thread.state.Is(state.Ready) && waitTime > maxIdleTime.Milliseconds() {
 			convertToInactiveThread(thread)
 			stoppedThreadCount++
-			autoScaledThreads = append(autoScaledThreads[:i], autoScaledThreads[i+1:]...)
+			autoScaledThreads = slices.Delete(autoScaledThreads, i, i+1)
 
 			if globalLogger.Enabled(globalCtx, slog.LevelInfo) {
 				globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "downscaling thread", slog.Int("thread", thread.threadIndex), slog.Int64("wait_time", waitTime), slog.Int("num_threads", len(autoScaledThreads)))
@@ -244,7 +238,7 @@ func deactivateThreads() {
 		// 	logger.LogAttrs(nil, slog.LevelDebug, "auto-stopping thread", slog.Int("thread", thread.threadIndex))
 		// 	thread.shutdown()
 		// 	stoppedThreadCount++
-		// 	autoScaledThreads = append(autoScaledThreads[:i], autoScaledThreads[i+1:]...)
+		// 	autoScaledThreads = slices.Delete(autoScaledThreads, i, i+1)
 		// 	continue
 		// }
 	}

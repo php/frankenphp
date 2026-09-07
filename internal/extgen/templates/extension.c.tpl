@@ -7,6 +7,14 @@
 // You may edit the file and remove this comment if you plan to manually maintain
 // this file going forward.
 
+{{define "methodCallArg" -}}
+{{- if .IsNullable -}}
+{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "array"}}{{.Name}}{{else if eq .PhpType "callable"}}{{.Name}}_callback{{end}}
+{{- else -}}
+{{if eq .PhpType "string"}}{{.Name}}{{else if eq .PhpType "int"}}(long){{.Name}}{{else if eq .PhpType "float"}}(double){{.Name}}{{else if eq .PhpType "bool"}}(int){{.Name}}{{else if eq .PhpType "array"}}{{.Name}}{{else if eq .PhpType "callable"}}{{.Name}}_callback{{end}}
+{{- end -}}
+{{- end}}
+
 #include <php.h>
 #include <Zend/zend_API.h>
 #include <Zend/zend_hash.h>
@@ -124,22 +132,22 @@ PHP_METHOD({{namespacedClassName $.Namespace .ClassName}}, {{.PhpName}}) {
     
     {{- if ne .ReturnType "void"}}
     {{- if eq .ReturnType "string"}}
-    zend_string* result = {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "array"}}{{.Name}}{{else if eq .PhpType "callable"}}{{.Name}}_callback{{end}}{{else}}{{if eq .PhpType "array"}}{{.Name}}{{else if eq .PhpType "callable"}}{{.Name}}_callback{{else}}{{.Name}}{{end}}{{end}}{{end}}{{end}});
+    zend_string* result = {{.Name}}_wrapper(intern->go_handle{{range .Params}}, {{template "methodCallArg" .}}{{end}});
     if (result) {
         RETURN_STR(result);
     }
     RETURN_EMPTY_STRING();
     {{- else if eq .ReturnType "int"}}
-    zend_long result = {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "array"}}{{.Name}}{{else if eq .PhpType "callable"}}{{.Name}}_callback{{end}}{{else}}{{if eq .PhpType "array"}}{{.Name}}{{else if eq .PhpType "callable"}}{{.Name}}_callback{{else}}(long){{.Name}}{{end}}{{end}}{{end}}{{end}});
+    zend_long result = {{.Name}}_wrapper(intern->go_handle{{range .Params}}, {{template "methodCallArg" .}}{{end}});
     RETURN_LONG(result);
     {{- else if eq .ReturnType "float"}}
-    double result = {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "array"}}{{.Name}}{{else if eq .PhpType "callable"}}{{.Name}}_callback{{end}}{{else}}{{if eq .PhpType "array"}}{{.Name}}{{else if eq .PhpType "callable"}}{{.Name}}_callback{{else}}(double){{.Name}}{{end}}{{end}}{{end}}{{end}});
+    double result = {{.Name}}_wrapper(intern->go_handle{{range .Params}}, {{template "methodCallArg" .}}{{end}});
     RETURN_DOUBLE(result);
     {{- else if eq .ReturnType "bool"}}
-    int result = {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "array"}}{{.Name}}{{else if eq .PhpType "callable"}}{{.Name}}_callback{{end}}{{else}}{{if eq .PhpType "array"}}{{.Name}}{{else if eq .PhpType "callable"}}{{.Name}}_callback{{else}}(int){{.Name}}{{end}}{{end}}{{end}}{{end}});
+    int result = {{.Name}}_wrapper(intern->go_handle{{range .Params}}, {{template "methodCallArg" .}}{{end}});
     RETURN_BOOL(result);
     {{- else if eq .ReturnType "array"}}
-    void* result = {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "array"}}{{.Name}}{{else if eq .PhpType "callable"}}{{.Name}}_callback{{end}}{{else}}{{if eq .PhpType "array"}}{{.Name}}{{else if eq .PhpType "callable"}}{{.Name}}_callback{{else}}{{.Name}}{{end}}{{end}}{{end}}{{end}});
+    void* result = {{.Name}}_wrapper(intern->go_handle{{range .Params}}, {{template "methodCallArg" .}}{{end}});
     if (result != NULL) {
         HashTable *ht = (HashTable*)result;
         RETURN_ARR(ht);
@@ -148,7 +156,7 @@ PHP_METHOD({{namespacedClassName $.Namespace .ClassName}}, {{.PhpName}}) {
     }
     {{- end}}
     {{- else}}
-    {{.Name}}_wrapper(intern->go_handle{{if .Params}}{{range .Params}}, {{if .IsNullable}}{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "array"}}{{.Name}}{{else if eq .PhpType "callable"}}{{.Name}}_callback{{end}}{{else}}{{if eq .PhpType "string"}}{{.Name}}{{else if eq .PhpType "int"}}(long){{.Name}}{{else if eq .PhpType "float"}}(double){{.Name}}{{else if eq .PhpType "bool"}}(int){{.Name}}{{else if eq .PhpType "array"}}{{.Name}}{{else if eq .PhpType "callable"}}{{.Name}}_callback{{end}}{{end}}{{end}}{{end}});
+    {{.Name}}_wrapper(intern->go_handle{{range .Params}}, {{template "methodCallArg" .}}{{end}});
     {{- end}}
 }
 {{end}}{{end}}

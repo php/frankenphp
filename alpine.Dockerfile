@@ -20,10 +20,10 @@ RUN set -eux; \
 		/data/caddy \
 		/etc/caddy \
 		/etc/frankenphp; \
-	sed -i 's/php/frankenphp run/g' /usr/local/bin/docker-php-entrypoint; \
-	echo '<?php phpinfo();' > /app/public/index.php
+	sed -i 's/php/frankenphp run/g' /usr/local/bin/docker-php-entrypoint
 
 COPY --link caddy/frankenphp/Caddyfile /etc/caddy/Caddyfile
+COPY --link package/content/index.php /app/public/index.php
 
 RUN ln /etc/caddy/Caddyfile /etc/frankenphp/Caddyfile && \
 	curl -sSLf \

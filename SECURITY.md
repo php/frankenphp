@@ -1,19 +1,19 @@
-# Security Policy
+# Security policy
 
-## Supported Versions
+## Supported versions
 
 Only the latest version is supported.
 Please ensure that you're always using the latest release.
 
 Binaries and Docker images are rebuilt nightly using the latest versions of dependencies.
 
-## Security Model
+## Security model
 
 FrankenPHP embeds the PHP interpreter into a Go and Caddy server, so its trust boundaries span Go, C, and PHP.
 Before auditing the project or reporting an issue, read the [security model documentation](docs/security.md),
 which describes what is trusted, what is not, and which attack surfaces belong to FrankenPHP itself.
 
-## Reporting a Vulnerability
+## Reporting a vulnerability
 
 If you believe you have discovered a security issue directly affecting FrankenPHP,
 please do **NOT** report it publicly.

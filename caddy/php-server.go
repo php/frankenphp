@@ -274,7 +274,7 @@ func cmdPHPServer(fs caddycmd.Flags) (int, error) {
 	server := &caddyhttp.Server{
 		ReadHeaderTimeout: caddy.Duration(10 * time.Second),
 		IdleTimeout:       caddy.Duration(30 * time.Second),
-		MaxHeaderBytes:    1024 * 10,
+		MaxHeaderBytes:    1024 * 16, // 16 KiB to match caddy's default
 		Routes:            caddyhttp.RouteList{route},
 	}
 	if listen == "" {

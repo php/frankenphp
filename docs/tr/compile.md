@@ -1,4 +1,4 @@
-# Kaynak Kodlardan Derleme
+# Kaynak kodlardan derleme
 
 Bu doküman, PHP'yi dinamik bir kütüphane olarak yükleyecek bir FrankenPHP yapısının nasıl oluşturulacağını açıklamaktadır.
 Önerilen yöntem bu şekildedir.
@@ -54,7 +54,7 @@ Ardından yapılandırma betiğini çalıştırın:
     --with-iconv=/opt/homebrew/opt/libiconv/
 ```
 
-## PHP Derleyin
+## PHP derleyin
 
 Son olarak, PHP'yi derleyin ve kurun:
 
@@ -63,7 +63,7 @@ make -j"$(getconf _NPROCESSORS_ONLN)"
 sudo make install
 ```
 
-## Go Uygulamasını Derleyin
+## Go uygulamasını derleyin
 
 Artık Go kütüphanesini kullanabilir ve Caddy yapımızı derleyebilirsiniz:
 

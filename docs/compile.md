@@ -1,6 +1,6 @@
 ---
 title: Compile FrankenPHP from sources with libphp.so
-description: Build FrankenPHP from source on Linux, macOS and FreeBSD, linking PHP as a shared library via xcaddy or go build, and add custom Caddy modules and extensions.
+description: Build FrankenPHP from source on Linux, macOS, FreeBSD and Windows, linking PHP as a shared library via xcaddy or go build, and add custom Caddy modules and extensions.
 ---
 
 # Compile from sources
@@ -9,6 +9,10 @@ This document explains how to create a FrankenPHP binary that will load PHP as a
 This is the recommended method.
 
 Alternatively, [fully and mostly static builds](static.md) can also be created.
+
+> [!NOTE]
+>
+> To compile FrankenPHP on Windows, follow [the Windows Development section of the contributing documentation](https://frankenphp.dev/docs/contributing/#windows-development).
 
 ## Install PHP
 

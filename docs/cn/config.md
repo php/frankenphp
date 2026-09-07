@@ -94,6 +94,7 @@ localhost {
 		max_threads <num_threads> # 限制可以在运行时启动的额外 PHP 线程的数量。默认值：num_threads。可以设置为 'auto'。
 		max_wait_time <duration> # 设置请求在超时之前可以等待的最大时间，直到找到一个空闲的 PHP 线程。 默认：禁用。
 		max_idle_time <duration> # 设置一个自动扩展的线程在被停用之前可以空闲的最长时间。默认：5s。
+		max_requests <num> # (实验性) 设置一个 PHP 线程在重启前将处理的最大请求数，这有助于缓解内存泄漏问题。适用于常规线程和 worker 线程。默认值：0 (无限制)。
 		php_ini <key> <value> # 设置一个 php.ini 指令。可以多次使用以设置多个指令。
 		worker {
 			file <path> # 设置工作脚本的路径。
@@ -256,6 +257,23 @@ Workers 可以通过 `watch` 指令在文件更改时重新启动。
 				match /api/* # 所有以 /api/ 开头的请求将由此 worker 处理
 			}
 		}
+	}
+}
+```
+
+## 在处理一定数量请求后重启线程 (实验性)
+
+FrankenPHP 可以在 PHP 线程处理完给定数量的请求后自动重启它们。
+当一个线程达到限制时，它会被完全重启，清除所有内存和状态。
+在重启期间，其他线程会继续处理请求。
+
+如果你注意到内存随着时间增长，理想的解决方案是将泄漏报告给负责的扩展或库维护者。
+但是，当修复依赖于你无法控制的第三方时，`max_requests` 提供了一个务实且有望临时的生产环境解决方案：
+
+```caddyfile
+{
+	frankenphp {
+		max_requests 500
 	}
 }
 ```

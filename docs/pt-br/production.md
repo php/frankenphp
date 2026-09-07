@@ -162,7 +162,7 @@ Acesse `https://seu-nome-de-dominio.example.com` e divirta-se!
 > correta para cada implantação ou reconstrua seu projeto com a opção
 > `--no-cache` para evitar problemas de cache.
 
-## Executando por Trás de um Proxy Reverso
+## Executando por trás de um proxy reverso
 
 Se o FrankenPHP estiver sendo executado por trás de um proxy reverso ou um balanceador de carga (por exemplo, Nginx, AWS ELB, Google Cloud LB),
 você deve configurar a [opção global `trusted_proxies`](https://caddyserver.com/docs/caddyfile/options#trusted-proxies) no seu Caddyfile

@@ -92,7 +92,7 @@ func TestTransitionAThreadBetween2DifferentWorkers(t *testing.T) {
 // try all possible handler transitions
 // takes around 200ms and is supposed to force race conditions
 func TestTransitionThreadsWhileDoingRequests(t *testing.T) {
-	t.Cleanup(Shutdown)
+	setupGlobals(t)
 
 	var (
 		isDone        atomic.Bool
@@ -166,6 +166,65 @@ func TestTransitionThreadsWhileDoingRequests(t *testing.T) {
 	transitionsWG.Wait()
 }
 
+// Test https://github.com/php/frankenphp/issues/2469
+// A request queued for a thread when the server reloads must be served
+// by the new threads, not rejected with ErrMaxWaitTimeExceeded.
+func TestQueuedRequestSurvivesReload(t *testing.T) {
+	t.Cleanup(Shutdown)
+
+	initOpts := []Option{
+		WithNumThreads(1),
+		WithMaxThreads(1),
+		WithMaxWaitTime(5 * time.Second),
+	}
+	assert.NoError(t, Init(initOpts...))
+
+	doRequest := func(query string) error {
+		r := httptest.NewRequest("GET", "http://localhost/sleep.php?"+query, nil)
+		w := httptest.NewRecorder()
+		req, err := NewRequestWithContext(r, WithRequestDocumentRoot(testDataPath, false))
+		if err != nil {
+			return err
+		}
+
+		return ServeHTTP(w, req)
+	}
+
+	// Occupy the single PHP thread so the next request has to wait in the queue.
+	started := make(chan struct{})
+	go func() {
+		close(started)
+		_ = doRequest("sleep=800")
+	}()
+	<-started
+	time.Sleep(100 * time.Millisecond)
+
+	queued := make(chan error, 1)
+	go func() {
+		queued <- doRequest("sleep=0")
+	}()
+
+	// Wait until the second request is genuinely queued waiting for a thread.
+	deadline := time.Now().Add(2 * time.Second)
+	for queuedRegularThreads.Load() == 0 {
+		if !assert.True(t, time.Now().Before(deadline), "request was never queued") {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	// Reload while the request is queued, exactly like the Caddy module does.
+	Shutdown()
+	assert.NoError(t, Init(initOpts...))
+
+	select {
+	case err := <-queued:
+		assert.NoError(t, err, "a queued request must not be rejected by a reload")
+	case <-time.After(15 * time.Second):
+		t.Fatal("the queued request never completed after the reload")
+	}
+}
+
 func TestFinishBootingAWorkerScript(t *testing.T) {
 	setupGlobals(t)
 
@@ -177,8 +236,10 @@ func TestFinishBootingAWorkerScript(t *testing.T) {
 	convertToWorkerThread(phpThreads[0], worker)
 	phpThreads[0].state.WaitFor(state.Ready)
 
-	assert.NotNil(t, phpThreads[0].handler.(*workerThread).dummyContext)
-	assert.Nil(t, phpThreads[0].handler.(*workerThread).workerContext)
+	dummyFC := phpThreads[0].handler.(*workerThread).dummyFrankenPHPContext
+	assert.NotNil(t, dummyFC)
+	assert.NotNil(t, dummyFC.ctx)
+	assert.Nil(t, phpThreads[0].handler.(*workerThread).workerFrankenPHPContext)
 	assert.False(
 		t,
 		phpThreads[0].handler.(*workerThread).isBootingScript,
@@ -190,27 +251,27 @@ func TestFinishBootingAWorkerScript(t *testing.T) {
 }
 
 func TestReturnAnErrorIf2WorkersHaveTheSameFileName(t *testing.T) {
+	resetGlobals()
 	workers = []*worker{}
 	workersByName = map[string]*worker{}
-	workersByPath = map[string]*worker{}
+	globalWorkersByPath = map[string]*worker{}
 	w, err1 := newWorker(workerOpt{fileName: testDataPath + "/index.php"})
 	assert.NoError(t, err1)
 	workers = append(workers, w)
 	workersByName[w.name] = w
-	workersByPath[w.fileName] = w
+	globalWorkersByPath[w.fileName] = w
 	_, err2 := newWorker(workerOpt{fileName: testDataPath + "/index.php"})
 	assert.Error(t, err2, "two workers cannot have the same filename")
 }
 
 func TestReturnAnErrorIf2ModuleWorkersHaveTheSameName(t *testing.T) {
+	resetGlobals()
 	workers = []*worker{}
 	workersByName = map[string]*worker{}
-	workersByPath = map[string]*worker{}
 	w, err1 := newWorker(workerOpt{fileName: testDataPath + "/index.php", name: "workername"})
 	assert.NoError(t, err1)
 	workers = append(workers, w)
 	workersByName[w.name] = w
-	workersByPath[w.fileName] = w
 	_, err2 := newWorker(workerOpt{fileName: testDataPath + "/hello.php", name: "workername"})
 	assert.Error(t, err2, "two workers cannot have the same name")
 }
@@ -254,9 +315,9 @@ func allPossibleTransitions(worker1Path string, worker2Path string) []func(*phpT
 				thread.boot()
 			}
 		},
-		func(thread *phpThread) { convertToWorkerThread(thread, workersByPath[worker1Path]) },
+		func(thread *phpThread) { convertToWorkerThread(thread, globalWorkersByPath[worker1Path]) },
 		convertToInactiveThread,
-		func(thread *phpThread) { convertToWorkerThread(thread, workersByPath[worker2Path]) },
+		func(thread *phpThread) { convertToWorkerThread(thread, globalWorkersByPath[worker2Path]) },
 		convertToInactiveThread,
 	}
 }
@@ -321,4 +382,23 @@ func testThreadCalculationError(t *testing.T, o *opt) {
 
 	_, err := calculateMaxThreads(o)
 	assert.Error(t, err, "configuration must error")
+}
+
+func TestContextAndLoggerMustNotBeNil(t *testing.T) {
+	log, ctx := getLogger(0)
+	assert.NotNil(t, log, "logger is defined if all threads are inactive")
+	assert.NotNil(t, ctx, "context is defined if all threads are inactive")
+
+	fc := newContextFromMessage(nil, nil, nil, &worker{})
+	assert.NotNil(t, fc.logger, "logger is defined for message context")
+	assert.NotNil(t, fc.ctx, "context is defined for message context")
+
+	r := httptest.NewRequest("GET", "http://localhost/index.php", nil)
+	fc, _ = newContextFromRequest(r, nil, fallbackServer)
+	assert.NotNil(t, fc.logger, "logger is defined for request context")
+	assert.NotNil(t, fc.ctx, "context is defined for request context")
+
+	fc, _ = newWorkerDummyContext(&worker{})
+	assert.NotNil(t, fc.logger, "logger is defined for worker dummy context")
+	assert.NotNil(t, fc.ctx, "context is defined for worker dummy context")
 }

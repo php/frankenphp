@@ -1,9 +1,9 @@
-# GitHub Actions Kullanma
+# GitHub Actions kullanma
 
 Bu depo Docker imajını [Docker Hub](https://hub.docker.com/r/dunglas/frankenphp) üzerinde derler ve dağıtır.
 Bu durum onaylanan her çekme (pull) isteğinde veya çatallandıktan (fork) sonra gerçekleşir.
 
-## GitHub Eylemlerini Ayarlama
+## GitHub eylemlerini ayarlama
 
 Depo ayarlarında, gizli değerler altında aşağıdaki gizli değerleri ekleyin:
 
@@ -12,13 +12,13 @@ Depo ayarlarında, gizli değerler altında aşağıdaki gizli değerleri ekleyi
 - `REGISTRY_PASSWORD`: Oturum açmak için kullanılacak parola (örn. bir erişim anahtarı).
 - `IMAGE_NAME`: İmajın adı (örn. `dunglas/frankenphp`).
 
-## İmajı Oluşturma ve Dağıtma
+## İmajı oluşturma ve dağıtma
 
 1. Bir Çekme (pull) İsteği oluşturun veya çatala (forka) dağıtın.
 2. GitHub Actions imajı oluşturacak ve tüm testleri çalıştıracaktır.
 3. Derleme başarılı olursa, görüntü `pr-x` (burada `x` PR numarasıdır) etiketi kullanılarak ilgili saklanan yere (registry'e) gönderilir.
 
-## İmajı Dağıtma
+## İmajı dağıtma
 
 1. Çekme (pull) isteği birleştirildikten sonra, GitHub Actions testleri tekrar çalıştıracak ve yeni bir imaj oluşturacaktır.
 2. Derleme başarılı olursa, `main` etiketi Docker Registry'de güncellenecektir.
