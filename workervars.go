@@ -24,9 +24,9 @@ var (
 	varsWaitOn = map[*worker]map[*worker]int{}
 )
 
-// varsWorker resolves a worker name the way requests do: within the caller's
-// server first, then among global workers
-func varsWorker(fc *frankenPHPContext, name string) (*worker, error) {
+// backgroundWorkerByName resolves a background worker the way requests
+// resolve workers: within the caller's server first, then among global ones
+func backgroundWorkerByName(fc *frankenPHPContext, name string) *worker {
 	var w *worker
 	if fc != nil && fc.server != nil {
 		w = fc.server.workersByName[name]
@@ -35,10 +35,10 @@ func varsWorker(fc *frankenPHPContext, name string) (*worker, error) {
 		w = fallbackServer.workersByName[name]
 	}
 	if w == nil || !w.isBackgroundWorker {
-		return nil, errors.New("frankenphp_get_vars(): unknown background worker " + strconv.Quote(name))
+		return nil
 	}
 
-	return w, nil
+	return w
 }
 
 // waitVarsReady blocks until target reached its ready point once. Requests
@@ -130,9 +130,10 @@ func go_frankenphp_set_vars(threadIndex C.uintptr_t, table *C.HashTable) *C.Hash
 //export go_frankenphp_get_vars
 func go_frankenphp_get_vars(threadIndex C.uintptr_t, name *C.char, nameLen C.size_t, returnValue *C.zval) *C.char {
 	thread := phpThreads[threadIndex]
-	target, err := varsWorker(thread.handler.frankenPHPContext(), C.GoStringN(name, C.int(nameLen)))
-	if err != nil {
-		return C.CString(err.Error())
+	workerName := C.GoStringN(name, C.int(nameLen))
+	target := backgroundWorkerByName(thread.handler.frankenPHPContext(), workerName)
+	if target == nil {
+		return C.CString("frankenphp_get_vars(): unknown background worker " + strconv.Quote(workerName))
 	}
 
 	var caller *worker

@@ -47,6 +47,9 @@ type worker struct {
 	readyClose sync.Once
 	// vars is the snapshot published with frankenphp_set_vars()
 	vars varsSlot
+	// tasks holds the tasks sent with frankenphp_send_task() until a thread
+	// picks them up
+	tasks taskQueue
 }
 
 // markReady records that the background worker reached its ready point once

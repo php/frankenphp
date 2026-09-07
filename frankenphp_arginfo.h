@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 33127b8399db193fa49fc42a01cf81bbf9907fd6 */
+ * Stub hash: d74aff3740ccd178824fffa034813e0eb2d4dc51 */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_handle_request, 0, 1, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, callback, IS_CALLABLE, 0)
@@ -54,6 +54,24 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_get_vars, 0, 1, IS_AR
 	ZEND_ARG_TYPE_INFO(0, name, IS_STRING, 0)
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_INFO_EX(arginfo_frankenphp_send_task, 0, 0, 2)
+	ZEND_ARG_TYPE_INFO(0, name, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, payload, IS_ARRAY, 0)
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, timeout, IS_DOUBLE, 1, "30.0")
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_read_task, 0, 1, IS_ARRAY, 1)
+	ZEND_ARG_INFO(0, stream)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_receive_task, 0, 0, IS_ARRAY, 1)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_update_task, 0, 2, IS_VOID, 0)
+	ZEND_ARG_INFO(0, stream)
+	ZEND_ARG_TYPE_INFO(0, data, IS_ARRAY, 0)
+ZEND_END_ARG_INFO()
+
 ZEND_FUNCTION(frankenphp_handle_request);
 ZEND_FUNCTION(headers_send);
 ZEND_FUNCTION(frankenphp_finish_request);
@@ -65,6 +83,10 @@ ZEND_FUNCTION(frankenphp_get_worker_handle);
 ZEND_FUNCTION(frankenphp_worker_tick);
 ZEND_FUNCTION(frankenphp_set_vars);
 ZEND_FUNCTION(frankenphp_get_vars);
+ZEND_FUNCTION(frankenphp_send_task);
+ZEND_FUNCTION(frankenphp_read_task);
+ZEND_FUNCTION(frankenphp_receive_task);
+ZEND_FUNCTION(frankenphp_update_task);
 
 static const zend_function_entry ext_functions[] = {
 	ZEND_FE(frankenphp_handle_request, arginfo_frankenphp_handle_request)
@@ -82,6 +104,10 @@ static const zend_function_entry ext_functions[] = {
 	ZEND_FE(frankenphp_worker_tick, arginfo_frankenphp_worker_tick)
 	ZEND_FE(frankenphp_set_vars, arginfo_frankenphp_set_vars)
 	ZEND_FE(frankenphp_get_vars, arginfo_frankenphp_get_vars)
+	ZEND_FE(frankenphp_send_task, arginfo_frankenphp_send_task)
+	ZEND_FE(frankenphp_read_task, arginfo_frankenphp_read_task)
+	ZEND_FE(frankenphp_receive_task, arginfo_frankenphp_receive_task)
+	ZEND_FE(frankenphp_update_task, arginfo_frankenphp_update_task)
 	ZEND_FE_END
 };
 

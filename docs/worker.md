@@ -274,6 +274,38 @@ $vars = frankenphp_get_vars('config');
 
 `frankenphp_get_vars()` blocks until the worker reached its ready point, which can only happen between background workers reading each other while booting; a cycle between them throws instead of hanging. It also throws when the name is unknown, or when the worker is ready but has not published anything.
 
+### Sending tasks to background workers
+
+A request, an HTTP worker or another background worker hands work to a background worker with `frankenphp_send_task()`, by worker name, resolved like `frankenphp_get_vars()` does. The payload follows the same rules as `frankenphp_set_vars()`: null, scalars, arrays or enums. The call blocks until a thread of the worker picks the task up and throws if none did before the timeout, so a busy worker pushes back on its senders instead of queueing without bounds. It returns a stream: `frankenphp_read_task()` blocks for the next update and returns `null` once the worker completed the task, and `stream_select()` works on the stream to wait on several tasks or to bound the wait. Closing the stream abandons the task.
+
+On the worker side, each task sent wakes one parked thread of the worker through its handle, in the loop of the previous section: `frankenphp_worker_tick()` consumes the wake-up, which is not a count and in a pool may belong to a task a sibling thread took. `frankenphp_receive_task()` dequeues a task without blocking, `[$stream, $payload]`, or `null` when another thread of the pool got there first, so the example below drains the queue on each wake-up and treats `null` as the normal outcome. A thread that ticks while tasks are queued finds its handle readable at once, whichever loop shape it uses. `frankenphp_update_task()` sends progress or a result back and closing the stream completes the task; a script that ends with the stream still open, a close from a destructor or a shutdown function at that point included, makes the sender's next `frankenphp_read_task()` throw. When the sender closes its stream instead, the worker's stream reaches EOF, so `stream_select()` or `feof()` on it tell a long task that nobody waits for its result, and `frankenphp_update_task()` throws.
+
+```php
+// background worker
+$handle = frankenphp_get_worker_handle();
+
+while (frankenphp_worker_tick()) {
+    $read = [$handle];
+    $write = $except = null;
+    stream_select($read, $write, $except, null);
+
+    while ($task = frankenphp_receive_task()) {
+        [$stream, $payload] = $task;
+        frankenphp_update_task($stream, ['progress' => 50]);
+        frankenphp_update_task($stream, ['result' => process($payload)]);
+        fclose($stream);
+    }
+}
+
+// request, HTTP worker or another background worker
+$task = frankenphp_send_task('jobs', ['file' => 'photo.jpg']);
+while (null !== $update = frankenphp_read_task($task)) {
+    // ['progress' => 50], then ['result' => ...]
+}
+```
+
+Sixteen updates are buffered per task; past that, `frankenphp_update_task()` waits for the sender to read, and it throws once the sender closed its stream. The streams of a task are backed by eventfd descriptors on Linux, pooled between tasks, and by a socket pair elsewhere.
+
 ## Superglobals behavior
 
 [PHP superglobals](https://www.php.net/manual/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...)
