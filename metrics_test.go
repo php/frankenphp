@@ -50,6 +50,8 @@ func TestPrometheusMetrics_TotalWorkers(t *testing.T) {
 	require.Nil(t, m.workerRestarts)
 	require.Nil(t, m.workerRequestTime)
 	require.Nil(t, m.workerRequestCount)
+	require.Nil(t, m.workerTaskCount)
+	require.Nil(t, m.workerTaskTime)
 
 	m.TotalWorkers("test_worker", 2)
 
@@ -60,6 +62,65 @@ func TestPrometheusMetrics_TotalWorkers(t *testing.T) {
 	require.NotNil(t, m.workerRestarts)
 	require.NotNil(t, m.workerRequestTime)
 	require.NotNil(t, m.workerRequestCount)
+	require.NotNil(t, m.workerTaskCount)
+	require.NotNil(t, m.workerTaskTime)
+}
+
+func TestPrometheusMetrics_WorkerTask(t *testing.T) {
+	m := createPrometheusMetrics()
+	m.TotalWorkers("bg_worker", 1)
+	m.StartWorkerTask("bg_worker")
+	m.StopWorkerTask("bg_worker", 3*time.Second)
+	m.WorkerTaskOutcome("bg_worker", TaskOutcomeCompleted)
+	m.WorkerTaskOutcome("bg_worker", TaskOutcomeTimeout)
+
+	inputs := []struct {
+		name     string
+		c        prometheus.Collector
+		metadata string
+		expect   string
+	}{
+		{
+			name: "Testing BusyWorkers",
+			c:    m.busyWorkers,
+			metadata: `
+				# HELP frankenphp_busy_workers Number of busy PHP workers for this worker: processing a request, or a task for a background worker
+				# TYPE frankenphp_busy_workers gauge
+			`,
+			expect: `
+				frankenphp_busy_workers{worker="bg_worker"} 0
+			`,
+		},
+		{
+			name: "Testing WorkerTaskTime",
+			c:    m.workerTaskTime,
+			metadata: `
+				# HELP frankenphp_worker_task_time Time spent on tasks by all threads of this background worker, from pickup to the close of the task's stream
+				# TYPE frankenphp_worker_task_time counter
+			`,
+			expect: `
+				frankenphp_worker_task_time{worker="bg_worker"} 3
+			`,
+		},
+		{
+			name: "Testing WorkerTaskCount",
+			c:    m.workerTaskCount,
+			metadata: `
+				# HELP frankenphp_worker_task_count Number of tasks sent to this background worker, by outcome: completed, aborted (the script ended with the task open), abandoned (the sender closed its stream first) or timeout (no thread picked the task up in time)
+				# TYPE frankenphp_worker_task_count counter
+			`,
+			expect: `
+				frankenphp_worker_task_count{outcome="completed",worker="bg_worker"} 1
+				frankenphp_worker_task_count{outcome="timeout",worker="bg_worker"} 1
+			`,
+		},
+	}
+
+	for _, input := range inputs {
+		t.Run(input.name, func(t *testing.T) {
+			require.NoError(t, testutil.CollectAndCompare(input.c, strings.NewReader(input.metadata+input.expect)))
+		})
+	}
 }
 
 func TestPrometheusMetrics_StopWorkerRequest(t *testing.T) {
@@ -88,7 +149,7 @@ func TestPrometheusMetrics_StopWorkerRequest(t *testing.T) {
 			name: "Testing BusyWorkers",
 			c:    m.busyWorkers,
 			metadata: `
-				# HELP frankenphp_busy_workers Number of busy PHP workers for this worker
+				# HELP frankenphp_busy_workers Number of busy PHP workers for this worker: processing a request, or a task for a background worker
 				# TYPE frankenphp_busy_workers gauge
 			`,
 			expect: `
@@ -131,7 +192,7 @@ func TestPrometheusMetrics_StartWorkerRequest(t *testing.T) {
 			name: "Testing BusyWorkers",
 			c:    m.busyWorkers,
 			metadata: `
-				# HELP frankenphp_busy_workers Number of busy PHP workers for this worker
+				# HELP frankenphp_busy_workers Number of busy PHP workers for this worker: processing a request, or a task for a background worker
 				# TYPE frankenphp_busy_workers gauge
 			`,
 			expect: `

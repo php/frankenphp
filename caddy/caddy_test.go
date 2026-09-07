@@ -866,7 +866,7 @@ func TestWorkerMetrics(t *testing.T) {
 	# TYPE frankenphp_busy_threads gauge
 	frankenphp_busy_threads 2
 
-	# HELP frankenphp_busy_workers Number of busy PHP workers for this worker
+	# HELP frankenphp_busy_workers Number of busy PHP workers for this worker: processing a request, or a task for a background worker
 	# TYPE frankenphp_busy_workers gauge
 	frankenphp_busy_workers{worker="` + workerName + `"} 0
 
@@ -1023,7 +1023,7 @@ func TestNamedWorkerMetrics(t *testing.T) {
 	# TYPE frankenphp_busy_threads gauge
 	frankenphp_busy_threads 2
 
-	# HELP frankenphp_busy_workers Number of busy PHP workers for this worker
+	# HELP frankenphp_busy_workers Number of busy PHP workers for this worker: processing a request, or a task for a background worker
         # TYPE frankenphp_busy_workers gauge
         frankenphp_busy_workers{worker="my_app"} 0
 
@@ -1119,7 +1119,7 @@ func TestAutoWorkerConfig(t *testing.T) {
 	# TYPE frankenphp_busy_threads gauge
 	frankenphp_busy_threads ` + workers + `
 
-	# HELP frankenphp_busy_workers Number of busy PHP workers for this worker
+	# HELP frankenphp_busy_workers Number of busy PHP workers for this worker: processing a request, or a task for a background worker
 	# TYPE frankenphp_busy_workers gauge
 	frankenphp_busy_workers{worker="` + workerName + `"} 0
 
@@ -1386,6 +1386,7 @@ func TestMaxWaitTimeWorker(t *testing.T) {
 	require.NoError(t, err)
 
 	expectedMetrics := `
+	# HELP frankenphp_worker_queue_depth Number of queued requests for this worker, or of tasks waiting for a thread of a background worker
 	# TYPE frankenphp_worker_queue_depth gauge
 	frankenphp_worker_queue_depth{worker="service"} 0
 	`
@@ -1486,7 +1487,7 @@ func TestMultiWorkersMetrics(t *testing.T) {
 	# TYPE frankenphp_busy_threads gauge
 	frankenphp_busy_threads 5
 
-	# HELP frankenphp_busy_workers Number of busy PHP workers for this worker
+	# HELP frankenphp_busy_workers Number of busy PHP workers for this worker: processing a request, or a task for a background worker
 	# TYPE frankenphp_busy_workers gauge
 	frankenphp_busy_workers{worker="service1"} 0
 

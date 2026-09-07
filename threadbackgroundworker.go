@@ -44,6 +44,11 @@ type backgroundWorkerThread struct {
 	// after backgroundBootWarnDelay; only touched on the PHP thread
 	bootTimer *time.Timer
 
+	// openTasks counts the tasks picked up and not closed yet: the thread
+	// is busy rather than waiting on the threads endpoint meanwhile. Only
+	// touched on the PHP thread, pickup and close both happen there.
+	openTasks int
+
 	// stopSock holds the Go side's end of this thread's stop socket pair
 	// (per thread so pool workers drain independently); the other end is
 	// exposed to the script via frankenphp_get_worker_handle(). Wide enough
@@ -169,6 +174,7 @@ func (handler *backgroundWorkerThread) setupScript() error {
 	handler.dummyFrankenPHPContext = fc
 
 	handler.isBootingScript = true
+	handler.openTasks = 0
 	metrics.StartWorker(handler.worker.qualifiedName)
 	// the run's logger and context, not the globals: Stop() does not wait
 	// for a callback that already started, and a shutdown finishing

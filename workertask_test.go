@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/dunglas/frankenphp"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -143,6 +145,46 @@ func TestTaskErrors(t *testing.T) {
 	assert.Contains(t, body, "receive: RuntimeException: frankenphp_receive_task() can only be called from a background worker")
 	assert.Contains(t, body, "update: TypeError: frankenphp_update_task(): Argument #1 ($stream) must be a stream returned by frankenphp_receive_task()")
 	assert.Contains(t, body, "read: TypeError: frankenphp_read_task(): Argument #1 ($stream) must be a stream returned by frankenphp_send_task()")
+}
+
+// the metrics of a background worker follow its tasks: busy while a thread
+// holds one, queued while nobody picked it up, counted by outcome
+func TestTaskMetrics(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	sentinel := filepath.Join(t.TempDir(), "abandoned.txt")
+	server, err := frankenphp.NewServer(testDataDir, frankenphp.WithServerName("api"))
+	require.NoError(t, err)
+	initServers(t,
+		frankenphp.WithServer(server),
+		bgWorker("echo", "task-worker.php", map[string]string{"BG_SENTINEL": sentinel}, server),
+		frankenphp.WithNumThreads(2),
+		frankenphp.WithMetrics(frankenphp.NewPrometheusMetrics(registry)),
+	)
+
+	assert.Contains(t, serverGet(t, server, "http://example.com/task.php?input=done"), `"result":"processed:done"`)
+	assert.Contains(t, serverGet(t, server, "http://example.com/task.php?crash=1"), "exited without completing the task")
+	assert.Equal(t, "closed", serverGet(t, server, "http://example.com/task.php?sleep_ms=200&close_early=1"))
+	requireFileContentEventually(t, sentinel)
+	assert.Contains(t, serverGet(t, server, "http://example.com/task-busy.php"), "picked up the task in time")
+
+	expected := `
+		# HELP frankenphp_worker_task_count Number of tasks sent to this background worker, by outcome: completed, aborted (the script ended with the task open), abandoned (the sender closed its stream first) or timeout (no thread picked the task up in time)
+		# TYPE frankenphp_worker_task_count counter
+		frankenphp_worker_task_count{outcome="abandoned",worker="api:echo"} 1
+		frankenphp_worker_task_count{outcome="aborted",worker="api:echo"} 1
+		frankenphp_worker_task_count{outcome="completed",worker="api:echo"} 2
+		frankenphp_worker_task_count{outcome="timeout",worker="api:echo"} 1
+		# HELP frankenphp_busy_workers Number of busy PHP workers for this worker: processing a request, or a task for a background worker
+		# TYPE frankenphp_busy_workers gauge
+		frankenphp_busy_workers{worker="api:echo"} 0
+		# HELP frankenphp_worker_queue_depth Number of queued requests for this worker, or of tasks waiting for a thread of a background worker
+		# TYPE frankenphp_worker_queue_depth gauge
+		frankenphp_worker_queue_depth{worker="api:echo"} 0
+	`
+	// the abandoned task is closed by the worker after the response
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.NoError(c, testutil.GatherAndCompare(registry, strings.NewReader(expected), "frankenphp_worker_task_count", "frankenphp_busy_workers", "frankenphp_worker_queue_depth"))
+	}, 5*time.Second, 25*time.Millisecond)
 }
 
 // a sender waiting for a busy worker to pick its task up is released by
