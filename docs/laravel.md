@@ -194,13 +194,23 @@ return [
 
     'mercure' => [
         'anonymous' => true,
-        'publisher_jwt' => '!ChangeThisMercureHubJWTSecretKey!',
-        'subscriber_jwt' => '!ChangeThisMercureHubJWTSecretKey!',
+        // The issuer of the access tokens, and the keys verifying them
+        'issuer' => <<<'CADDYFILE'
+        https://localhost {
+            publisher {
+                jwt !ChangeThisMercureHubJWTSecretKey!
+            }
+            subscriber {
+                jwt !ChangeThisMercureHubJWTSecretKey!
+            }
+        }
+        CADDYFILE,
     ],
 ];
 ```
 
-You can use [all directives supported by Mercure](https://mercure.rocks/docs/hub/config#directives) in this array.
+Octane writes each entry of this array as a `<key> <value>` line of the `mercure` block of the `Caddyfile`, so you can use [all directives supported by Mercure](https://mercure.rocks/docs/hub/config#directives) in it.
+The `publisher_jwt` and `subscriber_jwt` directives of the 0.x hub aren't available: they need a compatibility mode that FrankenPHP doesn't ship, see [the Mercure documentation](mercure.md#enabling-mercure).
 
 To publish and subscribe to updates, we recommend using the [Laravel Mercure Broadcaster](https://github.com/mvanduijker/laravel-mercure-broadcaster) library.
 Alternatively, see [the Mercure documentation](mercure.md) to do it in pure PHP and JavaScript.
