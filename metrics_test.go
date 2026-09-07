@@ -212,3 +212,30 @@ func TestPrometheusMetrics_TestStopReasonCrash(t *testing.T) {
 
 	}
 }
+
+func TestPrometheusMetrics_OpcacheRestart(t *testing.T) {
+	m := NewPrometheusMetrics(prometheus.NewRegistry())
+	m.OpcacheRestart("hash overflow")
+	m.OpcacheRestart("hash overflow")
+	m.OpcacheRestart("out of memory")
+
+	// known reasons are exposed from the start, unknown ones only once seen
+	require.NoError(t, testutil.CollectAndCompare(m.opcacheRestarts, strings.NewReader(`
+		# HELP frankenphp_opcache_restarts Number of restarts of opcache's shared memory, by reason
+		# TYPE frankenphp_opcache_restarts counter
+		frankenphp_opcache_restarts{reason="hash overflow"} 2
+		frankenphp_opcache_restarts{reason="out of memory"} 1
+		frankenphp_opcache_restarts{reason="user"} 0
+	`)))
+
+	m.OpcacheRestart("unknown")
+
+	require.NoError(t, testutil.CollectAndCompare(m.opcacheRestarts, strings.NewReader(`
+		# HELP frankenphp_opcache_restarts Number of restarts of opcache's shared memory, by reason
+		# TYPE frankenphp_opcache_restarts counter
+		frankenphp_opcache_restarts{reason="hash overflow"} 2
+		frankenphp_opcache_restarts{reason="out of memory"} 1
+		frankenphp_opcache_restarts{reason="unknown"} 1
+		frankenphp_opcache_restarts{reason="user"} 0
+	`)))
+}

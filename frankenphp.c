@@ -1018,7 +1018,7 @@ PHP_FUNCTION(frankenphp_log) {
  * do not trip -Werror=unused-function. */
 #if defined(ZTS) && PHP_VERSION_ID >= 80400
 static void frankenphp_opcache_restart_hook(int reason) {
-  go_log_opcache_restart(reason);
+  go_opcache_restart_scheduled(reason);
 }
 #endif
 
