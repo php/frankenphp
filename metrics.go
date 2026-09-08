@@ -390,9 +390,10 @@ func NewPrometheusMetrics(registry prometheus.Registerer) *PrometheusMetrics {
 			Name: "frankenphp_queue_depth",
 			Help: "Number of regular queued requests",
 		}),
+		// experimental: to be removed once opcache handles restarts safely under ZTS
 		opcacheRestarts: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "frankenphp_opcache_restarts",
-			Help: "Number of restarts of opcache's shared memory, by reason",
+			Help: "Number of restarts of opcache's shared memory, by reason (experimental, should stay at zero)",
 		}, []string{"reason"}),
 		totalWorkers:       nil,
 		busyWorkers:        nil,

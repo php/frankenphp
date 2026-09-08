@@ -23,7 +23,7 @@ When [Caddy metrics](https://caddyserver.com/docs/metrics) are enabled, FrankenP
 - `frankenphp_worker_crashes{worker="[worker_name]"}`: The number of times a worker has unexpectedly terminated.
 - `frankenphp_worker_restarts{worker="[worker_name]"}`: The number of times a worker has been deliberately restarted.
 - `frankenphp_worker_queue_depth{worker="[worker_name]"}`: The number of queued requests.
-- `frankenphp_opcache_restarts{reason="[reason]"}`: The number of times opcache restarted its shared memory on its own, by reason (`out of memory`, `hash overflow`, `user`). Each restart is also logged. Under ZTS, running PHP threads may hold stale references to the rewound memory, so raise `opcache.memory_consumption` and `opcache.max_accelerated_files` when this counter grows.
+- `frankenphp_opcache_restarts{reason="[reason]"}`: (experimental) The number of times opcache restarted its shared memory on its own, by reason (`out of memory`, `hash overflow`, `user`). This counter should always be zero: a restart rewinds memory that running PHP threads may still reference, which can crash the process. A non-zero value means opcache is undersized for the application, raise `opcache.memory_consumption` and `opcache.max_accelerated_files`. Each restart is also logged. This metric will be removed once opcache handles restarts safely under ZTS.
 
 For worker metrics, the `[worker_name]` placeholder is replaced by the worker name in the Caddyfile, otherwise the absolute path of the worker file will be used.
 
