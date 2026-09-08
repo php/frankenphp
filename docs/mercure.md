@@ -153,8 +153,9 @@ Generate these tokens dynamically, using a trusted [JWT library](https://www.jwt
 
 > [!WARNING]
 >
-> The tokens of the Mercure protocol 0.x, using a `mercure` claim, are rejected.
-> FrankenPHP is built without the compatibility build tags of the hub, so `protocol_version_compatibility` cannot re-enable them.
+> The tokens of the Mercure protocol 0.x, using a `mercure` claim, are rejected by default.
+> FrankenPHP is built with the `deprecated_topic` and `deprecated_claim` build tags of the hub, so adding `protocol_version_compatibility 8` to the `mercure` block accepts them again during a migration.
+> This mode relaxes the validation of the access tokens: remove it once your clients issue 1.0 tokens.
 
 ### Using Symfony Mercure
 

@@ -50,8 +50,7 @@ func (f *FrankenPHPModule) configureHotReload(app *FrankenPHPApp) error {
 
 	app.opts = append(app.opts, frankenphp.WithHotReload(f.HotReload.Topic, f.mercureHub, f.HotReload.Watch))
 
-	// "match" is the exact topic matcher of the Mercure protocol, the "topic"
-	// parameter it replaces is only honored in compatibility mode.
+	// add the hot reload to the env variables
 	if f.Env == nil {
 		f.Env = make(map[string]string)
 	}

@@ -3,7 +3,7 @@
 
 PHP_CONFIG=${PHP_CONFIG:-php-config}
 
-GOFLAGS="$GOFLAGS -tags=nobadger,nomysql,nopgx" \
+GOFLAGS="$GOFLAGS -tags=nobadger,nomysql,nopgx,deprecated_topic,deprecated_claim" \
 	CGO_CFLAGS="$CGO_CFLAGS $(${PHP_CONFIG} --includes) $(sh "$(dirname "$0")/mtls-cflags.sh")" \
 	CGO_LDFLAGS="$CGO_LDFLAGS $(${PHP_CONFIG} --ldflags) $(${PHP_CONFIG} --libs)" \
 	go "$@"
