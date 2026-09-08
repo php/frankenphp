@@ -1171,11 +1171,12 @@ static zend_module_entry frankenphp_module = {
     TOSTRING(FRANKENPHP_VERSION),
     STANDARD_MODULE_PROPERTIES};
 
-/* CLI exposes the same metadata, but must keep PHP's native functions and
- * avoid initializing hooks that depend on the server runtime. */
+/* CLI exposes the same metadata under a distinct name so extension detection
+ * does not advertise server functions. Keep PHP's native functions and avoid
+ * initializing hooks that depend on the server runtime. */
 static zend_module_entry frankenphp_cli_module = {
     STANDARD_MODULE_HEADER,
-    "frankenphp",
+    "frankenphp-cli",
     NULL,                  /* function table */
     NULL,                  /* initialization */
     NULL,                  /* shutdown */
@@ -1853,8 +1854,12 @@ int frankenphp_execute_script_cli(char *script, int argc, char **argv,
   cli_exec_args_t args = {
       .script = script, .argc = argc, .argv = argv, .eval = eval};
 
-  previous_php_register_internal_extensions_func =
-      php_register_internal_extensions_func;
+  /* A failed join can leave our hook installed. Do not save it as its own
+   * predecessor on the next call. */
+  if (previous_php_register_internal_extensions_func == NULL) {
+    previous_php_register_internal_extensions_func =
+        php_register_internal_extensions_func;
+  }
   php_register_internal_extensions_func = register_frankenphp_module;
 
   /*

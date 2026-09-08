@@ -173,6 +173,31 @@ echo json_encode($results);`,
 	}
 }
 
+func TestExecuteCLIExtensionDetection(t *testing.T) {
+	if _, err := os.Stat("internal/testcli/testcli"); err != nil {
+		t.Skip("internal/testcli/testcli has not been compiled, run `cd internal/testcli/ && go build`")
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "internal/testcli/testcli", "-r", `
+if (extension_loaded('frankenphp')) {
+    frankenphp_handle_request(static function () {});
+}
+echo json_encode([
+    extension_loaded('frankenphp'),
+    in_array('frankenphp', get_loaded_extensions(), true),
+    extension_loaded('frankenphp-cli'),
+    in_array('frankenphp-cli', get_loaded_extensions(), true),
+]);
+`)
+	cmd.WaitDelay = time.Second
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, ctx.Err(), "output: %s", output)
+	require.NoError(t, err, "output: %s", output)
+	require.Equal(t, "[false,false,true,true]", string(output))
+}
+
 func TestExecuteCLIHTTPFunctionsUnavailable(t *testing.T) {
 	if _, err := os.Stat("internal/testcli/testcli"); err != nil {
 		t.Skip("internal/testcli/testcli has not been compiled, run `cd internal/testcli/ && go build`")
