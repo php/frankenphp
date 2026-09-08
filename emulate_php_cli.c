@@ -17,6 +17,7 @@
 #endif
 #include <php_ini.h>
 #include <php_main.h>
+#include <php_network.h>
 #include <php_output.h>
 #include <php_variables.h>
 #include <php_version.h>
@@ -46,6 +47,24 @@ static void register_server_variable_filtered(const char *key, char **val,
   }
 }
 
+static php_stream *cli_open_standard_stream(const char *path, const char *mode,
+                                            FILE *file) {
+  php_stream *stream = php_stream_open_wrapper(path, mode, 0, NULL);
+  php_socket_t fd;
+
+  /* PHP uses the process's stdin/stdout/stderr on the first open and duplicates
+   * them on later opens. Keep the originals open for the next CLI execution,
+   * but let PHP close the duplicates. */
+  if (stream &&
+      php_stream_cast(stream, PHP_STREAM_AS_FD_FOR_SELECT, (void **)&fd, 0) ==
+          SUCCESS &&
+      fd == (php_socket_t)fileno(file)) {
+    stream->flags |= PHP_STREAM_FLAG_NO_CLOSE;
+  }
+
+  return stream;
+}
+
 /*
  * CLI code is adapted from
  * https://github.com/php/php-src/blob/master/sapi/cli/php_cli.c Copyright (c)
@@ -59,17 +78,9 @@ static void cli_register_file_handles(void) /* {{{ */
   php_stream *s_in, *s_out, *s_err;
   zend_constant ic, oc, ec;
 
-  s_in = php_stream_fopen_from_file(stdin, "rb");
-  s_out = php_stream_fopen_from_file(stdout, "wb");
-  s_err = php_stream_fopen_from_file(stderr, "wb");
-
-  /* Borrow stdio without duplicating or closing it between executions. */
-  if (s_in)
-    s_in->flags |= PHP_STREAM_FLAG_NO_CLOSE;
-  if (s_out)
-    s_out->flags |= PHP_STREAM_FLAG_NO_CLOSE;
-  if (s_err)
-    s_err->flags |= PHP_STREAM_FLAG_NO_CLOSE;
+  s_in = cli_open_standard_stream("php://stdin", "rb", stdin);
+  s_out = cli_open_standard_stream("php://stdout", "wb", stdout);
+  s_err = cli_open_standard_stream("php://stderr", "wb", stderr);
 
   if (s_in == NULL || s_out == NULL || s_err == NULL) {
     if (s_in)

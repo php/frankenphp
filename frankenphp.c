@@ -1856,7 +1856,7 @@ int frankenphp_execute_script_cli(char *script, int argc, char **argv,
 
   /* A failed join can leave our hook installed. Do not save it as its own
    * predecessor on the next call. */
-  if (previous_php_register_internal_extensions_func == NULL) {
+  if (php_register_internal_extensions_func != register_frankenphp_module) {
     previous_php_register_internal_extensions_func =
         php_register_internal_extensions_func;
   }
