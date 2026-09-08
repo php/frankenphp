@@ -280,14 +280,21 @@ func TestExecuteScriptCLILifecycle(t *testing.T) {
 		}
 
 		for i := 1; i <= calls; i++ {
-			code := fmt.Sprintf("file_put_contents('cli-lifecycle-script-%d', 'executed'); exit(%d);", i, 20+i)
+			code := fmt.Sprintf(`
+if (fstat(STDIN) === false) {
+    exit(1);
+}
+fwrite(STDOUT, "cli stdout %[1]d\n");
+fwrite(STDERR, "cli stderr %[1]d\n");
+file_put_contents('cli-lifecycle-script-%[1]d', 'executed');
+exit(%[2]d);`, i, 20+i)
 			args := []string{"cli-lifecycle", "-n", "-r", code}
 			if status := frankenphp.ExecuteScriptCLI(args[0], args); status != 20+i {
 				t.Fatalf("CLI call %d returned %d, want %d", i, status, 20+i)
 			}
+			fmt.Fprintf(os.Stdout, "host stdout %d\n", i)
+			fmt.Fprintf(os.Stderr, "host stderr %d\n", i)
 		}
-		// Older CLI emulation closes standard streams at shutdown. Use the
-		// process exit status rather than the test runner's final output.
 		os.Exit(0)
 	}
 
@@ -303,7 +310,6 @@ func TestExecuteScriptCLILifecycle(t *testing.T) {
 			defer cancel()
 			cmd := exec.CommandContext(ctx, self, "-test.run=^TestExecuteScriptCLILifecycle$")
 			cmd.Env = append(os.Environ(), childEnv+"="+scenario)
-			// File markers survive pre-8.6 CLI shutdown closing standard streams.
 			cmd.Dir = t.TempDir()
 			cmd.WaitDelay = time.Second
 			output, err := cmd.CombinedOutput()
@@ -315,6 +321,10 @@ func TestExecuteScriptCLILifecycle(t *testing.T) {
 				calls = 2
 			}
 			for i := 1; i <= calls; i++ {
+				// Both PHP and its host must retain usable stdio across shutdown.
+				for _, stream := range []string{"cli stdout", "cli stderr", "host stdout", "host stderr"} {
+					assert.Contains(t, string(output), fmt.Sprintf("%s %d\n", stream, i))
+				}
 				marker := filepath.Join(cmd.Dir, fmt.Sprintf("cli-lifecycle-script-%d", i))
 				if content, err := os.ReadFile(marker); err != nil || string(content) != "executed" {
 					t.Fatalf("CLI lifecycle child did not execute script %d: marker %q, error %v\n%s", i, content, err, output)

@@ -23,10 +23,9 @@ if ($pid === 0) {
     if (posix_setsid() === -1) {
         exit(1);
     }
-    fclose(STDOUT);
-    fclose(STDERR);
+    // Redirect after exec: the emulated CLI keeps process stdio open.
     // Keep stdin for the Go test's token, sent only after this CLI parent exits.
-    pcntl_exec('/bin/sh', ['-c', 'set -C; printf ready > "$1" && IFS= read -r result && [ "$result" = survived ]', 'detached', $ready]);
+    pcntl_exec('/bin/sh', ['-c', 'exec >/dev/null 2>&1; set -C; printf ready > "$1" && IFS= read -r result && [ "$result" = survived ]', 'detached', $ready]);
     exit(1);
 }
 
