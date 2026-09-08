@@ -1247,6 +1247,24 @@ func FuzzResponseHeaders(f *testing.F) {
 // fuzzer-controlled, since unbounded native recursion (no depth guard) is
 // the interesting bug class here, not the value shapes themselves.
 func FuzzPersistZvalRoundtrip(f *testing.F) {
+	// Check the compiled-in hook once, not in every seed's concurrent requests.
+	func() {
+		require.NoError(f, frankenphp.Init())
+		defer frankenphp.Shutdown()
+
+		root, err := fastabs.FastAbs("./testdata")
+		require.NoError(f, err)
+		req := httptest.NewRequest("GET", "http://example.com/fuzz-persist-roundtrip.php", nil)
+		req, err = frankenphp.NewRequestWithContext(req, frankenphp.WithRequestDocumentRoot(root, false))
+		require.NoError(f, err)
+		w := httptest.NewRecorder()
+		require.NoError(f, frankenphp.ServeHTTP(w, req))
+		require.Equal(f, http.StatusOK, w.Code)
+		if w.Body.String() == "SKIP" {
+			f.Skip("FRANKENPHP_TEST not set; skipping persistent_zval roundtrip fuzzing")
+		}
+	}()
+
 	f.Add(0, 1)
 	f.Add(1, 1)
 	f.Add(10, 2)

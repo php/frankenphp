@@ -292,8 +292,10 @@ exit(%[2]d);`, i, 20+i)
 			if status := frankenphp.ExecuteScriptCLI(args[0], args); status != 20+i {
 				t.Fatalf("CLI call %d returned %d, want %d", i, status, 20+i)
 			}
-			fmt.Fprintf(os.Stdout, "host stdout %d\n", i)
-			fmt.Fprintf(os.Stderr, "host stderr %d\n", i)
+			_, err := fmt.Fprintf(os.Stdout, "host stdout %d\n", i)
+			require.NoError(t, err)
+			_, err = fmt.Fprintf(os.Stderr, "host stderr %d\n", i)
+			require.NoError(t, err)
 		}
 		os.Exit(0)
 	}
