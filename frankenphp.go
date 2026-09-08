@@ -14,6 +14,7 @@ package frankenphp
 
 // #include <stdlib.h>
 // #include <stdint.h>
+// #include <string.h>
 // #include "frankenphp.h"
 // #include <php_variables.h>
 // #include <zend_llist.h>
@@ -245,7 +246,11 @@ func newCEntries(entries []phpinfoEntry) []*C.char {
 	})
 
 	n := 2*len(entries) + 1
-	arr := (*[1 << 28]*C.char)(C.malloc(C.size_t(n) * C.size_t(unsafe.Sizeof(uintptr(0)))))[:n:n]
+	size := C.size_t(n) * C.size_t(unsafe.Sizeof(uintptr(0)))
+	ptr := C.malloc(size)
+	// Zero in C before Go pointer writes: the GC write barrier may scan old values.
+	C.memset(ptr, 0, size)
+	arr := (*[1 << 28]*C.char)(ptr)[:n:n]
 	for i, e := range entries {
 		arr[2*i] = C.CString(e.key)
 		arr[2*i+1] = C.CString(e.value)
