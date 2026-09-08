@@ -33,7 +33,8 @@
 	#	# Trusted issuer: binds the iss claim access tokens must carry to its keys.
 	#	# The localhost default suits local development only: in production, set
 	#	# MERCURE_TRUSTED_ISSUERS to the stable identifier of your token issuer
-	#	# (your app's URL for self-issued tokens).
+	#	# (your app's URL for self-issued tokens). Add more issuer blocks through
+	#	# MERCURE_EXTRA_DIRECTIVES.
 	#	issuer {$MERCURE_TRUSTED_ISSUERS:https://localhost} {
 	#		# Publisher JWT key
 	#		publisher {
