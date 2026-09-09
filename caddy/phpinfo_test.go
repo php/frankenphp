@@ -35,7 +35,7 @@ func TestPHPInfoCaddyVersion(t *testing.T) {
 	require.NoError(t, err)
 
 	row := regexp.MustCompile(`<tr><td class="e">caddy </td><td class="v">(.*?) </td></tr>`).FindSubmatch(body)
-	_, fullVersion := caddy.Version()
+	simpleVersion, _ := caddy.Version()
 	require.Len(t, row, 2, "phpinfo must include the Caddy version row")
-	require.Equal(t, html.EscapeString(fullVersion), string(row[1]))
+	require.Equal(t, html.EscapeString(simpleVersion), string(row[1]))
 }
