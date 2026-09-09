@@ -11,7 +11,7 @@ variable "PHP_VERSION" {
 }
 
 variable "GO_VERSION" {
-    default = "1.26"
+    default = "1.27"
 }
 
 variable "BASE_FINGERPRINT" {

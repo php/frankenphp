@@ -102,7 +102,7 @@ func normalizeSplitPath(splitPath []string) error {
 	for i, split := range splitPath {
 		b.Grow(len(split))
 
-		for j := 0; j < len(split); j++ {
+		for j := range len(split) {
 			c := split[j]
 			if c >= utf8.RuneSelf {
 				return ErrInvalidSplitPath

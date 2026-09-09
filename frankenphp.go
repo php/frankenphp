@@ -46,6 +46,7 @@ var (
 	ErrInvalidRequest     = errors.New("not a FrankenPHP request")
 	ErrAlreadyStarted     = errors.New("FrankenPHP is already started")
 	ErrInvalidPHPVersion  = errors.New("FrankenPHP is only compatible with PHP 8.2+")
+	ErrZendSignals        = errors.New(`FrankenPHP is not compatible with Zend Signals, recompile PHP with the "--disable-zend-signals" configuration option`)
 	ErrMainThreadCreation = errors.New("error creating the main thread")
 	ErrScriptExecution    = errors.New("error during PHP script execution")
 	ErrNotRunning         = errors.New("server is not registered, you must first call frankenphp.Init() with the WithServer() option")
@@ -152,6 +153,21 @@ func Config() PHPConfig {
 		ZendSignals:            bool(cConfig.zend_signals),
 		ZendMaxExecutionTimers: bool(cConfig.zend_max_execution_timers),
 	}
+}
+
+// checkPHPConfig rejects the PHP builds FrankenPHP cannot run on
+func checkPHPConfig(config PHPConfig) error {
+	if config.Version.MajorVersion < 8 || (config.Version.MajorVersion == 8 && config.Version.MinorVersion < 2) {
+		return ErrInvalidPHPVersion
+	}
+
+	// FrankenPHP never calls zend_signal_startup(), so in ZTS the ini entries
+	// of the signal globals overwrite the TSRM entry of each thread
+	if config.ZTS && config.ZendSignals {
+		return ErrZendSignals
+	}
+
+	return nil
 }
 
 func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
@@ -294,9 +310,10 @@ func Init(options ...Option) error {
 
 	config := Config()
 
-	if config.Version.MajorVersion < 8 || (config.Version.MajorVersion == 8 && config.Version.MinorVersion < 2) {
+	if err := checkPHPConfig(config); err != nil {
 		shutdown()
-		return ErrInvalidPHPVersion
+
+		return err
 	}
 
 	if config.ZTS {
@@ -320,7 +337,7 @@ func Init(options ...Option) error {
 	}
 
 	regularThreads = make([]*phpThread, 0, opt.numThreads-workerThreadCount)
-	for i := 0; i < opt.numThreads-workerThreadCount; i++ {
+	for range opt.numThreads - workerThreadCount {
 		convertToRegularThread(getInactivePHPThread())
 	}
 
@@ -534,7 +551,7 @@ func splitRawHeader(rawHeader *C.char, length int) (string, string) {
 	}
 
 	// anything left is the header value
-	valuePtr := (*C.char)(unsafe.Pointer(uintptr(unsafe.Pointer(rawHeader)) + uintptr(j)))
+	valuePtr := (*C.char)(unsafe.Add(unsafe.Pointer(rawHeader), j))
 	headerValue := C.GoStringN(valuePtr, C.int(length-j))
 
 	return headerKey, headerValue

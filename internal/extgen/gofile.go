@@ -219,8 +219,8 @@ func extractGoFunctionCallParams(goFunction string) string {
 	}
 
 	var names []string
-	parts := strings.Split(params, ",")
-	for _, part := range parts {
+	parts := strings.SplitSeq(params, ",")
+	for part := range parts {
 		part = strings.TrimSpace(part)
 		if len(part) == 0 {
 			continue

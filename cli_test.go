@@ -21,8 +21,7 @@ func TestExecuteScriptCLI(t *testing.T) {
 	stdoutStderr, err := cmd.CombinedOutput()
 	assert.Error(t, err)
 
-	var exitError *exec.ExitError
-	if errors.As(err, &exitError) {
+	if exitError, ok := errors.AsType[*exec.ExitError](err); ok {
 		assert.Equal(t, 3, exitError.ExitCode())
 	}
 
@@ -60,8 +59,7 @@ func TestExecuteCLIPHPInfo(t *testing.T) {
 	if frankenphp.Version().VersionID < 80600 {
 		assert.Error(t, err)
 
-		var exitError *exec.ExitError
-		if errors.As(err, &exitError) {
+		if exitError, ok := errors.AsType[*exec.ExitError](err); ok {
 			assert.Equal(t, 1, exitError.ExitCode())
 		}
 

@@ -226,8 +226,8 @@ func (fc *frankenPHPContext) reject(err error) {
 		return
 	}
 
-	re := &ErrRejected{}
-	if !errors.As(err, re) {
+	re, ok := errors.AsType[ErrRejected](err)
+	if !ok {
 		// Should never happen
 		panic("only instance of ErrRejected can be passed to reject")
 	}
