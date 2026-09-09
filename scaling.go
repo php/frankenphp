@@ -28,7 +28,6 @@ const (
 var (
 	ErrMaxThreadsReached = errors.New("max amount of overall threads reached")
 
-	maxIdleTime       = defaultMaxIdleTime
 	scaleChan         chan *frankenPHPContext
 	autoScaledThreads = []*phpThread{}
 	scalingMu         = new(sync.RWMutex)

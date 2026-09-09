@@ -60,14 +60,14 @@ var (
 	isRunning        atomic.Bool
 	onServerShutdown []func()
 
-	// Set default values to make Shutdown() idempotent
-	startupMu    sync.Mutex
-	globalCtx    = context.Background()
-	globalLogger = slog.Default()
-
-	metrics Metrics = nullMetrics{}
-
+	// startupMu serializes Init() and Shutdown().
+	startupMu            sync.Mutex
+	globalCtx                    = context.Background()
+	globalLogger                 = slog.Default()
+	metrics              Metrics = nullMetrics{}
 	maxRequestsPerThread int
+	maxIdleTime          = defaultMaxIdleTime
+	watcherIsEnabled     bool
 )
 
 type ErrRejected struct {
@@ -409,7 +409,7 @@ func ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) error 
 		return ErrInvalidRequest
 	}
 
-	return fallbackServer.Load().ServeHTTP(responseWriter, request, opts...)
+	return fallbackServer.ServeHTTP(responseWriter, request, opts...)
 }
 
 //export go_ub_write
@@ -800,10 +800,12 @@ func resetGlobals() {
 	globalCtx = context.Background()
 	globalLogger = slog.Default()
 	workers = nil
-	workersByName = nil
-	globalWorkersByPath = nil
 	servers = nil
-	watcherIsEnabled = false
-	maxIdleTime = defaultMaxIdleTime
+	onServerShutdown = nil
+	metrics = nullMetrics{}
 	maxRequestsPerThread = 0
+	maxIdleTime = defaultMaxIdleTime
+	watcherIsEnabled = false
+	fallbackServer = newDefaultServer(0, globalLogger)
+	fallbackServer.logger = globalLogger
 }

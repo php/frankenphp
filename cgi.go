@@ -221,10 +221,11 @@ func splitCgiPath(fc *frankenPHPContext) {
 	// SCRIPT_FILENAME is the absolute path of SCRIPT_NAME
 	fc.scriptFilename = sanitizedPathJoin(fc.documentRoot, fc.scriptName)
 
-	// see if a php_server worker or global worker matches the request path
-	// aka: root + request path == worker.filename
-	if fc.worker = fc.server.workersByPath[fc.scriptFilename]; fc.worker == nil {
-		fc.worker = globalWorkersByPath[fc.scriptFilename]
+	// see if a worker matches the request path (root + request path == worker.filename).
+	// Global workers live on the default server and remain reachable from any registered server.
+	fc.worker = fc.server.workersByPath[fc.scriptFilename]
+	if fc.worker == nil && fc.server != fallbackServer {
+		fc.worker = fallbackServer.workersByPath[fc.scriptFilename]
 	}
 }
 

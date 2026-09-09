@@ -20,8 +20,10 @@ type Server struct {
 	env                       PreparedEnv
 	workers                   []*worker
 	workersByPath             map[string]*worker
+	workersByName             map[string]*worker
 	workersWithRequestMatcher []*worker
 	maxWaitTime               time.Duration
+	requestBodyTimeout        time.Duration
 	logger                    *slog.Logger
 	isRegistered              bool
 	isActive                  atomic.Bool
@@ -29,32 +31,25 @@ type Server struct {
 
 var (
 	servers        []*Server
-	fallbackServer = initFallbackServer()
+	fallbackServer = newDefaultServer(0, slog.Default())
 )
 
-func initFallbackServer() atomic.Pointer[Server] {
-	p := atomic.Pointer[Server]{}
-	p.Store(resetFallbackServer(0))
-
-	return p
-}
-
-func resetFallbackServer(maxWaitTime time.Duration) *Server {
-	s := &Server{
+func newDefaultServer(maxWaitTime time.Duration, logger *slog.Logger) *Server {
+	return &Server{
 		workersByPath:             make(map[string]*worker),
+		workersByName:             make(map[string]*worker),
 		env:                       make(map[string]string),
-		logger:                    globalLogger,
+		logger:                    logger,
 		workers:                   []*worker{},
 		workersWithRequestMatcher: []*worker{},
 		maxWaitTime:               maxWaitTime,
 	}
-
-	return s
 }
 
 func registerServers(o *opt) error {
 	servers = o.servers
-	fallbackServer.Store(resetFallbackServer(o.maxWaitTime))
+	fallbackServer = newDefaultServer(o.maxWaitTime, globalLogger)
+	fallbackServer.logger = globalLogger
 
 	for i, s := range servers {
 		if s.isRegistered {
@@ -71,16 +66,15 @@ func registerServers(o *opt) error {
 }
 
 // activateServers lets registered servers accept requests
-func activateServers(o *opt) {
-
-	fallbackServer.Load().isActive.Store(true)
+func activateServers(_ *opt) {
+	fallbackServer.isActive.Store(true)
 	for _, s := range servers {
 		s.isActive.Store(true)
 	}
 }
 
 func deactivateServers() {
-	fallbackServer.Load().isActive.Store(false)
+	fallbackServer.isActive.Store(false)
 	for _, server := range servers {
 		server.isActive.Store(false)
 	}
@@ -97,6 +91,7 @@ func NewServer(root string, options ...ServerOption) (*Server, error) {
 	s := &Server{
 		root:          root,
 		workersByPath: make(map[string]*worker),
+		workersByName: make(map[string]*worker),
 	}
 
 	for _, option := range options {
@@ -126,7 +121,13 @@ func (s *Server) Name() string {
 }
 
 func (s *Server) addWorker(w *worker) error {
+	if _, exists := s.workersByName[w.name]; exists {
+		return fmt.Errorf("two workers in a server cannot have the same name: %q", w.name)
+	}
+
 	s.workers = append(s.workers, w)
+	s.workersByName[w.name] = w
+
 	if w.matchRequest != nil {
 		s.workersWithRequestMatcher = append(s.workersWithRequestMatcher, w)
 		return nil

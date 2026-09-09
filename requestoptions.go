@@ -209,7 +209,10 @@ func WithRequestBodyTimeout(timeout time.Duration) RequestOption {
 func WithWorkerName(name string) RequestOption {
 	return func(o *frankenPHPContext) error {
 		if name != "" {
-			o.worker = workersByName[name]
+			o.worker = o.server.workersByName[name]
+			if o.worker == nil && o.server != fallbackServer {
+				o.worker = fallbackServer.workersByName[name]
+			}
 		}
 
 		return nil

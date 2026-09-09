@@ -37,11 +37,8 @@ type worker struct {
 }
 
 var (
-	workers             []*worker
-	workersByName       map[string]*worker
-	globalWorkersByPath map[string]*worker
-	watcherIsEnabled    bool
-	startupFailChan     chan error
+	workers         []*worker
+	startupFailChan chan error
 )
 
 func initWorkers(opts []workerOpt) error {
@@ -55,23 +52,33 @@ func initWorkers(opts []workerOpt) error {
 	)
 
 	workers = make([]*worker, 0, len(opts))
-	workersByName = make(map[string]*worker, len(opts))
-	globalWorkersByPath = make(map[string]*worker, len(opts))
 
-	for _, o := range opts {
+	for i := range opts {
+		o := opts[i]
+		if o.server == nil {
+			if o.matchRequest != nil {
+				name := o.name
+				if name == "" {
+					name = o.fileName
+				}
+
+				return fmt.Errorf("worker %q has a request matcher but no server scope, use WithWorkerServerScope()", name)
+			}
+
+			o.server = fallbackServer
+		}
+
 		w, err := newWorker(o)
 		if err != nil {
 			return err
 		}
 
-		totalThreadsToStart += w.num
-		workers = append(workers, w)
-		workersByName[w.name] = w
-		if w.server == nil {
-			globalWorkersByPath[w.fileName] = w
-		} else if err := w.server.addWorker(w); err != nil {
+		if err := w.server.addWorker(w); err != nil {
 			return err
 		}
+
+		totalThreadsToStart += w.num
+		workers = append(workers, w)
 	}
 
 	startupFailChan = make(chan error, totalThreadsToStart)
@@ -124,18 +131,7 @@ func newWorker(o workerOpt) (*worker, error) {
 	}
 
 	if o.server == nil {
-		if globalWorkersByPath[absFileName] != nil {
-			return nil, fmt.Errorf("two global workers cannot have the same filename: %q", absFileName)
-		}
-
-		// no server means no set of requests to match against, the matcher would never run
-		if o.matchRequest != nil {
-			return nil, fmt.Errorf("worker %q has a request matcher but no server scope, use WithWorkerServerScope()", o.name)
-		}
-	}
-
-	if workersByName[o.name] != nil {
-		return nil, fmt.Errorf("two workers cannot have the same name: %q", o.name)
+		o.server = fallbackServer
 	}
 
 	// env should always contain FRANKENPHP_WORKER and the parent php_server env
@@ -143,8 +139,8 @@ func newWorker(o workerOpt) (*worker, error) {
 		o.env = make(PreparedEnv, 1)
 	}
 
-	// if the worker is scoped to a server, inherit the server env
-	if o.server != nil && len(o.server.env) > 0 {
+	// inherit the server env
+	if len(o.server.env) > 0 {
 		for k, v := range o.server.env {
 			if _, exists := o.env[k]; !exists {
 				o.env[k] = v

@@ -116,18 +116,8 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 		f.Root = filepath.Join(frankenphp.EmbeddedAppPath, f.Root)
 	}
 
-	opt, err := frankenphp.WithRequestSplitPath(f.SplitPath)
-	if err != nil {
-		return fmt.Errorf("invalid split_path: %w", err)
-	}
-	f.requestOptions = append(f.requestOptions, opt)
-
 	if f.RequestBodyTimeout == nil {
 		f.RequestBodyTimeout = new(defaultRequestBodyTimeout)
-	}
-
-	if *f.RequestBodyTimeout > 0 {
-		f.requestOptions = append(f.requestOptions, frankenphp.WithRequestBodyTimeout(time.Duration(*f.RequestBodyTimeout)))
 	}
 
 	if f.ResolveRootSymlink == nil {
@@ -157,6 +147,12 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 				}
 			}
 		}
+
+		if f.ResolveRootSymlink != nil && *f.ResolveRootSymlink {
+			f.requestOptions = append(f.requestOptions, frankenphp.WithRequestDocumentRoot(f.resolvedDocumentRoot, true))
+		} else {
+			f.requestOptions = append(f.requestOptions, frankenphp.WithRequestResolvedDocumentRoot(f.resolvedDocumentRoot))
+		}
 	}
 
 	if err := f.configureHotReload(fapp); err != nil {
@@ -177,6 +173,25 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 	fapp.modules = append(fapp.modules, f)
 
 	return nil
+}
+
+func (f *FrankenPHPModule) frankenphpServerOptions(serverName string) []frankenphp.ServerOption {
+	opts := []frankenphp.ServerOption{
+		frankenphp.WithServerName(serverName),
+		frankenphp.WithServerSplitPath(f.SplitPath),
+		frankenphp.WithServerEnv(f.resolvedEnv),
+		frankenphp.WithServerLogger(f.logger),
+	}
+
+	if f.RequestBodyTimeout == nil {
+		f.RequestBodyTimeout = new(defaultRequestBodyTimeout)
+	}
+
+	if *f.RequestBodyTimeout > 0 {
+		opts = append(opts, frankenphp.WithServerRequestBodyTimeout(time.Duration(*f.RequestBodyTimeout)))
+	}
+
+	return opts
 }
 
 // needReplacement checks if a string contains placeholders.

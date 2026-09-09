@@ -73,15 +73,16 @@ func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Reques
 
 func newContextFromRequest(request *http.Request, responseWriter http.ResponseWriter, s *Server, opts ...RequestOption) (*frankenPHPContext, error) {
 	fc := &frankenPHPContext{
-		ctx:            request.Context(),
-		done:           make(chan any),
-		startedAt:      time.Now(),
-		server:         s,
-		splitPath:      s.splitPath,
-		logger:         s.logger,
-		request:        request,
-		documentRoot:   s.root,
-		responseWriter: responseWriter,
+		ctx:                request.Context(),
+		done:               make(chan any),
+		startedAt:          time.Now(),
+		server:             s,
+		splitPath:          s.splitPath,
+		logger:             s.logger,
+		request:            request,
+		documentRoot:       s.root,
+		responseWriter:     responseWriter,
+		requestBodyTimeout: s.requestBodyTimeout,
 	}
 
 	for _, o := range opts {
@@ -130,20 +131,14 @@ func newWorkerDummyContext(w *worker) (*frankenPHPContext, error) {
 		return nil, err
 	}
 
-	server := w.server
-	if server == nil {
-		// global worker, not associated with a server
-		server = fallbackServer.Load()
-	}
-
 	fc := &frankenPHPContext{
 		done:      make(chan any),
 		ctx:       r.Context(),
-		server:    server,
+		server:    w.server,
 		request:   r,
 		startedAt: time.Now(),
 		// startup output of a scoped worker belongs to its server's logger
-		logger: server.logger,
+		logger: w.server.logger,
 		worker: w,
 	}
 
@@ -160,11 +155,6 @@ func newWorkerDummyContext(w *worker) (*frankenPHPContext, error) {
 
 // newContextFromMessage creates a context from a message (external workers)
 func newContextFromMessage(message any, rw http.ResponseWriter, ctx context.Context, w *worker) *frankenPHPContext {
-	server := w.server
-	if server == nil {
-		server = fallbackServer.Load()
-	}
-
 	if ctx == nil {
 		ctx = globalCtx
 	}
@@ -172,9 +162,9 @@ func newContextFromMessage(message any, rw http.ResponseWriter, ctx context.Cont
 	return &frankenPHPContext{
 		done:              make(chan any),
 		startedAt:         time.Now(),
-		server:            server,
+		server:            w.server,
 		worker:            w,
-		logger:            server.logger,
+		logger:            w.server.logger,
 		responseWriter:    rw,
 		handlerParameters: message,
 		ctx:               ctx,

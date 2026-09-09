@@ -342,3 +342,13 @@ func WithServerEnv(env map[string]string) ServerOption {
 		return nil
 	}
 }
+
+// WithServerRequestBodyTimeout sets an idle timeout on request body reads for this server.
+// Zero disables it. Per-request overrides are possible via WithRequestBodyTimeout.
+func WithServerRequestBodyTimeout(timeout time.Duration) ServerOption {
+	return func(s *Server) error {
+		s.requestBodyTimeout = timeout
+
+		return nil
+	}
+}
