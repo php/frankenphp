@@ -2,9 +2,11 @@ package frankenphp
 
 import (
 	"log/slog"
+	"runtime"
 	"runtime/debug"
 	"slices"
 	"testing"
+	"unsafe"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -146,6 +148,23 @@ func TestNestedMixedArray(t *testing.T) {
 
 		assert.Equal(t, originalArray, convertedArray, "nested mixed array should be equal after conversion")
 	})
+}
+
+func TestPinPHPInfoEntries(t *testing.T) {
+	var pinner runtime.Pinner
+	defer pinner.Unpin()
+
+	require.Nil(t, pinPHPInfoEntries(nil, &pinner))
+	entries := []phpinfoEntry{{"z", "last"}, {"a", ""}, {"", "first"}}
+	ptr := pinPHPInfoEntries(entries, &pinner)
+	runtime.GC()
+
+	arr := unsafe.Slice(ptr, 2*len(entries)+1)
+	for i, want := range []string{"", "first", "a", "", "z", "last"} {
+		got := unsafe.Slice((*byte)(unsafe.Pointer(arr[i])), len(want)+1)
+		assert.Equal(t, want+"\x00", string(got))
+	}
+	assert.Nil(t, arr[len(arr)-1])
 }
 
 func TestBuildGoModuleEntries(t *testing.T) {

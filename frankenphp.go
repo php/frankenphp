@@ -14,7 +14,6 @@ package frankenphp
 
 // #include <stdlib.h>
 // #include <stdint.h>
-// #include <string.h>
 // #include "frankenphp.h"
 // #include <php_variables.h>
 // #include <zend_llist.h>
@@ -167,8 +166,7 @@ type phpinfoEntry struct {
 var (
 	phpinfoEntries  []phpinfoEntry
 	goModuleEntries []phpinfoEntry
-	cPhpinfoArr     []*C.char
-	cGoModulesArr   []*C.char
+	phpinfoPinner   runtime.Pinner
 )
 
 // Report the Go toolchain and Go module versions.
@@ -223,20 +221,17 @@ func AddPHPInfoModule(key string, module *debug.Module) {
 }
 
 func initPHPInfoEntries() {
-	freeCEntries(cPhpinfoArr)
-	freeCEntries(cGoModulesArr)
-
-	cPhpinfoArr = newCEntries(phpinfoEntries)
-	cGoModulesArr = newCEntries(goModuleEntries)
-
-	C.frankenphp_phpinfo_entries = firstCEntry(cPhpinfoArr)
-	C.frankenphp_go_modules = firstCEntry(cGoModulesArr)
+	// Replace the previous runtime's tables before PHP starts using them.
+	C.frankenphp_phpinfo_entries = nil
+	C.frankenphp_go_modules = nil
+	phpinfoPinner.Unpin()
+	C.frankenphp_phpinfo_entries = pinPHPInfoEntries(phpinfoEntries, &phpinfoPinner)
+	C.frankenphp_go_modules = pinPHPInfoEntries(goModuleEntries, &phpinfoPinner)
 }
 
-// newCEntries converts entries to a null-terminated C array of key, value, key,
-// value, ... sorted by key. The returned slice is backed by memory allocated by
-// C, free it with freeCEntries().
-func newCEntries(entries []phpinfoEntry) []*C.char {
+// pinPHPInfoEntries sorts entries and pins a null-terminated array of key, value
+// pointers, along with the null-terminated strings they point to.
+func pinPHPInfoEntries(entries []phpinfoEntry, pinner *runtime.Pinner) **C.char {
 	if len(entries) == 0 {
 		return nil
 	}
@@ -245,38 +240,15 @@ func newCEntries(entries []phpinfoEntry) []*C.char {
 		return entries[i].key < entries[j].key
 	})
 
-	n := 2*len(entries) + 1
-	size := C.size_t(n) * C.size_t(unsafe.Sizeof(uintptr(0)))
-	ptr := C.malloc(size)
-	// Zero in C before Go pointer writes: the GC write barrier may scan old values.
-	C.memset(ptr, 0, size)
-	arr := (*[1 << 28]*C.char)(ptr)[:n:n]
+	arr := make([]*C.char, 2*len(entries)+1)
 	for i, e := range entries {
-		arr[2*i] = C.CString(e.key)
-		arr[2*i+1] = C.CString(e.value)
-	}
-	arr[n-1] = nil
-
-	return arr
-}
-
-func freeCEntries(arr []*C.char) {
-	for _, cstr := range arr {
-		if cstr != nil {
-			C.free(unsafe.Pointer(cstr))
+		for j, s := range []string{e.key, e.value} {
+			data := unsafe.StringData(s + "\x00")
+			pinner.Pin(data)
+			arr[2*i+j] = (*C.char)(unsafe.Pointer(data))
 		}
 	}
-
-	if arr != nil {
-		C.free(unsafe.Pointer(&arr[0]))
-	}
-}
-
-func firstCEntry(arr []*C.char) **C.char {
-	if arr == nil {
-		return nil
-	}
-
+	pinner.Pin(&arr[0])
 	return &arr[0]
 }
 
