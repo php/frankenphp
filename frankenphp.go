@@ -268,7 +268,6 @@ func Init(options ...Option) error {
 	signal.Ignore(syscall.SIGPIPE)
 
 	registerExtensions()
-	initPHPInfoEntries()
 
 	opt := &opt{}
 	for _, o := range options {

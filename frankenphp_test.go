@@ -468,7 +468,14 @@ func TestPhpInfo_module(t *testing.T) { testPhpInfo(t, nil) }
 func TestPhpInfo_worker(t *testing.T) { testPhpInfo(t, &testOptions{workerScript: "phpinfo.php"}) }
 func testPhpInfo(t *testing.T, opts *testOptions) {
 	var logOnce sync.Once
+	var registerOnce sync.Once
+	lateKey := fmt.Sprintf("%s/%d", t.Name(), time.Now().UnixNano())
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		registerOnce.Do(func() {
+			body, _ := testGet("http://example.com/phpinfo.php", handler, t)
+			assert.NotContains(t, body, lateKey)
+			frankenphp.AddPHPInfoEntry(lateKey, "registered after phpinfo")
+		})
 		body, _ := testGet(fmt.Sprintf("http://example.com/phpinfo.php?i=%d", i), handler, t)
 
 		logOnce.Do(func() {
@@ -478,6 +485,7 @@ func testPhpInfo(t *testing.T, opts *testOptions) {
 		assert.Contains(t, body, "frankenphp")
 		assert.Contains(t, body, fmt.Sprintf("i=%d", i))
 		assert.Contains(t, body, runtime.Version())
+		assert.Contains(t, body, `<tr><td class="e">`+lateKey+` </td><td class="v">registered after phpinfo </td></tr>`)
 		assert.Contains(t, body, `<tr><td class="e">test/component&lt;&amp;&gt; </td><td class="v">example.com/fork&lt;&amp;&gt; v2.0.0 </td></tr>`)
 	}, opts)
 }

@@ -114,9 +114,6 @@ frankenphp_config frankenphp_get_config() {
   };
 }
 
-const char **frankenphp_phpinfo_entries = NULL;
-const char **frankenphp_go_modules = NULL;
-
 bool should_filter_var = 0;
 bool original_user_abort_setting = 0;
 frankenphp_interned_strings_t frankenphp_strings = {0};
@@ -1126,15 +1123,17 @@ static void frankenphp_print_info_rows(const char **entries) {
   }
 }
 
-PHP_MINFO_FUNCTION(frankenphp) {
+PHP_MINFO_FUNCTION(frankenphp) { go_frankenphp_phpinfo(); }
+
+void frankenphp_print_phpinfo(const char **entries, const char **modules) {
   php_info_print_table_start();
   php_info_print_table_row(2, "frankenphp", TOSTRING(FRANKENPHP_VERSION));
-  if (frankenphp_phpinfo_entries) {
-    frankenphp_print_info_rows(frankenphp_phpinfo_entries);
+  if (entries) {
+    frankenphp_print_info_rows(entries);
   }
   php_info_print_table_end();
 
-  if (frankenphp_go_modules == NULL) {
+  if (modules == NULL) {
     return;
   }
 
@@ -1151,7 +1150,7 @@ PHP_MINFO_FUNCTION(frankenphp) {
 
   php_info_print_table_start();
   php_info_print_table_header(2, "Module", "Version");
-  frankenphp_print_info_rows(frankenphp_go_modules);
+  frankenphp_print_info_rows(modules);
   php_info_print_table_end();
 
   if (!sapi_module.phpinfo_as_text) {

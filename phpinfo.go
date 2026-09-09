@@ -19,7 +19,6 @@ var (
 	phpinfoMu      sync.Mutex
 	phpinfoEntries []phpinfoEntry
 	phpinfoModules []phpinfoEntry
-	phpinfoPinner  runtime.Pinner
 )
 
 // AddPHPInfoEntry adds an entry to the frankenphp section of phpinfo().
@@ -85,16 +84,16 @@ func goModuleVersion(module *debug.Module) string {
 	return module.Replace.Path + " " + module.Replace.Version
 }
 
-func initPHPInfoEntries() {
+//export go_frankenphp_phpinfo
+func go_frankenphp_phpinfo() {
 	buildInfo, _ := debug.ReadBuildInfo()
 	entries, modules := collectPHPInfoEntries(buildInfo)
 
-	// Replace the previous runtime's tables before PHP starts using them.
-	C.frankenphp_phpinfo_entries = nil
-	C.frankenphp_go_modules = nil
-	phpinfoPinner.Unpin()
-	C.frankenphp_phpinfo_entries = pinPHPInfoEntries(entries, &phpinfoPinner)
-	C.frankenphp_go_modules = pinPHPInfoEntries(modules, &phpinfoPinner)
+	// PHP consumes these tables synchronously on the calling PHP thread.
+	// Each call owns its pins, so concurrent phpinfo() calls share no C pointers.
+	var pinner runtime.Pinner
+	defer pinner.Unpin()
+	C.frankenphp_print_phpinfo(pinPHPInfoEntries(entries, &pinner), pinPHPInfoEntries(modules, &pinner))
 }
 
 // pinPHPInfoEntries sorts entries and pins a null-terminated array of key, value
