@@ -27,7 +27,6 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
-	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -462,12 +461,7 @@ func testSession(t *testing.T, opts *testOptions) {
 const phpInfoTestComponent = "test/component<&>"
 
 func init() {
-	// Register before any Init call, as required by AddPHPInfoModule's contract.
-	frankenphp.AddPHPInfoModule(phpInfoTestComponent, &debug.Module{
-		Path:    "example.com/component",
-		Version: "v1.0.0",
-		Replace: &debug.Module{Path: "example.com/fork<&>", Version: "v2.0.0"},
-	})
+	frankenphp.AddPHPInfoEntry(phpInfoTestComponent, "example.com/fork<&> v2.0.0")
 }
 
 func TestPhpInfo_module(t *testing.T) { testPhpInfo(t, nil) }

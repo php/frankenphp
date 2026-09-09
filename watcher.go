@@ -3,7 +3,6 @@
 package frankenphp
 
 import (
-	"runtime/debug"
 	"sync/atomic"
 
 	"github.com/dunglas/frankenphp/internal/watcher"
@@ -11,15 +10,7 @@ import (
 )
 
 func init() {
-	// watcher doesn't expose the version, so get it from the build info.
-	if buildInfo, ok := debug.ReadBuildInfo(); ok {
-		for _, dep := range buildInfo.Deps {
-			if dep.Path == "github.com/e-dant/watcher" {
-				AddPHPInfoModule("e-dant/watcher", dep)
-				break
-			}
-		}
-	}
+	AddPHPInfoModule("e-dant/watcher", "github.com/e-dant/watcher")
 }
 
 type hotReloadOpt struct {

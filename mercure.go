@@ -8,21 +8,13 @@ package frankenphp
 import "C"
 import (
 	"log/slog"
-	"runtime/debug"
 	"unsafe"
 
 	"github.com/dunglas/mercure"
 )
 
 func init() {
-	if buildInfo, ok := debug.ReadBuildInfo(); ok {
-		for _, dep := range buildInfo.Deps {
-			if dep.Path == "github.com/dunglas/mercure" {
-				AddPHPInfoModule("dunglas/mercure", dep)
-				break
-			}
-		}
-	}
+	AddPHPInfoModule("dunglas/mercure", "github.com/dunglas/mercure")
 }
 
 type mercureContext struct {

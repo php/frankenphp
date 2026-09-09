@@ -255,10 +255,20 @@ func TestBuildGoModuleEntries(t *testing.T) {
 
 func TestAddPHPInfoModule(t *testing.T) {
 	// Keep this test serial and isolate registrations from the runtime tests.
-	previous := phpinfoEntries
-	t.Cleanup(func() { phpinfoEntries = previous })
+	previousEntries, previousModules := phpinfoEntries, phpinfoModules
+	phpinfoEntries, phpinfoModules = nil, nil
+	t.Cleanup(func() { phpinfoEntries, phpinfoModules = previousEntries, previousModules })
 
 	const key, path = "test/component", "example.com/component"
+	AddPHPInfoEntry("custom", "value")
+	AddPHPInfoModule(key, path)
+	AddPHPInfoModule("missing", "example.com/missing")
+	AddPHPInfoModule("main", "example.com/app")
+
+	entries, modules := collectPHPInfoEntries(nil)
+	require.Equal(t, []phpinfoEntry{{"custom", "value"}}, entries)
+	require.Empty(t, modules)
+
 	for _, tt := range []struct {
 		name    string
 		replace *debug.Module
@@ -270,14 +280,20 @@ func TestAddPHPInfoModule(t *testing.T) {
 		{name: "local path replacement", replace: &debug.Module{Path: "../local-component"}, want: "../local-component"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			phpinfoEntries = nil
-			AddPHPInfoModule(key, &debug.Module{Path: path, Version: "v1.2.3", Replace: tt.replace})
-			if len(phpinfoEntries) != 1 {
-				t.Fatalf("registered %d entries, want 1", len(phpinfoEntries))
-			}
-			if got := phpinfoEntries[0]; got != (phpinfoEntry{key, tt.want}) {
-				t.Errorf("component entry = %#v, want key %q and version %q", got, key, tt.want)
-			}
+			entries, modules := collectPHPInfoEntries(&debug.BuildInfo{
+				GoVersion: "go1.26.0",
+				Main:      debug.Module{Path: "example.com/app", Version: "v3.0.0"},
+				Deps: []*debug.Module{
+					{Path: path, Version: "v1.2.3", Replace: tt.replace},
+					{Path: "example.com/other", Version: "v4.0.0"},
+				},
+			})
+			require.Equal(t, []phpinfoEntry{
+				{"custom", "value"}, {"go", "go1.26.0"}, {key, tt.want}, {"main", "v3.0.0"},
+			}, entries)
+			require.Equal(t, []phpinfoEntry{
+				{"example.com/app", "v3.0.0"}, {path, tt.want}, {"example.com/other", "v4.0.0"},
+			}, modules)
 		})
 	}
 }

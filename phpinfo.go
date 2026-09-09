@@ -5,7 +5,9 @@ import "C"
 import (
 	"runtime"
 	"runtime/debug"
+	"slices"
 	"sort"
+	"sync"
 	"unsafe"
 )
 
@@ -14,22 +16,49 @@ type phpinfoEntry struct {
 }
 
 var (
-	phpinfoEntries  []phpinfoEntry
-	goModuleEntries []phpinfoEntry
-	phpinfoPinner   runtime.Pinner
+	phpinfoMu      sync.Mutex
+	phpinfoEntries []phpinfoEntry
+	phpinfoModules []phpinfoEntry
+	phpinfoPinner  runtime.Pinner
 )
 
-// Report the Go toolchain and Go module versions.
-// The list is verbose, so it's displayed in a collapsed section.
-func init() {
-	buildInfo, ok := debug.ReadBuildInfo()
-	if !ok {
-		return
+// AddPHPInfoEntry adds an entry to the frankenphp section of phpinfo().
+func AddPHPInfoEntry(key, value string) {
+	phpinfoMu.Lock()
+	defer phpinfoMu.Unlock()
+	phpinfoEntries = append(phpinfoEntries, phpinfoEntry{key, value})
+}
+
+// AddPHPInfoModule adds a component's Go module version to the frankenphp section
+// of phpinfo().
+func AddPHPInfoModule(key, modulePath string) {
+	phpinfoMu.Lock()
+	defer phpinfoMu.Unlock()
+	phpinfoModules = append(phpinfoModules, phpinfoEntry{key, modulePath})
+}
+
+func collectPHPInfoEntries(buildInfo *debug.BuildInfo) (entries, modules []phpinfoEntry) {
+	phpinfoMu.Lock()
+	entries = slices.Clone(phpinfoEntries)
+	components := slices.Clone(phpinfoModules)
+	phpinfoMu.Unlock()
+
+	if buildInfo == nil {
+		return entries, nil
 	}
 
-	AddPHPInfoEntry("go", buildInfo.GoVersion)
-
-	goModuleEntries = buildGoModuleEntries(buildInfo)
+	entries = append(entries, phpinfoEntry{"go", buildInfo.GoVersion})
+	modules = buildGoModuleEntries(buildInfo)
+	versions := make(map[string]string, len(modules))
+	for _, module := range modules {
+		versions[module.key] = module.value
+	}
+	for _, component := range components {
+		if version, ok := versions[component.value]; ok {
+			entries = append(entries, phpinfoEntry{component.key, version})
+		}
+	}
+	return entries, modules
 }
 
 func buildGoModuleEntries(buildInfo *debug.BuildInfo) []phpinfoEntry {
@@ -43,8 +72,6 @@ func buildGoModuleEntries(buildInfo *debug.BuildInfo) []phpinfoEntry {
 	return entries
 }
 
-// goModuleVersion returns the version of the given module, taking "replace"
-// directives into account.
 func goModuleVersion(module *debug.Module) string {
 	if module.Replace == nil {
 		return module.Version
@@ -58,25 +85,16 @@ func goModuleVersion(module *debug.Module) string {
 	return module.Replace.Path + " " + module.Replace.Version
 }
 
-// AddPHPInfoEntry adds an entry to the frankenphp section of phpinfo().
-// Call it during package initialization before Init.
-func AddPHPInfoEntry(key, value string) {
-	phpinfoEntries = append(phpinfoEntries, phpinfoEntry{key, value})
-}
-
-// AddPHPInfoModule adds a component's Go module version to the frankenphp section
-// of phpinfo(). Call it during package initialization before Init.
-func AddPHPInfoModule(key string, module *debug.Module) {
-	AddPHPInfoEntry(key, goModuleVersion(module))
-}
-
 func initPHPInfoEntries() {
+	buildInfo, _ := debug.ReadBuildInfo()
+	entries, modules := collectPHPInfoEntries(buildInfo)
+
 	// Replace the previous runtime's tables before PHP starts using them.
 	C.frankenphp_phpinfo_entries = nil
 	C.frankenphp_go_modules = nil
 	phpinfoPinner.Unpin()
-	C.frankenphp_phpinfo_entries = pinPHPInfoEntries(phpinfoEntries, &phpinfoPinner)
-	C.frankenphp_go_modules = pinPHPInfoEntries(goModuleEntries, &phpinfoPinner)
+	C.frankenphp_phpinfo_entries = pinPHPInfoEntries(entries, &phpinfoPinner)
+	C.frankenphp_go_modules = pinPHPInfoEntries(modules, &phpinfoPinner)
 }
 
 // pinPHPInfoEntries sorts entries and pins a null-terminated array of key, value
