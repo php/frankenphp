@@ -148,9 +148,15 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 
 // restartBackoff is the wait before a worker script is re-run after a
 // failure: quadratic in the number of consecutive failures, capped at one
-// second; shared by HTTP and background workers
+// second; shared by HTTP and background workers. The cap comes before the
+// multiplication, which overflows a duration past some 300k failures, a
+// count a crash loop reaches on its own in a few days
 func restartBackoff(failures int) time.Duration {
-	return min(time.Duration(failures*failures*100)*time.Millisecond, time.Second)
+	if failures >= 4 {
+		return time.Second
+	}
+
+	return time.Duration(failures*failures*100) * time.Millisecond
 }
 
 // waitForWorkerRequest is called during frankenphp_handle_request in the php worker script.
