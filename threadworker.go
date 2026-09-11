@@ -40,10 +40,6 @@ func (handler *workerThread) startScript() string {
 	return handler.worker.fileName
 }
 
-func (handler *workerThread) resetForReboot() {
-	handler.requestCount = 0
-}
-
 func (handler *workerThread) afterScriptExecution(exitStatus int) {
 	tearDownWorkerScript(handler, exitStatus)
 }

@@ -31,20 +31,9 @@ func (w *extensionWorkers) SendRequest(rw http.ResponseWriter, r *http.Request) 
 		return ErrNotRunning
 	}
 
-	opts := []RequestOption{WithOriginalRequest(r), WithWorkerName(w.name)}
-
-	// worker names are resolved within a server, so a scoped worker is only
-	// reachable through its own server
-	if server := w.internalWorker.server; server != nil {
-		return server.ServeHTTP(rw, r, opts...)
-	}
-
-	fr, err := NewRequestWithContext(r, opts...)
-	if err != nil {
-		return err
-	}
-
-	return ServeHTTP(rw, fr)
+	// worker names are resolved within a server, and a worker always has
+	// one, the fallback server when it was declared without a scope
+	return w.internalWorker.server.ServeHTTP(rw, r, WithOriginalRequest(r), WithWorkerName(w.name))
 }
 
 func (w *extensionWorkers) NumThreads() int {

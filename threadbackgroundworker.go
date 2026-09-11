@@ -114,9 +114,6 @@ func (handler *backgroundWorkerThread) startScript() string {
 	}
 }
 
-// a background worker counts nothing per run of the thread
-func (handler *backgroundWorkerThread) resetForReboot() {}
-
 // setupScript marks the thread as a background worker on the C side and
 // takes ownership of the Go side's end of its stop socket pair.
 func (handler *backgroundWorkerThread) setupScript() error {

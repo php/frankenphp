@@ -12,15 +12,13 @@ type workerLifecycle struct {
 	worker *worker
 }
 
-// workerHandler is a threadHandler running a worker script, plus the two
-// steps the shared lifecycle delegates
+// workerHandler is a threadHandler running a worker script, plus the step
+// the shared lifecycle delegates
 type workerHandler interface {
 	threadHandler
 	// startScript prepares a run and returns the script to execute, or an
 	// empty string to stop the thread
 	startScript() string
-	// resetForReboot clears what a handler counts per run of the thread
-	resetForReboot()
 }
 
 func newWorkerLifecycle(thread *phpThread, worker *worker) workerLifecycle {
@@ -45,7 +43,6 @@ func (l *workerLifecycle) beforeScriptExecution(handler workerHandler) string {
 	case state.Rebooting, state.ForceRebooting:
 		return ""
 	case state.RebootReady:
-		handler.resetForReboot()
 		l.state.Set(state.Ready)
 
 		return handler.beforeScriptExecution()
