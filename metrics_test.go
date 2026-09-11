@@ -185,7 +185,7 @@ func TestPrometheusMetrics_TestStopReasonCrash(t *testing.T) {
 			name: "Testing ReadyWorkers",
 			c:    m.readyWorkers,
 			metadata: `
-				# HELP frankenphp_ready_workers Running workers that have reached their ready point at least once: frankenphp_handle_request for HTTP workers, frankenphp_get_worker_handle for background workers
+				# HELP frankenphp_ready_workers Running workers that have reached their ready point at least once: frankenphp_handle_request for HTTP workers, the first wait on the stream of frankenphp_get_worker_handle for background workers
 				# TYPE frankenphp_ready_workers gauge
 			`,
 			expect: `

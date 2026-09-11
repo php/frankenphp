@@ -477,10 +477,8 @@ void frankenphp_worker_close_stop_sock(intptr_t s) {
 static void frankenphp_disable_execution_timeout(void) {
   zend_string *key = zend_string_init("max_execution_time",
                                       sizeof("max_execution_time") - 1, 0);
-  zend_string *value = zend_string_init("0", 1, 0);
-  zend_alter_ini_entry(key, value, PHP_INI_USER, PHP_INI_STAGE_RUNTIME);
+  zend_alter_ini_entry_chars(key, "0", 1, PHP_INI_USER, PHP_INI_STAGE_RUNTIME);
   zend_string_release(key);
-  zend_string_release(value);
 }
 
 void frankenphp_update_local_thread_context(bool is_worker) {
