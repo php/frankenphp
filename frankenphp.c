@@ -368,11 +368,8 @@ static void frankenphp_worker_close_sock(php_socket_t s) {
   if (s == SOCK_ERR) {
     return;
   }
-#ifdef PHP_WIN32
+  /* php_network.h maps closesocket to close outside Windows */
   closesocket(s);
-#else
-  close(s);
-#endif
 }
 
 /* keep the pair out of processes the script may spawn: a child holding the
@@ -463,6 +460,15 @@ void frankenphp_worker_close_stop_sock(intptr_t s) {
   if (s < 0) {
     return;
   }
+  /* Closing this end only lands as EOF on the script's end while no other
+   * process holds a copy of it, and a pcntl_fork() child inherits every
+   * descriptor of the process, including the pairs of the other threads.
+   * Shutting the write direction down sends the FIN regardless. */
+#ifdef PHP_WIN32
+  shutdown((php_socket_t)s, SD_SEND);
+#else
+  shutdown((php_socket_t)s, SHUT_WR);
+#endif
   frankenphp_worker_close_sock((php_socket_t)s);
 }
 
