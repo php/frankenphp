@@ -142,9 +142,13 @@ func (handler *backgroundWorkerThread) setupScript() error {
 
 	handler.isBootingScript = true
 	metrics.StartWorker(handler.worker.qualifiedName)
+	// the run's logger and context, not the globals: Stop() does not wait
+	// for a callback that already started, and a shutdown finishing
+	// meanwhile resets those
+	logger, ctx, name, threadIndex := fc.logger, fc.ctx, handler.worker.qualifiedName, handler.thread.threadIndex
 	handler.bootTimer = time.AfterFunc(backgroundBootWarnDelay, func() {
-		if globalLogger.Enabled(globalCtx, slog.LevelWarn) {
-			globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "background worker has not waited on its handle yet, Init() and Shutdown() wait for it, see frankenphp_get_worker_handle()", slog.String("worker", handler.worker.qualifiedName), slog.Int("thread", handler.thread.threadIndex))
+		if logger.Enabled(ctx, slog.LevelWarn) {
+			logger.LogAttrs(ctx, slog.LevelWarn, "background worker has not waited on its handle yet, Init() and Shutdown() wait for it, see frankenphp_get_worker_handle()", slog.String("worker", name), slog.Int("thread", threadIndex))
 		}
 	})
 

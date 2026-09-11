@@ -398,11 +398,11 @@ func Init(options ...Option) error {
 
 	maxThreads := opt.maxThreads
 	if maxThreads > 0 {
-		// in auto mode (maxThreads < 0), the resolved value is floored to the
-		// thread count, background threads included
 		maxThreads += backgroundThreads
 	}
-	mainThread, err := initPHPThreads(opt.numThreads+backgroundThreads, maxThreads, opt.phpIni)
+	// in auto mode (maxThreads < 0), the main thread adds the reservation to
+	// the limit it resolves, see setAutomaticMaxThreads()
+	mainThread, err := initPHPThreads(opt.numThreads+backgroundThreads, maxThreads, backgroundThreads, opt.phpIni)
 	if err != nil {
 		shutdown()
 		return err
