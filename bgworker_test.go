@@ -480,11 +480,12 @@ func TestBackgroundWorkerThreadsComeOnTopOfAutoMaxThreads(t *testing.T) {
 	assert.Equal(t, 6, len(state.ThreadDebugStates)+state.ReservedThreadCount)
 }
 
-// TestBackgroundWorkerHasNoExecutionTimeout checks that a script parking
-// past max_execution_time is not cut short, without the fixture disabling
-// the limit itself. max_input_time is set because php_execute_script()
-// re-arms the limit from the ini when it is.
-func TestBackgroundWorkerHasNoExecutionTimeout(t *testing.T) {
+// TestBackgroundWorkerParkingIsNotInterrupted checks that a script parked
+// on its handle is not cut short by the two limits it never disables
+// itself: max_execution_time, which php_execute_script() re-arms from the
+// ini when max_input_time is set, and default_socket_timeout, which the
+// handle overrides with an infinite read timeout.
+func TestBackgroundWorkerParkingIsNotInterrupted(t *testing.T) {
 	countFile := filepath.Join(t.TempDir(), "runs")
 	initServers(t,
 		frankenphp.WithWorkers("bg-timeout", "testdata/bgworker/no-time-limit.php", 1,
@@ -492,7 +493,7 @@ func TestBackgroundWorkerHasNoExecutionTimeout(t *testing.T) {
 			frankenphp.WithWorkerEnv(map[string]string{"BG_COUNT_FILE": countFile}),
 		),
 		frankenphp.WithNumThreads(2),
-		frankenphp.WithPhpIni(map[string]string{"max_execution_time": "1", "max_input_time": "1"}),
+		frankenphp.WithPhpIni(map[string]string{"max_execution_time": "1", "max_input_time": "1", "default_socket_timeout": "1"}),
 	)
 
 	runs := func() int {
@@ -501,9 +502,36 @@ func TestBackgroundWorkerHasNoExecutionTimeout(t *testing.T) {
 		return bytes.Count(b, []byte("\n"))
 	}
 	require.Eventually(t, func() bool { return runs() == 1 }, 5*time.Second, 25*time.Millisecond, "background worker did not start")
-	// well past the limit it must not enforce
+	// well past both limits
 	time.Sleep(2500 * time.Millisecond)
-	assert.Equal(t, 1, runs(), "the worker was restarted, so its run was cut short by max_execution_time")
+	assert.Equal(t, 1, runs(), "the worker was restarted, so a limit interrupted its park")
+}
+
+// TestBackgroundWorkerHandleClosedAndFetchedAgain checks the handle cache:
+// a run gets one stream, closing it yields a fresh one on the next fetch,
+// and the drain still reaches the script through it.
+func TestBackgroundWorkerHandleClosedAndFetchedAgain(t *testing.T) {
+	sentinel := filepath.Join(t.TempDir(), "refetch.txt")
+
+	require.NoError(t, frankenphp.Init(
+		frankenphp.WithWorkers("bg-refetch", "testdata/bgworker/refetch.php", 1,
+			frankenphp.WithWorkerBackground(),
+			frankenphp.WithWorkerEnv(map[string]string{"BG_SENTINEL": sentinel}),
+		),
+		frankenphp.WithNumThreads(2),
+	))
+	assert.Equal(t, "same then fresh", requireFileContentEventually(t, sentinel))
+
+	done := make(chan struct{})
+	go func() {
+		frankenphp.Shutdown()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Shutdown did not return within 10s: the re-fetched handle missed the drain")
+	}
 }
 
 // TestBackgroundWorkerBootFailuresThenSucceeds checks that boot failures below
