@@ -480,6 +480,32 @@ func TestBackgroundWorkerThreadsComeOnTopOfAutoMaxThreads(t *testing.T) {
 	assert.Equal(t, 6, len(state.ThreadDebugStates)+state.ReservedThreadCount)
 }
 
+// TestBackgroundWorkerHasNoExecutionTimeout checks that a script parking
+// past max_execution_time is not cut short, without the fixture disabling
+// the limit itself. max_input_time is set because php_execute_script()
+// re-arms the limit from the ini when it is.
+func TestBackgroundWorkerHasNoExecutionTimeout(t *testing.T) {
+	countFile := filepath.Join(t.TempDir(), "runs")
+	initServers(t,
+		frankenphp.WithWorkers("bg-timeout", "testdata/bgworker/no-time-limit.php", 1,
+			frankenphp.WithWorkerBackground(),
+			frankenphp.WithWorkerEnv(map[string]string{"BG_COUNT_FILE": countFile}),
+		),
+		frankenphp.WithNumThreads(2),
+		frankenphp.WithPhpIni(map[string]string{"max_execution_time": "1", "max_input_time": "1"}),
+	)
+
+	runs := func() int {
+		b, _ := os.ReadFile(countFile)
+
+		return bytes.Count(b, []byte("\n"))
+	}
+	require.Eventually(t, func() bool { return runs() == 1 }, 5*time.Second, 25*time.Millisecond, "background worker did not start")
+	// well past the limit it must not enforce
+	time.Sleep(2500 * time.Millisecond)
+	assert.Equal(t, 1, runs(), "the worker was restarted, so its run was cut short by max_execution_time")
+}
+
 // TestBackgroundWorkerBootFailuresThenSucceeds checks that boot failures below
 // max_consecutive_failures are retried with the backoff and Init() still
 // succeeds once a run reaches its ready point.

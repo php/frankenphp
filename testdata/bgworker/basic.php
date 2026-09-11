@@ -1,10 +1,8 @@
 <?php
 
-// Long-lived background worker: disable PHP max_execution_time so the
-// 30s default cannot interrupt the stream_select park. The C side calls
-// zend_unset_timeout() too, but the belt-and-suspenders here covers PHP
-// builds where that path does not fully disarm the timer.
-set_time_limit(0);
+// Long-lived background worker. FrankenPHP disables max_execution_time for
+// background runs, see TestBackgroundWorkerHasNoExecutionTimeout, so the
+// script does not have to.
 
 // Touch the sentinel so the test can confirm the worker actually ran.
 if (!empty($_SERVER['BG_SENTINEL'])) {

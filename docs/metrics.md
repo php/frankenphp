@@ -19,7 +19,7 @@ When [Caddy metrics](https://caddyserver.com/docs/metrics) are enabled, FrankenP
 - `frankenphp_busy_workers{worker="[worker_name]"}`: The number of workers currently processing a request.
 - `frankenphp_worker_request_time{worker="[worker_name]"}`: The time spent processing requests by all workers.
 - `frankenphp_worker_request_count{worker="[worker_name]"}`: The number of requests processed by all workers.
-- `frankenphp_ready_workers{worker="[worker_name]"}`: The number of workers that have reached their ready point at least once: `frankenphp_handle_request()` for HTTP workers, `frankenphp_get_worker_handle()` for background workers.
+- `frankenphp_ready_workers{worker="[worker_name]"}`: The number of workers that have reached their ready point at least once: `frankenphp_handle_request()` for HTTP workers, the first wait on the stream of `frankenphp_get_worker_handle()` for background workers.
 - `frankenphp_worker_crashes{worker="[worker_name]"}`: The number of times a worker has unexpectedly terminated.
 - `frankenphp_worker_restarts{worker="[worker_name]"}`: The number of times a worker has been deliberately restarted.
 - `frankenphp_worker_queue_depth{worker="[worker_name]"}`: The number of queued requests.
