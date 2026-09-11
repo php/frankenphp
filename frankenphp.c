@@ -1205,6 +1205,19 @@ static int frankenphp_worker_handle_cast(php_stream *stream, int castas,
   return php_stream_socket_ops.cast(stream, castas, ret);
 }
 
+/* stream_socket_recvfrom() and the other transport receives do not go
+ * through the read op, they reach the stream through its transport API, and
+ * a blocking receive is a wait on the handle too */
+static int frankenphp_worker_handle_set_option(php_stream *stream, int option,
+                                               int value, void *ptrparam) {
+  if (option == PHP_STREAM_OPTION_XPORT_API && ptrparam != NULL &&
+      ((php_stream_xport_param *)ptrparam)->op == STREAM_XPORT_OP_RECV) {
+    frankenphp_worker_handle_waited();
+  }
+
+  return php_stream_socket_ops.set_option(stream, option, value, ptrparam);
+}
+
 static int frankenphp_worker_handle_close(php_stream *stream,
                                           int close_handle) {
   (void)close_handle;
@@ -1329,6 +1342,7 @@ PHP_MINIT_FUNCTION(frankenphp) {
   frankenphp_worker_handle_ops.read = frankenphp_worker_handle_read;
   frankenphp_worker_handle_ops.cast = frankenphp_worker_handle_cast;
   frankenphp_worker_handle_ops.close = frankenphp_worker_handle_close;
+  frankenphp_worker_handle_ops.set_option = frankenphp_worker_handle_set_option;
 
   register_frankenphp_symbols(module_number);
 #ifndef PHP_WIN32
