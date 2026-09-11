@@ -20,12 +20,16 @@ import (
 // represents the main PHP thread
 // the thread needs to keep running as long as all other threads are running
 type phpMainThread struct {
-	state       *state.ThreadState
-	done        chan struct{}
-	numThreads  int
-	maxThreads  int
-	phpIni      map[string]string
-	isRebooting atomic.Bool
+	state      *state.ThreadState
+	done       chan struct{}
+	numThreads int
+	maxThreads int
+	// backgroundThreads is the part of numThreads and maxThreads that
+	// background workers reserve: it takes no part in the HTTP budget,
+	// see calculateMaxThreads()
+	backgroundThreads int
+	phpIni            map[string]string
+	isRebooting       atomic.Bool
 }
 
 var (
@@ -41,13 +45,14 @@ var (
 // initPHPThreads starts the main PHP thread,
 // a fixed number of inactive PHP threads
 // and reserves a fixed number of possible PHP threads
-func initPHPThreads(numThreads int, numMaxThreads int, phpIni map[string]string) (*phpMainThread, error) {
+func initPHPThreads(numThreads int, numMaxThreads int, backgroundThreads int, phpIni map[string]string) (*phpMainThread, error) {
 	mainThread = &phpMainThread{
-		state:      state.NewThreadState(),
-		done:       make(chan struct{}),
-		numThreads: numThreads,
-		maxThreads: numMaxThreads,
-		phpIni:     phpIni,
+		state:             state.NewThreadState(),
+		done:              make(chan struct{}),
+		numThreads:        numThreads,
+		maxThreads:        numMaxThreads,
+		backgroundThreads: backgroundThreads,
+		phpIni:            phpIni,
 	}
 
 	// initialize the first thread
@@ -263,18 +268,21 @@ func go_frankenphp_main_thread_is_ready() {
 // max_threads = auto
 // setAutomaticMaxThreads estimates the amount of threads based on php.ini and system memory_limit
 // If unable to get the system's memory limit, simply double num_threads
+// The estimate is an HTTP one, like an explicit max_threads: the threads
+// background workers reserve are added to it rather than taken out of it
 func (mainThread *phpMainThread) setAutomaticMaxThreads() {
 	if mainThread.maxThreads >= 0 {
 		return
 	}
+	httpThreads := mainThread.numThreads - mainThread.backgroundThreads
 	perThreadMemoryLimit := int64(C.frankenphp_get_current_memory_limit())
 	totalSysMemory := memory.TotalSysMemory()
 	if perThreadMemoryLimit <= 0 || totalSysMemory == 0 {
-		mainThread.maxThreads = mainThread.numThreads * 2
+		mainThread.maxThreads = httpThreads*2 + mainThread.backgroundThreads
 		return
 	}
 	maxAllowedThreads := totalSysMemory / uint64(perThreadMemoryLimit)
-	mainThread.maxThreads = int(maxAllowedThreads)
+	mainThread.maxThreads = int(maxAllowedThreads) + mainThread.backgroundThreads
 
 	if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
 		globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "Automatic thread limit", slog.Int("perThreadMemoryLimitMB", int(perThreadMemoryLimit/1024/1024)), slog.Int("maxThreads", mainThread.maxThreads))

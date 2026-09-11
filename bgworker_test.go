@@ -458,6 +458,28 @@ func TestBackgroundWorkerThreadsComeOnTop(t *testing.T) {
 	requireFileEventually(t, sentinel, "background worker did not start with num_threads 1")
 }
 
+// TestBackgroundWorkerThreadsComeOnTopOfAutoMaxThreads checks that the
+// automatic limit is an HTTP one too: the reservation is added to what it
+// resolves, instead of eating into it
+func TestBackgroundWorkerThreadsComeOnTopOfAutoMaxThreads(t *testing.T) {
+	sentinel := filepath.Join(t.TempDir(), "bg-auto.sentinel")
+	initServers(t,
+		frankenphp.WithWorkers("bg-auto", "testdata/bgworker/basic.php", 2,
+			frankenphp.WithWorkerBackground(),
+			frankenphp.WithWorkerEnv(map[string]string{"BG_SENTINEL": sentinel}),
+		),
+		frankenphp.WithNumThreads(2),
+		frankenphp.WithMaxThreads(-1),
+		frankenphp.WithPhpIni(map[string]string{"memory_limit": "-1"}),
+	)
+	requireFileEventually(t, sentinel, "background worker did not start")
+
+	// an unlimited memory_limit falls back to twice the HTTP threads, so
+	// 2*2 HTTP plus the 2 reserved, not (2+2)*2
+	state := frankenphp.DebugState()
+	assert.Equal(t, 6, len(state.ThreadDebugStates)+state.ReservedThreadCount)
+}
+
 // TestBackgroundWorkerBootFailuresThenSucceeds checks that boot failures below
 // max_consecutive_failures are retried with the backoff and Init() still
 // succeeds once a run reaches its ready point.
