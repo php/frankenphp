@@ -292,6 +292,33 @@ func TestBackgroundWorkerParksOnRead(t *testing.T) {
 	}
 }
 
+// TestBackgroundWorkerParksOnReceive checks that a blocking receive counts
+// as a wait as well: it reaches the stream through the transport API rather
+// than the read op, so Init() would hang if only reads reported readiness.
+func TestBackgroundWorkerParksOnReceive(t *testing.T) {
+	sentinel := filepath.Join(t.TempDir(), "bg-recv.sentinel")
+
+	require.NoError(t, frankenphp.Init(
+		frankenphp.WithWorkers("bg-recv", "testdata/bgworker/recv.php", 1,
+			frankenphp.WithWorkerBackground(),
+			frankenphp.WithWorkerEnv(map[string]string{"BG_SENTINEL": sentinel}),
+		),
+		frankenphp.WithNumThreads(2),
+	))
+	requireFileEventually(t, sentinel, "background worker parked on a receive did not start")
+
+	done := make(chan struct{})
+	go func() {
+		frankenphp.Shutdown()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Shutdown did not return within 10s: the receive did not observe EOF")
+	}
+}
+
 // TestBackgroundWorkerRestartDrainsParkedScript checks that RestartWorkers()
 // wakes a parked background script through the drain and re-runs it.
 func TestBackgroundWorkerRestartDrainsParkedScript(t *testing.T) {
