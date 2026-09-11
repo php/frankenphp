@@ -360,12 +360,14 @@ func TestGetWorkerHandleOutsideBackgroundWorker(t *testing.T) {
 // FRANKENPHP_WORKER_BACKGROUND flag.
 func TestWorkerNameInServerVars(t *testing.T) {
 	sentinel := filepath.Join(t.TempDir(), "flag.txt")
-	server, err := frankenphp.NewServer(testDataDir)
+	t.Setenv("FRANKENPHP_WORKER_BACKGROUND", "1")
+	server, err := frankenphp.NewServer(testDataDir, frankenphp.WithServerEnv(map[string]string{"FRANKENPHP_WORKER_BACKGROUND": "1"}))
 	require.NoError(t, err)
 	initServers(t,
 		frankenphp.WithServer(server),
-		// the flag is reserved: an env setting it must not make an HTTP
-		// worker look like a background one
+		// both names are reserved: neither the worker env here, nor the
+		// server env, nor the process environment set below may make an
+		// HTTP worker look like a background one
 		frankenphp.WithWorkers("web", testDataDir+"worker-name.php", 1,
 			frankenphp.WithWorkerServerScope(server),
 			frankenphp.WithWorkerEnv(map[string]string{"FRANKENPHP_WORKER_BACKGROUND": "1"}),
