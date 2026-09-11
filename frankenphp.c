@@ -1653,6 +1653,21 @@ static void frankenphp_register_variables(zval *track_vars_array) {
   /* import environment and CGI variables from the request context in go */
   go_register_server_variables(frankenphp_thread_index(), track_vars_array);
 
+  /* FRANKENPHP_WORKER and FRANKENPHP_WORKER_BACKGROUND say what is running
+   * the script, so FrankenPHP owns them: a value inherited from the process
+   * environment, from a php_server or from a worker would otherwise make a
+   * script take the wrong branch. The worker's own values were merged above,
+   * the layers below are dropped here. */
+  if (!is_worker_thread) {
+    zend_hash_str_del(Z_ARRVAL_P(track_vars_array), "FRANKENPHP_WORKER",
+                      sizeof("FRANKENPHP_WORKER") - 1);
+  }
+  if (!is_background_worker) {
+    zend_hash_str_del(Z_ARRVAL_P(track_vars_array),
+                      "FRANKENPHP_WORKER_BACKGROUND",
+                      sizeof("FRANKENPHP_WORKER_BACKGROUND") - 1);
+  }
+
   /* Some variables are already present in SG(request_info) */
   frankenphp_register_variables_from_request_info(track_vars_array);
 }
