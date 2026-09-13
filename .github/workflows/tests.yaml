@@ -37,6 +37,7 @@ jobs:
       GOMAXPROCS: 10
       LIBRARY_PATH: ${{ github.workspace }}/watcher/target/lib
       GOFLAGS: "-tags=nobadger,nomysql,nopgx"
+      FRANKENPHP_NATIVE_TEST_BINARY: ${{ github.workspace }}/caddy/internal/nativetest/nativetest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -57,6 +58,9 @@ jobs:
       - name: Build testcli binary
         working-directory: internal/testcli/
         run: go build
+      - name: Build native CLI with a Go extension
+        working-directory: caddy/internal/nativetest/
+        run: ../../../build-native.sh -o nativetest
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@latest
       - name: Run library tests
@@ -69,7 +73,7 @@ jobs:
         run: go test -fuzz FuzzRequest -fuzztime 20s
       - name: Build the server
         working-directory: caddy/frankenphp/
-        run: go build
+        run: ../../build-native.sh
       - name: Start the server
         working-directory: testdata/
         run: sudo ../caddy/frankenphp/frankenphp start

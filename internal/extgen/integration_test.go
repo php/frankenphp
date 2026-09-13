@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -186,6 +187,9 @@ func (s *IntegrationTestSuite) compileFrankenPHP(moduleDir string) (string, erro
 		"CGO_LDFLAGS="+cgoLdflags,
 		fmt.Sprintf("XCADDY_GO_BUILD_FLAGS=-ldflags='-w -s' -tags=nobadger,nomysql,nopgx,nowatcher"),
 	)
+	if runtime.GOOS == "linux" {
+		cmd.Env = append(cmd.Env, "XCADDY_WHICH_GO="+filepath.Join(projectRoot, "native-go.sh"))
+	}
 
 	cmd.Dir = s.tempDir
 
