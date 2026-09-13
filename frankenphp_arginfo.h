@@ -1,5 +1,5 @@
-/* This is a generated file, edit frankenphp.stub.php instead.
- * Stub hash: 2f36fc81e0981975adabf170febaaa863653817d */
+/* This is a generated file, edit the .stub.php file instead.
+ * Stub hash: 23bcea159c151578e7cb9458d2dd9595d8aab621 */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_handle_request, 0, 1, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, callback, IS_CALLABLE, 0)
