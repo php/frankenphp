@@ -56,14 +56,28 @@ function mercure_publish(string|array $topics, string $data = '', bool $private 
 function frankenphp_log(string $message, int $level = 0, array $context = []): void {}
 
 /**
- * EXPERIMENTAL: returns a stop-signal stream for the current background
- * worker. The stream reaches EOF when FrankenPHP drains the worker, so the
- * script can park on stream_select() and exit its loop gracefully. Every
- * call of a run returns the same stream, a fresh one over the same socket
- * once the script closed it. The worker counts as ready, and its startup as
- * successful, once it waits on the stream (stream_select() or a blocking
- * read). Only callable from inside a background worker.
+ * EXPERIMENTAL: returns the handle of the current background worker, a
+ * stream to wait on, alone or with the script's own streams: it becomes
+ * readable when FrankenPHP needs the script's attention, its drain
+ * included, and frankenphp_worker_tick() then tells whether the worker
+ * still runs. Every call of a run returns the same stream, a fresh one over
+ * the same socket once the script closed it. Only callable from inside a
+ * background worker.
  *
  * @return resource
  */
 function frankenphp_get_worker_handle() {}
+
+/**
+ * EXPERIMENTAL: the ready point and liveness check of a background worker,
+ * the background analog of frankenphp_handle_request(). The first call of a
+ * run marks the worker ready: the server start waits for it, and an exit
+ * before it counts as a failure. It returns false once FrankenPHP drains the
+ * worker, on shutdown, reboot or restart, so the script can leave its loop,
+ * and true otherwise. It never blocks and never hands out work: the script
+ * waits on the stream returned by frankenphp_get_worker_handle() and calls
+ * this when it is readable. Whatever FrankenPHP wrote on that stream is
+ * consumed here, the script does not have to read it. Only callable from
+ * inside a background worker.
+ */
+function frankenphp_worker_tick(): bool {}

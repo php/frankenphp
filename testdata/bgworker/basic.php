@@ -1,7 +1,7 @@
 <?php
 
 // Long-lived background worker. FrankenPHP disables max_execution_time for
-// background runs, see TestBackgroundWorkerHasNoExecutionTimeout, so the
+// background runs, see TestBackgroundWorkerParkingIsNotInterrupted, so the
 // script does not have to.
 
 // Touch the sentinel so the test can confirm the worker actually ran.
@@ -9,10 +9,12 @@ if (!empty($_SERVER['BG_SENTINEL'])) {
     @touch($_SERVER['BG_SENTINEL']);
 }
 
-// Park on the handle until FrankenPHP drains us (drain closes the other
-// end of the socket pair, which lands as EOF here).
-$stream = frankenphp_get_worker_handle();
-$read = [$stream];
-$write = null;
-$except = null;
-stream_select($read, $write, $except, null);
+// Ready, then park on the handle until FrankenPHP drains us: the drain
+// closes the other end of the socket pair, which lands as EOF here and
+// makes the next tick return false.
+$handle = frankenphp_get_worker_handle();
+while (frankenphp_worker_tick()) {
+    $read = [$handle];
+    $write = $except = null;
+    stream_select($read, $write, $except, null);
+}
