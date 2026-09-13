@@ -12,8 +12,9 @@ if (!empty($_SERVER['BG_SENTINEL_DIR'])) {
     @touch($_SERVER['BG_SENTINEL_DIR'] . DIRECTORY_SEPARATOR . $name);
 }
 
-$stream = frankenphp_get_worker_handle();
-$read = [$stream];
-$write = null;
-$except = null;
-stream_select($read, $write, $except, null);
+$handle = frankenphp_get_worker_handle();
+while (frankenphp_worker_tick()) {
+    $read = [$handle];
+    $write = $except = null;
+    stream_select($read, $write, $except, null);
+}

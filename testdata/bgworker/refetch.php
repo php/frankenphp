@@ -13,4 +13,5 @@ $third = frankenphp_get_worker_handle();
 $result .= $third === $second ? ' then same' : ' then fresh';
 
 file_put_contents($_SERVER['BG_SENTINEL'], $result);
+frankenphp_worker_tick();
 fgets($third);

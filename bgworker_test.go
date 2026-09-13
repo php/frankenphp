@@ -180,18 +180,18 @@ func TestBackgroundWorkerValidation(t *testing.T) {
 			),
 			frankenphp.WithNumThreads(2),
 		)
-		require.ErrorContains(t, err, "frankenphp_get_worker_handle")
+		require.ErrorContains(t, err, "without calling frankenphp_worker_tick()")
 	})
 
-	t.Run("fetching the handle without waiting on it fails startup", func(t *testing.T) {
+	t.Run("fetching the handle without ticking fails startup", func(t *testing.T) {
 		err := frankenphp.Init(
-			frankenphp.WithWorkers("bg-no-wait", "testdata/bgworker/fetch-no-wait.php", 1,
+			frankenphp.WithWorkers("bg-no-tick", "testdata/bgworker/fetch-no-tick.php", 1,
 				frankenphp.WithWorkerBackground(),
 				frankenphp.WithWorkerMaxFailures(2),
 			),
 			frankenphp.WithNumThreads(2),
 		)
-		require.ErrorContains(t, err, "waiting on its handle")
+		require.ErrorContains(t, err, "without calling frankenphp_worker_tick()")
 	})
 
 	t.Run("max_threads is rejected", func(t *testing.T) {
@@ -352,7 +352,30 @@ func TestGetWorkerHandleOutsideBackgroundWorker(t *testing.T) {
 
 	body := serverGet(t, server, "http://example.com/handle-outside.php")
 
-	assert.Contains(t, body, "can only be called from a background worker")
+	assert.Contains(t, body, "frankenphp_get_worker_handle() can only be called from a background worker")
+	assert.Contains(t, body, "frankenphp_worker_tick() can only be called from a background worker")
+}
+
+// TestBackgroundWorkerTick checks the contract of frankenphp_worker_tick():
+// true while the worker runs, false once it is drained, and still false on
+// the next call
+func TestBackgroundWorkerTick(t *testing.T) {
+	sentinel := filepath.Join(t.TempDir(), "ticks.txt")
+
+	require.NoError(t, frankenphp.Init(
+		frankenphp.WithWorkers("bg-tick", "testdata/bgworker/tick.php", 1,
+			frankenphp.WithWorkerBackground(),
+			frankenphp.WithWorkerEnv(map[string]string{"BG_SENTINEL": sentinel}),
+		),
+		frankenphp.WithNumThreads(2),
+	))
+	assert.Equal(t, "true true", requireFileContentEventually(t, sentinel))
+
+	// Shutdown() waits for the script to leave, so the file is final after it
+	frankenphp.Shutdown()
+	b, err := os.ReadFile(sentinel)
+	require.NoError(t, err)
+	assert.Equal(t, "true true false false", string(b))
 }
 
 // TestWorkerNameInServerVars checks that every worker sees its declared name
