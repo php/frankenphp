@@ -252,7 +252,7 @@ http://%s {
 		if err != nil {
 			return false
 		}
-		defer response.Body.Close()
+		defer func() { require.NoError(t, response.Body.Close()) }()
 		var body bytes.Buffer
 		_, err = body.ReadFrom(response.Body)
 		return err == nil && response.StatusCode == http.StatusOK && body.String() == "42"

@@ -43,14 +43,14 @@ func build(args []string) error {
 				value = args[i]
 			}
 		}
-		switch {
-		case flag == "-o":
+		switch flag {
+		case "-o":
 			output = value
-		case flag == "-buildmode":
+		case "-buildmode":
 			if value != "pie" && value != "exe" && value != "default" {
 				return fmt.Errorf("unsupported native build mode: %s", value)
 			}
-		case flag == "-ldflags":
+		case "-ldflags":
 			flags, err := linkerFlags(value)
 			if err != nil {
 				return err
@@ -135,7 +135,7 @@ func build(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 	archive := filepath.Join(dir, "frankenphp.a")
 	if err := run(goCommand, append([]string{"build", "-buildmode=c-archive", "-o", archive}, buildArgs...)...); err != nil {
 		return err
@@ -182,9 +182,10 @@ func linkerFlags(value string) ([]string, error) {
 	for i := 0; i < len(flags); i++ {
 		flag, value, hasValue := strings.Cut(flags[i], "=")
 		if !hasValue || value == "true" {
-			if flag == "-s" {
+			switch flag {
+			case "-s":
 				strip = append(strip, "-s")
-			} else if flag == "-w" {
+			case "-w":
 				strip = append(strip, "-Wl,--strip-debug")
 			}
 		}

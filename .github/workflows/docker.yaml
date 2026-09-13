@@ -213,11 +213,12 @@ jobs:
       - name: Run tests
         if: ${{ !fromJson(needs.prepare.outputs.push) }}
         run: |
+          # PHP's PIE flags require the external linker for pure Go race tests too.
           # TODO: remove "containerimage.config.digest" fallback once all runners use buildx v0.18+
           # which replaced it with "containerimage.digest" and "containerimage.descriptor"
           docker run --platform="${PLATFORM}" --rm \
             "$(jq -r ".\"builder-${VARIANT}\" | .\"containerimage.config.digest\" // .\"containerimage.digest\"" <<< "${METADATA}")" \
-            sh -c "./go.sh test ${RACE} -v $(./go.sh list ./... | grep -v github.com/dunglas/frankenphp/internal/testext | grep -v github.com/dunglas/frankenphp/internal/extgen | tr '\n' ' ') && cd caddy && ../go.sh test ${RACE} -v ./..."
+            sh -c "./go.sh test ${RACE} -ldflags=-linkmode=external -v $(./go.sh list ./... | grep -v github.com/dunglas/frankenphp/internal/testext | grep -v github.com/dunglas/frankenphp/internal/extgen | tr '\n' ' ') && cd caddy && ../go.sh test ${RACE} -ldflags=-linkmode=external -v ./..."
         env:
           METADATA: ${{ steps.build.outputs.metadata }}
           PLATFORM: ${{ matrix.platform }}

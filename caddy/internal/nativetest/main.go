@@ -1,3 +1,5 @@
+//go:build linux
+
 package main
 
 // #cgo linux CFLAGS: -D_GNU_SOURCE
