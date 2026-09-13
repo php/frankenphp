@@ -135,9 +135,9 @@ static THREAD_LOCAL bool is_background_worker = false;
  * exposed via frankenphp_get_worker_handle(); [1] is transferred to the Go
  * side, which closes it to signal a drain. */
 static THREAD_LOCAL php_socket_t worker_stop_socks[2] = {SOCK_ERR, SOCK_ERR};
-/* set on the first wait on the handle of the current run, see
- * frankenphp_worker_handle_ops */
-static THREAD_LOCAL bool worker_handle_waited = false;
+/* set by the first frankenphp_worker_tick() of the current run, the ready
+ * point of a background worker */
+static THREAD_LOCAL bool worker_ticked = false;
 /* the stream of the current run, see frankenphp_get_worker_handle(); the
  * cache holds a ref, and the resource list of the run frees it at request
  * shutdown, so the pointer is only reset, never released, between runs */
@@ -440,7 +440,7 @@ static int frankenphp_worker_open_stop_pair(void) {
  * re-arms it, see php_thread(). */
 intptr_t frankenphp_set_background_worker_and_get_stop_sock(void) {
   is_background_worker = true;
-  worker_handle_waited = false;
+  worker_ticked = false;
   worker_handle_res = NULL;
 
   frankenphp_worker_close_stop_socks();
@@ -1177,50 +1177,10 @@ PHP_FUNCTION(frankenphp_log) {
 }
 
 /* Ops of the streams returned by frankenphp_get_worker_handle(): the socket
- * ops, except that the first wait on the handle, a select cast or a read,
- * reports the worker ready, and that closing a stream leaves the socket
- * alone: it belongs to the thread, every handle of a run shares it, and it
- * is closed at the next run setup or on thread exit. Waiting is the
- * background analog of an HTTP worker reaching frankenphp_handle_request():
- * it comes after the script's bootstrap by construction, where merely
- * fetching the handle does not. Initialized in MINIT. */
+ * ops, except that closing a stream leaves the socket alone: it belongs to
+ * the thread, every handle of a run shares it, and it is closed at the next
+ * run setup or on thread exit. Initialized in MINIT. */
 static php_stream_ops frankenphp_worker_handle_ops;
-
-static void frankenphp_worker_handle_waited(void) {
-  if (!worker_handle_waited) {
-    worker_handle_waited = true;
-    go_frankenphp_background_worker_ready(frankenphp_thread_index());
-  }
-}
-
-static ssize_t frankenphp_worker_handle_read(php_stream *stream, char *buf,
-                                             size_t count) {
-  frankenphp_worker_handle_waited();
-
-  return php_stream_socket_ops.read(stream, buf, count);
-}
-
-static int frankenphp_worker_handle_cast(php_stream *stream, int castas,
-                                         void **ret) {
-  if (castas == PHP_STREAM_AS_FD_FOR_SELECT) {
-    frankenphp_worker_handle_waited();
-  }
-
-  return php_stream_socket_ops.cast(stream, castas, ret);
-}
-
-/* stream_socket_recvfrom() and the other transport receives do not go
- * through the read op, they reach the stream through its transport API, and
- * a blocking receive is a wait on the handle too */
-static int frankenphp_worker_handle_set_option(php_stream *stream, int option,
-                                               int value, void *ptrparam) {
-  if (option == PHP_STREAM_OPTION_XPORT_API && ptrparam != NULL &&
-      ((php_stream_xport_param *)ptrparam)->op == STREAM_XPORT_OP_RECV) {
-    frankenphp_worker_handle_waited();
-  }
-
-  return php_stream_socket_ops.set_option(stream, option, value, ptrparam);
-}
 
 static int frankenphp_worker_handle_close(php_stream *stream,
                                           int close_handle) {
@@ -1275,12 +1235,71 @@ PHP_FUNCTION(frankenphp_get_worker_handle) {
    * default_socket_timeout wake-ups */
   ((php_netstream_data_t *)stream->abstract)->timeout.tv_sec = -1;
 
-  /* report the worker ready on its first wait on the stream */
   stream->ops = &frankenphp_worker_handle_ops;
 
   php_stream_to_zval(stream, return_value);
   worker_handle_res = Z_RES_P(return_value);
   GC_ADDREF(worker_handle_res);
+}
+
+/* The ready point of a background worker and its liveness check, the
+ * background analog of frankenphp_handle_request(): the first call of a run
+ * reports the worker ready, and every call returns false once FrankenPHP
+ * drains it. It never blocks and never hands out work: the script waits on
+ * its handle, alone or with its own streams, and calls this when the handle
+ * is readable. Whatever the runtime writes on the handle to wake the script
+ * up is consumed here, so the script never has to read the handle and the
+ * protocol on it stays private. */
+PHP_FUNCTION(frankenphp_worker_tick) {
+  ZEND_PARSE_PARAMETERS_NONE();
+
+  if (!is_background_worker) {
+    zend_throw_exception(spl_ce_RuntimeException,
+                         "frankenphp_worker_tick() can only be called from a "
+                         "background worker",
+                         0);
+    RETURN_THROWS();
+  }
+
+  if (worker_stop_socks[0] == SOCK_ERR) {
+    zend_throw_exception(spl_ce_RuntimeException,
+                         "the background worker stop socket is not available",
+                         0);
+    RETURN_THROWS();
+  }
+
+  if (!worker_ticked) {
+    worker_ticked = true;
+    go_frankenphp_background_worker_ready(frankenphp_thread_index());
+  }
+
+  /* consume the wake-ups without blocking; EOF is the drain */
+  char buf[64];
+  for (;;) {
+    if (php_pollfd_for_ms(worker_stop_socks[0], PHP_POLLREADABLE, 0) <= 0) {
+      /* nothing pending, or a transient poll error: still running */
+      RETURN_TRUE;
+    }
+
+#ifdef PHP_WIN32
+    int n = recv(worker_stop_socks[0], buf, (int)sizeof(buf), 0);
+#else
+    ssize_t n = recv(worker_stop_socks[0], buf, sizeof(buf), 0);
+#endif
+    if (n == 0) {
+      /* the Go side closed its end: drained */
+      RETURN_FALSE;
+    }
+    if (n < 0) {
+      int err = php_socket_errno();
+      if (err == EINTR || PHP_IS_TRANSIENT_ERROR(err)) {
+        RETURN_TRUE;
+      }
+
+      /* a broken socket carries no drain anymore, stop the loop */
+      RETURN_FALSE;
+    }
+  }
 }
 
 /* {{{ thread-safe opcache reset */
@@ -1343,10 +1362,7 @@ static const zend_function_entry frankenphp_test_hook_functions[] = {
 PHP_MINIT_FUNCTION(frankenphp) {
   frankenphp_worker_handle_ops = php_stream_socket_ops;
   frankenphp_worker_handle_ops.label = "FrankenPHP worker handle";
-  frankenphp_worker_handle_ops.read = frankenphp_worker_handle_read;
-  frankenphp_worker_handle_ops.cast = frankenphp_worker_handle_cast;
   frankenphp_worker_handle_ops.close = frankenphp_worker_handle_close;
-  frankenphp_worker_handle_ops.set_option = frankenphp_worker_handle_set_option;
 
   register_frankenphp_symbols(module_number);
 #ifndef PHP_WIN32
