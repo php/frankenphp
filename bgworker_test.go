@@ -365,6 +365,23 @@ func TestBackgroundWorkerLoopTicksOnItsOwn(t *testing.T) {
 	requireFileEventually(t, sentinel, "background worker did not start")
 }
 
+// TestBackgroundWorkerTickLeavesTheHandleQuiet checks that the tick
+// consumes the wake-ups: the handle is readable at start, and not anymore
+// once a tick returned, so a loop selecting on it blocks instead of
+// spinning.
+func TestBackgroundWorkerTickLeavesTheHandleQuiet(t *testing.T) {
+	sentinel := filepath.Join(t.TempDir(), "readable.txt")
+	initServers(t,
+		frankenphp.WithWorkers("bg-readable", "testdata/bgworker/readable.php", 1,
+			frankenphp.WithWorkerBackground(),
+			frankenphp.WithWorkerEnv(map[string]string{"BG_SENTINEL": sentinel}),
+		),
+		frankenphp.WithNumThreads(2),
+	)
+
+	assert.Equal(t, "start:readable after tick:quiet after second tick:quiet", requireFileContentEventually(t, sentinel))
+}
+
 // TestBackgroundWorkerTick checks the contract of frankenphp_worker_tick():
 // true while the worker runs, false once it is drained, and still false on
 // the next call
