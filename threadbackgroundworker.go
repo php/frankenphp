@@ -99,8 +99,7 @@ func (handler *backgroundWorkerThread) startScript() string {
 
 		// fail fast during startup so Init() surfaces the error to the
 		// operator; past startup, back off and retry like a crash
-		if startupFailChan != nil {
-			startupFailChan <- err
+		if reportStartupFailure(err) {
 			handler.thread.state.Set(state.ShuttingDown)
 
 			return handler.beforeScriptExecution()
@@ -215,14 +214,17 @@ func (handler *backgroundWorkerThread) afterScriptExecution(exitStatus int) {
 	// restarting with a louder log line: silently giving up would leave
 	// the server in a broken half-state with no clear way to recover.
 	pastCap := worker.maxConsecutiveFailures >= 0 && handler.failureCount >= worker.maxConsecutiveFailures
-	if pastCap && startupFailChan != nil && !watcherIsEnabled {
+	if pastCap && !watcherIsEnabled {
+		var err error
 		if exitStatus == 0 {
-			startupFailChan <- fmt.Errorf("background worker %s exits without calling frankenphp_worker_tick()", worker.fileName)
+			err = fmt.Errorf("background worker %s exits without calling frankenphp_worker_tick()", worker.fileName)
 		} else {
-			startupFailChan <- fmt.Errorf("too many consecutive failures: background worker %s keeps crashing", worker.fileName)
+			err = fmt.Errorf("too many consecutive failures: background worker %s keeps crashing", worker.fileName)
 		}
-		handler.thread.state.Set(state.ShuttingDown)
-		return
+		if reportStartupFailure(err) {
+			handler.thread.state.Set(state.ShuttingDown)
+			return
+		}
 	}
 
 	logLevel := slog.LevelWarn
