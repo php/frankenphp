@@ -95,8 +95,8 @@ func TestBackgroundWorkerCrashRestarts(t *testing.T) {
 
 // TestBackgroundWorkerOnServer scopes a background worker to a Server. It
 // proves that the worker inherits the server env (the sentinel directory is
-// declared on the server, not on the worker), that FRANKENPHP_WORKER holds
-// the worker name, and that the worker does not intercept HTTP requests
+// declared on the server, not on the worker), that FRANKENPHP_WORKER_BACKGROUND
+// holds the worker name, and that the worker does not intercept HTTP requests
 // served by the same server.
 func TestBackgroundWorkerOnServer(t *testing.T) {
 	tmp := t.TempDir()
@@ -123,7 +123,7 @@ func TestBackgroundWorkerOnServer(t *testing.T) {
 		frankenphp.WithNumThreads(3),
 	)
 
-	// named.php touches "<BG_SENTINEL_DIR>/<FRANKENPHP_WORKER>": the script sees
+	// named.php touches "<BG_SENTINEL_DIR>/<FRANKENPHP_WORKER_BACKGROUND>": the script sees
 	// the declared name, not the server-qualified one used by metrics and logs
 	requireFileEventually(t, filepath.Join(tmp, "jobs"), "background worker did not touch its per-name sentinel")
 	requireFileEventually(t, globalSentinel, "the global worker sharing the name did not start")
@@ -378,23 +378,16 @@ func TestBackgroundWorkerTick(t *testing.T) {
 	assert.Equal(t, "true true false false", string(b))
 }
 
-// TestWorkerNameInServerVars checks that every worker sees its declared name
-// in FRANKENPHP_WORKER and that only background workers get the
-// FRANKENPHP_WORKER_BACKGROUND flag.
+// TestWorkerNameInServerVars checks that an HTTP worker sees FRANKENPHP_WORKER
+// as it always did, and that a background worker sees its declared name in
+// FRANKENPHP_WORKER_BACKGROUND and no FRANKENPHP_WORKER.
 func TestWorkerNameInServerVars(t *testing.T) {
 	sentinel := filepath.Join(t.TempDir(), "flag.txt")
-	t.Setenv("FRANKENPHP_WORKER_BACKGROUND", "1")
-	server, err := frankenphp.NewServer(testDataDir, frankenphp.WithServerEnv(map[string]string{"FRANKENPHP_WORKER_BACKGROUND": "1"}))
+	server, err := frankenphp.NewServer(testDataDir)
 	require.NoError(t, err)
 	initServers(t,
 		frankenphp.WithServer(server),
-		// both names are reserved: neither the worker env here, nor the
-		// server env, nor the process environment set below may make an
-		// HTTP worker look like a background one
-		frankenphp.WithWorkers("web", testDataDir+"worker-name.php", 1,
-			frankenphp.WithWorkerServerScope(server),
-			frankenphp.WithWorkerEnv(map[string]string{"FRANKENPHP_WORKER_BACKGROUND": "1"}),
-		),
+		frankenphp.WithWorkers("web", testDataDir+"worker-name.php", 1, frankenphp.WithWorkerServerScope(server)),
 		frankenphp.WithWorkers("jobs", "testdata/bgworker/flag.php", 1,
 			frankenphp.WithWorkerBackground(),
 			frankenphp.WithWorkerServerScope(server),
@@ -403,11 +396,11 @@ func TestWorkerNameInServerVars(t *testing.T) {
 		frankenphp.WithNumThreads(3),
 	)
 
-	assert.Equal(t, "web http", serverGet(t, server, "http://example.com/worker-name.php"))
+	assert.Equal(t, "1 http", serverGet(t, server, "http://example.com/worker-name.php"))
 
 	flag := requireFileContentEventually(t, sentinel)
-	assert.Contains(t, flag, "'worker' => 'jobs'")
-	assert.Contains(t, flag, "'background' => 'set'")
+	assert.Contains(t, flag, "'worker' => 'unset'")
+	assert.Contains(t, flag, "'background' => 'jobs'")
 }
 
 // TestBackgroundWorkerPool checks that num > 1 threads share the name, each

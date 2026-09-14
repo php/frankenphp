@@ -109,9 +109,9 @@ You can also explicitly configure FrankenPHP using the [global option](https://c
 			num <num> # Sets the number of PHP threads to start, defaults to 2x the number of available CPUs.
 			env <key> <value> # Sets an extra environment variable to the given value. Can be specified more than once for multiple environment variables.
 			watch <path> # Sets the path to watch for file changes. Can be specified more than once for multiple paths.
-			name <name> # Sets the name of the worker, used in logs and metrics and exposed as $_SERVER['FRANKENPHP_WORKER']. Must be unique among global workers. Default: absolute path of the worker file.
+			name <name> # Sets the name of the worker, used in logs and metrics. Must be unique among global workers. Default: absolute path of the worker file.
 			max_consecutive_failures <num> # Sets the maximum number of consecutive failures before the worker is considered unhealthy, -1 means the worker will always restart. Default: 6.
-			background # EXPERIMENTAL: marks this worker as a background (non-HTTP) worker; it runs the script in a loop without serving requests, "name" is required, "match" is not allowed. The script is ready once it calls frankenphp_worker_tick(); an exit before that counts as a failure. $_SERVER['FRANKENPHP_WORKER_BACKGROUND'] is set in it, test its presence rather than its value. Its threads come on top of num_threads and max_threads, and max_threads is not allowed on it.
+			background # EXPERIMENTAL: marks this worker as a background (non-HTTP) worker; it runs the script in a loop without serving requests, "name" is required, "match" is not allowed. The script is ready once it calls frankenphp_worker_tick(); an exit before that counts as a failure. $_SERVER['FRANKENPHP_WORKER_BACKGROUND'] holds its name, and FRANKENPHP_WORKER is not set in it. Its threads come on top of num_threads and max_threads, and max_threads is not allowed on it.
 		}
 	}
 }
@@ -195,11 +195,11 @@ php_server [<matcher>] {
 	worker { # Creates a worker specific to this server. Can be specified more than once for multiple workers.
 		file <path> # Sets the path to the worker script, can be relative to the php_server root
 		num <num> # Sets the number of PHP threads to start, defaults to 2x the number of available
-		name <name> # Sets the name for the worker, used in logs and metrics and exposed as $_SERVER['FRANKENPHP_WORKER']. Must be unique within this php_server. In logs and metrics, the worker is reported as "<server name>:<name>". Default: absolute path of the worker file.
+		name <name> # Sets the name for the worker, used in logs and metrics. Must be unique within this php_server. In logs and metrics, the worker is reported as "<server name>:<name>". Default: absolute path of the worker file.
 		watch <path> # Sets the path to watch for file changes. Can be specified more than once for multiple paths.
 		env <key> <value> # Sets an extra environment variable to the given value. Can be specified more than once for multiple environment variables. Environment variables for this worker are also inherited from the php_server parent, but can be overwritten here.
 		match <path> # match the worker to a path pattern. Overrides try_files and can only be used in the php_server directive.
-		background # EXPERIMENTAL: marks this worker as a background (non-HTTP) worker; it runs the script in a loop without serving requests, "name" is required, "match" is not allowed. The script is ready once it calls frankenphp_worker_tick(); an exit before that counts as a failure. $_SERVER['FRANKENPHP_WORKER_BACKGROUND'] is set in it, test its presence rather than its value. Its threads come on top of num_threads and max_threads, and max_threads is not allowed on it.
+		background # EXPERIMENTAL: marks this worker as a background (non-HTTP) worker; it runs the script in a loop without serving requests, "name" is required, "match" is not allowed. The script is ready once it calls frankenphp_worker_tick(); an exit before that counts as a failure. $_SERVER['FRANKENPHP_WORKER_BACKGROUND'] holds its name, and FRANKENPHP_WORKER is not set in it. Its threads come on top of num_threads and max_threads, and max_threads is not allowed on it.
 	}
 	worker <other_file> <num> # Can also use the short form like in the global frankenphp block.
 }
