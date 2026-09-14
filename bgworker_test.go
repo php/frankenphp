@@ -512,11 +512,39 @@ func TestBackgroundWorkerThreadsComeOnTopOfAutoMaxThreads(t *testing.T) {
 	assert.Equal(t, 6, len(state.ThreadDebugStates)+state.ReservedThreadCount)
 }
 
+// TestBackgroundWorkerBootstrapIsBounded checks that max_execution_time
+// applies until the first frankenphp_worker_tick(): a setup that outlives
+// it is ended as a boot failure, which fails Init() past the cap.
+func TestBackgroundWorkerBootstrapIsBounded(t *testing.T) {
+	if !frankenphp.Config().ZendMaxExecutionTimers && runtime.GOOS != "windows" {
+		t.Skip("max_execution_time needs Zend max execution timers on this platform")
+	}
+
+	countFile := filepath.Join(t.TempDir(), "boots")
+	err := frankenphp.Init(
+		frankenphp.WithWorkers("bg-slow", "testdata/bgworker/slow-boot.php", 1,
+			frankenphp.WithWorkerBackground(),
+			frankenphp.WithWorkerMaxFailures(0),
+			frankenphp.WithWorkerEnv(map[string]string{"BG_COUNT_FILE": countFile}),
+		),
+		frankenphp.WithNumThreads(2),
+		frankenphp.WithPhpIni(map[string]string{"max_execution_time": "1"}),
+	)
+	if err == nil {
+		frankenphp.Shutdown()
+	}
+	require.ErrorContains(t, err, "keeps crashing")
+
+	b, _ := os.ReadFile(countFile)
+	assert.Equal(t, 1, bytes.Count(b, []byte("\n")), "the limit should have ended the one and only boot")
+}
+
 // TestBackgroundWorkerParkingIsNotInterrupted checks that a script parked
-// on its handle is not cut short by the two limits it never disables
-// itself: max_execution_time, which php_execute_script() re-arms from the
-// ini when max_input_time is set, and default_socket_timeout, which the
-// handle overrides with an infinite read timeout.
+// on its handle, past its first tick, is not cut short by the two limits it
+// never disables itself: max_execution_time, which the first tick disarms
+// after php_execute_script() re-armed it from the ini, and
+// default_socket_timeout, which the handle overrides with an infinite read
+// timeout.
 func TestBackgroundWorkerParkingIsNotInterrupted(t *testing.T) {
 	countFile := filepath.Join(t.TempDir(), "runs")
 	initServers(t,
