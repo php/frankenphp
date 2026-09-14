@@ -448,6 +448,17 @@ intptr_t frankenphp_set_background_worker_and_get_stop_sock(void) {
     return -1;
   }
 
+  /* One wake-up right away, so a script that registers its handle with an
+   * event loop and runs it ticks on its own: readiness then means the loop
+   * serviced the handle once. The first frankenphp_worker_tick() consumes
+   * it. Nothing to do on failure, the script then has to tick by itself. */
+  const char wakeup = '\n';
+#ifdef MSG_NOSIGNAL
+  send(worker_stop_socks[1], &wakeup, 1, MSG_NOSIGNAL);
+#else
+  send(worker_stop_socks[1], &wakeup, 1, 0);
+#endif
+
   intptr_t s = (intptr_t)worker_stop_socks[1];
   worker_stop_socks[1] = SOCK_ERR;
 
