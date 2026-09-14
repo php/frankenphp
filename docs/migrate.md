@@ -18,6 +18,28 @@ This guide covers a basic migration for a typical PHP application.
 | `php_value` / `php_admin_value`   | [`php_ini` Caddyfile directive](config.md#php-config)    |
 | `pm = static` / `pm.max_children` | `num_threads`                                            |
 | `pm = dynamic`                    | [`max_threads auto`](performance.md#max_threads)         |
+| Web server request filtering      | Caddy routes and matchers                                |
+
+## HTTP request filtering
+
+When migrating from a stock Nginx or Apache package, check any request filtering that was done by the web server before PHP-FPM received the request.
+FrankenPHP is built on Caddy, so valid HTTP methods and headers are passed through Caddy's normal routing unless your `Caddyfile` or another proxy rejects them first.
+
+For example, some web servers reject `TRACE` requests by default.
+If your application should keep that behavior, add an explicit matcher before `php_server`:
+
+```caddyfile
+example.com {
+    @trace method TRACE
+    respond @trace 405
+
+    root /var/www/app/public
+    php_server
+}
+```
+
+Apply the same approach to any stricter method or header policy your previous front web server enforced.
+This is also relevant for request header names: some front web servers or proxies reject or drop valid-but-uncommon HTTP field names before PHP-FPM sees them, while FrankenPHP may pass them to the PHP application.
 
 ## Step 1: replace your web server config
 
