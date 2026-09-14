@@ -30,7 +30,7 @@ func convertToWorkerThread(thread *phpThread, worker *worker) {
 }
 
 func (handler *workerThread) beforeScriptExecution() string {
-	return handler.workerLifecycle.beforeScriptExecution(handler)
+	return handler.workerLifecycle.beforeScriptExecution(handler.startScript)
 }
 
 // startScript runs the worker script; it always has one to run
