@@ -47,6 +47,10 @@ var (
 	workers          []*worker
 	watcherIsEnabled bool
 	startupFailChan  chan error
+	// startupPhase is true while initWorkers() waits for the workers to
+	// boot, the only time a boot failure must reach startupFailChan: past
+	// that point the handlers log and keep restarting on their own
+	startupPhase atomic.Bool
 )
 
 func initWorkers(opts []workerOpt) error {
@@ -92,6 +96,7 @@ func initWorkers(opts []workerOpt) error {
 	}
 
 	startupFailChan = make(chan error, totalThreadsToStart)
+	startupPhase.Store(true)
 
 	for _, w := range workers {
 		for range w.num {
@@ -109,6 +114,7 @@ func initWorkers(opts []workerOpt) error {
 	}
 
 	workersReady.Wait()
+	startupPhase.Store(false)
 
 	select {
 	case err := <-startupFailChan:
@@ -116,10 +122,27 @@ func initWorkers(opts []workerOpt) error {
 		return fmt.Errorf("failed to initialize workers: %w", err)
 	default:
 		// all workers started successfully
-		startupFailChan = nil
 	}
 
 	return nil
+}
+
+// reportStartupFailure hands a boot failure to initWorkers() while it waits
+// for the workers, so Init() fails, and reports whether it did: past that
+// point the failure is dropped, the handler has logged it and keeps
+// restarting. It never blocks, the buffer holds one error per thread and a
+// thread failing repeatedly in the startup window must not hang on it
+func reportStartupFailure(err error) bool {
+	if !startupPhase.Load() {
+		return false
+	}
+
+	select {
+	case startupFailChan <- err:
+	default:
+	}
+
+	return true
 }
 
 func newWorker(o workerOpt) (*worker, error) {
