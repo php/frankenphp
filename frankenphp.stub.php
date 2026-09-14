@@ -54,3 +54,48 @@ function mercure_publish(string|array $topics, string $data = '', bool $private 
  * array<string, any> $context Values of the array will be converted to the corresponding Go type (if supported by FrankenPHP) and added to the context of the structured logs using https://pkg.go.dev/log/slog#Attr
  */
 function frankenphp_log(string $message, int $level = 0, array $context = []): void {}
+
+/**
+ * EXPERIMENTAL: returns the handle of the current background worker, a
+ * stream to wait on, alone or with the script's own streams: it becomes
+ * readable when FrankenPHP needs the script's attention, its drain
+ * included, and frankenphp_worker_tick() then tells whether the worker
+ * still runs. Every call of a run returns the same stream, a fresh one over
+ * the same socket once the script closed it. Only callable from inside a
+ * background worker.
+ *
+ * @return resource
+ */
+function frankenphp_get_worker_handle() {}
+
+/**
+ * EXPERIMENTAL: the ready point and liveness check of a background worker,
+ * the background analog of frankenphp_handle_request(). The first call of a
+ * run marks the worker ready: the server start waits for it, and an exit
+ * before it counts as a failure. max_execution_time applies until that
+ * call and not after. It returns false once FrankenPHP drains the
+ * worker, on shutdown, reboot or restart, so the script can leave its loop,
+ * and true otherwise. It never blocks and never hands out work: the script
+ * waits on the stream returned by frankenphp_get_worker_handle() and calls
+ * this when it is readable. Whatever FrankenPHP wrote on that stream is
+ * consumed here, the script does not have to read it. Only callable from
+ * inside a background worker.
+ */
+function frankenphp_worker_tick(): bool {}
+
+/**
+ * Publishes the vars of the current background worker: the array replaces
+ * the previous snapshot, atomically for readers, which get copies. Values
+ * must be null, scalars, arrays or enums. Only callable from inside a
+ * background worker.
+ */
+function frankenphp_set_vars(array $vars): void {}
+
+/**
+ * Returns a copy of the vars last published by the named background worker,
+ * resolved within the current php_server, then among global workers. Blocks
+ * until that worker reached its ready point. Throws if the worker is
+ * unknown, if it is ready but has not published any vars, or if background
+ * workers wait on each other in a cycle.
+ */
+function frankenphp_get_vars(string $name): array {}

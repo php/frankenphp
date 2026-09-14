@@ -60,6 +60,10 @@ err := frankenphp.Init(
 
 Workers declared without a server scope are global: they match by file path on any server. Since a global worker has no set of requests to match against, combining `WithWorkerMatcher()` with a global worker is a configuration error and `Init()` rejects it.
 
+Worker names are unique within their server (or among global workers), so two servers may each declare a worker named `queue`. The script sees the declared name, while metrics and logs report a server-scoped worker as `<server name>:<worker name>`; server names are made unique with a numeric suffix when needed. `WithWorkerName()` resolves a name within the request's server first, then among global workers.
+
+`WithWorkerBackground()` declares a [background worker](worker.md#background-workers), which runs outside the request cycle.
+
 ## Per-request options
 
 `Server.ServeHTTP()` accepts `RequestOption`s to override the server configuration for a single request, e.g. `WithRequestDocumentRoot()`, `WithRequestSplitPath()`, `WithRequestEnv()` or `WithRequestLogger()`.

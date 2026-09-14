@@ -199,6 +199,81 @@ frankenphp {
 }
 ```
 
+## Background workers
+
+This feature is experimental.
+
+A background worker runs its script in a loop outside the HTTP request cycle, on its own PHP thread. It is declared like any worker, with the `background` option; `name` is required and `num` must be at least 1:
+
+```caddyfile
+php_server {
+	worker {
+		file jobs.php
+		num 1
+		name jobs
+		background
+	}
+}
+```
+
+The script calls `frankenphp_worker_tick()` once it is set up. The first call marks the worker ready: the server start waits for that point, and an exit before it counts as a failure. Until that call, `max_execution_time` applies as in any request, 30 seconds by default: a setup that outlives it is ended and counts as a boot failure, so raise the limit in `php_ini`, or call `set_time_limit()` in the script, when the setup legitimately takes longer. From the first call on, the run has no time limit, like the CLI. Every call returns `false` once FrankenPHP drains the worker, on shutdown, reboot or restart, and `true` otherwise. It never blocks and never hands out work: like `frankenphp_handle_request()`, it is where the runtime and the script meet. Between two calls, the script waits on the stream returned by `frankenphp_get_worker_handle()`, alone or together with its own streams. The stream becomes readable when FrankenPHP needs the script's attention, and `frankenphp_worker_tick()` consumes whatever was written on it, so the script does not read the stream itself. It is readable once right after the script starts, so a loop that services it ticks by itself and the worker is ready as soon as its loop runs.
+
+```php
+<?php
+
+$handle = frankenphp_get_worker_handle();
+
+while (frankenphp_worker_tick()) {
+    $read = [$handle]; // plus the streams the script waits on
+    $write = $except = null;
+    stream_select($read, $write, $except, 1);
+
+    doSomeWork();
+}
+
+// drained: return, FrankenPHP re-runs or stops the script
+```
+
+With an event loop, register the stream as readable and call `frankenphp_worker_tick()` from the callback. With [Revolt](https://revolt.run), the loop of amphp:
+
+```php
+<?php
+
+use Revolt\EventLoop;
+
+$handle = frankenphp_get_worker_handle();
+EventLoop::onReadable($handle, function (): void {
+    if (!frankenphp_worker_tick()) {
+        // drained: stop the loop, the script returns and FrankenPHP moves on
+        EventLoop::getDriver()->stop();
+    }
+});
+
+// the script's own watchers go here
+
+EventLoop::run();
+```
+
+The wake-up sent at start makes the callback run as soon as the loop does, which is when the worker becomes ready. The polling API of PHP 8.6 works the same way: wrap the stream in a `StreamPollHandle`, add it to a context, and call `frankenphp_worker_tick()` when it triggers.
+
+`$_SERVER['FRANKENPHP_WORKER_BACKGROUND']` holds the declared name. `FRANKENPHP_WORKER`, the variable of HTTP workers, is not set, so a script serving both roles tests which of the two is set. Background threads come on top of `num_threads` and `max_threads`; they don't autoscale, so `max_threads` is not allowed on them. From Go, declare one with `WithWorkerBackground()`.
+
+### Sharing state with background workers
+
+A background worker publishes a snapshot with `frankenphp_set_vars()`; requests and other workers read it with `frankenphp_get_vars()`, by worker name, resolved like requests are: within the `php_server`, then among global workers. Values must be null, scalars, arrays or enums. Each call replaces the whole snapshot and readers get a copy, so the worker can publish at any time and a request always sees a consistent one. Publish before the first `frankenphp_worker_tick()` and the snapshot is in place before the server accepts requests; while the worker restarts, readers keep getting the last one.
+
+```php
+// background worker
+frankenphp_set_vars(['maintenance' => false, 'flags' => ['beta' => true]]);
+$handle = frankenphp_get_worker_handle();
+// ...
+
+// request, HTTP worker or another background worker
+$vars = frankenphp_get_vars('config');
+```
+
+`frankenphp_get_vars()` blocks until the worker reached its ready point, which can only happen between background workers reading each other while booting; a cycle between them throws instead of hanging. It also throws when the name is unknown, or when the worker is ready but has not published anything.
+
 ## Superglobals behavior
 
 [PHP superglobals](https://www.php.net/manual/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...)
