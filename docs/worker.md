@@ -236,7 +236,7 @@ while (frankenphp_worker_tick()) {
 
 With an event loop, register the stream as readable and call `frankenphp_worker_tick()` from the callback, stopping the loop when it returns `false`.
 
-`$_SERVER['FRANKENPHP_WORKER']` holds the declared name, as it does in HTTP workers, and `$_SERVER['FRANKENPHP_WORKER_BACKGROUND']` is set, so a script serving both roles can tell them apart with `isset()`. Its value is unspecified, only its presence is part of the contract. `FRANKENPHP_WORKER` used to hold `1` in HTTP workers for the same reason: a script comparing it to that value must test its presence instead. Background threads come on top of `num_threads` and `max_threads`; they don't autoscale, so `max_threads` is not allowed on them. From Go, declare one with `WithWorkerBackground()`.
+`$_SERVER['FRANKENPHP_WORKER_BACKGROUND']` holds the declared name. `FRANKENPHP_WORKER`, the variable of HTTP workers, is not set, so a script serving both roles tests which of the two is set. Background threads come on top of `num_threads` and `max_threads`; they don't autoscale, so `max_threads` is not allowed on them. From Go, declare one with `WithWorkerBackground()`.
 
 ## Superglobals behavior
 
