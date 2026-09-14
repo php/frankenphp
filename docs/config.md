@@ -106,7 +106,7 @@ You can also explicitly configure FrankenPHP using the [global option](https://c
 		php_ini <key> <value> # Set a php.ini directive. Can be used several times to set multiple directives.
 		worker {
 			file <path> # Sets the path to the worker script.
-			num <num> # Sets the number of PHP threads to start, defaults to 2x the number of available CPUs.
+			num <num> # Sets the number of PHP threads to start, defaults to 2x the number of available CPUs, 1 for background workers.
 			env <key> <value> # Sets an extra environment variable to the given value. Can be specified more than once for multiple environment variables.
 			watch <path> # Sets the path to watch for file changes. Can be specified more than once for multiple paths.
 			name <name> # Sets the name of the worker, used in logs and metrics. Must be unique among global workers. Default: absolute path of the worker file.
@@ -194,7 +194,7 @@ php_server [<matcher>] {
 	request_body_timeout <duration> # Sets an idle timeout on request body reads: a stalled (slow POST) client is cut off while a steady upload of any size succeeds. Default: 60s. Set to 0 to disable.
 	worker { # Creates a worker specific to this server. Can be specified more than once for multiple workers.
 		file <path> # Sets the path to the worker script, can be relative to the php_server root
-		num <num> # Sets the number of PHP threads to start, defaults to 2x the number of available
+		num <num> # Sets the number of PHP threads to start, defaults to 2x the number of available CPUs, 1 for background workers.
 		name <name> # Sets the name for the worker, used in logs and metrics. Must be unique within this php_server. In logs and metrics, the worker is reported as "<server name>:<name>". Default: absolute path of the worker file.
 		watch <path> # Sets the path to watch for file changes. Can be specified more than once for multiple paths.
 		env <key> <value> # Sets an extra environment variable to the given value. Can be specified more than once for multiple environment variables. Environment variables for this worker are also inherited from the php_server parent, but can be overwritten here.
