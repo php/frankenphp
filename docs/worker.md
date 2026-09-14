@@ -256,3 +256,36 @@ while (\frankenphp_handle_request($handler)) {
 
 When writing worker scripts, make sure to reset any request-specific state between requests.
 Frameworks like [Symfony](symfony.md) and [Laravel Octane](laravel.md) take care of resetting most state for you, but you may still need to reset your own services. With Symfony, services that hold request-specific state should implement [`Symfony\Contracts\Service\ResetInterface`](https://github.com/symfony/contracts/blob/main/Service/ResetInterface.php) so they're reset by the kernel between requests.
+
+## Ticking
+
+Workers can also be triggered repeatedly with a message.
+
+```caddyfile
+worker /path/to/worker.php {
+    tick 10s "Hello Worker" # send "Hello Worker" every 10s
+}
+```
+
+In the worker script, the function passed to `frankenphp_handle_request()` will receive the message directly as an argument every 10s:
+
+```php
+while(frankenphp_handle_request(function(string $message = "") {
+    match($message){
+        'Hello Worker' => handleMessage()
+        default => handleRequest() # if the worker also handles regular HTTP requests
+    }
+})){}
+```
+
+The interval must be a [Go duration](https://pkg.go.dev/time#ParseDuration) such as `60s`, `1m`, or `5m`.
+Add the `aligned` keyword to align ticks to the start of each interval (e.g. `tick 1m aligned minutely` runs at the start of every minute). Available modes for ticking are: "sync", "overlap", "each" and "idle".
+
+```caddyfile
+worker /path/to/worker {
+    tick sync 10s "message" # send a single tick each 10s, wait for completion in-between ticks
+    tick overlap 10s "message" # send a single tick each 10s, don't wait for completion
+    tick each 10s "message" # send ticks to each active thread every 10s, don't wait for completion
+    tick idle 10s "message" # send ticks to each active thread that has been idle for more than 10-13.3s
+}
+```
