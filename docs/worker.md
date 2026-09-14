@@ -203,7 +203,7 @@ frankenphp {
 
 This feature is experimental.
 
-A background worker runs its script in a loop outside the HTTP request cycle, on its own PHP thread. It is declared like any worker, with the `background` option; `name` is required and `num` must be at least 1:
+A background worker runs its script in a loop outside the HTTP request cycle, on its own PHP thread. It is declared like any worker, with the `background` option; `name` is required and `num` defaults to one thread:
 
 ```caddyfile
 php_server {
