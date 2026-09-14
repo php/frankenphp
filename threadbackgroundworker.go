@@ -81,7 +81,7 @@ func (handler *backgroundWorkerThread) drain() {
 }
 
 func (handler *backgroundWorkerThread) beforeScriptExecution() string {
-	return handler.workerLifecycle.beforeScriptExecution(handler)
+	return handler.workerLifecycle.beforeScriptExecution(handler.startScript)
 }
 
 // startScript keeps trying to start the script: unlike an HTTP worker, whose
