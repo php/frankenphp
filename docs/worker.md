@@ -234,7 +234,27 @@ while (frankenphp_worker_tick()) {
 // drained: return, FrankenPHP re-runs or stops the script
 ```
 
-With an event loop, register the stream as readable and call `frankenphp_worker_tick()` from the callback, stopping the loop when it returns `false`.
+With an event loop, register the stream as readable and call `frankenphp_worker_tick()` from the callback. With [Revolt](https://revolt.run), the loop of amphp:
+
+```php
+<?php
+
+use Revolt\EventLoop;
+
+$handle = frankenphp_get_worker_handle();
+EventLoop::onReadable($handle, function (string $id): void {
+    if (!frankenphp_worker_tick()) {
+        // drained: the loop ends once nothing else is pending
+        EventLoop::cancel($id);
+    }
+});
+
+// the script's own watchers go here
+
+EventLoop::run();
+```
+
+The wake-up sent at start makes the callback run as soon as the loop does, which is when the worker becomes ready. The polling API of PHP 8.6 works the same way: wrap the stream in a `StreamPollHandle`, add it to a context, and call `frankenphp_worker_tick()` when it triggers.
 
 `$_SERVER['FRANKENPHP_WORKER_BACKGROUND']` holds the declared name. `FRANKENPHP_WORKER`, the variable of HTTP workers, is not set, so a script serving both roles tests which of the two is set. Background threads come on top of `num_threads` and `max_threads`; they don't autoscale, so `max_threads` is not allowed on them. From Go, declare one with `WithWorkerBackground()`.
 
