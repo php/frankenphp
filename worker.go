@@ -188,18 +188,14 @@ func newWorker(o workerOpt) (*worker, error) {
 		}
 	}
 
-	// $_SERVER['FRANKENPHP_WORKER'] carries the worker name; scripts are
-	// documented to test its presence, not its value, so HTTP workers moving
-	// from "1" to their name breaks nothing. FRANKENPHP_WORKER_BACKGROUND
-	// tells a script it runs as a background worker, and is a presence-only
-	// flag for the same reason: its value is not part of the contract
-	o.env["FRANKENPHP_WORKER\x00"] = o.name
+	// $_SERVER['FRANKENPHP_WORKER'] identifies an HTTP worker, as it always
+	// did, and $_SERVER['FRANKENPHP_WORKER_BACKGROUND'] a background one,
+	// holding its declared name: a script serving both roles tests which of
+	// the two is set
 	if o.isBackgroundWorker {
-		o.env["FRANKENPHP_WORKER_BACKGROUND\x00"] = "1"
+		o.env["FRANKENPHP_WORKER_BACKGROUND\x00"] = o.name
 	} else {
-		// both are reserved: an env of the worker or of its server must not
-		// make an HTTP worker look like a background one
-		delete(o.env, "FRANKENPHP_WORKER_BACKGROUND\x00")
+		o.env["FRANKENPHP_WORKER\x00"] = "1"
 	}
 
 	w := &worker{
