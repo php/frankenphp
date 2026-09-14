@@ -356,6 +356,22 @@ func TestGetWorkerHandleOutsideBackgroundWorker(t *testing.T) {
 	assert.Contains(t, body, "frankenphp_worker_tick() can only be called from a background worker")
 }
 
+// TestBackgroundWorkerLoopTicksOnItsOwn checks the wake-up sent at start: a
+// script that only ticks when its handle is readable, the shape of a script
+// driven by an event loop, becomes ready without an explicit first call.
+// Without the wake-up, Init() would wait for that call until the drain.
+func TestBackgroundWorkerLoopTicksOnItsOwn(t *testing.T) {
+	sentinel := filepath.Join(t.TempDir(), "loop.sentinel")
+	initServers(t,
+		frankenphp.WithWorkers("bg-loop", "testdata/bgworker/loop.php", 1,
+			frankenphp.WithWorkerBackground(),
+			frankenphp.WithWorkerEnv(map[string]string{"BG_SENTINEL": sentinel}),
+		),
+		frankenphp.WithNumThreads(2),
+	)
+	requireFileEventually(t, sentinel, "background worker did not start")
+}
+
 // TestBackgroundWorkerTick checks the contract of frankenphp_worker_tick():
 // true while the worker runs, false once it is drained, and still false on
 // the next call
