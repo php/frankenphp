@@ -72,7 +72,8 @@ function frankenphp_get_worker_handle() {}
  * EXPERIMENTAL: the ready point and liveness check of a background worker,
  * the background analog of frankenphp_handle_request(). The first call of a
  * run marks the worker ready: the server start waits for it, and an exit
- * before it counts as a failure. It returns false once FrankenPHP drains the
+ * before it counts as a failure. max_execution_time applies until that
+ * call and not after. It returns false once FrankenPHP drains the
  * worker, on shutdown, reboot or restart, so the script can leave its loop,
  * and true otherwise. It never blocks and never hands out work: the script
  * waits on the stream returned by frankenphp_get_worker_handle() and calls
