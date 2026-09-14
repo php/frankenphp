@@ -24,8 +24,9 @@ import (
 type backgroundWorkerThread struct {
 	workerLifecycle
 
-	dummyFrankenPHPContext *frankenPHPContext
-	failureCount           int // number of consecutive failed runs
+	// context of the current run, a background worker serves no request
+	context      *frankenPHPContext
+	failureCount int // number of consecutive failed runs
 
 	// crashCount is the number of runs that crashed past their ready point
 	// in a row, paces their restarts; a cooperative exit resets it. Only
@@ -67,7 +68,7 @@ func (handler *backgroundWorkerThread) name() string {
 }
 
 func (handler *backgroundWorkerThread) frankenPHPContext() *frankenPHPContext {
-	return handler.dummyFrankenPHPContext
+	return handler.context
 }
 
 // drain closes the Go side's end of the stop socket pair so a script
@@ -134,7 +135,7 @@ func (handler *backgroundWorkerThread) setupScript() error {
 		handler.drain()
 		return err
 	}
-	handler.dummyFrankenPHPContext = fc
+	handler.context = fc
 
 	handler.isBootingScript = true
 	metrics.StartWorker(handler.worker.qualifiedName)
@@ -164,7 +165,7 @@ func (handler *backgroundWorkerThread) afterScriptExecution(exitStatus int) {
 	// (drain() already took it when the exit was drain-triggered)
 	handler.drain()
 	worker := handler.worker
-	handler.dummyFrankenPHPContext = nil
+	handler.context = nil
 
 	handler.stopBootTimer()
 	handler.state.MarkAsWaiting(false)
@@ -254,8 +255,14 @@ func (handler *backgroundWorkerThread) stopBootTimer() {
 func go_frankenphp_background_worker_ready(threadIndex C.uintptr_t) {
 	// called on the PHP thread by the first frankenphp_worker_tick() of a
 	// run; the handler is a backgroundWorkerThread because that function
-	// throws on every other thread kind
-	if handler, ok := phpThreads[threadIndex].handler.(*backgroundWorkerThread); ok && handler.isBootingScript {
+	// throws on every other thread kind, and a thread reaching this without
+	// one would wait out Init() instead
+	handler, ok := phpThreads[threadIndex].handler.(*backgroundWorkerThread)
+	if !ok {
+		panic("frankenphp_worker_tick() called on a thread that is not a background worker")
+	}
+
+	if handler.isBootingScript {
 		handler.isBootingScript = false
 		// the boot succeeded, only consecutive boot failures count
 		handler.failureCount = 0

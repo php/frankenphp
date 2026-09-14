@@ -158,18 +158,15 @@ func (s *Server) Name() string {
 }
 
 // addWorker registers a worker scoped to this server
-// scope names the worker set in errors: a server, or the global workers
-func (s *Server) scope() string {
+func (s *Server) addWorker(w *worker) error {
+	// the fallback server holds the workers declared without a scope
+	scope := "two workers in a server"
 	if s == fallbackServer {
-		return "two global workers"
+		scope = "two global workers"
 	}
 
-	return "two workers in a server"
-}
-
-func (s *Server) addWorker(w *worker) error {
 	if s.workersByName[w.name] != nil {
-		return fmt.Errorf("%s cannot have the same name: %q", s.scope(), w.name)
+		return fmt.Errorf("%s cannot have the same name: %q", scope, w.name)
 	}
 	s.workersByName[w.name] = w
 
@@ -184,7 +181,7 @@ func (s *Server) addWorker(w *worker) error {
 	}
 
 	if s.workersByPath[w.fileName] != nil {
-		return fmt.Errorf("%s cannot have the same filename: %q", s.scope(), w.fileName)
+		return fmt.Errorf("%s cannot have the same filename: %q", scope, w.fileName)
 	}
 	s.workersByPath[w.fileName] = w
 
