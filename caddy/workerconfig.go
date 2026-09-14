@@ -159,9 +159,6 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 		if len(wc.MatchPath) != 0 {
 			return wc, d.Err(`"match" is not supported for background workers`)
 		}
-		if wc.Num < 1 {
-			return wc, d.Err(`background workers must declare "num" >= 1`)
-		}
 	}
 
 	if frankenphp.EmbeddedAppPath != "" && filepath.IsLocal(wc.FileName) {

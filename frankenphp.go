@@ -225,15 +225,13 @@ func calculateMaxThreads(opt *opt) (numWorkers, backgroundThreads int, _ error) 
 
 	for i, w := range opt.workers {
 		if w.isBackgroundWorker {
-			if w.num < 1 {
-				name := w.name
-				if name == "" {
-					name = w.fileName
-				}
-
-				return 0, 0, fmt.Errorf("background worker %q must declare num >= 1", name)
+			if w.num <= 0 {
+				// one thread unless a pool is asked for: a background
+				// worker serves no requests, so it does not scale with
+				// the CPUs like an HTTP one
+				opt.workers[i].num = 1
 			}
-			backgroundThreads += w.num
+			backgroundThreads += opt.workers[i].num
 
 			continue
 		}
