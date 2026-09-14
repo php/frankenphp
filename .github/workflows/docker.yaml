@@ -109,7 +109,9 @@ jobs:
         include:
           - race: ""
           - platform: linux/amd64
-            race: "-race" # The Go race detector is only supported on amd64
+            # The Go race detector is only enabled on amd64. PHP's inherited PIE
+            # flags require external linking for runtime/cgo in pure-Go test packages.
+            race: "-race -ldflags=-linkmode=external"
         exclude:
           # arm/v6 is only available for Alpine: https://github.com/docker-library/golang/issues/502
           - variant: php-${{ needs.prepare.outputs.php82_version }}-trixie

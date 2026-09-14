@@ -47,6 +47,10 @@ typedef struct {
 #define STRINGIFY(x) #x
 #define TOSTRING(x) STRINGIFY(x)
 
+/* Print null-terminated arrays of key, value pairs supplied by Go.
+ * The pointers are only used for the duration of this call. */
+void frankenphp_print_phpinfo(const char **entries, const char **modules);
+
 typedef struct go_string {
   size_t len;
   char *data;

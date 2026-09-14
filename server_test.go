@@ -102,6 +102,7 @@ func TestServer(t *testing.T) {
 		server2, _ := frankenphp.NewServer(testDataDir)
 		initServers(
 			t,
+			frankenphp.WithPhpIni(map[string]string{"display_errors": "1"}),
 			frankenphp.WithServer(server1),
 			frankenphp.WithServer(server2),
 			frankenphp.WithWorkers("counter", testDataDir+"worker-with-counter.php", 1, frankenphp.WithWorkerServerScope(server1)),

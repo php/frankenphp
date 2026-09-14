@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <ext/spl/spl_exceptions.h>
 #include <ext/standard/head.h>
+#include <ext/standard/info.h>
 #ifdef HAVE_PHP_SESSION
 #include <ext/session/php_session.h>
 #endif
@@ -1116,6 +1117,47 @@ PHP_MINIT_FUNCTION(frankenphp) {
   return SUCCESS;
 }
 
+static void frankenphp_print_info_rows(const char **entries) {
+  for (int i = 0; entries[i] != NULL; i += 2) {
+    php_info_print_table_row(2, entries[i], entries[i + 1]);
+  }
+}
+
+PHP_MINFO_FUNCTION(frankenphp) { go_frankenphp_phpinfo(); }
+
+void frankenphp_print_phpinfo(const char **entries, const char **modules) {
+  php_info_print_table_start();
+  php_info_print_table_row(2, "frankenphp", TOSTRING(FRANKENPHP_VERSION));
+  if (entries) {
+    frankenphp_print_info_rows(entries);
+  }
+  php_info_print_table_end();
+
+  if (modules == NULL) {
+    return;
+  }
+
+  /* The list of Go modules is long, collapse it by default when rendering
+   * HTML */
+  if (sapi_module.phpinfo_as_text) {
+    php_info_print_table_start();
+    php_info_print_table_header(1, "Go modules");
+    php_info_print_table_end();
+  } else {
+    php_printf("<details><summary style=\"cursor: pointer\">Go "
+               "modules</summary>\n");
+  }
+
+  php_info_print_table_start();
+  php_info_print_table_header(2, "Module", "Version");
+  frankenphp_print_info_rows(modules);
+  php_info_print_table_end();
+
+  if (!sapi_module.phpinfo_as_text) {
+    php_printf("</details>\n");
+  }
+}
+
 static zend_module_entry frankenphp_module = {
     STANDARD_MODULE_HEADER,
     "frankenphp",
@@ -1124,7 +1166,22 @@ static zend_module_entry frankenphp_module = {
     NULL,                  /* shutdown */
     NULL,                  /* request initialization */
     NULL,                  /* request shutdown */
-    NULL,                  /* information */
+    PHP_MINFO(frankenphp), /* information */
+    TOSTRING(FRANKENPHP_VERSION),
+    STANDARD_MODULE_PROPERTIES};
+
+/* CLI exposes the same metadata under a distinct name so extension detection
+ * does not advertise server functions. Keep PHP's native functions and avoid
+ * initializing hooks that depend on the server runtime. */
+static zend_module_entry frankenphp_cli_module = {
+    STANDARD_MODULE_HEADER,
+    "frankenphp-cli",
+    NULL,                  /* function table */
+    NULL,                  /* initialization */
+    NULL,                  /* shutdown */
+    NULL,                  /* request initialization */
+    NULL,                  /* request shutdown */
+    PHP_MINFO(frankenphp), /* information */
     TOSTRING(FRANKENPHP_VERSION),
     STANDARD_MODULE_PROPERTIES};
 
@@ -1773,6 +1830,20 @@ static void *execute_script_cli(void *arg) {
 #endif
 }
 
+static int (*previous_php_register_internal_extensions_func)(void) = NULL;
+
+/* frankenphp_module is passed to php_module_startup() by our own SAPI, but the
+ * CLI SAPIs take no additional modules: hook their module startup instead */
+static int register_frankenphp_module(void) {
+  if (previous_php_register_internal_extensions_func() != SUCCESS) {
+    return FAILURE;
+  }
+
+  return zend_register_internal_module(&frankenphp_cli_module) == NULL
+             ? FAILURE
+             : SUCCESS;
+}
+
 int frankenphp_execute_script_cli(char *script, int argc, char **argv,
                                   bool eval) {
   pthread_t thread;
@@ -1782,20 +1853,33 @@ int frankenphp_execute_script_cli(char *script, int argc, char **argv,
   cli_exec_args_t args = {
       .script = script, .argc = argc, .argv = argv, .eval = eval};
 
+  /* A failed join can leave our hook installed. Do not save it as its own
+   * predecessor on the next call. */
+  if (php_register_internal_extensions_func != register_frankenphp_module) {
+    previous_php_register_internal_extensions_func =
+        php_register_internal_extensions_func;
+  }
+  php_register_internal_extensions_func = register_frankenphp_module;
+
   /*
    * Start the script in a dedicated thread to prevent conflicts between Go and
    * PHP signal handlers
    */
   err = pthread_create(&thread, NULL, execute_script_cli, &args);
   if (err != 0) {
+    php_register_internal_extensions_func =
+        previous_php_register_internal_extensions_func;
     return err;
   }
 
   err = pthread_join(thread, &exit_status);
   if (err != 0) {
+    /* The CLI thread may still be using the hook; do not restore it yet. */
     return err;
   }
 
+  php_register_internal_extensions_func =
+      previous_php_register_internal_extensions_func;
   return (intptr_t)exit_status;
 }
 
