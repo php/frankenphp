@@ -1200,12 +1200,9 @@ PHP_FUNCTION(frankenphp_get_worker_handle) {
     RETURN_THROWS();
   }
 
-  if (worker_stop_socks[0] == SOCK_ERR) {
-    zend_throw_exception(spl_ce_RuntimeException,
-                         "the background worker stop socket is not available",
-                         0);
-    RETURN_THROWS();
-  }
+  /* the pair is opened before the script starts and closed at the next run
+   * setup or on thread exit, so a run always has one */
+  ZEND_ASSERT(worker_stop_socks[0] != SOCK_ERR);
 
   /* One stream per run: the same resource is returned until the script
    * closes it, so fetching the handle in a loop does not grow the resource
@@ -1260,12 +1257,7 @@ PHP_FUNCTION(frankenphp_worker_tick) {
     RETURN_THROWS();
   }
 
-  if (worker_stop_socks[0] == SOCK_ERR) {
-    zend_throw_exception(spl_ce_RuntimeException,
-                         "the background worker stop socket is not available",
-                         0);
-    RETURN_THROWS();
-  }
+  ZEND_ASSERT(worker_stop_socks[0] != SOCK_ERR);
 
   if (!worker_ticked) {
     worker_ticked = true;
