@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -142,14 +143,6 @@ func TestBackgroundWorkerValidation(t *testing.T) {
 			frankenphp.WithNumThreads(2),
 		)
 		require.ErrorContains(t, err, "must have an explicit name")
-	})
-
-	t.Run("num must be >= 1", func(t *testing.T) {
-		err := frankenphp.Init(
-			frankenphp.WithWorkers("bg-zero", "testdata/bgworker/basic.php", 0, frankenphp.WithWorkerBackground()),
-			frankenphp.WithNumThreads(2),
-		)
-		require.ErrorContains(t, err, "must declare num >= 1")
 	})
 
 	t.Run("names are unique within a server", func(t *testing.T) {
@@ -488,6 +481,29 @@ func TestBackgroundWorkerThreadsComeOnTop(t *testing.T) {
 	)
 
 	requireFileEventually(t, sentinel, "background worker did not start with num_threads 1")
+}
+
+// TestBackgroundWorkerDefaultsToOneThread checks that num is optional: a
+// background worker serves no requests, so it gets one thread unless a
+// pool is asked for, rather than the CPU count of an HTTP worker.
+func TestBackgroundWorkerDefaultsToOneThread(t *testing.T) {
+	sentinel := filepath.Join(t.TempDir(), "bg-default.sentinel")
+	initServers(t,
+		frankenphp.WithWorkers("bg-default", "testdata/bgworker/basic.php", 0,
+			frankenphp.WithWorkerBackground(),
+			frankenphp.WithWorkerEnv(map[string]string{"BG_SENTINEL": sentinel}),
+		),
+		frankenphp.WithNumThreads(1),
+	)
+	requireFileEventually(t, sentinel, "background worker did not start without an explicit num")
+
+	background := 0
+	for _, thread := range frankenphp.DebugState().ThreadDebugStates {
+		if strings.Contains(thread.Name, "Background Worker") {
+			background++
+		}
+	}
+	assert.Equal(t, 1, background)
 }
 
 // TestBackgroundWorkerThreadsComeOnTopOfAutoMaxThreads checks that the

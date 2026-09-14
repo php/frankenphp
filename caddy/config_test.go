@@ -323,7 +323,7 @@ func TestWorkerBackgroundRequiresName(t *testing.T) {
 	require.ErrorContains(t, err, `background workers must have an explicit "name"`)
 }
 
-func TestWorkerBackgroundRequiresNum(t *testing.T) {
+func TestWorkerBackgroundWithoutNumParses(t *testing.T) {
 	d := caddyfile.NewTestDispenser(`
 	{
 		php_server {
@@ -336,8 +336,8 @@ func TestWorkerBackgroundRequiresNum(t *testing.T) {
 	}`)
 	module := &FrankenPHPModule{}
 
-	err := module.UnmarshalCaddyfile(d)
-	require.ErrorContains(t, err, `background workers must declare "num" >= 1`)
+	// num is optional, it defaults to one thread when the workers start
+	require.NoError(t, module.UnmarshalCaddyfile(d))
 }
 
 func TestWorkerBackgroundRejectsMatch(t *testing.T) {
