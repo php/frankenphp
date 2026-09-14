@@ -132,3 +132,51 @@ PHP
 	[[ "$drained_inflight" == true ]] || fail 'In-flight request did not span HTTP draining'
 	echo "FrankenPHP graceful shutdown: $attempt/5 passed"
 done
+
+directory=$(mktemp -d)
+cat > "$directory/Caddyfile" <<CADDY
+{
+	admin off
+	auto_https off
+	shutdown_delay 500ms
+	grace_period 10s
+	frankenphp {
+		num_threads 2
+		worker $directory/index.php 1
+	}
+}
+http://127.0.0.1:18080 {
+	root * $directory
+	php_server
+}
+CADDY
+cat > "$directory/index.php" <<'PHP'
+<?php
+$handler = static function (): void {
+	echo "worker-ok\n";
+};
+while (frankenphp_handle_request($handler)) {
+}
+file_put_contents(__DIR__ . '/worker-stopped', 'cleanup-complete');
+PHP
+
+"$frankenphp_binary" run --config "$directory/Caddyfile" > "$directory/server.log" 2>&1 &
+server_pid=$!
+deadline=$((SECONDS + 20))
+until [[ "$(request / "$directory/response")" == 200 ]] && [[ "$(cat "$directory/response")" == worker-ok ]]; do
+	kill -0 "$server_pid" 2>/dev/null || fail 'Server exited before the worker became ready'
+	(( SECONDS < deadline )) || fail 'Worker did not become ready'
+	sleep 0.05
+done
+[[ ! -e "$directory/worker-stopped" ]] || fail 'Worker cleanup ran before SIGTERM'
+kill -TERM "$server_pid"
+deadline=$((SECONDS + 20))
+while kill -0 "$server_pid" 2>/dev/null; do
+	(( SECONDS < deadline )) || fail 'Worker shutdown exceeded the shutdown budget'
+	sleep 0.02
+done
+wait "$server_pid" || fail 'Server did not exit successfully after worker shutdown'
+server_pid=
+[[ -f "$directory/worker-stopped" ]] || fail 'Worker cleanup did not run after the request loop'
+[[ "$(cat "$directory/worker-stopped")" == cleanup-complete ]] || fail 'Worker cleanup did not complete'
+echo 'FrankenPHP worker graceful shutdown: passed'
