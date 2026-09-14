@@ -86,13 +86,14 @@ jobs:
         with:
           version: latest
           working-directory: caddy/
-      - name: Ensure go.mod is tidy
-        if: matrix.php-versions == '8.5'
-        run: go mod tidy -diff
-      - name: Ensure caddy/go.mod is tidy
-        if: matrix.php-versions == '8.5'
-        run: go mod tidy -diff
-        working-directory: caddy/
+      - parallel:
+          - name: Ensure go.mod is tidy
+            if: matrix.php-versions == '8.5'
+            run: go mod tidy -diff
+          - name: Ensure caddy/go.mod is tidy
+            if: matrix.php-versions == '8.5'
+            run: go mod tidy -diff
+            working-directory: caddy/
   integration-tests:
     name: Integration Tests (Linux, PHP ${{ matrix.php-versions }})
     runs-on: ubuntu-latest

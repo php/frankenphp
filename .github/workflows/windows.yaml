@@ -82,48 +82,49 @@ jobs:
         with:
           working-directory: frankenphp
 
-      - name: Install Vcpkg Libraries
-        working-directory: frankenphp
-        run: "vcpkg install"
+      - parallel:
+          - name: Install Vcpkg Libraries
+            working-directory: frankenphp
+            run: "vcpkg install"
 
-      - name: Download Watcher
-        run: |
-          $latestTag = gh release list --repo e-dant/watcher --limit 1 --exclude-drafts --exclude-pre-releases --json tagName --jq '.[0].tagName'
-          Write-Host "Latest Watcher version: $latestTag"
+          - name: Download Watcher
+            run: |
+              $latestTag = gh release list --repo e-dant/watcher --limit 1 --exclude-drafts --exclude-pre-releases --json tagName --jq '.[0].tagName'
+              Write-Host "Latest Watcher version: $latestTag"
 
-          gh release download $latestTag --repo e-dant/watcher --pattern "*x86_64-pc-windows-msvc.tar" -O watcher.tar
+              gh release download $latestTag --repo e-dant/watcher --pattern "*x86_64-pc-windows-msvc.tar" -O watcher.tar
 
-          tar -xf "watcher.tar" -C "$env:GITHUB_WORKSPACE"
-          Rename-Item -Path "$env:GITHUB_WORKSPACE\x86_64-pc-windows-msvc" -NewName "watcher"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              tar -xf "watcher.tar" -C "$env:GITHUB_WORKSPACE"
+              Rename-Item -Path "$env:GITHUB_WORKSPACE\x86_64-pc-windows-msvc" -NewName "watcher"
+            env:
+              GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Download PHP
-        run: |
-          $webContent = Invoke-WebRequest -Uri $env:PHP_DOWNLOAD_BASE
-          $links = $webContent.Links.Href | Where-Object { $_ -match "php-\d+\.\d+\.\d+-Win32-vs17-x64\.zip$" }
+          - name: Download PHP
+            run: |
+              $webContent = Invoke-WebRequest -Uri $env:PHP_DOWNLOAD_BASE
+              $links = $webContent.Links.Href | Where-Object { $_ -match "php-\d+\.\d+\.\d+-Win32-vs17-x64\.zip$" }
 
-          if (-not $links) { throw "Could not find PHP zip files at $env:PHP_DOWNLOAD_BASE" }
+              if (-not $links) { throw "Could not find PHP zip files at $env:PHP_DOWNLOAD_BASE" }
 
-          $latestFile = $links | Sort-Object { if ($_ -match '(\d+\.\d+\.\d+)') { [version]$matches[1] } } | Select-Object -Last 1
+              $latestFile = $links | Sort-Object { if ($_ -match '(\d+\.\d+\.\d+)') { [version]$matches[1] } } | Select-Object -Last 1
 
-          $version = if ($latestFile -match '(\d+\.\d+\.\d+)') { $matches[1] }
-          Write-Host "Detected latest PHP version: $version"
+              $version = if ($latestFile -match '(\d+\.\d+\.\d+)') { $matches[1] }
+              Write-Host "Detected latest PHP version: $version"
 
-          "PHP_VERSION=$version" >> $env:GITHUB_ENV
+              "PHP_VERSION=$version" >> $env:GITHUB_ENV
 
-          $phpZip = "php-$version-Win32-vs17-x64.zip"
-          $develZip = "php-devel-pack-$version-Win32-vs17-x64.zip"
+              $phpZip = "php-$version-Win32-vs17-x64.zip"
+              $develZip = "php-devel-pack-$version-Win32-vs17-x64.zip"
 
-          $dirName = "frankenphp-windows-x86_64"
+              $dirName = "frankenphp-windows-x86_64"
 
-          "DIR_NAME=$dirName" >> $env:GITHUB_ENV
+              "DIR_NAME=$dirName" >> $env:GITHUB_ENV
 
-          Invoke-WebRequest -Uri "$env:PHP_DOWNLOAD_BASE/$phpZip" -OutFile "$env:TEMP\php.zip"
-          Expand-Archive -Path "$env:TEMP\php.zip" -DestinationPath "$env:GITHUB_WORKSPACE\$dirName"
+              Invoke-WebRequest -Uri "$env:PHP_DOWNLOAD_BASE/$phpZip" -OutFile "$env:TEMP\php.zip"
+              Expand-Archive -Path "$env:TEMP\php.zip" -DestinationPath "$env:GITHUB_WORKSPACE\$dirName"
 
-          Invoke-WebRequest -Uri "$env:PHP_DOWNLOAD_BASE/$develZip" -OutFile "$env:TEMP\php-devel.zip"
-          Expand-Archive -Path "$env:TEMP\php-devel.zip" -DestinationPath "$env:GITHUB_WORKSPACE\php-devel"
+              Invoke-WebRequest -Uri "$env:PHP_DOWNLOAD_BASE/$develZip" -OutFile "$env:TEMP\php-devel.zip"
+              Expand-Archive -Path "$env:TEMP\php-devel.zip" -DestinationPath "$env:GITHUB_WORKSPACE\php-devel"
 
       - name: Prepare env
         run: |
