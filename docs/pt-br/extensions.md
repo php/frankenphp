@@ -139,20 +139,20 @@ Esta tabela resume o que você precisa saber:
 | `?float`           | `*float64`                    | ✅               | -                                 | -                                  | ✅                          |
 | `bool`             | `bool`                        | ✅               | -                                 | -                                  | ✅                          |
 | `?bool`            | `*bool`                       | ✅               | -                                 | -                                  | ✅                          |
-| `?bool`            | `*bool`                       | ✅               | -                                 | -                                  | ✅                          |
 | `string`/`?string` | `*C.zend_string`              | ❌               | `frankenphp.GoString()`           | `frankenphp.PHPString()`           | ✅                          |
 | `array`            | `frankenphp.AssociativeArray` | ❌               | `frankenphp.GoAssociativeArray()` | `frankenphp.PHPAssociativeArray()` | ✅                          |
 | `array`            | `map[string]any`              | ❌               | `frankenphp.GoMap()`              | `frankenphp.PHPMap()`              | ✅                          |
 | `array`            | `[]any`                       | ❌               | `frankenphp.GoPackedArray()`      | `frankenphp.PHPPackedArray()`      | ✅                          |
-| `mixed`            | `any`                         | ❌               | `GoValue()`                       | `PHPValue()`                       | ❌                          |
+| `mixed`            | `*C.zval`                     | ❌               | `frankenphp.GoValue()`            | `frankenphp.PHPValue()`            | ✅                          |
+| `callable`         | `*C.zval`                     | ❌               | -                                 | frankenphp.CallPHPCallable()       | ✅                          |
 | `object`           | `struct`                      | ❌               | _Ainda não implementado_          | _Ainda não implementado_           | ❌                          |
 
 > [!NOTE]
 > Esta tabela ainda não é exaustiva e será completada à medida que a API de
 > tipos do FrankenPHP se tornar mais completa.
 >
-> Tipos primitivos e arrays são suportados atualmente, especificamente para
-> métodos de classe.
+> Tipos primitivos, arrays, `mixed` e `callable` são suportados atualmente,
+> especificamente para métodos de classe.
 > Objetos ainda não podem ser usados como parâmetros de métodos ou tipos de
 > retorno.
 

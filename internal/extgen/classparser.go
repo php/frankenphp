@@ -7,6 +7,7 @@ import (
 	"go/token"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -20,13 +21,14 @@ type exportDirective struct {
 
 type classParser struct{}
 
-func (cp *classParser) Parse(filename string) ([]phpClass, error) {
-	return cp.parse(filename)
-}
-
 func (cp *classParser) parse(filename string) (classes []phpClass, err error) {
+	src, err := os.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+
 	fset := token.NewFileSet()
-	node, err := parser.ParseFile(fset, filename, nil, parser.ParseComments)
+	node, err := parser.ParseFile(fset, filename, src, parser.ParseComments)
 	if err != nil {
 		return nil, fmt.Errorf("parsing file: %w", err)
 	}
@@ -34,7 +36,7 @@ func (cp *classParser) parse(filename string) (classes []phpClass, err error) {
 	validator := Validator{}
 
 	exportDirectives := cp.collectExportDirectives(node, fset)
-	methods, err := cp.parseMethods(filename)
+	methods, err := cp.parseMethods(src, node, fset)
 	if err != nil {
 		return nil, fmt.Errorf("parsing methods: %w", err)
 	}
@@ -83,7 +85,7 @@ func (cp *classParser) parse(filename string) (classes []phpClass, err error) {
 			}
 
 			if err := validator.validateClass(class); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: Invalid class '%s': %v\n", class.Name, err)
+				warnf("Warning: Invalid class %q: %v\n", class.Name, err)
 				continue
 			}
 
@@ -94,6 +96,15 @@ func (cp *classParser) parse(filename string) (classes []phpClass, err error) {
 	for _, directive := range exportDirectives {
 		if !matchedDirectives[directive.line] {
 			return nil, fmt.Errorf("//export_php class directive at line %d is not followed by a struct declaration", directive.line)
+		}
+	}
+
+	// Match against the declared directives rather than the classes that survived
+	// validation, so an invalid class does not turn its methods into a misleading
+	// "never exported" error.
+	for _, method := range methods {
+		if !slices.ContainsFunc(exportDirectives, func(d exportDirective) bool { return d.className == method.ClassName }) {
+			return nil, fmt.Errorf("//export_php:method directive at line %d targets class %q, which is not exported by any //export_php:class directive", method.lineNumber, method.ClassName)
 		}
 	}
 
@@ -201,18 +212,7 @@ func (cp *classParser) goTypeToPHPType(goType string) phpType {
 	return phpMixed
 }
 
-func (cp *classParser) parseMethods(filename string) ([]phpClassMethod, error) {
-	src, err := os.ReadFile(filename)
-	if err != nil {
-		return nil, err
-	}
-
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, filename, src, parser.ParseComments)
-	if err != nil {
-		return nil, fmt.Errorf("parsing file: %w", err)
-	}
-
+func (cp *classParser) parseMethods(src []byte, file *ast.File, fset *token.FileSet) ([]phpClassMethod, error) {
 	validator := Validator{}
 	var methods []phpClassMethod
 	consumed := make(map[int]bool)
@@ -223,21 +223,23 @@ func (cp *classParser) parseMethods(filename string) ([]phpClassMethod, error) {
 			continue
 		}
 
-		directive, directiveLine := findDirective(funcDecl.Doc, fset, phpMethodRegex)
-		if directive == "" {
+		comment := findMatchingComment(funcDecl.Doc, phpMethodRegex)
+		if comment == nil {
 			continue
 		}
-		rawMatch := phpMethodRegex.FindStringSubmatch(findMatchingComment(funcDecl.Doc, phpMethodRegex))
+
+		rawMatch := phpMethodRegex.FindStringSubmatch(comment.Text)
 		if len(rawMatch) != 3 {
 			continue
 		}
 		className := strings.TrimSpace(rawMatch[1])
 		signature := strings.TrimSpace(rawMatch[2])
+		directiveLine := fset.Position(comment.Pos()).Line
 		consumed[directiveLine] = true
 
 		method, err := cp.parseMethodSignature(className, signature)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Error parsing method signature %q: %v\n", signature, err)
+			warnf("Warning: Error parsing method signature %q: %v\n", signature, err)
 			continue
 		}
 
@@ -249,7 +251,7 @@ func (cp *classParser) parseMethods(filename string) ([]phpClassMethod, error) {
 			IsReturnNullable: method.isReturnNullable,
 		}
 		if err := validator.validateTypes(phpFunc); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Method \"%s::%s\" uses unsupported types: %v\n", className, method.Name, err)
+			warnf("Warning: Method \"%s::%s\" uses unsupported types: %v\n", className, method.Name, err)
 			continue
 		}
 
@@ -258,7 +260,7 @@ func (cp *classParser) parseMethods(filename string) ([]phpClassMethod, error) {
 
 		phpFunc.GoFunction = method.GoFunction
 		if err := validator.validateGoFunctionSignatureWithOptions(phpFunc, true); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Go method signature mismatch for '%s::%s': %v\n", method.ClassName, method.Name, err)
+			warnf("Warning: Go method signature mismatch for %q: %v\n", method.ClassName+"::"+method.Name, err)
 			continue
 		}
 
@@ -272,17 +274,17 @@ func (cp *classParser) parseMethods(filename string) ([]phpClassMethod, error) {
 	return methods, nil
 }
 
-// findMatchingComment returns the raw comment text whose line matches re.
-func findMatchingComment(group *ast.CommentGroup, re *regexp.Regexp) string {
+// findMatchingComment returns the first comment of the group matching re.
+func findMatchingComment(group *ast.CommentGroup, re *regexp.Regexp) *ast.Comment {
 	if group == nil {
-		return ""
+		return nil
 	}
 	for _, comment := range group.List {
 		if re.MatchString(comment.Text) {
-			return comment.Text
+			return comment
 		}
 	}
-	return ""
+	return nil
 }
 
 func (cp *classParser) parseMethodSignature(className, signature string) (*phpClassMethod, error) {
