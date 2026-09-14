@@ -128,6 +128,11 @@ jobs:
             platform: linux/arm/v6
           - variant: php-${{ needs.prepare.outputs.php85_version }}-bookworm
             platform: linux/arm/v6
+          # PHP 8.5 Debian images are not published for 386.
+          - variant: php-${{ needs.prepare.outputs.php85_version }}-trixie
+            platform: linux/386
+          - variant: php-${{ needs.prepare.outputs.php85_version }}-bookworm
+            platform: linux/386
     steps:
       - name: Prepare
         id: prepare

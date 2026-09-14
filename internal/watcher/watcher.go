@@ -145,6 +145,7 @@ func (g *globalWatcher) startWatching() error {
 
 	for _, w := range g.watchers {
 		w.events = g.events
+		w.done = g.stop
 		w.startSession()
 	}
 

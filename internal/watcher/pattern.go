@@ -18,6 +18,7 @@ type pattern struct {
 	value        string
 	parsedValues []string
 	events       chan eventHolder
+	done         <-chan struct{}
 	failureCount int
 
 	watcher *watcher.Watcher
@@ -101,7 +102,11 @@ func (p *pattern) handle(event *watcher.Event) {
 	}
 
 	if p.allowReload(event) {
-		p.events <- eventHolder{p.patternGroup, event}
+		// Callbacks may still arrive while the native watcher is being closed.
+		select {
+		case p.events <- eventHolder{p.patternGroup, event}:
+		case <-p.done:
+		}
 	}
 }
 

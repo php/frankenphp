@@ -53,11 +53,14 @@ func TestHotReload(t *testing.T) {
 			}
 		`, "caddyfile")
 
-	var connected, received sync.WaitGroup
+	var connected sync.WaitGroup
+	received := make(chan struct{})
 
 	connected.Add(1)
-	received.Go(func() {
+	go func() {
+		defer close(received)
 		cx, cancel := context.WithCancel(t.Context())
+		defer cancel()
 		req, _ := http.NewRequest(http.MethodGet, "http://localhost:"+testPort+u, nil)
 		req = req.WithContext(cx)
 		resp := tester.AssertResponseCode(req, http.StatusOK)
@@ -89,13 +92,22 @@ func TestHotReload(t *testing.T) {
 		}
 
 		require.NoError(t, resp.Body.Close())
-	})
+	}()
 
 	connected.Wait()
 
-	require.NoError(t, os.WriteFile(indexFile, []byte("<?=$_SERVER['FRANKENPHP_HOT_RELOAD'];"), 0644))
+	// The file watcher starts asynchronously. Retry the write until it sees a
+	// change, leaving enough time between writes for its debounce timer to fire.
+	require.Eventually(t, func() bool {
+		select {
+		case <-received:
+			return true
+		default:
+			require.NoError(t, os.WriteFile(indexFile, []byte("<?=$_SERVER['FRANKENPHP_HOT_RELOAD'];"), 0644))
 
-	received.Wait()
+			return false
+		}
+	}, tester.Client.Timeout, 500*time.Millisecond)
 
 	tester.AssertGetResponse("http://localhost:"+testPort+"/index.php", http.StatusOK, u)
 }

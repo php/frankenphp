@@ -118,12 +118,13 @@ target "default" {
         "linux/arm/v6",
         "linux/arm/v7",
         "linux/arm64",
-    ] : [
+    ] : compact([
         "linux/amd64",
-        "linux/386",
+        # PHP 8.5 Debian images are not published for 386.
+        substr(php-version, 0, 3) == "8.5" ? "" : "linux/386",
         "linux/arm/v7",
         "linux/arm64"
-    ]
+    ])
     tags = distinct(flatten(
         [for pv in php_version(php-version) : flatten([
             LATEST ? tag("latest", os, pv, tgt) : [],
