@@ -1773,6 +1773,14 @@ static void *execute_script_cli(void *arg) {
 #endif
 }
 
+/* The native launcher calls this after returning from Go initialization, so PHP
+ * runs on a C-owned thread with the caller's original signal mask. */
+int frankenphp_execute_script_cli_native(int argc, char **argv) {
+  cli_exec_args_t args = {
+      .script = argv[0], .argc = argc, .argv = argv, .eval = false};
+  return (intptr_t)execute_script_cli(&args);
+}
+
 int frankenphp_execute_script_cli(char *script, int argc, char **argv,
                                   bool eval) {
   pthread_t thread;

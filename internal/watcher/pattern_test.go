@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/e-dant/watcher/watcher-go"
 	"github.com/stretchr/testify/assert"
@@ -353,6 +354,28 @@ func TestAnAssociatedEventTriggersTheWatcher(t *testing.T) {
 	go w.handle(e)
 
 	assert.Equal(t, e, (<-w.events).event)
+}
+
+func TestEventAfterWatcherShutdownDoesNotBlock(t *testing.T) {
+	t.Parallel()
+
+	w := newPattern(t, "/**/*.php")
+	w.events = make(chan eventHolder)
+	stop := make(chan struct{})
+	w.done = stop
+	close(stop)
+
+	returned := make(chan struct{})
+	go func() {
+		defer close(returned)
+		w.handle(&watcher.Event{PathName: normalizePath(t, "/path/file.php")})
+	}()
+
+	select {
+	case <-returned:
+	case <-time.After(time.Second):
+		t.Fatal("watcher callback blocked after shutdown")
+	}
 }
 
 func relativeDir(t *testing.T, relativePath string) string {

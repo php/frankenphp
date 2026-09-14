@@ -98,10 +98,24 @@ Alternatively, these features can be disabled by passing build tags to the Go co
 
 You can now build the final binary.
 
+On Linux, use the native launcher when running PHP CLI programs with `pcntl`.
+It starts Go as a C archive with CLI signals blocked on Go threads, then runs
+`php-cli` on the original C thread. Go extensions are initialized and remain
+callable. Caddy's server commands use the same executable.
+
 ### Using xcaddy
 
 The recommended way is to use [xcaddy](https://github.com/caddyserver/xcaddy) to compile FrankenPHP.
 `xcaddy` also makes it easy to add [custom Caddy modules](https://caddyserver.com/docs/modules/) and FrankenPHP extensions:
+
+For the native launcher on Linux, first download the FrankenPHP sources and
+select the Go wrapper. On macOS and FreeBSD, omit the `export` command:
+
+```console
+curl -L https://github.com/php/frankenphp/archive/refs/heads/main.tar.gz | tar xz
+cd frankenphp-main
+export XCADDY_WHICH_GO="$PWD/native-go.sh"
+```
 
 ```console
 CGO_ENABLED=1 \
@@ -110,14 +124,12 @@ CGO_CFLAGS=$(php-config --includes) \
 CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)" \
 xcaddy build \
     --output frankenphp \
-    --with github.com/dunglas/frankenphp/caddy \
+    --with github.com/dunglas/frankenphp="$PWD" \
+    --with github.com/dunglas/frankenphp/caddy="$PWD/caddy" \
     --with github.com/dunglas/mercure/caddy \
     --with github.com/dunglas/vulcain/caddy \
     --with github.com/dunglas/caddy-cbrotli
     # Add extra Caddy modules and FrankenPHP extensions here
-    # optionally, if you would like to compile from your frankenphp sources:
-    # --with github.com/dunglas/frankenphp=$(pwd) \
-    # --with github.com/dunglas/frankenphp/caddy=$(pwd)/caddy
 
 ```
 
@@ -133,10 +145,28 @@ xcaddy build \
 
 ### Without xcaddy
 
-Alternatively, it's possible to compile FrankenPHP without `xcaddy` by using the `go` command directly:
+Alternatively, build the native launcher on Linux without `xcaddy`:
 
 ```console
 curl -L https://github.com/php/frankenphp/archive/refs/heads/main.tar.gz | tar xz
 cd frankenphp-main/caddy/frankenphp
-CGO_CFLAGS=$(php-config --includes) CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)" go build -tags=nobadger,nomysql,nopgx
+../../build-native.sh -o frankenphp
 ```
+
+The script accepts Go build flags, including `-tags`, `-ldflags` and `-o`.
+Set `PHP_CONFIG` if `php-config` is not in your path. For xcaddy, use the
+`CGO_CFLAGS` and `CGO_LDFLAGS` variables shown above. Linux Docker and static
+builds select the native launcher automatically.
+
+The native build requires an ELF linker supporting GNU linker scripts (GNU ld
+or LLVM lld). Its linker script lets C `main()` supply Go's initializer with
+the original arguments on both glibc and musl.
+
+On macOS and FreeBSD, continue to use
+`CGO_CFLAGS=$(php-config --includes) CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)" go build -tags=nobadger,nomysql,nopgx`.
+
+The native launcher reserves SIGHUP, SIGINT, SIGQUIT, SIGTERM, SIGUSR1, SIGUSR2
+and SIGALRM for PHP CLI. Go extensions must not call `signal.Notify` for these
+signals in CLI mode, because that enables delivery on Go threads again.
+Go's runtime signals retain their normal behavior. This does not make
+`pcntl_fork()` followed by Go extension calls safe: the Go runtime is still running.

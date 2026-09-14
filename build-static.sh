@@ -217,6 +217,9 @@ done
 # shellcheck disable=SC2086
 ${spcCommand} download --with-php="${PHP_VERSION}" --for-extensions="${PHP_EXTENSIONS}" --for-libs="${PHP_EXTENSION_LIBS}" ${SPC_OPT_DOWNLOAD_ARGS}
 export FRANKENPHP_SOURCE_PATH="${CURRENT_DIR}"
+if [ "${os}" = "linux" ]; then
+	export XCADDY_WHICH_GO="${CURRENT_DIR}/native-go.sh"
+fi
 # shellcheck disable=SC2086,SC2090
 ${spcCommand} build --enable-zts --build-embed --build-frankenphp ${SPC_OPT_BUILD_ARGS} "${PHP_EXTENSIONS}" --with-libs="${PHP_EXTENSION_LIBS}"
 
