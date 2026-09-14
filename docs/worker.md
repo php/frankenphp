@@ -242,10 +242,10 @@ With an event loop, register the stream as readable and call `frankenphp_worker_
 use Revolt\EventLoop;
 
 $handle = frankenphp_get_worker_handle();
-EventLoop::onReadable($handle, function (string $id): void {
+EventLoop::onReadable($handle, function (): void {
     if (!frankenphp_worker_tick()) {
-        // drained: the loop ends once nothing else is pending
-        EventLoop::cancel($id);
+        // drained: stop the loop, the script returns and FrankenPHP moves on
+        EventLoop::getDriver()->stop();
     }
 });
 
