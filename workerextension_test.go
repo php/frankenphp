@@ -77,6 +77,36 @@ func TestWorkerExtensionSendMessage(t *testing.T) {
 	assert.Equal(t, "received message: Hello Workers", ret)
 }
 
+// an extension worker scoped to a server stays reachable through
+// SendRequest(), which resolves the name within that server
+func TestWorkerExtensionOnServer(t *testing.T) {
+	t.Cleanup(Shutdown)
+
+	server, err := NewServer("testdata/", WithServerName("api"))
+	require.NoError(t, err)
+	externalWorker, o := WithExtensionWorkers("scopedWorker", "testdata/worker.php", 1, WithWorkerServerScope(server))
+	require.NoError(t, Init(o, WithServer(server)))
+
+	// a URI that does not match the worker's own script, so only the name
+	// lookup can route this to it
+	w := httptest.NewRecorder()
+	require.NoError(t, externalWorker.SendRequest(w, httptest.NewRequest("GET", "http://example.com/index.php", nil)))
+
+	body, err := io.ReadAll(w.Result().Body)
+	require.NoError(t, err)
+	assert.Contains(t, string(body), "Requests handled: 0")
+}
+
+// background workers never read requestChan, so an extension cannot send
+// them requests or messages
+func TestErrorIfExtensionWorkerIsBackground(t *testing.T) {
+	t.Cleanup(Shutdown)
+
+	_, o := WithExtensionWorkers("backgroundExtension", "testdata/bgworker/basic.php", 1, WithWorkerBackground())
+
+	require.ErrorContains(t, Init(o), "cannot be an extension worker")
+}
+
 func TestErrorIf2WorkersHaveSameName(t *testing.T) {
 	_, o1 := WithExtensionWorkers("duplicateWorker", "testdata/worker.php", 1)
 	_, o2 := WithExtensionWorkers("duplicateWorker", "testdata/worker2.php", 1)
