@@ -483,15 +483,6 @@ void frankenphp_worker_close_stop_sock(intptr_t s) {
   frankenphp_worker_close_sock((php_socket_t)s);
 }
 
-/* Sets max_execution_time to 0 for the current request, which also disarms
- * the timer through OnUpdateTimeout(). */
-static void frankenphp_disable_execution_timeout(void) {
-  zend_string *key = zend_string_init("max_execution_time",
-                                      sizeof("max_execution_time") - 1, 0);
-  zend_alter_ini_entry_chars(key, "0", 1, PHP_INI_USER, PHP_INI_STAGE_RUNTIME);
-  zend_string_release(key);
-}
-
 void frankenphp_update_local_thread_context(bool is_worker) {
   /* A thread that ran a background worker can be recycled into an HTTP
    * worker or a regular request thread: reset the bg TLS so
@@ -1281,6 +1272,11 @@ PHP_FUNCTION(frankenphp_worker_tick) {
 
   if (!worker_ticked) {
     worker_ticked = true;
+    /* The bootstrap ran under max_execution_time like any request; the loop
+     * that starts now has no time limit, like the CLI. Nothing re-arms the
+     * timer past this point: php_execute_script() did so before the script
+     * started, request shutdown comes after it ended. */
+    zend_unset_timeout();
     go_frankenphp_background_worker_ready(frankenphp_thread_index());
   }
 
@@ -1826,16 +1822,6 @@ static void *php_thread(void *arg) {
        * (php 8.4 and under) */
       frankenphp_override_opcache_reset();
 #endif
-
-      /* A background worker runs for the lifetime of its thread, so it has
-       * no execution limit, like the CLI SAPI. Disarming the timer is not
-       * enough: php_execute_script() re-arms it from the ini right before
-       * running the script whenever max_input_time is set, so change the
-       * setting itself. Request shutdown restores it, and the next run
-       * applies it again. */
-      if (is_background_worker) {
-        frankenphp_disable_execution_timeout();
-      }
 
       zend_file_handle file_handle;
       zend_stream_init_filename(&file_handle, scriptName);
