@@ -514,10 +514,12 @@ func TestBackgroundWorkerThreadsComeOnTopOfAutoMaxThreads(t *testing.T) {
 
 // TestBackgroundWorkerBootstrapIsBounded checks that max_execution_time
 // applies until the first frankenphp_worker_tick(): a setup that outlives
-// it is ended as a boot failure, which fails Init() past the cap.
+// it is ended as a boot failure, which fails Init() past the cap. The limit
+// itself is PHP's, so the test only runs where its timers are known to
+// fire under FrankenPHP, the max execution timers of ZTS builds on Linux.
 func TestBackgroundWorkerBootstrapIsBounded(t *testing.T) {
-	if !frankenphp.Config().ZendMaxExecutionTimers && runtime.GOOS != "windows" {
-		t.Skip("max_execution_time needs Zend max execution timers on this platform")
+	if !frankenphp.Config().ZendMaxExecutionTimers {
+		t.Skip("max_execution_time is only reliable with Zend max execution timers")
 	}
 
 	countFile := filepath.Join(t.TempDir(), "boots")
