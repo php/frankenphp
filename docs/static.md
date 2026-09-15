@@ -83,15 +83,15 @@ To add extra Caddy modules or pass other arguments to [xcaddy](https://github.co
 ```console
 docker buildx bake \
   --load \
-  --set static-builder-musl.args.XCADDY_ARGS="--with github.com/darkweak/souin/plugins/caddy --with github.com/dunglas/caddy-cbrotli --with github.com/dunglas/mercure/caddy --with github.com/dunglas/vulcain/caddy" \
+  --set static-builder-musl.args.XCADDY_ARGS="--with github.com/darkweak/souin/plugins/caddy --with github.com/dunglas/caddy-cbrotli --with github.com/swytchdb/caddy-swytch --with github.com/dunglas/mercure/caddy --with github.com/dunglas/vulcain/caddy" \
   static-builder-musl
 ```
 
-In this example, we add the [Souin](https://souin.io) HTTP cache module for Caddy as well as the [cbrotli](https://github.com/dunglas/caddy-cbrotli), [Mercure](https://mercure.rocks) and [Vulcain](https://vulcain.rocks) modules.
+In this example, we add the [Souin](https://souin.io) HTTP cache module for Caddy as well as the [cbrotli](https://github.com/dunglas/caddy-cbrotli), [Mercure](https://mercure.rocks), [Vulcain](https://vulcain.rocks), and [Swytch](swytch.md) modules.
 
 > [!TIP]
 >
-> The cbrotli, Mercure, and Vulcain modules are included by default if `XCADDY_ARGS` is empty or not set.
+> The cbrotli, Mercure, Vulcain, and Swytch modules are included by default if `XCADDY_ARGS` is empty or not set.
 > If you customize the value of `XCADDY_ARGS`, you must include them explicitly if you want them to be included.
 
 See also how to [customize the FrankenPHP static build](#customizing-the-frankenphp-static-build)
