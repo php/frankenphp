@@ -206,7 +206,7 @@ else
 fi
 export SPC_CMD_VAR_PHP_MAKE_EXTRA_CFLAGS
 if [ -z "$SPC_CMD_VAR_FRANKENPHP_XCADDY_MODULES" ]; then
-	export SPC_CMD_VAR_FRANKENPHP_XCADDY_MODULES="--with github.com/dunglas/mercure/caddy --with github.com/dunglas/vulcain/caddy --with github.com/dunglas/caddy-cbrotli"
+	export SPC_CMD_VAR_FRANKENPHP_XCADDY_MODULES="--with github.com/swytchdb/caddy-swytch --with github.com/dunglas/mercure/caddy --with github.com/dunglas/vulcain/caddy --with github.com/dunglas/caddy-cbrotli"
 fi
 
 # Build FrankenPHP
