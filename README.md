@@ -158,6 +158,7 @@ Go to `https://localhost`, and enjoy!
 - [Migrating from Nginx/PHP-FPM](https://frankenphp.dev/docs/migrate/)
 - [Early Hints support (103 HTTP status code)](https://frankenphp.dev/docs/early-hints/)
 - [Real-time](https://frankenphp.dev/docs/mercure/)
+- [Swytch](docs/swytch.md)
 - [Logging](https://frankenphp.dev/docs/logging/)
 - [Hot reloading](https://frankenphp.dev/docs/hot-reload/)
 - [Efficiently serving large static files](https://frankenphp.dev/docs/x-sendfile/)
