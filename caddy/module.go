@@ -195,6 +195,10 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 		}
 	}
 
+	if app := activeApp.Load(); app != nil && app != f.app {
+		return app.serveReloadedRequest(w, r)
+	}
+
 	ctx := r.Context()
 	repl := ctx.Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
 
@@ -226,12 +230,48 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 	}
 
 	err := f.server.ServeHTTP(w, r, opts...)
+	if errors.Is(err, frankenphp.ErrNotRunning) {
+		if app := activeApp.Load(); app != nil && app != f.app {
+			return app.serveReloadedRequest(w, r)
+		}
+	}
 
 	if _, rejected := errors.AsType[frankenphp.ErrRejected](err); err != nil && !rejected {
 		return caddyhttp.Error(http.StatusInternalServerError, err)
 	}
 
 	return nil
+}
+
+// Old HTTP handlers can still receive requests while the replacement PHP app
+// starts. Wait for it, then route the original request through its HTTP server.
+func (f *FrankenPHPApp) serveReloadedRequest(w http.ResponseWriter, r *http.Request) error {
+	select {
+	case <-f.started:
+	case <-r.Context().Done():
+		return r.Context().Err()
+	case <-time.After(10 * time.Second):
+		return caddyhttp.Error(http.StatusServiceUnavailable, frankenphp.ErrNotRunning)
+	}
+	if !f.hasStarted.Load() {
+		return caddyhttp.Error(http.StatusServiceUnavailable, frankenphp.ErrNotRunning)
+	}
+
+	previous := r.Context().Value(caddyhttp.ServerCtxKey).(*caddyhttp.Server)
+	for _, server := range f.httpApp.Servers {
+		if !slices.Equal(server.Listen, previous.Listen) {
+			continue
+		}
+
+		original := r.Context().Value(caddyhttp.OriginalRequestCtxKey).(http.Request)
+		r = r.Clone(r.Context())
+		r.Method, r.RequestURI = original.Method, original.RequestURI
+		*r.URL = *original.URL
+		server.ServeHTTP(w, r)
+		return nil
+	}
+
+	return caddyhttp.Error(http.StatusServiceUnavailable, frankenphp.ErrNotRunning)
 }
 
 // UnmarshalCaddyfile implements caddyfile.Unmarshaler.

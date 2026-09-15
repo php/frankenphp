@@ -93,6 +93,11 @@ func scaleWorkerThread(worker *worker, done chan struct{}, mstate *state.ThreadS
 		return
 	}
 
+	// Do not scale a worker from a previous PHP runtime.
+	if worker.done != done {
+		return
+	}
+
 	thread, err := addWorkerThread(worker)
 	if err != nil {
 		if globalLogger.Enabled(globalCtx, slog.LevelWarn) {
