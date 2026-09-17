@@ -38,8 +38,8 @@ example.com {
 }
 ```
 
-Apply the same approach to any stricter method or header policy your previous front web server enforced.
-This is also relevant for request header names: some front web servers or proxies reject or drop valid-but-uncommon HTTP field names before PHP-FPM sees them, while FrankenPHP may pass them to the PHP application.
+Apply the same approach to any stricter method or header policy your previous web server enforced.
+The same applies to request header names: some web servers or proxies reject or drop valid-but-uncommon HTTP field names before PHP-FPM sees them, while FrankenPHP may pass them to the PHP application.
 
 ## Step 1: replace your web server config
 
