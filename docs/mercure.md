@@ -50,6 +50,16 @@ Access tokens must carry the identifier of the `issuer` they were signed by in t
 >
 > Uncomment the Mercure section in `/etc/frankenphp/Caddyfile` to enable it.
 
+### With `php-server`
+
+`frankenphp php-server --mercure` starts the hub without a `Caddyfile`, configured by environment variables:
+
+- `MERCURE_PUBLISHER_JWT_KEY` and `MERCURE_SUBSCRIBER_JWT_KEY` (required): the keys verifying the publisher and subscriber tokens
+- `MERCURE_PUBLISHER_JWT_ALG` and `MERCURE_SUBSCRIBER_JWT_ALG` (default: `HS256`): the algorithms these tokens are signed with
+- `MERCURE_TRUSTED_ISSUERS` (default: `https://localhost`): the identifiers accepted in the `iss` claim of the tokens, separated by commas or spaces
+
+The tokens must follow [the format described below](#using-file_get_contents): the ones issued for the 0.x hub are rejected.
+
 ## Subscribing to updates
 
 By default, the Mercure hub is available on the `/.well-known/mercure` path of your FrankenPHP server.
@@ -189,10 +199,20 @@ $jwFactory = new \Symfony\Component\Mercure\Jwt\LcobucciFactory(
 $provider = new \Symfony\Component\Mercure\Jwt\FactoryTokenProvider(
     $jwFactory,
     [new \Symfony\Component\Mercure\Jwt\Grant([\Symfony\Component\Mercure\Jwt\Grant::ACTION_PUBLISH], ['*'])],
-    ['iss' => 'https://localhost', 'aud' => 'https://localhost/.well-known/mercure'],
+    [
+        'iss' => 'https://localhost',
+        'aud' => 'https://localhost/.well-known/mercure',
+        // Required by RFC 9068: the subject and the client the token is issued to
+        'sub' => 'https://localhost',
+        'client_id' => 'https://localhost',
+    ],
 );
 
-$hub = new \Symfony\Component\Mercure\Hub('https://localhost/.well-known/mercure', $provider);
+$hub = new \Symfony\Component\Mercure\Hub(
+    'https://localhost/.well-known/mercure',
+    $provider,
+    protocolVersion: \Symfony\Component\Mercure\ProtocolVersion::V1,
+);
 // Serialize the update, and dispatch it to the hub, that will broadcast it to the clients
 $updateID = $hub->publish(new \Symfony\Component\Mercure\Update('my-topic', json_encode(['key' => 'value'])));
 
