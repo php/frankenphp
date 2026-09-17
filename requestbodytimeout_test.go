@@ -1,8 +1,6 @@
 package frankenphp_test
 
 import (
-	"context"
-	"crypto/tls"
 	"fmt"
 	"io"
 	"net"
@@ -14,7 +12,6 @@ import (
 
 	"github.com/dunglas/frankenphp"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/http2"
 )
 
 // newH2CServer starts a cleartext HTTP/2 (h2c) server for handler and returns
@@ -36,12 +33,7 @@ func newH2CServer(t *testing.T, handler http.HandlerFunc) (addr string, client *
 		_ = ln.Close()
 	})
 
-	client = &http.Client{Transport: &http2.Transport{
-		AllowHTTP: true,
-		DialTLSContext: func(_ context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
-			return net.Dial(network, addr)
-		},
-	}}
+	client = &http.Client{Transport: &http.Transport{Protocols: protocols}}
 
 	return ln.Addr().String(), client
 }
