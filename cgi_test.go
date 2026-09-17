@@ -142,6 +142,12 @@ func TestSplitPos(t *testing.T) {
 			name:      "unicode in filename with multiple php occurrences",
 			path:      "/ȺȺȺȺshell.php.txt.php",
 			splitPath: []string{".php"},
+			wantPos:   -1, // the first .php doesn't end a segment, so no split
+		},
+		{
+			name:      "unicode filename split at a segment boundary",
+			path:      "/ȺȺȺȺshell.php/txt.php",
+			splitPath: []string{".php"},
 			wantPos:   18, // should match first .php, not be confused by byte offset shift
 		},
 		{
@@ -183,11 +189,33 @@ func TestSplitPos(t *testing.T) {
 			splitPath: []string{".php"},
 			wantPos:   10,
 		},
+		// Regression tests for GHSA-xxjp-cjxr-2x6m: the split has to end the
+		// path or a whole path segment, otherwise ".php" embedded in a
+		// filename splits inside it and executes a script the router never
+		// matched (e.g. one a deny rule or a WAF protects).
 		{
-			name:      "extension in middle of filename",
+			name:      "extension in middle of filename must not match",
 			path:      "/test.php.bak",
 			splitPath: []string{".php"},
-			wantPos:   9,
+			wantPos:   -1,
+		},
+		{
+			name:      "extension inside a segment followed by a real one must not match",
+			path:      "/uploads/a.php.txt/b.php",
+			splitPath: []string{".php"},
+			wantPos:   -1,
+		},
+		{
+			name:      "any byte after the extension must not match",
+			path:      "/a.phpx/b.php",
+			splitPath: []string{".php"},
+			wantPos:   -1,
+		},
+		{
+			name:      "a non-boundary match gives up on that split, not on the next one",
+			path:      "/a.phpx/b.phtml",
+			splitPath: []string{".php", ".phtml"},
+			wantPos:   15,
 		},
 		// Regression tests for GHSA-3g8v-8r37-cgjm: an inner non-ASCII byte
 		// caused the loop to break without resetting match=false, so a path
@@ -285,7 +313,7 @@ func TestSplitPos(t *testing.T) {
 // incorrect SCRIPT_NAME/PATH_INFO splitting
 func TestSplitPosUnicodeSecurityRegression(t *testing.T) {
 	// U+023A: Ⱥ (UTF-8: C8 BA). Lowercase is ⱥ (UTF-8: E2 B1 A5), longer in bytes.
-	path := "/ȺȺȺȺshell.php.txt.php"
+	path := "/ȺȺȺȺshell.php/txt.php"
 	split := []string{".php"}
 
 	pos := splitPos(path, split)
@@ -301,7 +329,7 @@ func TestSplitPosUnicodeSecurityRegression(t *testing.T) {
 		pathInfo := path[pos:]
 
 		assert.Equal(t, "/ȺȺȺȺshell.php", scriptName, "script name should be the path up to first .php")
-		assert.Equal(t, ".txt.php", pathInfo, "path info should be the remainder after first .php")
+		assert.Equal(t, "/txt.php", pathInfo, "path info should be the remainder after first .php")
 	}
 }
 
@@ -341,12 +369,20 @@ func FuzzSplitPos(f *testing.F) {
 	f.Add("/path/to/script.php/some/path", ".php")
 	f.Add("/ȺȺȺȺshell.php.txt.php", ".php")
 	f.Add("/shell﹒php", ".php")
+	f.Add("/uploads/a.php.txt/b.php", ".php")
 	f.Add("", "")
 
 	f.Fuzz(func(t *testing.T, path, splitMarker string) {
 		pos := splitPos(path, []string{splitMarker})
 		if pos < -1 || pos > len(path) {
 			t.Fatalf("splitPos(%q, %q) returned out-of-bounds position %d for a %d-byte path", path, splitMarker, pos, len(path))
+		}
+
+		// GHSA-xxjp-cjxr-2x6m: a split inside a filename executes a script the
+		// router never matched, so any position returned must end the path or
+		// a whole path segment.
+		if pos > 0 && pos != len(path) && path[pos] != '/' {
+			t.Fatalf("splitPos(%q, %q) returned %d, which splits inside the %q segment", path, splitMarker, pos, path)
 		}
 	})
 }
