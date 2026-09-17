@@ -9,8 +9,8 @@
 # The build happens when the container *runs*, not while the image is built, so
 # that the static-php-cli logs can be copied out of the container when it fails.
 #
-#     docker run --name static-builder-gnu dunglas/frankenphp:static-builder-gnu
-#     docker cp static-builder-gnu:/go/src/app/dist/frankenphp-linux-x86_64 frankenphp
+#     docker run --rm -v "$PWD/output:/output" -e OUTPUT_DIR=/output -e SPC_LOGS_DIR=/output/log \
+#         dunglas/frankenphp:static-builder-gnu
 #
 # The musl flavor links with zig, which opens a lot of file descriptors when many
 # extensions are built statically; give it `--ulimit nofile=8192:8192`.

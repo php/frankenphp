@@ -122,16 +122,6 @@ if [ -z "${PHP_EXTENSIONS}" ] && [ -n "${EMBED}" ] &&
 	PHP_EXTENSIONS="$("${spc}" dump-extensions "${EMBED}" --format=text --no-dev)"
 fi
 
-libs="${PHP_EXTENSION_LIBS}"
-if [ -n "${libs}" ]; then
-	libs="${libs}${MIMALLOC:+,mimalloc}"
-	# caddy-cbrotli needs the brotli library, always build it
-	case ",${libs}," in
-	*,brotli,*) ;;
-	*) libs="${libs},brotli" ;;
-	esac
-fi
-
 bool() { [ -n "${1}" ] && echo true || echo false; }
 
 upx_pack=false
