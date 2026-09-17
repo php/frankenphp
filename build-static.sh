@@ -105,7 +105,8 @@ fi
 # Fetch the spc binary if we don't have it yet
 spc="${DIST_DIR}/spc"
 if [ ! -x "${spc}" ]; then
-	curl -fsSL -o "${spc}" "https://dl.static-php.dev/v3/spc-bin/nightly/spc-${spc_os}-${spc_arch}"
+	# the nightly endpoint occasionally answers 500, retry instead of failing the build
+	curl -fsSL --retry 5 -o "${spc}" "https://dl.static-php.dev/v3/spc-bin/nightly/spc-${spc_os}-${spc_arch}"
 	chmod +x "${spc}"
 fi
 

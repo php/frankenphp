@@ -161,7 +161,7 @@ jobs:
         if: ${{ failure() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: static-php-cli-log-musl-${{ steps.prepare.outputs.sanitized_platform }}-${{ github.sha }}
+          name: static-php-cli-log-musl-${{ steps.prepare.outputs.sanitized_platform }}${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }}-${{ github.sha }}
           path: output/log
           if-no-files-found: warn
       - name: Push the builder image
