@@ -142,6 +142,9 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 	handler.failureCount++
 }
 
+// maxRestartBackoff is the longest wait between two runs of a failing script
+const maxRestartBackoff = time.Second
+
 // restartBackoff is the wait before a worker script is re-run after a
 // failure: quadratic in the number of consecutive failures, capped at one
 // second; shared by HTTP and background workers. The cap comes before the
@@ -149,7 +152,7 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 // count a crash loop reaches on its own in a few days
 func restartBackoff(failures int) time.Duration {
 	if failures >= 4 {
-		return time.Second
+		return maxRestartBackoff
 	}
 
 	return time.Duration(failures*failures*100) * time.Millisecond

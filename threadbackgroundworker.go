@@ -28,10 +28,15 @@ type backgroundWorkerThread struct {
 	context      *frankenPHPContext
 	failureCount int // number of consecutive failed runs
 
-	// crashCount is the number of runs that crashed past their ready point
-	// in a row, paces their restarts; a cooperative exit resets it. Only
-	// touched on the PHP thread.
+	// crashCount is the number of runs that ended past their ready point
+	// within maxRestartBackoff in a row, crashed or not, and paces their
+	// restarts; a run that outlives it resets the count. Only touched on
+	// the PHP thread.
 	crashCount int
+
+	// runStartedAt is when the current run started, only touched on the
+	// PHP thread
+	runStartedAt time.Time
 
 	// isBootingScript is true until the current run calls
 	// frankenphp_worker_tick(), the background analog of an HTTP worker
@@ -135,9 +140,12 @@ func (handler *backgroundWorkerThread) setupScript() error {
 		handler.drain()
 		return err
 	}
+	handler.thread.contextMu.Lock()
 	handler.context = fc
+	handler.thread.contextMu.Unlock()
 
 	handler.isBootingScript = true
+	handler.runStartedAt = time.Now()
 	metrics.StartWorker(handler.worker.name, handler.worker.server.name)
 	// the run's logger and context, not the globals: Stop() does not wait
 	// for a callback that already started, and a shutdown finishing
@@ -165,39 +173,39 @@ func (handler *backgroundWorkerThread) afterScriptExecution(exitStatus int) {
 	// (drain() already took it when the exit was drain-triggered)
 	handler.drain()
 	worker := handler.worker
+	handler.thread.contextMu.Lock()
 	handler.context = nil
+	handler.thread.contextMu.Unlock()
 
 	handler.stopBootTimer()
 	handler.state.MarkAsWaiting(false)
 
-	// cooperative exit: the script ticked and returned cleanly, re-run it,
+	// exit past the ready point, cooperative or a crash: re-run the script,
 	// unless the thread is being drained (beforeScriptExecution checks the
-	// state)
-	if exitStatus == 0 && !handler.isBootingScript {
-		handler.crashCount = 0
-		metrics.StopWorker(worker.name, worker.server.name, StopReasonRestart)
-
-		if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
-			globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "restarting background worker", slog.String("worker", worker.qualifiedName), slog.Int("thread", handler.thread.threadIndex))
-		}
-
-		return
-	}
-
-	// crash after the ready point: restart without counting toward
-	// max_consecutive_failures, that cap is about a script that never boots.
-	// The wait still applies: unlike an HTTP worker, which can only crash
-	// after a request reached frankenphp_handle_request() and is therefore
-	// paced by traffic, a background worker reaches its ready point on its
-	// own and a script crashing right after it would spin
+	// state), without counting toward max_consecutive_failures, that cap is
+	// about a script that never boots. Unlike an HTTP worker, which can only
+	// exit after a request reached frankenphp_handle_request() and is
+	// therefore paced by traffic, a background worker reaches its ready
+	// point on its own, so a script ending right after it is paced here
 	if !handler.isBootingScript {
-		metrics.StopWorker(worker.name, worker.server.name, StopReasonCrash)
+		if exitStatus == 0 {
+			metrics.StopWorker(worker.name, worker.server.name, StopReasonRestart)
 
-		if globalLogger.Enabled(globalCtx, slog.LevelWarn) {
-			globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "background worker crashed, restarting", slog.String("worker", worker.qualifiedName), slog.Int("thread", handler.thread.threadIndex), slog.Int("exit_status", exitStatus), slog.Int("crashes", handler.crashCount))
+			if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
+				globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "restarting background worker", slog.String("worker", worker.qualifiedName), slog.Int("thread", handler.thread.threadIndex))
+			}
+		} else {
+			metrics.StopWorker(worker.name, worker.server.name, StopReasonCrash)
+
+			if globalLogger.Enabled(globalCtx, slog.LevelWarn) {
+				globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "background worker crashed, restarting", slog.String("worker", worker.qualifiedName), slog.Int("thread", handler.thread.threadIndex), slog.Int("exit_status", exitStatus), slog.Int("crashes", handler.crashCount))
+			}
 		}
 
-		time.Sleep(restartBackoff(handler.crashCount))
+		if time.Since(handler.runStartedAt) > maxRestartBackoff {
+			handler.crashCount = 0
+		}
+		handler.wait(restartBackoff(handler.crashCount))
 		handler.crashCount++
 
 		return
@@ -282,6 +290,16 @@ func go_frankenphp_background_worker_ready(threadIndex C.uintptr_t) {
 
 // backoff waits before the next run of a crashed script, see restartBackoff
 func (handler *backgroundWorkerThread) backoff() {
-	time.Sleep(restartBackoff(handler.failureCount))
+	handler.wait(restartBackoff(handler.failureCount))
 	handler.failureCount++
+}
+
+// wait sleeps between two runs, cut short by a drain (shutdown, reboot,
+// handler transition), which the next beforeScriptExecution() picks up
+// from the state
+func (handler *backgroundWorkerThread) wait(d time.Duration) {
+	select {
+	case <-handler.thread.drainChan:
+	case <-time.After(d):
+	}
 }

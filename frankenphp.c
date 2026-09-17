@@ -389,6 +389,17 @@ static void frankenphp_worker_close_stop_socks(void) {
   }
 }
 
+/* Resets the background worker state of the calling thread. The streams
+ * handed out by frankenphp_get_worker_handle() do not own the socket and
+ * were destroyed by request shutdown, so the cache is dropped, not released.
+ */
+static void frankenphp_reset_background_worker(void) {
+  is_background_worker = false;
+  worker_ticked = false;
+  worker_handle_res = NULL;
+  frankenphp_worker_close_stop_socks();
+}
+
 static int frankenphp_worker_open_stop_pair(void) {
 #ifdef PHP_WIN32
   /* PHP's emulation, a loopback TCP pair; it only accepts AF_INET, listens
@@ -436,14 +447,12 @@ static int frankenphp_worker_open_stop_pair(void) {
 /* Marks the calling thread as a background worker, opens its stop socket
  * pair and transfers the Go side's end to the caller (clearing the TLS slot
  * so a later recycle won't double-close it). Returns -1 if the pair could
- * not be created. max_execution_time is disarmed after php_request_startup()
- * re-arms it, see php_thread(). */
+ * not be created. max_execution_time stays armed until the first
+ * frankenphp_worker_tick() of the run, see there. */
 intptr_t frankenphp_set_background_worker_and_get_stop_sock(void) {
+  frankenphp_reset_background_worker();
   is_background_worker = true;
-  worker_ticked = false;
-  worker_handle_res = NULL;
 
-  frankenphp_worker_close_stop_socks();
   if (frankenphp_worker_open_stop_pair() != 0) {
     return -1;
   }
@@ -487,12 +496,9 @@ void frankenphp_update_local_thread_context(bool is_worker) {
   /* A thread that ran a background worker can be recycled into an HTTP
    * worker or a regular request thread: reset the bg TLS so
    * frankenphp_get_worker_handle() rejects callers again, and release the
-   * stop socket. The streams handed out by frankenphp_get_worker_handle()
-   * do not own it and were destroyed by request shutdown. */
+   * stop socket. */
   if (is_background_worker) {
-    is_background_worker = false;
-    worker_handle_res = NULL;
-    frankenphp_worker_close_stop_socks();
+    frankenphp_reset_background_worker();
   }
 
   is_worker_thread = is_worker;
@@ -1232,7 +1238,8 @@ PHP_FUNCTION(frankenphp_get_worker_handle) {
 
   /* a blocking read is a valid way to park: wait without the
    * default_socket_timeout wake-ups */
-  ((php_netstream_data_t *)stream->abstract)->timeout.tv_sec = -1;
+  struct timeval no_timeout = {-1, 0};
+  php_stream_set_option(stream, PHP_STREAM_OPTION_READ_TIMEOUT, 0, &no_timeout);
 
   stream->ops = &frankenphp_worker_handle_ops;
 
@@ -1891,8 +1898,7 @@ static void *php_thread(void *arg) {
    * it here too so it does not outlive the thread on shutdown, reboot or an
    * unhealthy exit. The Go side's end is closed by the Go side. */
   if (is_background_worker) {
-    is_background_worker = false;
-    frankenphp_worker_close_stop_socks();
+    frankenphp_reset_background_worker();
   }
 
   /* Must precede ts_free_thread: that frees the TSRM storage backing
