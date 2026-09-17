@@ -17,17 +17,35 @@ get_php_version() {
 		jq -r '.Env[] | select(test("^PHP_VERSION=")) | sub("^PHP_VERSION="; "")'
 }
 
-get_image_digest() {
-	local image="$1" ref
-	if [[ "${image}" == */* ]]; then
-		ref="docker://docker.io/${image}"
+image_ref() {
+	if [[ "$1" == */* ]]; then
+		echo "docker://docker.io/$1"
 	else
-		ref="docker://docker.io/library/${image}"
+		echo "docker://docker.io/library/$1"
 	fi
-	skopeo inspect "${ref}" \
+}
+
+get_image_digest() {
+	skopeo inspect "$(image_ref "$1")" \
 		--override-os linux \
 		--override-arch amd64 \
 		--format '{{.Digest}}'
+}
+
+get_image_platforms() {
+	local platforms
+	platforms="$(skopeo inspect --raw "$(image_ref "$1")" | jq -c '
+		[.manifests // [] | .[] | .platform | select(.os == "linux")
+		| "linux/\(.architecture)" + (if .architecture == "arm" and (.variant // "") != "" then "/\(.variant)" else "" end)]
+		| unique
+	')"
+
+	if [[ "${platforms}" == "[]" ]]; then
+		echo "No linux platform in the manifest of $1" >&2
+		return 1
+	fi
+
+	echo "${platforms}"
 }
 
 get_existing_fingerprint() {
@@ -50,10 +68,6 @@ main() {
 
 	PHP_VERSION="${PHP_82_LATEST},${PHP_83_LATEST},${PHP_84_LATEST},${PHP_85_LATEST}"
 	write_output "php_version=${PHP_VERSION}"
-	write_output "php82_version=${PHP_82_LATEST//./-}"
-	write_output "php83_version=${PHP_83_LATEST//./-}"
-	write_output "php84_version=${PHP_84_LATEST//./-}"
-	write_output "php85_version=${PHP_85_LATEST//./-}"
 
 	local FRANKENPHP_LATEST_TAG=""
 	if [[ "${GITHUB_EVENT_NAME:-}" == "schedule" ]]; then
@@ -74,9 +88,9 @@ main() {
 	# Collect the base images (docker-image:// contexts) of each variant. The variant key
 	# is derived from the php-base ref (e.g. "php:8.4.23-zts-trixie" -> "8.4.23-trixie") and
 	# matches the "${php-version}-${os}" keys expected by docker-bake.hcl for BASE_FINGERPRINTS.
-	declare -A VARIANT_IMAGES=() VARIANT_NAMES=() DIGEST_CACHE=() VARIANT_FINGERPRINTS=()
-	local target php_base images image variant_key variant_name
-	while IFS=$'\t' read -r target php_base images; do
+	declare -A VARIANT_IMAGES=() VARIANT_NAMES=() VARIANT_PLATFORMS=() DIGEST_CACHE=() VARIANT_FINGERPRINTS=()
+	local target php_base images platforms image variant_key variant_name
+	while IFS=$'\t' read -r target php_base images platforms; do
 		[[ -z "${php_base}" ]] && continue
 		variant_key="${php_base#php:}"
 		variant_key="${variant_key/-zts/}"
@@ -84,11 +98,12 @@ main() {
 		variant_name="${variant_name#runner-}"
 		VARIANT_IMAGES["${variant_key}"]="${images}"
 		VARIANT_NAMES["${variant_key}"]="${variant_name}"
+		VARIANT_PLATFORMS["${variant_key}"]="${platforms}"
 	done < <(jq -r '
 		.target | to_entries[]
 		| (.value.contexts // {} | [to_entries[].value | select(startswith("docker-image://")) | sub("^docker-image://"; "")]) as $images
 		| select(($images | length) > 0)
-		| [.key, ($images | map(select(startswith("php:"))) | first // ""), ($images | sort | join(" "))]
+		| [.key, ($images | map(select(startswith("php:"))) | first // ""), ($images | sort | join(" ")), (.value.platforms // [] | tojson)]
 		| @tsv
 	' <<<"${METADATA}")
 
@@ -113,6 +128,26 @@ main() {
 	BASE_FINGERPRINT="$(printf '%s\n' "${all_digests[@]}" | sort | sha256sum | awk '{print $1}')"
 	write_output "base_fingerprint=${BASE_FINGERPRINT}"
 	write_output "base_fingerprints=${fingerprints_json}"
+
+	declare -A PLATFORM_CACHE=()
+	local variant_platforms="{}" buildable
+	for variant_key in "${!VARIANT_IMAGES[@]}"; do
+		buildable="${VARIANT_PLATFORMS["${variant_key}"]}"
+		for image in ${VARIANT_IMAGES["${variant_key}"]}; do
+			if [[ -z "${PLATFORM_CACHE["${image}"]:-}" ]]; then
+				PLATFORM_CACHE["${image}"]="$(get_image_platforms "${image}")"
+			fi
+			buildable="$(jq -c --argjson carried "${PLATFORM_CACHE["${image}"]}" 'map(select(IN($carried[])))' <<<"${buildable}")"
+		done
+
+		if [[ "${buildable}" == "[]" ]]; then
+			echo "None of ${VARIANT_PLATFORMS["${variant_key}"]} is carried by every base image of ${VARIANT_NAMES["${variant_key}"]}" >&2
+			return 1
+		fi
+
+		variant_platforms="$(jq -c --arg k "${VARIANT_NAMES["${variant_key}"]}" --argjson v "${buildable}" '. + {($k): $v}' <<<"${variant_platforms}")"
+	done
+	write_output "variant_platforms=${variant_platforms}"
 
 	if [[ "${GITHUB_EVENT_NAME:-}" != "schedule" ]]; then
 		write_output "skip=false"
