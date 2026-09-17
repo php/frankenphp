@@ -122,10 +122,7 @@ func (thread *phpThread) shutdown() {
 		return
 	}
 
-	// wake up handlers parked in a blocking C call (background workers'
-	// stream_select on the stop socket); no-op for the other handlers
-	thread.handler.drain()
-	close(thread.drainChan)
+	thread.drain()
 
 	thread.waitForExit(state.Done)
 
@@ -170,15 +167,21 @@ func (thread *phpThread) setHandler(handler threadHandler) {
 		return
 	}
 
-	// wake up a handler parked in a blocking C call (background workers'
-	// stream_select on the stop socket) so it can yield for the transition
-	thread.handler.drain()
-	close(thread.drainChan)
+	thread.drain()
 
 	thread.state.WaitFor(state.TransitionInProgress)
 	thread.handler = handler
 	thread.drainChan = make(chan struct{})
 	thread.state.Set(state.TransitionComplete)
+}
+
+// drain tells the handler to yield: drainChan wakes it up from a Go wait,
+// the handler hook from a blocking C call (background workers' stream_select
+// on the stop socket), so a thread parked either way leaves without waiting
+// for the force-kill
+func (thread *phpThread) drain() {
+	thread.handler.drain()
+	close(thread.drainChan)
 }
 
 // transition to a new handler safely

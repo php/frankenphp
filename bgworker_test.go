@@ -49,6 +49,7 @@ func TestBackgroundWorkerLifecycle(t *testing.T) {
 	tmp := t.TempDir()
 	sentinel := filepath.Join(tmp, "bg-lifecycle.sentinel")
 
+	t.Cleanup(frankenphp.Shutdown)
 	require.NoError(t, frankenphp.Init(
 		frankenphp.WithWorkers("bg-lifecycle", "testdata/bgworker/basic.php", 1,
 			frankenphp.WithWorkerBackground(),
@@ -245,6 +246,7 @@ func TestBackgroundWorkerParksOnRead(t *testing.T) {
 	tmp := t.TempDir()
 	sentinel := filepath.Join(tmp, "bg-read.sentinel")
 
+	t.Cleanup(frankenphp.Shutdown)
 	require.NoError(t, frankenphp.Init(
 		frankenphp.WithWorkers("bg-read", "testdata/bgworker/read.php", 1,
 			frankenphp.WithWorkerBackground(),
@@ -272,6 +274,7 @@ func TestBackgroundWorkerParksOnRead(t *testing.T) {
 func TestBackgroundWorkerParksOnReceive(t *testing.T) {
 	sentinel := filepath.Join(t.TempDir(), "bg-recv.sentinel")
 
+	t.Cleanup(frankenphp.Shutdown)
 	require.NoError(t, frankenphp.Init(
 		frankenphp.WithWorkers("bg-recv", "testdata/bgworker/recv.php", 1,
 			frankenphp.WithWorkerBackground(),
@@ -369,6 +372,7 @@ func TestBackgroundWorkerTickLeavesTheHandleQuiet(t *testing.T) {
 func TestBackgroundWorkerTick(t *testing.T) {
 	sentinel := filepath.Join(t.TempDir(), "ticks.txt")
 
+	t.Cleanup(frankenphp.Shutdown)
 	require.NoError(t, frankenphp.Init(
 		frankenphp.WithWorkers("bg-tick", "testdata/bgworker/tick.php", 1,
 			frankenphp.WithWorkerBackground(),
@@ -589,6 +593,7 @@ func TestBackgroundWorkerParkingIsNotInterrupted(t *testing.T) {
 func TestBackgroundWorkerHandleClosedAndFetchedAgain(t *testing.T) {
 	sentinel := filepath.Join(t.TempDir(), "refetch.txt")
 
+	t.Cleanup(frankenphp.Shutdown)
 	require.NoError(t, frankenphp.Init(
 		frankenphp.WithWorkers("bg-refetch", "testdata/bgworker/refetch.php", 1,
 			frankenphp.WithWorkerBackground(),
@@ -631,9 +636,9 @@ func TestBackgroundWorkerBootFailuresThenSucceeds(t *testing.T) {
 }
 
 // TestBackgroundWorkerCrashAfterReadyRestarts checks that a crash after the
-// ready point restarts right away without counting toward
-// max_consecutive_failures, and that a zero-timeout stream_select() counts
-// as the wait.
+// ready point restarts without counting toward max_consecutive_failures,
+// that a zero-timeout stream_select() counts as the wait, and that a drain
+// cuts the backoff short.
 func TestBackgroundWorkerCrashAfterReadyRestarts(t *testing.T) {
 	countFile := filepath.Join(t.TempDir(), "runs")
 	initServers(t,
@@ -647,8 +652,33 @@ func TestBackgroundWorkerCrashAfterReadyRestarts(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		b, _ := os.ReadFile(countFile)
-		return bytes.Count(b, []byte("\n")) >= 4
+		return bytes.Count(b, []byte("\n")) >= 5
 	}, 5*time.Second, 25*time.Millisecond, "the worker was not restarted after crashing past its ready point")
+
+	// past four crashes the wait is at its 1s cap
+	start := time.Now()
+	frankenphp.Shutdown()
+	assert.Less(t, time.Since(start), 500*time.Millisecond, "Shutdown() waited for the backoff")
+}
+
+// TestBackgroundWorkerCleanExitIsPaced checks that a script returning right
+// after its tick is re-run with the crash backoff rather than at once.
+func TestBackgroundWorkerCleanExitIsPaced(t *testing.T) {
+	countFile := filepath.Join(t.TempDir(), "runs")
+	initServers(t,
+		frankenphp.WithWorkers("bg-exit", "testdata/bgworker/exit-after-tick.php", 1,
+			frankenphp.WithWorkerBackground(),
+			frankenphp.WithWorkerEnv(map[string]string{"BG_COUNT_FILE": countFile}),
+		),
+		frankenphp.WithNumThreads(2),
+	)
+
+	time.Sleep(time.Second)
+	b, err := os.ReadFile(countFile)
+	require.NoError(t, err)
+	runs := bytes.Count(b, []byte("\n"))
+	assert.GreaterOrEqual(t, runs, 2, "the script was not re-run")
+	assert.LessOrEqual(t, runs, 8, "the re-runs were not paced")
 }
 
 // TestBackgroundWorkerRebootForceKillsStuckScript checks that a script
