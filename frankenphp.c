@@ -976,6 +976,18 @@ PHP_FUNCTION(mercure_publish) {
     RETURN_THROWS();
   }
 
+  if (Z_TYPE_P(topics) == IS_ARRAY) {
+    zval *topic;
+    ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(topics), topic) {
+      if (Z_TYPE_P(topic) != IS_STRING) {
+        zend_argument_type_error(1, "must only contain strings, %s given",
+                                 zend_zval_type_name(topic));
+        RETURN_THROWS();
+      }
+    }
+    ZEND_HASH_FOREACH_END();
+  }
+
   /* The protocol only allows digits in the "retry" field. */
   if (retry < 0) {
     zend_argument_value_error(6, "must be greater than or equal to 0");
@@ -987,6 +999,7 @@ PHP_FUNCTION(mercure_publish) {
 
   switch (result.r2) {
   case FRANKENPHP_MERCURE_OK:
+    /* A custom transport may leave the ID of the update empty. */
     if (result.r0 == NULL) {
       RETURN_EMPTY_STRING();
     }
@@ -997,7 +1010,7 @@ PHP_FUNCTION(mercure_publish) {
                          0);
     RETURN_THROWS();
   case FRANKENPHP_MERCURE_INVALID_UPDATE:
-    zend_value_error("%s", result.r1);
+    zend_argument_value_error(result.r3, "%s", result.r1);
     free(result.r1);
     RETURN_THROWS();
   case FRANKENPHP_MERCURE_PUBLISH_FAILED:
