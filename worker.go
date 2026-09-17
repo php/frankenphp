@@ -23,8 +23,10 @@ type worker struct {
 
 	// name as declared, unique within its server (or among global workers)
 	name string
-	// qualifiedName is unique across the process: "<server name>:<name>" for
-	// server-scoped workers, name otherwise; used for metrics and logs
+	// qualifiedName identifies the worker in logs and errors, where one
+	// string reads better than two fields: "<server name>:<name>" for a
+	// server-scoped worker, the name otherwise. Metrics keep the two apart,
+	// see the Metrics interface
 	qualifiedName          string
 	fileName               string
 	matchRequest           func(*http.Request) bool
@@ -64,7 +66,6 @@ func initWorkers(opts []workerOpt) error {
 	)
 
 	workers = make([]*worker, 0, len(opts))
-	qualifiedNames := make(map[string]bool, len(opts))
 
 	for _, o := range opts {
 		w, err := newWorker(o)
@@ -81,18 +82,10 @@ func initWorkers(opts []workerOpt) error {
 			return err
 		}
 
-		// scoping makes qualified names unique in all but pathological
-		// cases: a global worker may still be named like the "<server>:<name>"
-		// of a scoped one, and metrics would merge the two series
-		if qualifiedNames[w.qualifiedName] {
-			return fmt.Errorf("two workers cannot report under the same name: %q", w.qualifiedName)
-		}
-		qualifiedNames[w.qualifiedName] = true
-
 		totalThreadsToStart += w.num
 		workers = append(workers, w)
 		// reported here rather than in calculateMaxThreads(), where the name is not resolved yet
-		metrics.TotalWorkers(w.qualifiedName, w.num)
+		metrics.TotalWorkers(w.name, w.server.name, w.num)
 	}
 
 	startupFailChan = make(chan error, totalThreadsToStart)
@@ -319,7 +312,7 @@ func (worker *worker) isAtThreadLimit() bool {
 }
 
 func (worker *worker) handleRequest(fc *frankenPHPContext) error {
-	metrics.StartWorkerRequest(worker.qualifiedName)
+	metrics.StartWorkerRequest(worker.name, worker.server.name)
 
 	runtime.Gosched()
 
@@ -331,7 +324,7 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) error {
 			case thread.requestChan <- fc:
 				worker.threadMutex.RUnlock()
 				<-fc.done
-				metrics.StopWorkerRequest(worker.qualifiedName, time.Since(fc.startedAt))
+				metrics.StopWorkerRequest(worker.name, worker.server.name, time.Since(fc.startedAt))
 
 				return nil
 			default:
@@ -343,7 +336,7 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) error {
 
 	// if no thread was available, mark the request as queued and apply the scaling strategy
 	worker.queuedRequests.Add(1)
-	metrics.QueuedWorkerRequest(worker.qualifiedName)
+	metrics.QueuedWorkerRequest(worker.name, worker.server.name)
 
 	for {
 		workerScaleChan := scaleChan
@@ -354,9 +347,9 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) error {
 		select {
 		case worker.requestChan <- fc:
 			worker.queuedRequests.Add(-1)
-			metrics.DequeuedWorkerRequest(worker.qualifiedName)
+			metrics.DequeuedWorkerRequest(worker.name, worker.server.name)
 			<-fc.done
-			metrics.StopWorkerRequest(worker.qualifiedName, time.Since(fc.startedAt))
+			metrics.StopWorkerRequest(worker.name, worker.server.name, time.Since(fc.startedAt))
 
 			return nil
 		case workerScaleChan <- fc:
@@ -364,8 +357,8 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) error {
 		case <-timeoutChan(time.Duration(maxWaitTime.Load())):
 			// the request has timed out stalling
 			worker.queuedRequests.Add(-1)
-			metrics.DequeuedWorkerRequest(worker.qualifiedName)
-			metrics.StopWorkerRequest(worker.qualifiedName, time.Since(fc.startedAt))
+			metrics.DequeuedWorkerRequest(worker.name, worker.server.name)
+			metrics.StopWorkerRequest(worker.name, worker.server.name, time.Since(fc.startedAt))
 
 			fc.reject(ErrMaxWaitTimeExceeded)
 
