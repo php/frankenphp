@@ -182,8 +182,23 @@ func newWorker(o workerOpt) (*worker, error) {
 		}
 	}
 
+	// a worker declared without a scope belongs to the fallback server, the
+	// one serving the requests that have no server either, so a worker
+	// always has one
+	scope := o.server
+	if scope == nil {
+		scope = fallbackServer
+	}
+
 	if o.name == "" {
+		// a name generated from the script path is not a declaration:
+		// several workers may share a script, a pool split by a matcher
+		// for instance, so it is made unique rather than reported as the
+		// collision a declared name gets
 		o.name = absFileName
+		for suffix := 1; scope.workersByName[o.name] != nil; suffix++ {
+			o.name = fmt.Sprintf("%s_%d", absFileName, suffix)
+		}
 	}
 
 	// no server means no set of requests to match against, the matcher would never run
@@ -234,15 +249,8 @@ func newWorker(o workerOpt) (*worker, error) {
 		maxConsecutiveFailures: o.maxConsecutiveFailures,
 		onThreadReady:          o.onThreadReady,
 		onThreadShutdown:       o.onThreadShutdown,
-		server:                 o.server,
+		server:                 scope,
 		isBackgroundWorker:     o.isBackgroundWorker,
-	}
-
-	// a worker declared without a scope belongs to the fallback server, the
-	// one serving the requests that have no server either, so a worker
-	// always has one
-	if w.server == nil {
-		w.server = fallbackServer
 	}
 
 	w.configureMercure(&o)
