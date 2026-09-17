@@ -475,12 +475,8 @@ jobs:
       id-token: write
       attestations: write
       artifact-metadata: write
-    strategy:
-      fail-fast: false
-      matrix:
-        platform: ["arm64", "x86_64"]
-    name: Build macOS ${{ matrix.platform }} binaries
-    runs-on: ${{ matrix.platform == 'arm64' && 'macos-15' || 'macos-15-intel' }}
+    name: Build macOS arm64 binaries
+    runs-on: macos-15
     needs: [prepare]
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
@@ -505,7 +501,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           path: dist/log
-          name: static-php-cli-log-${{ matrix.platform }}-${{ github.sha }}
+          name: static-php-cli-log-arm64-${{ github.sha }}
       - if: needs.prepare.outputs.ref || github.ref_type == 'tag'
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
@@ -514,8 +510,8 @@ jobs:
         if: github.ref_type == 'branch'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: frankenphp-mac-${{ matrix.platform }}
-          path: dist/frankenphp-mac-${{ matrix.platform }}
+          name: frankenphp-mac-arm64
+          path: dist/frankenphp-mac-arm64
           compression-level: 0
       - name: Run sanity checks
         run: |
@@ -528,4 +524,4 @@ jobs:
           "${BINARY}" list-modules | grep http.handlers.vulcain
           "${BINARY}" php-cli -r "echo 'Sanity check passed';"
         env:
-          BINARY: dist/frankenphp-mac-${{ matrix.platform }}
+          BINARY: dist/frankenphp-mac-arm64

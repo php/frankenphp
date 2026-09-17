@@ -120,6 +120,8 @@ cd frankenphp
 
 Note: this script also works on Linux (and probably on other Unixes), and is used internally by the Docker images we provide.
 
+We only publish macOS binaries for Apple Silicon. On Intel Macs, build from source with this script.
+
 ## Customizing the FrankenPHP static build
 
 The following environment variables can be passed to `docker run` and to the `build-static.sh`
