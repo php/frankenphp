@@ -17,4 +17,16 @@ return function () {
 	} catch (ValueError $e) {
 		echo "error 2: " . $e->getMessage() . "\n";
 	}
+
+	try {
+		mercure_publish(['foo', 1]);
+	} catch (TypeError $e) {
+		echo "error 3: " . $e->getMessage() . "\n";
+	}
+
+	try {
+		mercure_publish('foo', id: 'earliest');
+	} catch (ValueError $e) {
+		echo "error 4: " . $e->getMessage() . "\n";
+	}
 };

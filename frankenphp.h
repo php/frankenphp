@@ -202,7 +202,8 @@ void frankenphp_force_kill_thread(force_kill_slot slot);
 void frankenphp_release_thread_for_kill(force_kill_slot slot);
 
 /* Outcome of go_mercure_publish(). INVALID_UPDATE and PUBLISH_FAILED carry a
- * malloc'ed message the caller must free. */
+ * malloc'ed message the caller must free, INVALID_UPDATE the position of the
+ * argument at fault. */
 typedef enum {
   FRANKENPHP_MERCURE_OK = 0,
   FRANKENPHP_MERCURE_NO_HUB = 1,

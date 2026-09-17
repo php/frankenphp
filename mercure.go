@@ -7,6 +7,7 @@ package frankenphp
 // #include <php.h>
 import "C"
 import (
+	"errors"
 	"log/slog"
 	"unsafe"
 
@@ -18,7 +19,7 @@ type mercureContext struct {
 }
 
 //export go_mercure_publish
-func go_mercure_publish(threadIndex C.uintptr_t, topics *C.struct__zval_struct, data *C.zend_string, private bool, id, typ *C.zend_string, retry uint64) (generatedID *C.zend_string, errorMessage *C.char, status C.frankenphp_mercure_status) {
+func go_mercure_publish(threadIndex C.uintptr_t, topics *C.struct__zval_struct, data *C.zend_string, private bool, id, typ *C.zend_string, retry uint64) (generatedID *C.zend_string, errorMessage *C.char, status C.frankenphp_mercure_status, argument C.uint32_t) {
 	thread := phpThreads[threadIndex]
 	fc := thread.handler.frankenPHPContext()
 
@@ -27,7 +28,7 @@ func go_mercure_publish(threadIndex C.uintptr_t, topics *C.struct__zval_struct, 
 			fc.logger.LogAttrs(fc.ctx, slog.LevelError, "No Mercure hub configured")
 		}
 
-		return nil, nil, C.FRANKENPHP_MERCURE_NO_HUB
+		return nil, nil, C.FRANKENPHP_MERCURE_NO_HUB, 0
 	}
 
 	u := &mercure.Update{
@@ -48,7 +49,7 @@ func go_mercure_publish(threadIndex C.uintptr_t, topics *C.struct__zval_struct, 
 	case C.IS_ARRAY:
 		ts, err := GoPackedArray[string](unsafe.Pointer(*(**C.zend_array)(unsafe.Pointer(&topics.value[0]))))
 		if err != nil {
-			return nil, C.CString(err.Error()), C.FRANKENPHP_MERCURE_INVALID_UPDATE
+			return nil, C.CString(err.Error()), C.FRANKENPHP_MERCURE_INVALID_UPDATE, 1
 		}
 
 		u.Topics = ts
@@ -57,21 +58,43 @@ func go_mercure_publish(threadIndex C.uintptr_t, topics *C.struct__zval_struct, 
 		panic("invalid topics type")
 	}
 
-	// The protocol constrains topics, id, type and data: report the violations
-	// as argument errors instead of as a failed publication.
-	if err := u.Validate(); err != nil {
-		return nil, C.CString(err.Error()), C.FRANKENPHP_MERCURE_INVALID_UPDATE
-	}
-
 	if err := fc.mercureHub.Publish(fc.ctx, u); err != nil {
+		// The hub validates the update before dispatching it: report a violation
+		// of the protocol as an error of the argument at fault.
+		if argument := invalidMercureArgument(err); argument != 0 {
+			return nil, C.CString(err.Error()), C.FRANKENPHP_MERCURE_INVALID_UPDATE, argument
+		}
+
 		if fc.logger.Enabled(fc.ctx, slog.LevelError) {
 			fc.logger.LogAttrs(fc.ctx, slog.LevelError, "Unable to publish Mercure update", slog.Any("error", err))
 		}
 
-		return nil, C.CString(err.Error()), C.FRANKENPHP_MERCURE_PUBLISH_FAILED
+		return nil, C.CString(err.Error()), C.FRANKENPHP_MERCURE_PUBLISH_FAILED, 0
 	}
 
-	return (*C.zend_string)(PHPString(u.ID, false)), nil, C.FRANKENPHP_MERCURE_OK
+	return (*C.zend_string)(PHPString(u.ID, false)), nil, C.FRANKENPHP_MERCURE_OK, 0
+}
+
+// invalidMercureArgument maps a validation error of the hub to the position of
+// the mercure_publish() argument at fault, 0 for any other error.
+func invalidMercureArgument(err error) C.uint32_t {
+	switch {
+	case errors.Is(err, mercure.ErrMissingTopic),
+		errors.Is(err, mercure.ErrTooManyTopics),
+		errors.Is(err, mercure.ErrInvalidTopic),
+		errors.Is(err, mercure.ErrReservedTopic),
+		errors.Is(err, mercure.ErrReservedWildcard):
+		return 1
+	case errors.Is(err, mercure.ErrInvalidData):
+		return 2
+	case errors.Is(err, mercure.ErrInvalidEventID):
+		return 4
+	case errors.Is(err, mercure.ErrInvalidEventType),
+		errors.Is(err, mercure.ErrReservedEventType):
+		return 5
+	}
+
+	return 0
 }
 
 func (w *worker) configureMercure(o *workerOpt) {
