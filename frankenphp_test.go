@@ -890,12 +890,13 @@ func ExampleServeHTTP() {
 	defer frankenphp.Shutdown()
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Drop headers whose name contains an underscore: CGI maps dashes to
-		// underscores, so "Foo_Bar" would be indistinguishable from "Foo-Bar"
-		// in $_SERVER and could spoof any header an app or proxy trusts.
+		// Drop headers whose name contains an underscore or a dot: CGI maps
+		// dashes to underscores and PHP maps dots to underscores, so "Foo_Bar"
+		// and "Foo.Bar" would both be indistinguishable from "Foo-Bar" in
+		// $_SERVER and could spoof any header an app or proxy trusts.
 		// Whitelist any you genuinely need.
 		for name := range r.Header {
-			if strings.ContainsRune(name, '_') {
+			if strings.ContainsAny(name, "_.") {
 				delete(r.Header, name)
 			}
 		}
