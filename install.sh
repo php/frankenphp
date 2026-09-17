@@ -130,7 +130,7 @@ Darwin*)
 		THE_ARCH_BIN="frankenphp-mac-arm64"
 		;;
 	*)
-		THE_ARCH_BIN="frankenphp-mac-x86_64"
+		THE_ARCH_BIN=""
 		;;
 	esac
 	;;
