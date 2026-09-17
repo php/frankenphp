@@ -12,8 +12,11 @@ import (
 
 var constRegex = regexp.MustCompile(`//\s*export_php:const$`)
 var classConstRegex = regexp.MustCompile(`//\s*export_php:classconst\s+(\w+)$`)
-var constDeclRegex = regexp.MustCompile(`const\s+(\w+)\s*=\s*(.+)`)
-var constBlockDeclRegex = regexp.MustCompile(`^(\w+)\s*=\s*(.+)$`)
+
+// The optional group before "=" is the explicit Go type of a typed constant
+// declaration such as "const Perm os.FileMode = 0o755".
+var constDeclRegex = regexp.MustCompile(`const\s+(\w+)(?:\s+[\w.\[\]*]+)?\s*=\s*(.+)`)
+var constBlockDeclRegex = regexp.MustCompile(`^(\w+)(?:\s+[\w.\[\]*]+)?\s*=\s*(.+)$`)
 var constNameRegex = regexp.MustCompile(`^(\w+)$`)
 
 type ConstantParser struct{}
@@ -84,7 +87,7 @@ func (cp *ConstantParser) parse(filename string) (constants []phpConstant, err e
 			matches := constDeclRegex.FindStringSubmatch(line)
 			if len(matches) == 3 {
 				name := matches[1]
-				value := strings.TrimSpace(matches[2])
+				value := normalizeConstValue(strings.TrimSpace(matches[2]))
 
 				constant := phpConstant{
 					Name:       name,
@@ -113,7 +116,7 @@ func (cp *ConstantParser) parse(filename string) (constants []phpConstant, err e
 		} else if inConstBlock && (expectConstDecl || expectClassConstDecl || exportAllInBlock) {
 			if matches := constBlockDeclRegex.FindStringSubmatch(line); len(matches) == 3 {
 				name := matches[1]
-				value := strings.TrimSpace(matches[2])
+				value := normalizeConstValue(strings.TrimSpace(matches[2]))
 
 				constant := phpConstant{
 					Name:       name,
@@ -175,6 +178,22 @@ func (cp *ConstantParser) parse(filename string) (constants []phpConstant, err e
 	}
 
 	return constants, scanner.Err()
+}
+
+// normalizeConstValue rewrites Go literals that neither C nor PHP understand.
+// Only raw string literals qualify: they are re-quoted as regular double-quoted
+// strings, which both languages accept.
+func normalizeConstValue(value string) string {
+	if !strings.HasPrefix(value, "`") || !strings.HasSuffix(value, "`") || len(value) < 2 {
+		return value
+	}
+
+	unquoted, err := strconv.Unquote(value)
+	if err != nil {
+		return value
+	}
+
+	return strconv.Quote(unquoted)
 }
 
 // determineConstantType analyzes the value and determines its type

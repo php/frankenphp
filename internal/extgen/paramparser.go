@@ -72,8 +72,8 @@ func (pp *ParameterParser) generateSingleParamDeclaration(param phpParameter) []
 		decls = append(decls, fmt.Sprintf("zend_array *%s = NULL;", param.Name))
 	case phpMixed:
 		decls = append(decls, fmt.Sprintf("zval *%s = NULL;", param.Name))
-	case "callable":
-		decls = append(decls, fmt.Sprintf("zval *%s_callback;", param.Name))
+	case phpCallable:
+		decls = append(decls, fmt.Sprintf("zval *%s_callback = NULL;", param.Name))
 	}
 
 	return decls

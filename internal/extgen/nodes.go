@@ -1,8 +1,8 @@
 package extgen
 
 import (
+	"regexp"
 	"strconv"
-	"strings"
 )
 
 // phpType represents a PHP type
@@ -77,17 +77,20 @@ type phpConstant struct {
 	ClassName  string // empty for global constants, set for class constants
 }
 
+// goOnlyIntLiteral matches the integer spellings Go accepts but C does not:
+// the "0o"/"0b" base prefixes and digit separators.
+var goOnlyIntLiteral = regexp.MustCompile(`^[+-]?0[oObB]|_`)
+
 // CValue returns the constant value in C-compatible format
 func (c phpConstant) CValue() string {
-	if c.PhpType != phpInt {
+	if c.PhpType != phpInt || !goOnlyIntLiteral.MatchString(c.Value) {
 		return c.Value
 	}
 
-	if strings.HasPrefix(c.Value, "0o") {
-		if val, err := strconv.ParseInt(c.Value, 0, 64); err == nil {
-			return strconv.FormatInt(val, 10)
-		}
+	val, err := strconv.ParseInt(c.Value, 0, 64)
+	if err != nil {
+		return c.Value
 	}
 
-	return c.Value
+	return strconv.FormatInt(val, 10)
 }
