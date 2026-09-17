@@ -101,6 +101,33 @@ func TestServer(t *testing.T) {
 		assert.Equal(t, "requests:2", byName(server1))
 	})
 
+	t.Run("two_workers_may_share_a_script_when_matchers_tell_them_apart", func(t *testing.T) {
+		// the documented way to give slow endpoints their own thread pool,
+		// see docs/performance.md; neither worker is named, so the names
+		// generated from their shared script must not collide
+		t.Cleanup(frankenphp.Shutdown)
+
+		server, err := frankenphp.NewServer(testDataDir)
+		require.NoError(t, err)
+		require.NoError(t, frankenphp.Init(
+			frankenphp.WithServer(server),
+			frankenphp.WithWorkers("", testDataDir+"worker-with-counter.php", 1,
+				frankenphp.WithWorkerServerScope(server),
+				frankenphp.WithWorkerMatcher(func(r *http.Request) bool { return strings.HasPrefix(r.URL.Path, "/slow/") }),
+			),
+			frankenphp.WithWorkers("", testDataDir+"worker-with-counter.php", 1,
+				frankenphp.WithWorkerServerScope(server),
+				frankenphp.WithWorkerMatcher(func(*http.Request) bool { return true }),
+			),
+			frankenphp.WithNumThreads(3),
+		))
+
+		// each pool counts the requests its matcher took
+		assert.Equal(t, "requests:1", serverGet(t, server, "http://example.com/slow/one"))
+		assert.Equal(t, "requests:2", serverGet(t, server, "http://example.com/slow/two"))
+		assert.Equal(t, "requests:1", serverGet(t, server, "http://example.com/index.php"))
+	})
+
 	t.Run("error_on_duplicate_worker_names", func(t *testing.T) {
 		t.Cleanup(frankenphp.Shutdown)
 

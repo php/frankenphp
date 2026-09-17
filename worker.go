@@ -146,12 +146,15 @@ func reportStartupFailure(err error) bool {
 }
 
 // resolveWorkerFile turns a declared filename into the path a worker runs,
-// and names the worker after it when the declaration left the name out.
+// and names the worker after it when the declaration left the name out. A
+// generated name is not a declaration: several workers may share a script,
+// a pool split by a matcher for instance, so it is made unique within the
+// worker's scope rather than reported as the collision a declared name gets.
 //
 // Order is important!
 // This order ensures that FrankenPHP started from inside a symlinked directory will properly resolve any paths.
 // If it is started from outside a symlinked directory, it is resolved to the same path that we use in the Caddy module.
-func resolveWorkerFile(o workerOpt) (workerOpt, error) {
+func resolveWorkerFile(o workerOpt, nameTaken func(*Server, string) bool) (workerOpt, error) {
 	absFileName, err := filepath.EvalSymlinks(filepath.FromSlash(o.fileName))
 	if err != nil {
 		return o, fmt.Errorf("worker filename is invalid %q: %w", o.fileName, err)
@@ -175,6 +178,9 @@ func resolveWorkerFile(o workerOpt) (workerOpt, error) {
 		}
 
 		o.name = absFileName
+		for suffix := 1; nameTaken(o.server, o.name); suffix++ {
+			o.name = fmt.Sprintf("%s_%d", absFileName, suffix)
+		}
 	}
 
 	return o, nil
@@ -223,11 +229,9 @@ func checkWorkerDeclaration(o workerOpt, nameTaken, pathTaken func(*Server, stri
 }
 
 func newWorker(o workerOpt) (*worker, error) {
-	o, err := resolveWorkerFile(o)
-	if err != nil {
-		return nil, err
-	}
-
+	// a worker declared without a scope belongs to the fallback server, the
+	// one serving the requests that have no server either, so a worker
+	// always has one
 	registeredIn := func(server *Server) *Server {
 		if server == nil {
 			return fallbackServer
@@ -238,9 +242,16 @@ func newWorker(o workerOpt) (*worker, error) {
 	nameTaken := func(server *Server, name string) bool { return registeredIn(server).workersByName[name] != nil }
 	pathTaken := func(server *Server, path string) bool { return registeredIn(server).workersByPath[path] != nil }
 
+	o, err := resolveWorkerFile(o, nameTaken)
+	if err != nil {
+		return nil, err
+	}
+
 	if err := checkWorkerDeclaration(o, nameTaken, pathTaken); err != nil {
 		return nil, err
 	}
+
+	scope := registeredIn(o.server)
 
 	absFileName := o.fileName
 
@@ -287,15 +298,8 @@ func newWorker(o workerOpt) (*worker, error) {
 		maxConsecutiveFailures: o.maxConsecutiveFailures,
 		onThreadReady:          o.onThreadReady,
 		onThreadShutdown:       o.onThreadShutdown,
-		server:                 o.server,
+		server:                 scope,
 		isBackgroundWorker:     o.isBackgroundWorker,
-	}
-
-	// a worker declared without a scope belongs to the fallback server, the
-	// one serving the requests that have no server either, so a worker
-	// always has one
-	if w.server == nil {
-		w.server = fallbackServer
 	}
 
 	w.configureMercure(&o)

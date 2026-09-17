@@ -349,7 +349,7 @@ func Validate(options ...Option) error {
 		taken[server][key] = true
 	}
 	for _, w := range opt.workers {
-		w, err := resolveWorkerFile(w)
+		w, err := resolveWorkerFile(w, nameTaken)
 		if err != nil {
 			return err
 		}
