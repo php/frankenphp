@@ -16,15 +16,20 @@ const (
 
 type StopReason int
 
+// Metrics reports what the workers and the threads of a FrankenPHP instance
+// are doing. A worker is identified by two values: its declared name, and
+// the name of the server it is scoped to, empty for a global worker. They
+// stay apart rather than packed into one string, so a series keyed on the
+// name alone still selects the worker of every server.
 type Metrics interface {
 	// StartWorker collects started workers
-	StartWorker(name string)
+	StartWorker(name, server string)
 	// ReadyWorker collects ready workers
-	ReadyWorker(name string)
+	ReadyWorker(name, server string)
 	// StopWorker collects stopped workers
-	StopWorker(name string, reason StopReason)
+	StopWorker(name, server string, reason StopReason)
 	// TotalWorkers collects expected workers
-	TotalWorkers(name string, num int)
+	TotalWorkers(name, server string, num int)
 	// TotalThreads collects total threads
 	TotalThreads(num int)
 	// StartRequest collects started requests
@@ -32,28 +37,28 @@ type Metrics interface {
 	// StopRequest collects stopped requests
 	StopRequest()
 	// StopWorkerRequest collects stopped worker requests
-	StopWorkerRequest(name string, duration time.Duration)
+	StopWorkerRequest(name, server string, duration time.Duration)
 	// StartWorkerRequest collects started worker requests
-	StartWorkerRequest(name string)
+	StartWorkerRequest(name, server string)
 	Shutdown()
-	QueuedWorkerRequest(name string)
-	DequeuedWorkerRequest(name string)
+	QueuedWorkerRequest(name, server string)
+	DequeuedWorkerRequest(name, server string)
 	QueuedRequest()
 	DequeuedRequest()
 }
 
 type nullMetrics struct{}
 
-func (n nullMetrics) StartWorker(string) {
+func (n nullMetrics) StartWorker(string, string) {
 }
 
-func (n nullMetrics) ReadyWorker(string) {
+func (n nullMetrics) ReadyWorker(string, string) {
 }
 
-func (n nullMetrics) StopWorker(string, StopReason) {
+func (n nullMetrics) StopWorker(string, string, StopReason) {
 }
 
-func (n nullMetrics) TotalWorkers(string, int) {
+func (n nullMetrics) TotalWorkers(string, string, int) {
 }
 
 func (n nullMetrics) TotalThreads(int) {
@@ -65,18 +70,18 @@ func (n nullMetrics) StartRequest() {
 func (n nullMetrics) StopRequest() {
 }
 
-func (n nullMetrics) StopWorkerRequest(string, time.Duration) {
+func (n nullMetrics) StopWorkerRequest(string, string, time.Duration) {
 }
 
-func (n nullMetrics) StartWorkerRequest(string) {
+func (n nullMetrics) StartWorkerRequest(string, string) {
 }
 
 func (n nullMetrics) Shutdown() {
 }
 
-func (n nullMetrics) QueuedWorkerRequest(string) {}
+func (n nullMetrics) QueuedWorkerRequest(string, string) {}
 
-func (n nullMetrics) DequeuedWorkerRequest(string) {}
+func (n nullMetrics) DequeuedWorkerRequest(string, string) {}
 
 func (n nullMetrics) QueuedRequest()   {}
 func (n nullMetrics) DequeuedRequest() {}
@@ -106,7 +111,7 @@ func (m *PrometheusMetrics) mustRegister(c prometheus.Collector) {
 	}
 }
 
-func (m *PrometheusMetrics) StartWorker(name string) {
+func (m *PrometheusMetrics) StartWorker(name, server string) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -117,10 +122,10 @@ func (m *PrometheusMetrics) StartWorker(name string) {
 		return
 	}
 
-	m.totalWorkers.WithLabelValues(name).Inc()
+	m.totalWorkers.WithLabelValues(name, server).Inc()
 }
 
-func (m *PrometheusMetrics) ReadyWorker(name string) {
+func (m *PrometheusMetrics) ReadyWorker(name, server string) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -128,10 +133,10 @@ func (m *PrometheusMetrics) ReadyWorker(name string) {
 		return
 	}
 
-	m.readyWorkers.WithLabelValues(name).Inc()
+	m.readyWorkers.WithLabelValues(name, server).Inc()
 }
 
-func (m *PrometheusMetrics) StopWorker(name string, reason StopReason) {
+func (m *PrometheusMetrics) StopWorker(name, server string, reason StopReason) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -142,27 +147,29 @@ func (m *PrometheusMetrics) StopWorker(name string, reason StopReason) {
 		return
 	}
 
-	m.totalWorkers.WithLabelValues(name).Dec()
+	m.totalWorkers.WithLabelValues(name, server).Dec()
 
 	// only decrement readyWorkers if the worker actually reached its ready point
 	if reason != StopReasonBootFailure {
-		m.readyWorkers.WithLabelValues(name).Dec()
+		m.readyWorkers.WithLabelValues(name, server).Dec()
 	}
 
 	switch reason {
 	case StopReasonCrash, StopReasonBootFailure:
-		m.workerCrashes.WithLabelValues(name).Inc()
+		m.workerCrashes.WithLabelValues(name, server).Inc()
 	case StopReasonRestart:
-		m.workerRestarts.WithLabelValues(name).Inc()
+		m.workerRestarts.WithLabelValues(name, server).Inc()
 	}
 }
 
-func (m *PrometheusMetrics) TotalWorkers(string, int) {
+func (m *PrometheusMetrics) TotalWorkers(string, string, int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	const ns, sub = "frankenphp", "worker"
-	basicLabels := []string{"worker"}
+	// a worker of a php_server keeps its declared name, the block it belongs
+	// to is a label of its own, empty for a global worker
+	basicLabels := []string{"worker", "server"}
 
 	if m.totalWorkers == nil {
 		m.totalWorkers = prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -260,7 +267,7 @@ func (m *PrometheusMetrics) StopRequest() {
 	m.busyThreads.Dec()
 }
 
-func (m *PrometheusMetrics) StopWorkerRequest(name string, duration time.Duration) {
+func (m *PrometheusMetrics) StopWorkerRequest(name, server string, duration time.Duration) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -268,39 +275,39 @@ func (m *PrometheusMetrics) StopWorkerRequest(name string, duration time.Duratio
 		return
 	}
 
-	m.workerRequestCount.WithLabelValues(name).Inc()
-	m.busyWorkers.WithLabelValues(name).Dec()
-	m.workerRequestTime.WithLabelValues(name).Add(duration.Seconds())
+	m.workerRequestCount.WithLabelValues(name, server).Inc()
+	m.busyWorkers.WithLabelValues(name, server).Dec()
+	m.workerRequestTime.WithLabelValues(name, server).Add(duration.Seconds())
 }
 
-func (m *PrometheusMetrics) StartWorkerRequest(name string) {
+func (m *PrometheusMetrics) StartWorkerRequest(name, server string) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	if m.busyWorkers == nil {
 		return
 	}
-	m.busyWorkers.WithLabelValues(name).Inc()
+	m.busyWorkers.WithLabelValues(name, server).Inc()
 }
 
-func (m *PrometheusMetrics) QueuedWorkerRequest(name string) {
+func (m *PrometheusMetrics) QueuedWorkerRequest(name, server string) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	if m.workerQueueDepth == nil {
 		return
 	}
-	m.workerQueueDepth.WithLabelValues(name).Inc()
+	m.workerQueueDepth.WithLabelValues(name, server).Inc()
 }
 
-func (m *PrometheusMetrics) DequeuedWorkerRequest(name string) {
+func (m *PrometheusMetrics) DequeuedWorkerRequest(name, server string) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	if m.workerQueueDepth == nil {
 		return
 	}
-	m.workerQueueDepth.WithLabelValues(name).Dec()
+	m.workerQueueDepth.WithLabelValues(name, server).Dec()
 }
 
 func (m *PrometheusMetrics) QueuedRequest() {

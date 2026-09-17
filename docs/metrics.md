@@ -15,16 +15,16 @@ When [Caddy metrics](https://caddyserver.com/docs/metrics) are enabled, FrankenP
 - `frankenphp_total_threads`: The total number of PHP threads.
 - `frankenphp_busy_threads`: The number of PHP threads currently processing a request (running workers always consume a thread).
 - `frankenphp_queue_depth`: The number of regular queued requests.
-- `frankenphp_total_workers{worker="[worker_name]"}`: The total number of workers.
-- `frankenphp_busy_workers{worker="[worker_name]"}`: The number of workers currently processing a request.
-- `frankenphp_worker_request_time{worker="[worker_name]"}`: The time spent processing requests by all workers.
-- `frankenphp_worker_request_count{worker="[worker_name]"}`: The number of requests processed by all workers.
-- `frankenphp_ready_workers{worker="[worker_name]"}`: The number of workers that have reached their ready point at least once: `frankenphp_handle_request()` for HTTP workers, `frankenphp_worker_tick()` for background workers.
-- `frankenphp_worker_crashes{worker="[worker_name]"}`: The number of times a worker has unexpectedly terminated.
-- `frankenphp_worker_restarts{worker="[worker_name]"}`: The number of times a worker has been deliberately restarted.
-- `frankenphp_worker_queue_depth{worker="[worker_name]"}`: The number of queued requests.
+- `frankenphp_total_workers{worker="[worker_name]",server="[server_name]"}`: The total number of workers.
+- `frankenphp_busy_workers{worker="[worker_name]",server="[server_name]"}`: The number of workers currently processing a request.
+- `frankenphp_worker_request_time{worker="[worker_name]",server="[server_name]"}`: The time spent processing requests by all workers.
+- `frankenphp_worker_request_count{worker="[worker_name]",server="[server_name]"}`: The number of requests processed by all workers.
+- `frankenphp_ready_workers{worker="[worker_name]",server="[server_name]"}`: The number of workers that have reached their ready point at least once: `frankenphp_handle_request()` for HTTP workers, `frankenphp_worker_tick()` for background workers.
+- `frankenphp_worker_crashes{worker="[worker_name]",server="[server_name]"}`: The number of times a worker has unexpectedly terminated.
+- `frankenphp_worker_restarts{worker="[worker_name]",server="[server_name]"}`: The number of times a worker has been deliberately restarted.
+- `frankenphp_worker_queue_depth{worker="[worker_name]",server="[server_name]"}`: The number of queued requests.
 
-`[worker_name]` is the worker name from the Caddyfile, or the absolute path of the worker file when it has none. Workers of a `php_server` block are prefixed with the name of that block: `<server name>:<worker name>`. They used to be reported under their bare name unless two blocks declared the same one, so dashboards and alerts built on those series need the prefix.
+`[worker_name]` is the worker name from the Caddyfile, or the absolute path of the worker file when it has none, with a number appended when several workers share a script. `[server_name]` is the name of the `php_server` block the worker belongs to, and is empty for a worker declared in the global `frankenphp` block. The two stay apart, so a query on the worker name alone still selects that worker in every server.
 
 ## Threads State Endpoint
 
