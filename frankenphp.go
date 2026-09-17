@@ -140,7 +140,9 @@ type PHPThread struct {
 
 // EXPERIMENTAL: IsRequestDone determines whether the request associated with the PHPThread has been closed.
 func (p *PHPThread) IsRequestDone() bool {
-	return p.thread.frankenPHPContext().isDone
+	fc := p.thread.currentContext()
+
+	return fc == nil || fc.isDone
 }
 
 // EXPERIMENTAL: Pin pins a Go object, preventing it from being moved or freed by the garbage
@@ -152,7 +154,7 @@ func (p *PHPThread) Pin(pointer any) {
 // EXPERIMENTAL: Thread retrieves a PHP thread by its index.
 // Returns nil and false if the system is not running or no thread exists at the given index.
 func Thread(index uint) (*PHPThread, bool) {
-	if !isRunning {
+	if !isRunning.Load() {
 		return nil, false
 	}
 
@@ -165,7 +167,7 @@ func Thread(index uint) (*PHPThread, bool) {
 		return nil, false
 	}
 
-	fc := thread.frankenPHPContext()
+	fc := thread.currentContext()
 	var request *http.Request
 	if fc != nil {
 		request = fc.request

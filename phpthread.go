@@ -186,6 +186,18 @@ func (thread *phpThread) name() string {
 	return thread.handler.name()
 }
 
+// currentContext returns the request context of the current handler, if any.
+func (thread *phpThread) currentContext() *frankenPHPContext {
+	thread.handlerMu.RLock()
+	defer thread.handlerMu.RUnlock()
+
+	if thread.handler == nil {
+		return nil
+	}
+
+	return thread.handler.frankenPHPContext()
+}
+
 // send a kill signal to PHP (ZTS compatible)
 // make sure to only call this if PHP is actively handling a request
 func (thread *phpThread) sendKillSignal() {
