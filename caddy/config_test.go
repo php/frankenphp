@@ -284,3 +284,39 @@ func TestCreateUniqueWorkerNamesQualifiedByServer(t *testing.T) {
 	// workers without a server keep the numeric postfix behavior
 	require.Equal(t, "queue_2", app.createUniqueWorkerName(wc, ""))
 }
+
+func TestWorkerWatchAllowsExcludePatterns(t *testing.T) {
+	// Create a test configuration with an exclude watch pattern
+	configWithExcludeWatch := `
+	{
+		php {
+			worker {
+				file ../testdata/worker-with-env.php
+				num 1
+				watch
+				watch !./vendor/**
+				watch ./src/**/*.php
+			}
+		}
+	}`
+
+	// Parse the configuration
+	d := caddyfile.NewTestDispenser(configWithExcludeWatch)
+	module := &FrankenPHPModule{}
+
+	// Unmarshal the configuration
+	err := module.UnmarshalCaddyfile(d)
+
+	// Verify that no error was returned
+	require.NoError(t, err, "Expected no error when configuring a worker with an exclude watch pattern")
+
+	// Verify that the worker was added to the module
+	require.Len(t, module.Workers, 1, "Expected one worker to be added to the module")
+	require.Equal(t, "../testdata/worker-with-env.php", module.Workers[0].FileName, "Worker should have the correct filename")
+
+	// Verify that the watch patterns were set correctly
+	require.Len(t, module.Workers[0].Watch, 3, "Expected three watch patterns")
+	require.Equal(t, defaultWatchPattern, module.Workers[0].Watch[0], "First watch pattern should be the default")
+	require.Equal(t, "!./vendor/**", module.Workers[0].Watch[1], "Second watch pattern should be the exclude pattern")
+	require.Equal(t, "./src/**/*.php", module.Workers[0].Watch[2], "Third watch pattern should match the configuration")
+}
