@@ -999,11 +999,6 @@ PHP_FUNCTION(mercure_publish) {
 
   switch (result.r2) {
   case FRANKENPHP_MERCURE_OK:
-    /* A custom transport may leave the ID of the update empty. */
-    if (result.r0 == NULL) {
-      RETURN_EMPTY_STRING();
-    }
-
     RETURN_STR(result.r0);
   case FRANKENPHP_MERCURE_NO_HUB:
     zend_throw_exception(spl_ce_RuntimeException, "No Mercure hub configured",
