@@ -166,11 +166,7 @@ func (mainThread *phpMainThread) rebootAllThreads() bool {
 
 	for _, thread := range rebootingThreads {
 		rebootWg.Go(func() {
-			// wake up handlers parked in a blocking C call (background
-			// workers' stream_select on the stop socket) so they can yield
-			// for the reboot without waiting for the force-kill below
-			thread.handler.drain()
-			close(thread.drainChan)
+			thread.drain()
 			if thread.state.WaitForStateWithTimeout(rebootGracePeriod, state.YieldingForReboot) {
 				return
 			}

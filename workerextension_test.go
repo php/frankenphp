@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -78,7 +79,7 @@ func TestWorkerExtensionSendMessage(t *testing.T) {
 }
 
 // an extension worker scoped to a server stays reachable through
-// SendRequest(), which resolves the name within that server
+// SendRequest(), which dispatches on it whatever the URI
 func TestWorkerExtensionOnServer(t *testing.T) {
 	t.Cleanup(Shutdown)
 
@@ -95,6 +96,43 @@ func TestWorkerExtensionOnServer(t *testing.T) {
 	body, err := io.ReadAll(w.Result().Body)
 	require.NoError(t, err)
 	assert.Contains(t, string(body), "Requests handled: 0")
+}
+
+// an extension worker without a name is still the one SendRequest()
+// dispatches on
+func TestWorkerExtensionSendRequestWithoutName(t *testing.T) {
+	t.Cleanup(Shutdown)
+
+	externalWorker, o := WithExtensionWorkers("", "testdata/worker.php", 1)
+	require.NoError(t, Init(o))
+
+	w := httptest.NewRecorder()
+	require.NoError(t, externalWorker.SendRequest(w, httptest.NewRequest("GET", "http://example.com/index.php", nil)))
+
+	body, err := io.ReadAll(w.Result().Body)
+	require.NoError(t, err)
+	assert.Contains(t, string(body), "Requests handled: 0")
+}
+
+// SendMessage() after Shutdown() reports the stopped runtime instead of
+// waiting for a thread
+func TestWorkerExtensionSendMessageAfterShutdown(t *testing.T) {
+	externalWorker, o := WithExtensionWorkers("extensionWorkers", "testdata/message-worker.php", 1)
+	require.NoError(t, Init(o))
+	Shutdown()
+
+	errChan := make(chan error, 1)
+	go func() {
+		_, err := externalWorker.SendMessage(t.Context(), "Hello Workers", nil)
+		errChan <- err
+	}()
+
+	select {
+	case err := <-errChan:
+		require.ErrorIs(t, err, ErrNotRunning)
+	case <-time.After(2 * time.Second):
+		t.Fatal("SendMessage() did not return after Shutdown()")
+	}
 }
 
 // background workers never read requestChan, so an extension cannot send

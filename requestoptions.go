@@ -206,6 +206,15 @@ func WithRequestBodyTimeout(timeout time.Duration) RequestOption {
 	}
 }
 
+// withWorker dispatches the request on a worker directly, no lookup
+func withWorker(w *worker) RequestOption {
+	return func(o *frankenPHPContext) error {
+		o.worker = w
+
+		return nil
+	}
+}
+
 // WithWorkerName sets the worker that should handle the request
 // the name is resolved among the workers of the request's server first, then among global workers
 func WithWorkerName(name string) RequestOption {

@@ -31,9 +31,9 @@ func (w *extensionWorkers) SendRequest(rw http.ResponseWriter, r *http.Request) 
 		return ErrNotRunning
 	}
 
-	// worker names are resolved within a server, and a worker always has
-	// one, the fallback server when it was declared without a scope
-	return w.internalWorker.server.ServeHTTP(rw, r, WithOriginalRequest(r), WithWorkerName(w.name))
+	// a worker always has a server, the fallback one when it was declared
+	// without a scope
+	return w.internalWorker.server.ServeHTTP(rw, r, WithOriginalRequest(r), withWorker(w.internalWorker))
 }
 
 func (w *extensionWorkers) NumThreads() int {
@@ -46,7 +46,9 @@ func (w *extensionWorkers) NumThreads() int {
 
 // EXPERIMENTAL: SendMessage sends a message to the worker and waits for a response.
 func (w *extensionWorkers) SendMessage(ctx context.Context, message any, rw http.ResponseWriter) (any, error) {
-	if w.internalWorker == nil {
+	// the worker only exists between Init() and Shutdown(), and stays
+	// referenced past the latter
+	if w.internalWorker == nil || !w.internalWorker.server.isRegistered.Load() {
 		return nil, ErrNotRunning
 	}
 
