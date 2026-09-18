@@ -17,7 +17,6 @@ import (
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 	"github.com/dunglas/frankenphp"
-	"github.com/dunglas/frankenphp/internal/fastabs"
 )
 
 var (
@@ -132,11 +131,6 @@ func (f *FrankenPHPApp) Start() error {
 	// register global workers
 	for _, w := range f.Workers {
 		w.FileName = repl.ReplaceKnown(w.FileName, "")
-		// the declared path, symlinks kept, so the metric label does not
-		// move when the target of a release symlink does
-		if w.Name == "" {
-			w.Name, _ = fastabs.FastAbs(w.FileName)
-		}
 		opts, err := w.toWorkerOptions()
 		if err != nil {
 			return err

@@ -184,13 +184,20 @@ func newWorker(o workerOpt) (*worker, error) {
 	}
 
 	if o.name == "" {
+		// the path as it was declared, symlinks kept, so the name does not
+		// move when the target of a release symlink does
+		declaredPath, err := fastabs.FastAbs(filepath.FromSlash(o.fileName))
+		if err != nil {
+			declaredPath = absFileName
+		}
+
 		// a name generated from the script path is not a declaration:
 		// several workers may share a script, a pool split by a matcher
 		// for instance, so it is made unique rather than reported as the
 		// collision a declared name gets
-		o.name = absFileName
+		o.name = declaredPath
 		for suffix := 1; scope.workersByName[o.name] != nil; suffix++ {
-			o.name = fmt.Sprintf("%s_%d", absFileName, suffix)
+			o.name = fmt.Sprintf("%s_%d", declaredPath, suffix)
 		}
 	}
 
