@@ -17,8 +17,8 @@ import (
 // It owns their lifecycle: boot the script, re-run it when it exits, restart
 // it with a quadratic backoff when it crashes. Background workers share the
 // PHP runtime with HTTP threads but never receive HTTP requests. The script
-// can park on the stream returned by frankenphp_get_worker_handle(), which
-// reaches EOF when the thread is drained, and frankenphp_worker_tick() then
+// can park on the stream returned by WorkerHandle::getStream(), which
+// reaches EOF when the thread is drained, and WorkerHandle::tick() then
 // returns false, so it exits gracefully on shutdown, reboot or handler
 // transition.
 type backgroundWorkerThread struct {
@@ -39,25 +39,25 @@ type backgroundWorkerThread struct {
 	runStartedAt time.Time
 
 	// isBootingScript is true until the current run calls
-	// frankenphp_worker_tick(), the background analog of an HTTP worker
+	// WorkerHandle::tick(), the background analog of an HTTP worker
 	// reaching frankenphp_handle_request(). Only touched on the PHP thread
 	// (setup, the C callback during execution, teardown).
 	isBootingScript bool
 
-	// bootTimer warns when a run has not called frankenphp_worker_tick()
+	// bootTimer warns when a run has not called WorkerHandle::tick()
 	// after backgroundBootWarnDelay; only touched on the PHP thread
 	bootTimer *time.Timer
 
 	// stopSock holds the Go side's end of this thread's stop socket pair
 	// (per thread so pool workers drain independently); the other end is
-	// exposed to the script via frankenphp_get_worker_handle(). Wide enough
+	// exposed to the script via WorkerHandle::getStream(). Wide enough
 	// for a Windows SOCKET, -1 when not held. Atomic because drain() closes
 	// it from another goroutine.
 	stopSock atomic.Int64
 }
 
 // backgroundBootWarnDelay is how long a run may go without calling
-// frankenphp_worker_tick() before a warning: Init() and Shutdown() wait for
+// WorkerHandle::tick() before a warning: Init() and Shutdown() wait for
 // that point, so a script that never gets there hangs both silently
 const backgroundBootWarnDelay = 10 * time.Second
 
@@ -153,7 +153,7 @@ func (handler *backgroundWorkerThread) setupScript() error {
 	logger, ctx, name, threadIndex := fc.logger, fc.ctx, handler.worker.qualifiedName, handler.thread.threadIndex
 	handler.bootTimer = time.AfterFunc(backgroundBootWarnDelay, func() {
 		if logger.Enabled(ctx, slog.LevelWarn) {
-			logger.LogAttrs(ctx, slog.LevelWarn, "background worker has not called frankenphp_worker_tick() yet, Init() and Shutdown() wait for it", slog.String("worker", name), slog.Int("thread", threadIndex))
+			logger.LogAttrs(ctx, slog.LevelWarn, "background worker has not called WorkerHandle::tick() yet, Init() and Shutdown() wait for it", slog.String("worker", name), slog.Int("thread", threadIndex))
 		}
 	})
 
@@ -162,7 +162,7 @@ func (handler *backgroundWorkerThread) setupScript() error {
 	}
 
 	// the thread stays in TransitionComplete until the script calls
-	// frankenphp_worker_tick(), see go_frankenphp_background_worker_ready
+	// WorkerHandle::tick(), see go_frankenphp_background_worker_ready
 
 	return nil
 }
@@ -214,7 +214,7 @@ func (handler *backgroundWorkerThread) afterScriptExecution(exitStatus int) {
 		return
 	}
 
-	// boot failure: the script exited before calling frankenphp_worker_tick(),
+	// boot failure: the script exited before calling WorkerHandle::tick(),
 	// a clean exit included, which would otherwise respawn in a tight loop.
 	// StopReasonBootFailure skips the ready-gauge decrement, matching the
 	// ReadyWorker call that never happened
@@ -229,7 +229,7 @@ func (handler *backgroundWorkerThread) afterScriptExecution(exitStatus int) {
 	if pastCap && !watcherIsEnabled {
 		var err error
 		if exitStatus == 0 {
-			err = fmt.Errorf("background worker %s exits without calling frankenphp_worker_tick()", worker.fileName)
+			err = fmt.Errorf("background worker %s exits without calling WorkerHandle::tick()", worker.fileName)
 		} else {
 			err = fmt.Errorf("too many consecutive failures: background worker %s keeps crashing", worker.fileName)
 		}
@@ -240,9 +240,9 @@ func (handler *backgroundWorkerThread) afterScriptExecution(exitStatus int) {
 	}
 
 	logLevel := slog.LevelWarn
-	logMsg := "background worker failed before calling frankenphp_worker_tick(), restarting"
+	logMsg := "background worker failed before calling WorkerHandle::tick(), restarting"
 	if exitStatus == 0 {
-		logMsg = "background worker exited without calling frankenphp_worker_tick(), restarting"
+		logMsg = "background worker exited without calling WorkerHandle::tick(), restarting"
 	}
 	if pastCap {
 		logLevel = slog.LevelError
@@ -264,13 +264,13 @@ func (handler *backgroundWorkerThread) stopBootTimer() {
 
 //export go_frankenphp_background_worker_ready
 func go_frankenphp_background_worker_ready(threadIndex C.uintptr_t) {
-	// called on the PHP thread by the first frankenphp_worker_tick() of a
+	// called on the PHP thread by the first WorkerHandle::tick() of a
 	// run; the handler is a backgroundWorkerThread because that function
 	// throws on every other thread kind, and a thread reaching this without
 	// one would wait out Init() instead
 	handler, ok := phpThreads[threadIndex].handler.(*backgroundWorkerThread)
 	if !ok {
-		panic("frankenphp_worker_tick() called on a thread that is not a background worker")
+		panic("WorkerHandle::tick() called on a thread that is not a background worker")
 	}
 
 	if handler.isBootingScript {

@@ -1,17 +1,18 @@
 <?php
 
-// Bg worker checking the handle cache: two fetches of a run are the same
-// stream, a fetch after closing it is a fresh one, and the drain still
-// reaches the script through that one. Writes what it saw to BG_SENTINEL,
-// then parks.
-$first = frankenphp_get_worker_handle();
-$second = frankenphp_get_worker_handle();
+// Bg worker checking the stream of a handle: two handles of a run share
+// one stream, closing it and asking again gives a fresh one, and the drain
+// still reaches the script through that one. Writes what it saw to
+// BG_SENTINEL, then parks.
+$first = (new \FrankenPHP\WorkerHandle())->getStream();
+$second = (new \FrankenPHP\WorkerHandle())->getStream();
 $result = $first === $second ? 'same' : 'different';
 
 fclose($first);
-$third = frankenphp_get_worker_handle();
+$handle = new \FrankenPHP\WorkerHandle();
+$third = $handle->getStream();
 $result .= $third === $second ? ' then same' : ' then fresh';
 
 file_put_contents($_SERVER['BG_SENTINEL'], $result);
-frankenphp_worker_tick();
+$handle->tick();
 fgets($third);

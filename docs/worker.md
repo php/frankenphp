@@ -216,15 +216,16 @@ php_server {
 }
 ```
 
-The script calls `frankenphp_worker_tick()` once it is set up. The first call marks the worker ready: the server start waits for that point, and an exit before it counts as a failure. Until that call, `max_execution_time` applies as in any request, 30 seconds by default: a setup that outlives it is ended and counts as a boot failure, so raise the limit in `php_ini`, or call `set_time_limit()` in the script, when the setup legitimately takes longer. This bound only holds on PHP builds with Zend max execution timers (`--enable-zend-max-execution-timers`, see [the compilation guide](compile.md)): elsewhere FrankenPHP disables `max_execution_time`, so a setup that never reaches its first call keeps the server start waiting, with a warning logged after 10 seconds. From the first call on, the run has no time limit, like the CLI. Every call returns `false` once FrankenPHP drains the worker, on shutdown, reboot or restart, and `true` otherwise. It never blocks and never hands out work: like `frankenphp_handle_request()`, it is where the runtime and the script meet. Between two calls, the script waits on the stream returned by `frankenphp_get_worker_handle()`, alone or together with its own streams. The stream becomes readable when FrankenPHP needs the script's attention, and `frankenphp_worker_tick()` consumes whatever was written on it, so the script does not read the stream itself and the stream is quiet again until the next wake-up. It is readable once right after the script starts, so a loop that services it ticks by itself and the worker is ready as soon as its loop runs.
+The script takes a handle on the worker, `new FrankenPHP\WorkerHandle()`, and calls `tick()` on it once it is set up. The first call marks the worker ready: the server start waits for that point, and an exit before it counts as a failure. Until that call, `max_execution_time` applies as in any request, 30 seconds by default: a setup that outlives it is ended and counts as a boot failure, so raise the limit in `php_ini`, or call `set_time_limit()` in the script, when the setup legitimately takes longer. This bound only holds on PHP builds with Zend max execution timers (`--enable-zend-max-execution-timers`, see [the compilation guide](compile.md)): elsewhere FrankenPHP disables `max_execution_time`, so a setup that never reaches its first call keeps the server start waiting, with a warning logged after 10 seconds. From the first call on, the run has no time limit, like the CLI. Every call returns `false` once FrankenPHP drains the worker, on shutdown, reboot or restart, and `true` otherwise. It never blocks and never hands out work: like `frankenphp_handle_request()`, it is where the runtime and the script meet. Between two calls, the script waits on the stream of `getStream()`, alone or together with its own streams. Waiting is all that stream supports: it becomes readable when FrankenPHP needs the script's attention, `tick()` consumes whatever was written on it, and the stream is quiet again until the next wake-up. What it carries is not part of the contract. Waiting really is all: reading the stream steals the bytes `tick()` would have consumed, and writing to it lands in a buffer FrankenPHP never drains, so a script that fills it blocks itself. Closing it is safe, the socket belongs to the thread and the next `getStream()` hands out a fresh stream over it, drain included. It is readable once right after the script starts, so a loop that services it ticks by itself and the worker is ready as soon as its loop runs.
 
 ```php
 <?php
 
-$handle = frankenphp_get_worker_handle();
+$handle = new FrankenPHP\WorkerHandle();
+$stream = $handle->getStream();
 
-while (frankenphp_worker_tick()) {
-    $read = [$handle]; // plus the streams the script waits on
+while ($handle->tick()) {
+    $read = [$stream]; // plus the streams the script waits on
     $write = $except = null;
     stream_select($read, $write, $except, 1);
 
@@ -234,18 +235,18 @@ while (frankenphp_worker_tick()) {
 // drained: return, FrankenPHP re-runs or stops the script
 ```
 
-`stream_select()` rejects a stream whose descriptor is `1024` or higher (`FD_SETSIZE`), and the handle takes the lowest free descriptor when the run starts, so a worker re-run while the server holds more than a thousand connections cannot wait this way. Under that load, park with a blocking read on the handle, such as `fgets()`, or with `Io\Poll\Context` on PHP 8.6. `frankenphp_worker_tick()` itself uses `poll()` and is not affected.
+`stream_select()` rejects a stream whose descriptor is `1024` or higher (`FD_SETSIZE`), and the handle takes the lowest free descriptor when the run starts, so a worker re-run while the server holds more than a thousand connections cannot wait this way. Under that load, park with a blocking read on the stream, such as `fgets()`, or with an `Io\Poll\Context` on PHP 8.6, which takes the handle itself. `tick()` itself uses `poll()` and is not affected.
 
-With an event loop, register the stream as readable and call `frankenphp_worker_tick()` from the callback. With [Revolt](https://revolt.run), the loop of amphp:
+With an event loop, register the stream as readable and tick from the callback. With [Revolt](https://revolt.run), the loop of amphp:
 
 ```php
 <?php
 
 use Revolt\EventLoop;
 
-$handle = frankenphp_get_worker_handle();
-EventLoop::onReadable($handle, function (): void {
-    if (!frankenphp_worker_tick()) {
+$handle = new FrankenPHP\WorkerHandle();
+EventLoop::onReadable($handle->getStream(), function () use ($handle): void {
+    if (!$handle->tick()) {
         // drained: stop the loop, the script returns and FrankenPHP moves on
         EventLoop::getDriver()->stop();
     }
@@ -256,7 +257,29 @@ EventLoop::onReadable($handle, function (): void {
 EventLoop::run();
 ```
 
-The wake-up sent at start makes the callback run as soon as the loop does, which is when the worker becomes ready. The polling API of PHP 8.6 works the same way: wrap the stream in a `StreamPollHandle`, add it to a context, and call `frankenphp_worker_tick()` when it triggers.
+The wake-up sent at start makes the callback run as soon as the loop does, which is when the worker becomes ready.
+
+On PHP 8.6, the handle is an `Io\Poll\Handle`: a context takes it as it is, next to the script's own handles, and no stream is involved.
+
+```php
+<?php
+
+use Io\Poll\{Context, Event};
+
+$handle = new FrankenPHP\WorkerHandle();
+
+$poll = new Context();
+$poll->add($handle, [Event::Read]);
+// plus the handles the script waits on
+
+while ($handle->tick()) {
+    foreach ($poll->wait() as $watcher) {
+        // the worker's handle triggered, or one of the script's
+    }
+}
+```
+
+The context polls with `epoll` or `kqueue`, so it has neither the `FD_SETSIZE` ceiling of `stream_select()` nor its cost of rebuilding the set on every wait. On 8.2 to 8.5 the class implements the interface all the same, so the same loop runs there with [symfony/polyfill-io-poll](https://github.com/symfony/polyfill/tree/1.x/src/Io/Poll), which backs the context with `stream_select()`.
 
 `$_SERVER['FRANKENPHP_WORKER_BACKGROUND']` holds the declared name. `FRANKENPHP_WORKER`, the variable of HTTP workers, is not set, so a script serving both roles tests which of the two is set. Background threads come on top of `num_threads` and `max_threads`; they don't autoscale, so `max_threads` is not allowed on them. From Go, declare one with `WithWorkerBackground()`.
 

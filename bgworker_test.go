@@ -175,7 +175,7 @@ func TestBackgroundWorkerValidation(t *testing.T) {
 			),
 			frankenphp.WithNumThreads(2),
 		)
-		require.ErrorContains(t, err, "without calling frankenphp_worker_tick()")
+		require.ErrorContains(t, err, "without calling WorkerHandle::tick()")
 	})
 
 	t.Run("fetching the handle without ticking fails startup", func(t *testing.T) {
@@ -186,7 +186,7 @@ func TestBackgroundWorkerValidation(t *testing.T) {
 			),
 			frankenphp.WithNumThreads(2),
 		)
-		require.ErrorContains(t, err, "without calling frankenphp_worker_tick()")
+		require.ErrorContains(t, err, "without calling WorkerHandle::tick()")
 	})
 
 	t.Run("max_threads is rejected", func(t *testing.T) {
@@ -340,17 +340,16 @@ func TestBackgroundWorkerRestartDrainsParkedScript(t *testing.T) {
 	require.Eventually(t, func() bool { return runs() == 2 }, 5*time.Second, 25*time.Millisecond, "background worker was not re-run after the restart")
 }
 
-// TestGetWorkerHandleOutsideBackgroundWorker checks the function throws on a
-// regular request thread instead of handing out a stream.
-func TestGetWorkerHandleOutsideBackgroundWorker(t *testing.T) {
+// TestWorkerHandleOutsideBackgroundWorker checks that a regular request
+// thread cannot take a handle instead of being handed a stream on one.
+func TestWorkerHandleOutsideBackgroundWorker(t *testing.T) {
 	server, err := frankenphp.NewServer(testDataDir)
 	require.NoError(t, err)
 	initServers(t, frankenphp.WithServer(server), frankenphp.WithNumThreads(1))
 
 	body := serverGet(t, server, "http://example.com/handle-outside.php")
 
-	assert.Contains(t, body, "frankenphp_get_worker_handle() can only be called from a background worker")
-	assert.Contains(t, body, "frankenphp_worker_tick() can only be called from a background worker")
+	assert.Contains(t, body, `FrankenPHP\WorkerHandle can only be created from a background worker`)
 }
 
 // TestBackgroundWorkerLoopTicksOnItsOwn checks the wake-up sent at start: a
@@ -386,7 +385,7 @@ func TestBackgroundWorkerTickLeavesTheHandleQuiet(t *testing.T) {
 	assert.Equal(t, "start:readable after tick:quiet after second tick:quiet", requireFileContentEventually(t, sentinel))
 }
 
-// TestBackgroundWorkerTick checks the contract of frankenphp_worker_tick():
+// TestBackgroundWorkerTick checks the contract of WorkerHandle::tick():
 // true while the worker runs, false once it is drained, and still false on
 // the next call
 func TestBackgroundWorkerTick(t *testing.T) {
@@ -551,7 +550,7 @@ func TestBackgroundWorkerThreadsComeOnTopOfAutoMaxThreads(t *testing.T) {
 }
 
 // TestBackgroundWorkerBootstrapIsBounded checks that max_execution_time
-// applies until the first frankenphp_worker_tick(): a setup that outlives
+// applies until the first WorkerHandle::tick(): a setup that outlives
 // it is ended as a boot failure, which fails Init() past the cap. The limit
 // itself is PHP's, so the test only runs where its timers are known to
 // fire under FrankenPHP, the max execution timers of ZTS builds on Linux.
@@ -607,10 +606,10 @@ func TestBackgroundWorkerParkingIsNotInterrupted(t *testing.T) {
 	assert.Equal(t, 1, runs(), "the worker was restarted, so a limit interrupted its park")
 }
 
-// TestBackgroundWorkerHandleClosedAndFetchedAgain checks the handle cache:
+// TestBackgroundWorkerStreamClosedAndFetchedAgain checks the stream cache:
 // a run gets one stream, closing it yields a fresh one on the next fetch,
 // and the drain still reaches the script through it.
-func TestBackgroundWorkerHandleClosedAndFetchedAgain(t *testing.T) {
+func TestBackgroundWorkerStreamClosedAndFetchedAgain(t *testing.T) {
 	sentinel := filepath.Join(t.TempDir(), "refetch.txt")
 
 	t.Cleanup(frankenphp.Shutdown)
@@ -759,4 +758,44 @@ func TestBackgroundWorkerRebootForceKillsStuckScript(t *testing.T) {
 	assert.WithinDuration(t, start, time.Now(), 10*time.Second, "the reboot must force-kill the stuck script within its grace period")
 
 	requireFileEventually(t, sentinel, "the re-run script did not park")
+}
+
+// TestBackgroundWorkerPollHandle checks that a script can wait on its handle
+// through the poll API of PHP 8.6, without a stream: the handle implements
+// Io\Poll\Handle, so a context takes it as is, the first tick makes the
+// worker ready, and the drain ends the loop.
+func TestBackgroundWorkerPollHandle(t *testing.T) {
+	if frankenphp.Version().VersionID < 80600 {
+		t.Skip("the poll API needs PHP 8.6")
+	}
+
+	sentinel := filepath.Join(t.TempDir(), "poll.backend")
+	initServers(t,
+		frankenphp.WithWorkers("bg-poll", "testdata/bgworker/poll.php", 1,
+			frankenphp.WithWorkerBackground(),
+			frankenphp.WithWorkerEnv(map[string]string{"BG_SENTINEL": sentinel}),
+		),
+		frankenphp.WithNumThreads(2),
+	)
+
+	// the server only starts once the worker ticked, which it does through
+	// the context: a backend name means the wait came back on its own
+	assert.NotEmpty(t, requireFileContentEventually(t, sentinel))
+}
+
+// TestBackgroundWorkerHandleIsAPollHandle checks that the handle implements
+// Io\Poll\Handle on every version: PHP 8.6 declares the interface with the
+// poll API, FrankenPHP declares it below that, so one script serves both and
+// symfony/polyfill-io-poll finds it already there.
+func TestBackgroundWorkerHandleIsAPollHandle(t *testing.T) {
+	sentinel := filepath.Join(t.TempDir(), "poll.json")
+	initServers(t,
+		frankenphp.WithWorkers("bg-iface", "testdata/bgworker/poll-interface.php", 1,
+			frankenphp.WithWorkerBackground(),
+			frankenphp.WithWorkerEnv(map[string]string{"BG_SENTINEL": sentinel}),
+		),
+		frankenphp.WithNumThreads(2),
+	)
+
+	assert.JSONEq(t, `{"handle":true,"internal":true}`, requireFileContentEventually(t, sentinel))
 }
