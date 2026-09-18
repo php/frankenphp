@@ -30,6 +30,12 @@ func testRegisterExtension(t *testing.T) {
 	require.Nil(t, err)
 	defer frankenphp.Shutdown()
 
+	require.Equal(t, int(C.SUCCESS), int(C.test_signal_handler()))
+	assert.Panics(t, func() {
+		var p *int
+		_ = *p
+	})
+
 	req := httptest.NewRequest("GET", "http://example.com/index.php", nil)
 	w := httptest.NewRecorder()
 
