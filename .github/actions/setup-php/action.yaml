@@ -12,6 +12,7 @@ runs:
       with:
         php-version: ${{ inputs.php-version }}
         ini-file: development
+        ini-values: disable_functions=
         coverage: none
         tools: none
       env:

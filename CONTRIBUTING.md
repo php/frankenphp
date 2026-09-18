@@ -45,8 +45,18 @@ Build Caddy with the FrankenPHP Caddy module:
 
 ```console
 cd caddy/frankenphp/
-go build -tags nobadger,nomysql,nopgx
+../../build-native.sh
 cd ../../
+```
+
+Use `go build -tags nobadger,nomysql,nopgx` instead on macOS and FreeBSD.
+To exercise native CLI signal handling and Go extension callbacks on Linux:
+
+```console
+cd caddy
+../build-native.sh -o internal/nativetest/nativetest ./internal/nativetest
+FRANKENPHP_NATIVE_TEST_BINARY="$PWD/internal/nativetest/nativetest" ../go.sh test -race -run '^TestNative' .
+cd ..
 ```
 
 Run the Caddy with the FrankenPHP Caddy module:

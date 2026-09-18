@@ -166,6 +166,8 @@ bool frankenphp_new_php_thread(uintptr_t thread_index);
 bool frankenphp_shutdown_dummy_request(void);
 void frankenphp_update_local_thread_context(bool is_worker);
 
+int frankenphp_execute_script_cli_native(int argc, char **argv);
+
 int frankenphp_execute_script_cli(char *script, int argc, char **argv,
                                   bool eval);
 

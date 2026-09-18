@@ -6,6 +6,7 @@
 /profiles/worker.pgo
 /caddy/frankenphp/frankenphp.exe
 /caddy/frankenphp/public
+/caddy/internal/nativetest/nativetest
 /dist
 /github_conf
 /internal/testserver/testserver
