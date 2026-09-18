@@ -170,9 +170,16 @@ func resolveWorkerFile(o workerOpt, nameTaken func(*Server, string) bool) (worke
 			return o, fmt.Errorf("background worker %q must have an explicit name", declaredFileName)
 		}
 
-		o.name = absFileName
+		// the path as it was declared, symlinks kept, so the name does not
+		// move when the target of a release symlink does
+		declaredPath, err := fastabs.FastAbs(filepath.FromSlash(declaredFileName))
+		if err != nil {
+			declaredPath = absFileName
+		}
+
+		o.name = declaredPath
 		for suffix := 1; nameTaken(o.server, o.name); suffix++ {
-			o.name = fmt.Sprintf("%s_%d", absFileName, suffix)
+			o.name = fmt.Sprintf("%s_%d", declaredPath, suffix)
 		}
 	}
 
