@@ -227,6 +227,36 @@ However, **`$_ENV` is currently not reset between requests**.
 This means that any modifications made to `$_ENV` during a request will persist and be visible to subsequent requests handled by the same worker thread.
 Avoid storing request-specific or sensitive data in `$_ENV`.
 
+## Handling request parsing errors
+
+When PHP cannot fully parse an incoming request (a body larger than `post_max_size`, more input variables than `max_input_vars`, a malformed multipart payload...), it raises a warning and continues with truncated input, in every SAPI.
+
+In worker mode this parsing happens inside `frankenphp_handle_request()`, between two requests.
+These warnings are never delivered to error handlers registered with `set_error_handler()` in the worker script: they go to the SAPI log, exactly as under PHP-FPM or Apache, where parsing happens before the script starts.
+So a throwing error handler (such as the one registered by `symfony/error-handler`) cannot accidentally turn a malformed request into a worker crash.
+
+To detect these failures and respond appropriately (for instance with a `400` or `413` status code instead of processing truncated input), call `frankenphp_request_parse_errors()` inside the handler.
+It returns one entry per diagnostic, shaped like [`error_get_last()`](https://www.php.net/error_get_last), or an empty array if the request was parsed cleanly:
+
+```php
+<?php
+
+$handler = static function () {
+    if (frankenphp_request_parse_errors()) {
+        // The request could not be fully parsed: $_POST and $_FILES may be truncated or empty
+        http_response_code(400);
+
+        return;
+    }
+
+    // Process the request as usual
+};
+
+// ...
+```
+
+This function also works outside of worker mode.
+
 ## State persistence
 
 Because worker mode keeps the PHP process alive between requests, the following state persists across requests:

@@ -364,6 +364,23 @@ func testRequestSuperGlobal(t *testing.T, opts *testOptions) {
 	}, opts)
 }
 
+func TestRequestParseErrors_module(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		params := make([]string, 20)
+		for i := range params {
+			params[i] = fmt.Sprintf("p%d=%d", i, i)
+		}
+		body, resp := testGet("http://example.com/request-parse-errors.php?"+strings.Join(params, "&"), handler, t)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		assert.Contains(t, body, "Input variables exceeded")
+		assert.Contains(t, body, `"type":2`)
+
+		body2, resp2 := testGet("http://example.com/request-parse-errors.php?a=1", handler, t)
+		assert.Equal(t, http.StatusOK, resp2.StatusCode)
+		assert.Contains(t, body2, "[]")
+	}, &testOptions{nbParallelRequests: 1, phpIni: map[string]string{"max_input_vars": "10", "post_max_size": "1K", "display_errors": "0"}})
+}
+
 func TestRequestSuperGlobalConditional_worker(t *testing.T) {
 	// This test verifies that $_REQUEST works correctly when accessed conditionally
 	// in worker mode. The first request does NOT access $_REQUEST, but subsequent
