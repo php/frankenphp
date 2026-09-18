@@ -12,6 +12,8 @@ import (
 	"github.com/dunglas/mercure"
 	mercureCaddy "github.com/dunglas/mercure/caddy"
 	"os"
+	"strings"
+	"unicode"
 )
 
 func init() {
@@ -48,18 +50,33 @@ func createMercureRoute() (caddyhttp.Route, error) {
 		return caddyhttp.Route{}, errors.New(`the "MERCURE_SUBSCRIBER_JWT_KEY" environment variable must be set to use the Mercure.rocks hub`)
 	}
 
+	// The protocol requires access tokens to name their issuer, so the keys are
+	// bound to trusted issuers instead of being set globally.
+	publisher := mercureCaddy.VerifierConfig{
+		JWT: mercureCaddy.JWTConfig{
+			Alg: os.Getenv("MERCURE_PUBLISHER_JWT_ALG"),
+			Key: mercurePublisherJwtKey,
+		},
+	}
+	subscriber := mercureCaddy.VerifierConfig{
+		JWT: mercureCaddy.JWTConfig{
+			Alg: os.Getenv("MERCURE_SUBSCRIBER_JWT_ALG"),
+			Key: mercureSubscriberJwtKey,
+		},
+	}
+
+	var issuers []mercureCaddy.IssuerConfig
+	for _, identifier := range trustedIssuers(os.Getenv("MERCURE_TRUSTED_ISSUERS")) {
+		issuers = append(issuers, mercureCaddy.IssuerConfig{
+			Identifier: identifier,
+			Publisher:  publisher,
+			Subscriber: subscriber,
+		})
+	}
+
 	mercureRoute := caddyhttp.Route{
 		HandlersRaw: []json.RawMessage{caddyconfig.JSONModuleObject(
-			mercureCaddy.Mercure{
-				PublisherJWT: mercureCaddy.JWTConfig{
-					Alg: os.Getenv("MERCURE_PUBLISHER_JWT_ALG"),
-					Key: mercurePublisherJwtKey,
-				},
-				SubscriberJWT: mercureCaddy.JWTConfig{
-					Alg: os.Getenv("MERCURE_SUBSCRIBER_JWT_ALG"),
-					Key: mercureSubscriberJwtKey,
-				},
-			},
+			mercureCaddy.Mercure{Issuers: issuers},
 			"handler",
 			"mercure",
 			nil,
@@ -68,4 +85,15 @@ func createMercureRoute() (caddyhttp.Route, error) {
 	}
 
 	return mercureRoute, nil
+}
+
+// trustedIssuers parses MERCURE_TRUSTED_ISSUERS, a list of issuer identifiers
+// separated by commas or whitespace, defaulting to localhost for development.
+func trustedIssuers(env string) []string {
+	issuers := strings.FieldsFunc(env, func(r rune) bool { return r == ',' || unicode.IsSpace(r) })
+	if len(issuers) == 0 {
+		return []string{"https://localhost"}
+	}
+
+	return issuers
 }
