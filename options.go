@@ -244,7 +244,7 @@ func WithWorkerServerScope(s *Server) WorkerOption {
 // (non-HTTP) worker. Background workers run outside the request cycle:
 // they share the PHP runtime with HTTP threads but never receive HTTP
 // requests. The script can park on the stream returned by
-// frankenphp_get_worker_handle(), which reaches EOF when FrankenPHP
+// WorkerHandle::getStream(), which reaches EOF when FrankenPHP
 // drains the worker, to exit gracefully on shutdown or restart.
 func WithWorkerBackground() WorkerOption {
 	return func(w *workerOpt) error {

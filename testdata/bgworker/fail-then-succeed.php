@@ -9,9 +9,10 @@ if ($count <= (int) $_SERVER['BG_FAIL_UNTIL']) {
     exit(1);
 }
 @touch($_SERVER['BG_SENTINEL']);
-$handle = frankenphp_get_worker_handle();
-while (frankenphp_worker_tick()) {
-    $read = [$handle];
+$handle = new \FrankenPHP\WorkerHandle();
+$stream = $handle->getStream();
+while ($handle->tick()) {
+    $read = [$stream];
     $write = $except = null;
     stream_select($read, $write, $except, null);
 }
