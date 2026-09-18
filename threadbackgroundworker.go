@@ -146,7 +146,7 @@ func (handler *backgroundWorkerThread) setupScript() error {
 
 	handler.isBootingScript = true
 	handler.runStartedAt = time.Now()
-	metrics.StartWorker(handler.worker.name, handler.worker.server.name)
+	metrics.StartWorker(handler.worker.qualifiedName)
 	// the run's logger and context, not the globals: Stop() does not wait
 	// for a callback that already started, and a shutdown finishing
 	// meanwhile resets those
@@ -189,13 +189,13 @@ func (handler *backgroundWorkerThread) afterScriptExecution(exitStatus int) {
 	// point on its own, so a script ending right after it is paced here
 	if !handler.isBootingScript {
 		if exitStatus == 0 {
-			metrics.StopWorker(worker.name, worker.server.name, StopReasonRestart)
+			metrics.StopWorker(worker.qualifiedName, StopReasonRestart)
 
 			if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
 				globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "restarting background worker", slog.String("worker", worker.qualifiedName), slog.Int("thread", handler.thread.threadIndex))
 			}
 		} else {
-			metrics.StopWorker(worker.name, worker.server.name, StopReasonCrash)
+			metrics.StopWorker(worker.qualifiedName, StopReasonCrash)
 
 			if globalLogger.Enabled(globalCtx, slog.LevelWarn) {
 				globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "background worker crashed, restarting", slog.String("worker", worker.qualifiedName), slog.Int("thread", handler.thread.threadIndex), slog.Int("exit_status", exitStatus), slog.Int("crashes", handler.crashCount))
@@ -218,7 +218,7 @@ func (handler *backgroundWorkerThread) afterScriptExecution(exitStatus int) {
 	// a clean exit included, which would otherwise respawn in a tight loop.
 	// StopReasonBootFailure skips the ready-gauge decrement, matching the
 	// ReadyWorker call that never happened
-	metrics.StopWorker(worker.name, worker.server.name, StopReasonBootFailure)
+	metrics.StopWorker(worker.qualifiedName, StopReasonBootFailure)
 
 	// max_consecutive_failures only fails hard during startup, where it
 	// surfaces on startupFailChan so Init() returns the error to the
@@ -278,7 +278,7 @@ func go_frankenphp_background_worker_ready(threadIndex C.uintptr_t) {
 		// the boot succeeded, only consecutive boot failures count
 		handler.failureCount = 0
 		handler.stopBootTimer()
-		metrics.ReadyWorker(handler.worker.name, handler.worker.server.name)
+		metrics.ReadyWorker(handler.worker.qualifiedName)
 		// parked from now on as far as the threads state endpoint is concerned
 		handler.state.MarkAsWaiting(true)
 
