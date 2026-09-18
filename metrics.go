@@ -40,6 +40,8 @@ type Metrics interface {
 	DequeuedWorkerRequest(name string)
 	QueuedRequest()
 	DequeuedRequest()
+	// OpcacheRestart collects the restarts of opcache's shared memory, by reason
+	OpcacheRestart(reason string)
 }
 
 type nullMetrics struct{}
@@ -81,6 +83,8 @@ func (n nullMetrics) DequeuedWorkerRequest(string) {}
 func (n nullMetrics) QueuedRequest()   {}
 func (n nullMetrics) DequeuedRequest() {}
 
+func (n nullMetrics) OpcacheRestart(string) {}
+
 type PrometheusMetrics struct {
 	registry           prometheus.Registerer
 	totalThreads       prometheus.Gauge
@@ -94,6 +98,7 @@ type PrometheusMetrics struct {
 	workerRequestCount *prometheus.CounterVec
 	workerQueueDepth   *prometheus.GaugeVec
 	queueDepth         prometheus.Gauge
+	opcacheRestarts    *prometheus.CounterVec
 	mu                 sync.RWMutex
 }
 
@@ -317,6 +322,13 @@ func (m *PrometheusMetrics) DequeuedRequest() {
 	m.queueDepth.Dec()
 }
 
+func (m *PrometheusMetrics) OpcacheRestart(reason string) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	m.opcacheRestarts.WithLabelValues(reason).Inc()
+}
+
 func (m *PrometheusMetrics) Shutdown() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -324,6 +336,7 @@ func (m *PrometheusMetrics) Shutdown() {
 	m.registry.Unregister(m.totalThreads)
 	m.registry.Unregister(m.busyThreads)
 	m.registry.Unregister(m.queueDepth)
+	m.registry.Unregister(m.opcacheRestarts)
 
 	if m.totalWorkers != nil {
 		m.registry.Unregister(m.totalWorkers)
@@ -377,6 +390,11 @@ func NewPrometheusMetrics(registry prometheus.Registerer) *PrometheusMetrics {
 			Name: "frankenphp_queue_depth",
 			Help: "Number of regular queued requests",
 		}),
+		// experimental: to be removed once opcache handles restarts safely under ZTS
+		opcacheRestarts: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "frankenphp_opcache_restarts",
+			Help: "Number of restarts of opcache's shared memory, by reason (experimental, should stay at zero)",
+		}, []string{"reason"}),
 		totalWorkers:       nil,
 		busyWorkers:        nil,
 		workerRequestTime:  nil,
@@ -392,6 +410,17 @@ func NewPrometheusMetrics(registry prometheus.Registerer) *PrometheusMetrics {
 	m.mustRegister(m.busyThreads)
 
 	m.mustRegister(m.queueDepth)
+
+	if err := m.registry.Register(m.opcacheRestarts); err != nil &&
+		!errors.As(err, &prometheus.AlreadyRegisteredError{}) {
+		panic(err)
+	}
+
+	// expose the series at zero so a rate or an alert on them works from the
+	// first restart on, instead of missing it for lack of a previous sample
+	for _, reason := range opcacheRestartReasons {
+		m.opcacheRestarts.WithLabelValues(reason)
+	}
 
 	return m
 }

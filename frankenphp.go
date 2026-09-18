@@ -841,6 +841,29 @@ func go_schedule_opcache_reset(threadIndex C.uintptr_t) {
 	}
 }
 
+// Restart reasons opcache reports to the hook, in the order of
+// zend_accel_restart_reason (ext/opcache/ZendAccelerator.h).
+var opcacheRestartReasons = [...]string{"out of memory", "hash overflow", "user"}
+
+//export go_opcache_restart_scheduled
+func go_opcache_restart_scheduled(reason C.int) {
+	reasonText := "unknown"
+	if i := int(reason); i >= 0 && i < len(opcacheRestartReasons) {
+		reasonText = opcacheRestartReasons[i]
+	}
+
+	metrics.OpcacheRestart(reasonText)
+
+	if !globalLogger.Enabled(globalCtx, slog.LevelWarn) {
+		return
+	}
+
+	globalLogger.LogAttrs(globalCtx, slog.LevelWarn,
+		"opcache restart scheduled, running PHP threads may hold stale references to its shared memory: raise opcache.memory_consumption and opcache.max_accelerated_files to make restarts less likely",
+		slog.String("reason", reasonText),
+	)
+}
+
 func convertArgs(args []string) (C.int, []*C.char) {
 	argc := C.int(len(args))
 	argv := make([]*C.char, argc)
