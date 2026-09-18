@@ -59,7 +59,7 @@ func (handler *workerThread) name() string {
 func (handler *workerThread) drain() {}
 
 func setupWorkerScript(handler *workerThread, worker *worker) {
-	metrics.StartWorker(worker.qualifiedName)
+	metrics.StartWorker(worker.name, worker.server.name)
 
 	// Create a dummy request to set up the worker
 	fc, err := newWorkerDummyContext(worker)
@@ -91,7 +91,7 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 
 	// on exit status 0 we just run the worker script again
 	if exitStatus == 0 && !handler.isBootingScript {
-		metrics.StopWorker(worker.qualifiedName, StopReasonRestart)
+		metrics.StopWorker(worker.name, worker.server.name, StopReasonRestart)
 
 		if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
 			globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "restarting", slog.String("worker", worker.qualifiedName), slog.Int("thread", handler.thread.threadIndex), slog.Int("exit_status", exitStatus))
@@ -102,9 +102,9 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 
 	// worker has thrown a fatal error or has not reached frankenphp_handle_request
 	if handler.isBootingScript {
-		metrics.StopWorker(worker.qualifiedName, StopReasonBootFailure)
+		metrics.StopWorker(worker.name, worker.server.name, StopReasonBootFailure)
 	} else {
-		metrics.StopWorker(worker.qualifiedName, StopReasonCrash)
+		metrics.StopWorker(worker.name, worker.server.name, StopReasonCrash)
 	}
 
 	if !handler.isBootingScript {
@@ -180,7 +180,7 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 		}
 
 		// worker is truly ready only after reaching frankenphp_handle_request()
-		metrics.ReadyWorker(handler.worker.qualifiedName)
+		metrics.ReadyWorker(handler.worker.name, handler.worker.server.name)
 	}
 
 	// max_requests reached: signal reboot for full ZTS cleanup

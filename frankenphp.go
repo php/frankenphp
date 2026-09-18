@@ -66,7 +66,7 @@ var (
 	globalCtx    = context.Background()
 	globalLogger = slog.Default()
 
-	metrics Metrics = nullMetrics{}
+	metrics workerMetrics = nullMetrics{}
 
 	// atomic: read by in-flight requests while a reload may rewrite it
 	maxWaitTime          atomic.Int64
@@ -401,7 +401,7 @@ func Init(options ...Option) error {
 	}
 
 	if opt.metrics != nil {
-		metrics = opt.metrics
+		metrics = adaptMetrics(opt.metrics)
 	}
 
 	maxWaitTime.Store(int64(opt.maxWaitTime))
@@ -947,9 +947,7 @@ func opcacheRestartScheduled(reason int) {
 		reasonText = opcacheRestartReasons[reason]
 	}
 
-	if m, ok := metrics.(OpcacheMetrics); ok {
-		m.OpcacheRestart(reasonText)
-	}
+	metrics.OpcacheRestart(reasonText)
 
 	if !globalLogger.Enabled(globalCtx, slog.LevelWarn) {
 		return
