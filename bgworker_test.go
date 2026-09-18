@@ -200,6 +200,25 @@ func TestBackgroundWorkerValidation(t *testing.T) {
 		require.ErrorContains(t, err, "cannot set max_threads")
 	})
 
+	t.Run("two workers cannot report under the same name", func(t *testing.T) {
+		// scoping keeps names apart, except for a global name shaped like
+		// the "<server>:<name>" of a scoped one
+		server, err := frankenphp.NewServer(testDataDir, frankenphp.WithServerName("api"))
+		require.NoError(t, err)
+		err = frankenphp.Init(
+			frankenphp.WithServer(server),
+			frankenphp.WithWorkers("jobs", "testdata/bgworker/basic.php", 1,
+				frankenphp.WithWorkerBackground(),
+				frankenphp.WithWorkerServerScope(server),
+			),
+			frankenphp.WithWorkers("api:jobs", "testdata/bgworker/named.php", 1,
+				frankenphp.WithWorkerBackground(),
+			),
+			frankenphp.WithNumThreads(3),
+		)
+		require.ErrorContains(t, err, `two workers cannot report under the same name: "api:jobs"`)
+	})
+
 	t.Run("an unregistered server scope is rejected", func(t *testing.T) {
 		unregistered, err := frankenphp.NewServer(testDataDir)
 		require.NoError(t, err)

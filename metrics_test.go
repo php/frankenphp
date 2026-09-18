@@ -45,6 +45,7 @@ func TestPrometheusMetrics_TotalThreadsReportsCurrentValue(t *testing.T) {
 
 func TestPrometheusMetrics_TotalWorkers(t *testing.T) {
 	m := createPrometheusMetrics()
+	m.DeclareWorker("test_server:test_worker", "test_worker", "test_server")
 
 	require.Nil(t, m.totalWorkers)
 	require.Nil(t, m.busyWorkers)
@@ -54,7 +55,7 @@ func TestPrometheusMetrics_TotalWorkers(t *testing.T) {
 	require.Nil(t, m.workerRequestTime)
 	require.Nil(t, m.workerRequestCount)
 
-	m.TotalWorkers("test_worker", "test_server", 2)
+	m.TotalWorkers("test_server:test_worker", 2)
 
 	require.NotNil(t, m.totalWorkers)
 	require.NotNil(t, m.busyWorkers)
@@ -67,8 +68,9 @@ func TestPrometheusMetrics_TotalWorkers(t *testing.T) {
 
 func TestPrometheusMetrics_StopWorkerRequest(t *testing.T) {
 	m := createPrometheusMetrics()
-	m.TotalWorkers("test_worker", "test_server", 2)
-	m.StopWorkerRequest("test_worker", "test_server", 2*time.Second)
+	m.DeclareWorker("test_server:test_worker", "test_worker", "test_server")
+	m.TotalWorkers("test_server:test_worker", 2)
+	m.StopWorkerRequest("test_server:test_worker", 2*time.Second)
 
 	inputs := []struct {
 		name     string
@@ -121,8 +123,9 @@ func TestPrometheusMetrics_StopWorkerRequest(t *testing.T) {
 
 func TestPrometheusMetrics_StartWorkerRequest(t *testing.T) {
 	m := createPrometheusMetrics()
-	m.TotalWorkers("test_worker", "test_server", 2)
-	m.StartWorkerRequest("test_worker", "test_server")
+	m.DeclareWorker("test_server:test_worker", "test_worker", "test_server")
+	m.TotalWorkers("test_server:test_worker", 2)
+	m.StartWorkerRequest("test_server:test_worker")
 
 	inputs := []struct {
 		name     string
@@ -153,8 +156,9 @@ func TestPrometheusMetrics_StartWorkerRequest(t *testing.T) {
 
 func TestPrometheusMetrics_TestStopReasonCrash(t *testing.T) {
 	m := createPrometheusMetrics()
-	m.TotalWorkers("test_worker", "test_server", 2)
-	m.StopWorker("test_worker", "test_server", StopReasonCrash)
+	m.DeclareWorker("test_server:test_worker", "test_worker", "test_server")
+	m.TotalWorkers("test_server:test_worker", 2)
+	m.StopWorker("test_server:test_worker", StopReasonCrash)
 
 	inputs := []struct {
 		name     string
