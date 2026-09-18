@@ -18,7 +18,7 @@ ARG PHP_EXTENSION_LIBS=''
 ARG SPC_OPT_BUILD_ARGS
 
 # args passed to xcaddy
-ARG XCADDY_ARGS='--with github.com/dunglas/caddy-cbrotli --with github.com/dunglas/mercure/caddy --with github.com/dunglas/vulcain/caddy'
+ARG XCADDY_ARGS='--with github.com/dunglas/caddy-cbrotli --with github.com/swytchdb/caddy-swytch --with github.com/dunglas/mercure/caddy --with github.com/dunglas/vulcain/caddy'
 ENV SPC_CMD_VAR_FRANKENPHP_XCADDY_MODULES="${XCADDY_ARGS}"
 ARG CLEAN=''
 ARG EMBED=''
