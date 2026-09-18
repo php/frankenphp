@@ -13,6 +13,10 @@ import (
 	"github.com/dunglas/mercure"
 )
 
+func init() {
+	AddPHPInfoModule("dunglas/mercure", "github.com/dunglas/mercure")
+}
+
 type mercureContext struct {
 	mercureHub *mercure.Hub
 }
