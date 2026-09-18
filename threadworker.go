@@ -145,6 +145,10 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 // maxRestartBackoff is the longest wait between two runs of a failing script
 const maxRestartBackoff = time.Second
 
+// minHealthyRun is how long a run has to last to count as one that did
+// something: a shorter one paces the next, see restartBackoff
+const minHealthyRun = 100 * time.Millisecond
+
 // restartBackoff is the wait before a worker script is re-run after a
 // failure: quadratic in the number of consecutive failures, capped at one
 // second; shared by HTTP and background workers. The cap comes before the
