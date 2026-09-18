@@ -7,5 +7,6 @@ set_time_limit(0);
 if (!empty($_SERVER['BG_SENTINEL'])) {
     @touch($_SERVER['BG_SENTINEL']);
 }
-frankenphp_worker_tick();
-stream_socket_recvfrom(frankenphp_get_worker_handle(), 1);
+$handle = new \FrankenPHP\WorkerHandle();
+$handle->tick();
+stream_socket_recvfrom($handle->getStream(), 1);

@@ -11,7 +11,7 @@ import (
 const (
 	StopReasonCrash = iota
 	StopReasonRestart
-	StopReasonBootFailure // worker exited before reaching its ready point: frankenphp_handle_request, or frankenphp_worker_tick for background workers
+	StopReasonBootFailure // worker exited before reaching its ready point: frankenphp_handle_request, or WorkerHandle::tick() for background workers
 )
 
 type StopReason int
@@ -332,7 +332,7 @@ func (m *PrometheusMetrics) TotalWorkersOnServer(string, string, int) {
 		m.readyWorkers = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Namespace: ns,
 			Name:      "ready_workers",
-			Help:      "Running workers that have reached their ready point at least once: frankenphp_handle_request for HTTP workers, frankenphp_worker_tick for background workers",
+			Help:      "Running workers that have reached their ready point at least once: frankenphp_handle_request for HTTP workers, WorkerHandle::tick() for background workers",
 		}, basicLabels)
 		m.mustRegister(m.readyWorkers)
 	}

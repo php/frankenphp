@@ -22,9 +22,10 @@ if (!file_exists($marker)) {
 
 @touch($restarted);
 
-$handle = frankenphp_get_worker_handle();
-while (frankenphp_worker_tick()) {
-    $read = [$handle];
+$handle = new \FrankenPHP\WorkerHandle();
+$stream = $handle->getStream();
+while ($handle->tick()) {
+    $read = [$stream];
     $write = $except = null;
     stream_select($read, $write, $except, null);
 }

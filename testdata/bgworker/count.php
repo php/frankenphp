@@ -6,9 +6,10 @@ set_time_limit(0);
 if (!empty($_SERVER['BG_COUNT_FILE'])) {
     @file_put_contents($_SERVER['BG_COUNT_FILE'], "run\n", FILE_APPEND);
 }
-$handle = frankenphp_get_worker_handle();
-while (frankenphp_worker_tick()) {
-    $read = [$handle];
+$handle = new \FrankenPHP\WorkerHandle();
+$stream = $handle->getStream();
+while ($handle->tick()) {
+    $read = [$stream];
     $write = $except = null;
     stream_select($read, $write, $except, null);
 }
