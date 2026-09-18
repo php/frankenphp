@@ -111,6 +111,7 @@ You can also explicitly configure FrankenPHP using the [global option](https://c
 			watch <path> # Sets the path to watch for file changes. Can be specified more than once for multiple paths.
 			name <name> # Sets the name of the worker, used in logs and metrics. Default: absolute path of worker file
 			max_consecutive_failures <num> # Sets the maximum number of consecutive failures before the worker is considered unhealthy, -1 means the worker will always restart. Default: 6.
+			request_idle_timeout <duration> # After this idle duration with no request, frankenphp_handle_request() returns FRANKENPHP_REQUEST_IDLE_TIMEOUT (-1) so the worker can refresh long-lived connections (database, Redis) without restarting. Default: 0 (disabled).
 		}
 	}
 }
