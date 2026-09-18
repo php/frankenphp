@@ -4,7 +4,7 @@ require_once __DIR__.'/_executor.php';
 
 // Self-contained repro of https://github.com/php/frankenphp/issues/2368
 if (!class_exists('StrictSessionHandler', false)) {
-    abstract class AbstractSessionHandler implements SessionHandlerInterface, SessionUpdateTimestampHandlerInterface
+    abstract class AbstractSessionHandler implements SessionHandlerInterface, SessionIdInterface, SessionUpdateTimestampHandlerInterface
     {
         private string $sessionName;
         private string $prefetchId;
@@ -20,6 +20,11 @@ if (!class_exists('StrictSessionHandler', false)) {
         abstract protected function doRead(string $sessionId): string;
         abstract protected function doWrite(string $sessionId, string $data): bool;
         abstract protected function doDestroy(string $sessionId): bool;
+
+        public function create_sid(): string
+        {
+            return bin2hex(random_bytes(16));
+        }
 
         public function validateId(string $sessionId): bool
         {
