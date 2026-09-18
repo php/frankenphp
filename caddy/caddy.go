@@ -4,11 +4,13 @@
 package caddy
 
 import (
+	"context"
 	"fmt"
 	"time"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
+	"github.com/dunglas/frankenphp"
 )
 
 const (
@@ -22,6 +24,12 @@ const (
 )
 
 func init() {
+	// Keep PHP available until every Caddy app has finished stopping, including
+	// the HTTP server's shutdown delay and in-flight request draining.
+	caddy.OnExit(func(context.Context) {
+		frankenphp.Shutdown()
+	})
+
 	caddy.RegisterModule(&FrankenPHPApp{})
 	caddy.RegisterModule(&FrankenPHPModule{})
 	caddy.RegisterModule(&FrankenPHPAdmin{})
