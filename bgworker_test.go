@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -679,6 +680,40 @@ func TestBackgroundWorkerCleanExitIsPaced(t *testing.T) {
 	runs := bytes.Count(b, []byte("\n"))
 	assert.GreaterOrEqual(t, runs, 2, "the script was not re-run")
 	assert.LessOrEqual(t, runs, 8, "the re-runs were not paced")
+}
+
+// TestBackgroundWorkerCyclingIsNotThrottled checks the other side of the
+// pacing: a worker that does some work and returns is re-run at its own
+// pace, only a run ending too fast to have done anything is slowed down.
+func TestBackgroundWorkerCyclingIsNotThrottled(t *testing.T) {
+	countFile := filepath.Join(t.TempDir(), "runs")
+	initServers(t,
+		frankenphp.WithWorkers("bg-cycle", "testdata/bgworker/cycle.php", 1,
+			frankenphp.WithWorkerBackground(),
+			frankenphp.WithWorkerEnv(map[string]string{"BG_COUNT_FILE": countFile}),
+		),
+		frankenphp.WithNumThreads(2),
+	)
+
+	// the interval between two runs is the work plus whatever FrankenPHP
+	// waits: comparing the last to the first cancels how fast the machine
+	// is, and a backoff counting these runs would have grown it by a second
+	starts := func() []float64 {
+		b, _ := os.ReadFile(countFile)
+		var times []float64
+		for _, line := range strings.Fields(string(b)) {
+			if t, err := strconv.ParseFloat(line, 64); err == nil {
+				times = append(times, t)
+			}
+		}
+
+		return times
+	}
+	require.Eventually(t, func() bool { return len(starts()) >= 6 }, 15*time.Second, 50*time.Millisecond, "the worker did not run six times")
+
+	times := starts()
+	first, last := times[1]-times[0], times[5]-times[4]
+	assert.Less(t, last-first, 0.5, "the interval between runs grew, the worker was throttled")
 }
 
 // TestBackgroundWorkerRebootForceKillsStuckScript checks that a script
