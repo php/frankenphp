@@ -94,8 +94,7 @@ func initWorkers(opts []workerOpt) error {
 		qualifiedNames[w.qualifiedName] = true
 
 		// reported here rather than in calculateMaxThreads(), where the name is not resolved yet
-		metrics.DeclareWorker(w.qualifiedName, w.name, w.server.name)
-		metrics.TotalWorkers(w.qualifiedName, w.num)
+		metrics.TotalWorkers(w.name, w.server.name, w.num)
 	}
 
 	startupFailChan = make(chan error, totalThreadsToStart)
@@ -329,7 +328,7 @@ func (worker *worker) isAtThreadLimit() bool {
 }
 
 func (worker *worker) handleRequest(fc *frankenPHPContext) error {
-	metrics.StartWorkerRequest(worker.qualifiedName)
+	metrics.StartWorkerRequest(worker.name, worker.server.name)
 
 	runtime.Gosched()
 
@@ -341,7 +340,7 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) error {
 			case thread.requestChan <- fc:
 				worker.threadMutex.RUnlock()
 				<-fc.done
-				metrics.StopWorkerRequest(worker.qualifiedName, time.Since(fc.startedAt))
+				metrics.StopWorkerRequest(worker.name, worker.server.name, time.Since(fc.startedAt))
 
 				return nil
 			default:
@@ -353,7 +352,7 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) error {
 
 	// if no thread was available, mark the request as queued and apply the scaling strategy
 	worker.queuedRequests.Add(1)
-	metrics.QueuedWorkerRequest(worker.qualifiedName)
+	metrics.QueuedWorkerRequest(worker.name, worker.server.name)
 
 	for {
 		workerScaleChan := scaleChan
@@ -364,9 +363,9 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) error {
 		select {
 		case worker.requestChan <- fc:
 			worker.queuedRequests.Add(-1)
-			metrics.DequeuedWorkerRequest(worker.qualifiedName)
+			metrics.DequeuedWorkerRequest(worker.name, worker.server.name)
 			<-fc.done
-			metrics.StopWorkerRequest(worker.qualifiedName, time.Since(fc.startedAt))
+			metrics.StopWorkerRequest(worker.name, worker.server.name, time.Since(fc.startedAt))
 
 			return nil
 		case workerScaleChan <- fc:
@@ -374,8 +373,8 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) error {
 		case <-timeoutChan(time.Duration(maxWaitTime.Load())):
 			// the request has timed out stalling
 			worker.queuedRequests.Add(-1)
-			metrics.DequeuedWorkerRequest(worker.qualifiedName)
-			metrics.StopWorkerRequest(worker.qualifiedName, time.Since(fc.startedAt))
+			metrics.DequeuedWorkerRequest(worker.name, worker.server.name)
+			metrics.StopWorkerRequest(worker.name, worker.server.name, time.Since(fc.startedAt))
 
 			fc.reject(ErrMaxWaitTimeExceeded)
 
