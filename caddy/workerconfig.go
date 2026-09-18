@@ -1,8 +1,10 @@
 package caddy
 
 import (
+	"fmt"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
@@ -23,6 +25,7 @@ type workerConfig struct {
 	mercureContext
 
 	// Name for the worker. Default: the absolute path of the worker file, postfixed with a number if the name is already used.
+	// Name for the worker. Default: the absolute path of the worker file, postfixed with a number if the name is already used.
 	Name string `json:"name,omitempty"`
 	// FileName sets the path to the worker script.
 	FileName string `json:"file_name,omitempty"`
@@ -38,8 +41,24 @@ type workerConfig struct {
 	MatchPath []string `json:"match_path,omitempty"`
 	// MaxConsecutiveFailures sets the maximum number of consecutive failures before panicking (defaults to 6, set to -1 to never panick)
 	MaxConsecutiveFailures int `json:"max_consecutive_failures,omitempty"`
+	// Ticks configures periodic internal messages sent to the worker.
+	Ticks []*tickConfig `json:"ticks,omitempty"`
 
 	options []frankenphp.WorkerOption
+}
+
+type tickConfig struct {
+	Interval time.Duration       `json:"interval"`
+	Message  string              `json:"message"`
+	Aligned  bool                `json:"aligned,omitempty"`
+	Mode     frankenphp.TickMode `json:"mode,omitempty"`
+}
+
+var tickModes = map[string]frankenphp.TickMode{
+	"sync":    frankenphp.TickModeSynchronous,
+	"overlap": frankenphp.TickModeOverlapping,
+	"each":    frankenphp.TickModeEach,
+	"idle":    frankenphp.TickModeIdle,
 }
 
 func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
@@ -139,8 +158,15 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 			}
 
 			wc.MaxConsecutiveFailures = v
+		case "tick":
+			tick, err := parseTickConfig(d)
+			if err != nil {
+				return wc, d.WrapErr(err)
+			}
+
+			wc.Ticks = append(wc.Ticks, tick)
 		default:
-			return wc, wrongSubDirectiveError("worker", "name, file, num, env, watch, match, max_consecutive_failures, max_threads", v)
+			return wc, wrongSubDirectiveError("worker", "name, file, num, env, watch, match, tick, max_consecutive_failures, max_threads", v)
 		}
 	}
 
@@ -175,5 +201,47 @@ func (wc *workerConfig) toWorkerOptions() ([]frankenphp.WorkerOption, error) {
 		}
 		opts = append(opts, frankenphp.WithWorkerMatcher(matchFunc.Match))
 	}
+
+	if len(wc.Ticks) > 0 {
+		for _, t := range wc.Ticks {
+			opts = append(opts, frankenphp.WithWorkerTicks(t.Mode, t.Interval, t.Message, t.Aligned))
+		}
+	}
+
 	return opts, nil
+}
+
+// parse the configuration for recurring ticks to the worker
+// tick 1s "Hello, world!"
+// tick overlap aligned 1m "Hello, world!"
+func parseTickConfig(d *caddyfile.Dispenser) (*tickConfig, error) {
+	args := d.RemainingArgs()
+	if len(args) < 2 {
+		return nil, d.ArgErr()
+	}
+
+	mode := frankenphp.TickModeSynchronous
+	if m, ok := tickModes[args[0]]; ok {
+		mode, args = m, args[1:]
+	}
+
+	aligned := false
+	if len(args) > 2 && args[len(args)-2] == "aligned" {
+		aligned = true
+		args = append(args[:len(args)-2], args[len(args)-1])
+	}
+
+	if len(args) != 2 {
+		return nil, d.ArgErr()
+	}
+
+	interval, err := time.ParseDuration(args[0])
+	if err != nil {
+		return nil, fmt.Errorf("tick interval must be a valid duration, received: %s (%s)", args[0], err)
+	}
+	if interval <= 0 {
+		return nil, fmt.Errorf("tick interval must be positive, received: %s (%s)", args[0], interval)
+	}
+
+	return &tickConfig{Interval: interval, Message: args[1], Aligned: aligned, Mode: mode}, nil
 }
