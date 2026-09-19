@@ -45,11 +45,12 @@ func TestVarsNamespaces(t *testing.T) {
 			frankenphp.WithWorkerBackground(),
 			frankenphp.WithWorkerServerScope(server),
 			frankenphp.WithWorkerVars("redis", "feature_flags"),
+			frankenphp.WithWorkerTasks("jobs"),
 		),
 		frankenphp.WithNumThreads(2),
 	)
 
-	all := `{"vars":["redis","feature_flags"]}`
+	all := `{"vars":["redis","feature_flags"],"tasks":["jobs"]}`
 	assert.JSONEq(t, `{"namespace":"redis","all":`+all+`}`, serverGet(t, server, "http://example.com/vars.php?ns=redis"))
 	assert.JSONEq(t, `{"namespace":"feature_flags","all":`+all+`}`, serverGet(t, server, "http://example.com/vars.php?ns=feature_flags"))
 	assert.Contains(t, serverGet(t, server, "http://example.com/vars.php?ns=config"), "no background worker publishes")

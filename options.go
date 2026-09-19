@@ -64,6 +64,7 @@ type workerOpt struct {
 	bootTimeout            time.Duration
 	bootTimeoutIsSet       bool
 	vars                   []string
+	tasks                  []string
 }
 
 // WithContext sets the main context to use.
@@ -289,6 +290,22 @@ func WithWorkerVars(namespaces ...string) WorkerOption {
 			return errors.New("a vars namespace cannot be empty")
 		}
 		w.vars = append(w.vars, namespaces...)
+
+		return nil
+	}
+}
+
+// EXPERIMENTAL: WithWorkerTasks declares the task namespaces a background
+// worker receives, the ones a SentTaskHandle is sent to. A namespace has one
+// receiving worker within a server, and one among the global workers; its
+// pool shares one queue for all of them, and ReceivedTaskHandle::getNamespace()
+// tells them apart.
+func WithWorkerTasks(namespaces ...string) WorkerOption {
+	return func(w *workerOpt) error {
+		if slices.Contains(namespaces, "") {
+			return errors.New("a task namespace cannot be empty")
+		}
+		w.tasks = append(w.tasks, namespaces...)
 
 		return nil
 	}

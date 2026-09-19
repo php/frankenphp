@@ -255,3 +255,15 @@ func go_frankenphp_worker_vars(threadIndex C.uintptr_t, array *C.zval) {
 		}
 	}
 }
+
+// go_frankenphp_worker_tasks lists the task namespaces of the calling worker,
+// for WorkerHandle::getNamespaces()
+//
+//export go_frankenphp_worker_tasks
+func go_frankenphp_worker_tasks(threadIndex C.uintptr_t, array *C.zval) {
+	if handler, ok := phpThreads[threadIndex].handler.(*backgroundWorkerThread); ok {
+		for _, ns := range handler.worker.taskNamespaces {
+			C.frankenphp_array_append_string(array, toUnsafeChar(ns), C.size_t(len(ns)))
+		}
+	}
+}
