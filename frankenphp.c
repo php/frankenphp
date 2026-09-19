@@ -618,15 +618,23 @@ void frankenphp_worker_signal_task(intptr_t s) {
 
 /* Task channels: one descriptor per side of a task, the sender's [0] and
  * the receiver's [1], each waited on by its stream and signaled by the other
- * side through the Go side. On Linux they are eventfds: a counter, no
- * buffer, nothing to close between two tasks, so the Go side pools them.
- * Elsewhere a socket pair, for Windows's php_select(); a signal to one end
- * is a byte written to the other. Both descriptors are non-blocking: waits
- * go through poll(), consuming a signal never blocks. Signals and events
- * match one to one, EFD_SEMAPHORE makes a read consume a single one. */
+ * side through the Go side. On Linux they are eventfds and on macOS kqueue
+ * descriptors carrying a user event: a side signals the other without a
+ * pair, there is nothing to close between two tasks, so the Go side pools
+ * them. Elsewhere a socket pair, for Windows's php_select(); a signal to
+ * one end is a byte written to the other. Waits go through poll() on the
+ * descriptor, consuming a signal never blocks. Signals and events match
+ * one to one: EFD_SEMAPHORE makes a read consume a single one, and a side
+ * never has more than one signal outstanding, which is what lets the
+ * coalescing user event of kqueue stand in for a counter. */
 #ifdef __linux__
 #include <sys/eventfd.h>
 #define FRANKENPHP_TASK_CHAN_EVENTFD 1
+#elif defined(__APPLE__)
+#include <sys/event.h>
+#define FRANKENPHP_TASK_CHAN_KQUEUE 1
+/* the one event of a channel's queue */
+#define FRANKENPHP_TASK_CHAN_IDENT 1
 #endif
 
 int frankenphp_task_chan_open(intptr_t fds[2]) {
@@ -638,6 +646,31 @@ int frankenphp_task_chan_open(intptr_t fds[2]) {
   int b = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK | EFD_SEMAPHORE);
   if (b < 0) {
     close(a);
+
+    return -1;
+  }
+  fds[0] = a;
+  fds[1] = b;
+#elif defined(FRANKENPHP_TASK_CHAN_KQUEUE)
+  int a = kqueue();
+  if (a < 0) {
+    return -1;
+  }
+  int b = kqueue();
+  if (b < 0) {
+    close(a);
+
+    return -1;
+  }
+
+  /* EV_CLEAR: a trigger is reported once, so a consume takes one signal */
+  struct kevent ev;
+  EV_SET(&ev, FRANKENPHP_TASK_CHAN_IDENT, EVFILT_USER, EV_ADD | EV_CLEAR, 0, 0,
+         NULL);
+  if (kevent(a, &ev, 1, NULL, 0, NULL) != 0 ||
+      kevent(b, &ev, 1, NULL, 0, NULL) != 0) {
+    close(a);
+    close(b);
 
     return -1;
   }
@@ -661,6 +694,11 @@ void frankenphp_task_chan_signal(intptr_t fd0, intptr_t fd1, int side) {
 #ifdef FRANKENPHP_TASK_CHAN_EVENTFD
   uint64_t one = 1;
   (void)!write((int)(side ? fd1 : fd0), &one, sizeof(one));
+#elif defined(FRANKENPHP_TASK_CHAN_KQUEUE)
+  struct kevent ev;
+  EV_SET(&ev, FRANKENPHP_TASK_CHAN_IDENT, EVFILT_USER, 0, NOTE_TRIGGER, 0,
+         NULL);
+  kevent((int)(side ? fd1 : fd0), &ev, 1, NULL, 0, NULL);
 #else
   /* a byte on one end lands on the other */
   frankenphp_sock_send((php_socket_t)(side ? fd0 : fd1), "1", 1);
@@ -673,6 +711,11 @@ bool frankenphp_task_chan_consume(intptr_t fd) {
   uint64_t v;
 
   return read((int)fd, &v, sizeof(v)) == (ssize_t)sizeof(v);
+#elif defined(FRANKENPHP_TASK_CHAN_KQUEUE)
+  struct kevent ev;
+  struct timespec immediately = {0, 0};
+
+  return kevent((int)fd, NULL, 0, &ev, 1, &immediately) == 1;
 #else
   char b;
 
