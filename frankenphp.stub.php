@@ -152,7 +152,8 @@ namespace FrankenPHP {
          * readable when an update is there and reaches EOF when the task
          * ends. Only waiting on it is supported, read() consumes what it
          * carries and reading it steals that signal. Closing it abandons
-         * the task, and past its end the stream comes back closed.
+         * the task. Past its end a stream the script already took comes
+         * back closed, and asking for a first one throws.
          *
          * @return resource
          */
@@ -198,8 +199,9 @@ namespace FrankenPHP {
         /**
          * The stream to wait on: it reaches EOF when the sender abandons the
          * task, for stream_select() and feof(). Only waiting on it is
-         * supported. Closing it completes the task, and past its end the
-         * stream comes back closed.
+         * supported. Closing it completes the task. Past its end a stream
+         * the script already took comes back closed, and asking for a
+         * first one throws.
          *
          * @return resource
          */

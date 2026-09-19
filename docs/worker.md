@@ -317,7 +317,7 @@ while (null !== $update = $task->read()) {
 }
 ```
 
-On PHP 8.6 both handles are `Io\Poll\Handle`, so a context follows several tasks without a stream:
+On PHP 8.6 both handles are `Io\Poll\Handle`, so a context follows several tasks without a stream, and a script that never calls `getStream()` has none built for it:
 
 ```php
 use Io\Poll\{Context, Event};
