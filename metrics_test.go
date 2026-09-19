@@ -7,6 +7,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -51,7 +52,7 @@ func TestPrometheusMetrics_TotalWorkers(t *testing.T) {
 	require.Nil(t, m.workerRequestTime)
 	require.Nil(t, m.workerRequestCount)
 
-	m.TotalWorkers("test_worker", 2)
+	m.TotalWorkersOnServer("test_worker", "test_server", 2)
 
 	require.NotNil(t, m.totalWorkers)
 	require.NotNil(t, m.busyWorkers)
@@ -64,8 +65,8 @@ func TestPrometheusMetrics_TotalWorkers(t *testing.T) {
 
 func TestPrometheusMetrics_StopWorkerRequest(t *testing.T) {
 	m := createPrometheusMetrics()
-	m.TotalWorkers("test_worker", 2)
-	m.StopWorkerRequest("test_worker", 2*time.Second)
+	m.TotalWorkersOnServer("test_worker", "test_server", 2)
+	m.StopWorkerRequestOnServer("test_worker", "test_server", 2*time.Second)
 
 	inputs := []struct {
 		name     string
@@ -81,7 +82,7 @@ func TestPrometheusMetrics_StopWorkerRequest(t *testing.T) {
 				# TYPE frankenphp_worker_request_count counter
 			`,
 			expect: `
-				frankenphp_worker_request_count{worker="test_worker"} 1
+				frankenphp_worker_request_count{server="test_server",worker="test_worker"} 1
 			`,
 		},
 		{
@@ -92,7 +93,7 @@ func TestPrometheusMetrics_StopWorkerRequest(t *testing.T) {
 				# TYPE frankenphp_busy_workers gauge
 			`,
 			expect: `
-				frankenphp_busy_workers{worker="test_worker"} -1
+				frankenphp_busy_workers{server="test_server",worker="test_worker"} -1
 			`,
 		},
 		{
@@ -103,7 +104,7 @@ func TestPrometheusMetrics_StopWorkerRequest(t *testing.T) {
 				# TYPE frankenphp_worker_request_time counter
 			`,
 			expect: `
-				frankenphp_worker_request_time{worker="test_worker"} 2
+				frankenphp_worker_request_time{server="test_server",worker="test_worker"} 2
 			`,
 		},
 	}
@@ -118,8 +119,8 @@ func TestPrometheusMetrics_StopWorkerRequest(t *testing.T) {
 
 func TestPrometheusMetrics_StartWorkerRequest(t *testing.T) {
 	m := createPrometheusMetrics()
-	m.TotalWorkers("test_worker", 2)
-	m.StartWorkerRequest("test_worker")
+	m.TotalWorkersOnServer("test_worker", "test_server", 2)
+	m.StartWorkerRequestOnServer("test_worker", "test_server")
 
 	inputs := []struct {
 		name     string
@@ -135,7 +136,7 @@ func TestPrometheusMetrics_StartWorkerRequest(t *testing.T) {
 				# TYPE frankenphp_busy_workers gauge
 			`,
 			expect: `
-				frankenphp_busy_workers{worker="test_worker"} 1
+				frankenphp_busy_workers{server="test_server",worker="test_worker"} 1
 			`,
 		},
 	}
@@ -150,8 +151,8 @@ func TestPrometheusMetrics_StartWorkerRequest(t *testing.T) {
 
 func TestPrometheusMetrics_TestStopReasonCrash(t *testing.T) {
 	m := createPrometheusMetrics()
-	m.TotalWorkers("test_worker", 2)
-	m.StopWorker("test_worker", StopReasonCrash)
+	m.TotalWorkersOnServer("test_worker", "test_server", 2)
+	m.StopWorkerOnServer("test_worker", "test_server", StopReasonCrash)
 
 	inputs := []struct {
 		name     string
@@ -178,18 +179,18 @@ func TestPrometheusMetrics_TestStopReasonCrash(t *testing.T) {
 				# TYPE frankenphp_total_workers gauge
 			`,
 			expect: `
-				frankenphp_total_workers{worker="test_worker"} -1
+				frankenphp_total_workers{server="test_server",worker="test_worker"} -1
 			`,
 		},
 		{
 			name: "Testing ReadyWorkers",
 			c:    m.readyWorkers,
 			metadata: `
-				# HELP frankenphp_ready_workers Running workers that have successfully called frankenphp_handle_request at least once
+				# HELP frankenphp_ready_workers Running workers that have reached their ready point at least once: frankenphp_handle_request for HTTP workers, WorkerHandle::tick() for background workers
 				# TYPE frankenphp_ready_workers gauge
 			`,
 			expect: `
-				frankenphp_ready_workers{worker="test_worker"} -1
+				frankenphp_ready_workers{server="test_server",worker="test_worker"} -1
 			`,
 		},
 		{
@@ -200,7 +201,7 @@ func TestPrometheusMetrics_TestStopReasonCrash(t *testing.T) {
 				# TYPE frankenphp_worker_crashes counter
 			`,
 			expect: `
-				frankenphp_worker_crashes{worker="test_worker"} 1
+				frankenphp_worker_crashes{server="test_server",worker="test_worker"} 1
 			`,
 		},
 	}
@@ -210,5 +211,103 @@ func TestPrometheusMetrics_TestStopReasonCrash(t *testing.T) {
 			require.NoError(t, testutil.CollectAndCompare(input.c, strings.NewReader(input.metadata+input.expect)))
 		})
 
+	}
+}
+
+// packedMetrics records the worker names a Metrics implementation without
+// ServerMetrics receives
+type packedMetrics struct {
+	nullMetrics
+	names []string
+}
+
+func (m *packedMetrics) StartWorker(name string)              { m.names = append(m.names, name) }
+func (m *packedMetrics) ReadyWorker(name string)              { m.names = append(m.names, name) }
+func (m *packedMetrics) StopWorker(name string, _ StopReason) { m.names = append(m.names, name) }
+func (m *packedMetrics) TotalWorkers(name string, _ int)      { m.names = append(m.names, name) }
+func (m *packedMetrics) StopWorkerRequest(name string, _ time.Duration) {
+	m.names = append(m.names, name)
+}
+func (m *packedMetrics) StartWorkerRequest(name string)    { m.names = append(m.names, name) }
+func (m *packedMetrics) QueuedWorkerRequest(name string)   { m.names = append(m.names, name) }
+func (m *packedMetrics) DequeuedWorkerRequest(name string) { m.names = append(m.names, name) }
+
+// splitMetrics records the name and server pairs a ServerMetrics
+// implementation receives, and fails the test if a packed method is called
+type splitMetrics struct {
+	t     *testing.T
+	pairs [][2]string
+}
+
+func (m *splitMetrics) record(name, server string) {
+	m.pairs = append(m.pairs, [2]string{name, server})
+}
+
+func (m *splitMetrics) StartWorkerOnServer(name, server string)              { m.record(name, server) }
+func (m *splitMetrics) ReadyWorkerOnServer(name, server string)              { m.record(name, server) }
+func (m *splitMetrics) StopWorkerOnServer(name, server string, _ StopReason) { m.record(name, server) }
+func (m *splitMetrics) TotalWorkersOnServer(name, server string, _ int)      { m.record(name, server) }
+func (m *splitMetrics) StopWorkerRequestOnServer(name, server string, _ time.Duration) {
+	m.record(name, server)
+}
+func (m *splitMetrics) StartWorkerRequestOnServer(name, server string)    { m.record(name, server) }
+func (m *splitMetrics) QueuedWorkerRequestOnServer(name, server string)   { m.record(name, server) }
+func (m *splitMetrics) DequeuedWorkerRequestOnServer(name, server string) { m.record(name, server) }
+
+func (m *splitMetrics) StartWorker(string)            { m.t.Fatal("packed StartWorker called") }
+func (m *splitMetrics) ReadyWorker(string)            { m.t.Fatal("packed ReadyWorker called") }
+func (m *splitMetrics) StopWorker(string, StopReason) { m.t.Fatal("packed StopWorker called") }
+func (m *splitMetrics) TotalWorkers(string, int)      { m.t.Fatal("packed TotalWorkers called") }
+func (m *splitMetrics) TotalThreads(int)              {}
+func (m *splitMetrics) StartRequest()                 {}
+func (m *splitMetrics) StopRequest()                  {}
+func (m *splitMetrics) StopWorkerRequest(string, time.Duration) {
+	m.t.Fatal("packed StopWorkerRequest called")
+}
+func (m *splitMetrics) StartWorkerRequest(string)  { m.t.Fatal("packed StartWorkerRequest called") }
+func (m *splitMetrics) Shutdown()                  {}
+func (m *splitMetrics) QueuedWorkerRequest(string) { m.t.Fatal("packed QueuedWorkerRequest called") }
+func (m *splitMetrics) DequeuedWorkerRequest(string) {
+	m.t.Fatal("packed DequeuedWorkerRequest called")
+}
+func (m *splitMetrics) QueuedRequest()   {}
+func (m *splitMetrics) DequeuedRequest() {}
+
+func reportEveryWorkerMethod(m workerMetrics, name, server string) {
+	m.StartWorker(name, server)
+	m.ReadyWorker(name, server)
+	m.StopWorker(name, server, StopReasonRestart)
+	m.TotalWorkers(name, server, 1)
+	m.StopWorkerRequest(name, server, time.Second)
+	m.StartWorkerRequest(name, server)
+	m.QueuedWorkerRequest(name, server)
+	m.DequeuedWorkerRequest(name, server)
+}
+
+// a Metrics implementation without ServerMetrics gets the packed name, the
+// bare name for a global worker
+func TestMetricsAdapterPacksTheServerIntoTheName(t *testing.T) {
+	m := &packedMetrics{}
+	a := adaptMetrics(m)
+
+	reportEveryWorkerMethod(a, "queue", "api")
+	reportEveryWorkerMethod(a, "queue", "")
+
+	require.Len(t, m.names, 16)
+	assert.Equal(t, []string{"api:queue", "api:queue", "api:queue", "api:queue", "api:queue", "api:queue", "api:queue", "api:queue"}, m.names[:8])
+	assert.Equal(t, []string{"queue", "queue", "queue", "queue", "queue", "queue", "queue", "queue"}, m.names[8:])
+}
+
+// a ServerMetrics implementation gets the two names apart and its packed
+// methods are never called
+func TestMetricsAdapterKeepsTheServerApart(t *testing.T) {
+	m := &splitMetrics{t: t}
+	a := adaptMetrics(m)
+
+	reportEveryWorkerMethod(a, "queue", "api")
+
+	require.Len(t, m.pairs, 8)
+	for _, pair := range m.pairs {
+		assert.Equal(t, [2]string{"queue", "api"}, pair)
 	}
 }

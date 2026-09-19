@@ -13,11 +13,14 @@
 #include <php.h>
 #ifdef PHP_WIN32
 #include <config.w32.h>
+#include <win32/sockets.h>
 #else
 #include <php_config.h>
 #endif
+#include <main/php_streams.h>
 #include <php_ini.h>
 #include <php_main.h>
+#include <php_network.h>
 #include <php_output.h>
 #include <php_variables.h>
 #include <php_version.h>
@@ -28,6 +31,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #ifndef PHP_WIN32
+#include <fcntl.h>
 #include <unistd.h>
 #endif
 #if defined(__linux__)
@@ -51,13 +55,23 @@
 #include "emulate_php_cli.h"
 
 #include "_cgo_export.h"
-#include "frankenphp_arginfo.h"
-#ifdef FRANKENPHP_TEST
-/* The persistent_zval helpers are only compiled in when a consumer needs
- * them. The step that lands the first real caller (background workers)
- * will drop this guard. */
-#include "zval.h"
+
+#if PHP_VERSION_ID < 80400
+/* gen_stub.php registers classes with an API that only exists since 8.4. */
+static zend_always_inline zend_class_entry *
+zend_register_internal_class_with_flags(zend_class_entry *class_entry,
+                                        zend_class_entry *parent_ce,
+                                        uint32_t flags) {
+  zend_class_entry *ce =
+      zend_register_internal_class_ex(class_entry, parent_ce);
+  ce->ce_flags |= flags;
+
+  return ce;
+}
 #endif
+
+#include "frankenphp_arginfo.h"
+#include "zval.h"
 
 #if defined(PHP_WIN32) && defined(ZTS)
 ZEND_TSRMLS_CACHE_DEFINE()
@@ -126,6 +140,18 @@ HashTable *main_thread_env = NULL;
 
 static THREAD_LOCAL uintptr_t thread_index;
 static THREAD_LOCAL bool is_worker_thread = false;
+static THREAD_LOCAL bool is_background_worker = false;
+/* Stop socket pair of a background worker thread: [0] is the script's end,
+ * exposed via WorkerHandle::getStream(); [1] is transferred to the Go
+ * side, which closes it to signal a drain. */
+static THREAD_LOCAL php_socket_t worker_stop_socks[2] = {SOCK_ERR, SOCK_ERR};
+/* set by the first WorkerHandle::tick() of the current run, the ready
+ * point of a background worker */
+static THREAD_LOCAL bool worker_ticked = false;
+/* the stream of the current run, see WorkerHandle::getStream(); the
+ * cache holds a ref, and the resource list of the run frees it at request
+ * shutdown, so the pointer is only reset, never released, between runs */
+static THREAD_LOCAL zend_resource *worker_handle_res = NULL;
 static THREAD_LOCAL HashTable *sandboxed_env = NULL;
 /* prepared_env holds entries from php(_server)'s `env KEY VAL`, exposed to
  * getenv() and merged into $_ENV when 'E' is in variables_order. Separate from
@@ -342,7 +368,149 @@ void frankenphp_release_thread_for_kill(force_kill_slot slot) {
 #endif
 }
 
+/* Stop channel of background workers: a socket pair. One end is exposed to
+ * the PHP script via WorkerHandle::getStream(), the other is handed to
+ * the Go side, which closes it on drain so the script's end reaches EOF and
+ * a stream_select() or a blocking read on it returns. A socket pair rather
+ * than a pipe because on Windows PHP's php_select() only really waits on
+ * sockets: before 8.5 it reports any other handle as always ready. */
+static void frankenphp_worker_close_sock(php_socket_t s) {
+  if (s == SOCK_ERR) {
+    return;
+  }
+  /* php_network.h maps closesocket to close outside Windows */
+  closesocket(s);
+}
+
+/* keep the pair out of processes the script may spawn: a child holding the
+ * Go side's end would keep the script's end from ever reaching EOF */
+static void frankenphp_worker_sock_no_inherit(php_socket_t s) {
+#ifdef PHP_WIN32
+  SetHandleInformation((HANDLE)s, HANDLE_FLAG_INHERIT, 0);
+#else
+  fcntl(s, F_SETFD, FD_CLOEXEC);
+#endif
+}
+
+static void frankenphp_worker_close_stop_socks(void) {
+  for (int i = 0; i < 2; i++) {
+    frankenphp_worker_close_sock(worker_stop_socks[i]);
+    worker_stop_socks[i] = SOCK_ERR;
+  }
+}
+
+/* Resets the background worker state of the calling thread. The streams
+ * handed out by WorkerHandle::getStream() do not own the socket and
+ * were destroyed by request shutdown, so the cache is dropped, not released.
+ */
+static void frankenphp_reset_background_worker(void) {
+  is_background_worker = false;
+  worker_ticked = false;
+  worker_handle_res = NULL;
+  frankenphp_worker_close_stop_socks();
+}
+
+static int frankenphp_worker_open_stop_pair(void) {
+#ifdef PHP_WIN32
+  /* PHP's emulation, a loopback TCP pair; it only accepts AF_INET, listens
+   * on INADDR_ANY and accepts the first peer, so check the pair is ours */
+  if (socketpair(AF_INET, SOCK_STREAM, 0, worker_stop_socks) != 0) {
+    worker_stop_socks[0] = SOCK_ERR;
+    worker_stop_socks[1] = SOCK_ERR;
+
+    return -1;
+  }
+
+  struct sockaddr_in peer = {0}, local = {0};
+  int peer_len = sizeof(peer), local_len = sizeof(local);
+  if (getpeername(worker_stop_socks[0], (struct sockaddr *)&peer, &peer_len) !=
+          0 ||
+      getsockname(worker_stop_socks[1], (struct sockaddr *)&local,
+                  &local_len) != 0 ||
+      peer.sin_port != local.sin_port ||
+      peer.sin_addr.s_addr != local.sin_addr.s_addr) {
+    frankenphp_worker_close_stop_socks();
+
+    return -1;
+  }
+#else
+#ifdef SOCK_CLOEXEC
+  int type = SOCK_STREAM | SOCK_CLOEXEC;
+#else
+  int type = SOCK_STREAM;
+#endif
+  if (socketpair(AF_UNIX, type, 0, worker_stop_socks) != 0) {
+    worker_stop_socks[0] = SOCK_ERR;
+    worker_stop_socks[1] = SOCK_ERR;
+
+    return -1;
+  }
+#endif
+  /* redundant where SOCK_CLOEXEC applied; a fork()ed child (pcntl) still
+   * inherits both ends and delays the EOF until it exits */
+  frankenphp_worker_sock_no_inherit(worker_stop_socks[0]);
+  frankenphp_worker_sock_no_inherit(worker_stop_socks[1]);
+
+  return 0;
+}
+
+/* Marks the calling thread as a background worker, opens its stop socket
+ * pair and transfers the Go side's end to the caller (clearing the TLS slot
+ * so a later recycle won't double-close it). Returns -1 if the pair could
+ * not be created. max_execution_time stays armed until the first
+ * WorkerHandle::tick() of the run, see there. */
+intptr_t frankenphp_set_background_worker_and_get_stop_sock(void) {
+  frankenphp_reset_background_worker();
+  is_background_worker = true;
+
+  if (frankenphp_worker_open_stop_pair() != 0) {
+    return -1;
+  }
+
+  /* One wake-up right away, so a script that registers its handle with an
+   * event loop and runs it ticks on its own: readiness then means the loop
+   * serviced the handle once. The first WorkerHandle::tick() consumes
+   * it. Nothing to do on failure, the script then has to tick by itself. */
+  const char wakeup = '\n';
+#ifdef MSG_NOSIGNAL
+  send(worker_stop_socks[1], &wakeup, 1, MSG_NOSIGNAL);
+#else
+  send(worker_stop_socks[1], &wakeup, 1, 0);
+#endif
+
+  intptr_t s = (intptr_t)worker_stop_socks[1];
+  worker_stop_socks[1] = SOCK_ERR;
+
+  return s;
+}
+
+/* Closes the Go side's end of a stop socket pair, which lands as EOF on the
+ * script's end so its stream_select() or blocking read returns promptly. */
+void frankenphp_worker_close_stop_sock(intptr_t s) {
+  if (s < 0) {
+    return;
+  }
+  /* Closing this end only lands as EOF on the script's end while no other
+   * process holds a copy of it, and a pcntl_fork() child inherits every
+   * descriptor of the process, including the pairs of the other threads.
+   * Shutting the write direction down sends the FIN regardless. */
+#ifdef PHP_WIN32
+  shutdown((php_socket_t)s, SD_SEND);
+#else
+  shutdown((php_socket_t)s, SHUT_WR);
+#endif
+  frankenphp_worker_close_sock((php_socket_t)s);
+}
+
 void frankenphp_update_local_thread_context(bool is_worker) {
+  /* A thread that ran a background worker can be recycled into an HTTP
+   * worker or a regular request thread: reset the bg TLS so
+   * WorkerHandle::getStream() rejects callers again, and release the
+   * stop socket. */
+  if (is_background_worker) {
+    frankenphp_reset_background_worker();
+  }
+
   is_worker_thread = is_worker;
 
   /* workers should keep running if the user aborts the connection */
@@ -857,6 +1025,15 @@ PHP_FUNCTION(frankenphp_handle_request) {
     RETURN_THROWS();
   }
 
+  if (is_background_worker) {
+    /* background workers never receive HTTP requests */
+    zend_throw_exception(
+        spl_ce_RuntimeException,
+        "frankenphp_handle_request() cannot be called from a background worker",
+        0);
+    RETURN_THROWS();
+  }
+
 #ifdef ZEND_MAX_EXECUTION_TIMERS
   /* Disable timeouts while waiting for a request to handle */
   zend_unset_timeout();
@@ -1017,6 +1194,287 @@ PHP_FUNCTION(frankenphp_log) {
   }
 }
 
+/* Handles of FrankenPHP: objects a script waits on. On PHP 8.6 they
+ * implement Io\Poll\Handle, so an Io\Poll\Context waits on them next to
+ * the script's own handles; the interface is a marker, the contract is the
+ * three hooks below, and the descriptor never reaches userland. Before 8.6
+ * the same hooks carry the object's lifetime, with the layout the poll API
+ * expects so that one set of ops serves both. */
+#if PHP_VERSION_ID >= 80600
+#include <php_poll.h>
+typedef php_poll_handle_object frankenphp_handle_obj;
+typedef php_poll_handle_ops frankenphp_handle_ops;
+#define FRANKENPHP_HANDLE_OF(zobj) PHP_POLL_HANDLE_OBJ_FROM_ZOBJ(zobj)
+#else
+typedef struct frankenphp_handle_obj frankenphp_handle_obj;
+typedef struct {
+  php_socket_t (*get_fd)(frankenphp_handle_obj *handle);
+  int (*is_valid)(frankenphp_handle_obj *handle);
+  void (*cleanup)(frankenphp_handle_obj *handle);
+} frankenphp_handle_ops;
+struct frankenphp_handle_obj {
+  frankenphp_handle_ops *ops;
+  void *handle_data;
+  zend_object std;
+};
+#define FRANKENPHP_HANDLE_OF(zobj)                                             \
+  ((frankenphp_handle_obj *)((char *)(zobj) -                                  \
+                             offsetof(frankenphp_handle_obj, std)))
+#endif
+
+/* The state a handle carries, NULL when it needs none. */
+#define FRANKENPHP_HANDLE_DATA(zthis)                                          \
+  (FRANKENPHP_HANDLE_OF(Z_OBJ_P(zthis))->handle_data)
+
+static zend_object_handlers frankenphp_handle_obj_handlers;
+
+static zend_object *frankenphp_handle_obj_create(zend_class_entry *ce,
+                                                 frankenphp_handle_ops *ops) {
+#if PHP_VERSION_ID >= 80600
+  frankenphp_handle_obj *obj =
+      php_poll_handle_object_create(sizeof(*obj), ce, ops);
+#else
+  frankenphp_handle_obj *obj = zend_object_alloc(sizeof(*obj), ce);
+
+  zend_object_std_init(&obj->std, ce);
+  object_properties_init(&obj->std, ce);
+  obj->ops = ops;
+  obj->handle_data = NULL;
+#endif
+  obj->std.handlers = &frankenphp_handle_obj_handlers;
+
+  return &obj->std;
+}
+
+static void frankenphp_handle_obj_free(zend_object *object) {
+  frankenphp_handle_obj *obj = FRANKENPHP_HANDLE_OF(object);
+
+  if (obj->ops != NULL && obj->ops->cleanup != NULL) {
+    obj->ops->cleanup(obj);
+  }
+  zend_object_std_dtor(&obj->std);
+}
+
+/* Declares Io\Poll\Handle on a handle class where the poll API exists.
+ * The interface is internal only, an internal class is what it takes. */
+static void frankenphp_handle_implements_poll(zend_class_entry *ce) {
+#if PHP_VERSION_ID >= 80600
+  zend_class_entry *poll_handle_ce = zend_hash_str_find_ptr(
+      CG(class_table), "io\\poll\\handle", sizeof("io\\poll\\handle") - 1);
+
+  if (poll_handle_ce != NULL) {
+    zend_class_implements(ce, 1, poll_handle_ce);
+  }
+#else
+  (void)ce;
+#endif
+}
+
+/* The socket of the current background worker, invalid outside one and
+ * once the thread let it go: is_valid() then reports what tick() does. */
+static php_socket_t
+frankenphp_worker_handle_get_fd(frankenphp_handle_obj *handle) {
+  (void)handle;
+
+  return is_background_worker ? worker_stop_socks[0] : SOCK_ERR;
+}
+
+static int frankenphp_worker_handle_is_valid(frankenphp_handle_obj *handle) {
+  return frankenphp_worker_handle_get_fd(handle) != SOCK_ERR;
+}
+
+static frankenphp_handle_ops frankenphp_worker_handle_poll_ops = {
+    .get_fd = frankenphp_worker_handle_get_fd,
+    .is_valid = frankenphp_worker_handle_is_valid,
+    .cleanup = NULL,
+};
+
+static zend_object *frankenphp_worker_handle_new(zend_class_entry *ce) {
+  return frankenphp_handle_obj_create(ce, &frankenphp_worker_handle_poll_ops);
+}
+
+/* Ops of the streams returned by WorkerHandle::getStream(): the socket
+ * ops, except that closing a stream leaves the socket alone: it belongs to
+ * the thread, every handle of a run shares it, and it is closed at the next
+ * run setup or on thread exit. Initialized in MINIT. */
+static php_stream_ops frankenphp_worker_handle_ops;
+
+static int frankenphp_worker_handle_close(php_stream *stream,
+                                          int close_handle) {
+  (void)close_handle;
+
+  /* free the stream data only, never the shared socket */
+  return php_stream_socket_ops.close(stream, 0);
+}
+
+/* The handle of the current background worker: the stream to wait on, the
+ * tick that reports the drain, and nothing else. Constructing it outside a
+ * background worker throws; a run may create as many as it likes, they all
+ * speak for the same socket. */
+ZEND_METHOD(FrankenPHP_WorkerHandle, __construct) {
+  ZEND_PARSE_PARAMETERS_NONE();
+
+  if (!is_background_worker) {
+    zend_throw_exception(
+        spl_ce_RuntimeException,
+        "FrankenPHP\\WorkerHandle can only be created from a background worker",
+        0);
+    RETURN_THROWS();
+  }
+}
+
+ZEND_METHOD(FrankenPHP_WorkerHandle, getStream) {
+  ZEND_PARSE_PARAMETERS_NONE();
+
+  /* the pair is opened before the script starts and closed at the next run
+   * setup or on thread exit, so a run always has one */
+  ZEND_ASSERT(worker_stop_socks[0] != SOCK_ERR);
+
+  /* One stream per run, whatever the number of handles: the same resource
+   * is returned until the script closes it, so asking for it in a loop does
+   * not grow the resource list of a run that never ends. The stream does not
+   * own the socket (see frankenphp_worker_handle_ops), so closing it never
+   * affects a later one and the EOF of a drain reaches all. */
+  if (worker_handle_res != NULL) {
+    if (worker_handle_res->type == php_file_le_stream()) {
+      GC_ADDREF(worker_handle_res);
+      RETURN_RES(worker_handle_res);
+    }
+    /* closed by the script: drop the cache's ref */
+    zend_list_delete(worker_handle_res);
+    worker_handle_res = NULL;
+  }
+
+  php_stream *stream =
+      php_stream_sock_open_from_socket(worker_stop_socks[0], NULL);
+  if (stream == NULL) {
+    zend_throw_exception(spl_ce_RuntimeException,
+                         "failed to create a stream over the stop socket", 0);
+    RETURN_THROWS();
+  }
+
+  /* a blocking read is a valid way to park: wait without the
+   * default_socket_timeout wake-ups */
+  struct timeval no_timeout = {-1, 0};
+  php_stream_set_option(stream, PHP_STREAM_OPTION_READ_TIMEOUT, 0, &no_timeout);
+
+  stream->ops = &frankenphp_worker_handle_ops;
+
+  php_stream_to_zval(stream, return_value);
+  worker_handle_res = Z_RES_P(return_value);
+  GC_ADDREF(worker_handle_res);
+}
+
+/* The ready point of a background worker and its liveness check, the
+ * background analog of frankenphp_handle_request(): the first call of a run
+ * reports the worker ready, and every call returns false once FrankenPHP
+ * drains it. It never blocks and never hands out work: the script waits on
+ * the stream of getStream(), alone or with its own streams, and calls this
+ * when it is readable. Whatever the runtime writes there to wake the script
+ * up is consumed here, so the script never has to read it and the protocol
+ * on it stays private. */
+ZEND_METHOD(FrankenPHP_WorkerHandle, tick) {
+  ZEND_PARSE_PARAMETERS_NONE();
+
+  ZEND_ASSERT(worker_stop_socks[0] != SOCK_ERR);
+
+  if (!worker_ticked) {
+    worker_ticked = true;
+    /* The bootstrap ran under max_execution_time like any request; the loop
+     * that starts now has no time limit, like the CLI. Nothing re-arms the
+     * timer past this point: php_execute_script() did so before the script
+     * started, request shutdown comes after it ended. */
+    zend_unset_timeout();
+    go_frankenphp_background_worker_ready(frankenphp_thread_index());
+  }
+
+  /* consume the wake-ups without blocking; EOF is the drain */
+  char buf[64];
+  for (;;) {
+    if (php_pollfd_for_ms(worker_stop_socks[0], PHP_POLLREADABLE, 0) <= 0) {
+      /* nothing pending, or a transient poll error: still running */
+      RETURN_TRUE;
+    }
+
+#ifdef PHP_WIN32
+    int n = recv(worker_stop_socks[0], buf, (int)sizeof(buf), 0);
+#else
+    ssize_t n = recv(worker_stop_socks[0], buf, sizeof(buf), 0);
+#endif
+    if (n == 0) {
+      /* the Go side closed its end: drained */
+      RETURN_FALSE;
+    }
+    if (n < 0) {
+      int err = php_socket_errno();
+      if (err == EINTR || PHP_IS_TRANSIENT_ERROR(err)) {
+        RETURN_TRUE;
+      }
+
+      /* a broken socket carries no drain anymore, stop the loop */
+      RETURN_FALSE;
+    }
+  }
+}
+
+/* Shared vars of background workers, see WorkerHandle::setVars() and
+ * frankenphp_get_vars(): the persistent tables live in slots owned by the
+ * Go side, which copies and frees them through these two helpers. */
+void frankenphp_vars_to_request(zval *return_value, HashTable *table) {
+  zval persistent;
+  ZVAL_ARR(&persistent, table);
+  persistent_zval_to_request(return_value, &persistent);
+}
+
+void frankenphp_vars_free(HashTable *table) {
+  zval persistent;
+  ZVAL_ARR(&persistent, table);
+  persistent_zval_free(&persistent);
+}
+
+/* Holding a handle means being a background worker: the constructor is the
+ * gate, so no caller check is needed here. */
+ZEND_METHOD(FrankenPHP_WorkerHandle, setVars) {
+  zval *vars;
+  ZEND_PARSE_PARAMETERS_START(1, 1)
+  Z_PARAM_ARRAY(vars)
+  ZEND_PARSE_PARAMETERS_END();
+
+  /* validate the whole tree first: persist and free recurse without a
+   * guard of their own */
+  if (!persistent_zval_validate(vars)) {
+    zend_value_error(
+        "FrankenPHP\\WorkerHandle::setVars(): values must be null, scalars, "
+        "arrays or enums, nested no deeper than %d levels",
+        PERSISTENT_ZVAL_MAX_DEPTH);
+    RETURN_THROWS();
+  }
+
+  zval persistent;
+  persistent_zval_persist(&persistent, vars);
+
+  HashTable *old =
+      go_frankenphp_set_vars(frankenphp_thread_index(), Z_ARRVAL(persistent));
+  if (old != NULL) {
+    frankenphp_vars_free(old);
+  }
+}
+
+PHP_FUNCTION(frankenphp_get_vars) {
+  zend_string *name;
+  ZEND_PARSE_PARAMETERS_START(1, 1)
+  Z_PARAM_STR(name)
+  ZEND_PARSE_PARAMETERS_END();
+
+  char *error = go_frankenphp_get_vars(
+      frankenphp_thread_index(), ZSTR_VAL(name), ZSTR_LEN(name), return_value);
+  if (error != NULL) {
+    zend_throw_exception(spl_ce_RuntimeException, error, 0);
+    free(error);
+    RETURN_THROWS();
+  }
+}
+
 /* {{{ thread-safe opcache reset */
 PHP_FUNCTION(frankenphp_opcache_reset) {
   go_schedule_opcache_reset(frankenphp_thread_index());
@@ -1075,7 +1533,20 @@ static const zend_function_entry frankenphp_test_hook_functions[] = {
 #endif
 
 PHP_MINIT_FUNCTION(frankenphp) {
+  frankenphp_worker_handle_ops = php_stream_socket_ops;
+  frankenphp_worker_handle_ops.label = "FrankenPHP worker handle";
+  frankenphp_worker_handle_ops.close = frankenphp_worker_handle_close;
+
+  frankenphp_handle_obj_handlers = std_object_handlers;
+  frankenphp_handle_obj_handlers.offset = offsetof(frankenphp_handle_obj, std);
+  frankenphp_handle_obj_handlers.free_obj = frankenphp_handle_obj_free;
+  frankenphp_handle_obj_handlers.clone_obj = NULL;
+
   register_frankenphp_symbols(module_number);
+
+  zend_class_entry *worker_handle_ce = register_class_FrankenPHP_WorkerHandle();
+  worker_handle_ce->create_object = frankenphp_worker_handle_new;
+  frankenphp_handle_implements_poll(worker_handle_ce);
 #ifndef PHP_WIN32
   /* MINIT runs once per ZTS thread — guard the atfork registration */
   static pthread_once_t atfork_once = PTHREAD_ONCE_INIT;
@@ -1597,6 +2068,14 @@ static void *php_thread(void *arg) {
     go_frankenphp_after_script_execution(thread_index, EG(exit_status));
   }
   zend_end_try();
+
+  /* The stop socket of a background worker is plain thread-local state that
+   * frankenphp_update_local_thread_context() only releases on recycle: close
+   * it here too so it does not outlive the thread on shutdown, reboot or an
+   * unhealthy exit. The Go side's end is closed by the Go side. */
+  if (is_background_worker) {
+    frankenphp_reset_background_worker();
+  }
 
   /* Must precede ts_free_thread: that frees the TSRM storage backing
    * the slot's &EG() pointers. Clearing first means any concurrent
