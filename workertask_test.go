@@ -265,12 +265,13 @@ abandoned getStream: resource (closed)
 abandoned abandon: ok
 `, serverGet(t, server, "http://example.com/task-over.php"))
 
-	// the payload outlives the task, closing twice is free
+	// the payload outlives the task, closing twice is free, and a stream
+	// the script never took is not built past the end of the task
 	assert.Equal(t, `getPayload: {"input":"over"}
 update: RuntimeException: the task is over
 complete: ok
 complete-data: RuntimeException: the task is over
-getStream: resource (closed)`, requireFileContentEventually(t, sentinel))
+getStream: RuntimeException: the task is over`, requireFileContentEventually(t, sentinel))
 }
 
 // TestTaskPoll follows two tasks through an Io\Poll\Context: the handles
@@ -288,5 +289,5 @@ func TestTaskPoll(t *testing.T) {
 		frankenphp.WithNumThreads(3),
 	)
 
-	assert.Equal(t, `["processed:a","processed:b"]`, serverGet(t, server, "http://example.com/task-poll.php"))
+	assert.Equal(t, `["processed:a","processed:b"] 0`, serverGet(t, server, "http://example.com/task-poll.php"))
 }

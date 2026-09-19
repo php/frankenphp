@@ -1689,19 +1689,66 @@ PHP_FUNCTION(frankenphp_get_vars) {
 
 /* Tasks, see SentTaskHandle: the sender hands a persistent copy of the
  * payload to the Go side, which queues it for the named background worker
- * and wakes one of its threads; WorkerHandle::receive() dequeues it
- * there. Updates flow back the same way, persistent copies through the Go
- * side. Each side has a stream over its descriptor of the task's channel:
- * the stream carries no data, it is what stream_select() waits on and what
- * fclose() ends, and the Go side holds the state the functions report. The
- * descriptors belong to the task until both sides closed. */
+ * and wakes one of its threads; WorkerHandle::receive() dequeues it there.
+ * Updates flow back the same way, persistent copies through the Go side.
+ * Each side keeps the state of its end on its handle: the descriptor of
+ * the task's channel, what a wait on it costs, and whether it ended the
+ * task. Nothing travels on the descriptor, it is what a wait returns on
+ * and what the Go side signals; the Go side holds the state the methods
+ * report. The descriptors belong to the task until both sides closed. */
 typedef struct {
   uintptr_t task;
   intptr_t fd;    /* the side's descriptor, see frankenphp_task_chan_open */
   int timeout_ms; /* stream_set_timeout(), -1 waits forever */
   bool sender;
   bool timed_out;
-} frankenphp_task_stream_data;
+  bool closed;        /* this side ended the task */
+  unsigned refs;      /* the handle, plus the stream of getStream() */
+  zend_resource *res; /* that stream, NULL until a script asks for one */
+  zval payload;       /* the receiver's side only */
+} frankenphp_task_data;
+
+static zend_class_entry *frankenphp_sent_task_ce;
+static zend_class_entry *frankenphp_received_task_ce;
+
+/* Ends the task from this side, once: the sender abandons it, the receiver
+ * completes it, unless the script ended with the task open, where the
+ * sender is told so. The Go side learns it before signaling the other
+ * side, which then finds it. */
+static void frankenphp_task_settle(frankenphp_task_data *data) {
+  if (data->closed || data->task == 0) {
+    return;
+  }
+  data->closed = true;
+
+  if (data->sender) {
+    go_frankenphp_task_sender_close(data->task);
+  } else {
+    go_frankenphp_task_receiver_close(data->task,
+                                      (EG(flags) & EG_FLAGS_IN_SHUTDOWN) != 0);
+  }
+}
+
+/* The state outlives whichever of the handle and the stream goes first. */
+static void frankenphp_task_data_release(frankenphp_task_data *data) {
+  if (--data->refs > 0) {
+    return;
+  }
+
+  zval_ptr_dtor(&data->payload);
+  efree(data);
+}
+
+/* The stream a script took for this side, NULL when it took none or
+ * closed it. */
+static php_stream *frankenphp_task_data_stream(frankenphp_task_data *data) {
+  if (data->res == NULL || data->res->ptr == NULL ||
+      data->res->type != php_file_le_stream()) {
+    return NULL;
+  }
+
+  return data->res->ptr;
+}
 
 static ssize_t frankenphp_task_stream_write(php_stream *stream, const char *buf,
                                             size_t count) {
@@ -1712,12 +1759,12 @@ static ssize_t frankenphp_task_stream_write(php_stream *stream, const char *buf,
   return -1;
 }
 
-/* the data goes through the frankenphp_*_task() functions */
+/* the data goes through the methods of the handles */
 static ssize_t frankenphp_task_stream_read(php_stream *stream, char *buf,
                                            size_t count) {
   (void)buf;
   (void)count;
-  frankenphp_task_stream_data *data = stream->abstract;
+  frankenphp_task_data *data = stream->abstract;
   if (go_frankenphp_task_side_gone(data->task, data->sender)) {
     stream->eof = 1;
   }
@@ -1725,20 +1772,14 @@ static ssize_t frankenphp_task_stream_read(php_stream *stream, char *buf,
   return -1;
 }
 
-/* Closing the receiver's stream completes the task, unless the close is the
- * resource cleanup of request shutdown, where the script ended with the task
- * open and the sender is told so; closing the sender's abandons it. The Go
- * side learns it before signaling the other side, which then finds it. */
+/* Closing the stream ends the task from this side, as complete() and
+ * abandon() do, and the state stays until the handle lets go of it too. */
 static int frankenphp_task_stream_close(php_stream *stream, int close_handle) {
   (void)close_handle;
-  frankenphp_task_stream_data *data = stream->abstract;
-  if (data->sender) {
-    go_frankenphp_task_sender_close(data->task);
-  } else {
-    go_frankenphp_task_receiver_close(data->task,
-                                      (EG(flags) & EG_FLAGS_IN_SHUTDOWN) != 0);
-  }
-  efree(data);
+  frankenphp_task_data *data = stream->abstract;
+
+  frankenphp_task_settle(data);
+  frankenphp_task_data_release(data);
 
   return 0;
 }
@@ -1748,7 +1789,7 @@ static int frankenphp_task_stream_cast(php_stream *stream, int castas,
   if (castas != PHP_STREAM_AS_FD_FOR_SELECT) {
     return FAILURE;
   }
-  frankenphp_task_stream_data *data = stream->abstract;
+  frankenphp_task_data *data = stream->abstract;
   if (data->sender) {
     /* the sender parks for the select, unless an event is already there */
     go_frankenphp_task_sender_wait(data->task);
@@ -1763,7 +1804,7 @@ static int frankenphp_task_stream_cast(php_stream *stream, int castas,
 static int frankenphp_task_stream_set_option(php_stream *stream, int option,
                                              int value, void *ptrparam) {
   (void)value;
-  frankenphp_task_stream_data *data = stream->abstract;
+  frankenphp_task_data *data = stream->abstract;
   switch (option) {
   case PHP_STREAM_OPTION_READ_TIMEOUT: {
     struct timeval *tv = ptrparam;
@@ -1799,24 +1840,10 @@ static const php_stream_ops frankenphp_task_sender_ops =
 static const php_stream_ops frankenphp_task_receiver_ops =
     FRANKENPHP_TASK_STREAM_OPS("FrankenPHP task receiver");
 
-static php_stream *frankenphp_task_stream_open(uintptr_t task, intptr_t fd,
-                                               bool sender) {
-  frankenphp_task_stream_data *data = ecalloc(1, sizeof(*data));
-  data->task = task;
-  data->fd = fd;
-  data->timeout_ms = -1;
-  data->sender = sender;
-
-  return php_stream_alloc(sender ? &frankenphp_task_sender_ops
-                                 : &frankenphp_task_receiver_ops,
-                          data, NULL, "r");
-}
-
 /* Waits for a signal on the side's descriptor without consuming it: 1 when
  * one is pending, 0 on timeout. Interrupted polls are retried, like PHP's
  * own stream code does. */
-static int frankenphp_task_stream_poll(frankenphp_task_stream_data *data,
-                                       int timeout_ms) {
+static int frankenphp_task_poll(frankenphp_task_data *data, int timeout_ms) {
   for (;;) {
     int n =
         php_pollfd_for_ms((php_socket_t)data->fd, PHP_POLLREADABLE, timeout_ms);
@@ -1832,66 +1859,45 @@ static int frankenphp_task_stream_poll(frankenphp_task_stream_data *data,
  * the other side has not written it yet: the state is set before the
  * signal, so the wait is momentary, and one signal per event keeps
  * stream_select() exact. */
-static void frankenphp_task_stream_consume(frankenphp_task_stream_data *data) {
+static void frankenphp_task_consume(frankenphp_task_data *data) {
   while (!frankenphp_task_chan_consume(data->fd)) {
-    frankenphp_task_stream_poll(data, -1);
+    frankenphp_task_poll(data, -1);
   }
 }
 
-/* Handles of a task: the state of one side, carried by the handle object
- * of that side. The stream is what stream_select() waits on, so the handle
- * holds its resource and dropping the handle ends the task, as closing the
- * stream always did. On PHP 8.6 the handles are Io\Poll\Handle too, and a
- * context waits on the task's descriptor without any stream. */
-typedef struct {
-  zend_resource *res;
-  zval payload; /* the receiver's side only */
-} frankenphp_task_data;
-
-static zend_class_entry *frankenphp_sent_task_ce;
-static zend_class_entry *frankenphp_received_task_ce;
-
+/* Handles of a task: the state above belongs to the handle of its side.
+ * On PHP 8.6 they are Io\Poll\Handle, so a context waits on the descriptor
+ * and no stream is built at all; getStream() builds one on demand for
+ * stream_select() and for the loops that take a stream. */
 static frankenphp_task_data *frankenphp_task_data_of(zend_object *object) {
   return FRANKENPHP_HANDLE_OF(object)->handle_data;
 }
 
 #define FRANKENPHP_TASK_DATA(zthis) frankenphp_task_data_of(Z_OBJ_P(zthis))
 
-/* The stream of a handle, NULL once the task ended: complete(), abandon()
- * and fclose() all close it, and every method but getStream() throws from
- * there on. */
-static php_stream *frankenphp_task_data_stream(frankenphp_task_data *data) {
-  if (data == NULL || data->res == NULL || data->res->ptr == NULL ||
-      data->res->type != php_file_le_stream()) {
+/* The state of a live task, NULL once this side ended it: complete(),
+ * abandon() and closing the stream all do, and every method but
+ * getStream() throws from there on. */
+static frankenphp_task_data *frankenphp_task_obj_open(zval *zthis) {
+  frankenphp_task_data *data = FRANKENPHP_TASK_DATA(zthis);
+  if (data == NULL || data->task == 0 || data->closed) {
+    zend_throw_exception(spl_ce_RuntimeException, "the task is over", 0);
+
     return NULL;
   }
 
-  return data->res->ptr;
-}
-
-static php_stream *frankenphp_task_obj_stream(zval *zthis) {
-  return frankenphp_task_data_stream(FRANKENPHP_TASK_DATA(zthis));
-}
-
-static php_stream *frankenphp_task_obj_open_stream(zval *zthis) {
-  php_stream *stream = frankenphp_task_obj_stream(zthis);
-  if (stream == NULL) {
-    zend_throw_exception(spl_ce_RuntimeException, "the task is over", 0);
-  }
-
-  return stream;
+  return data;
 }
 
 /* The descriptor a task waits on, the same one its stream reports to
- * stream_select(); invalid once the task ended, which is what the poll
- * context and read() both report. */
+ * stream_select(); invalid once this side ended the task, which is what
+ * the poll context and read() both report. */
 static php_socket_t frankenphp_task_get_fd(frankenphp_handle_obj *handle) {
-  php_stream *stream = frankenphp_task_data_stream(handle->handle_data);
-  if (stream == NULL) {
+  frankenphp_task_data *data = handle->handle_data;
+  if (data == NULL || data->task == 0 || data->closed) {
     return SOCK_ERR;
   }
 
-  frankenphp_task_stream_data *data = stream->abstract;
   if (data->sender) {
     /* a context waits without a hook of its own, see the Go side */
     go_frankenphp_task_sender_watch(data->task);
@@ -1901,7 +1907,9 @@ static php_socket_t frankenphp_task_get_fd(frankenphp_handle_obj *handle) {
 }
 
 static int frankenphp_task_is_valid(frankenphp_handle_obj *handle) {
-  return frankenphp_task_data_stream(handle->handle_data) != NULL;
+  frankenphp_task_data *data = handle->handle_data;
+
+  return data != NULL && data->task != 0 && !data->closed;
 }
 
 static void frankenphp_task_cleanup(frankenphp_handle_obj *handle) {
@@ -1909,14 +1917,16 @@ static void frankenphp_task_cleanup(frankenphp_handle_obj *handle) {
   if (data == NULL) {
     return;
   }
-
-  if (data->res != NULL) {
-    /* the last reference closes the stream, which settles the task */
-    zend_list_delete(data->res);
-  }
-  zval_ptr_dtor(&data->payload);
-  efree(data);
   handle->handle_data = NULL;
+
+  frankenphp_task_settle(data);
+  if (data->res != NULL) {
+    zend_resource *res = data->res;
+    data->res = NULL;
+    /* the last reference frees the stream, which releases the state too */
+    zend_list_delete(res);
+  }
+  frankenphp_task_data_release(data);
 }
 
 static frankenphp_handle_ops frankenphp_task_poll_ops = {
@@ -1930,6 +1940,8 @@ static zend_object *frankenphp_task_handle_new(zend_class_entry *ce) {
       frankenphp_handle_obj_create(ce, &frankenphp_task_poll_ops);
   frankenphp_task_data *data = ecalloc(1, sizeof(*data));
 
+  data->timeout_ms = -1;
+  data->refs = 1;
   ZVAL_UNDEF(&data->payload);
   FRANKENPHP_HANDLE_OF(object)->handle_data = data;
 
@@ -1944,18 +1956,35 @@ static zend_object *frankenphp_received_task_new(zend_class_entry *ce) {
   return frankenphp_task_handle_new(ce);
 }
 
-/* Takes over the reference the stream's registration holds, so the handle
- * owns the task from here on. */
-static void frankenphp_task_obj_take(zval *zthis, php_stream *stream) {
-  FRANKENPHP_TASK_DATA(zthis)->res = stream->res;
+/* The handle takes the task the Go side just handed out. */
+static void frankenphp_task_obj_take(zval *zthis, uintptr_t task, intptr_t fd,
+                                     bool sender) {
+  frankenphp_task_data *data = FRANKENPHP_TASK_DATA(zthis);
+
+  data->task = task;
+  data->fd = fd;
+  data->sender = sender;
 }
 
-/* Hands the resource to the script, which may select on it and close it.
- * Past the end of the task it is handed over closed, as the poll hooks
- * report an invalid descriptor there: a waiter learns that the task is
- * over from is_resource(), the way it would from Io\Poll. */
+/* Builds the stream of this side on demand, so a script waiting through a
+ * poll context allocates none, and hands the resource over: it may select
+ * on it and close it. Past the end of the task it comes back closed when
+ * one was built, as the poll hooks report an invalid descriptor there: a
+ * waiter learns that the task is over from is_resource(), the way it would
+ * from Io\Poll. */
 static void frankenphp_task_obj_get_stream(zval *zthis, zval *return_value) {
   frankenphp_task_data *data = FRANKENPHP_TASK_DATA(zthis);
+
+  if (data != NULL && data->res == NULL && data->task != 0 && !data->closed) {
+    php_stream *stream =
+        php_stream_alloc(data->sender ? &frankenphp_task_sender_ops
+                                      : &frankenphp_task_receiver_ops,
+                         data, NULL, "r");
+
+    /* the handle keeps the reference the registration holds */
+    data->res = stream->res;
+    ++data->refs;
+  }
 
   if (data == NULL || data->res == NULL) {
     zend_throw_exception(spl_ce_RuntimeException, "the task is over", 0);
@@ -1966,11 +1995,17 @@ static void frankenphp_task_obj_get_stream(zval *zthis, zval *return_value) {
   RETURN_RES(data->res);
 }
 
-/* Ends the task from this side: the stream's close reports it, see
- * frankenphp_task_stream_close(). */
+/* Ends the task from this side, and closes the stream when the script took
+ * one, so its stream_select() and feof() report the end. */
 static void frankenphp_task_obj_close(zval *zthis) {
-  if (frankenphp_task_obj_stream(zthis) != NULL) {
-    zend_list_close(FRANKENPHP_TASK_DATA(zthis)->res);
+  frankenphp_task_data *data = FRANKENPHP_TASK_DATA(zthis);
+  if (data == NULL || data->closed) {
+    return;
+  }
+
+  frankenphp_task_settle(data);
+  if (data->res != NULL && data->res->type == php_file_le_stream()) {
+    zend_list_close(data->res);
   }
 }
 
@@ -2016,21 +2051,15 @@ ZEND_METHOD(FrankenPHP_SentTaskHandle, __construct) {
     RETURN_THROWS();
   }
 
-  /* the task is queued from here on: a bailout (memory limit) must not
-   * leave the sender's side open, the receiver would wait on it forever */
-  php_stream *stream = NULL;
-  zend_try { stream = frankenphp_task_stream_open(task.r0, task.r1, true); }
-  zend_catch {
-    go_frankenphp_task_cancel(task.r0, false);
-    go_frankenphp_task_sender_close(task.r0);
-    zend_bailout();
-  }
-  zend_end_try();
+  /* the task is the handle's from here on: a bailout below, or a throw,
+   * settles it through the handle rather than leaving the receiver to wait
+   * on it forever */
+  frankenphp_task_obj_take(ZEND_THIS, task.r0, task.r1, true);
 
   /* wait for the pickup in the kernel: the thread taking the task signals
    * the sender's side, so does the Go side when the wait must end without a
    * pickup, see go_frankenphp_send_task */
-  frankenphp_task_stream_data *data = stream->abstract;
+  frankenphp_task_data *data = FRANKENPHP_TASK_DATA(ZEND_THIS);
   /* the first slice of the wait is short: past it, the Go side escalates the
    * wake-up and starts watching for a drain or the shutdown, neither of
    * which the common case, a pickup within microseconds, needs */
@@ -2042,7 +2071,7 @@ ZEND_METHOD(FrankenPHP_SentTaskHandle, __construct) {
         (remaining < 0 || remaining > FRANKENPHP_TASK_LINGER_MS)) {
       slice = FRANKENPHP_TASK_LINGER_MS;
     }
-    if (!frankenphp_task_stream_poll(data, slice)) {
+    if (!frankenphp_task_poll(data, slice)) {
       if (remaining > 0) {
         remaining -= slice;
       }
@@ -2053,7 +2082,7 @@ ZEND_METHOD(FrankenPHP_SentTaskHandle, __construct) {
       }
       /* nobody took the task in time, unless right now */
       if (go_frankenphp_task_cancel(task.r0, true)) {
-        php_stream_close(stream);
+        frankenphp_task_settle(data);
         zend_throw_exception_ex(spl_ce_RuntimeException, 0,
                                 "FrankenPHP\\SentTaskHandle: no thread of "
                                 "background worker \"%s\" picked up the "
@@ -2061,7 +2090,7 @@ ZEND_METHOD(FrankenPHP_SentTaskHandle, __construct) {
                                 ZSTR_VAL(name));
         RETURN_THROWS();
       }
-      frankenphp_task_stream_consume(data);
+      frankenphp_task_consume(data);
 
       break;
     }
@@ -2073,28 +2102,25 @@ ZEND_METHOD(FrankenPHP_SentTaskHandle, __construct) {
       frankenphp_task_chan_consume(data->fd);
       continue;
     }
-    frankenphp_task_stream_consume(data);
+    frankenphp_task_consume(data);
     if (state.r0 == 1) {
       break;
     }
     go_frankenphp_task_cancel(task.r0, false);
-    php_stream_close(stream);
+    frankenphp_task_settle(data);
     zend_throw_exception(spl_ce_RuntimeException, state.r1, 0);
     free(state.r1);
     RETURN_THROWS();
   }
-
-  frankenphp_task_obj_take(ZEND_THIS, stream);
 }
 
 ZEND_METHOD(FrankenPHP_SentTaskHandle, read) {
   ZEND_PARSE_PARAMETERS_NONE();
 
-  php_stream *stream = frankenphp_task_obj_open_stream(ZEND_THIS);
-  if (stream == NULL) {
+  frankenphp_task_data *data = frankenphp_task_obj_open(ZEND_THIS);
+  if (data == NULL) {
     RETURN_THROWS();
   }
-  frankenphp_task_stream_data *data = stream->abstract;
 
   for (;;) {
     struct go_frankenphp_read_task_return update =
@@ -2102,7 +2128,7 @@ ZEND_METHOD(FrankenPHP_SentTaskHandle, read) {
     switch (update.r1) {
     case FRANKENPHP_TASK_READ_UPDATE:
       if (update.r2) {
-        frankenphp_task_stream_consume(data);
+        frankenphp_task_consume(data);
       }
       zend_try { frankenphp_vars_to_request(return_value, update.r0); }
       zend_catch {
@@ -2115,9 +2141,14 @@ ZEND_METHOD(FrankenPHP_SentTaskHandle, read) {
     case FRANKENPHP_TASK_READ_COMPLETED:
     case FRANKENPHP_TASK_READ_ABORTED:
       if (update.r2) {
-        frankenphp_task_stream_consume(data);
+        frankenphp_task_consume(data);
       }
-      stream->eof = 1;
+      php_stream *stream = frankenphp_task_data_stream(data);
+      if (stream != NULL) {
+        /* a script waiting on it with stream_select() or feof() sees the
+         * end of the task there too */
+        stream->eof = 1;
+      }
       if (update.r1 == FRANKENPHP_TASK_READ_COMPLETED) {
         RETURN_NULL();
       }
@@ -2129,7 +2160,7 @@ ZEND_METHOD(FrankenPHP_SentTaskHandle, read) {
     default:
       /* nothing yet: wait for the next signal, without consuming it, the
        * event it announces does */
-      if (!frankenphp_task_stream_poll(data, data->timeout_ms)) {
+      if (!frankenphp_task_poll(data, data->timeout_ms)) {
         data->timed_out = true;
         zend_throw_exception(spl_ce_RuntimeException,
                              "FrankenPHP\\SentTaskHandle::read(): timed out "
@@ -2175,8 +2206,8 @@ ZEND_METHOD(FrankenPHP_ReceivedTaskHandle, getPayload) {
 
 /* Queues an update for the sender, which reads it with read(). */
 static void frankenphp_task_obj_update(zval *zthis, zval *data) {
-  php_stream *stream = frankenphp_task_obj_open_stream(zthis);
-  if (stream == NULL) {
+  frankenphp_task_data *task = frankenphp_task_obj_open(zthis);
+  if (task == NULL) {
     return;
   }
   if (!persistent_zval_validate(data)) {
@@ -2191,9 +2222,7 @@ static void frankenphp_task_obj_update(zval *zthis, zval *data) {
   persistent_zval_persist(&persistent, data);
 
   /* the Go side owns the update from here on, it frees it on failure */
-  char *error = go_frankenphp_update_task(
-      ((frankenphp_task_stream_data *)stream->abstract)->task,
-      Z_ARRVAL(persistent));
+  char *error = go_frankenphp_update_task(task->task, Z_ARRVAL(persistent));
   if (error != NULL) {
     zend_throw_exception(spl_ce_RuntimeException, error, 0);
     free(error);
@@ -2242,14 +2271,13 @@ ZEND_METHOD(FrankenPHP_WorkerHandle, receive) {
   }
 
   /* the task is this thread's from here on: a bailout while copying the
-   * payload (memory limit, a fatal error in an autoloader) or creating the
-   * stream must not leave it open, the sender would wait on it forever */
+   * payload (memory limit, a fatal error in an autoloader) or while making
+   * the handle must not leave it open, the sender would wait on it forever */
   zval payload;
-  php_stream *stream = NULL;
   zend_try {
     frankenphp_vars_to_request(&payload, task.r1);
     if (!EG(exception)) {
-      stream = frankenphp_task_stream_open(task.r0, task.r2, false);
+      object_init_ex(return_value, frankenphp_received_task_ce);
     }
   }
   zend_catch {
@@ -2268,10 +2296,8 @@ ZEND_METHOD(FrankenPHP_WorkerHandle, receive) {
     RETURN_THROWS();
   }
 
-  object_init_ex(return_value, frankenphp_received_task_ce);
-  frankenphp_task_data *data = FRANKENPHP_TASK_DATA(return_value);
-  data->res = stream->res;
-  ZVAL_COPY_VALUE(&data->payload, &payload);
+  frankenphp_task_obj_take(return_value, task.r0, task.r2, false);
+  ZVAL_COPY_VALUE(&FRANKENPHP_TASK_DATA(return_value)->payload, &payload);
 }
 
 /* {{{ thread-safe opcache reset */

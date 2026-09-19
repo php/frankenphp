@@ -13,6 +13,7 @@ try {
         $poll->add($task, [Event::Read], spl_object_id($task));
     }
     $results = [];
+    $resources = count(get_resources());
     while ($tasks) {
         foreach ($poll->wait() as $watcher) {
             if (null === $update = $tasks[$watcher->getData()]->read()) {
@@ -24,7 +25,8 @@ try {
         }
     }
     sort($results);
-    echo json_encode($results);
+    // waiting through the context builds no stream and no resource
+    echo json_encode($results), ' ', count(get_resources()) - $resources;
 } catch (\Throwable $e) {
     echo get_class($e), ': ', $e->getMessage();
 }
