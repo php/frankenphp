@@ -7,6 +7,7 @@ import "C"
 import (
 	"fmt"
 	"log/slog"
+	"runtime"
 	"sync/atomic"
 	"time"
 
@@ -16,8 +17,9 @@ import (
 // backgroundWorkerThread is the threadHandler of background worker scripts:
 // boot the script, re-run it when it exits, restart it with a quadratic
 // backoff when it crashes. The script parks on the stream returned by
-// WorkerHandle::getStream(), which reaches EOF when the thread is drained,
-// so it exits on shutdown, reboot or handler transition.
+// WorkerHandle::getStream(), which reaches EOF when the thread is drained, so
+// it exits on shutdown, reboot or handler transition; the handle also carries
+// a wake-up per task sent to the worker, see SentTaskHandle.
 type backgroundWorkerThread struct {
 	workerLifecycle
 
@@ -35,11 +37,27 @@ type backgroundWorkerThread struct {
 	isBootingScript bool
 	bootTimer       *time.Timer
 
-	// the Go side's end of this thread's stop socket pair, the script
-	// holding the other end; one per thread so pool workers drain
-	// independently. Wide enough for a Windows SOCKET, -1 when not held,
-	// atomic because drain() closes it from another goroutine
-	stopSock atomic.Int64
+	// tasks picked up and not closed yet: the thread is busy rather than
+	// waiting on the threads endpoint meanwhile. Only touched on the PHP
+	// thread, pickup and close both happen there
+	openTasks int
+
+	// the Go side's end of this thread's stop socket pair, the script holding
+	// the other end; one per thread so pool workers drain independently. Wide
+	// enough for a Windows SOCKET, -1 when not held. Guarded by
+	// worker.tasks.mu, senders write their wake-up line to it
+	stopSock int64
+
+	// set by WorkerHandle::tick() when no task is queued, as the script is
+	// about to wait on its handle: senders wake one parked thread per task.
+	// Guarded by worker.tasks.mu
+	parked bool
+
+	// senders writing to stopSock outside of worker.tasks.mu, so the socket is
+	// only closed once they are done: holding the mutex across that syscall
+	// would park every contending thread, and a thread inside a cgo callback
+	// parks at the price of a scheduler hand-off
+	signaling atomic.Int32
 }
 
 // backgroundBootWarnDelay is how long a run may go without calling
@@ -48,8 +66,10 @@ type backgroundWorkerThread struct {
 const backgroundBootWarnDelay = 10 * time.Second
 
 func convertToBackgroundWorkerThread(thread *phpThread, worker *worker) {
-	handler := &backgroundWorkerThread{workerLifecycle: newWorkerLifecycle(thread, worker)}
-	handler.stopSock.Store(-1)
+	handler := &backgroundWorkerThread{
+		workerLifecycle: newWorkerLifecycle(thread, worker),
+		stopSock:        -1,
+	}
 	thread.setHandler(handler)
 	worker.attachThread(thread)
 }
@@ -66,7 +86,18 @@ func (handler *backgroundWorkerThread) frankenPHPContext() *frankenPHPContext {
 // on the other end wakes up with EOF. Called right before drainChan is closed
 // on shutdown and reboot, and on the other exit paths to release the socket.
 func (handler *backgroundWorkerThread) drain() {
-	if s := handler.stopSock.Swap(-1); s >= 0 {
+	q := &handler.worker.tasks
+	q.mu.Lock()
+	s := handler.stopSock
+	handler.stopSock = -1
+	handler.parked = false
+	q.mu.Unlock()
+
+	if s >= 0 {
+		// senders that took the socket before it was withdrawn finish their write first
+		for handler.signaling.Load() > 0 {
+			runtime.Gosched()
+		}
 		C.frankenphp_worker_close_stop_sock(C.intptr_t(s))
 	}
 }
@@ -111,7 +142,12 @@ func (handler *backgroundWorkerThread) setupScript() error {
 	if s < 0 {
 		return fmt.Errorf("failed to create the stop socket pair of background worker %q", handler.worker.qualifiedName)
 	}
-	handler.stopSock.Store(s)
+	// tasks queued meanwhile reach the new run when it parks, see
+	// go_frankenphp_background_worker_park
+	q := &handler.worker.tasks
+	q.mu.Lock()
+	handler.stopSock = s
+	q.mu.Unlock()
 
 	switch handler.state.Get() {
 	case state.ShuttingDown, state.Rebooting, state.ForceRebooting, state.TransitionRequested:
@@ -131,6 +167,7 @@ func (handler *backgroundWorkerThread) setupScript() error {
 
 	handler.isBootingScript = true
 	handler.runStartedAt = time.Now()
+	handler.openTasks = 0
 	metrics.StartWorker(handler.worker.name, handler.worker.server.name)
 	// the run's logger and context, not the globals: a shutdown finishing
 	// meanwhile resets those, and Stop() does not wait for this callback

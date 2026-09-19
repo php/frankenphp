@@ -16,13 +16,15 @@ When [Caddy metrics](https://caddyserver.com/docs/metrics) are enabled, FrankenP
 - `frankenphp_busy_threads`: The number of PHP threads currently processing a request (running workers always consume a thread).
 - `frankenphp_queue_depth`: The number of regular queued requests.
 - `frankenphp_total_workers{worker="[worker_name]",server="[server_name]"}`: The total number of workers.
-- `frankenphp_busy_workers{worker="[worker_name]",server="[server_name]"}`: The number of workers currently processing a request.
+- `frankenphp_busy_workers{worker="[worker_name]",server="[server_name]"}`: The number of workers currently processing a request, or a task for a background worker.
 - `frankenphp_worker_request_time{worker="[worker_name]",server="[server_name]"}`: The time spent processing requests by all workers.
 - `frankenphp_worker_request_count{worker="[worker_name]",server="[server_name]"}`: The number of requests processed by all workers.
 - `frankenphp_ready_workers{worker="[worker_name]",server="[server_name]"}`: The number of workers that have reached their ready point at least once: `frankenphp_handle_request()` for HTTP workers, `WorkerHandle::tick()` for background workers.
 - `frankenphp_worker_crashes{worker="[worker_name]",server="[server_name]"}`: The number of times a worker has unexpectedly terminated.
 - `frankenphp_worker_restarts{worker="[worker_name]",server="[server_name]"}`: The number of times a worker has been deliberately restarted.
-- `frankenphp_worker_queue_depth{worker="[worker_name]",server="[server_name]"}`: The number of queued requests.
+- `frankenphp_worker_queue_depth{worker="[worker_name]",server="[server_name]"}`: The number of queued requests, or of tasks waiting for a thread of a background worker.
+- `frankenphp_worker_task_count{worker="[worker_name]",server="[server_name]",outcome="[outcome]"}`: The number of tasks sent to a background worker, by outcome: `completed`, `aborted` (the script ended with the task open), `abandoned` (the sender closed its stream first) or `timeout` (no thread picked the task up in time).
+- `frankenphp_worker_task_time{worker="[worker_name]",server="[server_name]"}`: The time spent on tasks by all threads of a background worker, from pickup to the close of the task's stream.
 
 `[worker_name]` is the worker name from the Caddyfile, or the absolute path of the worker file when it has none, with a number appended when several workers share a script. `[server_name]` is the name of the `php_server` block the worker belongs to, and is empty for a worker declared in the global `frankenphp` block. The two stay apart, so a query on the worker name alone still selects that worker in every server.
 
@@ -73,8 +75,8 @@ Each entry in `ThreadDebugStates` contains:
 | `Index` | integer | The index of the thread. |
 | `Name` | string | The name of the thread (e.g., the worker file path). |
 | `State` | string | The internal state of the thread (e.g., `ready`, `shutting down`). |
-| `IsWaiting` | boolean | Whether the thread is waiting for a request. |
-| `IsBusy` | boolean | Whether the thread is currently processing a request. |
+| `IsWaiting` | boolean | Whether the thread is waiting for a request, or for a task in a background worker. |
+| `IsBusy` | boolean | Whether the thread is currently processing a request, or a task in a background worker. |
 | `WaitingSinceMilliseconds` | integer | How long the thread has been idle, in milliseconds. `0` if the thread is busy. |
 | `CurrentURI` | string | The URI currently being processed. Empty if the thread is idle. |
 | `CurrentMethod` | string | The HTTP method of the current request (e.g., `GET`, `POST`). Empty if the thread is idle. |
