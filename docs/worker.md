@@ -310,6 +310,49 @@ Values must be null, scalars, arrays or enums. Each call replaces the whole snap
 
 `frankenphp_get_vars()` can only block while workers boot, a background worker or the bootstrap of an HTTP worker waiting for the publisher of a namespace. A cycle between background workers throws instead of hanging, and so does a wait once the start failed. It also throws when no worker publishes the namespace.
 
+### Sending tasks to background workers
+
+A request, an HTTP worker or another background worker hands work to a background worker by constructing a `FrankenPHP\SentTaskHandle`, naming it the way `frankenphp_get_vars()` does. The payload follows the same rules as `setVars()`: null, scalars, arrays or enums. Constructing blocks until a thread of the worker picks the task up and throws if none did before the timeout, so a busy worker pushes back on its senders instead of queueing without bounds. `read()` then blocks for the next update and returns `null` once the worker completed the task, and `abandon()`, like dropping the handle, gives up on the task. Waiting on a task, alone or with others, goes through a context as it does for the worker's handle, or through `getStream()` for a library that takes a stream: reading that stream steals the signal `read()` needs, writing to it goes nowhere, and closing it ends the task on that side.
+
+On the worker side, each task sent wakes one parked thread of the worker through its handle, in the loop of the previous section: `tick()` consumes the wake-up, which is not a count and in a pool may belong to a task a sibling thread took. `receive()` dequeues a task without blocking, a `FrankenPHP\ReceivedTaskHandle`, or `null` when another thread of the pool got there first, so the example below drains the queue on each wake-up and treats `null` as the normal outcome. A thread that ticks while tasks are queued finds its handle readable at once, whichever loop shape it uses. `update()` sends progress back, `complete()` ends the task with a last update when one is given, and a script that ends with a task still open, a `complete()` from a destructor or a shutdown function at that point included, makes the sender's next `read()` throw. When the sender gives up instead, the task's side of the worker becomes readable and its stream reaches EOF, so a context or a `feof()` tells a long task that nobody waits for its result, and `update()` throws.
+
+```php
+// background worker, in the loop of the previous section
+while ($handle->tick()) {
+    foreach ($poll->wait() as $watcher) {
+    }
+
+    while ($task = $handle->receive()) {
+        $task->update(['progress' => 50]);
+        $task->complete(['result' => process($task->getPayload())]);
+    }
+}
+
+// request, HTTP worker or another background worker
+$task = new FrankenPHP\SentTaskHandle('jobs', ['file' => 'photo.jpg']);
+while (null !== $update = $task->read()) {
+    // ['progress' => 50], then ['result' => ...]
+}
+```
+
+Both task handles are `Io\Poll\Handle` as well, so a context follows several tasks at once, and a script that never asks for a stream has none built for it:
+
+```php
+use Io\Poll\{Context, Event};
+
+$poll = new Context();
+$task = new FrankenPHP\SentTaskHandle('jobs', ['file' => 'photo.jpg']);
+$poll->add($task, [Event::Read], 'photo');
+
+foreach ($poll->wait() as $watcher) {
+    $update = $task->read();
+}
+```
+
+`getStream()` is there for the libraries that take a stream, and `stream_select()` or a blocking read work on it as they do on the worker's handle.
+
+Sixteen updates are buffered per task; past that, `update()` waits for the sender to read, and it throws once the sender gave up. The channel of a task is a pair of eventfd descriptors on Linux and of kqueue descriptors on macOS, pooled between tasks, and a socket pair elsewhere.
+
 ## Superglobals behavior
 
 [PHP superglobals](https://www.php.net/manual/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...)

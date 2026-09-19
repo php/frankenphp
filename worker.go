@@ -48,6 +48,9 @@ type worker struct {
 	// the snapshot of each, see WorkerHandle::setVars()
 	varsNamespaces []string
 	vars           map[string]*varsSlot
+	// tasks holds the tasks sent with SentTaskHandle until a thread
+	// picks them up
+	tasks taskQueue
 }
 
 // markReady records that the background worker reached its ready point once

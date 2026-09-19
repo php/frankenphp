@@ -63,6 +63,16 @@ func varsOwner(fc *frankenPHPContext, ns string) (*worker, error) {
 	return w, nil
 }
 
+// backgroundWorkerByName resolves the name of a background worker
+func backgroundWorkerByName(name string) *worker {
+	w := workersByName[name]
+	if w == nil || !w.isBackgroundWorker {
+		return nil
+	}
+
+	return w
+}
+
 // waitVarsReady blocks until target reached its ready point once. Requests
 // cannot get here before that (activateServers() runs after initWorkers()),
 // so a blocked caller is a worker still booting, a background one or the
