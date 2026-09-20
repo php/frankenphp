@@ -606,9 +606,9 @@ func TestBackgroundWorkerParkingIsNotInterrupted(t *testing.T) {
 	assert.Equal(t, 1, runs(), "the worker was restarted, so a limit interrupted its park")
 }
 
-// TestBackgroundWorkerStreamClosedAndFetchedAgain checks the stream cache:
-// a run gets one stream, closing it yields a fresh one on the next fetch,
-// and the drain still reaches the script through it.
+// TestBackgroundWorkerStreamClosedAndFetchedAgain checks the stream a
+// handle hands out: the same one every time, a fresh one once the script
+// closed it, one per handle, and the drain reaches the script through it.
 func TestBackgroundWorkerStreamClosedAndFetchedAgain(t *testing.T) {
 	sentinel := filepath.Join(t.TempDir(), "refetch.txt")
 
@@ -620,7 +620,7 @@ func TestBackgroundWorkerStreamClosedAndFetchedAgain(t *testing.T) {
 		),
 		frankenphp.WithNumThreads(2),
 	))
-	assert.Equal(t, "same then fresh", requireFileContentEventually(t, sentinel))
+	assert.Equal(t, "same then fresh then its own", requireFileContentEventually(t, sentinel))
 
 	done := make(chan struct{})
 	go func() {

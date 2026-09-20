@@ -90,8 +90,8 @@ namespace FrankenPHP {
          * stream_select() or a blocking read; what it carries is not part
          * of the contract and tick() consumes it. Reading it steals those
          * bytes from tick(), writing to it goes nowhere. Closing it is
-         * safe: a run has one stream, a fresh one over the same socket
-         * once the script closed it.
+         * safe: a handle hands out one stream, a fresh one over the same
+         * socket once the script closed it.
          *
          * @return resource
          */
