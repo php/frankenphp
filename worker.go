@@ -101,42 +101,78 @@ func initWorkers(opts []workerOpt) error {
 	return nil
 }
 
-func newWorker(o workerOpt) (*worker, error) {
-	// Order is important!
-	// This order ensures that FrankenPHP started from inside a symlinked directory will properly resolve any paths.
-	// If it is started from outside a symlinked directory, it is resolved to the same path that we use in the Caddy module.
+// resolveWorkerFile turns a declared filename into the path a worker runs,
+// and names the worker after it when the declaration left the name out.
+//
+// Order is important!
+// This order ensures that FrankenPHP started from inside a symlinked directory will properly resolve any paths.
+// If it is started from outside a symlinked directory, it is resolved to the same path that we use in the Caddy module.
+func resolveWorkerFile(o workerOpt) (workerOpt, error) {
 	absFileName, err := filepath.EvalSymlinks(filepath.FromSlash(o.fileName))
 	if err != nil {
-		return nil, fmt.Errorf("worker filename is invalid %q: %w", o.fileName, err)
+		return o, fmt.Errorf("worker filename is invalid %q: %w", o.fileName, err)
 	}
 
 	absFileName, err = fastabs.FastAbs(absFileName)
 	if err != nil {
-		return nil, fmt.Errorf("worker filename is invalid %q: %w", o.fileName, err)
+		return o, fmt.Errorf("worker filename is invalid %q: %w", o.fileName, err)
 	}
 
 	if _, err := os.Stat(absFileName); err != nil {
-		return nil, fmt.Errorf("worker file not found %q: %w", absFileName, err)
+		return o, fmt.Errorf("worker file not found %q: %w", absFileName, err)
 	}
 
+	o.fileName = absFileName
 	if o.name == "" {
 		o.name = absFileName
 	}
 
+	return o, nil
+}
+
+// checkWorkerDeclaration holds the rules a set of workers must follow,
+// against the names and paths the ones before it took. Validate() runs them
+// over a configuration that may never start, newWorker() over the one
+// starting, so both answer the same way.
+func checkWorkerDeclaration(o workerOpt, takenNames map[string]bool, takenGlobalPaths map[string]bool) error {
 	if o.server == nil {
-		if globalWorkersByPath[absFileName] != nil {
-			return nil, fmt.Errorf("two global workers cannot have the same filename: %q", absFileName)
+		if takenGlobalPaths[o.fileName] {
+			return fmt.Errorf("two global workers cannot have the same filename: %q", o.fileName)
 		}
 
 		// no server means no set of requests to match against, the matcher would never run
 		if o.matchRequest != nil {
-			return nil, fmt.Errorf("worker %q has a request matcher but no server scope, use WithWorkerServerScope()", o.name)
+			return fmt.Errorf("worker %q has a request matcher but no server scope, use WithWorkerServerScope()", o.name)
 		}
 	}
 
-	if workersByName[o.name] != nil {
-		return nil, fmt.Errorf("two workers cannot have the same name: %q", o.name)
+	if takenNames[o.name] {
+		return fmt.Errorf("two workers cannot have the same name: %q", o.name)
 	}
+
+	return nil
+}
+
+func newWorker(o workerOpt) (*worker, error) {
+	o, err := resolveWorkerFile(o)
+	if err != nil {
+		return nil, err
+	}
+
+	takenNames := make(map[string]bool, len(workersByName))
+	for name := range workersByName {
+		takenNames[name] = true
+	}
+	takenGlobalPaths := make(map[string]bool, len(globalWorkersByPath))
+	for path := range globalWorkersByPath {
+		takenGlobalPaths[path] = true
+	}
+
+	if err := checkWorkerDeclaration(o, takenNames, takenGlobalPaths); err != nil {
+		return nil, err
+	}
+
+	absFileName := o.fileName
 
 	// env should always contain FRANKENPHP_WORKER and the parent php_server env
 	if o.env == nil {
