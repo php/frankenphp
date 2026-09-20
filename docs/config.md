@@ -98,8 +98,8 @@ You can also explicitly configure FrankenPHP using the [global option](https://c
 ```caddyfile
 {
 	frankenphp {
-		num_threads <num_threads> # Sets the number of PHP threads to start. Default: 2x the number of available CPUs.
-		max_threads <num_threads> # Limits the number of additional PHP threads that can be started at runtime. Default: num_threads. Can be set to 'auto'.
+		num_threads <num_threads> # Sets the number of PHP threads to start for the requests no worker serves, worker threads coming on top of it. Default: what is left of 2x the number of available CPUs once the workers have their threads.
+		max_threads <num_threads> # Limits how many PHP threads may run at once, workers included. Default: the threads started at boot. Can be set to 'auto'.
 		max_wait_time <duration> # Sets the maximum time a request may wait for a free PHP thread before timing out. Default: disabled.
 		max_idle_time <duration> # Sets the maximum time an autoscaled thread may be idle before being deactivated. Default: 5s.
 		max_requests <num> # (experimental) Sets the maximum number of requests a PHP thread will handle before being restarted, useful for mitigating memory leaks. Applies to both regular and worker threads. Default: 0 (unlimited).

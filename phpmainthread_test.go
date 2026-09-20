@@ -330,14 +330,16 @@ func TestCorrectThreadCalculation(t *testing.T) {
 	testThreadCalculation(t, maxProcs, maxProcs, &opt{})
 	testThreadCalculation(t, maxProcs, maxProcs, &opt{workers: oneWorkerThread})
 
-	// num_threads is set
+	// num_threads is set: it counts the threads for regular requests, the
+	// worker threads coming on top of it
 	testThreadCalculation(t, 1, 1, &opt{numThreads: 1})
-	testThreadCalculation(t, 2, 2, &opt{numThreads: 2, workers: oneWorkerThread})
+	testThreadCalculation(t, 3, 3, &opt{numThreads: 2, workers: oneWorkerThread})
+	testThreadCalculation(t, 2, 2, &opt{numThreads: 1, workers: oneWorkerThread})
 
 	// max_threads is set
 	testThreadCalculation(t, 1, 10, &opt{maxThreads: 10})
 	testThreadCalculation(t, 2, 10, &opt{maxThreads: 10, workers: oneWorkerThread})
-	testThreadCalculation(t, 5, 10, &opt{numThreads: 5, maxThreads: 10, workers: oneWorkerThread})
+	testThreadCalculation(t, 6, 10, &opt{numThreads: 5, maxThreads: 10, workers: oneWorkerThread})
 
 	// automatic max_threads
 	testThreadCalculation(t, 1, -1, &opt{maxThreads: -1})
@@ -347,14 +349,14 @@ func TestCorrectThreadCalculation(t *testing.T) {
 	// max_threads should be thread minimum + sum of worker max_threads
 	testThreadCalculation(t, 2, 6, &opt{workers: []workerOpt{{num: 1, maxThreads: 5}}})
 	testThreadCalculation(t, 6, 9, &opt{workers: []workerOpt{{num: 1, maxThreads: 4}, {num: 4, maxThreads: 4}}})
-	testThreadCalculation(t, 10, 14, &opt{numThreads: 10, workers: []workerOpt{{num: 1, maxThreads: 4}, {num: 3, maxThreads: 4}}})
+	testThreadCalculation(t, 14, 18, &opt{numThreads: 10, workers: []workerOpt{{num: 1, maxThreads: 4}, {num: 3, maxThreads: 4}}})
 
 	// max_threads should remain equal to overall max_threads
 	testThreadCalculation(t, 2, 5, &opt{maxThreads: 5, workers: []workerOpt{{num: 1, maxThreads: 3}}})
 	testThreadCalculation(t, 3, 5, &opt{maxThreads: 5, workers: []workerOpt{{num: 1, maxThreads: 4}, {num: 1, maxThreads: 4}}})
 
-	// not enough num threads
-	testThreadCalculationError(t, &opt{numThreads: 1, workers: oneWorkerThread})
+	// a worker never eats into num_threads, so there is no floor to miss;
+	// max_threads still has to fit what starts
 	testThreadCalculationError(t, &opt{numThreads: 1, maxThreads: 1, workers: oneWorkerThread})
 
 	// not enough max_threads

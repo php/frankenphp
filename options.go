@@ -68,7 +68,8 @@ func WithContext(ctx context.Context) Option {
 	}
 }
 
-// WithNumThreads configures the number of PHP threads to start.
+// WithNumThreads configures the number of PHP threads to start for the
+// requests no worker serves. Worker threads come on top of it.
 func WithNumThreads(numThreads int) Option {
 	return func(o *opt) error {
 		o.numThreads = numThreads
@@ -77,6 +78,8 @@ func WithNumThreads(numThreads int) Option {
 	}
 }
 
+// WithMaxThreads limits how many threads may run at once, workers included.
+// A negative value derives that limit from the memory available.
 func WithMaxThreads(maxThreads int) Option {
 	return func(o *opt) error {
 		o.maxThreads = maxThreads
