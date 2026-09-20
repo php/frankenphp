@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dunglas/frankenphp/internal/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -75,4 +76,47 @@ func TestRestartWorkersForceKillsStuckThread(t *testing.T) {
 	}
 	assert.NotContains(t, recorder.Body.String(), "should not reach",
 		"VM interrupt was never observed; sleep returned naturally")
+}
+
+// Init() must not return, nor the runtime tear SAPI/TSRM down, while a worker
+// that failed to boot is still inside its shutdown handler
+func TestInitJoinsAThreadStuckInStartupTeardown(t *testing.T) {
+	t.Cleanup(Shutdown)
+
+	var failedThread *phpThread
+	held := make(chan struct{})
+	release := make(chan struct{})
+	initDone := make(chan error, 1)
+
+	go func() {
+		initDone <- Init(
+			WithNumThreads(2),
+			WithWorkers("held-failing-worker", testDataPath+"/failing-worker.php", 1,
+				WithWorkerMaxFailures(0),
+				WithWorkerOnShutdown(func(threadIndex int) {
+					failedThread = phpThreads[threadIndex]
+					close(held)
+					<-release
+				}),
+			),
+		)
+	}()
+
+	select {
+	case <-held:
+	case err := <-initDone:
+		t.Fatalf("Init returned before the failed worker thread started its teardown: %v", err)
+	}
+
+	select {
+	case err := <-initDone:
+		t.Fatalf("Init returned while the failed worker thread was still shutting down (state: %s, error: %v)", failedThread.state.Name(), err)
+	case <-time.After(500 * time.Millisecond):
+	}
+
+	require.True(t, failedThread.state.Is(state.ShuttingDown), "thread should still be shutting down")
+	close(release)
+
+	assert.Error(t, <-initDone, "a worker failing to boot must fail Init")
+	assert.True(t, failedThread.state.Is(state.Reserved), "the thread must have exited and been reclaimed before Init returned, got: "+failedThread.state.Name())
 }
