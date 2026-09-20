@@ -10,7 +10,13 @@ try {
     } catch (\RuntimeException $e) {
         echo $e->getMessage(), "\n";
     }
-    echo json_encode($slow->read());
+    // read to the end: leaving with the task open would abandon it, and
+    // the worker completes it right after the update below
+    $update = null;
+    while (null !== $next = $slow->read()) {
+        $update = $next;
+    }
+    echo json_encode($update);
 } catch (\Throwable $e) {
     echo get_class($e), ': ', $e->getMessage();
 }
