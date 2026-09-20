@@ -154,10 +154,6 @@ static THREAD_LOCAL php_socket_t worker_stop_socks[2] = {SOCK_ERR, SOCK_ERR};
 /* set by the first WorkerHandle::tick() of the current run, the ready
  * point of a background worker */
 static THREAD_LOCAL bool worker_ticked = false;
-/* the stream of the current run, see WorkerHandle::getStream(); the
- * cache holds a ref, and the resource list of the run frees it at request
- * shutdown, so the pointer is only reset, never released, between runs */
-static THREAD_LOCAL zend_resource *worker_handle_res = NULL;
 static THREAD_LOCAL HashTable *sandboxed_env = NULL;
 /* prepared_env holds entries from php(_server)'s `env KEY VAL`, exposed to
  * getenv() and merged into $_ENV when 'E' is in variables_order. Separate from
@@ -412,13 +408,11 @@ static void frankenphp_worker_close_stop_socks(void) {
 }
 
 /* Resets the background worker state of the calling thread. The streams
- * handed out by WorkerHandle::getStream() do not own the socket and
- * were destroyed by request shutdown, so the cache is dropped, not released.
- */
+ * handed out by WorkerHandle::getStream() do not own the socket, and they
+ * belong to the handles of the run, which request shutdown destroyed. */
 static void frankenphp_reset_background_worker(void) {
   is_background_worker = false;
   worker_ticked = false;
-  worker_handle_res = NULL;
   frankenphp_worker_close_stop_socks();
 }
 
@@ -1292,10 +1286,24 @@ static int frankenphp_worker_handle_is_valid(frankenphp_handle_obj *handle) {
   return frankenphp_worker_handle_get_fd(handle) != SOCK_ERR;
 }
 
+/* The stream a script took from this handle, so asking twice hands out
+ * the same one and a loop does not grow the resource list of a run that
+ * never ends. It lives on the handle rather than on the thread: a handle
+ * that goes away takes its stream with it, and nothing of it survives the
+ * run. */
+static void frankenphp_worker_handle_cleanup(frankenphp_handle_obj *handle) {
+  if (handle->handle_data == NULL) {
+    return;
+  }
+
+  zend_list_delete(handle->handle_data);
+  handle->handle_data = NULL;
+}
+
 static frankenphp_handle_ops frankenphp_worker_handle_poll_ops = {
     .get_fd = frankenphp_worker_handle_get_fd,
     .is_valid = frankenphp_worker_handle_is_valid,
-    .cleanup = NULL,
+    .cleanup = frankenphp_worker_handle_cleanup,
 };
 
 static zend_object *frankenphp_worker_handle_new(zend_class_entry *ce) {
@@ -1339,19 +1347,21 @@ ZEND_METHOD(FrankenPHP_WorkerHandle, getStream) {
    * setup or on thread exit, so a run always has one */
   ZEND_ASSERT(worker_stop_socks[0] != SOCK_ERR);
 
-  /* One stream per run, whatever the number of handles: the same resource
-   * is returned until the script closes it, so asking for it in a loop does
-   * not grow the resource list of a run that never ends. The stream does not
-   * own the socket (see frankenphp_worker_handle_ops), so closing it never
-   * affects a later one and the EOF of a drain reaches all. */
-  if (worker_handle_res != NULL) {
-    if (worker_handle_res->type == php_file_le_stream()) {
-      GC_ADDREF(worker_handle_res);
-      RETURN_RES(worker_handle_res);
+  /* One stream per handle: the same resource is returned until the script
+   * closes it, so asking for it in a loop does not grow the resource list
+   * of a run that never ends. The stream does not own the socket (see
+   * frankenphp_worker_handle_ops), so closing it never affects the stream
+   * of another handle and the EOF of a drain reaches all of them. */
+  frankenphp_handle_obj *handle = FRANKENPHP_HANDLE_OF(Z_OBJ_P(ZEND_THIS));
+  if (handle->handle_data != NULL) {
+    zend_resource *cached = handle->handle_data;
+    if (cached->type == php_file_le_stream()) {
+      GC_ADDREF(cached);
+      RETURN_RES(cached);
     }
-    /* closed by the script: drop the cache's ref */
-    zend_list_delete(worker_handle_res);
-    worker_handle_res = NULL;
+    /* closed by the script: drop the handle's ref */
+    zend_list_delete(cached);
+    handle->handle_data = NULL;
   }
 
   php_stream *stream =
@@ -1370,8 +1380,8 @@ ZEND_METHOD(FrankenPHP_WorkerHandle, getStream) {
   stream->ops = &frankenphp_worker_handle_ops;
 
   php_stream_to_zval(stream, return_value);
-  worker_handle_res = Z_RES_P(return_value);
-  GC_ADDREF(worker_handle_res);
+  handle->handle_data = Z_RES_P(return_value);
+  GC_ADDREF(Z_RES_P(return_value));
 }
 
 /* The ready point of a background worker and its liveness check, the
