@@ -26,8 +26,9 @@ type extensionWorkers struct {
 
 // EXPERIMENTAL: SendRequest sends an HTTP request to the worker and writes the response to the provided ResponseWriter.
 func (w *extensionWorkers) SendRequest(rw http.ResponseWriter, r *http.Request) error {
-	// the worker only exists between Init() and Shutdown()
-	if w.internalWorker == nil {
+	// the worker only exists between Init() and Shutdown(), and its server
+	// only serves once registered, which SendMessage checks the same way
+	if w.internalWorker == nil || !w.internalWorker.server.isRegistered.Load() {
 		return ErrNotRunning
 	}
 
