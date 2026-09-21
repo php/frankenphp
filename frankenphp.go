@@ -845,15 +845,25 @@ func go_schedule_opcache_reset(threadIndex C.uintptr_t) {
 	}
 }
 
+// opcacheRestartHook tells whether this build reports the restarts opcache
+// schedules on its own: PHP 8.4 brought the hook, and only ZTS builds are
+// exposed to them
+var opcacheRestartHook = C.FRANKENPHP_OPCACHE_RESTART_HOOK != 0
+
 // Restart reasons opcache reports to the hook, in the order of
-// zend_accel_restart_reason (ext/opcache/ZendAccelerator.h).
-var opcacheRestartReasons = [...]string{"out of memory", "hash overflow", "user"}
+// zend_accel_restart_reason (ext/opcache/ZendAccelerator.h), named like the
+// counters of opcache_get_status()
+var opcacheRestartReasons = [...]string{"oom", "hash", "manual"}
 
 //export go_opcache_restart_scheduled
 func go_opcache_restart_scheduled(reason C.int) {
+	opcacheRestartScheduled(int(reason))
+}
+
+func opcacheRestartScheduled(reason int) {
 	reasonText := "unknown"
-	if i := int(reason); i >= 0 && i < len(opcacheRestartReasons) {
-		reasonText = opcacheRestartReasons[i]
+	if reason >= 0 && reason < len(opcacheRestartReasons) {
+		reasonText = opcacheRestartReasons[reason]
 	}
 
 	metrics.OpcacheRestart(reasonText)
@@ -862,8 +872,10 @@ func go_opcache_restart_scheduled(reason C.int) {
 		return
 	}
 
+	// written synchronously, under opcache's lock: a line deferred to a
+	// goroutine is lost if the restart crashes the process
 	globalLogger.LogAttrs(globalCtx, slog.LevelWarn,
-		"opcache restart scheduled, running PHP threads may hold stale references to its shared memory: raise opcache.memory_consumption and opcache.max_accelerated_files to make restarts less likely",
+		"opcache restart scheduled, caching stops until the next request start carries it out while other threads may still reference the old memory: raise opcache.memory_consumption, opcache.max_accelerated_files or opcache.max_wasted_percentage",
 		slog.String("reason", reasonText),
 	)
 }

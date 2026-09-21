@@ -1014,9 +1014,7 @@ PHP_FUNCTION(frankenphp_log) {
   }
 }
 
-/* Guarded like its only assignment in php_main(), so builds without the hook
- * do not trip -Werror=unused-function. */
-#if defined(ZTS) && PHP_VERSION_ID >= 80400
+#if FRANKENPHP_OPCACHE_RESTART_HOOK
 static void frankenphp_opcache_restart_hook(int reason) {
   go_opcache_restart_scheduled(reason);
 }
@@ -1799,7 +1797,7 @@ static void *php_main(void *arg) {
 
   frankenphp_sapi_module.startup(&frankenphp_sapi_module);
 
-#if defined(ZTS) && PHP_VERSION_ID >= 80400
+#if FRANKENPHP_OPCACHE_RESTART_HOOK
   /* Report the opcache restarts that opcache schedules on its own */
   zend_accel_schedule_restart_hook = frankenphp_opcache_restart_hook;
 #endif

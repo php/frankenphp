@@ -326,7 +326,9 @@ func (m *PrometheusMetrics) OpcacheRestart(reason string) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	m.opcacheRestarts.WithLabelValues(reason).Inc()
+	if m.opcacheRestarts != nil {
+		m.opcacheRestarts.WithLabelValues(reason).Inc()
+	}
 }
 
 func (m *PrometheusMetrics) Shutdown() {
@@ -336,7 +338,10 @@ func (m *PrometheusMetrics) Shutdown() {
 	m.registry.Unregister(m.totalThreads)
 	m.registry.Unregister(m.busyThreads)
 	m.registry.Unregister(m.queueDepth)
-	m.registry.Unregister(m.opcacheRestarts)
+
+	if m.opcacheRestarts != nil {
+		m.registry.Unregister(m.opcacheRestarts)
+	}
 
 	if m.totalWorkers != nil {
 		m.registry.Unregister(m.totalWorkers)
@@ -393,7 +398,7 @@ func NewPrometheusMetrics(registry prometheus.Registerer) *PrometheusMetrics {
 		// experimental: to be removed once opcache handles restarts safely under ZTS
 		opcacheRestarts: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "frankenphp_opcache_restarts",
-			Help: "Number of restarts of opcache's shared memory, by reason (experimental, should stay at zero)",
+			Help: "Number of restarts of opcache's shared memory scheduled, by reason (experimental, should stay at zero)",
 		}, []string{"reason"}),
 		totalWorkers:       nil,
 		busyWorkers:        nil,
@@ -411,12 +416,16 @@ func NewPrometheusMetrics(registry prometheus.Registerer) *PrometheusMetrics {
 
 	m.mustRegister(m.queueDepth)
 
-	m.mustRegister(m.opcacheRestarts)
+	// only where the hook exists: a series stuck at zero would read as "no
+	// restart" on a build that cannot report one
+	if opcacheRestartHook {
+		m.mustRegister(m.opcacheRestarts)
 
-	// expose the series at zero so a rate or an alert on them works from the
-	// first restart on, instead of missing it for lack of a previous sample
-	for _, reason := range opcacheRestartReasons {
-		m.opcacheRestarts.WithLabelValues(reason)
+		// expose the series at zero so a rate or an alert on it works from the
+		// first restart on, instead of missing it for lack of a previous sample
+		for _, reason := range opcacheRestartReasons {
+			m.opcacheRestarts.WithLabelValues(reason)
+		}
 	}
 
 	return m
