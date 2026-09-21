@@ -134,9 +134,9 @@ func resolveWorkerFile(o workerOpt) (workerOpt, error) {
 // against the names and paths the ones before it took. Validate() runs them
 // over a configuration that may never start, newWorker() over the one
 // starting, so both answer the same way.
-func checkWorkerDeclaration(o workerOpt, takenNames map[string]bool, takenGlobalPaths map[string]bool) error {
+func checkWorkerDeclaration(o workerOpt, nameTaken func(string) bool, globalPathTaken func(string) bool) error {
 	if o.server == nil {
-		if takenGlobalPaths[o.fileName] {
+		if globalPathTaken(o.fileName) {
 			return fmt.Errorf("two global workers cannot have the same filename: %q", o.fileName)
 		}
 
@@ -146,7 +146,7 @@ func checkWorkerDeclaration(o workerOpt, takenNames map[string]bool, takenGlobal
 		}
 	}
 
-	if takenNames[o.name] {
+	if nameTaken(o.name) {
 		return fmt.Errorf("two workers cannot have the same name: %q", o.name)
 	}
 
@@ -159,16 +159,10 @@ func newWorker(o workerOpt) (*worker, error) {
 		return nil, err
 	}
 
-	takenNames := make(map[string]bool, len(workersByName))
-	for name := range workersByName {
-		takenNames[name] = true
-	}
-	takenGlobalPaths := make(map[string]bool, len(globalWorkersByPath))
-	for path := range globalWorkersByPath {
-		takenGlobalPaths[path] = true
-	}
+	nameTaken := func(name string) bool { _, taken := workersByName[name]; return taken }
+	globalPathTaken := func(path string) bool { _, taken := globalWorkersByPath[path]; return taken }
 
-	if err := checkWorkerDeclaration(o, takenNames, takenGlobalPaths); err != nil {
+	if err := checkWorkerDeclaration(o, nameTaken, globalPathTaken); err != nil {
 		return nil, err
 	}
 

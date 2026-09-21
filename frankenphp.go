@@ -325,7 +325,8 @@ func Validate(options ...Option) error {
 			return err
 		}
 
-		if err := checkWorkerDeclaration(w, takenNames, takenGlobalPaths); err != nil {
+		if err := checkWorkerDeclaration(w, func(name string) bool { return takenNames[name] },
+			func(path string) bool { return takenGlobalPaths[path] }); err != nil {
 			return err
 		}
 

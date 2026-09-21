@@ -61,6 +61,9 @@ type FrankenPHPApp struct {
 	MaxRequests int `json:"max_requests,omitempty"`
 
 	opts            []frankenphp.Option
+	// options the modules add while they provision, before Start() collects
+	// the rest: they belong to the configuration but nothing else knows them
+	provisionOpts []frankenphp.Option
 	metrics         frankenphp.Metrics
 	ctx             context.Context
 	logger          *slog.Logger
@@ -126,11 +129,13 @@ func (f *FrankenPHPApp) Validate() error {
 // modules serve from, hence keep.
 func (f *FrankenPHPApp) collectOptions(repl *caddy.Replacer, keep bool) ([]frankenphp.Option, error) {
 	// We have at least 9 hardcoded options
-	opts := make([]frankenphp.Option, 0, 9+len(options))
+	opts := make([]frankenphp.Option, 0, 9+len(options)+len(f.provisionOpts))
 
 	optionsMU.RLock()
 	opts = append(opts, options...)
 	optionsMU.RUnlock()
+
+	opts = append(opts, f.provisionOpts...)
 
 	opts = append(opts,
 		frankenphp.WithContext(f.ctx),
@@ -175,6 +180,13 @@ func (f *FrankenPHPApp) Start() error {
 		return err
 	}
 	f.opts = opts
+
+	// Validate() ran before the modules provisioned, so it saw the workers
+	// of the global block alone; the ones a php_server declares are checked
+	// here, while the configuration in place still serves
+	if err := frankenphp.Validate(f.opts...); err != nil {
+		return err
+	}
 
 	// if FrankenPHP is currently running, shut it down first
 	// this will happen in admin API reloads and caddy tests

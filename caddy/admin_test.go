@@ -477,6 +477,66 @@ func TestRejectedReloadKeepsThePreviousSiteServing(t *testing.T) {
 }
 
 // the number of requests testdata/worker-with-counter.php has served
+// TestRejectedReloadWithAModuleWorkerKeepsThePreviousSiteServing covers the
+// workers a php_server block declares: Caddy calls Validate() before the
+// modules provision, so those reach Start() alone, which checks them before
+// it takes the runtime in place down.
+func TestRejectedReloadWithAModuleWorkerKeepsThePreviousSiteServing(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+			http_port `+testPort+`
+		}
+
+		localhost:`+testPort+` {
+			route {
+				root ../testdata
+				rewrite worker-with-counter.php
+				php {
+					worker ../testdata/worker-with-counter.php 1
+				}
+			}
+		}
+		`, "caddyfile")
+
+	workerURL := "http://localhost:" + testPort + "/worker-with-counter.php"
+	servedBefore := countedRequests(t, workerURL)
+
+	rejected := `
+	{
+		skip_install_trust
+		admin localhost:2999
+		http_port ` + testPort + `
+	}
+
+	localhost:` + testPort + ` {
+		route {
+			root ../testdata
+			rewrite worker-with-counter.php
+			php {
+				worker ../testdata/not-a-worker.php 1
+			}
+		}
+	}
+	`
+
+	r, err := http.NewRequest("POST", "http://localhost:2999/load", bytes.NewBufferString(rejected))
+	require.NoError(t, err)
+	r.Header.Set("Content-Type", "text/caddyfile")
+	resp, err := http.DefaultClient.Do(r)
+	require.NoError(t, err)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	require.Contains(t, string(body), "worker filename is invalid")
+
+	// the runtime that served before the rejected reload still serves, and
+	// it is the same one: its worker kept counting
+	require.Equal(t, servedBefore+1, countedRequests(t, workerURL))
+}
+
 func countedRequests(t *testing.T, workerURL string) int {
 	t.Helper()
 
