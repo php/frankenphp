@@ -127,9 +127,8 @@ func WithWorkers(name, fileName string, num int, options ...WorkerOption) Option
 //
 // Workers are designed to run indefinitely and will be gracefully shut down when FrankenPHP shuts down.
 //
-// Extension workers receive the lowest priority when determining thread allocations. If the requested number of threads
-// cannot be allocated, then FrankenPHP will panic and provide this information to the user (who will need to allocate
-// more total threads). Don't be greedy.
+// Extension workers count as worker threads: they come on top of num_threads, and Init() returns an error when
+// max_threads has no room for them. Don't be greedy.
 func WithExtensionWorkers(name, fileName string, numThreads int, options ...WorkerOption) (Workers, Option) {
 	w := &extensionWorkers{
 		name:     name,

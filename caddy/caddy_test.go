@@ -1814,7 +1814,7 @@ func TestOpcacheReset(t *testing.T) {
 			metrics
 
 			frankenphp {
-				num_threads 40
+				num_threads 20
 				php_ini {
 					opcache.enable 1
 					opcache.log_verbosity_level 4

@@ -279,9 +279,9 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 	}
 
 	if !numThreadsIsSet {
+		// default: what is left of 2x the CPUs once the workers have their
+		// threads, and one thread at the very least
 		if numWorkers >= maxProcs {
-			// default: what is left of 2x the CPUs once the workers have their
-			// threads, and one thread at the very least
 			opt.numThreads = numWorkers + 1
 		} else {
 			opt.numThreads = maxProcs
@@ -293,6 +293,10 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 
 	// both num_threads and max_threads are set
 	if !maxThreadsIsAuto && opt.maxThreads < opt.numThreads {
+		if numWorkers > 0 {
+			return 0, fmt.Errorf("max_threads (%d) must be greater than or equal to num_threads (%d) plus the worker threads (%d)", opt.maxThreads, opt.numThreads-numWorkers, numWorkers)
+		}
+
 		return 0, fmt.Errorf("max_threads (%d) must be greater than or equal to num_threads (%d)", opt.maxThreads, opt.numThreads)
 	}
 

@@ -45,7 +45,7 @@ func RegisterWorkers(name, fileName string, num int, wo ...frankenphp.WorkerOpti
 //		}
 //	}
 type FrankenPHPApp struct {
-	// NumThreads sets the number of PHP threads to start for the requests no worker serves, worker threads coming on top of it. Default: what is left of 2x the number of available CPUs.
+	// NumThreads sets the number of PHP threads to start for the requests no worker serves, worker threads coming on top of it. Default: what is left of 2x the number of available CPUs once the workers have their threads, one at the very least.
 	NumThreads int `json:"num_threads,omitempty"`
 	// MaxThreads limits how many threads may run at once, workers included. Default: the threads started at boot
 	MaxThreads int `json:"max_threads,omitempty"`
