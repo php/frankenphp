@@ -663,7 +663,11 @@ func go_sapi_flush(threadIndex C.uintptr_t) bool {
 		return false
 	}
 
-	if fc.clientHasClosed() && !fc.isDone {
+	if fc.isDone {
+		return fc.clientHadClosed
+	}
+
+	if fc.clientHasClosed() {
 		return true
 	}
 

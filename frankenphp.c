@@ -1122,6 +1122,19 @@ static int frankenphp_startup(sapi_module_struct *sapi_module) {
   php_import_environment_variables = get_full_env;
 
   int result = php_module_startup(sapi_module, &frankenphp_module);
+#ifndef PHP_WIN32
+  if (result == SUCCESS) {
+    const int signals[] = {SIGSEGV, SIGBUS, SIGFPE};
+    for (size_t i = 0; i < sizeof(signals) / sizeof(signals[0]); i++) {
+      struct sigaction sa;
+      if (sigaction(signals[i], NULL, &sa) == 0 && sa.sa_handler != SIG_DFL &&
+          sa.sa_handler != SIG_IGN && !(sa.sa_flags & SA_ONSTACK)) {
+        sa.sa_flags |= SA_ONSTACK;
+        sigaction(signals[i], &sa, NULL);
+      }
+    }
+  }
+#endif
 #if PHP_VERSION_ID < 80500
   if (result == SUCCESS) {
     /* Override opcache here again if loaded as a shared extension
