@@ -411,8 +411,7 @@ func TestRegisteredModuleWorkerPoolsMustBeCorrect(t *testing.T) {
 	assert.Contains(t, receivedThreadNames, "Worker PHP Thread - "+worker3Path, "expected module worker without \"match\" directive to be present")
 }
 
-// a configuration Caddy rolls back must leave the running one serving:
-// Validate() rejects it before Start() has a chance to stop the runtime
+// Validate() must reject incorrect configs before Start() calls frankenphp.Shutdown()
 func TestRejectedReloadKeepsThePreviousSiteServing(t *testing.T) {
 	tester := caddytest.NewTester(t)
 	initServer(t, tester, `
@@ -476,8 +475,8 @@ func TestRejectedReloadKeepsThePreviousSiteServing(t *testing.T) {
 	require.Equal(t, servedBefore+1, countedRequests(t, workerURL))
 }
 
-// the workers a php_server declares reach Start() alone, since Caddy calls
-// Validate() before the modules provision
+// Validate() cannot see a worker declared in a php_server block: Caddy calls it
+// before the modules provision, so Start() must reject those before shutting down
 func TestRejectedReloadWithAModuleWorkerKeepsThePreviousSiteServing(t *testing.T) {
 	tester := caddytest.NewTester(t)
 	initServer(t, tester, `

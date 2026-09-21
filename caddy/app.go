@@ -60,16 +60,15 @@ type FrankenPHPApp struct {
 	// EXPERIMENTAL: MaxRequests sets the maximum number of requests a PHP thread handles before restarting (0 = unlimited)
 	MaxRequests int `json:"max_requests,omitempty"`
 
-	opts            []frankenphp.Option
-	// added by the modules as they provision, before Start() collects the rest
+	opts          []frankenphp.Option
 	provisionOpts []frankenphp.Option
-	metrics         frankenphp.Metrics
-	ctx             context.Context
-	logger          *slog.Logger
-	modules         []*FrankenPHPModule
-	httpApp         *caddyhttp.App
-	hasStarted      atomic.Bool
-	started         chan any
+	metrics       frankenphp.Metrics
+	ctx           context.Context
+	logger        *slog.Logger
+	modules       []*FrankenPHPModule
+	httpApp       *caddyhttp.App
+	hasStarted    atomic.Bool
+	started       chan any
 }
 
 var errIni = errors.New(`"php_ini" must be in the format: php_ini "<key>" "<value>"`)
@@ -108,9 +107,7 @@ func (f *FrankenPHPApp) Provision(ctx caddy.Context) error {
 	return nil
 }
 
-// Validate implements caddy.Validator, which Caddy calls while the running
-// configuration still serves: Start() shuts the runtime down before Init()
-// can report anything.
+// Validate is called by Caddy before Start() to validate before shutting down the currently running config
 func (f *FrankenPHPApp) Validate() error {
 	opts, err := f.collectOptions(caddy.NewReplacer(), false)
 	if err != nil {
