@@ -202,10 +202,12 @@ func (handler *backgroundWorkerThread) afterScriptExecution(exitStatus int) {
 			}
 		}
 
-		// a run that lasted did something, whatever its exit status, and
-		// the next one starts fresh: a worker processing a batch and
-		// returning is not a worker spinning on an immediate exit
-		if time.Since(handler.runStartedAt) > minHealthyRun {
+		// a run that returned cleanly did something, and the next one
+		// starts fresh: a worker processing a batch and returning is not a
+		// worker spinning on an immediate exit. A crash never resets the
+		// count, however long the run lasted, so a script failing every
+		// few hundred milliseconds still ends up paced by the backoff
+		if exitStatus == 0 && time.Since(handler.runStartedAt) > minHealthyRun {
 			handler.crashCount = 0
 		}
 		handler.wait(restartBackoff(handler.crashCount))
