@@ -15,50 +15,43 @@ import (
 const taskUpdatesMax = 16
 
 // workerTask is a unit of work handed by a PHP thread to a thread of a
-// background worker, see SentTaskHandle. The payload and the
-// updates flowing back are persistent HashTables, copied into request
-// memory on arrival. Each side waits on its descriptor of the task's channel
-// and is signaled there by the other, one signal per event: pickup, update,
-// completion and abort for the sender, abandonment for the receiver.
+// background worker, see SentTaskHandle. The payload and the updates flowing
+// back are persistent HashTables, copied into request memory on arrival. Each
+// side waits on its descriptor of the task's channel and is signaled there by
+// the other, one signal per event.
 type workerTask struct {
 	handle   cgo.Handle
 	worker   *worker
 	payload  *C.HashTable  // owned by the task until a thread picks it up
 	pickedUp chan struct{} // closed when a thread picks the task up
 	// cancelled is closed when the sender gave up before any pickup, ending
-	// the watcher; abortReason is set by the watcher, under the queue mutex,
-	// when the wait must end without a pickup; drainChan and shutdown are
-	// the channels the watcher ends the wait on, read on the sender's thread
-	// at send time
+	// the watcher, which sets abortReason under the queue mutex when the wait
+	// must end without a pickup. drainChan and shutdown are what it waits on,
+	// read on the sender's thread at send time
 	cancelled           chan struct{}
 	abortReason         string
 	drainChan, shutdown <-chan struct{}
-	// receiver and pickedUpAt are set by the thread that picked the task
-	// up and read by its close, on the same thread
+	// set by the thread that picked the task up, read by its close
 	receiver   *backgroundWorkerThread
 	pickedUpAt time.Time
-	// fds[0] is the sender's descriptor, fds[1] the receiver's; the streams
-	// wait on them but the task owns them, until both sides closed and the
-	// pair goes back to the pool
+	// fds[0] is the sender's descriptor, fds[1] the receiver's; the task owns
+	// them until both sides closed and the pair goes back to the pool
 	fds [2]int64
 
 	mu   sync.Mutex
 	cond *sync.Cond // signaled on pop and close
-	// one wake-up per sleep of the sender's reads: a signal goes out only
-	// while the sender sleeps on its descriptor and none is outstanding, the
-	// sender consumes it on its next event and finds the rest in updates
-	// and the flags below
+	// one wake-up per sleep of the sender's reads: a signal goes out only while
+	// the sender sleeps on its descriptor and none is outstanding
 	senderParked, senderSignaled bool
-	// senderWatched is set once the sender handed its descriptor to a poll
-	// context, which parks without a hook to tell us: every event then
-	// signals, and the signal stays outstanding while there is more to take,
-	// so the descriptor is readable exactly when something waits there
+	// set once the sender handed its descriptor to a poll context, which parks
+	// without a hook to tell us: every event then signals, and the signal stays
+	// outstanding while there is more to take
 	senderWatched bool
-	updates                      []*C.HashTable
-	closed                       bool // the receiver closed its stream
-	aborted                      bool // ...during request shutdown: the script ended with the task open
-	senderGone                   bool // the sender closed its stream
-	retired                      int  // sides done with the task, freed at 2
+	updates       []*C.HashTable
+	closed        bool // the receiver closed its stream
+	aborted       bool // ...during request shutdown: the script ended with the task open
+	senderGone    bool // the sender closed its stream
+	retired       int  // sides done with the task, freed at 2
 }
 
 // taskQueue holds the tasks sent to a background worker until a thread picks
@@ -88,9 +81,8 @@ func (q *taskQueue) remove(t *workerTask) bool {
 // claimParkedThread picks one parked thread of the worker, round-robin over
 // the pool, and returns its stop socket to write the wake-up line to, or -1
 // when no thread is parked: the task then waits in the queue for a thread to
-// drain it or to park, see go_frankenphp_background_worker_park. The thread
-// is no longer parked once claimed. Called with tasks.mu held; the caller
-// writes after releasing it, see signalThreads
+// drain it or to park, see go_frankenphp_background_worker_park. Called with
+// tasks.mu held, the caller writes after releasing it, see signalThreads
 func (worker *worker) claimParkedThread() (*backgroundWorkerThread, int64) {
 	worker.threadMutex.RLock()
 	defer worker.threadMutex.RUnlock()
@@ -138,10 +130,9 @@ func signalThreads(handlers []*backgroundWorkerThread, socks []int64) {
 	}
 }
 
-// taskChanPool keeps the descriptor pairs of finished tasks for the next
-// ones: drained, they are as good as new, and creating and closing them was
-// most of a task's syscalls. Bounded so an idle server does not hold the
-// descriptors of a past peak.
+// taskChanPool keeps the descriptor pairs of finished tasks for the next ones:
+// creating and closing them was most of a task's syscalls. Bounded so an idle
+// server does not hold the descriptors of a past peak.
 var taskChanPool struct {
 	mu   sync.Mutex
 	free [][2]int64
@@ -278,10 +269,9 @@ func go_frankenphp_send_task(threadIndex C.uintptr_t, name *C.char, nameLen C.si
 		pickedUp:  make(chan struct{}),
 		cancelled: make(chan struct{}),
 		fds:       fds,
-		// closed when this thread is drained for a restart or the shutdown:
-		// the target's threads are drained too, nobody would pick the task
-		// up. Read here, on the PHP thread: a goroutine may only get to run
-		// after Shutdown() replaced them
+		// the target's threads are drained too, nobody would pick the task up.
+		// Read here, on the PHP thread: a goroutine may only get to run after
+		// Shutdown() replaced them
 		drainChan: thread.drainChan,
 		shutdown:  mainThread.done,
 	}
@@ -299,20 +289,18 @@ func go_frankenphp_send_task(threadIndex C.uintptr_t, name *C.char, nameLen C.si
 		signalThreads([]*backgroundWorkerThread{handler}, []int64{sock})
 	}
 
-	// the C side waits for the pickup on the sender's descriptor, in the
-	// kernel rather than in a Go select: waking a thread parked inside a Go
-	// callback costs the scheduler a hand-off, a signal on a descriptor does
-	// not. The thread taking the task sends it; a pickup that takes longer
+	// the C side waits for the pickup in the kernel rather than in a Go select:
+	// waking a thread parked inside a Go callback costs the scheduler a
+	// hand-off, a signal on a descriptor does not. A pickup that takes longer
 	// than the first wait slice brings in go_frankenphp_task_linger
 
 	return C.uintptr_t(t.handle), C.intptr_t(t.fds[0]), nil
 }
 
-// go_frankenphp_task_linger is called by a sender whose first wait slice
-// passed without a pickup, the uncommon case: the thread signaled first did
-// not come, so every thread gets the line, and a watcher starts to end the
-// wait if the sender's thread is drained or FrankenPHP shuts down. Neither
-// costs the common case, a pickup within microseconds, a goroutine
+// go_frankenphp_task_linger is called by a sender whose first wait slice passed
+// without a pickup: every thread gets the line then, and a watcher starts to
+// end the wait if the sender's thread is drained or FrankenPHP shuts down.
+// Neither costs the common case, a pickup within microseconds, a goroutine
 //
 //export go_frankenphp_task_linger
 func go_frankenphp_task_linger(handle C.uintptr_t) {
@@ -427,14 +415,11 @@ func go_frankenphp_task_cancel(handle C.uintptr_t, timedOut C.bool) C.bool {
 	return true
 }
 
-// go_frankenphp_background_worker_park is called by WorkerHandle::tick()
-// as the script is about to wait on its handle: the thread parks unless
-// tasks are queued, in which case a wake-up is written on its own handle so
-// the wait returns at once and the script dequeues them. Under tasks.mu, so
-// a task queued after the check finds the thread parked and signals it: no
-// wake-up is lost either way. The flag stays set when the wait returns for
-// another reason than a claim: a claim meanwhile writes a wake-up the
-// script's next wait returns on.
+// go_frankenphp_background_worker_park is called by WorkerHandle::tick() as the
+// script is about to wait on its handle: the thread parks unless tasks are
+// queued, in which case a wake-up is written on its own handle so the wait
+// returns at once. Under tasks.mu, so a task queued after the check finds the
+// thread parked and signals it: no wake-up is lost either way.
 //
 //export go_frankenphp_background_worker_park
 func go_frankenphp_background_worker_park(threadIndex C.uintptr_t) {

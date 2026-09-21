@@ -372,12 +372,10 @@ void frankenphp_release_thread_for_kill(force_kill_slot slot) {
 }
 
 /* Socket pairs of background workers: the handle of a thread, see
- * WorkerHandle::getStream(), and one per task, see
- * SentTaskHandle. One end is exposed to a PHP script as a stream,
- * the other is held by the Go side, which writes wake-ups to it and closes
- * it to land EOF on the script's end, so a stream_select() or a blocking
- * read there returns. A socket pair rather than a pipe because on Windows
- * PHP's php_select() only really waits on sockets: before 8.5 it reports
+ * WorkerHandle::getStream(). One end is exposed to a PHP script as a stream,
+ * the other is held by the Go side, which writes wake-ups to it and closes it
+ * to land EOF on the script's end. A pair rather than a pipe because on
+ * Windows php_select() only really waits on sockets: before 8.5 it reports
  * any other handle as always ready. */
 static void frankenphp_sock_close(php_socket_t s) {
   if (s == SOCK_ERR) {
@@ -603,11 +601,9 @@ void frankenphp_worker_close_stop_sock(intptr_t s) {
   frankenphp_sock_close((php_socket_t)s);
 }
 
-/* Wakes a background worker thread with a line on its handle, one per task
- * sent to the worker, see SentTaskHandle. The line is a wake-up
- * rather than a description: it says something may be pending, the script
- * finds out what by polling. Its content is therefore not part of the
- * contract, see WorkerHandle::receive(). */
+/* Wakes a background worker thread with a line on its handle, one per task sent
+ * to the worker. The line says something may be pending, the script finds out
+ * what by polling, so its content is no part of the contract. */
 void frankenphp_worker_signal_task(intptr_t s) {
   frankenphp_sock_send((php_socket_t)s, "\n", 1);
 }
@@ -616,17 +612,15 @@ void frankenphp_worker_signal_task(intptr_t s) {
  * side gets involved, see go_frankenphp_task_linger. */
 #define FRANKENPHP_TASK_LINGER_MS 10
 
-/* Task channels: one descriptor per side of a task, the sender's [0] and
- * the receiver's [1], each waited on by its stream and signaled by the other
- * side through the Go side. On Linux they are eventfds and on macOS kqueue
- * descriptors carrying a user event: a side signals the other without a
- * pair, there is nothing to close between two tasks, so the Go side pools
- * them. Elsewhere a socket pair, for Windows's php_select(); a signal to
- * one end is a byte written to the other. Waits go through poll() on the
- * descriptor, consuming a signal never blocks. Signals and events match
- * one to one: EFD_SEMAPHORE makes a read consume a single one, and a side
- * never has more than one signal outstanding, which is what lets the
- * coalescing user event of kqueue stand in for a counter. */
+/* Task channels: one descriptor per side of a task, the sender's [0] and the
+ * receiver's [1], each waited on by its stream and signaled by the other side
+ * through the Go side. On Linux they are eventfds and on macOS kqueue
+ * descriptors carrying a user event: nothing to close between two tasks, so
+ * the Go side pools them. Elsewhere a socket pair, for Windows's php_select().
+ * Waits go through poll(), consuming a signal never blocks, and signals match
+ * events one to one: EFD_SEMAPHORE makes a read consume a single one, and a
+ * side never has more than one outstanding, which is what lets the coalescing
+ * user event of kqueue stand in for a counter. */
 #ifdef __linux__
 #include <sys/eventfd.h>
 #define FRANKENPHP_TASK_CHAN_EVENTFD 1
@@ -1730,15 +1724,12 @@ PHP_FUNCTION(frankenphp_get_vars) {
   }
 }
 
-/* Tasks, see SentTaskHandle: the sender hands a persistent copy of the
- * payload to the Go side, which queues it for the named background worker
- * and wakes one of its threads; WorkerHandle::receive() dequeues it there.
- * Updates flow back the same way, persistent copies through the Go side.
- * Each side keeps the state of its end on its handle: the descriptor of
- * the task's channel, what a wait on it costs, and whether it ended the
- * task. Nothing travels on the descriptor, it is what a wait returns on
- * and what the Go side signals; the Go side holds the state the methods
- * report. The descriptors belong to the task until both sides closed. */
+/* Tasks, see SentTaskHandle: the sender hands a persistent copy of the payload
+ * to the Go side, which queues it for the named background worker and wakes one
+ * of its threads; WorkerHandle::receive() dequeues it there. Updates flow back
+ * the same way. Each side keeps the state of its end on its handle, nothing
+ * travels on the descriptor: it is what a wait returns on and what the Go side
+ * signals, which holds the state the methods report. */
 typedef struct {
   uintptr_t task;
   intptr_t fd;    /* the side's descriptor, see frankenphp_task_chan_open */
@@ -1898,20 +1889,18 @@ static int frankenphp_task_poll(frankenphp_task_data *data, int timeout_ms) {
   }
 }
 
-/* Consumes the signal of an event the Go side reported, waiting for it if
- * the other side has not written it yet: the state is set before the
- * signal, so the wait is momentary, and one signal per event keeps
- * stream_select() exact. */
+/* Consumes the signal of an event the Go side reported, waiting for it if the
+ * other side has not written it yet: the state is set before the signal, so the
+ * wait is momentary. */
 static void frankenphp_task_consume(frankenphp_task_data *data) {
   while (!frankenphp_task_chan_consume(data->fd)) {
     frankenphp_task_poll(data, -1);
   }
 }
 
-/* Handles of a task: the state above belongs to the handle of its side.
- * On PHP 8.6 they are Io\Poll\Handle, so a context waits on the descriptor
- * and no stream is built at all; getStream() builds one on demand for
- * stream_select() and for the loops that take a stream. */
+/* Handles of a task: the state above belongs to the handle of its side. On PHP
+ * 8.6 they are Io\Poll\Handle, so a context waits on the descriptor and no
+ * stream is built at all. */
 static frankenphp_task_data *frankenphp_task_data_of(zend_object *object) {
   return FRANKENPHP_HANDLE_OF(object)->handle_data;
 }
@@ -2009,12 +1998,11 @@ static void frankenphp_task_obj_take(zval *zthis, uintptr_t task, intptr_t fd,
   data->sender = sender;
 }
 
-/* Builds the stream of this side on demand, so a script waiting through a
- * poll context allocates none, and hands the resource over: it may select
- * on it and close it. Past the end of the task it comes back closed when
- * one was built, as the poll hooks report an invalid descriptor there: a
- * waiter learns that the task is over from is_resource(), the way it would
- * from Io\Poll. */
+/* Builds the stream of this side on demand, so a script waiting through a poll
+ * context allocates none, and hands the resource over: it may select on it and
+ * close it. Past the end of the task it comes back closed, as the poll hooks
+ * report an invalid descriptor there, so a waiter learns the task is over from
+ * is_resource(). */
 static void frankenphp_task_obj_get_stream(zval *zthis, zval *return_value) {
   frankenphp_task_data *data = FRANKENPHP_TASK_DATA(zthis);
 
@@ -2094,18 +2082,17 @@ ZEND_METHOD(FrankenPHP_SentTaskHandle, __construct) {
     RETURN_THROWS();
   }
 
-  /* the task is the handle's from here on: a bailout below, or a throw,
-   * settles it through the handle rather than leaving the receiver to wait
-   * on it forever */
+  /* the task is the handle's from here on: a bailout below, or a throw, settles
+   * it rather than leaving the receiver to wait on it forever */
   frankenphp_task_obj_take(ZEND_THIS, task.r0, task.r1, true);
 
   /* wait for the pickup in the kernel: the thread taking the task signals
    * the sender's side, so does the Go side when the wait must end without a
    * pickup, see go_frankenphp_send_task */
   frankenphp_task_data *data = FRANKENPHP_TASK_DATA(ZEND_THIS);
-  /* the first slice of the wait is short: past it, the Go side escalates the
-   * wake-up and starts watching for a drain or the shutdown, neither of
-   * which the common case, a pickup within microseconds, needs */
+  /* past the first slice, the Go side escalates the wake-up and starts watching
+   * for a drain or the shutdown, neither of which a pickup within microseconds
+   * needs */
   int remaining = timeout_ms;
   bool lingering = false;
   for (;;) {
@@ -2317,9 +2304,9 @@ ZEND_METHOD(FrankenPHP_WorkerHandle, receive) {
     RETURN_NULL();
   }
 
-  /* the task is this thread's from here on: a bailout while copying the
-   * payload (memory limit, a fatal error in an autoloader) or while making
-   * the handle must not leave it open, the sender would wait on it forever */
+  /* the task is this thread's from here on: a bailout while copying the payload
+   * or while making the handle must not leave it open, the sender would wait on
+   * it forever */
   zval payload;
   zend_try {
     frankenphp_vars_to_request(&payload, task.r1);
