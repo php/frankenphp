@@ -2307,6 +2307,10 @@ ZEND_METHOD(FrankenPHP_ReceivedTaskHandle, getStream) {
 ZEND_METHOD(FrankenPHP_WorkerHandle, receive) {
   ZEND_PARSE_PARAMETERS_NONE();
 
+  if (!frankenphp_worker_handle_usable()) {
+    RETURN_THROWS();
+  }
+
   struct go_frankenphp_receive_task_return task =
       go_frankenphp_receive_task(frankenphp_thread_index());
   if (task.r0 == 0) {
