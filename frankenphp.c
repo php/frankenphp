@@ -1510,13 +1510,15 @@ void frankenphp_vars_free(HashTable *table) {
   persistent_zval_free(&persistent);
 }
 
-/* Holding a handle means being a background worker: the constructor is the
- * gate, so no caller check is needed here. */
 ZEND_METHOD(FrankenPHP_WorkerHandle, setVars) {
   zval *vars;
   ZEND_PARSE_PARAMETERS_START(1, 1)
   Z_PARAM_ARRAY(vars)
   ZEND_PARSE_PARAMETERS_END();
+
+  if (!frankenphp_worker_handle_usable()) {
+    RETURN_THROWS();
+  }
 
   /* validate the whole tree first: persist and free recurse without a
    * guard of their own */
