@@ -416,27 +416,92 @@ static void frankenphp_reset_background_worker(void) {
   frankenphp_worker_close_stop_socks();
 }
 
-static int frankenphp_worker_open_stop_pair(void) {
 #ifdef PHP_WIN32
-  /* PHP's emulation, a loopback TCP pair; it only accepts AF_INET, listens
-   * on INADDR_ANY and accepts the first peer, so check the pair is ours */
-  if (socketpair(AF_INET, SOCK_STREAM, 0, worker_stop_socks) != 0) {
-    worker_stop_socks[0] = SOCK_ERR;
-    worker_stop_socks[1] = SOCK_ERR;
+/* Windows has no socketpair() and PHP's emulation is not one: it binds a
+ * listener to INADDR_ANY, reachable off the machine, and hands back
+ * whichever connection arrives first. The pair is formed by hand here
+ * instead, the way libevent and Tor do it: the listener takes the
+ * loopback address alone, and a connection is kept only when it comes
+ * from the socket we connected with, so a process racing a connect is
+ * rejected and the next one accepted rather than failing the pair. */
+#define FRANKENPHP_SOCK_PAIR_TRIES 8
 
+static int frankenphp_sock_pair_win32(php_socket_t socks[2]) {
+  SOCKET listener = INVALID_SOCKET, client = INVALID_SOCKET,
+         accepted = INVALID_SOCKET;
+  struct sockaddr_in addr, local, peer;
+  int addr_len = sizeof(addr), local_len = sizeof(local), peer_len,
+      exclusive = 1;
+
+  socks[0] = SOCK_ERR;
+  socks[1] = SOCK_ERR;
+
+  listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  if (listener == INVALID_SOCKET) {
     return -1;
   }
 
-  struct sockaddr_in peer = {0}, local = {0};
-  int peer_len = sizeof(peer), local_len = sizeof(local);
-  if (getpeername(worker_stop_socks[0], (struct sockaddr *)&peer, &peer_len) !=
-          0 ||
-      getsockname(worker_stop_socks[1], (struct sockaddr *)&local,
-                  &local_len) != 0 ||
-      peer.sin_port != local.sin_port ||
-      peer.sin_addr.s_addr != local.sin_addr.s_addr) {
-    frankenphp_worker_close_stop_socks();
+  /* nobody else may take this port from under the listener */
+  setsockopt(listener, SOL_SOCKET, SO_EXCLUSIVEADDRUSE,
+             (const char *)&exclusive, sizeof(exclusive));
 
+  memset(&addr, 0, sizeof(addr));
+  addr.sin_family = AF_INET;
+  addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  addr.sin_port = 0;
+
+  if (bind(listener, (struct sockaddr *)&addr, sizeof(addr)) != 0 ||
+      getsockname(listener, (struct sockaddr *)&addr, &addr_len) != 0 ||
+      listen(listener, 1) != 0) {
+    goto error;
+  }
+
+  client = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  if (client == INVALID_SOCKET ||
+      connect(client, (struct sockaddr *)&addr, sizeof(addr)) != 0 ||
+      getsockname(client, (struct sockaddr *)&local, &local_len) != 0) {
+    goto error;
+  }
+
+  for (int attempt = 0; attempt < FRANKENPHP_SOCK_PAIR_TRIES; attempt++) {
+    memset(&peer, 0, sizeof(peer));
+    peer_len = sizeof(peer);
+    accepted = accept(listener, (struct sockaddr *)&peer, &peer_len);
+    if (accepted == INVALID_SOCKET) {
+      goto error;
+    }
+    if (peer.sin_port == local.sin_port &&
+        peer.sin_addr.s_addr == local.sin_addr.s_addr) {
+      closesocket(listener);
+      socks[0] = accepted;
+      socks[1] = client;
+
+      return 0;
+    }
+
+    /* somebody else got in: drop them and wait for our own connection */
+    closesocket(accepted);
+    accepted = INVALID_SOCKET;
+  }
+
+error:
+  if (listener != INVALID_SOCKET) {
+    closesocket(listener);
+  }
+  if (client != INVALID_SOCKET) {
+    closesocket(client);
+  }
+  if (accepted != INVALID_SOCKET) {
+    closesocket(accepted);
+  }
+
+  return -1;
+}
+#endif
+
+static int frankenphp_worker_open_stop_pair(void) {
+#ifdef PHP_WIN32
+  if (frankenphp_sock_pair_win32(worker_stop_socks) != 0) {
     return -1;
   }
 #else
