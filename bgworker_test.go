@@ -799,3 +799,18 @@ func TestBackgroundWorkerHandleIsAPollHandle(t *testing.T) {
 
 	assert.JSONEq(t, `{"handle":true,"internal":true}`, requireFileContentEventually(t, sentinel))
 }
+
+// TestWorkerHandleBuiltBehindTheConstructor checks that the methods do not
+// trust the constructor's guard: unserialize() is refused outright, and a
+// handle Reflection built on a request thread throws instead of reaching
+// the Go side, which would panic and take the process with it.
+func TestWorkerHandleBuiltBehindTheConstructor(t *testing.T) {
+	server, err := frankenphp.NewServer(testDataDir)
+	require.NoError(t, err)
+	initServers(t, frankenphp.WithServer(server), frankenphp.WithNumThreads(1))
+
+	body := serverGet(t, server, "http://example.com/handle-bypass.php")
+	assert.Contains(t, body, "unserialize: Exception: Unserialization of 'FrankenPHP\\WorkerHandle' is not allowed")
+	assert.Contains(t, body, "reflection: ReflectionException:")
+	assert.Contains(t, body, "construct: RuntimeException: FrankenPHP\\WorkerHandle can only be created from a background worker")
+}
