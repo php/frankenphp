@@ -16,6 +16,7 @@
 
 #include <Zend/zend_modules.h>
 #include <Zend/zend_types.h>
+#include <php_version.h>
 #include <stdbool.h>
 #include <stdint.h>
 
