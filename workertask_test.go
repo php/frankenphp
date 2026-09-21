@@ -245,8 +245,7 @@ func sendWhileWorkerBusy(t *testing.T, server *frankenphp.Server, mark string) <
 	return body
 }
 
-// TestTaskMethodsAfterTheEnd pins what a handle does once the task is over,
-// on both sides.
+// what a handle does once the task is over, on both sides
 func TestTaskMethodsAfterTheEnd(t *testing.T) {
 	sentinel := filepath.Join(t.TempDir(), "over.txt")
 	server, err := frankenphp.NewServer(testDataDir)
@@ -274,8 +273,8 @@ complete-data: RuntimeException: the task is over
 getStream: RuntimeException: the task is over`, requireFileContentEventually(t, sentinel))
 }
 
-// TestTaskPoll follows two tasks through an Io\Poll\Context: the handles
-// implement Io\Poll\Handle, so the script never touches a stream.
+// two tasks followed through an Io\Poll\Context: the handles implement
+// Io\Poll\Handle, so the script never touches a stream
 func TestTaskPoll(t *testing.T) {
 	if frankenphp.Version().VersionID < 80600 {
 		t.Skip("the poll API needs PHP 8.6")
