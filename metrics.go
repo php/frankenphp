@@ -16,6 +16,9 @@ const (
 
 type StopReason int
 
+// Metrics reports what the workers and the threads of a FrankenPHP instance
+// are doing. An implementation that also satisfies OpcacheMetrics is told
+// about opcache restarts as well.
 type Metrics interface {
 	// StartWorker collects started workers
 	StartWorker(name string)
@@ -40,7 +43,13 @@ type Metrics interface {
 	DequeuedWorkerRequest(name string)
 	QueuedRequest()
 	DequeuedRequest()
-	// OpcacheRestart collects the restarts of opcache's shared memory, by reason
+}
+
+// OpcacheMetrics is the optional part of a Metrics implementation that counts
+// the restarts of opcache's shared memory, by reason, where the build reports
+// them (ZTS, PHP 8.4 and up). An implementation passed to WithMetrics() that
+// lacks it only misses the counter, the restart is logged either way.
+type OpcacheMetrics interface {
 	OpcacheRestart(reason string)
 }
 
@@ -83,8 +92,6 @@ func (n nullMetrics) DequeuedWorkerRequest(string) {}
 func (n nullMetrics) QueuedRequest()   {}
 func (n nullMetrics) DequeuedRequest() {}
 
-func (n nullMetrics) OpcacheRestart(string) {}
-
 type PrometheusMetrics struct {
 	registry           prometheus.Registerer
 	totalThreads       prometheus.Gauge
@@ -110,6 +117,11 @@ func (m *PrometheusMetrics) mustRegister(c prometheus.Collector) {
 		}
 	}
 }
+
+var (
+	_ Metrics        = (*PrometheusMetrics)(nil)
+	_ OpcacheMetrics = (*PrometheusMetrics)(nil)
+)
 
 func (m *PrometheusMetrics) StartWorker(name string) {
 	m.mu.RLock()

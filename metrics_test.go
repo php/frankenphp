@@ -268,3 +268,18 @@ func TestOpcacheRestartScheduledLogsAndCounts(t *testing.T) {
 	assert.Equal(t, float64(1), testutil.ToFloat64(m.opcacheRestarts.WithLabelValues("hash")))
 	assert.Equal(t, float64(1), testutil.ToFloat64(m.opcacheRestarts.WithLabelValues("unknown")))
 }
+
+func TestOpcacheRestartScheduledWithoutOpcacheMetrics(t *testing.T) {
+	// nullMetrics is a Metrics without the optional part, like an
+	// implementation from before OpcacheMetrics existed
+	_, ok := Metrics(nullMetrics{}).(OpcacheMetrics)
+	require.False(t, ok)
+
+	var buf bytes.Buffer
+	prevLogger, prevMetrics := globalLogger, metrics
+	globalLogger, metrics = slog.New(slog.NewTextHandler(&buf, nil)), nullMetrics{}
+	t.Cleanup(func() { globalLogger, metrics = prevLogger, prevMetrics })
+
+	assert.NotPanics(t, func() { opcacheRestartScheduled(0) })
+	assert.Contains(t, buf.String(), "reason=oom")
+}

@@ -866,7 +866,9 @@ func opcacheRestartScheduled(reason int) {
 		reasonText = opcacheRestartReasons[reason]
 	}
 
-	metrics.OpcacheRestart(reasonText)
+	if m, ok := metrics.(OpcacheMetrics); ok {
+		m.OpcacheRestart(reasonText)
+	}
 
 	if !globalLogger.Enabled(globalCtx, slog.LevelWarn) {
 		return
