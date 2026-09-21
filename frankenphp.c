@@ -1328,6 +1328,20 @@ static int frankenphp_worker_handle_close(php_stream *stream,
  * tick that reports the drain, and nothing else. Constructing it outside a
  * background worker throws; a run may create as many as it likes, they all
  * speak for the same socket. */
+/* The constructor is not a gate: unserialize() and Reflection make an
+ * instance without it, so every method checks the thread it runs on. */
+static bool frankenphp_worker_handle_usable(void) {
+  if (is_background_worker && worker_stop_socks[0] != SOCK_ERR) {
+    return true;
+  }
+
+  zend_throw_exception(
+      spl_ce_RuntimeException,
+      "FrankenPHP\\WorkerHandle can only be used from a background worker", 0);
+
+  return false;
+}
+
 ZEND_METHOD(FrankenPHP_WorkerHandle, __construct) {
   ZEND_PARSE_PARAMETERS_NONE();
 
@@ -1343,9 +1357,9 @@ ZEND_METHOD(FrankenPHP_WorkerHandle, __construct) {
 ZEND_METHOD(FrankenPHP_WorkerHandle, getStream) {
   ZEND_PARSE_PARAMETERS_NONE();
 
-  /* the pair is opened before the script starts and closed at the next run
-   * setup or on thread exit, so a run always has one */
-  ZEND_ASSERT(worker_stop_socks[0] != SOCK_ERR);
+  if (!frankenphp_worker_handle_usable()) {
+    RETURN_THROWS();
+  }
 
   /* One stream per handle: the same resource is returned until the script
    * closes it, so asking for it in a loop does not grow the resource list
@@ -1395,7 +1409,9 @@ ZEND_METHOD(FrankenPHP_WorkerHandle, getStream) {
 ZEND_METHOD(FrankenPHP_WorkerHandle, tick) {
   ZEND_PARSE_PARAMETERS_NONE();
 
-  ZEND_ASSERT(worker_stop_socks[0] != SOCK_ERR);
+  if (!frankenphp_worker_handle_usable()) {
+    RETURN_THROWS();
+  }
 
   if (!worker_ticked) {
     worker_ticked = true;

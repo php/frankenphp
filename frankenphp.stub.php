@@ -59,6 +59,9 @@ namespace {
 
 namespace FrankenPHP {
     /**
+     * @strict-properties
+     * @not-serializable
+     *
      * EXPERIMENTAL: the handle of the current background worker, the one
      * point where the script and FrankenPHP meet. Constructing it outside
      * a background worker throws. It implements Io\Poll\Handle, so an
