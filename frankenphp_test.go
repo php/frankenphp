@@ -770,6 +770,26 @@ func TestEnvIsResetInNonWorkerMode(t *testing.T) {
 	}, &testOptions{})
 }
 
+// putenv() must stay inside the thread-local sandbox and never mutate the
+// process-global OS environment, so a secret set by application code cannot leak
+// to the Go/Caddy side or to child processes (proc_open, exec, ...).
+func TestPutenvDoesNotLeakToOSEnvironment(t *testing.T) {
+	const key = "FRANKENPHP_PUTENV_LEAK"
+	const secret = "server-side-secret"
+	assert.NoError(t, os.Setenv(key, ""))
+	t.Cleanup(func() { _ = os.Unsetenv(key) })
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		putResult, _ := testGet(fmt.Sprintf("http://example.com/env/putenv.php?key=%s&put=%s", key, secret), handler, t)
+		assert.Equal(t, key+"="+secret, putResult, "putenv is visible to getenv within the sandbox")
+
+		assert.Empty(t, os.Getenv(key), "putenv must not leak into the OS environment")
+
+		childOut, _ := exec.Command("printenv", key).Output()
+		assert.Empty(t, strings.TrimSpace(string(childOut)), "child process must not inherit the putenv value")
+	}, &testOptions{nbParallelRequests: 1})
+}
+
 // TODO: should it actually get reset in worker mode?
 func TestEnvIsNotResetInWorkerMode(t *testing.T) {
 	assert.NoError(t, os.Setenv("index", ""))

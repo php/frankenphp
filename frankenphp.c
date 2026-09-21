@@ -650,7 +650,10 @@ PHP_FUNCTION(frankenphp_finish_request) { /* {{{ */
   RETURN_TRUE;
 } /* }}} */
 
-/* {{{ Call go's putenv to prevent race conditions */
+/* {{{ Sandboxed putenv() that never mutates the process-global OS environment.
+ * Writes land only in the thread-local sandboxed_env, so a secret passed to
+ * putenv() by one request cannot leak to the Go/Caddy side, to child processes
+ * (proc_open, exec, ...), or to other requests. */
 PHP_FUNCTION(frankenphp_putenv) {
   char *setting;
   size_t setting_len;
@@ -658,12 +661,6 @@ PHP_FUNCTION(frankenphp_putenv) {
   ZEND_PARSE_PARAMETERS_START(1, 1)
   Z_PARAM_STRING(setting, setting_len)
   ZEND_PARSE_PARAMETERS_END();
-
-  // Cast str_len to int (ensure it fits in an int)
-  if (setting_len > INT_MAX) {
-    php_error(E_WARNING, "String length exceeds maximum integer value");
-    RETURN_FALSE;
-  }
 
   if (setting_len == 0 || setting[0] == '=') {
     zend_argument_value_error(1, "must have a valid syntax");
@@ -689,29 +686,22 @@ PHP_FUNCTION(frankenphp_putenv) {
 
   /* cut the string at the first '=' */
   char *eq_pos = memchr(setting, '=', setting_len);
-  bool success = true;
 
   /* no '=' found, delete the variable */
   if (eq_pos == NULL) {
-    success = go_putenv(setting, (int)setting_len, NULL, 0);
-    if (success) {
-      zend_hash_str_del(sandboxed_env, setting, setting_len);
-    }
+    zend_hash_str_del(sandboxed_env, setting, setting_len);
 
-    RETURN_BOOL(success);
+    RETURN_TRUE;
   }
 
   size_t name_len = eq_pos - setting;
   size_t value_len =
       (setting_len > name_len + 1) ? (setting_len - name_len - 1) : 0;
-  success = go_putenv(setting, (int)name_len, eq_pos + 1, (int)value_len);
-  if (success) {
-    zval val = {0};
-    ZVAL_STRINGL(&val, eq_pos + 1, value_len);
-    zend_hash_str_update(sandboxed_env, setting, name_len, &val);
-  }
+  zval val = {0};
+  ZVAL_STRINGL(&val, eq_pos + 1, value_len);
+  zend_hash_str_update(sandboxed_env, setting, name_len, &val);
 
-  RETURN_BOOL(success);
+  RETURN_TRUE;
 } /* }}} */
 
 /* getenv() lookup: sandboxed_env if present (it already holds prepared + OS),
