@@ -111,6 +111,7 @@ You can also explicitly configure FrankenPHP using the [global option](https://c
 			watch <path> # Sets the path to watch for file changes. Can be specified more than once for multiple paths.
 			name <name> # Sets the name of the worker, used in logs and metrics. Must be unique among global workers. Default: absolute path of the worker file, with a number appended when several workers share a script.
 			max_consecutive_failures <num> # Sets the maximum number of consecutive failures before the worker is considered unhealthy, -1 means the worker will always restart. Default: 6.
+			boot_timeout <duration> # EXPERIMENTAL: how long a background worker may take to reach its first tick() before the start fails, 0 waits forever. Default: 30s.
 			background # EXPERIMENTAL: marks this worker as a background (non-HTTP) worker, requiring "name" and a script ticking its FrankenPHP\WorkerHandle at least once
 		}
 	}

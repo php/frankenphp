@@ -227,7 +227,15 @@ func (handler *backgroundWorkerThread) afterScriptExecution(exitStatus int) {
 	// operator. Past startup, a failing background worker keeps
 	// restarting with a louder log line: silently giving up would leave
 	// the server in a broken half-state with no clear way to recover.
+	// a worker Init() gave up on stops here, whatever the cap says: it was
+	// drained precisely so this path could end the thread
 	pastCap := worker.maxConsecutiveFailures >= 0 && handler.failureCount >= worker.maxConsecutiveFailures
+	if worker.bootTimedOut.Load() {
+		reportStartupFailure(fmt.Errorf("background worker %s did not call WorkerHandle::tick() in time", worker.fileName))
+		handler.thread.state.Set(state.ShuttingDown)
+
+		return
+	}
 	if pastCap && !watcherIsEnabled {
 		var err error
 		if exitStatus == 0 {
