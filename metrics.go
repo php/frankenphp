@@ -47,11 +47,10 @@ type Metrics interface {
 }
 
 // ServerMetrics is the optional part of a Metrics implementation that keeps
-// the name of a worker and the name of its server apart, the latter empty
-// for a global worker, so a series keyed on the name alone still selects
-// the worker of every server. When the implementation passed to
-// WithMetrics() satisfies it, the runtime reports workers through these
-// methods and never through the worker methods of Metrics.
+// the name of a worker and the name of its server apart, the latter empty for
+// a global worker, so a series keyed on the name alone still selects the
+// worker of every server. An implementation passed to WithMetrics() that
+// satisfies it never has the worker methods of Metrics called.
 type ServerMetrics interface {
 	StartWorkerOnServer(name, server string)
 	ReadyWorkerOnServer(name, server string)

@@ -13,14 +13,11 @@ import (
 	"github.com/dunglas/frankenphp/internal/state"
 )
 
-// backgroundWorkerThread is the threadHandler of background worker scripts.
-// It owns their lifecycle: boot the script, re-run it when it exits, restart
-// it with a quadratic backoff when it crashes. Background workers share the
-// PHP runtime with HTTP threads but never receive HTTP requests. The script
-// can park on the stream returned by WorkerHandle::getStream(), which
-// reaches EOF when the thread is drained, and WorkerHandle::tick() then
-// returns false, so it exits gracefully on shutdown, reboot or handler
-// transition.
+// backgroundWorkerThread is the threadHandler of background worker scripts:
+// boot the script, re-run it when it exits, restart it with a quadratic
+// backoff when it crashes. The script parks on the stream returned by
+// WorkerHandle::getStream(), which reaches EOF when the thread is drained,
+// so it exits on shutdown, reboot or handler transition.
 type backgroundWorkerThread struct {
 	workerLifecycle
 
@@ -28,31 +25,20 @@ type backgroundWorkerThread struct {
 	context      *frankenPHPContext
 	failureCount int // number of consecutive failed runs
 
-	// crashCount is the number of runs that ended past their ready point
-	// within maxRestartBackoff in a row, crashed or not, and paces their
-	// restarts; a run that outlives it resets the count. Only touched on
-	// the PHP thread.
-	crashCount int
-
-	// runStartedAt is when the current run started, only touched on the
-	// PHP thread
+	// consecutive short runs, crashed or not, pacing the restarts; a run
+	// that outlives maxRestartBackoff resets the count
+	crashCount   int
 	runStartedAt time.Time
 
-	// isBootingScript is true until the current run calls
-	// WorkerHandle::tick(), the background analog of an HTTP worker
-	// reaching frankenphp_handle_request(). Only touched on the PHP thread
-	// (setup, the C callback during execution, teardown).
+	// true until the run calls WorkerHandle::tick(), the background analog
+	// of an HTTP worker reaching frankenphp_handle_request()
 	isBootingScript bool
+	bootTimer       *time.Timer
 
-	// bootTimer warns when a run has not called WorkerHandle::tick()
-	// after backgroundBootWarnDelay; only touched on the PHP thread
-	bootTimer *time.Timer
-
-	// stopSock holds the Go side's end of this thread's stop socket pair
-	// (per thread so pool workers drain independently); the other end is
-	// exposed to the script via WorkerHandle::getStream(). Wide enough
-	// for a Windows SOCKET, -1 when not held. Atomic because drain() closes
-	// it from another goroutine.
+	// the Go side's end of this thread's stop socket pair, the script
+	// holding the other end; one per thread so pool workers drain
+	// independently. Wide enough for a Windows SOCKET, -1 when not held,
+	// atomic because drain() closes it from another goroutine
 	stopSock atomic.Int64
 }
 
@@ -76,10 +62,9 @@ func (handler *backgroundWorkerThread) frankenPHPContext() *frankenPHPContext {
 	return handler.context
 }
 
-// drain closes the Go side's end of the stop socket pair so a script
-// parked on the other end wakes up with EOF and can exit its loop. Called
-// right before drainChan is closed on shutdown and reboot; also reused
-// internally to release the socket on the other exit paths.
+// drain closes the Go side's end of the stop socket pair, so a script parked
+// on the other end wakes up with EOF. Called right before drainChan is closed
+// on shutdown and reboot, and on the other exit paths to release the socket.
 func (handler *backgroundWorkerThread) drain() {
 	if s := handler.stopSock.Swap(-1); s >= 0 {
 		C.frankenphp_worker_close_stop_sock(C.intptr_t(s))
@@ -119,8 +104,8 @@ func (handler *backgroundWorkerThread) startScript() string {
 	}
 }
 
-// setupScript marks the thread as a background worker on the C side and
-// takes ownership of the Go side's end of its stop socket pair.
+// setupScript marks the thread as a background worker on the C side and takes
+// ownership of the Go side's end of its stop socket pair.
 func (handler *backgroundWorkerThread) setupScript() error {
 	s := int64(C.frankenphp_set_background_worker_and_get_stop_sock())
 	if s < 0 {
@@ -147,9 +132,8 @@ func (handler *backgroundWorkerThread) setupScript() error {
 	handler.isBootingScript = true
 	handler.runStartedAt = time.Now()
 	metrics.StartWorker(handler.worker.name, handler.worker.server.name)
-	// the run's logger and context, not the globals: Stop() does not wait
-	// for a callback that already started, and a shutdown finishing
-	// meanwhile resets those
+	// the run's logger and context, not the globals: a shutdown finishing
+	// meanwhile resets those, and Stop() does not wait for this callback
 	logger, ctx, name, threadIndex := fc.logger, fc.ctx, handler.worker.qualifiedName, handler.thread.threadIndex
 	handler.bootTimer = time.AfterFunc(backgroundBootWarnDelay, func() {
 		if logger.Enabled(ctx, slog.LevelWarn) {
@@ -168,9 +152,8 @@ func (handler *backgroundWorkerThread) setupScript() error {
 }
 
 func (handler *backgroundWorkerThread) afterScriptExecution(exitStatus int) {
-	// the Go side's end of the stop socket pair belongs to this thread;
-	// release it on every exit path so the next run gets a fresh pair
-	// (drain() already took it when the exit was drain-triggered)
+	// release the socket on every exit path so the next run gets a fresh
+	// pair; drain() already took it when the exit was drain-triggered
 	handler.drain()
 	worker := handler.worker
 	handler.thread.contextMu.Lock()
@@ -180,13 +163,10 @@ func (handler *backgroundWorkerThread) afterScriptExecution(exitStatus int) {
 	handler.stopBootTimer()
 	handler.state.MarkAsWaiting(false)
 
-	// exit past the ready point, cooperative or a crash: re-run the script,
-	// unless the thread is being drained (beforeScriptExecution checks the
-	// state), without counting toward max_consecutive_failures, that cap is
-	// about a script that never boots. Unlike an HTTP worker, which can only
-	// exit after a request reached frankenphp_handle_request() and is
-	// therefore paced by traffic, a background worker reaches its ready
-	// point on its own, so a script ending right after it is paced here
+	// exit past the ready point, cooperative or a crash: re-run the script
+	// without counting toward max_consecutive_failures, that cap is about a
+	// script that never boots. An HTTP worker is paced by traffic, a
+	// background one reaches its ready point on its own, so pace it here
 	if !handler.isBootingScript {
 		if exitStatus == 0 {
 			metrics.StopWorker(worker.name, worker.server.name, StopReasonRestart)
@@ -202,11 +182,9 @@ func (handler *backgroundWorkerThread) afterScriptExecution(exitStatus int) {
 			}
 		}
 
-		// a run that returned cleanly did something, and the next one
-		// starts fresh: a worker processing a batch and returning is not a
-		// worker spinning on an immediate exit. A crash never resets the
-		// count, however long the run lasted, so a script failing every
-		// few hundred milliseconds still ends up paced by the backoff
+		// a worker processing a batch and returning is not a worker spinning
+		// on an immediate exit; a crash never resets the count, however long
+		// the run lasted
 		if exitStatus == 0 && time.Since(handler.runStartedAt) > minHealthyRun {
 			handler.crashCount = 0
 		}
@@ -216,18 +194,15 @@ func (handler *backgroundWorkerThread) afterScriptExecution(exitStatus int) {
 		return
 	}
 
-	// boot failure: the script exited before calling WorkerHandle::tick(),
-	// a clean exit included, which would otherwise respawn in a tight loop.
-	// StopReasonBootFailure skips the ready-gauge decrement, matching the
-	// ReadyWorker call that never happened
+	// the script exited before calling WorkerHandle::tick(), a clean exit
+	// included; StopReasonBootFailure skips the ready-gauge decrement,
+	// matching the ReadyWorker call that never happened
 	metrics.StopWorker(worker.name, worker.server.name, StopReasonBootFailure)
 
-	// max_consecutive_failures only fails hard during startup, where it
-	// surfaces on startupFailChan so Init() returns the error to the
-	// operator. Past startup, a failing background worker keeps
-	// restarting with a louder log line: silently giving up would leave
-	// the server in a broken half-state with no clear way to recover.
-	// a worker Init() gave up on stops here, whatever the cap says: it was
+	// max_consecutive_failures only fails hard during startup, through
+	// startupFailChan; past it a failing worker keeps restarting with a
+	// louder log line rather than leave the server in a broken half-state.
+	// A worker Init() gave up on stops here whatever the cap says, it was
 	// drained precisely so this path could end the thread
 	pastCap := worker.maxConsecutiveFailures >= 0 && handler.failureCount >= worker.maxConsecutiveFailures
 	if worker.bootTimedOut.Load() {
@@ -274,10 +249,8 @@ func (handler *backgroundWorkerThread) stopBootTimer() {
 
 //export go_frankenphp_background_worker_ready
 func go_frankenphp_background_worker_ready(threadIndex C.uintptr_t) {
-	// called on the PHP thread by the first WorkerHandle::tick() of a
-	// run; the handler is a backgroundWorkerThread because that function
-	// throws on every other thread kind, and a thread reaching this without
-	// one would wait out Init() instead
+	// called on the PHP thread by the first WorkerHandle::tick() of a run;
+	// that function throws on every other thread kind
 	handler, ok := phpThreads[threadIndex].handler.(*backgroundWorkerThread)
 	if !ok {
 		panic("WorkerHandle::tick() called on a thread that is not a background worker")
@@ -292,9 +265,8 @@ func go_frankenphp_background_worker_ready(threadIndex C.uintptr_t) {
 		// parked from now on as far as the threads state endpoint is concerned
 		handler.state.MarkAsWaiting(true)
 
-		// like an HTTP worker reaching frankenphp_handle_request(), the thread
-		// is ready only now: initWorkers() waits for this state, so a script
-		// that fails before its first tick still fails Init()
+		// initWorkers() waits for this state, so a script that fails before
+		// its first tick still fails Init()
 		if handler.state.Is(state.TransitionComplete) {
 			handler.state.Set(state.Ready)
 		}
@@ -307,9 +279,8 @@ func (handler *backgroundWorkerThread) backoff() {
 	handler.failureCount++
 }
 
-// wait sleeps between two runs, cut short by a drain (shutdown, reboot,
-// handler transition), which the next beforeScriptExecution() picks up
-// from the state
+// wait sleeps between two runs, cut short by a drain, which the next
+// beforeScriptExecution() picks up from the state
 func (handler *backgroundWorkerThread) wait(d time.Duration) {
 	select {
 	case <-handler.thread.drainChan:

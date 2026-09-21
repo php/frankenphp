@@ -243,11 +243,10 @@ func WithWorkerServerScope(s *Server) WorkerOption {
 }
 
 // EXPERIMENTAL: WithWorkerBackground marks this worker as a background
-// (non-HTTP) worker. Background workers run outside the request cycle:
-// they share the PHP runtime with HTTP threads but never receive HTTP
-// requests. The script can park on the stream returned by
-// WorkerHandle::getStream(), which reaches EOF when FrankenPHP
-// drains the worker, to exit gracefully on shutdown or restart.
+// (non-HTTP) worker: it shares the PHP runtime with the HTTP threads but
+// never receives requests. The script parks on the stream returned by
+// WorkerHandle::getStream(), which reaches EOF when FrankenPHP drains the
+// worker, to exit gracefully on shutdown or restart.
 func WithWorkerBackground() WorkerOption {
 	return func(w *workerOpt) error {
 		w.isBackgroundWorker = true
@@ -257,12 +256,11 @@ func WithWorkerBackground() WorkerOption {
 }
 
 // WithWorkerMaxFailures sets the maximum number of consecutive failures before panicking
-// EXPERIMENTAL: WithWorkerBootTimeout bounds how long a background worker
-// may take to reach its ready point, its first WorkerHandle::tick(), before
-// Init() gives up and returns an error. Zero waits for ever, which is what
-// a build with Zend max execution timers does anyway, since
-// max_execution_time ends the bootstrap there. Defaults to
-// DefaultWorkerBootTimeout, and has no effect on HTTP workers.
+// EXPERIMENTAL: WithWorkerBootTimeout bounds how long a background worker may
+// take to reach its ready point, its first WorkerHandle::tick(), before Init()
+// gives up and returns an error. Zero waits for ever, as a build with Zend max
+// execution timers does anyway. Defaults to DefaultWorkerBootTimeout, and has
+// no effect on HTTP workers.
 func WithWorkerBootTimeout(timeout time.Duration) WorkerOption {
 	return func(w *workerOpt) error {
 		if timeout < 0 {

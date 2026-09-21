@@ -23,10 +23,7 @@ type worker struct {
 
 	// name as declared, unique within its server (or among global workers)
 	name string
-	// qualifiedName identifies the worker in logs and errors, where one
-	// string reads better than two fields: "<server name>:<name>" for a
-	// server-scoped worker, the name otherwise. Metrics keep the two apart,
-	// see the Metrics interface
+	// "<server name>:<name>" for a server-scoped worker, the name otherwise, for logs and errors
 	qualifiedName          string
 	fileName               string
 	matchRequest           func(*http.Request) bool
@@ -38,14 +35,12 @@ type worker struct {
 	threadMutex            sync.RWMutex
 	maxConsecutiveFailures int
 	bootTimeout            time.Duration
-	// bootTimedOut is set when Init() gave up waiting for this worker to
-	// reach its ready point: the run is drained and must not start again
-	bootTimedOut atomic.Bool
-	onThreadReady          func(int)
-	onThreadShutdown       func(int)
-	queuedRequests         atomic.Int32
-	server                 *Server
-	// isBackgroundWorker marks this as a background (non-HTTP) worker
+	// Init() gave up waiting for the ready point: the run is drained and must not start again
+	bootTimedOut       atomic.Bool
+	onThreadReady      func(int)
+	onThreadShutdown   func(int)
+	queuedRequests     atomic.Int32
+	server             *Server
 	isBackgroundWorker bool
 }
 
@@ -53,17 +48,14 @@ var (
 	workers          []*worker
 	watcherIsEnabled bool
 	startupFailChan  chan error
-	// startupPhase is true while initWorkers() waits for the workers to
-	// boot, the only time a boot failure must reach startupFailChan: past
-	// that point the handlers log and keep restarting on their own
+	// the only window where a boot failure reaches startupFailChan: past it, the handlers log and keep restarting
 	startupPhase atomic.Bool
 )
 
-// DefaultWorkerBootTimeout is how long a background worker may take to
-// reach its first WorkerHandle::tick() before Init() fails, matching PHP's
-// own default max_execution_time, which bounds the same bootstrap on builds
-// with Zend max execution timers. WithWorkerBootTimeout() changes it, zero
-// waits for ever.
+// DefaultWorkerBootTimeout is how long a background worker may take to reach
+// its first WorkerHandle::tick() before Init() fails. It matches PHP's default
+// max_execution_time, which bounds the same bootstrap where Zend timers are
+// around. WithWorkerBootTimeout() changes it, zero waits for ever.
 const DefaultWorkerBootTimeout = 30 * time.Second
 
 func initWorkers(opts []workerOpt) error {
@@ -96,9 +88,8 @@ func initWorkers(opts []workerOpt) error {
 
 		totalThreadsToStart += w.num
 		workers = append(workers, w)
-		// scoping makes qualified names unique in all but pathological
-		// cases: a global worker may still be named like the "<server>:<name>"
-		// of a scoped one, and metrics would report them as one
+		// a global worker may still be named like the "<server>:<name>" of a
+		// scoped one, and metrics would report them as one
 		if qualifiedNames[w.qualifiedName] {
 			return fmt.Errorf("two workers cannot report under the same name: %q", w.qualifiedName)
 		}
@@ -135,16 +126,13 @@ func initWorkers(opts []workerOpt) error {
 					return
 				}
 
-				// the script is still in its bootstrap, or parked without
-				// ever ticking: tell it to drain, so the run ends and the
-				// thread reaches a state Shutdown() can act on, and say
-				// what happened rather than wait for ever
+				// the script never ticked: drain it, so the run ends and the
+				// thread reaches a state Shutdown() can act on
 				startupFailChan <- fmt.Errorf("background worker %q did not call WorkerHandle::tick() within %s", w.qualifiedName, bootTimeout)
 				w.bootTimedOut.Store(true)
 				if handler, ok := thread.handler.(*backgroundWorkerThread); ok {
-					// wake the script: its run then ends on the boot
-					// failure path, which stops the thread instead of
-					// starting it again, see afterScriptExecution()
+					// the run then ends on the boot failure path, which stops
+					// the thread instead of starting it again, see afterScriptExecution()
 					handler.drain()
 				}
 			})
@@ -165,11 +153,9 @@ func initWorkers(opts []workerOpt) error {
 	return nil
 }
 
-// reportStartupFailure hands a boot failure to initWorkers() while it waits
-// for the workers, so Init() fails, and reports whether it did: past that
-// point the failure is dropped, the handler has logged it and keeps
-// restarting. It never blocks, the buffer holds one error per thread and a
-// thread failing repeatedly in the startup window must not hang on it
+// reportStartupFailure hands a boot failure to initWorkers() while it waits,
+// so Init() fails, and reports whether it did: past the startup phase the
+// handler logs it and keeps restarting. It never blocks.
 func reportStartupFailure(err error) bool {
 	if !startupPhase.Load() {
 		return false
@@ -202,8 +188,7 @@ func newWorker(o workerOpt) (*worker, error) {
 	}
 
 	if o.isBackgroundWorker {
-		// the name is the script's identity (exposed via FRANKENPHP_WORKER);
-		// empty names are reserved for the catch-all workers of a future build
+		// the name is the script's identity, exposed as FRANKENPHP_WORKER_BACKGROUND
 		if o.name == "" {
 			return nil, fmt.Errorf("background worker %q must have an explicit name", o.fileName)
 		}
@@ -220,9 +205,7 @@ func newWorker(o workerOpt) (*worker, error) {
 		}
 	}
 
-	// a worker declared without a scope belongs to the fallback server, the
-	// one serving the requests that have no server either, so a worker
-	// always has one
+	// the fallback server serves the requests that have no server either, so a worker always has one
 	scope := o.server
 	if scope == nil {
 		scope = fallbackServer
@@ -236,10 +219,8 @@ func newWorker(o workerOpt) (*worker, error) {
 			declaredPath = absFileName
 		}
 
-		// a name generated from the script path is not a declaration:
-		// several workers may share a script, a pool split by a matcher
-		// for instance, so it is made unique rather than reported as the
-		// collision a declared name gets
+		// a generated name is not a declaration: several workers may share a
+		// script, so it is made unique instead of reported as a collision
 		o.name = declaredPath
 		for suffix := 1; scope.workersByName[o.name] != nil; suffix++ {
 			o.name = fmt.Sprintf("%s_%d", declaredPath, suffix)
@@ -271,19 +252,15 @@ func newWorker(o workerOpt) (*worker, error) {
 		}
 	}
 
-	// $_SERVER['FRANKENPHP_WORKER'] identifies an HTTP worker, as it always
-	// did, and $_SERVER['FRANKENPHP_WORKER_BACKGROUND'] a background one,
-	// holding its declared name: a script serving both roles tests which of
-	// the two is set
+	// a script serving both roles tests which of the two is set
 	if o.isBackgroundWorker {
 		o.env["FRANKENPHP_WORKER_BACKGROUND\x00"] = o.name
 	} else {
 		o.env["FRANKENPHP_WORKER\x00"] = "1"
 	}
 
-	// a background worker that never reaches its ready point would keep
-	// Init() waiting for ever, see initWorkers(); where Zend max execution
-	// timers are around, max_execution_time ends its bootstrap first
+	// a background worker that never reaches its ready point would keep Init()
+	// waiting for ever, see initWorkers()
 	bootTimeout := DefaultWorkerBootTimeout
 	if o.bootTimeoutIsSet {
 		bootTimeout = o.bootTimeout
