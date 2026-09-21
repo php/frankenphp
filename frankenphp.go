@@ -297,14 +297,11 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 }
 
 // Init starts the PHP runtime and the configured workers.
-// Validate reports whether a configuration would be accepted by Init(),
-// without starting anything or touching the configuration already running.
-// It runs the rules a declaration must follow: the thread budget, the
-// worker files, and the names and scopes workers may take.
-//
-// A host that replaces a running configuration should call it before
-// stopping the one in place, since Init() only reports these errors once
-// the previous runtime is gone.
+// Validate reports whether Init() would accept a configuration, without
+// starting anything: the thread budget, the worker files, and the names and
+// scopes workers may take. A host replacing a running configuration should
+// call it before stopping the one in place, since Init() only reports these
+// errors once the previous runtime is gone.
 func Validate(options ...Option) error {
 	opt := &opt{}
 	for _, o := range options {

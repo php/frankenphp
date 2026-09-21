@@ -130,10 +130,8 @@ func resolveWorkerFile(o workerOpt) (workerOpt, error) {
 	return o, nil
 }
 
-// checkWorkerDeclaration holds the rules a set of workers must follow,
-// against the names and paths the ones before it took. Validate() runs them
-// over a configuration that may never start, newWorker() over the one
-// starting, so both answer the same way.
+// checkWorkerDeclaration holds the rules a set of workers must follow, so
+// Validate() and newWorker() answer the same way.
 func checkWorkerDeclaration(o workerOpt, nameTaken func(string) bool, globalPathTaken func(string) bool) error {
 	if o.server == nil {
 		if globalPathTaken(o.fileName) {

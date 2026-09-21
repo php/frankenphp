@@ -61,8 +61,7 @@ type FrankenPHPApp struct {
 	MaxRequests int `json:"max_requests,omitempty"`
 
 	opts            []frankenphp.Option
-	// options the modules add while they provision, before Start() collects
-	// the rest: they belong to the configuration but nothing else knows them
+	// added by the modules as they provision, before Start() collects the rest
 	provisionOpts []frankenphp.Option
 	metrics         frankenphp.Metrics
 	ctx             context.Context
@@ -109,11 +108,9 @@ func (f *FrankenPHPApp) Provision(ctx caddy.Context) error {
 	return nil
 }
 
-// Validate implements caddy.Validator. Caddy calls it before the running
-// configuration is replaced, so a declaration error is reported while that
+// Validate implements caddy.Validator, which Caddy calls while the running
 // configuration still serves: Start() shuts the runtime down before Init()
-// can report anything, and Caddy rolls back the configuration, not the PHP
-// runtime that went with it.
+// can report anything.
 func (f *FrankenPHPApp) Validate() error {
 	opts, err := f.collectOptions(caddy.NewReplacer(), false)
 	if err != nil {
@@ -124,9 +121,8 @@ func (f *FrankenPHPApp) Validate() error {
 }
 
 // collectOptions turns the configuration into the options Init() takes.
-// Validate() collects them for a configuration that may never start, Start()
-// for the one starting, where the servers it creates are the ones the
-// modules serve from, hence keep.
+// keep is for the configuration that starts, whose servers the modules
+// serve from; Validate() collects those of one that may never start.
 func (f *FrankenPHPApp) collectOptions(repl *caddy.Replacer, keep bool) ([]frankenphp.Option, error) {
 	// We have at least 9 hardcoded options
 	opts := make([]frankenphp.Option, 0, 9+len(options)+len(f.provisionOpts))
@@ -181,9 +177,9 @@ func (f *FrankenPHPApp) Start() error {
 	}
 	f.opts = opts
 
-	// Validate() ran before the modules provisioned, so it saw the workers
-	// of the global block alone; the ones a php_server declares are checked
-	// here, while the configuration in place still serves
+	// Validate() ran before the modules provisioned, so it saw the global
+	// block alone: what a php_server declares is checked here, in time for
+	// the configuration in place to survive a refusal
 	if err := frankenphp.Validate(f.opts...); err != nil {
 		return err
 	}
@@ -256,7 +252,6 @@ func (f *FrankenPHPApp) collectModuleOptions(repl *caddy.Replacer, usedWorkerNam
 	return opts, nil
 }
 
-// collect the server instance and the worker options of a single Caddy module
 func (f *FrankenPHPApp) collectModule(repl *caddy.Replacer, module *FrankenPHPModule, usedWorkerNames map[string]bool) (*frankenphp.Server, []frankenphp.Option, error) {
 	serverName := f.resolveServerName(module)
 	server, err := frankenphp.NewServer(
