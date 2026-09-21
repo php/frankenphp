@@ -131,10 +131,11 @@ func resolveWorkerFile(o workerOpt) (workerOpt, error) {
 }
 
 // checkWorkerDeclaration holds the rules a set of workers must follow, so
-// Validate() and newWorker() answer the same way.
-func checkWorkerDeclaration(o workerOpt, nameTaken func(string) bool, globalPathTaken func(string) bool) error {
+// Validate() and newWorker() answer the same way; pathTaken is asked for the
+// global workers with a nil server.
+func checkWorkerDeclaration(o workerOpt, nameTaken func(string) bool, pathTaken func(*Server, string) bool) error {
 	if o.server == nil {
-		if globalPathTaken(o.fileName) {
+		if pathTaken(nil, o.fileName) {
 			return fmt.Errorf("two global workers cannot have the same filename: %q", o.fileName)
 		}
 
@@ -142,6 +143,9 @@ func checkWorkerDeclaration(o workerOpt, nameTaken func(string) bool, globalPath
 		if o.matchRequest != nil {
 			return fmt.Errorf("worker %q has a request matcher but no server scope, use WithWorkerServerScope()", o.name)
 		}
+	} else if o.matchRequest == nil && pathTaken(o.server, o.fileName) {
+		// a matcher tells the workers of a server sharing a file apart
+		return fmt.Errorf("two workers in a server cannot have the same filename: %q", o.fileName)
 	}
 
 	if nameTaken(o.name) {
@@ -157,10 +161,16 @@ func newWorker(o workerOpt) (*worker, error) {
 		return nil, err
 	}
 
-	nameTaken := func(name string) bool { _, taken := workersByName[name]; return taken }
-	globalPathTaken := func(path string) bool { _, taken := globalWorkersByPath[path]; return taken }
+	nameTaken := func(name string) bool { return workersByName[name] != nil }
+	pathTaken := func(server *Server, path string) bool {
+		if server == nil {
+			return globalWorkersByPath[path] != nil
+		}
 
-	if err := checkWorkerDeclaration(o, nameTaken, globalPathTaken); err != nil {
+		return server.workersByPath[path] != nil
+	}
+
+	if err := checkWorkerDeclaration(o, nameTaken, pathTaken); err != nil {
 		return nil, err
 	}
 

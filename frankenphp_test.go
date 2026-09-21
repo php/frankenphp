@@ -1583,6 +1583,22 @@ func TestValidateReportsDeclarationErrors(t *testing.T) {
 		frankenphp.WithWorkers("two", "testdata/worker.php", 1),
 	), "two global workers cannot have the same filename")
 
+	server, err := frankenphp.NewServer(testDataDir)
+	require.NoError(t, err)
+	matchAll := frankenphp.WithWorkerMatcher(func(*http.Request) bool { return true })
+
+	assert.ErrorContains(t, frankenphp.Validate(
+		frankenphp.WithServer(server),
+		frankenphp.WithWorkers("one", "testdata/worker.php", 1, frankenphp.WithWorkerServerScope(server)),
+		frankenphp.WithWorkers("two", "testdata/worker.php", 1, frankenphp.WithWorkerServerScope(server)),
+	), "two workers in a server cannot have the same filename")
+
+	assert.NoError(t, frankenphp.Validate(
+		frankenphp.WithServer(server),
+		frankenphp.WithWorkers("one", "testdata/worker.php", 1, frankenphp.WithWorkerServerScope(server)),
+		frankenphp.WithWorkers("two", "testdata/worker.php", 1, frankenphp.WithWorkerServerScope(server), matchAll),
+	))
+
 	assert.ErrorContains(t, frankenphp.Validate(
 		frankenphp.WithNumThreads(2),
 		frankenphp.WithMaxThreads(1),

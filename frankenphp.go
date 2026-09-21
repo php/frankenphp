@@ -318,21 +318,25 @@ func Validate(options ...Option) error {
 	}
 
 	takenNames := make(map[string]bool, len(opt.workers))
-	takenGlobalPaths := make(map[string]bool, len(opt.workers))
+	takenPaths := make(map[*Server]map[string]bool, 1)
+	nameTaken := func(name string) bool { return takenNames[name] }
+	pathTaken := func(server *Server, path string) bool { return takenPaths[server][path] }
 	for _, w := range opt.workers {
 		w, err := resolveWorkerFile(w)
 		if err != nil {
 			return err
 		}
 
-		if err := checkWorkerDeclaration(w, func(name string) bool { return takenNames[name] },
-			func(path string) bool { return takenGlobalPaths[path] }); err != nil {
+		if err := checkWorkerDeclaration(w, nameTaken, pathTaken); err != nil {
 			return err
 		}
 
 		takenNames[w.name] = true
-		if w.server == nil {
-			takenGlobalPaths[w.fileName] = true
+		if w.matchRequest == nil {
+			if takenPaths[w.server] == nil {
+				takenPaths[w.server] = make(map[string]bool)
+			}
+			takenPaths[w.server][w.fileName] = true
 		}
 	}
 
