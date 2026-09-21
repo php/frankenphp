@@ -6,6 +6,14 @@
 {
 	skip_install_trust
 
+	# Uncomment to enable the built-in Swytch server
+	#swytch {
+	#	listen 127.0.0.1:6379
+	#	password {env.REDIS_PASSWORD}
+	#	max_memory 80%
+	#	{$SWYTCH_EXTRA_DIRECTIVES}
+	#}
+
 	{$CADDY_GLOBAL_OPTIONS}
 
 	frankenphp {

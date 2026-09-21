@@ -5,7 +5,7 @@ description: Configure FrankenPHP and Caddy via Caddyfile, JSON, or environment 
 
 # Configuration
 
-FrankenPHP, Caddy, as well as the [Mercure](mercure.md) and [Vulcain](https://vulcain.rocks) modules, can be configured using [the formats supported by Caddy](https://caddyserver.com/docs/getting-started#your-first-config).
+FrankenPHP, Caddy, as well as the [Mercure](mercure.md), [Vulcain](https://vulcain.rocks), and [Swytch](swytch.md) modules, can be configured using [the formats supported by Caddy](https://caddyserver.com/docs/getting-started#your-first-config).
 
 The most common format is the `Caddyfile`, which is a simple, human-readable text format.
 By default, FrankenPHP will look for a `Caddyfile` in the current directory.
