@@ -37,6 +37,10 @@ type worker struct {
 	threads                []*phpThread
 	threadMutex            sync.RWMutex
 	maxConsecutiveFailures int
+	bootTimeout            time.Duration
+	// bootTimedOut is set when Init() gave up waiting for this worker to
+	// reach its ready point: the run is drained and must not start again
+	bootTimedOut atomic.Bool
 	onThreadReady          func(int)
 	onThreadShutdown       func(int)
 	queuedRequests         atomic.Int32
@@ -54,6 +58,13 @@ var (
 	// that point the handlers log and keep restarting on their own
 	startupPhase atomic.Bool
 )
+
+// DefaultWorkerBootTimeout is how long a background worker may take to
+// reach its first WorkerHandle::tick() before Init() fails, matching PHP's
+// own default max_execution_time, which bounds the same bootstrap on builds
+// with Zend max execution timers. WithWorkerBootTimeout() changes it, zero
+// waits for ever.
+const DefaultWorkerBootTimeout = 30 * time.Second
 
 func initWorkers(opts []workerOpt) error {
 	if len(opts) == 0 {
@@ -109,8 +120,33 @@ func initWorkers(opts []workerOpt) error {
 				convertToWorkerThread(thread, w)
 			}
 
+			bootTimeout := time.Duration(0)
+			if w.isBackgroundWorker {
+				bootTimeout = w.bootTimeout
+			}
 			workersReady.Go(func() {
-				thread.state.WaitFor(state.Ready, state.ShuttingDown, state.Done)
+				if bootTimeout <= 0 {
+					thread.state.WaitFor(state.Ready, state.ShuttingDown, state.Done)
+
+					return
+				}
+
+				if thread.state.WaitForStateWithTimeout(bootTimeout, state.Ready, state.ShuttingDown, state.Done) {
+					return
+				}
+
+				// the script is still in its bootstrap, or parked without
+				// ever ticking: tell it to drain, so the run ends and the
+				// thread reaches a state Shutdown() can act on, and say
+				// what happened rather than wait for ever
+				startupFailChan <- fmt.Errorf("background worker %q did not call WorkerHandle::tick() within %s", w.qualifiedName, bootTimeout)
+				w.bootTimedOut.Store(true)
+				if handler, ok := thread.handler.(*backgroundWorkerThread); ok {
+					// wake the script: its run then ends on the boot
+					// failure path, which stops the thread instead of
+					// starting it again, see afterScriptExecution()
+					handler.drain()
+				}
 			})
 		}
 	}
@@ -245,6 +281,14 @@ func newWorker(o workerOpt) (*worker, error) {
 		o.env["FRANKENPHP_WORKER\x00"] = "1"
 	}
 
+	// a background worker that never reaches its ready point would keep
+	// Init() waiting for ever, see initWorkers(); where Zend max execution
+	// timers are around, max_execution_time ends its bootstrap first
+	bootTimeout := DefaultWorkerBootTimeout
+	if o.bootTimeoutIsSet {
+		bootTimeout = o.bootTimeout
+	}
+
 	w := &worker{
 		name:                   o.name,
 		qualifiedName:          qualifiedName,
@@ -256,6 +300,7 @@ func newWorker(o workerOpt) (*worker, error) {
 		requestChan:            make(chan *frankenPHPContext),
 		threads:                make([]*phpThread, 0, o.num),
 		maxConsecutiveFailures: o.maxConsecutiveFailures,
+		bootTimeout:            bootTimeout,
 		onThreadReady:          o.onThreadReady,
 		onThreadShutdown:       o.onThreadShutdown,
 		server:                 scope,

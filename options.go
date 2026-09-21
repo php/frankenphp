@@ -58,6 +58,8 @@ type workerOpt struct {
 	onServerShutdown       func()
 	server                 *Server
 	isBackgroundWorker     bool
+	bootTimeout            time.Duration
+	bootTimeoutIsSet       bool
 }
 
 // WithContext sets the main context to use.
@@ -255,6 +257,24 @@ func WithWorkerBackground() WorkerOption {
 }
 
 // WithWorkerMaxFailures sets the maximum number of consecutive failures before panicking
+// EXPERIMENTAL: WithWorkerBootTimeout bounds how long a background worker
+// may take to reach its ready point, its first WorkerHandle::tick(), before
+// Init() gives up and returns an error. Zero waits for ever, which is what
+// a build with Zend max execution timers does anyway, since
+// max_execution_time ends the bootstrap there. Defaults to
+// DefaultWorkerBootTimeout, and has no effect on HTTP workers.
+func WithWorkerBootTimeout(timeout time.Duration) WorkerOption {
+	return func(w *workerOpt) error {
+		if timeout < 0 {
+			return fmt.Errorf("worker boot timeout must be >= 0, got %s", timeout)
+		}
+		w.bootTimeout = timeout
+		w.bootTimeoutIsSet = true
+
+		return nil
+	}
+}
+
 func WithWorkerMaxFailures(maxFailures int) WorkerOption {
 	return func(w *workerOpt) error {
 		if maxFailures < -1 {
