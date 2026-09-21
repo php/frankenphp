@@ -17,8 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// requireFileEventually asserts that `path` appears on disk before the
-// deadline. Wraps require.Eventually so call sites stay short.
+// requireFileEventually asserts that `path` appears on disk before the deadline
 func requireFileEventually(t testing.TB, path string, msgAndArgs ...any) {
 	t.Helper()
 	require.Eventually(t, func() bool {
@@ -27,8 +26,7 @@ func requireFileEventually(t testing.TB, path string, msgAndArgs ...any) {
 	}, 5*time.Second, 25*time.Millisecond, msgAndArgs...)
 }
 
-// requireFileContentEventually waits for `path` to appear with content and
-// returns it
+// requireFileContentEventually waits for `path` to appear with content
 func requireFileContentEventually(t *testing.T, path string) string {
 	t.Helper()
 	require.Eventually(t, func() bool {
@@ -41,11 +39,8 @@ func requireFileContentEventually(t *testing.T, path string) string {
 	return string(b)
 }
 
-// TestBackgroundWorkerLifecycle boots a background worker that touches a
-// sentinel file then parks on its handle. It proves the bg worker runs
-// (sentinel appears) and that Shutdown returns within a reasonable time.
-// The test asserts on Shutdown timing, so it manages Shutdown itself
-// instead of using initServers' t.Cleanup hook.
+// asserts on the timing of Shutdown(), so it calls it itself rather than
+// through initServers' t.Cleanup hook
 func TestBackgroundWorkerLifecycle(t *testing.T) {
 	tmp := t.TempDir()
 	sentinel := filepath.Join(tmp, "bg-lifecycle.sentinel")
@@ -74,9 +69,6 @@ func TestBackgroundWorkerLifecycle(t *testing.T) {
 	}
 }
 
-// TestBackgroundWorkerCrashRestarts boots a worker that exit(1)s on its
-// first run and touches a "restarted" sentinel on its second run. The
-// sentinel proves the crash-restart loop fired.
 func TestBackgroundWorkerCrashRestarts(t *testing.T) {
 	tmp := t.TempDir()
 	crashMarker := filepath.Join(tmp, "bg-crash.marker")
@@ -96,11 +88,7 @@ func TestBackgroundWorkerCrashRestarts(t *testing.T) {
 	requireFileEventually(t, restarted, "background worker did not restart after crash")
 }
 
-// TestBackgroundWorkerOnServer scopes a background worker to a Server. It
-// proves that the worker inherits the server env (the sentinel directory is
-// declared on the server, not on the worker), that FRANKENPHP_WORKER_BACKGROUND
-// holds the worker name, and that the worker does not intercept HTTP requests
-// served by the same server.
+// the sentinel directory is declared on the server, not on the worker
 func TestBackgroundWorkerOnServer(t *testing.T) {
 	tmp := t.TempDir()
 
@@ -135,7 +123,6 @@ func TestBackgroundWorkerOnServer(t *testing.T) {
 	assert.Contains(t, body, "I am by birth a Genevese", "the server must still serve regular requests")
 }
 
-// TestBackgroundWorkerValidation covers the declaration-time errors.
 func TestBackgroundWorkerValidation(t *testing.T) {
 	t.Cleanup(frankenphp.Shutdown)
 
@@ -244,8 +231,6 @@ func TestBackgroundWorkerValidation(t *testing.T) {
 	})
 }
 
-// TestBackgroundWorkerCannotHandleRequests checks that a request targeting a
-// background worker by name is refused rather than dispatched to it.
 func TestBackgroundWorkerCannotHandleRequests(t *testing.T) {
 	server, err := frankenphp.NewServer(testDataDir)
 	require.NoError(t, err)
@@ -259,9 +244,8 @@ func TestBackgroundWorkerCannotHandleRequests(t *testing.T) {
 	require.ErrorContains(t, err, `background worker "jobs" cannot handle requests`)
 }
 
-// TestBackgroundWorkerParksOnRead checks that a blocking read on the handle
-// is a wait too: Init() returns only once the worker is ready, and the EOF
-// of the drain unblocks the read so Shutdown() returns promptly.
+// a blocking read is a wait too: it reports the worker ready, and the EOF of
+// the drain unblocks it
 func TestBackgroundWorkerParksOnRead(t *testing.T) {
 	tmp := t.TempDir()
 	sentinel := filepath.Join(tmp, "bg-read.sentinel")
@@ -288,9 +272,8 @@ func TestBackgroundWorkerParksOnRead(t *testing.T) {
 	}
 }
 
-// TestBackgroundWorkerParksOnReceive checks that a blocking receive counts
-// as a wait as well: it reaches the stream through the transport API rather
-// than the read op, so Init() would hang if only reads reported readiness.
+// a blocking receive reaches the stream through the transport API rather than
+// the read op, so Init() would hang if only reads reported readiness
 func TestBackgroundWorkerParksOnReceive(t *testing.T) {
 	sentinel := filepath.Join(t.TempDir(), "bg-recv.sentinel")
 
@@ -316,8 +299,6 @@ func TestBackgroundWorkerParksOnReceive(t *testing.T) {
 	}
 }
 
-// TestBackgroundWorkerRestartDrainsParkedScript checks that RestartWorkers()
-// wakes a parked background script through the drain and re-runs it.
 func TestBackgroundWorkerRestartDrainsParkedScript(t *testing.T) {
 	tmp := t.TempDir()
 	countFile := filepath.Join(tmp, "bg-count.log")
@@ -340,8 +321,6 @@ func TestBackgroundWorkerRestartDrainsParkedScript(t *testing.T) {
 	require.Eventually(t, func() bool { return runs() == 2 }, 5*time.Second, 25*time.Millisecond, "background worker was not re-run after the restart")
 }
 
-// TestWorkerHandleOutsideBackgroundWorker checks that a regular request
-// thread cannot take a handle instead of being handed a stream on one.
 func TestWorkerHandleOutsideBackgroundWorker(t *testing.T) {
 	server, err := frankenphp.NewServer(testDataDir)
 	require.NoError(t, err)
@@ -352,10 +331,8 @@ func TestWorkerHandleOutsideBackgroundWorker(t *testing.T) {
 	assert.Contains(t, body, `FrankenPHP\WorkerHandle can only be created from a background worker`)
 }
 
-// TestBackgroundWorkerLoopTicksOnItsOwn checks the wake-up sent at start: a
-// script that only ticks when its handle is readable, the shape of a script
-// driven by an event loop, becomes ready without an explicit first call.
-// Without the wake-up, Init() would wait for that call until the drain.
+// without the wake-up sent at start, a script that only ticks when its handle
+// is readable would keep Init() waiting until the drain
 func TestBackgroundWorkerLoopTicksOnItsOwn(t *testing.T) {
 	sentinel := filepath.Join(t.TempDir(), "loop.sentinel")
 	initServers(t,
@@ -368,10 +345,8 @@ func TestBackgroundWorkerLoopTicksOnItsOwn(t *testing.T) {
 	requireFileEventually(t, sentinel, "background worker did not start")
 }
 
-// TestBackgroundWorkerTickLeavesTheHandleQuiet checks that the tick
-// consumes the wake-ups: the handle is readable at start, and not anymore
-// once a tick returned, so a loop selecting on it blocks instead of
-// spinning.
+// the handle is readable at start and quiet once a tick returned, so a loop
+// selecting on it blocks instead of spinning
 func TestBackgroundWorkerTickLeavesTheHandleQuiet(t *testing.T) {
 	sentinel := filepath.Join(t.TempDir(), "readable.txt")
 	initServers(t,
@@ -385,9 +360,8 @@ func TestBackgroundWorkerTickLeavesTheHandleQuiet(t *testing.T) {
 	assert.Equal(t, "start:readable after tick:quiet after second tick:quiet", requireFileContentEventually(t, sentinel))
 }
 
-// TestBackgroundWorkerTick checks the contract of WorkerHandle::tick():
-// true while the worker runs, false once it is drained, and still false on
-// the next call
+// true while the worker runs, false once it is drained, and still false on the
+// next call
 func TestBackgroundWorkerTick(t *testing.T) {
 	sentinel := filepath.Join(t.TempDir(), "ticks.txt")
 
@@ -408,9 +382,8 @@ func TestBackgroundWorkerTick(t *testing.T) {
 	assert.Equal(t, "true true false false", string(b))
 }
 
-// TestWorkerNameInServerVars checks that an HTTP worker sees FRANKENPHP_WORKER
-// as it always did, and that a background worker sees its declared name in
-// FRANKENPHP_WORKER_BACKGROUND and no FRANKENPHP_WORKER.
+// an HTTP worker sees FRANKENPHP_WORKER as it always did, a background one its
+// declared name in FRANKENPHP_WORKER_BACKGROUND and no FRANKENPHP_WORKER
 func TestWorkerNameInServerVars(t *testing.T) {
 	sentinel := filepath.Join(t.TempDir(), "flag.txt")
 	server, err := frankenphp.NewServer(testDataDir)
@@ -433,8 +406,8 @@ func TestWorkerNameInServerVars(t *testing.T) {
 	assert.Contains(t, flag, "'background' => 'jobs'")
 }
 
-// TestBackgroundWorkerPool checks that num > 1 threads share the name, each
-// parks on its own handle, and one drain wakes them all.
+// the threads of a pool share the name, park on a handle each, and one drain
+// wakes them all
 func TestBackgroundWorkerPool(t *testing.T) {
 	dir := t.TempDir()
 	initServers(t,
@@ -462,8 +435,8 @@ func TestBackgroundWorkerPool(t *testing.T) {
 	}
 }
 
-// TestBackgroundWorkerMultiEntrypoint checks that two named background
-// workers of one server may share a script, since they are not matched by path.
+// two named background workers of one server may share a script, they are not
+// matched by path
 func TestBackgroundWorkerMultiEntrypoint(t *testing.T) {
 	tmp := t.TempDir()
 	first, second := filepath.Join(tmp, "first"), filepath.Join(tmp, "second")
@@ -488,9 +461,7 @@ func TestBackgroundWorkerMultiEntrypoint(t *testing.T) {
 	requireFileEventually(t, second, "the second worker on the shared script did not start")
 }
 
-// TestBackgroundWorkerThreadsComeOnTop checks that background threads are
-// reserved on top of num_threads: one HTTP thread plus one background worker
-// starts with num_threads 1.
+// background threads are reserved on top of num_threads
 func TestBackgroundWorkerThreadsComeOnTop(t *testing.T) {
 	sentinel := filepath.Join(t.TempDir(), "bg-only.sentinel")
 	initServers(t,
@@ -504,9 +475,8 @@ func TestBackgroundWorkerThreadsComeOnTop(t *testing.T) {
 	requireFileEventually(t, sentinel, "background worker did not start with num_threads 1")
 }
 
-// TestBackgroundWorkerDefaultsToOneThread checks that num is optional: a
-// background worker serves no requests, so it gets one thread unless a
-// pool is asked for, rather than the CPU count of an HTTP worker.
+// a background worker serves no requests, so num defaults to one thread rather
+// than to the CPU count of an HTTP worker
 func TestBackgroundWorkerDefaultsToOneThread(t *testing.T) {
 	sentinel := filepath.Join(t.TempDir(), "bg-default.sentinel")
 	initServers(t,
@@ -527,8 +497,7 @@ func TestBackgroundWorkerDefaultsToOneThread(t *testing.T) {
 	assert.Equal(t, 1, background)
 }
 
-// TestBackgroundWorkerThreadsComeOnTopOfAutoMaxThreads checks that the
-// automatic limit is an HTTP one too: the reservation is added to what it
+// the automatic limit is an HTTP one too: the reservation is added to what it
 // resolves, instead of eating into it
 func TestBackgroundWorkerThreadsComeOnTopOfAutoMaxThreads(t *testing.T) {
 	sentinel := filepath.Join(t.TempDir(), "bg-auto.sentinel")
@@ -549,11 +518,9 @@ func TestBackgroundWorkerThreadsComeOnTopOfAutoMaxThreads(t *testing.T) {
 	assert.Equal(t, 6, len(state.ThreadDebugStates)+state.ReservedThreadCount)
 }
 
-// TestBackgroundWorkerBootstrapIsBounded checks that max_execution_time
-// applies until the first WorkerHandle::tick(): a setup that outlives
-// it is ended as a boot failure, which fails Init() past the cap. The limit
-// itself is PHP's, so the test only runs where its timers are known to
-// fire under FrankenPHP, the max execution timers of ZTS builds on Linux.
+// max_execution_time applies until the first tick, a setup that outlives it
+// fails Init(). The limit is PHP's, so the test only runs where its timers are
+// known to fire under FrankenPHP: the max execution timers of Linux ZTS builds
 func TestBackgroundWorkerBootstrapIsBounded(t *testing.T) {
 	if !frankenphp.Config().ZendMaxExecutionTimers {
 		t.Skip("max_execution_time is only reliable with Zend max execution timers")
@@ -578,12 +545,9 @@ func TestBackgroundWorkerBootstrapIsBounded(t *testing.T) {
 	assert.Equal(t, 1, bytes.Count(b, []byte("\n")), "the limit should have ended the one and only boot")
 }
 
-// TestBackgroundWorkerParkingIsNotInterrupted checks that a script parked
-// on its handle, past its first tick, is not cut short by the two limits it
-// never disables itself: max_execution_time, which the first tick disarms
-// after php_execute_script() re-armed it from the ini, and
-// default_socket_timeout, which the handle overrides with an infinite read
-// timeout.
+// past its first tick, a parked script is cut short by neither of the two
+// limits it never disables itself: max_execution_time, disarmed by the tick,
+// and default_socket_timeout, which the handle's stream overrides
 func TestBackgroundWorkerParkingIsNotInterrupted(t *testing.T) {
 	countFile := filepath.Join(t.TempDir(), "runs")
 	initServers(t,
@@ -606,9 +570,8 @@ func TestBackgroundWorkerParkingIsNotInterrupted(t *testing.T) {
 	assert.Equal(t, 1, runs(), "the worker was restarted, so a limit interrupted its park")
 }
 
-// TestBackgroundWorkerStreamClosedAndFetchedAgain checks the stream a
-// handle hands out: the same one every time, a fresh one once the script
-// closed it, one per handle, and the drain reaches the script through it.
+// the same stream every time, a fresh one once the script closed it, one per
+// handle, and the drain reaches the script through all of them
 func TestBackgroundWorkerStreamClosedAndFetchedAgain(t *testing.T) {
 	sentinel := filepath.Join(t.TempDir(), "refetch.txt")
 
@@ -634,9 +597,8 @@ func TestBackgroundWorkerStreamClosedAndFetchedAgain(t *testing.T) {
 	}
 }
 
-// TestBackgroundWorkerBootFailuresThenSucceeds checks that boot failures below
-// max_consecutive_failures are retried with the backoff and Init() still
-// succeeds once a run reaches its ready point.
+// boot failures below max_consecutive_failures are retried with the backoff,
+// and Init() still succeeds once a run reaches its ready point
 func TestBackgroundWorkerBootFailuresThenSucceeds(t *testing.T) {
 	tmp := t.TempDir()
 	countFile, sentinel := filepath.Join(tmp, "boots"), filepath.Join(tmp, "ready")
@@ -654,10 +616,8 @@ func TestBackgroundWorkerBootFailuresThenSucceeds(t *testing.T) {
 	assert.Equal(t, "3", string(boots), "two boot failures then a success")
 }
 
-// TestBackgroundWorkerCrashAfterReadyRestarts checks that a crash after the
-// ready point restarts without counting toward max_consecutive_failures,
-// that a zero-timeout stream_select() counts as the wait, and that a drain
-// cuts the backoff short.
+// a crash past the ready point restarts without counting toward
+// max_consecutive_failures, and a drain cuts the backoff short
 func TestBackgroundWorkerCrashAfterReadyRestarts(t *testing.T) {
 	countFile := filepath.Join(t.TempDir(), "runs")
 	initServers(t,
@@ -680,8 +640,7 @@ func TestBackgroundWorkerCrashAfterReadyRestarts(t *testing.T) {
 	assert.Less(t, time.Since(start), 500*time.Millisecond, "Shutdown() waited for the backoff")
 }
 
-// TestBackgroundWorkerCleanExitIsPaced checks that a script returning right
-// after its tick is re-run with the crash backoff rather than at once.
+// a script returning right after its tick is re-run with the crash backoff
 func TestBackgroundWorkerCleanExitIsPaced(t *testing.T) {
 	countFile := filepath.Join(t.TempDir(), "runs")
 	initServers(t,
@@ -700,9 +659,8 @@ func TestBackgroundWorkerCleanExitIsPaced(t *testing.T) {
 	assert.LessOrEqual(t, runs, 8, "the re-runs were not paced")
 }
 
-// TestBackgroundWorkerCyclingIsNotThrottled checks the other side of the
-// pacing: a worker that does some work and returns is re-run at its own
-// pace, only a run ending too fast to have done anything is slowed down.
+// the other side of the pacing: a worker that does some work and returns is
+// re-run at its own pace
 func TestBackgroundWorkerCyclingIsNotThrottled(t *testing.T) {
 	countFile := filepath.Join(t.TempDir(), "runs")
 	initServers(t,
@@ -734,9 +692,8 @@ func TestBackgroundWorkerCyclingIsNotThrottled(t *testing.T) {
 	assert.Less(t, last-first, 0.5, "the interval between runs grew, the worker was throttled")
 }
 
-// TestBackgroundWorkerRebootForceKillsStuckScript checks that a script
-// ignoring its handle does not stall RestartWorkers() past the reboot grace
-// period: the force-kill ends it and the next run parks normally.
+// a script ignoring its handle does not stall RestartWorkers() past the reboot
+// grace period, the force-kill ends it
 func TestBackgroundWorkerRebootForceKillsStuckScript(t *testing.T) {
 	if runtime.GOOS != "linux" && runtime.GOOS != "freebsd" {
 		t.Skipf("force-kill cannot interrupt a blocking syscall on %s", runtime.GOOS)
@@ -760,10 +717,7 @@ func TestBackgroundWorkerRebootForceKillsStuckScript(t *testing.T) {
 	requireFileEventually(t, sentinel, "the re-run script did not park")
 }
 
-// TestBackgroundWorkerPollHandle checks that a script can wait on its handle
-// through the poll API of PHP 8.6, without a stream: the handle implements
-// Io\Poll\Handle, so a context takes it as is, the first tick makes the
-// worker ready, and the drain ends the loop.
+// the poll API of PHP 8.6 waits on the handle itself, no stream involved
 func TestBackgroundWorkerPollHandle(t *testing.T) {
 	if frankenphp.Version().VersionID < 80600 {
 		t.Skip("the poll API needs PHP 8.6")
@@ -783,10 +737,8 @@ func TestBackgroundWorkerPollHandle(t *testing.T) {
 	assert.NotEmpty(t, requireFileContentEventually(t, sentinel))
 }
 
-// TestBackgroundWorkerHandleIsAPollHandle checks that the handle implements
-// Io\Poll\Handle on every version: PHP 8.6 declares the interface with the
-// poll API, FrankenPHP declares it below that, so one script serves both and
-// symfony/polyfill-io-poll finds it already there.
+// the handle implements Io\Poll\Handle on every version: PHP 8.6 declares the
+// interface with the poll API, FrankenPHP declares it below that
 func TestBackgroundWorkerHandleIsAPollHandle(t *testing.T) {
 	sentinel := filepath.Join(t.TempDir(), "poll.json")
 	initServers(t,
@@ -800,10 +752,9 @@ func TestBackgroundWorkerHandleIsAPollHandle(t *testing.T) {
 	assert.JSONEq(t, `{"handle":true,"internal":true}`, requireFileContentEventually(t, sentinel))
 }
 
-// TestWorkerHandleBuiltBehindTheConstructor checks that the methods do not
-// trust the constructor's guard: unserialize() is refused outright, and a
-// handle Reflection built on a request thread throws instead of reaching
-// the Go side, which would panic and take the process with it.
+// the methods do not trust the constructor's guard: unserialize() is refused
+// outright, and a handle Reflection built on a request thread throws instead
+// of reaching the Go side, which would panic and take the process with it
 func TestWorkerHandleBuiltBehindTheConstructor(t *testing.T) {
 	server, err := frankenphp.NewServer(testDataDir)
 	require.NoError(t, err)
@@ -815,10 +766,8 @@ func TestWorkerHandleBuiltBehindTheConstructor(t *testing.T) {
 	assert.Contains(t, body, "construct: RuntimeException: FrankenPHP\\WorkerHandle can only be created from a background worker")
 }
 
-// TestBackgroundWorkerBootTimeout checks the bound on the wait for a
-// worker to become ready: a script that parks without ever calling
-// WorkerHandle::tick() fails Init() instead of hanging it, which is the
-// only failure mode available where Zend max execution timers are not.
+// a script that parks without ever ticking fails Init() instead of hanging it,
+// the only failure mode available where Zend max execution timers are not
 func TestBackgroundWorkerBootTimeout(t *testing.T) {
 	err := frankenphp.Init(
 		frankenphp.WithWorkers("bg-mute", "testdata/bgworker/never-ticks.php", 1,

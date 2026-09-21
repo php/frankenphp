@@ -56,9 +56,8 @@ func registerServers(newServers []*Server) {
 	fallbackServer.logger = globalLogger
 	fallbackServer.resetWorkers()
 
-	// several servers may resolve to the same name (e.g. the same host), but
 	// the name qualifies worker names in metrics and logs, so it must be
-	// unique: the first server keeps a name, the next ones get a numeric
+	// unique: the first server keeps its name, the next ones get a numeric
 	// suffix that never takes a name another server configured
 	configured := make(map[string]struct{}, len(servers))
 	for _, s := range servers {
