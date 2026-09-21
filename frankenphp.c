@@ -976,24 +976,48 @@ PHP_FUNCTION(mercure_publish) {
     RETURN_THROWS();
   }
 
-  struct go_mercure_publish_return result = go_mercure_publish(
-      frankenphp_thread_index(), topics, data, private, id, type, retry);
+  if (Z_TYPE_P(topics) == IS_ARRAY) {
+    zval *topic;
+    ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(topics), topic) {
+      if (Z_TYPE_P(topic) != IS_STRING) {
+        zend_argument_type_error(1, "must only contain strings, %s given",
+                                 zend_zval_type_name(topic));
+        RETURN_THROWS();
+      }
+    }
+    ZEND_HASH_FOREACH_END();
+  }
 
-  switch (result.r1) {
-  case 0:
-    RETURN_STR(result.r0);
-  case 1:
-    zend_throw_exception(spl_ce_RuntimeException, "No Mercure hub configured",
-                         0);
-    RETURN_THROWS();
-  case 2:
-    zend_throw_exception(spl_ce_RuntimeException, "Publish failed", 0);
+  /* The protocol only allows digits in the "retry" field. */
+  if (retry < 0) {
+    zend_argument_value_error(6, "must be greater than or equal to 0");
     RETURN_THROWS();
   }
 
-  zend_throw_exception(spl_ce_RuntimeException,
-                       "FrankenPHP not built with Mercure support", 0);
-  RETURN_THROWS();
+  struct go_mercure_publish_return result = go_mercure_publish(
+      frankenphp_thread_index(), topics, data, private, id, type, retry);
+
+  switch (result.r2) {
+  case FRANKENPHP_MERCURE_OK:
+    RETURN_STR(result.r0);
+  case FRANKENPHP_MERCURE_NO_HUB:
+    zend_throw_exception(spl_ce_RuntimeException, "No Mercure hub configured",
+                         0);
+    RETURN_THROWS();
+  case FRANKENPHP_MERCURE_INVALID_UPDATE:
+    zend_argument_value_error(result.r3, "%s", result.r1);
+    free(result.r1);
+    RETURN_THROWS();
+  case FRANKENPHP_MERCURE_PUBLISH_FAILED:
+    zend_throw_exception_ex(spl_ce_RuntimeException, 0, "Publish failed: %s",
+                            result.r1);
+    free(result.r1);
+    RETURN_THROWS();
+  case FRANKENPHP_MERCURE_UNSUPPORTED:
+    zend_throw_exception(spl_ce_RuntimeException,
+                         "FrankenPHP not built with Mercure support", 0);
+    RETURN_THROWS();
+  }
 }
 
 PHP_FUNCTION(frankenphp_log) {

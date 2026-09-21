@@ -38,7 +38,7 @@ jobs:
     env:
       GOMAXPROCS: 10
       LIBRARY_PATH: ${{ github.workspace }}/watcher/target/lib
-      GOFLAGS: "-tags=nobadger,nomysql,nopgx"
+      GOFLAGS: "-tags=nobadger,nomysql,nopgx,deprecated_topic,deprecated_claim"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -103,7 +103,7 @@ jobs:
       matrix:
         php-versions: ["8.3", "8.4", "8.5"]
     env:
-      XCADDY_GO_BUILD_FLAGS: "-tags=nobadger,nomysql,nopgx"
+      XCADDY_GO_BUILD_FLAGS: "-tags=nobadger,nomysql,nopgx,deprecated_topic,deprecated_claim"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -136,7 +136,7 @@ jobs:
     runs-on: macos-latest
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
-      GOFLAGS: "-tags=nowatcher,nobadger,nomysql,nopgx"
+      GOFLAGS: "-tags=nowatcher,nobadger,nomysql,nopgx,deprecated_topic,deprecated_claim"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

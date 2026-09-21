@@ -45,7 +45,7 @@ Build Caddy with the FrankenPHP Caddy module:
 
 ```console
 cd caddy/frankenphp/
-go build -tags nobadger,nomysql,nopgx
+go build -tags nobadger,nomysql,nopgx,deprecated_topic,deprecated_claim
 cd ../../
 ```
 
@@ -143,7 +143,7 @@ curl -v http://127.0.0.1:8080/phpinfo.php
    ```powershell
    go test -race -ldflags '-extldflags="-fuse-ld=lld"' ./...
    cd caddy
-   go test -race -ldflags '-extldflags="-fuse-ld=lld"' -tags nobadger,nomysql,nopgx ./...
+   go test -race -ldflags '-extldflags="-fuse-ld=lld"' -tags nobadger,nomysql,nopgx,deprecated_topic,deprecated_claim ./...
    cd ..
    ```
 
@@ -151,7 +151,7 @@ curl -v http://127.0.0.1:8080/phpinfo.php
 
     ```powershell
     cd caddy/frankenphp
-    go build -ldflags '-extldflags="-fuse-ld=lld"' -tags nobadger,nomysql,nopgx
+    go build -ldflags '-extldflags="-fuse-ld=lld"' -tags nobadger,nomysql,nopgx,deprecated_topic,deprecated_claim
     cd ../..
     ```
 
@@ -345,7 +345,7 @@ Use GoLand for primary Go development, but the debugger cannot debug C code.
 - Working directory: `~/frankenphp/caddy/frankenphp`
 - Environment (adjust for your $(php-config ...) output):
   `CGO_CFLAGS=-O0 -g -I/usr/local/include/php -I/usr/local/include/php/main -I/usr/local/include/php/TSRM -I/usr/local/include/php/Zend -I/usr/local/include/php/ext -I/usr/local/include/php/ext/date/lib;CGO_LDFLAGS=-lm -lpthread -lsqlite3 -lxml2 -lbrotlienc -lbrotlidec -lbrotlicommon -lwatcher`
-- Go tool arguments: `-tags=nobadger,nomysql,nopgx`
+- Go tool arguments: `-tags=nobadger,nomysql,nopgx,deprecated_topic,deprecated_claim`
 - Program arguments: e.g. `php-cli -i`
 
 To debug C files from GoLand
@@ -379,7 +379,7 @@ Now you can place breakpoints in C, C++ and Go files.
    - Directory: `.\caddy\frankenphp`
    - Output directory: `.\caddy\frankenphp`
    - Working directory: `.\caddy\frankenphp`
-   - Go tool arguments: `-tags=nobadger,nomysql,nopgx`
+   - Go tool arguments: `-tags=nobadger,nomysql,nopgx,deprecated_topic,deprecated_claim`
    - Environment variables: see the [Windows Development section](#windows-development)
    - Program arguments: e.g. `php-server`
 
