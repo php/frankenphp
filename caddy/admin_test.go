@@ -467,7 +467,8 @@ func TestRejectedReloadKeepsThePreviousSiteServing(t *testing.T) {
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
-	// the adapt endpoint answers 200 with the format warnings, then the error
+	// /load writes the adaptation warnings before loading, so the status is
+	// already 200 when the error follows them in the body
 	require.Contains(t, string(body), "invalid configuration: worker filename is invalid")
 
 	// the runtime that served before the rejected reload still serves, and

@@ -296,7 +296,6 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 	return numWorkers, nil
 }
 
-// Init starts the PHP runtime and the configured workers.
 // Validate reports whether Init() would accept a configuration, without
 // starting anything: the thread budget, the worker files, and the names and
 // scopes workers may take. A host replacing a running configuration should
@@ -340,6 +339,7 @@ func Validate(options ...Option) error {
 	return nil
 }
 
+// Init starts the PHP runtime and the configured workers.
 func Init(options ...Option) error {
 	if !isRunning.CompareAndSwap(false, true) {
 		return ErrAlreadyStarted

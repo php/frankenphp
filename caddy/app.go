@@ -121,10 +121,9 @@ func (f *FrankenPHPApp) Validate() error {
 // keep is for the configuration that starts, whose servers the modules
 // serve from; Validate() collects those of one that may never start.
 func (f *FrankenPHPApp) collectOptions(repl *caddy.Replacer, keep bool) ([]frankenphp.Option, error) {
+	optionsMU.RLock()
 	// We have at least 9 hardcoded options
 	opts := make([]frankenphp.Option, 0, 9+len(options)+len(f.provisionOpts))
-
-	optionsMU.RLock()
 	opts = append(opts, options...)
 	optionsMU.RUnlock()
 
