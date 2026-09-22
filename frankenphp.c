@@ -1123,7 +1123,12 @@ static void frankenphp_print_info_rows(const char **entries) {
   }
 }
 
-PHP_MINFO_FUNCTION(frankenphp) { go_frankenphp_phpinfo(); }
+PHP_MINFO_FUNCTION(frankenphp) {
+  /* Do NOT call into Go below, printing may bailout */
+  struct go_frankenphp_collect_phpinfo_return data =
+      go_frankenphp_collect_phpinfo();
+  frankenphp_print_phpinfo((const char **)data.r0, (const char **)data.r1);
+}
 
 void frankenphp_print_phpinfo(const char **entries, const char **modules) {
   php_info_print_table_start();

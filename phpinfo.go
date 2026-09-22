@@ -18,6 +18,12 @@ type phpinfoEntry struct {
 var (
 	phpinfoMu      sync.Mutex
 	phpinfoEntries []phpinfoEntry
+
+	phpinfoDirty         = true
+	phpinfoBuildMu       sync.Mutex
+	phpinfoPinner        runtime.Pinner
+	phpinfoCachedEntries **C.char
+	phpinfoCachedModules **C.char
 )
 
 // AddPHPInfoEntry adds an entry to the frankenphp section of phpinfo().
@@ -25,6 +31,7 @@ func AddPHPInfoEntry(key, value string) {
 	phpinfoMu.Lock()
 	defer phpinfoMu.Unlock()
 	phpinfoEntries = append(phpinfoEntries, phpinfoEntry{key, value})
+	phpinfoDirty = true
 }
 
 func collectPHPInfoEntries(buildInfo *debug.BuildInfo) (entries, modules []phpinfoEntry) {
@@ -75,16 +82,30 @@ func goModuleVersion(module *debug.Module) string {
 	return module.Replace.Path + " " + module.Replace.Version
 }
 
-//export go_frankenphp_phpinfo
-func go_frankenphp_phpinfo() {
+// Pins the tables for the process lifetime so a bailout during the
+// C-side printing can never unwind a Go frame.
+//
+//export go_frankenphp_collect_phpinfo
+func go_frankenphp_collect_phpinfo() (**C.char, **C.char) {
+	phpinfoBuildMu.Lock()
+	defer phpinfoBuildMu.Unlock()
+
+	phpinfoMu.Lock()
+	dirty := phpinfoDirty
+	phpinfoDirty = false
+	phpinfoMu.Unlock()
+
+	if !dirty {
+		return phpinfoCachedEntries, phpinfoCachedModules
+	}
+
 	buildInfo, _ := debug.ReadBuildInfo()
 	entries, modules := collectPHPInfoEntries(buildInfo)
 
-	// PHP consumes these tables synchronously on the calling PHP thread.
-	// Each call owns its pins, so concurrent phpinfo() calls share no C pointers.
-	var pinner runtime.Pinner
-	defer pinner.Unpin()
-	C.frankenphp_print_phpinfo(pinPHPInfoEntries(entries, &pinner), pinPHPInfoEntries(modules, &pinner))
+	phpinfoCachedEntries = pinPHPInfoEntries(entries, &phpinfoPinner)
+	phpinfoCachedModules = pinPHPInfoEntries(modules, &phpinfoPinner)
+
+	return phpinfoCachedEntries, phpinfoCachedModules
 }
 
 // pinPHPInfoEntries sorts entries and pins a null-terminated array of key, value
