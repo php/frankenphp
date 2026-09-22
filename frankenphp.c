@@ -228,7 +228,46 @@ static void frankenphp_fill_cli_signal_set(sigset_t *s) {
 #endif
 }
 
+#if defined(__linux__)
+/* Linux ignores default-action signals re-raised by PID 1 from inside its
+ * namespace. Go's runtime preserves handlers installed before it starts and
+ * forwards synchronous faults from C-created threads to them, so this turns a
+ * PHP-thread SIGSEGV into a process exit instead of the raisebadsignal loop.
+ * See https://github.com/php/frankenphp/issues/2558 and
+ * https://github.com/golang/go/issues/59569. */
+static void frankenphp_pid1_sigsegv_handler(int sig, siginfo_t *info,
+                                            void *context) {
+  (void)sig;
+  (void)info;
+  (void)context;
+  _exit(2);
+}
+
+static void frankenphp_install_pid1_sigsegv_handler(void) {
+  if (getpid() != 1) {
+    return;
+  }
+
+  struct sigaction previous;
+  if (sigaction(SIGSEGV, NULL, &previous) != 0 ||
+      previous.sa_handler != SIG_DFL) {
+    return;
+  }
+
+  struct sigaction action;
+  memset(&action, 0, sizeof(action));
+  action.sa_sigaction = frankenphp_pid1_sigsegv_handler;
+  sigemptyset(&action.sa_mask);
+  action.sa_flags = SA_SIGINFO | SA_ONSTACK;
+  sigaction(SIGSEGV, &action, NULL);
+}
+#endif
+
 __attribute__((constructor)) static void frankenphp_libpreinit(void) {
+#if defined(__linux__)
+  frankenphp_install_pid1_sigsegv_handler();
+#endif
+
   sigset_t set;
   frankenphp_fill_cli_signal_set(&set);
   /* Single-threaded at this point (constructors run before Go's runtime),
