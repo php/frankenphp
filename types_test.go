@@ -253,20 +253,21 @@ func TestBuildGoModuleEntries(t *testing.T) {
 	}
 }
 
-func TestAddPHPInfoModule(t *testing.T) {
+func TestCollectPHPInfoEntries(t *testing.T) {
 	// Keep this test serial and isolate registrations from the runtime tests.
-	previousEntries, previousModules := phpinfoEntries, phpinfoModules
-	phpinfoEntries, phpinfoModules = nil, nil
-	t.Cleanup(func() { phpinfoEntries, phpinfoModules = previousEntries, previousModules })
+	previousEntries := phpinfoEntries
+	phpinfoEntries = nil
+	t.Cleanup(func() { phpinfoEntries = previousEntries })
 
-	const key, path = "test/component", "example.com/component"
+	const key, path = "dunglas/mercure", "github.com/dunglas/mercure"
 	AddPHPInfoEntry("custom", "value")
-	AddPHPInfoModule(key, path)
-	AddPHPInfoModule("missing", "example.com/missing")
-	AddPHPInfoModule("main", "example.com/app")
 
 	entries, modules := collectPHPInfoEntries(nil)
 	require.Equal(t, []phpinfoEntry{{"custom", "value"}}, entries)
+	require.Empty(t, modules)
+
+	entries, modules = collectPHPInfoEntries(&debug.BuildInfo{GoVersion: "go1.26.0"})
+	require.Equal(t, []phpinfoEntry{{"custom", "value"}, {"go", "go1.26.0"}}, entries)
 	require.Empty(t, modules)
 
 	for _, tt := range []struct {
@@ -282,17 +283,20 @@ func TestAddPHPInfoModule(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			entries, modules := collectPHPInfoEntries(&debug.BuildInfo{
 				GoVersion: "go1.26.0",
-				Main:      debug.Module{Path: "example.com/app", Version: "v3.0.0"},
+				Main:      debug.Module{Path: "github.com/e-dant/watcher", Version: "v3.0.0"},
 				Deps: []*debug.Module{
 					{Path: path, Version: "v1.2.3", Replace: tt.replace},
 					{Path: "example.com/other", Version: "v4.0.0"},
+					{Path: "github.com/dunglas/caddy-cbrotli", Version: "v1.0.0"},
 				},
 			})
 			require.Equal(t, []phpinfoEntry{
-				{"custom", "value"}, {"go", "go1.26.0"}, {key, tt.want}, {"main", "v3.0.0"},
+				{"custom", "value"}, {"go", "go1.26.0"}, {"e-dant/watcher", "v3.0.0"}, {key, tt.want},
+				{"dunglas/caddy-cbrotli", "v1.0.0"},
 			}, entries)
 			require.Equal(t, []phpinfoEntry{
-				{"example.com/app", "v3.0.0"}, {path, tt.want}, {"example.com/other", "v4.0.0"},
+				{"github.com/e-dant/watcher", "v3.0.0"}, {path, tt.want}, {"example.com/other", "v4.0.0"},
+				{"github.com/dunglas/caddy-cbrotli", "v1.0.0"},
 			}, modules)
 		})
 	}

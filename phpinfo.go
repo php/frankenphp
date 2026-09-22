@@ -18,7 +18,6 @@ type phpinfoEntry struct {
 var (
 	phpinfoMu      sync.Mutex
 	phpinfoEntries []phpinfoEntry
-	phpinfoModules []phpinfoEntry
 )
 
 // AddPHPInfoEntry adds an entry to the frankenphp section of phpinfo().
@@ -28,18 +27,9 @@ func AddPHPInfoEntry(key, value string) {
 	phpinfoEntries = append(phpinfoEntries, phpinfoEntry{key, value})
 }
 
-// AddPHPInfoModule adds a component's Go module version to the frankenphp section
-// of phpinfo().
-func AddPHPInfoModule(key, modulePath string) {
-	phpinfoMu.Lock()
-	defer phpinfoMu.Unlock()
-	phpinfoModules = append(phpinfoModules, phpinfoEntry{key, modulePath})
-}
-
 func collectPHPInfoEntries(buildInfo *debug.BuildInfo) (entries, modules []phpinfoEntry) {
 	phpinfoMu.Lock()
 	entries = slices.Clone(phpinfoEntries)
-	components := slices.Clone(phpinfoModules)
 	phpinfoMu.Unlock()
 
 	if buildInfo == nil {
@@ -48,13 +38,14 @@ func collectPHPInfoEntries(buildInfo *debug.BuildInfo) (entries, modules []phpin
 
 	entries = append(entries, phpinfoEntry{"go", buildInfo.GoVersion})
 	modules = buildGoModuleEntries(buildInfo)
-	versions := make(map[string]string, len(modules))
-	for _, module := range modules {
-		versions[module.key] = module.value
+	moduleAliases := map[string]string{
+		"github.com/dunglas/mercure":       "dunglas/mercure",
+		"github.com/e-dant/watcher":        "e-dant/watcher",
+		"github.com/dunglas/caddy-cbrotli": "dunglas/caddy-cbrotli",
 	}
-	for _, component := range components {
-		if version, ok := versions[component.value]; ok {
-			entries = append(entries, phpinfoEntry{component.key, version})
+	for _, module := range modules {
+		if alias, ok := moduleAliases[module.key]; ok {
+			entries = append(entries, phpinfoEntry{alias, module.value})
 		}
 	}
 	return entries, modules

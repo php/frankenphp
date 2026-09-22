@@ -9,10 +9,6 @@ import (
 	watcherGo "github.com/e-dant/watcher/watcher-go"
 )
 
-func init() {
-	AddPHPInfoModule("e-dant/watcher", "github.com/e-dant/watcher")
-}
-
 type hotReloadOpt struct {
 	hotReload []*watcher.PatternGroup
 }
