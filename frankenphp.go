@@ -314,6 +314,10 @@ func Validate(options ...Option) error {
 		return err
 	}
 
+	if err := validateWatchers(opt); err != nil {
+		return err
+	}
+
 	takenNames := make(map[string]bool, len(opt.workers))
 	takenGlobalPaths := make(map[string]bool, len(opt.workers))
 	for _, w := range opt.workers {
