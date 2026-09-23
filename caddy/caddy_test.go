@@ -98,8 +98,8 @@ func TestPHP(t *testing.T) {
 		wg.Add(1)
 
 		go func(i int) {
+			defer wg.Done()
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/index.php?i=%d", i), http.StatusOK, fmt.Sprintf("I am by birth a Genevese (%d)", i))
-			wg.Done()
 		}(i)
 	}
 	wg.Wait()
@@ -161,8 +161,8 @@ func TestWorker(t *testing.T) {
 		wg.Add(1)
 
 		go func(i int) {
+			defer wg.Done()
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/index.php?i=%d", i), http.StatusOK, fmt.Sprintf("I am by birth a Genevese (%d)", i))
-			wg.Done()
 		}(i)
 	}
 	wg.Wait()
@@ -213,9 +213,9 @@ func TestGlobalAndModuleWorker(t *testing.T) {
 		wg.Add(1)
 
 		go func(i int) {
+			defer wg.Done()
 			tester.AssertGetResponse("http://localhost:"+testPort+"/worker-with-env.php", http.StatusOK, "Worker has APP_ENV=module")
 			tester.AssertGetResponse("http://localhost:"+testPortTwo+"/worker-with-env.php", http.StatusOK, "Worker has APP_ENV=global")
-			wg.Done()
 		}(i)
 	}
 	wg.Wait()
@@ -287,9 +287,9 @@ func TestNamedModuleWorkers(t *testing.T) {
 		wg.Add(1)
 
 		go func(i int) {
+			defer wg.Done()
 			tester.AssertGetResponse("http://localhost:"+testPort+"/worker-with-env.php", http.StatusOK, "Worker has APP_ENV=one")
 			tester.AssertGetResponse("http://localhost:"+testPortTwo+"/worker-with-env.php", http.StatusOK, "Worker has APP_ENV=two")
-			wg.Done()
 		}(i)
 	}
 	wg.Wait()
@@ -722,8 +722,8 @@ func TestMetrics(t *testing.T) {
 	for i := range 10 {
 		wg.Add(1)
 		go func(i int) {
+			defer wg.Done()
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/index.php?i=%d", i), http.StatusOK, fmt.Sprintf("I am by birth a Genevese (%d)", i))
-			wg.Done()
 		}(i)
 	}
 	wg.Wait()
@@ -798,8 +798,8 @@ func TestWorkerMetrics(t *testing.T) {
 	for i := range 10 {
 		wg.Add(1)
 		go func(i int) {
+			defer wg.Done()
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/index.php?i=%d", i), http.StatusOK, fmt.Sprintf("I am by birth a Genevese (%d)", i))
-			wg.Done()
 		}(i)
 	}
 	wg.Wait()
@@ -955,8 +955,8 @@ func TestNamedWorkerMetrics(t *testing.T) {
 	for i := range 10 {
 		wg.Add(1)
 		go func(i int) {
+			defer wg.Done()
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/index.php?i=%d", i), http.StatusOK, fmt.Sprintf("I am by birth a Genevese (%d)", i))
-			wg.Done()
 		}(i)
 	}
 	wg.Wait()
@@ -1049,8 +1049,8 @@ func TestAutoWorkerConfig(t *testing.T) {
 	for i := range 10 {
 		wg.Add(1)
 		go func(i int) {
+			defer wg.Done()
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/index.php?i=%d", i), http.StatusOK, fmt.Sprintf("I am by birth a Genevese (%d)", i))
-			wg.Done()
 		}(i)
 	}
 	wg.Wait()
@@ -1285,11 +1285,11 @@ func TestMaxWaitTime(t *testing.T) {
 	wg.Add(10)
 	for range 10 {
 		go func() {
+			defer wg.Done()
 			statusCode := getStatusCode("http://localhost:"+testPort+"/sleep.php?sleep=10", t)
 			if statusCode == http.StatusServiceUnavailable {
 				success.Store(true)
 			}
-			wg.Done()
 		}()
 	}
 	wg.Wait()
@@ -1332,11 +1332,11 @@ func TestMaxWaitTimeWorker(t *testing.T) {
 	wg.Add(10)
 	for range 10 {
 		go func() {
+			defer wg.Done()
 			statusCode := getStatusCode("http://localhost:"+testPort+"/sleep.php?sleep=10&iteration=1", t)
 			if statusCode == http.StatusServiceUnavailable {
 				success.Store(true)
 			}
-			wg.Done()
 		}()
 	}
 	wg.Wait()
@@ -1425,8 +1425,8 @@ func TestMultiWorkersMetrics(t *testing.T) {
 	for i := range 10 {
 		wg.Add(1)
 		go func(i int) {
+			defer wg.Done()
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/index.php?i=%d", i), http.StatusOK, fmt.Sprintf("I am by birth a Genevese (%d)", i))
-			wg.Done()
 		}(i)
 	}
 	wg.Wait()
@@ -1533,8 +1533,8 @@ func TestDisabledMetrics(t *testing.T) {
 	for i := range 10 {
 		wg.Add(1)
 		go func(i int) {
+			defer wg.Done()
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/index.php?i=%d", i), http.StatusOK, fmt.Sprintf("I am by birth a Genevese (%d)", i))
-			wg.Done()
 		}(i)
 	}
 	wg.Wait()
@@ -1642,8 +1642,8 @@ func TestWorkerRestart(t *testing.T) {
 	for i := range 10 {
 		wg.Add(1)
 		go func(i int) {
+			defer wg.Done()
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/worker-restart.php?i=%d", i), http.StatusOK, fmt.Sprintf("Counter (%d)", i))
-			wg.Done()
 		}(i)
 	}
 	wg.Wait()

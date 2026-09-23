@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -53,49 +52,34 @@ func TestHotReload(t *testing.T) {
 			}
 		`, "caddyfile")
 
-	var connected, received sync.WaitGroup
+	cx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	req, err := http.NewRequestWithContext(cx, http.MethodGet, "http://localhost:"+testPort+u, nil)
+	require.NoError(t, err)
+	resp := tester.AssertResponseCode(req, http.StatusOK)
+	defer resp.Body.Close()
 
-	connected.Add(1)
-	received.Go(func() {
-		cx, cancel := context.WithCancel(t.Context())
-		req, _ := http.NewRequest(http.MethodGet, "http://localhost:"+testPort+u, nil)
-		req = req.WithContext(cx)
-		resp := tester.AssertResponseCode(req, http.StatusOK)
-
-		var receivedBody strings.Builder
-
-		buf := make([]byte, 1024)
-		isConnected := false
-		for {
-			n, err := resp.Body.Read(buf)
-			if n > 0 {
-				receivedBody.Write(buf[:n])
-			}
-			if !isConnected {
-				// wait for the first bytes before marking the client as connected
-				isConnected = true
-				connected.Done()
-			}
-			if strings.Contains(receivedBody.String(), "index.php") {
-				cancel()
-
-				break
-			}
-			// Surface the read error only after checking the buffer: on
-			// Windows the SSE server sometimes flushes the event and closes
-			// the connection in the same syscall, so Read returns (n>0, EOF)
-			// and we'd otherwise fail despite having the data we wanted.
-			require.NoError(t, err)
-		}
-
-		require.NoError(t, resp.Body.Close())
-	})
-
-	connected.Wait()
+	// Wait for the first bytes before changing the file, so the subscription
+	// is ready. Keep reads on the test goroutine so a failed request or read
+	// cannot leave a readiness WaitGroup blocked forever.
+	buf := make([]byte, 1024)
+	_, err = resp.Body.Read(buf)
+	require.NoError(t, err)
 
 	require.NoError(t, os.WriteFile(indexFile, []byte("<?=$_SERVER['FRANKENPHP_HOT_RELOAD'];"), 0644))
 
-	received.Wait()
+	var receivedBody strings.Builder
+	for {
+		n, err := resp.Body.Read(buf)
+		receivedBody.Write(buf[:n])
+		if strings.Contains(receivedBody.String(), "index.php") {
+			break
+		}
+		// A read may return both the expected event and an error.
+		require.NoError(t, err)
+	}
+	cancel()
+	require.NoError(t, resp.Body.Close())
 
 	tester.AssertGetResponse("http://localhost:"+testPort+"/index.php", http.StatusOK, u)
 }
