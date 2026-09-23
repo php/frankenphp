@@ -77,14 +77,20 @@ func TestShowTheCorrectThreadDebugStatus(t *testing.T) {
 		}
 		`, "caddyfile")
 
+	// Regular threads finish their startup transition asynchronously.
+	require.Eventually(t, func() bool {
+		threads := frankenphp.DebugState().ThreadDebugStates
+		return len(threads) == 3 && threads[0].State == "ready"
+	}, 5*time.Second, 10*time.Millisecond, "regular PHP thread did not become ready")
+
 	debugState := getDebugState(t, tester)
 
 	// assert that the correct threads are present in the thread info
-	assert.Equal(t, debugState.ThreadDebugStates[0].State, "ready")
+	require.Len(t, debugState.ThreadDebugStates, 3)
+	assert.Equal(t, "ready", debugState.ThreadDebugStates[0].State)
 	assert.Contains(t, debugState.ThreadDebugStates[1].Name, "worker-with-counter.php")
 	assert.Contains(t, debugState.ThreadDebugStates[2].Name, "index.php")
-	assert.Equal(t, debugState.ReservedThreadCount, 3)
-	assert.Len(t, debugState.ThreadDebugStates, 3)
+	assert.Equal(t, 3, debugState.ReservedThreadCount)
 }
 
 func TestThreadDebugStateMetricsAfterRequests(t *testing.T) {
