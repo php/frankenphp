@@ -61,8 +61,14 @@ jobs:
         run: go build
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@latest
+      - name: Enable native crash backtraces
+        run: |
+          sudo apt-get install -y gdb
+          sudo sysctl -w kernel.core_pattern=frankenphp-core.%p
       - name: Run library tests
-        run: gotestsum -- -race ./...
+        run: |
+          ulimit -c unlimited
+          gotestsum -- -race -exec="bash $GITHUB_WORKSPACE/.github/scripts/test-with-backtrace.sh" ./...
       - name: Run Caddy module tests
         working-directory: caddy/
         run: gotestsum -- -race ./...
