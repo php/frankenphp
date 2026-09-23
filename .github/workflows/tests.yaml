@@ -64,7 +64,8 @@ jobs:
       - name: Diagnose extension startup crash
         if: matrix.php-versions == '8.5'
         run: |
-          command -v gdb
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get -o Acquire::Retries=3 install -y gdb
           sudo sysctl -w kernel.core_pattern="${RUNNER_TEMP}/frankenphp-core.%p"
           ulimit -c unlimited
           go test -race -c -o "${RUNNER_TEMP}/testext.test" ./internal/testext
