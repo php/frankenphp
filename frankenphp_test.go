@@ -458,19 +458,53 @@ func testSession(t *testing.T, opts *testOptions) {
 	}, opts)
 }
 
+const phpInfoTestComponent = "test/component<&>"
+
+func init() {
+	frankenphp.AddPHPInfoEntry(phpInfoTestComponent, "example.com/fork<&> v2.0.0")
+}
+
 func TestPhpInfo_module(t *testing.T) { testPhpInfo(t, nil) }
 func TestPhpInfo_worker(t *testing.T) { testPhpInfo(t, &testOptions{workerScript: "phpinfo.php"}) }
 func testPhpInfo(t *testing.T, opts *testOptions) {
 	var logOnce sync.Once
+	var registerOnce sync.Once
+	lateKey := fmt.Sprintf("%s/%d", t.Name(), time.Now().UnixNano())
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		registerOnce.Do(func() {
+			body, _ := testGet("http://example.com/phpinfo.php", handler, t)
+			assert.NotContains(t, body, lateKey)
+			frankenphp.AddPHPInfoEntry(lateKey, "registered after phpinfo")
+		})
 		body, _ := testGet(fmt.Sprintf("http://example.com/phpinfo.php?i=%d", i), handler, t)
 
 		logOnce.Do(func() {
 			t.Log(body)
 		})
 
-		assert.Contains(t, body, "frankenphp")
+		assert.Contains(t, body, `<tr><td class="e">FrankenPHP </td><td class="v">`)
 		assert.Contains(t, body, fmt.Sprintf("i=%d", i))
+		assert.Contains(t, body, runtime.Version())
+		assert.Contains(t, body, `<tr><td class="e">`+lateKey+` </td><td class="v">registered after phpinfo </td></tr>`)
+		assert.Contains(t, body, `<tr><td class="e">test/component&lt;&amp;&gt; </td><td class="v">example.com/fork&lt;&amp;&gt; v2.0.0 </td></tr>`)
+	}, opts)
+}
+
+func TestPhpInfoForkChild_module(t *testing.T) { testPhpInfoForkChild(t, nil) }
+func TestPhpInfoForkChild_worker(t *testing.T) {
+	testPhpInfoForkChild(t, &testOptions{workerScript: "phpinfo-fork.php"})
+}
+func testPhpInfoForkChild(t *testing.T, opts *testOptions) {
+	if opts == nil {
+		opts = &testOptions{}
+	}
+	opts.nbParallelRequests = 1
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/phpinfo-fork.php", handler, t)
+		if body == "pcntl-unavailable" {
+			t.Skip("pcntl/posix not fully loaded")
+		}
+		require.Equal(t, "child-safe", body)
 	}, opts)
 }
 
@@ -579,6 +613,11 @@ func TestException_worker(t *testing.T) {
 	testException(t, &testOptions{workerScript: "exception.php"})
 }
 func testException(t *testing.T, opts *testOptions) {
+	if opts.phpIni == nil {
+		opts.phpIni = map[string]string{}
+	}
+	opts.phpIni["display_errors"] = "1"
+
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
 		body, _ := testGet(fmt.Sprintf("http://example.com/exception.php?i=%d", i), handler, t)
 
@@ -1249,6 +1288,24 @@ func FuzzResponseHeaders(f *testing.F) {
 // fuzzer-controlled, since unbounded native recursion (no depth guard) is
 // the interesting bug class here, not the value shapes themselves.
 func FuzzPersistZvalRoundtrip(f *testing.F) {
+	// Check the compiled-in hook once, not in every seed's concurrent requests.
+	func() {
+		require.NoError(f, frankenphp.Init())
+		defer frankenphp.Shutdown()
+
+		root, err := fastabs.FastAbs("./testdata")
+		require.NoError(f, err)
+		req := httptest.NewRequest("GET", "http://example.com/fuzz-persist-roundtrip.php", nil)
+		req, err = frankenphp.NewRequestWithContext(req, frankenphp.WithRequestDocumentRoot(root, false))
+		require.NoError(f, err)
+		w := httptest.NewRecorder()
+		require.NoError(f, frankenphp.ServeHTTP(w, req))
+		require.Equal(f, http.StatusOK, w.Code)
+		if w.Body.String() == "SKIP" {
+			f.Skip("FRANKENPHP_TEST not set; skipping persistent_zval roundtrip fuzzing")
+		}
+	}()
+
 	f.Add(0, 1)
 	f.Add(1, 1)
 	f.Add(10, 2)

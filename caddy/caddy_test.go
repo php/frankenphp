@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -1219,12 +1220,19 @@ func testSingleIniConfiguration(tester *caddytest.Tester, key string, value stri
 }
 
 func TestOsEnv(t *testing.T) {
+	// This is not a reload test: avoid the previous config's listener, which
+	// Caddy may still be shutting down after FrankenPHP unregisters its server.
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	port := strconv.Itoa(listener.Addr().(*net.TCPAddr).Port)
+	require.NoError(t, listener.Close())
+
 	tester := caddytest.NewTester(t)
-	initServer(t, tester, `
+	tester.InitServer(`
 		{
 			skip_install_trust
 			admin localhost:2999
-			http_port `+testPort+`
+			http_port `+port+`
 
 			frankenphp {
 				num_threads 2
@@ -1233,7 +1241,7 @@ func TestOsEnv(t *testing.T) {
 			}
 		}
 
-		localhost:`+testPort+` {
+		localhost:`+port+` {
 			route {
 				root ../testdata
 				php
@@ -1242,7 +1250,7 @@ func TestOsEnv(t *testing.T) {
 		`, "caddyfile")
 
 	tester.AssertGetResponse(
-		"http://localhost:"+testPort+"/env/env.php?keys[]=ENV1&keys[]=ENV2",
+		"http://localhost:"+port+"/env/env.php?keys[]=ENV1&keys[]=ENV2",
 		http.StatusOK,
 		"ENV1=value1,ENV2=value2",
 	)
