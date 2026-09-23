@@ -154,6 +154,8 @@ static pid_t fork_parent_pid = 0;
 
 static void frankenphp_fork_prepare(void) { fork_parent_pid = getpid(); }
 
+static void frankenphp_mark_fork_child(void) { is_forked_child = true; }
+
 #if defined(FRANKENPHP_KQUEUE_PARENT_DEATH)
 /* Watcher thread for platforms without a kernel parent-death signal.
  * Blocks in kevent() until the parent exits, then force-kills this child. */
@@ -176,7 +178,7 @@ static void *frankenphp_parent_death_watcher(void *arg) {
 #endif
 
 static void frankenphp_fork_child(void) {
-  is_forked_child = true;
+  frankenphp_mark_fork_child();
 #if defined(__linux__)
   // if the parent process dies between fork() and this prctl()
   if (prctl(PR_SET_PDEATHSIG, SIGKILL, 0, 0, 0) != 0 ||
@@ -208,6 +210,10 @@ static void frankenphp_fork_child(void) {
 
 static void frankenphp_register_atfork(void) {
   pthread_atfork(frankenphp_fork_prepare, NULL, frankenphp_fork_child);
+}
+
+static void frankenphp_register_cli_atfork(void) {
+  pthread_atfork(NULL, NULL, frankenphp_mark_fork_child);
 }
 
 /* pcntl signals delivered to a Go M segfault on PCNTL_G (no TSRM there)
@@ -1124,41 +1130,58 @@ static void frankenphp_print_info_rows(const char **entries) {
 }
 
 PHP_MINFO_FUNCTION(frankenphp) {
+#ifndef PHP_WIN32
+  if (UNEXPECTED(is_forked_child)) {
+    return;
+  }
+#endif
+
   struct go_frankenphp_collect_phpinfo_return data =
       go_frankenphp_collect_phpinfo();
   const char **entries = (const char **)data.r0;
   const char **modules = (const char **)data.r1;
+  bool bailed_out = false;
 
-  /* Do NOT call into Go below, printing may bailout */
-  php_info_print_table_start();
-  php_info_print_table_row(2, "frankenphp", TOSTRING(FRANKENPHP_VERSION));
-  if (entries) {
-    frankenphp_print_info_rows(entries);
-  }
-  php_info_print_table_end();
-
-  if (modules == NULL) {
-    return;
-  }
-
-  /* The list of Go modules is long, collapse it by default when rendering
-   * HTML */
-  if (sapi_module.phpinfo_as_text) {
+  zend_try {
+    /* no Go in here: printing may bailout, and a bailout must never
+     * unwind a Go frame */
     php_info_print_table_start();
-    php_info_print_table_header(1, "Go modules");
+    php_info_print_table_row(2, "frankenphp", TOSTRING(FRANKENPHP_VERSION));
+    if (entries) {
+      frankenphp_print_info_rows(entries);
+    }
     php_info_print_table_end();
-  } else {
-    php_printf("<details><summary style=\"cursor: pointer\">Go "
-               "modules</summary>\n");
+
+    if (modules != NULL) {
+      /* the Go module list is long: collapse it in HTML */
+      if (sapi_module.phpinfo_as_text) {
+        php_info_print_table_start();
+        php_info_print_table_header(1, "Go modules");
+        php_info_print_table_end();
+      } else {
+        php_printf("<details><summary style=\"cursor: pointer\">Go "
+                   "modules</summary>\n");
+      }
+
+      php_info_print_table_start();
+      php_info_print_table_header(2, "Module", "Version");
+      frankenphp_print_info_rows(modules);
+      php_info_print_table_end();
+
+      if (!sapi_module.phpinfo_as_text) {
+        php_printf("</details>\n");
+      }
+    }
   }
+  zend_catch { bailed_out = true; }
+  zend_end_try();
 
-  php_info_print_table_start();
-  php_info_print_table_header(2, "Module", "Version");
-  frankenphp_print_info_rows(modules);
-  php_info_print_table_end();
+  /* the bailout is caught: safe to hand the tables back to Go */
+  go_frankenphp_release_phpinfo(data.r0, data.r1);
 
-  if (!sapi_module.phpinfo_as_text) {
-    php_printf("</details>\n");
+  if (bailed_out) {
+    /* re-raise the caught bailout */
+    zend_bailout();
   }
 }
 
@@ -1174,9 +1197,7 @@ static zend_module_entry frankenphp_module = {
     TOSTRING(FRANKENPHP_VERSION),
     STANDARD_MODULE_PROPERTIES};
 
-/* CLI exposes the same metadata under a distinct name so extension detection
- * does not advertise server functions. Keep PHP's native functions and avoid
- * initializing hooks that depend on the server runtime. */
+/* same phpinfo section in CLI, without the server functions and hooks */
 static zend_module_entry frankenphp_cli_module = {
     STANDARD_MODULE_HEADER,
     "frankenphp-cli",
@@ -1836,12 +1857,17 @@ static void *execute_script_cli(void *arg) {
 
 static int (*previous_php_register_internal_extensions_func)(void) = NULL;
 
-/* frankenphp_module is passed to php_module_startup() by our own SAPI, but the
- * CLI SAPIs take no additional modules: hook their module startup instead */
+/* the CLI SAPIs take no extra modules: hook their module startup */
 static int register_frankenphp_module(void) {
   if (previous_php_register_internal_extensions_func() != SUCCESS) {
     return FAILURE;
   }
+
+#ifndef PHP_WIN32
+  /* mark only: a CLI child must survive its PHP thread's exit */
+  static pthread_once_t cli_atfork_once = PTHREAD_ONCE_INIT;
+  pthread_once(&cli_atfork_once, frankenphp_register_cli_atfork);
+#endif
 
   return zend_register_internal_module(&frankenphp_cli_module) == NULL
              ? FAILURE
@@ -1857,8 +1883,8 @@ int frankenphp_execute_script_cli(char *script, int argc, char **argv,
   cli_exec_args_t args = {
       .script = script, .argc = argc, .argv = argv, .eval = eval};
 
-  /* A failed join can leave our hook installed. Do not save it as its own
-   * predecessor on the next call. */
+  /* a failed join leaves the hook installed: don't save it as its own
+   * predecessor */
   if (php_register_internal_extensions_func != register_frankenphp_module) {
     previous_php_register_internal_extensions_func =
         php_register_internal_extensions_func;
@@ -1878,7 +1904,7 @@ int frankenphp_execute_script_cli(char *script, int argc, char **argv,
 
   err = pthread_join(thread, &exit_status);
   if (err != 0) {
-    /* The CLI thread may still be using the hook; do not restore it yet. */
+    /* the CLI thread may still be inside the hook */
     return err;
   }
 

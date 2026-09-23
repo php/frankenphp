@@ -490,6 +490,24 @@ func testPhpInfo(t *testing.T, opts *testOptions) {
 	}, opts)
 }
 
+func TestPhpInfoForkChild_module(t *testing.T) { testPhpInfoForkChild(t, nil) }
+func TestPhpInfoForkChild_worker(t *testing.T) {
+	testPhpInfoForkChild(t, &testOptions{workerScript: "phpinfo-fork.php"})
+}
+func testPhpInfoForkChild(t *testing.T, opts *testOptions) {
+	if opts == nil {
+		opts = &testOptions{}
+	}
+	opts.nbParallelRequests = 1
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/phpinfo-fork.php", handler, t)
+		if body == "pcntl-unavailable" {
+			t.Skip("pcntl/posix not fully loaded")
+		}
+		require.Equal(t, "child-safe", body)
+	}, opts)
+}
+
 func TestPersistentObject_module(t *testing.T) { testPersistentObject(t, nil) }
 func TestPersistentObject_worker(t *testing.T) {
 	testPersistentObject(t, &testOptions{workerScript: "persistent-object.php"})
