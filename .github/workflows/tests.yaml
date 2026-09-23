@@ -63,6 +63,7 @@ jobs:
         run: go install gotest.tools/gotestsum@latest
       - name: Enable native crash backtraces
         run: |
+          sudo apt-get update
           sudo apt-get install -y gdb
           sudo sysctl -w kernel.core_pattern=frankenphp-core.%p
       - name: Run library tests
