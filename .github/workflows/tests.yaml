@@ -79,7 +79,7 @@ jobs:
 
           root = pathlib.Path(os.environ["RUNNER_TEMP"])
           binary = root / "testext.test"
-          env = dict(os.environ, GORACE="atexit_sleep_ms=0")
+          env = dict(os.environ, GORACE="atexit_sleep_ms=0", GOTRACEBACK="crash")
           failed = threading.Event()
 
           def run(index):
@@ -104,6 +104,7 @@ jobs:
                   "gdb", "--batch", "--quiet", "-iex", "set auto-load off",
                   "-ex", "set debuginfod enabled off",
                   "-ex", "set pagination off", "-ex", "thread apply all bt 30",
+                  "-ex", "info sharedlibrary", "-ex", "p 'runtime.mheap_'.sweepgen",
                   binary, core,
               ])
           sys.exit(any(results))
