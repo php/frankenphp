@@ -60,23 +60,45 @@ func TestHotReload(t *testing.T) {
 	defer resp.Body.Close()
 
 	// Wait for the first bytes before changing the file, so the subscription
-	// is ready. Keep reads on the test goroutine so a failed request or read
-	// cannot leave a readiness WaitGroup blocked forever.
+	// is ready. A failed request or read must not leave a readiness wait blocked.
 	buf := make([]byte, 1024)
 	_, err = resp.Body.Read(buf)
 	require.NoError(t, err)
 
-	require.NoError(t, os.WriteFile(indexFile, []byte("<?=$_SERVER['FRANKENPHP_HOT_RELOAD'];"), 0644))
-
-	var receivedBody strings.Builder
-	for {
-		n, err := resp.Body.Read(buf)
-		receivedBody.Write(buf[:n])
-		if strings.Contains(receivedBody.String(), "index.php") {
-			break
+	// Return read failures to the test goroutine. Buffer the result so this
+	// goroutine can exit even if a failed file write ends the test first.
+	received := make(chan error, 1)
+	go func() {
+		var receivedBody strings.Builder
+		for {
+			n, err := resp.Body.Read(buf)
+			receivedBody.Write(buf[:n])
+			if strings.Contains(receivedBody.String(), "index.php") {
+				received <- nil
+				return
+			}
+			// A read may return both the expected event and an error.
+			if err != nil {
+				received <- err
+				return
+			}
 		}
-		// A read may return both the expected event and an error.
-		require.NoError(t, err)
+	}()
+
+	// The native watcher starts asynchronously, independently of the SSE
+	// subscription. Retry changes until one is observed, leaving more time
+	// between writes than the watcher's 150 ms debounce interval.
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+waitForReload:
+	for {
+		require.NoError(t, os.WriteFile(indexFile, []byte("<?=$_SERVER['FRANKENPHP_HOT_RELOAD'];"), 0644))
+		select {
+		case err := <-received:
+			require.NoError(t, err)
+			break waitForReload
+		case <-ticker.C:
+		}
 	}
 	cancel()
 	require.NoError(t, resp.Body.Close())
