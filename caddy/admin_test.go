@@ -21,7 +21,7 @@ import (
 
 func TestRestartWorkerViaAdminApi(t *testing.T) {
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initTestServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -54,7 +54,7 @@ func TestRestartWorkerViaAdminApi(t *testing.T) {
 
 func TestShowTheCorrectThreadDebugStatus(t *testing.T) {
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initTestServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -89,7 +89,7 @@ func TestShowTheCorrectThreadDebugStatus(t *testing.T) {
 
 func TestThreadDebugStateMetricsAfterRequests(t *testing.T) {
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initTestServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -132,7 +132,7 @@ func TestAutoScaleWorkerThreads(t *testing.T) {
 	maxTries := 10
 	requestsPerTry := 200
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initTestServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -189,7 +189,7 @@ func TestAutoScaleRegularThreadsOnAutomaticThreadLimit(t *testing.T) {
 	maxTries := 10
 	requestsPerTry := 200
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initTestServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -278,7 +278,7 @@ func getNumThreads(t *testing.T, tester *caddytest.Tester) int {
 func TestAddModuleWorkerViaAdminApi(t *testing.T) {
 	// Initialize a server with admin API enabled
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initTestServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999

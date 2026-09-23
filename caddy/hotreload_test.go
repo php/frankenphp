@@ -29,7 +29,7 @@ func TestHotReload(t *testing.T) {
 	// SSE roundtrip below on slow CI runners (notably emulated armv7).
 	// 30s keeps the test bounded so a real regression fails fast.
 	tester.Client.Timeout = 30 * time.Second
-	tester.InitServer(`
+	initTestServer(t, tester, `
 		{
 			debug
 			skip_install_trust

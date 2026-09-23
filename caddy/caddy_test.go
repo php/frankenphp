@@ -23,12 +23,11 @@ import (
 )
 
 // initServer initializes a Caddy test server and waits for it to be ready.
-// After InitServer, it polls the server to handle a race condition on macOS where
-// SO_REUSEPORT can briefly route connections to the old listener being shut down,
-// resulting in "connection reset by peer".
+// It polls the HTTP endpoint after loading the configuration to wait for the
+// listener to start accepting requests.
 func initServer(t *testing.T, tester *caddytest.Tester, config string, format string) {
 	t.Helper()
-	tester.InitServer(config, format)
+	initTestServer(t, tester, config, format)
 
 	client := &http.Client{Timeout: 1 * time.Second}
 	require.Eventually(t, func() bool {
@@ -65,6 +64,9 @@ func escapeMetricLabel(s string) string {
 }
 
 func TestMain(m *testing.M) {
+	// Bound helpers using http.Get, including diagnostics and metrics requests.
+	http.DefaultClient.Timeout = caddytest.Default.TestRequestTimeout
+
 	// setup custom environment vars for TestOsEnv
 	if os.Setenv("ENV1", "value1") != nil || os.Setenv("ENV2", "value2") != nil {
 		fmt.Println("Failed to set environment variables for tests")
@@ -1228,7 +1230,7 @@ func TestOsEnv(t *testing.T) {
 	require.NoError(t, listener.Close())
 
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initTestServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -1806,7 +1808,7 @@ func TestDd(t *testing.T) {
 func TestOpcacheReset(t *testing.T) {
 	tester := caddytest.NewTester(t)
 	tester.Client.Timeout = 60 * time.Second
-	tester.InitServer(`
+	initTestServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
