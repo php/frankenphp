@@ -458,19 +458,53 @@ func testSession(t *testing.T, opts *testOptions) {
 	}, opts)
 }
 
+const phpInfoTestComponent = "test/component<&>"
+
+func init() {
+	frankenphp.AddPHPInfoEntry(phpInfoTestComponent, "example.com/fork<&> v2.0.0")
+}
+
 func TestPhpInfo_module(t *testing.T) { testPhpInfo(t, nil) }
 func TestPhpInfo_worker(t *testing.T) { testPhpInfo(t, &testOptions{workerScript: "phpinfo.php"}) }
 func testPhpInfo(t *testing.T, opts *testOptions) {
 	var logOnce sync.Once
+	var registerOnce sync.Once
+	lateKey := fmt.Sprintf("%s/%d", t.Name(), time.Now().UnixNano())
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		registerOnce.Do(func() {
+			body, _ := testGet("http://example.com/phpinfo.php", handler, t)
+			assert.NotContains(t, body, lateKey)
+			frankenphp.AddPHPInfoEntry(lateKey, "registered after phpinfo")
+		})
 		body, _ := testGet(fmt.Sprintf("http://example.com/phpinfo.php?i=%d", i), handler, t)
 
 		logOnce.Do(func() {
 			t.Log(body)
 		})
 
-		assert.Contains(t, body, "frankenphp")
+		assert.Contains(t, body, `<tr><td class="e">FrankenPHP </td><td class="v">`)
 		assert.Contains(t, body, fmt.Sprintf("i=%d", i))
+		assert.Contains(t, body, runtime.Version())
+		assert.Contains(t, body, `<tr><td class="e">`+lateKey+` </td><td class="v">registered after phpinfo </td></tr>`)
+		assert.Contains(t, body, `<tr><td class="e">test/component&lt;&amp;&gt; </td><td class="v">example.com/fork&lt;&amp;&gt; v2.0.0 </td></tr>`)
+	}, opts)
+}
+
+func TestPhpInfoForkChild_module(t *testing.T) { testPhpInfoForkChild(t, nil) }
+func TestPhpInfoForkChild_worker(t *testing.T) {
+	testPhpInfoForkChild(t, &testOptions{workerScript: "phpinfo-fork.php"})
+}
+func testPhpInfoForkChild(t *testing.T, opts *testOptions) {
+	if opts == nil {
+		opts = &testOptions{}
+	}
+	opts.nbParallelRequests = 1
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/phpinfo-fork.php", handler, t)
+		if body == "pcntl-unavailable" {
+			t.Skip("pcntl/posix not fully loaded")
+		}
+		require.Equal(t, "child-safe", body)
 	}, opts)
 }
 
@@ -579,6 +613,11 @@ func TestException_worker(t *testing.T) {
 	testException(t, &testOptions{workerScript: "exception.php"})
 }
 func testException(t *testing.T, opts *testOptions) {
+	if opts.phpIni == nil {
+		opts.phpIni = map[string]string{}
+	}
+	opts.phpIni["display_errors"] = "1"
+
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
 		body, _ := testGet(fmt.Sprintf("http://example.com/exception.php?i=%d", i), handler, t)
 
@@ -770,6 +809,26 @@ func TestEnvIsResetInNonWorkerMode(t *testing.T) {
 	}, &testOptions{})
 }
 
+// putenv() must stay inside the thread-local sandbox and never mutate the
+// process-global OS environment, so a secret set by application code cannot leak
+// to the Go/Caddy side or to child processes (proc_open, exec, ...).
+func TestPutenvDoesNotLeakToOSEnvironment(t *testing.T) {
+	const key = "FRANKENPHP_PUTENV_LEAK"
+	const secret = "server-side-secret"
+	assert.NoError(t, os.Setenv(key, ""))
+	t.Cleanup(func() { _ = os.Unsetenv(key) })
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		putResult, _ := testGet(fmt.Sprintf("http://example.com/env/putenv.php?key=%s&put=%s", key, secret), handler, t)
+		assert.Equal(t, key+"="+secret, putResult, "putenv is visible to getenv within the sandbox")
+
+		assert.Empty(t, os.Getenv(key), "putenv must not leak into the OS environment")
+
+		childOut, _ := exec.Command("printenv", key).Output()
+		assert.Empty(t, strings.TrimSpace(string(childOut)), "child process must not inherit the putenv value")
+	}, &testOptions{nbParallelRequests: 1})
+}
+
 // TODO: should it actually get reset in worker mode?
 func TestEnvIsNotResetInWorkerMode(t *testing.T) {
 	assert.NoError(t, os.Setenv("index", ""))
@@ -890,12 +949,13 @@ func ExampleServeHTTP() {
 	defer frankenphp.Shutdown()
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Drop headers whose name contains an underscore: CGI maps dashes to
-		// underscores, so "Foo_Bar" would be indistinguishable from "Foo-Bar"
-		// in $_SERVER and could spoof any header an app or proxy trusts.
+		// Drop headers whose name contains an underscore or a dot: CGI maps
+		// dashes to underscores and PHP maps dots to underscores, so "Foo_Bar"
+		// and "Foo.Bar" would both be indistinguishable from "Foo-Bar" in
+		// $_SERVER and could spoof any header an app or proxy trusts.
 		// Whitelist any you genuinely need.
 		for name := range r.Header {
-			if strings.ContainsRune(name, '_') {
+			if strings.ContainsAny(name, "_.") {
 				delete(r.Header, name)
 			}
 		}
@@ -1228,6 +1288,24 @@ func FuzzResponseHeaders(f *testing.F) {
 // fuzzer-controlled, since unbounded native recursion (no depth guard) is
 // the interesting bug class here, not the value shapes themselves.
 func FuzzPersistZvalRoundtrip(f *testing.F) {
+	// Check the compiled-in hook once, not in every seed's concurrent requests.
+	func() {
+		require.NoError(f, frankenphp.Init())
+		defer frankenphp.Shutdown()
+
+		root, err := fastabs.FastAbs("./testdata")
+		require.NoError(f, err)
+		req := httptest.NewRequest("GET", "http://example.com/fuzz-persist-roundtrip.php", nil)
+		req, err = frankenphp.NewRequestWithContext(req, frankenphp.WithRequestDocumentRoot(root, false))
+		require.NoError(f, err)
+		w := httptest.NewRecorder()
+		require.NoError(f, frankenphp.ServeHTTP(w, req))
+		require.Equal(f, http.StatusOK, w.Code)
+		if w.Body.String() == "SKIP" {
+			f.Skip("FRANKENPHP_TEST not set; skipping persistent_zval roundtrip fuzzing")
+		}
+	}()
+
 	f.Add(0, 1)
 	f.Add(1, 1)
 	f.Add(10, 2)

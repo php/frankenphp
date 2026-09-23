@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <ext/spl/spl_exceptions.h>
 #include <ext/standard/head.h>
+#include <ext/standard/info.h>
 #ifdef HAVE_PHP_SESSION
 #include <ext/session/php_session.h>
 #endif
@@ -153,6 +154,8 @@ static pid_t fork_parent_pid = 0;
 
 static void frankenphp_fork_prepare(void) { fork_parent_pid = getpid(); }
 
+static void frankenphp_mark_fork_child(void) { is_forked_child = true; }
+
 #if defined(FRANKENPHP_KQUEUE_PARENT_DEATH)
 /* Watcher thread for platforms without a kernel parent-death signal.
  * Blocks in kevent() until the parent exits, then force-kills this child. */
@@ -175,7 +178,7 @@ static void *frankenphp_parent_death_watcher(void *arg) {
 #endif
 
 static void frankenphp_fork_child(void) {
-  is_forked_child = true;
+  frankenphp_mark_fork_child();
 #if defined(__linux__)
   // if the parent process dies between fork() and this prctl()
   if (prctl(PR_SET_PDEATHSIG, SIGKILL, 0, 0, 0) != 0 ||
@@ -207,6 +210,10 @@ static void frankenphp_fork_child(void) {
 
 static void frankenphp_register_atfork(void) {
   pthread_atfork(frankenphp_fork_prepare, NULL, frankenphp_fork_child);
+}
+
+static void frankenphp_register_cli_atfork(void) {
+  pthread_atfork(NULL, NULL, frankenphp_mark_fork_child);
 }
 
 /* pcntl signals delivered to a Go M segfault on PCNTL_G (no TSRM there)
@@ -650,7 +657,10 @@ PHP_FUNCTION(frankenphp_finish_request) { /* {{{ */
   RETURN_TRUE;
 } /* }}} */
 
-/* {{{ Call go's putenv to prevent race conditions */
+/* {{{ Sandboxed putenv() that never mutates the process-global OS environment.
+ * Writes land only in the thread-local sandboxed_env, so a secret passed to
+ * putenv() by one request cannot leak to the Go/Caddy side, to child processes
+ * (proc_open, exec, ...), or to other requests. */
 PHP_FUNCTION(frankenphp_putenv) {
   char *setting;
   size_t setting_len;
@@ -658,12 +668,6 @@ PHP_FUNCTION(frankenphp_putenv) {
   ZEND_PARSE_PARAMETERS_START(1, 1)
   Z_PARAM_STRING(setting, setting_len)
   ZEND_PARSE_PARAMETERS_END();
-
-  // Cast str_len to int (ensure it fits in an int)
-  if (setting_len > INT_MAX) {
-    php_error(E_WARNING, "String length exceeds maximum integer value");
-    RETURN_FALSE;
-  }
 
   if (setting_len == 0 || setting[0] == '=') {
     zend_argument_value_error(1, "must have a valid syntax");
@@ -689,29 +693,22 @@ PHP_FUNCTION(frankenphp_putenv) {
 
   /* cut the string at the first '=' */
   char *eq_pos = memchr(setting, '=', setting_len);
-  bool success = true;
 
   /* no '=' found, delete the variable */
   if (eq_pos == NULL) {
-    success = go_putenv(setting, (int)setting_len, NULL, 0);
-    if (success) {
-      zend_hash_str_del(sandboxed_env, setting, setting_len);
-    }
+    zend_hash_str_del(sandboxed_env, setting, setting_len);
 
-    RETURN_BOOL(success);
+    RETURN_TRUE;
   }
 
   size_t name_len = eq_pos - setting;
   size_t value_len =
       (setting_len > name_len + 1) ? (setting_len - name_len - 1) : 0;
-  success = go_putenv(setting, (int)name_len, eq_pos + 1, (int)value_len);
-  if (success) {
-    zval val = {0};
-    ZVAL_STRINGL(&val, eq_pos + 1, value_len);
-    zend_hash_str_update(sandboxed_env, setting, name_len, &val);
-  }
+  zval val = {0};
+  ZVAL_STRINGL(&val, eq_pos + 1, value_len);
+  zend_hash_str_update(sandboxed_env, setting, name_len, &val);
 
-  RETURN_BOOL(success);
+  RETURN_TRUE;
 } /* }}} */
 
 /* getenv() lookup: sandboxed_env if present (it already holds prepared + OS),
@@ -1116,6 +1113,68 @@ PHP_MINIT_FUNCTION(frankenphp) {
   return SUCCESS;
 }
 
+static void frankenphp_print_info_rows(const char **entries) {
+  for (int i = 0; entries[i] != NULL; i += 2) {
+    php_info_print_table_row(2, entries[i], entries[i + 1]);
+  }
+}
+
+PHP_MINFO_FUNCTION(frankenphp) {
+#ifndef PHP_WIN32
+  if (UNEXPECTED(is_forked_child)) {
+    return;
+  }
+#endif
+
+  struct go_frankenphp_collect_phpinfo_return data =
+      go_frankenphp_collect_phpinfo();
+  const char **entries = (const char **)data.r0;
+  const char **modules = (const char **)data.r1;
+  bool bailed_out = false;
+
+  zend_try {
+    /* no Go in here: printing may bailout, and a bailout must never
+     * unwind a Go frame */
+    php_info_print_table_start();
+    php_info_print_table_row(2, "FrankenPHP", TOSTRING(FRANKENPHP_VERSION));
+    if (entries) {
+      frankenphp_print_info_rows(entries);
+    }
+    php_info_print_table_end();
+
+    if (modules != NULL) {
+      /* the Go module list is long: collapse it in HTML */
+      if (sapi_module.phpinfo_as_text) {
+        php_info_print_table_start();
+        php_info_print_table_header(1, "Go modules");
+        php_info_print_table_end();
+      } else {
+        php_printf("<details><summary style=\"cursor: pointer\">Go "
+                   "modules</summary>\n");
+      }
+
+      php_info_print_table_start();
+      php_info_print_table_header(2, "Module", "Version");
+      frankenphp_print_info_rows(modules);
+      php_info_print_table_end();
+
+      if (!sapi_module.phpinfo_as_text) {
+        php_printf("</details>\n");
+      }
+    }
+  }
+  zend_catch { bailed_out = true; }
+  zend_end_try();
+
+  /* the bailout is caught: safe to hand the tables back to Go */
+  go_frankenphp_release_phpinfo(data.r0, data.r1);
+
+  if (bailed_out) {
+    /* re-raise the caught bailout */
+    zend_bailout();
+  }
+}
+
 static zend_module_entry frankenphp_module = {
     STANDARD_MODULE_HEADER,
     "frankenphp",
@@ -1124,7 +1183,20 @@ static zend_module_entry frankenphp_module = {
     NULL,                  /* shutdown */
     NULL,                  /* request initialization */
     NULL,                  /* request shutdown */
-    NULL,                  /* information */
+    PHP_MINFO(frankenphp), /* information */
+    TOSTRING(FRANKENPHP_VERSION),
+    STANDARD_MODULE_PROPERTIES};
+
+/* same phpinfo section in CLI, without the server functions and hooks */
+static zend_module_entry frankenphp_cli_module = {
+    STANDARD_MODULE_HEADER,
+    "frankenphp-cli",
+    NULL,                  /* function table */
+    NULL,                  /* initialization */
+    NULL,                  /* shutdown */
+    NULL,                  /* request initialization */
+    NULL,                  /* request shutdown */
+    PHP_MINFO(frankenphp), /* information */
     TOSTRING(FRANKENPHP_VERSION),
     STANDARD_MODULE_PROPERTIES};
 
@@ -1132,6 +1204,19 @@ static int frankenphp_startup(sapi_module_struct *sapi_module) {
   php_import_environment_variables = get_full_env;
 
   int result = php_module_startup(sapi_module, &frankenphp_module);
+#ifndef PHP_WIN32
+  if (result == SUCCESS) {
+    const int signals[] = {SIGSEGV, SIGBUS, SIGFPE};
+    for (size_t i = 0; i < sizeof(signals) / sizeof(signals[0]); i++) {
+      struct sigaction sa;
+      if (sigaction(signals[i], NULL, &sa) == 0 && sa.sa_handler != SIG_DFL &&
+          sa.sa_handler != SIG_IGN && !(sa.sa_flags & SA_ONSTACK)) {
+        sa.sa_flags |= SA_ONSTACK;
+        sigaction(signals[i], &sa, NULL);
+      }
+    }
+  }
+#endif
 #if PHP_VERSION_ID < 80500
   if (result == SUCCESS) {
     /* Override opcache here again if loaded as a shared extension
@@ -1773,6 +1858,25 @@ static void *execute_script_cli(void *arg) {
 #endif
 }
 
+static int (*previous_php_register_internal_extensions_func)(void) = NULL;
+
+/* the CLI SAPIs take no extra modules: hook their module startup */
+static int register_frankenphp_module(void) {
+  if (previous_php_register_internal_extensions_func() != SUCCESS) {
+    return FAILURE;
+  }
+
+#ifndef PHP_WIN32
+  /* mark only: a CLI child must survive its PHP thread's exit */
+  static pthread_once_t cli_atfork_once = PTHREAD_ONCE_INIT;
+  pthread_once(&cli_atfork_once, frankenphp_register_cli_atfork);
+#endif
+
+  return zend_register_internal_module(&frankenphp_cli_module) == NULL
+             ? FAILURE
+             : SUCCESS;
+}
+
 int frankenphp_execute_script_cli(char *script, int argc, char **argv,
                                   bool eval) {
   pthread_t thread;
@@ -1782,20 +1886,33 @@ int frankenphp_execute_script_cli(char *script, int argc, char **argv,
   cli_exec_args_t args = {
       .script = script, .argc = argc, .argv = argv, .eval = eval};
 
+  /* a failed join leaves the hook installed: don't save it as its own
+   * predecessor */
+  if (php_register_internal_extensions_func != register_frankenphp_module) {
+    previous_php_register_internal_extensions_func =
+        php_register_internal_extensions_func;
+  }
+  php_register_internal_extensions_func = register_frankenphp_module;
+
   /*
    * Start the script in a dedicated thread to prevent conflicts between Go and
    * PHP signal handlers
    */
   err = pthread_create(&thread, NULL, execute_script_cli, &args);
   if (err != 0) {
+    php_register_internal_extensions_func =
+        previous_php_register_internal_extensions_func;
     return err;
   }
 
   err = pthread_join(thread, &exit_status);
   if (err != 0) {
+    /* the CLI thread may still be inside the hook */
     return err;
   }
 
+  php_register_internal_extensions_func =
+      previous_php_register_internal_extensions_func;
   return (intptr_t)exit_status;
 }
 
@@ -1831,6 +1948,7 @@ int register_internal_extensions(void) {
     }
   }
 
+  pefree(modules, 1);
   modules = NULL;
   modules_len = 0;
 
@@ -1838,7 +1956,8 @@ int register_internal_extensions(void) {
 }
 
 void register_extensions(zend_module_entry **m, int len) {
-  modules = m;
+  modules = pemalloc(len * sizeof(*modules), 1);
+  memcpy(modules, m, len * sizeof(*modules));
   modules_len = len;
 
   original_php_register_internal_extensions_func =

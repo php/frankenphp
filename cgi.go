@@ -274,7 +274,18 @@ func splitPos(path string, splitPath []string) int {
 			}
 
 			if match {
-				return i + splitLen
+				pos := i + splitLen
+				// the split must end the path or a whole path segment: without
+				// this, ".php" embedded in a filename ("/a.php.txt/b.php")
+				// would split inside that filename and run a script the router
+				// never matched. Give up on this split string entirely rather
+				// than looking for a later occurrence of it, so the result
+				// stays identical to Caddy's file matcher (firstSplit).
+				if pos != pathLen && path[pos] != '/' {
+					break
+				}
+
+				return pos
 			}
 		}
 	}

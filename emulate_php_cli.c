@@ -17,6 +17,7 @@
 #endif
 #include <php_ini.h>
 #include <php_main.h>
+#include <php_network.h>
 #include <php_output.h>
 #include <php_variables.h>
 #include <php_version.h>
@@ -46,6 +47,24 @@ static void register_server_variable_filtered(const char *key, char **val,
   }
 }
 
+static php_stream *cli_open_standard_stream(const char *path, const char *mode,
+                                            FILE *file) {
+  php_stream *stream = php_stream_open_wrapper(path, mode, 0, NULL);
+  php_socket_t fd;
+
+  /* PHP uses the process's stdin/stdout/stderr on the first open and duplicates
+   * them on later opens. Keep the originals open for the next CLI execution,
+   * but let PHP close the duplicates. */
+  if (stream &&
+      php_stream_cast(stream, PHP_STREAM_AS_FD_FOR_SELECT, (void **)&fd, 0) ==
+          SUCCESS &&
+      fd == (php_socket_t)fileno(file)) {
+    stream->flags |= PHP_STREAM_FLAG_NO_CLOSE;
+  }
+
+  return stream;
+}
+
 /*
  * CLI code is adapted from
  * https://github.com/php/php-src/blob/master/sapi/cli/php_cli.c Copyright (c)
@@ -54,15 +73,14 @@ static void register_server_variable_filtered(const char *key, char **val,
  * <johannes@php.net> Parts based on CGI SAPI Module by Rasmus Lerdorf, Stig
  * Bakken and Zeev Suraski
  */
-static void cli_register_file_handles(bool no_close) /* {{{ */
+static void cli_register_file_handles(void) /* {{{ */
 {
   php_stream *s_in, *s_out, *s_err;
-  php_stream_context *sc_in = NULL, *sc_out = NULL, *sc_err = NULL;
   zend_constant ic, oc, ec;
 
-  s_in = php_stream_open_wrapper_ex("php://stdin", "rb", 0, NULL, sc_in);
-  s_out = php_stream_open_wrapper_ex("php://stdout", "wb", 0, NULL, sc_out);
-  s_err = php_stream_open_wrapper_ex("php://stderr", "wb", 0, NULL, sc_err);
+  s_in = cli_open_standard_stream("php://stdin", "rb", stdin);
+  s_out = cli_open_standard_stream("php://stdout", "wb", stdout);
+  s_err = cli_open_standard_stream("php://stderr", "wb", stderr);
 
   if (s_in == NULL || s_out == NULL || s_err == NULL) {
     if (s_in)
@@ -73,14 +91,6 @@ static void cli_register_file_handles(bool no_close) /* {{{ */
       php_stream_close(s_err);
     return;
   }
-
-  if (no_close) {
-    s_in->flags |= PHP_STREAM_FLAG_NO_CLOSE;
-    s_out->flags |= PHP_STREAM_FLAG_NO_CLOSE;
-    s_err->flags |= PHP_STREAM_FLAG_NO_CLOSE;
-  }
-
-  /*s_in_process = s_in;*/
 
   php_stream_to_zval(s_in, &ic.value);
   php_stream_to_zval(s_out, &oc.value);
@@ -165,10 +175,12 @@ void *emulate_script_cli(void *arg) {
   php_embed_module.name = "cli";
   php_embed_module.pretty_name = "PHP CLI embedded in FrankenPHP";
   php_embed_module.register_server_variables = sapi_cli_register_variables;
+  /* the CLI SAPI prints phpinfo() as plain text, not as HTML */
+  php_embed_module.phpinfo_as_text = 1;
 
   php_embed_init(cli_args->argc, cli_args->argv);
 
-  cli_register_file_handles(false);
+  cli_register_file_handles();
   zend_first_try {
     if (eval) {
       /* evaluate script as literal PHP code (php-cli -r "...") */

@@ -14,6 +14,7 @@ import "C"
 import (
 	"io"
 	"net/http/httptest"
+	"runtime"
 	"testing"
 	"unsafe"
 
@@ -26,9 +27,36 @@ func testRegisterExtension(t *testing.T) {
 	frankenphp.RegisterExtension(unsafe.Pointer(&C.module1_entry))
 	frankenphp.RegisterExtension(unsafe.Pointer(&C.module2_entry))
 
+	// race the GC against C reading the raw array
+	stop := make(chan struct{})
+	go func() {
+		var sink [][]unsafe.Pointer
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			runtime.GC()
+			for i := 0; i < 20000; i++ {
+				sink = append(sink, make([]unsafe.Pointer, 2))
+				if len(sink) > 100000 {
+					sink = nil
+				}
+			}
+		}
+	}()
+	defer close(stop)
+
 	err := frankenphp.Init()
 	require.Nil(t, err)
 	defer frankenphp.Shutdown()
+
+	require.Equal(t, int(C.SUCCESS), int(C.test_signal_handler()))
+	assert.Panics(t, func() {
+		var p *int
+		_ = *p
+	})
 
 	req := httptest.NewRequest("GET", "http://example.com/index.php", nil)
 	w := httptest.NewRecorder()

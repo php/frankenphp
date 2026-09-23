@@ -37,7 +37,7 @@ import (
 	"time"
 	"unsafe"
 	// debug on Linux
-	//_ "github.com/ianlancetaylor/cgosymbolizer"
+	// _ "github.com/ianlancetaylor/cgosymbolizer"
 )
 
 type contextKeyStruct struct{}
@@ -130,6 +130,50 @@ type PHPConfig struct {
 	ZTS                    bool
 	ZendSignals            bool
 	ZendMaxExecutionTimers bool
+}
+
+// EXPERIMENTAL: PHPThread exposes a PHP thread's request context.
+type PHPThread struct {
+	Request *http.Request
+	thread  *phpThread
+}
+
+// EXPERIMENTAL: IsRequestDone determines whether the request associated with the PHPThread has been closed.
+func (p *PHPThread) IsRequestDone() bool {
+	fc := p.thread.currentContext()
+
+	return fc == nil || fc.isDone
+}
+
+// EXPERIMENTAL: Pin pins a Go object, preventing it from being moved or freed by the garbage
+// collector until the Pinner.Unpin method has been called.
+func (p *PHPThread) Pin(pointer any) {
+	p.thread.Pin(pointer)
+}
+
+// EXPERIMENTAL: Thread retrieves a PHP thread by its index.
+// Returns nil and false if the system is not running or no thread exists at the given index.
+func Thread(index uint) (*PHPThread, bool) {
+	if !isRunning.Load() {
+		return nil, false
+	}
+
+	if index >= uint(len(phpThreads)) {
+		return nil, false
+	}
+
+	thread := phpThreads[index]
+	if thread == nil {
+		return nil, false
+	}
+
+	fc := thread.currentContext()
+	var request *http.Request
+	if fc != nil {
+		request = fc.request
+	}
+
+	return &PHPThread{request, thread}, true
 }
 
 // Version returns infos about the PHP version.
@@ -619,7 +663,11 @@ func go_sapi_flush(threadIndex C.uintptr_t) bool {
 		return false
 	}
 
-	if fc.clientHasClosed() && !fc.isDone {
+	if fc.isDone {
+		return fc.clientHadClosed
+	}
+
+	if fc.clientHasClosed() {
 		return true
 	}
 

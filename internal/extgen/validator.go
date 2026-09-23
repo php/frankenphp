@@ -142,45 +142,26 @@ func (v *Validator) validateGoFunctionSignatureWithOptions(phpFunc phpFunction, 
 		return fmt.Errorf("no function declaration found in Go function")
 	}
 
-	goParamCount := 0
-	if goFunc.Type.Params != nil {
-		goParamCount = len(goFunc.Type.Params.List)
-	}
+	goParamTypes := flattenParamTypes(goFunc.Type.Params)
 
-	hasReceiver := goFunc.Recv != nil && len(goFunc.Recv.List) > 0
 	paramOffset := 0
-	effectiveGoParamCount := goParamCount
-
-	if hasReceiver {
-		paramOffset = 0
-		effectiveGoParamCount = goParamCount
-	} else if isMethod && goParamCount > 0 {
+	hasReceiver := goFunc.Recv != nil && len(goFunc.Recv.List) > 0
+	if !hasReceiver && isMethod && len(goParamTypes) > 0 {
 		// this is a method-like function, first parameter should be the struct
 		paramOffset = 1
-		effectiveGoParamCount = goParamCount - 1
 	}
 
-	expectedGoParams := len(phpFunc.Params)
-
-	if expectedGoParams != effectiveGoParamCount {
-		return fmt.Errorf("parameter count mismatch: PHP function has %d parameters (expecting %d Go parameters) but Go function has %d", len(phpFunc.Params), expectedGoParams, effectiveGoParamCount)
+	effectiveGoParamCount := len(goParamTypes) - paramOffset
+	if len(phpFunc.Params) != effectiveGoParamCount {
+		return fmt.Errorf("parameter count mismatch: PHP function has %d parameters but Go function has %d", len(phpFunc.Params), effectiveGoParamCount)
 	}
 
-	if goFunc.Type.Params != nil && len(phpFunc.Params) > 0 {
-		for i, phpParam := range phpFunc.Params {
-			goParamIndex := i + paramOffset
+	for i, phpParam := range phpFunc.Params {
+		expectedGoType := v.phpTypeToGoType(phpParam.PhpType, phpParam.IsNullable)
+		actualGoType := v.goTypeToString(goParamTypes[i+paramOffset])
 
-			if goParamIndex >= len(goFunc.Type.Params.List) {
-				break
-			}
-
-			goParam := goFunc.Type.Params.List[goParamIndex]
-			expectedGoType := v.phpTypeToGoType(phpParam.PhpType, phpParam.IsNullable)
-			actualGoType := v.goTypeToString(goParam.Type)
-
-			if !v.isCompatibleGoType(expectedGoType, actualGoType) {
-				return fmt.Errorf("parameter %d type mismatch: PHP %q requires Go type %q but found %q", i+1, phpParam.PhpType, expectedGoType, actualGoType)
-			}
+		if !v.isCompatibleGoType(expectedGoType, actualGoType) {
+			return fmt.Errorf("parameter %d type mismatch: PHP %q requires Go type %q but found %q", i+1, phpParam.PhpType, expectedGoType, actualGoType)
 		}
 	}
 
@@ -215,7 +196,9 @@ func (v *Validator) phpTypeToGoType(t phpType, isNullable bool) string {
 		baseType = "any"
 	}
 
-	if isNullable && t != phpString && t != phpArray && t != phpCallable {
+	// Types already passed as a pointer carry PHP null in the pointer itself,
+	// so they never gain an extra level of indirection when nullable.
+	if isNullable && t != phpString && t != phpArray && t != phpMixed && t != phpCallable {
 		return "*" + baseType
 	}
 
@@ -250,7 +233,7 @@ func (v *Validator) phpReturnTypeToGoType(phpReturnType phpType) string {
 		return "float64"
 	case phpBool:
 		return "bool"
-	case phpArray:
+	case phpArray, phpMixed:
 		return "unsafe.Pointer"
 	default:
 		return "any"

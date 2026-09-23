@@ -156,15 +156,15 @@ echo $processor->process('Hello World', StringProcessor::MODE_UPPERCASE);  // "H
 | `array`            | `frankenphp.AssociativeArray` | ❌       | `frankenphp.GoAssociativeArray()` | `frankenphp.PHPAssociativeArray()` | ✅         |
 | `array`            | `map[string]any`              | ❌       | `frankenphp.GoMap()`          | `frankenphp.PHPMap()`          | ✅         |
 | `array`            | `[]any`                       | ❌       | `frankenphp.GoPackedArray()`  | `frankenphp.PHPPackedArray()`  | ✅         |
-| `mixed`            | `any`                         | ❌       | `GoValue()`                   | `PHPValue()`                   | ❌         |
-| `callable`         | `*C.zval`                     | ❌       | -                             | `frankenphp.CallPHPCallable()` | ❌         |
+| `mixed`            | `*C.zval`                     | ❌       | `frankenphp.GoValue()`        | `frankenphp.PHPValue()`        | ✅         |
+| `callable`         | `*C.zval`                     | ❌       | -                             | `frankenphp.CallPHPCallable()` | ✅         |
 | `object`           | `struct`                      | ❌       | _尚未实现_                    | _尚未实现_                     | ❌         |
 
 > [!NOTE]
 >
 > 此表尚不详尽，将随着 FrankenPHP 类型 API 变得更加完整而完善。
 >
-> 特别是对于类方法，目前支持原始类型和数组。对象尚不能用作方法参数或返回类型。
+> 特别是对于类方法，目前支持原始类型、数组、`mixed` 和 `callable`。对象尚不能用作方法参数或返回类型。
 
 如果你参考上一节的代码片段，你可以看到助手用于转换第一个参数和返回值。我们的 `repeat_this()` 函数的第二和第三个参数不需要转换，因为底层类型的内存表示对于 C 和 Go 都是相同的。
 
