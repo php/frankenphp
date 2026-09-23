@@ -19,7 +19,7 @@ cleanup() {
 
 on_exit() {
 	local status=$?
-	if (( status != 0 )) && [[ -n "$directory" && -f "$directory/server.log" ]]; then
+	if ((status != 0)) && [[ -n "$directory" && -f "$directory/server.log" ]]; then
 		cat "$directory/server.log" >&2
 	fi
 	cleanup
@@ -27,24 +27,27 @@ on_exit() {
 }
 trap on_exit EXIT
 
-fail() { echo "FAIL: $*" >&2; exit 1; }
+fail() {
+	echo "FAIL: $*" >&2
+	exit 1
+}
 request() {
 	local status error=0
 	status=$(curl --silent --max-time 1 --output "$2" --write-out '%{http_code}' \
 		"http://127.0.0.1:18080$1") || error=$?
 	case "$error" in
-		0) printf '%s' "$status" ;;
-		7) printf 'closed' ;;
-		# An accepted connection can close while HTTP shutdown begins.
-		52|56) printf 'closing' ;;
-		*) printf 'error-%s' "$error" ;;
+	0) printf '%s' "$status" ;;
+	7) printf 'closed' ;;
+	# An accepted connection can close while HTTP shutdown begins.
+	52 | 56) printf 'closing' ;;
+	*) printf 'error-%s' "$error" ;;
 	esac
 }
 
 # Fresh processes exercise Caddy's non-deterministic app shutdown order.
 for attempt in {1..5}; do
 	directory=$(mktemp -d)
-	cat > "$directory/Caddyfile" <<CADDY
+	cat >"$directory/Caddyfile" <<CADDY
 {
 	debug
 	admin off
@@ -65,7 +68,7 @@ http://127.0.0.1:18080 {
 	php_server
 }
 CADDY
-	cat > "$directory/index.php" <<'PHP'
+	cat >"$directory/index.php" <<'PHP'
 <?php
 set_time_limit(20);
 if (isset($_GET['slow'])) {
@@ -83,21 +86,21 @@ if (isset($_GET['slow'])) {
 echo "ok\n";
 PHP
 
-	"$frankenphp_binary" run --config "$directory/Caddyfile" > "$directory/server.log" 2>&1 &
+	"$frankenphp_binary" run --config "$directory/Caddyfile" >"$directory/server.log" 2>&1 &
 	server_pid=$!
 	deadline=$((SECONDS + 20))
 	until [[ "$(request / "$directory/response")" == 200 ]] && [[ "$(cat "$directory/response")" == ok ]]; do
 		kill -0 "$server_pid" 2>/dev/null || fail 'Server exited before becoming ready'
-		(( SECONDS < deadline )) || fail 'PHP did not become ready'
+		((SECONDS < deadline)) || fail 'PHP did not become ready'
 		sleep 0.05
 	done
 
 	curl --silent --show-error --fail --max-time 15 \
-		'http://127.0.0.1:18080/?slow=1' > "$directory/slow-response" &
+		'http://127.0.0.1:18080/?slow=1' >"$directory/slow-response" &
 	slow_pid=$!
 	deadline=$((SECONDS + 10))
 	until [[ -f "$directory/started" ]]; do
-		(( SECONDS < deadline )) || fail 'Slow PHP request did not start'
+		((SECONDS < deadline)) || fail 'Slow PHP request did not start'
 		sleep 0.02
 	done
 	kill -0 "$slow_pid" 2>/dev/null || fail 'Slow request finished before SIGTERM'
@@ -107,7 +110,7 @@ PHP
 	drained_inflight=false
 	deadline=$((SECONDS + 20))
 	while kill -0 "$server_pid" 2>/dev/null; do
-		(( SECONDS < deadline )) || fail 'Server did not exit within the shutdown budget'
+		((SECONDS < deadline)) || fail 'Server did not exit within the shutdown budget'
 		health=$(request /health /dev/null)
 		status=$(request / "$directory/response")
 		[[ "$health" != error-* ]] || fail "Health request failed with curl exit code ${health#error-}"
@@ -134,7 +137,7 @@ PHP
 done
 
 directory=$(mktemp -d)
-cat > "$directory/Caddyfile" <<CADDY
+cat >"$directory/Caddyfile" <<CADDY
 {
 	admin off
 	auto_https off
@@ -150,7 +153,7 @@ http://127.0.0.1:18080 {
 	php_server
 }
 CADDY
-cat > "$directory/index.php" <<'PHP'
+cat >"$directory/index.php" <<'PHP'
 <?php
 $handler = static function (): void {
 	echo "worker-ok\n";
@@ -160,19 +163,19 @@ while (frankenphp_handle_request($handler)) {
 file_put_contents(__DIR__ . '/worker-stopped', 'cleanup-complete');
 PHP
 
-"$frankenphp_binary" run --config "$directory/Caddyfile" > "$directory/server.log" 2>&1 &
+"$frankenphp_binary" run --config "$directory/Caddyfile" >"$directory/server.log" 2>&1 &
 server_pid=$!
 deadline=$((SECONDS + 20))
 until [[ "$(request / "$directory/response")" == 200 ]] && [[ "$(cat "$directory/response")" == worker-ok ]]; do
 	kill -0 "$server_pid" 2>/dev/null || fail 'Server exited before the worker became ready'
-	(( SECONDS < deadline )) || fail 'Worker did not become ready'
+	((SECONDS < deadline)) || fail 'Worker did not become ready'
 	sleep 0.05
 done
 [[ ! -e "$directory/worker-stopped" ]] || fail 'Worker cleanup ran before SIGTERM'
 kill -TERM "$server_pid"
 deadline=$((SECONDS + 20))
 while kill -0 "$server_pid" 2>/dev/null; do
-	(( SECONDS < deadline )) || fail 'Worker shutdown exceeded the shutdown budget'
+	((SECONDS < deadline)) || fail 'Worker shutdown exceeded the shutdown budget'
 	sleep 0.02
 done
 wait "$server_pid" || fail 'Server did not exit successfully after worker shutdown'
