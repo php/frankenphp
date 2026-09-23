@@ -19,12 +19,24 @@ var (
 	phpinfoMu      sync.Mutex
 	phpinfoEntries []phpinfoEntry
 
-	phpinfoDirty         = true
-	phpinfoBuildMu       sync.Mutex
-	phpinfoPinner        runtime.Pinner
-	phpinfoCachedEntries **C.char
-	phpinfoCachedModules **C.char
+	phpinfoDirty   = true
+	phpinfoBuildMu sync.Mutex
+	phpinfoCurrent *phpinfoTable
+	phpinfoRetired []*phpinfoTable
 )
+
+// one pinned generation of the phpinfo tables, held at a fixed address while
+// C code may still be reading it
+type phpinfoTable struct {
+	pinner           runtime.Pinner
+	entries, modules **C.char
+	readers          int
+	retired          bool
+}
+
+func (t *phpinfoTable) matches(entries, modules **C.char) bool {
+	return t.entries == entries && t.modules == modules
+}
 
 // AddPHPInfoEntry adds an entry to the frankenphp section of phpinfo().
 func AddPHPInfoEntry(key, value string) {
@@ -82,8 +94,8 @@ func goModuleVersion(module *debug.Module) string {
 	return module.Replace.Path + " " + module.Replace.Version
 }
 
-// Pins the tables for the process lifetime so a bailout during the
-// C-side printing can never unwind a Go frame.
+// The caller must hand the borrowed tables back to
+// go_frankenphp_release_phpinfo, bailout included, or they stay pinned.
 //
 //export go_frankenphp_collect_phpinfo
 func go_frankenphp_collect_phpinfo() (**C.char, **C.char) {
@@ -95,21 +107,76 @@ func go_frankenphp_collect_phpinfo() (**C.char, **C.char) {
 	phpinfoDirty = false
 	phpinfoMu.Unlock()
 
-	if !dirty {
-		return phpinfoCachedEntries, phpinfoCachedModules
+	if !dirty && phpinfoCurrent != nil {
+		phpinfoCurrent.readers++
+		return phpinfoCurrent.entries, phpinfoCurrent.modules
 	}
 
 	buildInfo, _ := debug.ReadBuildInfo()
 	entries, modules := collectPHPInfoEntries(buildInfo)
 
-	phpinfoCachedEntries = pinPHPInfoEntries(entries, &phpinfoPinner)
-	phpinfoCachedModules = pinPHPInfoEntries(modules, &phpinfoPinner)
+	table := new(phpinfoTable)
+	table.entries = pinPHPInfoEntries(entries, &table.pinner)
+	table.modules = pinPHPInfoEntries(modules, &table.pinner)
+	table.readers = 1
 
-	return phpinfoCachedEntries, phpinfoCachedModules
+	// readers of the previous table may still be printing it
+	retirePHPInfoTableLocked(phpinfoCurrent)
+	phpinfoCurrent = table
+
+	return table.entries, table.modules
 }
 
-// pinPHPInfoEntries sorts entries and pins a null-terminated array of key, value
-// pointers, along with the null-terminated strings they point to.
+// go_frankenphp_release_phpinfo ends a collect borrow; the table is unpinned
+// once retired and its last reader is done.
+//
+//export go_frankenphp_release_phpinfo
+func go_frankenphp_release_phpinfo(entries, modules **C.char) {
+	phpinfoBuildMu.Lock()
+	defer phpinfoBuildMu.Unlock()
+
+	table := phpinfoCurrent
+	if table == nil || !table.matches(entries, modules) {
+		table = nil
+		for _, t := range phpinfoRetired {
+			if t.matches(entries, modules) {
+				table = t
+				break
+			}
+		}
+	}
+	if table == nil {
+		return
+	}
+
+	if table.readers > 0 {
+		table.readers--
+	}
+	unpinPHPInfoTableLocked(table)
+}
+
+func retirePHPInfoTableLocked(table *phpinfoTable) {
+	if table == nil || table.retired {
+		return
+	}
+
+	table.retired = true
+	phpinfoRetired = append(phpinfoRetired, table)
+	unpinPHPInfoTableLocked(table)
+}
+
+func unpinPHPInfoTableLocked(table *phpinfoTable) {
+	if !table.retired || table.readers > 0 {
+		return
+	}
+
+	table.pinner.Unpin()
+	phpinfoRetired = slices.DeleteFunc(phpinfoRetired, func(t *phpinfoTable) bool {
+		return t == table
+	})
+}
+
+// pinPHPInfoEntries returns a sorted, NUL-terminated key/value array for C.
 func pinPHPInfoEntries(entries []phpinfoEntry, pinner *runtime.Pinner) **C.char {
 	if len(entries) == 0 {
 		return nil
