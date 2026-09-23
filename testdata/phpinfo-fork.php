@@ -19,7 +19,7 @@ return function () {
         ob_start();
         phpinfo();
         $output = ob_get_clean();
-        exit(str_contains($output, '<td class="e">frankenphp </td>') ? 3 : 0);
+        exit(str_contains($output, '<td class="e">FrankenPHP </td>') ? 3 : 0);
     }
 
     $deadline = microtime(true) + 3;

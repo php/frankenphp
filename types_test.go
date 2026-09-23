@@ -267,7 +267,7 @@ func TestCollectPHPInfoEntries(t *testing.T) {
 	require.Empty(t, modules)
 
 	entries, modules = collectPHPInfoEntries(&debug.BuildInfo{GoVersion: "go1.26.0"})
-	require.Equal(t, []phpinfoEntry{{"custom", "value"}, {"go", "go1.26.0"}}, entries)
+	require.Equal(t, []phpinfoEntry{{"custom", "value"}, {"Go", "go1.26.0"}}, entries)
 	require.Empty(t, modules)
 
 	for _, tt := range []struct {
@@ -291,7 +291,7 @@ func TestCollectPHPInfoEntries(t *testing.T) {
 				},
 			})
 			require.Equal(t, []phpinfoEntry{
-				{"custom", "value"}, {"go", "go1.26.0"}, {"e-dant/watcher", "v3.0.0"}, {key, tt.want},
+				{"custom", "value"}, {"Go", "go1.26.0"}, {"e-dant/watcher", "v3.0.0"}, {key, tt.want},
 				{"dunglas/caddy-cbrotli", "v1.0.0"},
 			}, entries)
 			require.Equal(t, []phpinfoEntry{

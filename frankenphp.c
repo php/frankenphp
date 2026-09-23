@@ -1146,7 +1146,7 @@ PHP_MINFO_FUNCTION(frankenphp) {
     /* no Go in here: printing may bailout, and a bailout must never
      * unwind a Go frame */
     php_info_print_table_start();
-    php_info_print_table_row(2, "frankenphp", TOSTRING(FRANKENPHP_VERSION));
+    php_info_print_table_row(2, "FrankenPHP", TOSTRING(FRANKENPHP_VERSION));
     if (entries) {
       frankenphp_print_info_rows(entries);
     }

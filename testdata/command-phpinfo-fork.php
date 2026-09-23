@@ -14,7 +14,7 @@ if ($pid === 0) {
     ob_start();
     phpinfo();
     $output = ob_get_clean();
-    fwrite(STDERR, str_contains($output, "\nfrankenphp => ") ? "child-frankenphp\n" : "child-safe\n");
+    fwrite(STDERR, str_contains($output, "\nFrankenPHP => ") ? "child-frankenphp\n" : "child-safe\n");
     exit(0);
 }
 

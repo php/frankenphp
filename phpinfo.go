@@ -55,7 +55,7 @@ func collectPHPInfoEntries(buildInfo *debug.BuildInfo) (entries, modules []phpin
 		return entries, nil
 	}
 
-	entries = append(entries, phpinfoEntry{"go", buildInfo.GoVersion})
+	entries = append(entries, phpinfoEntry{"Go", buildInfo.GoVersion})
 	modules = buildGoModuleEntries(buildInfo)
 	moduleAliases := map[string]string{
 		"github.com/dunglas/mercure":       "dunglas/mercure",

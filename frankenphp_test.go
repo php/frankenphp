@@ -482,7 +482,7 @@ func testPhpInfo(t *testing.T, opts *testOptions) {
 			t.Log(body)
 		})
 
-		assert.Contains(t, body, "frankenphp")
+		assert.Contains(t, body, `<tr><td class="e">FrankenPHP </td><td class="v">`)
 		assert.Contains(t, body, fmt.Sprintf("i=%d", i))
 		assert.Contains(t, body, runtime.Version())
 		assert.Contains(t, body, `<tr><td class="e">`+lateKey+` </td><td class="v">registered after phpinfo </td></tr>`)

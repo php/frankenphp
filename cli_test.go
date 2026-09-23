@@ -63,8 +63,8 @@ func TestExecuteCLICodePHPInfoAsText(t *testing.T) {
 	stdoutStderrStr := string(stdoutStderr)
 
 	assert.Contains(t, stdoutStderrStr, "PHP Version => ")
-	assert.Contains(t, stdoutStderrStr, "frankenphp => ")
-	assert.Contains(t, stdoutStderrStr, "go => go")
+	assert.Contains(t, stdoutStderrStr, "FrankenPHP => ")
+	assert.Contains(t, stdoutStderrStr, "Go => go")
 	assert.Contains(t, stdoutStderrStr, "Go modules")
 	assert.Contains(t, stdoutStderrStr, "Module => Version")
 	assert.NotContains(t, stdoutStderrStr, "<!DOCTYPE")
