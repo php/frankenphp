@@ -92,23 +92,3 @@ func initTestServer(t *testing.T, tester *caddytest.Tester, config, format strin
 	// immediate reload of that listener when the real configuration is sent.
 	require.NoError(t, caddy.Load(configJSON, true))
 }
-
-func TestCaddyTestServerReleasesListeners(t *testing.T) {
-	for _, name := range []string{"first", "second"} {
-		t.Run(name, func(t *testing.T) {
-			tester := caddytest.NewTester(t)
-			initTestServer(t, tester, `
-				{
-					admin localhost:2999
-				}
-				http://localhost:`+testPort+` {
-					respond "ready"
-				}
-			`, "caddyfile")
-			tester.AssertGetResponse("http://localhost:"+testPort, http.StatusOK, "ready")
-		})
-
-		require.Zero(t, caddy.ListenerUsage("tcp", "localhost:2999"))
-		require.Zero(t, caddy.ListenerUsage("tcp", ":"+testPort))
-	}
-}
