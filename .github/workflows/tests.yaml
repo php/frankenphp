@@ -105,6 +105,13 @@ jobs:
                   "-ex", "set debuginfod enabled off",
                   "-ex", "set pagination off", "-ex", "thread apply all bt 30",
                   "-ex", "info sharedlibrary", "-ex", "p 'runtime.mheap_'.sweepgen",
+                  "-ex", "frame 3", "-ex", "set language c",
+                  "-ex", "set $uc = (char *)ctx", "-ex", "x/23gx $uc+40",
+                  "-ex", "set $pc = *(unsigned long *)($uc+168)",
+                  "-ex", "set $sp = *(unsigned long *)($uc+160)",
+                  "-ex", "set $rbp = *(unsigned long *)($uc+120)",
+                  "-ex", "set $r14 = *(unsigned long *)($uc+88)",
+                  "-ex", "x/i $pc", "-ex", "bt 30",
                   binary, core,
               ])
           sys.exit(any(results))
