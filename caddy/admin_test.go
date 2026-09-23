@@ -86,11 +86,11 @@ func TestShowTheCorrectThreadDebugStatus(t *testing.T) {
 	debugState := getDebugState(t, tester)
 
 	// assert that the correct threads are present in the thread info
-	require.Len(t, debugState.ThreadDebugStates, 3)
-	assert.Equal(t, "ready", debugState.ThreadDebugStates[0].State)
+	assert.Equal(t, debugState.ThreadDebugStates[0].State, "ready")
 	assert.Contains(t, debugState.ThreadDebugStates[1].Name, "worker-with-counter.php")
 	assert.Contains(t, debugState.ThreadDebugStates[2].Name, "index.php")
-	assert.Equal(t, 3, debugState.ReservedThreadCount)
+	assert.Equal(t, debugState.ReservedThreadCount, 3)
+	assert.Len(t, debugState.ThreadDebugStates, 3)
 }
 
 func TestThreadDebugStateMetricsAfterRequests(t *testing.T) {

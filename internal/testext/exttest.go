@@ -48,18 +48,11 @@ func testRegisterExtension(t *testing.T) {
 	}()
 	defer close(stop)
 
-	t.Log("initializing PHP with the registered extensions")
 	err := frankenphp.Init()
 	require.Nil(t, err)
-	defer func() {
-		t.Log("shutting down PHP")
-		frankenphp.Shutdown()
-		t.Log("PHP shutdown completed")
-	}()
+	defer frankenphp.Shutdown()
 
-	t.Log("checking the signal handler")
 	require.Equal(t, int(C.SUCCESS), int(C.test_signal_handler()))
-	t.Log("checking recovery from a Go nil-pointer panic")
 	assert.Panics(t, func() {
 		var p *int
 		_ = *p
@@ -71,11 +64,9 @@ func testRegisterExtension(t *testing.T) {
 	req, err = frankenphp.NewRequestWithContext(req, frankenphp.WithRequestDocumentRoot("./testdata", false))
 	assert.NoError(t, err)
 
-	t.Log("serving the extension-list request")
 	err = frankenphp.ServeHTTP(w, req)
 	assert.NoError(t, err)
 
-	t.Log("checking the registered extension names")
 	resp := w.Result()
 	body, _ := io.ReadAll(resp.Body)
 	assert.Contains(t, string(body), "ext1")
