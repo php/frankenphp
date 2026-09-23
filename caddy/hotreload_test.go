@@ -57,7 +57,7 @@ func TestHotReload(t *testing.T) {
 	req, err := http.NewRequestWithContext(cx, http.MethodGet, "http://localhost:"+testPort+u, nil)
 	require.NoError(t, err)
 	resp := tester.AssertResponseCode(req, http.StatusOK)
-	defer resp.Body.Close()
+	defer func() { require.NoError(t, resp.Body.Close()) }()
 
 	// Wait for the first bytes before changing the file, so the subscription
 	// is ready. A failed request or read must not leave a readiness wait blocked.
