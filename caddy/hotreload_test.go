@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -30,7 +29,7 @@ func TestHotReload(t *testing.T) {
 	// SSE roundtrip below on slow CI runners (notably emulated armv7).
 	// 30s keeps the test bounded so a real regression fails fast.
 	tester.Client.Timeout = 30 * time.Second
-	tester.InitServer(`
+	initTestServer(t, tester, `
 		{
 			debug
 			skip_install_trust
@@ -53,49 +52,56 @@ func TestHotReload(t *testing.T) {
 			}
 		`, "caddyfile")
 
-	var connected, received sync.WaitGroup
+	cx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	req, err := http.NewRequestWithContext(cx, http.MethodGet, "http://localhost:"+testPort+u, nil)
+	require.NoError(t, err)
+	resp := tester.AssertResponseCode(req, http.StatusOK)
+	defer func() { require.NoError(t, resp.Body.Close()) }()
 
-	connected.Add(1)
-	received.Go(func() {
-		cx, cancel := context.WithCancel(t.Context())
-		req, _ := http.NewRequest(http.MethodGet, "http://localhost:"+testPort+u, nil)
-		req = req.WithContext(cx)
-		resp := tester.AssertResponseCode(req, http.StatusOK)
+	// Wait for the first bytes before changing the file, so the subscription
+	// is ready. A failed request or read must not leave a readiness wait blocked.
+	buf := make([]byte, 1024)
+	_, err = resp.Body.Read(buf)
+	require.NoError(t, err)
 
+	// Return read failures to the test goroutine. Buffer the result so this
+	// goroutine can exit even if a failed file write ends the test first.
+	received := make(chan error, 1)
+	go func() {
 		var receivedBody strings.Builder
-
-		buf := make([]byte, 1024)
-		isConnected := false
 		for {
 			n, err := resp.Body.Read(buf)
-			if n > 0 {
-				receivedBody.Write(buf[:n])
-			}
-			if !isConnected {
-				// wait for the first bytes before marking the client as connected
-				isConnected = true
-				connected.Done()
-			}
+			receivedBody.Write(buf[:n])
 			if strings.Contains(receivedBody.String(), "index.php") {
-				cancel()
-
-				break
+				received <- nil
+				return
 			}
-			// Surface the read error only after checking the buffer: on
-			// Windows the SSE server sometimes flushes the event and closes
-			// the connection in the same syscall, so Read returns (n>0, EOF)
-			// and we'd otherwise fail despite having the data we wanted.
-			require.NoError(t, err)
+			// A read may return both the expected event and an error.
+			if err != nil {
+				received <- err
+				return
+			}
 		}
+	}()
 
-		require.NoError(t, resp.Body.Close())
-	})
-
-	connected.Wait()
-
-	require.NoError(t, os.WriteFile(indexFile, []byte("<?=$_SERVER['FRANKENPHP_HOT_RELOAD'];"), 0644))
-
-	received.Wait()
+	// The native watcher starts asynchronously, independently of the SSE
+	// subscription. Retry changes until one is observed, leaving more time
+	// between writes than the watcher's 150 ms debounce interval.
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+waitForReload:
+	for {
+		require.NoError(t, os.WriteFile(indexFile, []byte("<?=$_SERVER['FRANKENPHP_HOT_RELOAD'];"), 0644))
+		select {
+		case err := <-received:
+			require.NoError(t, err)
+			break waitForReload
+		case <-ticker.C:
+		}
+	}
+	cancel()
+	require.NoError(t, resp.Body.Close())
 
 	tester.AssertGetResponse("http://localhost:"+testPort+"/index.php", http.StatusOK, u)
 }

@@ -16,7 +16,7 @@ func TestRootBehavesTheSameOutsideAndInsidePhpServer(t *testing.T) {
 	expectedFileResponse, _ := os.ReadFile("../testdata/files/static.txt")
 	hostWithRootOutside := "http://localhost:" + testPort
 	hostWithRootInside := "http://localhost:" + testPortTwo
-	tester.InitServer(`
+	initTestServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
