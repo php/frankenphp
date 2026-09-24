@@ -111,15 +111,33 @@ func (thread *phpThread) forceReboot() bool {
 	return true
 }
 
-// shutdown the underlying PHP thread
+// shutdown the underlying PHP thread, block until shutdown is finished
 func (thread *phpThread) shutdown() {
 	if !thread.state.RequestSafeStateChange(state.ShuttingDown) {
-		// thread is already shutting down, prefer the stable reserved state over done
+		// a worker that failed to boot published ShuttingDown itself and is
+		// still walking its C exit path: join it before TSRM is torn down
+		thread.waitForExit(state.Done, state.Reserved)
+		// prefer the stable reserved state over done
 		_ = thread.state.CompareAndSwap(state.Done, state.Reserved)
+
 		return
 	}
 
 	close(thread.drainChan)
+
+	thread.waitForExit(state.Done)
+
+	thread.drainChan = make(chan struct{})
+
+	// threads go back to the reserved state from which they can be booted again
+	thread.state.Set(state.Reserved)
+}
+
+// waitForExit joins the C thread, arming force-kill past the grace period
+func (thread *phpThread) waitForExit(exitStates ...state.State) {
+	if thread.state.WaitForStateWithTimeout(shutDownGracePeriod, exitStates...) {
+		return
+	}
 
 	// Arm force-kill after the grace period to wake any thread stuck in
 	// a blocking syscall (sleep, blocking I/O). The wait remains
@@ -127,23 +145,16 @@ func (thread *phpThread) shutdown() {
 	// syscall (macOS, Windows non-alertable Sleep) the thread will exit
 	// when the syscall completes naturally; the operator's orchestrator
 	// is responsible for any harder timeout.
-	if !thread.state.WaitForStateWithTimeout(shutDownGracePeriod, state.Done) {
-		globalLogger.LogAttrs(
-			globalCtx,
-			slog.LevelWarn,
-			"force-killing thread on shutdown timeout",
-			slog.String("name", thread.name()),
-			slog.String("state", thread.state.Name()),
-			slog.String("timeout", shutDownGracePeriod.String()),
-		)
-		thread.sendKillSignal()
-		thread.state.WaitFor(state.Done)
-	}
-
-	thread.drainChan = make(chan struct{})
-
-	// threads go back to the reserved state from which they can be booted again
-	thread.state.Set(state.Reserved)
+	globalLogger.LogAttrs(
+		globalCtx,
+		slog.LevelWarn,
+		"force-killing thread on shutdown timeout",
+		slog.String("name", thread.name()),
+		slog.String("state", thread.state.Name()),
+		slog.String("timeout", shutDownGracePeriod.String()),
+	)
+	thread.sendKillSignal()
+	thread.state.WaitFor(exitStates...)
 }
 
 // setHandler changes the thread handler safely
