@@ -760,6 +760,45 @@ func TestMetrics(t *testing.T) {
 	require.NoError(t, testutil.GatherAndCompare(ctx.GetMetricsRegistry(), strings.NewReader(expectedMetrics), "frankenphp_total_threads", "frankenphp_busy_threads"))
 }
 
+// TestBackgroundWorkerFromCaddyfile starts a background worker from a
+// Caddyfile and checks it runs: the sentinel its script touches appears
+func TestBackgroundWorkerFromCaddyfile(t *testing.T) {
+	sentinel := filepath.ToSlash(filepath.Join(t.TempDir(), "bg.sentinel"))
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+	{
+		skip_install_trust
+		admin localhost:2999
+		http_port `+testPort+`
+		https_port 9443
+
+		frankenphp {
+			worker {
+				file ../testdata/bgworker/basic.php
+				num 1
+				name bg-caddy
+				background
+				env BG_SENTINEL `+sentinel+`
+			}
+		}
+	}
+
+	localhost:`+testPort+` {
+		route {
+			php {
+				root ../testdata
+			}
+		}
+	}
+	`, "caddyfile")
+
+	require.Eventually(t, func() bool {
+		_, err := os.Stat(sentinel)
+
+		return err == nil
+	}, 5*time.Second, 25*time.Millisecond, "the background worker declared in the Caddyfile did not run")
+}
+
 func TestWorkerMetrics(t *testing.T) {
 	var wg sync.WaitGroup
 	tester := caddytest.NewTester(t)
@@ -830,21 +869,21 @@ func TestWorkerMetrics(t *testing.T) {
 	# TYPE frankenphp_busy_threads gauge
 	frankenphp_busy_threads 2
 
-	# HELP frankenphp_busy_workers Number of busy PHP workers for this worker
+	# HELP frankenphp_busy_workers Number of busy PHP workers for this worker: processing a request, or a task for a background worker
 	# TYPE frankenphp_busy_workers gauge
-	frankenphp_busy_workers{worker="` + workerName + `"} 0
+	frankenphp_busy_workers{server="",worker="` + workerName + `"} 0
 
 	# HELP frankenphp_total_workers Total number of PHP workers for this worker
 	# TYPE frankenphp_total_workers gauge
-	frankenphp_total_workers{worker="` + workerName + `"} 2
+	frankenphp_total_workers{server="",worker="` + workerName + `"} 2
 
 	# HELP frankenphp_worker_request_count
 	# TYPE frankenphp_worker_request_count counter
-	frankenphp_worker_request_count{worker="` + workerName + `"} 10
+	frankenphp_worker_request_count{server="",worker="` + workerName + `"} 10
 
-	# HELP frankenphp_ready_workers Running workers that have successfully called frankenphp_handle_request at least once
+	# HELP frankenphp_ready_workers Running workers that have reached their ready point at least once: frankenphp_handle_request for HTTP workers, WorkerHandle::tick() for background workers
 	# TYPE frankenphp_ready_workers gauge
-	frankenphp_ready_workers{worker="` + workerName + `"} 2
+	frankenphp_ready_workers{server="",worker="` + workerName + `"} 2
 	`
 
 	ctx := caddy.ActiveContext()
@@ -907,7 +946,7 @@ func TestPhpServerWorkerMatchPoolCount(t *testing.T) {
 
 	var pools []string
 	for line := range strings.SplitSeq(metrics.String(), "\n") {
-		if !strings.HasPrefix(line, "frankenphp_total_workers{worker=") {
+		if !strings.HasPrefix(line, "frankenphp_total_workers{") {
 			continue
 		}
 		if !strings.Contains(line, "dedup-match-worker.php") && !strings.Contains(line, "dedup-plain-worker.php") {
@@ -987,21 +1026,21 @@ func TestNamedWorkerMetrics(t *testing.T) {
 	# TYPE frankenphp_busy_threads gauge
 	frankenphp_busy_threads 2
 
-	# HELP frankenphp_busy_workers Number of busy PHP workers for this worker
+	# HELP frankenphp_busy_workers Number of busy PHP workers for this worker: processing a request, or a task for a background worker
         # TYPE frankenphp_busy_workers gauge
-        frankenphp_busy_workers{worker="my_app"} 0
+        frankenphp_busy_workers{server="",worker="my_app"} 0
 
 	# HELP frankenphp_total_workers Total number of PHP workers for this worker
 	# TYPE frankenphp_total_workers gauge
-	frankenphp_total_workers{worker="my_app"} 2
+	frankenphp_total_workers{server="",worker="my_app"} 2
 
 	# HELP frankenphp_worker_request_count
 	# TYPE frankenphp_worker_request_count counter
-	frankenphp_worker_request_count{worker="my_app"} 10
+	frankenphp_worker_request_count{server="",worker="my_app"} 10
 
-	# HELP frankenphp_ready_workers Running workers that have successfully called frankenphp_handle_request at least once
+	# HELP frankenphp_ready_workers Running workers that have reached their ready point at least once: frankenphp_handle_request for HTTP workers, WorkerHandle::tick() for background workers
 	# TYPE frankenphp_ready_workers gauge
-	frankenphp_ready_workers{worker="my_app"} 2
+	frankenphp_ready_workers{server="",worker="my_app"} 2
 	`
 
 	ctx := caddy.ActiveContext()
@@ -1083,21 +1122,21 @@ func TestAutoWorkerConfig(t *testing.T) {
 	# TYPE frankenphp_busy_threads gauge
 	frankenphp_busy_threads ` + workers + `
 
-	# HELP frankenphp_busy_workers Number of busy PHP workers for this worker
+	# HELP frankenphp_busy_workers Number of busy PHP workers for this worker: processing a request, or a task for a background worker
 	# TYPE frankenphp_busy_workers gauge
-	frankenphp_busy_workers{worker="` + workerName + `"} 0
+	frankenphp_busy_workers{server="",worker="` + workerName + `"} 0
 
 	# HELP frankenphp_total_workers Total number of PHP workers for this worker
 	# TYPE frankenphp_total_workers gauge
-	frankenphp_total_workers{worker="` + workerName + `"} ` + workers + `
+	frankenphp_total_workers{server="",worker="` + workerName + `"} ` + workers + `
 
 	# HELP frankenphp_worker_request_count
 	# TYPE frankenphp_worker_request_count counter
-	frankenphp_worker_request_count{worker="` + workerName + `"} 10
+	frankenphp_worker_request_count{server="",worker="` + workerName + `"} 10
 
-	# HELP frankenphp_ready_workers Running workers that have successfully called frankenphp_handle_request at least once
+	# HELP frankenphp_ready_workers Running workers that have reached their ready point at least once: frankenphp_handle_request for HTTP workers, WorkerHandle::tick() for background workers
 	# TYPE frankenphp_ready_workers gauge
-	frankenphp_ready_workers{worker="` + workerName + `"} ` + workers + `
+	frankenphp_ready_workers{server="",worker="` + workerName + `"} ` + workers + `
 	`
 
 	ctx := caddy.ActiveContext()
@@ -1357,8 +1396,9 @@ func TestMaxWaitTimeWorker(t *testing.T) {
 	require.NoError(t, err)
 
 	expectedMetrics := `
+	# HELP frankenphp_worker_queue_depth Number of queued requests for this worker, or of tasks waiting for a thread of a background worker
 	# TYPE frankenphp_worker_queue_depth gauge
-	frankenphp_worker_queue_depth{worker="service"} 0
+	frankenphp_worker_queue_depth{server="",worker="service"} 0
 	`
 
 	ctx := caddy.ActiveContext()
@@ -1457,23 +1497,23 @@ func TestMultiWorkersMetrics(t *testing.T) {
 	# TYPE frankenphp_busy_threads gauge
 	frankenphp_busy_threads 5
 
-	# HELP frankenphp_busy_workers Number of busy PHP workers for this worker
+	# HELP frankenphp_busy_workers Number of busy PHP workers for this worker: processing a request, or a task for a background worker
 	# TYPE frankenphp_busy_workers gauge
-	frankenphp_busy_workers{worker="service1"} 0
+	frankenphp_busy_workers{server="",worker="service1"} 0
 
 	# HELP frankenphp_total_workers Total number of PHP workers for this worker
 	# TYPE frankenphp_total_workers gauge
-	frankenphp_total_workers{worker="service1"} 2
-	frankenphp_total_workers{worker="service2"} 3
+	frankenphp_total_workers{server="",worker="service1"} 2
+	frankenphp_total_workers{server="",worker="service2"} 3
 
 	# HELP frankenphp_worker_request_count
 	# TYPE frankenphp_worker_request_count counter
-	frankenphp_worker_request_count{worker="service1"} 10
+	frankenphp_worker_request_count{server="",worker="service1"} 10
 
-	# HELP frankenphp_ready_workers Running workers that have successfully called frankenphp_handle_request at least once
+	# HELP frankenphp_ready_workers Running workers that have reached their ready point at least once: frankenphp_handle_request for HTTP workers, WorkerHandle::tick() for background workers
 	# TYPE frankenphp_ready_workers gauge
-	frankenphp_ready_workers{worker="service1"} 2
-	frankenphp_ready_workers{worker="service2"} 3
+	frankenphp_ready_workers{server="",worker="service1"} 2
+	frankenphp_ready_workers{server="",worker="service2"} 3
 	`
 
 	ctx := caddy.ActiveContext()
@@ -1624,12 +1664,12 @@ func TestWorkerRestart(t *testing.T) {
 
 	// Check metrics
 	expectedMetrics := `
-	# HELP frankenphp_ready_workers Running workers that have successfully called frankenphp_handle_request at least once
+	# HELP frankenphp_ready_workers Running workers that have reached their ready point at least once: frankenphp_handle_request for HTTP workers, WorkerHandle::tick() for background workers
 	# TYPE frankenphp_ready_workers gauge
-	frankenphp_ready_workers{worker="service"} 1
+	frankenphp_ready_workers{server="",worker="service"} 1
 	# HELP frankenphp_total_workers Total number of PHP workers for this worker
 	# TYPE frankenphp_total_workers gauge
-	frankenphp_total_workers{worker="service"} 1
+	frankenphp_total_workers{server="",worker="service"} 1
 	`
 
 	require.NoError(t,
@@ -1652,15 +1692,15 @@ func TestWorkerRestart(t *testing.T) {
 
 	// frankenphp_ready_workers should be back to 1 even after worker restarts
 	expectedMetrics = `
-	# HELP frankenphp_ready_workers Running workers that have successfully called frankenphp_handle_request at least once
+	# HELP frankenphp_ready_workers Running workers that have reached their ready point at least once: frankenphp_handle_request for HTTP workers, WorkerHandle::tick() for background workers
 	# TYPE frankenphp_ready_workers gauge
-	frankenphp_ready_workers{worker="service"} 1
+	frankenphp_ready_workers{server="",worker="service"} 1
 	# HELP frankenphp_total_workers Total number of PHP workers for this worker
 	# TYPE frankenphp_total_workers gauge
-	frankenphp_total_workers{worker="service"} 1
+	frankenphp_total_workers{server="",worker="service"} 1
 	# HELP frankenphp_worker_restarts Number of PHP worker restarts for this worker
 	# TYPE frankenphp_worker_restarts counter
-	frankenphp_worker_restarts{worker="service"} 3
+	frankenphp_worker_restarts{server="",worker="service"} 3
 	`
 
 	require.NoError(t,
@@ -2123,7 +2163,7 @@ func TestSymlinkWorkerBehavior(t *testing.T) {
 
 		// Accessing the worker script without worker configuration MUST fail
 		// The script checks $_SERVER['FRANKENPHP_WORKER'] and dies if not set
-		tester.AssertGetResponse("http://localhost:"+testPort+"/index.php", http.StatusOK, "Error: This script must be run in worker mode (FRANKENPHP_WORKER not set to '1')\n")
+		tester.AssertGetResponse("http://localhost:"+testPort+"/index.php", http.StatusOK, "Error: This script must be run in worker mode (FRANKENPHP_WORKER not set)\n")
 	})
 
 	t.Run("MultipleRequests", func(t *testing.T) {
