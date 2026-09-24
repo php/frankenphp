@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 60f0d27c04f94d7b24c052e91ef294595a2bc421 */
+ * Stub hash: bef9b3db168eabf3acabe7c1f5a107b466809146 */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_handle_request, 0, 1, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, callback, IS_CALLABLE, 0)
@@ -41,6 +41,12 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_log, 0, 1, IS_VOID, 0
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, context, IS_ARRAY, 0, "[]")
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_INFO_EX(arginfo_class_FrankenPHP_WorkerHandle___construct, 0, 0, 0)
+ZEND_END_ARG_INFO()
+
+#define arginfo_class_FrankenPHP_WorkerHandle_tick arginfo_frankenphp_finish_request
+
+#define arginfo_class_FrankenPHP_WorkerHandle_getStream arginfo_class_FrankenPHP_WorkerHandle___construct
 
 ZEND_FUNCTION(frankenphp_handle_request);
 ZEND_FUNCTION(headers_send);
@@ -49,7 +55,9 @@ ZEND_FUNCTION(frankenphp_request_headers);
 ZEND_FUNCTION(frankenphp_response_headers);
 ZEND_FUNCTION(mercure_publish);
 ZEND_FUNCTION(frankenphp_log);
-
+ZEND_METHOD(FrankenPHP_WorkerHandle, __construct);
+ZEND_METHOD(FrankenPHP_WorkerHandle, tick);
+ZEND_METHOD(FrankenPHP_WorkerHandle, getStream);
 
 static const zend_function_entry ext_functions[] = {
 	ZEND_FE(frankenphp_handle_request, arginfo_frankenphp_handle_request)
@@ -66,10 +74,27 @@ static const zend_function_entry ext_functions[] = {
 	ZEND_FE_END
 };
 
+static const zend_function_entry class_FrankenPHP_WorkerHandle_methods[] = {
+	ZEND_ME(FrankenPHP_WorkerHandle, __construct, arginfo_class_FrankenPHP_WorkerHandle___construct, ZEND_ACC_PUBLIC)
+	ZEND_ME(FrankenPHP_WorkerHandle, tick, arginfo_class_FrankenPHP_WorkerHandle_tick, ZEND_ACC_PUBLIC)
+	ZEND_ME(FrankenPHP_WorkerHandle, getStream, arginfo_class_FrankenPHP_WorkerHandle_getStream, ZEND_ACC_PUBLIC)
+	ZEND_FE_END
+};
+
 static void register_frankenphp_symbols(int module_number)
 {
 	REGISTER_LONG_CONSTANT("FRANKENPHP_LOG_LEVEL_DEBUG", -4, CONST_PERSISTENT);
 	REGISTER_LONG_CONSTANT("FRANKENPHP_LOG_LEVEL_INFO", 0, CONST_PERSISTENT);
 	REGISTER_LONG_CONSTANT("FRANKENPHP_LOG_LEVEL_WARN", 4, CONST_PERSISTENT);
 	REGISTER_LONG_CONSTANT("FRANKENPHP_LOG_LEVEL_ERROR", 8, CONST_PERSISTENT);
+}
+
+static zend_class_entry *register_class_FrankenPHP_WorkerHandle(void)
+{
+	zend_class_entry ce, *class_entry;
+
+	INIT_NS_CLASS_ENTRY(ce, "FrankenPHP", "WorkerHandle", class_FrankenPHP_WorkerHandle_methods);
+	class_entry = zend_register_internal_class_with_flags(&ce, NULL, ZEND_ACC_FINAL|ZEND_ACC_NO_DYNAMIC_PROPERTIES|ZEND_ACC_NOT_SERIALIZABLE);
+
+	return class_entry;
 }
