@@ -45,6 +45,37 @@ func TestWorker(t *testing.T) {
 	}, &testOptions{workerScript: "worker.php", nbWorkers: 1, nbParallelRequests: 1})
 }
 
+func TestWorkerSurvivesRequestParseErrors(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		// max_input_vars exceeded while the worker script has a throwing error
+		// handler installed (https://github.com/php/frankenphp/issues/2631)
+		params := make([]string, 20)
+		for i := range params {
+			params[i] = fmt.Sprintf("p%d=%d", i, i)
+		}
+		body, resp := testGet("http://example.com/request-parse-errors.php?"+strings.Join(params, "&"), handler, t)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		assert.Contains(t, body, "requests:1")
+		assert.Contains(t, body, "Input variables exceeded")
+		assert.Contains(t, body, `"type":2`)
+
+		// post_max_size exceeded: the same worker must have survived the
+		// previous parse failure (the counter proves no restart happened)
+		req := httptest.NewRequest("POST", "http://example.com/request-parse-errors.php", strings.NewReader(strings.Repeat("a=1&", 600)))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		body2, resp2 := testRequest(req, handler, t)
+		assert.Equal(t, http.StatusBadRequest, resp2.StatusCode)
+		assert.Contains(t, body2, "requests:2")
+		assert.Contains(t, body2, "exceeds the limit")
+
+		// clean request: recorded errors must be reset between requests
+		body3, resp3 := testGet("http://example.com/request-parse-errors.php", handler, t)
+		assert.Equal(t, http.StatusOK, resp3.StatusCode)
+		assert.Contains(t, body3, "requests:3")
+		assert.Contains(t, body3, "[]")
+	}, &testOptions{workerScript: "request-parse-errors.php", nbWorkers: 1, nbParallelRequests: 1, phpIni: map[string]string{"max_input_vars": "10", "post_max_size": "1K", "display_errors": "0"}})
+}
+
 func TestWorkerDie(t *testing.T) {
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
 		req := httptest.NewRequest("GET", "http://example.com/die.php", nil)

@@ -148,6 +148,100 @@ static inline uintptr_t frankenphp_thread_index(void) {
   return ctx == NULL ? thread_index : ctx->thread_index;
 }
 
+/* Diagnostics raised while PHP parses the request (post_max_size,
+ * max_input_vars, multipart errors...), recorded so userland can inspect them
+ * via frankenphp_request_parse_errors(). In worker mode this parsing happens
+ * inside frankenphp_handle_request(), where a persistent userland error
+ * handler may be installed; classic SAPIs parse before any handler exists, so
+ * the handler is shielded during this window to keep the same semantics
+ * (https://github.com/php/frankenphp/issues/2631). */
+typedef struct frankenphp_parse_error {
+  int type;
+  uint32_t line;
+  char *message;
+  char *file;
+  struct frankenphp_parse_error *next;
+} frankenphp_parse_error;
+
+static THREAD_LOCAL frankenphp_parse_error *parse_errors_head = NULL;
+static THREAD_LOCAL frankenphp_parse_error *parse_errors_tail = NULL;
+static THREAD_LOCAL bool request_parse_window = false;
+/* TLS rather than stack locals: a bailout can longjmp over the frame that
+ * opened the window. */
+static THREAD_LOCAL zval saved_user_error_handler;
+static THREAD_LOCAL int saved_user_error_handler_error_reporting;
+
+static void (*original_zend_error_cb)(int type, zend_string *error_filename,
+                                      const uint32_t error_lineno,
+                                      zend_string *message);
+
+/* malloc/strdup on purpose: entries must survive a bailout and stay invisible
+ * to the per-request allocator. */
+static void frankenphp_error_cb(int type, zend_string *error_filename,
+                                const uint32_t error_lineno,
+                                zend_string *message) {
+  if (request_parse_window) {
+    frankenphp_parse_error *e = malloc(sizeof *e);
+    if (e != NULL) {
+      /* strip E_DONT_BAIL and friends, like error_get_last() */
+      e->type = type & E_ALL;
+      e->line = error_lineno;
+      e->message = strdup(message != NULL ? ZSTR_VAL(message) : "");
+      e->file = strdup(error_filename != NULL ? ZSTR_VAL(error_filename) : "");
+      e->next = NULL;
+      if (parse_errors_tail != NULL) {
+        parse_errors_tail->next = e;
+      } else {
+        parse_errors_head = e;
+      }
+      parse_errors_tail = e;
+    }
+  }
+
+  original_zend_error_cb(type, error_filename, error_lineno, message);
+}
+
+static void frankenphp_clear_parse_errors(void) {
+  frankenphp_parse_error *e = parse_errors_head;
+  while (e != NULL) {
+    frankenphp_parse_error *next = e->next;
+    free(e->message);
+    free(e->file);
+    free(e);
+    e = next;
+  }
+  parse_errors_head = parse_errors_tail = NULL;
+}
+
+/* With EG(user_error_handler) undefined, every diagnostic goes straight to
+ * zend_error_cb (Zend/zend.c), i.e. to frankenphp_error_cb above. */
+static void frankenphp_open_request_parse_window(void) {
+  frankenphp_clear_parse_errors();
+  ZVAL_COPY_VALUE(&saved_user_error_handler, &EG(user_error_handler));
+  saved_user_error_handler_error_reporting =
+      EG(user_error_handler_error_reporting);
+  ZVAL_UNDEF(&EG(user_error_handler));
+  request_parse_window = true;
+}
+
+static void frankenphp_close_request_parse_window(void) {
+  request_parse_window = false;
+  if (Z_ISUNDEF(saved_user_error_handler)) {
+    return;
+  }
+  if (Z_ISUNDEF(EG(user_error_handler))) {
+    ZVAL_COPY_VALUE(&EG(user_error_handler), &saved_user_error_handler);
+    EG(user_error_handler_error_reporting) =
+        saved_user_error_handler_error_reporting;
+  } else {
+    /* userland code ran inside the window (e.g. session.auto_start with a
+     * user save handler) and called set_error_handler(): the new handler
+     * wins */
+    zval_ptr_dtor(&saved_user_error_handler);
+  }
+  ZVAL_UNDEF(&saved_user_error_handler);
+}
+
 #ifndef PHP_WIN32
 static bool is_forked_child = false;
 static pid_t fork_parent_pid = 0;
@@ -575,6 +669,8 @@ static int frankenphp_worker_request_startup() {
 
   frankenphp_update_request_context();
 
+  frankenphp_open_request_parse_window();
+
   zend_try {
     frankenphp_release_temporary_streams();
     php_output_activate();
@@ -635,6 +731,8 @@ static int frankenphp_worker_request_startup() {
   }
   zend_catch { retval = FAILURE; }
   zend_end_try();
+
+  frankenphp_close_request_parse_window();
 
   SG(sapi_started) = 1;
 
@@ -928,6 +1026,21 @@ PHP_FUNCTION(frankenphp_handle_request) {
   }
 
   RETURN_TRUE;
+}
+
+PHP_FUNCTION(frankenphp_request_parse_errors) {
+  ZEND_PARSE_PARAMETERS_NONE();
+
+  array_init(return_value);
+  for (frankenphp_parse_error *e = parse_errors_head; e != NULL; e = e->next) {
+    zval entry;
+    array_init(&entry);
+    add_assoc_long(&entry, "type", e->type);
+    add_assoc_string(&entry, "message", e->message);
+    add_assoc_string(&entry, "file", e->file);
+    add_assoc_long(&entry, "line", (zend_long)e->line);
+    add_next_index_zval(return_value, &entry);
+  }
 }
 
 PHP_FUNCTION(headers_send) {
@@ -1224,6 +1337,13 @@ static int frankenphp_startup(sapi_module_struct *sapi_module) {
     frankenphp_override_opcache_reset();
   }
 #endif
+
+  /* zend_startup() resets zend_error_cb on every Init(), so reinstall each
+   * time; the guard only prevents self-chaining */
+  if (result == SUCCESS && zend_error_cb != frankenphp_error_cb) {
+    original_zend_error_cb = zend_error_cb;
+    zend_error_cb = frankenphp_error_cb;
+  }
 
   return result;
 }
@@ -1599,7 +1719,11 @@ static void *php_thread(void *arg) {
 
       frankenphp_update_request_context();
 
-      if (UNEXPECTED(php_request_startup() == FAILURE)) {
+      frankenphp_open_request_parse_window();
+      int request_startup_result = php_request_startup();
+      frankenphp_close_request_parse_window();
+
+      if (UNEXPECTED(request_startup_result == FAILURE)) {
         /* Request startup failed, bail out to zend_catch */
         frankenphp_log_message("Request startup failed, thread is unhealthy",
                                LOG_ERR);
@@ -1682,6 +1806,8 @@ static void *php_thread(void *arg) {
     go_frankenphp_after_script_execution(thread_index, EG(exit_status));
   }
   zend_end_try();
+
+  frankenphp_clear_parse_errors();
 
   /* Must precede ts_free_thread: that frees the TSRM storage backing
    * the slot's &EG() pointers. Clearing first means any concurrent

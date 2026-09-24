@@ -25,6 +25,15 @@ function frankenphp_finish_request(): bool {}
  */
 function fastcgi_finish_request(): bool {}
 
+/**
+ * Diagnostics raised while PHP parsed the current request (post_max_size or
+ * max_input_vars exceeded, malformed multipart bodies...), shaped like
+ * error_get_last().
+ *
+ * @return array<int, array{type: int, message: string, file: string, line: int}>
+ */
+function frankenphp_request_parse_errors(): array {}
+
 function frankenphp_request_headers(): array {}
 
 /**
