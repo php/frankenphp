@@ -1,7 +1,7 @@
 <?php
 
 if (!isset($_SERVER['FRANKENPHP_WORKER'])) {
-    die("Error: This script must be run in worker mode (FRANKENPHP_WORKER not set to '1')\n");
+    die("Error: This script must be run in worker mode (FRANKENPHP_WORKER not set)\n");
 }
 
 $i = 0;
