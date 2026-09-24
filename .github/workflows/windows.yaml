@@ -7,17 +7,14 @@ concurrency:
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
     branches:
       - main
-    paths-ignore:
-      - "docs/**"
   push:
     branches:
       - main
     tags:
       - v*.*.*
-    paths-ignore:
-      - "docs/**"
   workflow_dispatch:
     inputs:
       #checkov:skip=CKV_GHA_7
@@ -32,6 +29,7 @@ permissions:
   contents: read
 
 env:
+  BUILD_RELEASE: "${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'CI: All jobs') }}"
   GOTOOLCHAIN: local
   GOTESTSUM_FORMAT: pkgname-and-test-fails
   GOFLAGS: "-ldflags=-extldflags=-fuse-ld=lld -tags=nobadger,nomysql,nopgx"
@@ -143,6 +141,7 @@ jobs:
           FRANKENPHP_VERSION: ${{ steps.version.outputs.version }}
 
       - name: Embed Windows icon and metadata
+        if: env.BUILD_RELEASE == 'true'
         working-directory: frankenphp\caddy\frankenphp
         run: |
           go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
@@ -181,6 +180,7 @@ jobs:
           FRANKENPHP_VERSION: ${{ steps.version.outputs.version }}
 
       - name: Build FrankenPHP
+        if: env.BUILD_RELEASE == 'true'
         run: |
           $customVersion = "FrankenPHP $env:FRANKENPHP_VERSION PHP $env:PHP_VERSION Caddy"
           go build -ldflags="-extldflags=-fuse-ld=lld -X 'github.com/caddyserver/caddy/v2.CustomVersion=$customVersion' -X 'github.com/caddyserver/caddy/v2.CustomBinaryName=frankenphp' -X 'github.com/caddyserver/caddy/v2/modules/caddyhttp.ServerHeader=FrankenPHP Caddy'"
@@ -189,6 +189,7 @@ jobs:
           FRANKENPHP_VERSION: ${{ steps.version.outputs.version }}
 
       - name: Create Directory
+        if: env.BUILD_RELEASE == 'true'
         run: |
           Copy-Item frankenphp\caddy\frankenphp\frankenphp.exe $env:DIR_NAME
           Copy-Item watcher\libwatcher-c.dll $env:DIR_NAME
@@ -198,7 +199,7 @@ jobs:
           Copy-Item frankenphp\vcpkg_installed\x64-windows\bin\pthreadVC3.dll $env:DIR_NAME
 
       - name: Upload Artifact
-        if: ${{ !env.REF }}
+        if: env.BUILD_RELEASE == 'true' && !env.REF
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ env.DIR_NAME }}
