@@ -111,7 +111,7 @@ func (thread *phpThread) forceReboot() bool {
 	return true
 }
 
-// shutdown the underlying PHP thread
+// shutdown the underlying PHP thread, block until shutdown is finished
 func (thread *phpThread) shutdown() {
 	if !thread.state.RequestSafeStateChange(state.ShuttingDown) {
 		// a worker that failed to boot published ShuttingDown itself and is
