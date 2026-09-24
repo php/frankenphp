@@ -61,7 +61,8 @@ func TestShowTheCorrectThreadDebugStatus(t *testing.T) {
 			http_port `+testPort+`
 
 			frankenphp {
-				num_threads 3
+				# one thread for regular requests, one per worker
+				num_threads 1
 				max_threads 6
 				worker ../testdata/worker-with-counter.php 1
 				worker ../testdata/index.php 1
@@ -140,7 +141,8 @@ func TestAutoScaleWorkerThreads(t *testing.T) {
 
 			frankenphp {
 				max_threads 10
-				num_threads 2
+				# one thread for regular requests, one for the worker
+				num_threads 1
 				worker ../testdata/sleep.php {
 					num 1
 					max_threads 3
@@ -372,7 +374,8 @@ func TestRegisteredModuleWorkerPoolsMustBeCorrect(t *testing.T) {
 			admin localhost:2999
 
 			frankenphp {
-				num_threads 4
+				# one thread for regular requests, one per worker
+				num_threads 1
 				worker ../testdata/worker-with-env.php 1
 			}
 		}

@@ -68,7 +68,8 @@ func WithContext(ctx context.Context) Option {
 	}
 }
 
-// WithNumThreads configures the number of PHP threads to start.
+// WithNumThreads configures the number of PHP threads to start for the
+// requests no worker serves. Worker threads come on top of it.
 func WithNumThreads(numThreads int) Option {
 	return func(o *opt) error {
 		o.numThreads = numThreads
@@ -77,6 +78,8 @@ func WithNumThreads(numThreads int) Option {
 	}
 }
 
+// WithMaxThreads limits how many threads may run at once, workers included.
+// A negative value derives that limit from the memory available.
 func WithMaxThreads(maxThreads int) Option {
 	return func(o *opt) error {
 		o.maxThreads = maxThreads
@@ -124,9 +127,8 @@ func WithWorkers(name, fileName string, num int, options ...WorkerOption) Option
 //
 // Workers are designed to run indefinitely and will be gracefully shut down when FrankenPHP shuts down.
 //
-// Extension workers receive the lowest priority when determining thread allocations. If the requested number of threads
-// cannot be allocated, then FrankenPHP will panic and provide this information to the user (who will need to allocate
-// more total threads). Don't be greedy.
+// Extension workers count as worker threads: they come on top of num_threads, and Init() returns an error when
+// max_threads has no room for them. Don't be greedy.
 func WithExtensionWorkers(name, fileName string, numThreads int, options ...WorkerOption) (Workers, Option) {
 	w := &extensionWorkers{
 		name:     name,
