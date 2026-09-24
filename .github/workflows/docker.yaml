@@ -34,13 +34,9 @@ jobs:
       # Push if it's a scheduled job, a tag, or if we're committing to the main branch
       push: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.version) || startsWith(github.ref, 'refs/tags/') || (github.ref == 'refs/heads/main' && github.event_name != 'pull_request')) && true || false }}
       variants: ${{ steps.matrix.outputs.variants }}
-      platforms: ${{ steps.matrix.outputs.platforms }}
+      matrix: ${{ steps.matrix.outputs.matrix }}
       metadata: ${{ steps.matrix.outputs.metadata }}
       php_version: ${{ steps.check.outputs.php_version }}
-      php82_version: ${{ steps.check.outputs.php82_version }}
-      php83_version: ${{ steps.check.outputs.php83_version }}
-      php84_version: ${{ steps.check.outputs.php84_version }}
-      php85_version: ${{ steps.check.outputs.php85_version }}
       skip: ${{ steps.check.outputs.skip }}
       ref: ${{ steps.check.outputs.ref || (github.ref_type == 'tag' && github.ref_name) || (github.event_name == 'workflow_dispatch' && inputs.version) || '' }}
       sha: ${{ steps.check.outputs.sha }}
@@ -82,13 +78,15 @@ jobs:
           {
             echo metadata="${METADATA}"
             echo variants="${variants}"
-            echo platforms="$(jq -c 'first(.target[]) | .platforms' <<< "${METADATA}")"
+            echo matrix="$(jq -cn --argjson variants "${variants}" --argjson platforms "${VARIANT_PLATFORMS}" \
+              '{include: [$variants[] as $v | $platforms[$v][] | {variant: $v, platform: .}]}')"
           } >> "${GITHUB_OUTPUT}"
         env:
           SHA: ${{ github.sha }}
           VERSION: ${{ (github.ref_type == 'tag' && github.ref_name) || steps.check.outputs.ref || 'dev' }}
           PHP_VERSION: ${{ steps.check.outputs.php_version }}
           REBUILD_VARIANTS: ${{ steps.check.outputs.rebuild_variants }}
+          VARIANT_PLATFORMS: ${{ steps.check.outputs.variant_platforms }}
   build:
     runs-on: ${{ startsWith(matrix.platform, 'linux/arm') && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     needs:
@@ -96,33 +94,7 @@ jobs:
     if: ${{ !fromJson(needs.prepare.outputs.skip) }}
     strategy:
       fail-fast: false
-      matrix:
-        variant: ${{ fromJson(needs.prepare.outputs.variants) }}
-        platform: ${{ fromJson(needs.prepare.outputs.platforms) }}
-        include:
-          - race: ""
-          - platform: linux/amd64
-            # The Go race detector is only enabled on amd64. PHP's inherited PIE
-            # flags require external linking for runtime/cgo in pure-Go test packages.
-            race: "-race -ldflags=-linkmode=external"
-        exclude:
-          # arm/v6 is only available for Alpine: https://github.com/docker-library/golang/issues/502
-          - variant: php-${{ needs.prepare.outputs.php82_version }}-trixie
-            platform: linux/arm/v6
-          - variant: php-${{ needs.prepare.outputs.php83_version }}-trixie
-            platform: linux/arm/v6
-          - variant: php-${{ needs.prepare.outputs.php84_version }}-trixie
-            platform: linux/arm/v6
-          - variant: php-${{ needs.prepare.outputs.php85_version }}-trixie
-            platform: linux/arm/v6
-          - variant: php-${{ needs.prepare.outputs.php82_version }}-bookworm
-            platform: linux/arm/v6
-          - variant: php-${{ needs.prepare.outputs.php83_version }}-bookworm
-            platform: linux/arm/v6
-          - variant: php-${{ needs.prepare.outputs.php84_version }}-bookworm
-            platform: linux/arm/v6
-          - variant: php-${{ needs.prepare.outputs.php85_version }}-bookworm
-            platform: linux/arm/v6
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     steps:
       - name: Prepare
         id: prepare
@@ -217,7 +189,9 @@ jobs:
           METADATA: ${{ steps.build.outputs.metadata }}
           PLATFORM: ${{ matrix.platform }}
           VARIANT: ${{ matrix.variant }}
-          RACE: ${{ matrix.race }}
+          # The Go race detector is only enabled on amd64. PHP's inherited PIE
+          # flags require external linking for runtime/cgo in pure-Go test packages.
+          RACE: ${{ matrix.platform == 'linux/amd64' && '-race -ldflags=-linkmode=external' || '' }}
 
   # Adapted from https://docs.docker.com/build/ci/github-actions/multi-platform/
   push:
