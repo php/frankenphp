@@ -1,12 +1,15 @@
 package frankenphp
 
 import (
+	"bytes"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -211,4 +214,72 @@ func TestPrometheusMetrics_TestStopReasonCrash(t *testing.T) {
 		})
 
 	}
+}
+
+func TestPrometheusMetrics_OpcacheRestart(t *testing.T) {
+	if !opcacheRestartHook {
+		t.Skip("this build has no opcache restart hook")
+	}
+
+	registry := prometheus.NewRegistry()
+	m := NewPrometheusMetrics(registry)
+	m.OpcacheRestart("hash")
+	m.OpcacheRestart("hash")
+	m.OpcacheRestart("oom")
+
+	// known reasons are exposed from the start, unknown ones only once seen
+	require.NoError(t, testutil.GatherAndCompare(registry, strings.NewReader(`
+		# HELP frankenphp_opcache_restarts Number of restarts of opcache's shared memory scheduled, by reason (experimental, should stay at zero)
+		# TYPE frankenphp_opcache_restarts counter
+		frankenphp_opcache_restarts{reason="hash"} 2
+		frankenphp_opcache_restarts{reason="manual"} 0
+		frankenphp_opcache_restarts{reason="oom"} 1
+	`), "frankenphp_opcache_restarts"))
+
+	m.OpcacheRestart("unknown")
+
+	require.NoError(t, testutil.CollectAndCompare(m.opcacheRestarts, strings.NewReader(`
+		# HELP frankenphp_opcache_restarts Number of restarts of opcache's shared memory scheduled, by reason (experimental, should stay at zero)
+		# TYPE frankenphp_opcache_restarts counter
+		frankenphp_opcache_restarts{reason="hash"} 2
+		frankenphp_opcache_restarts{reason="manual"} 0
+		frankenphp_opcache_restarts{reason="oom"} 1
+		frankenphp_opcache_restarts{reason="unknown"} 1
+	`)))
+}
+
+func TestOpcacheRestartScheduledLogsAndCounts(t *testing.T) {
+	if !opcacheRestartHook {
+		t.Skip("this build has no opcache restart hook")
+	}
+
+	var buf bytes.Buffer
+	m := NewPrometheusMetrics(prometheus.NewRegistry())
+	prevLogger, prevMetrics := globalLogger, metrics
+	globalLogger, metrics = slog.New(slog.NewTextHandler(&buf, nil)), m
+	t.Cleanup(func() { globalLogger, metrics = prevLogger, prevMetrics })
+
+	opcacheRestartScheduled(1)
+	opcacheRestartScheduled(7)
+
+	assert.Contains(t, buf.String(), `level=WARN msg="opcache restart scheduled`)
+	assert.Contains(t, buf.String(), "reason=hash")
+	assert.Contains(t, buf.String(), "reason=unknown")
+	assert.Equal(t, float64(1), testutil.ToFloat64(m.opcacheRestarts.WithLabelValues("hash")))
+	assert.Equal(t, float64(1), testutil.ToFloat64(m.opcacheRestarts.WithLabelValues("unknown")))
+}
+
+func TestOpcacheRestartScheduledWithoutOpcacheMetrics(t *testing.T) {
+	// nullMetrics is a Metrics without the optional part, like an
+	// implementation from before OpcacheMetrics existed
+	_, ok := Metrics(nullMetrics{}).(OpcacheMetrics)
+	require.False(t, ok)
+
+	var buf bytes.Buffer
+	prevLogger, prevMetrics := globalLogger, metrics
+	globalLogger, metrics = slog.New(slog.NewTextHandler(&buf, nil)), nullMetrics{}
+	t.Cleanup(func() { globalLogger, metrics = prevLogger, prevMetrics })
+
+	assert.NotPanics(t, func() { opcacheRestartScheduled(0) })
+	assert.Contains(t, buf.String(), "reason=oom")
 }
