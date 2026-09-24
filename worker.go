@@ -27,6 +27,7 @@ type worker struct {
 	maxThreads             int
 	requestOptions         []RequestOption
 	requestChan            chan *frankenPHPContext
+	done                   <-chan struct{}
 	threads                []*phpThread
 	threadMutex            sync.RWMutex
 	maxConsecutiveFailures int
@@ -63,6 +64,8 @@ func initWorkers(opts []workerOpt) error {
 		if err != nil {
 			return err
 		}
+
+		w.done = mainThread.done
 
 		totalThreadsToStart += w.num
 		workers = append(workers, w)
@@ -277,6 +280,13 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) error {
 			return nil
 		case workerScaleChan <- fc:
 			// the request has triggered scaling, continue to wait for a thread
+		case <-worker.done:
+			worker.queuedRequests.Add(-1)
+			metrics.DequeuedWorkerRequest(worker.name)
+			metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
+
+			// No thread accepted the request; the caller can retry after a reload.
+			return ErrNotRunning
 		case <-timeoutChan(time.Duration(maxWaitTime.Load())):
 			// the request has timed out stalling
 			worker.queuedRequests.Add(-1)
