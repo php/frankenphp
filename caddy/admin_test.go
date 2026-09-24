@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -408,4 +409,142 @@ func TestRegisteredModuleWorkerPoolsMustBeCorrect(t *testing.T) {
 	assert.Contains(t, receivedThreadNames, "Worker PHP Thread - "+worker1Path, "expected global worker to be present")
 	assert.Contains(t, receivedThreadNames, "Worker PHP Thread - "+worker2Path, "expected module worker with \"match\" directive to be present")
 	assert.Contains(t, receivedThreadNames, "Worker PHP Thread - "+worker3Path, "expected module worker without \"match\" directive to be present")
+}
+
+// Validate() must reject incorrect configs before Start() calls frankenphp.Shutdown()
+func TestRejectedReloadKeepsThePreviousSiteServing(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+			http_port `+testPort+`
+
+			frankenphp {
+				worker ../testdata/worker-with-counter.php 1
+			}
+		}
+
+		localhost:`+testPort+` {
+			route {
+				root ../testdata
+				rewrite worker-with-counter.php
+				php
+			}
+		}
+		`, "caddyfile")
+
+	workerURL := "http://localhost:" + testPort + "/worker-with-counter.php"
+	servedBefore := countedRequests(t, workerURL)
+
+	// the worker file does not exist, which Init() only reports once the
+	// running configuration is gone
+	rejected := `
+	{
+		skip_install_trust
+		admin localhost:2999
+		http_port ` + testPort + `
+
+		frankenphp {
+			worker ../testdata/not-a-worker.php 1
+		}
+	}
+
+	localhost:` + testPort + ` {
+		route {
+			root ../testdata
+			rewrite worker-with-counter.php
+			php
+		}
+	}
+	`
+
+	r, err := http.NewRequest("POST", "http://localhost:2999/load", bytes.NewBufferString(rejected))
+	require.NoError(t, err)
+	r.Header.Set("Content-Type", "text/caddyfile")
+	resp, err := http.DefaultClient.Do(r)
+	require.NoError(t, err)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	// /load writes the adaptation warnings before loading, so the status is
+	// already 200 when the error follows them in the body
+	require.Contains(t, string(body), "invalid configuration: worker filename is invalid")
+
+	// the runtime that served before the rejected reload still serves, and
+	// it is the same one: its worker kept counting
+	require.Equal(t, servedBefore+1, countedRequests(t, workerURL))
+}
+
+// Validate() cannot see a worker declared in a php_server block: Caddy calls it
+// before the modules provision, so Start() must reject those before shutting down
+func TestRejectedReloadWithAModuleWorkerKeepsThePreviousSiteServing(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+			http_port `+testPort+`
+		}
+
+		localhost:`+testPort+` {
+			route {
+				root ../testdata
+				rewrite worker-with-counter.php
+				php {
+					worker ../testdata/worker-with-counter.php 1
+				}
+			}
+		}
+		`, "caddyfile")
+
+	workerURL := "http://localhost:" + testPort + "/worker-with-counter.php"
+	servedBefore := countedRequests(t, workerURL)
+
+	rejected := `
+	{
+		skip_install_trust
+		admin localhost:2999
+		http_port ` + testPort + `
+	}
+
+	localhost:` + testPort + ` {
+		route {
+			root ../testdata
+			rewrite worker-with-counter.php
+			php {
+				worker ../testdata/not-a-worker.php 1
+			}
+		}
+	}
+	`
+
+	r, err := http.NewRequest("POST", "http://localhost:2999/load", bytes.NewBufferString(rejected))
+	require.NoError(t, err)
+	r.Header.Set("Content-Type", "text/caddyfile")
+	resp, err := http.DefaultClient.Do(r)
+	require.NoError(t, err)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	require.Contains(t, string(body), "worker filename is invalid")
+	require.Equal(t, servedBefore+1, countedRequests(t, workerURL))
+}
+
+// the number of requests testdata/worker-with-counter.php has served
+func countedRequests(t *testing.T, workerURL string) int {
+	t.Helper()
+
+	resp, err := http.Get(workerURL)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, resp.Body.Close()) }()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	count, err := strconv.Atoi(strings.TrimPrefix(string(body), "requests:"))
+	require.NoError(t, err, "unexpected worker response %q", body)
+
+	return count
 }

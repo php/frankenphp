@@ -1561,3 +1561,46 @@ func testOpcachePreload(t *testing.T, opts *testOptions) {
 		assert.Equal(t, "I am preloaded", body)
 	}, opts)
 }
+
+// Validate reports what Init() would refuse, without starting anything
+func TestValidateReportsDeclarationErrors(t *testing.T) {
+	assert.NoError(t, frankenphp.Validate(
+		frankenphp.WithNumThreads(2),
+		frankenphp.WithWorkers("worker", "testdata/worker.php", 1),
+	))
+
+	assert.ErrorContains(t, frankenphp.Validate(
+		frankenphp.WithWorkers("worker", "testdata/not-a-worker.php", 1),
+	), "worker filename is invalid")
+
+	assert.ErrorContains(t, frankenphp.Validate(
+		frankenphp.WithWorkers("same", "testdata/worker.php", 1),
+		frankenphp.WithWorkers("same", "testdata/index.php", 1),
+	), "two workers cannot have the same name")
+
+	assert.ErrorContains(t, frankenphp.Validate(
+		frankenphp.WithWorkers("one", "testdata/worker.php", 1),
+		frankenphp.WithWorkers("two", "testdata/worker.php", 1),
+	), "two global workers cannot have the same filename")
+
+	server, err := frankenphp.NewServer(testDataDir)
+	require.NoError(t, err)
+	matchAll := frankenphp.WithWorkerMatcher(func(*http.Request) bool { return true })
+
+	assert.ErrorContains(t, frankenphp.Validate(
+		frankenphp.WithServer(server),
+		frankenphp.WithWorkers("one", "testdata/worker.php", 1, frankenphp.WithWorkerServerScope(server)),
+		frankenphp.WithWorkers("two", "testdata/worker.php", 1, frankenphp.WithWorkerServerScope(server)),
+	), "two workers in a server cannot have the same filename")
+
+	assert.NoError(t, frankenphp.Validate(
+		frankenphp.WithServer(server),
+		frankenphp.WithWorkers("one", "testdata/worker.php", 1, frankenphp.WithWorkerServerScope(server)),
+		frankenphp.WithWorkers("two", "testdata/worker.php", 1, frankenphp.WithWorkerServerScope(server), matchAll),
+	))
+
+	assert.ErrorContains(t, frankenphp.Validate(
+		frankenphp.WithNumThreads(2),
+		frankenphp.WithMaxThreads(1),
+	), "max_threads")
+}

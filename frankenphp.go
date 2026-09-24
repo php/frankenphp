@@ -225,8 +225,6 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 			// https://github.com/php/frankenphp/issues/126
 			opt.workers[i].num = maxProcs
 		}
-		metrics.TotalWorkers(w.name, w.num)
-
 		numWorkers += opt.workers[i].num
 
 		if w.maxThreads > 0 {
@@ -298,6 +296,53 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 	return numWorkers, nil
 }
 
+// Validate reports whether Init() would accept a configuration, without
+// starting anything: the thread budget, the worker files, and the names and
+// scopes workers may take. A host replacing a running configuration should
+// call it before stopping the one in place, since Init() only reports these
+// errors once the previous runtime is gone.
+func Validate(options ...Option) error {
+	opt := &opt{}
+	for _, o := range options {
+		if err := o(opt); err != nil {
+			return err
+		}
+	}
+
+	if _, err := calculateMaxThreads(opt); err != nil {
+		return err
+	}
+
+	if err := validateWatchers(opt); err != nil {
+		return err
+	}
+
+	takenNames := make(map[string]bool, len(opt.workers))
+	takenPaths := make(map[*Server]map[string]bool, 1)
+	nameTaken := func(name string) bool { return takenNames[name] }
+	pathTaken := func(server *Server, path string) bool { return takenPaths[server][path] }
+	for _, w := range opt.workers {
+		w, err := resolveWorkerFile(w)
+		if err != nil {
+			return err
+		}
+
+		if err := checkWorkerDeclaration(w, nameTaken, pathTaken); err != nil {
+			return err
+		}
+
+		takenNames[w.name] = true
+		if w.matchRequest == nil {
+			if takenPaths[w.server] == nil {
+				takenPaths[w.server] = make(map[string]bool)
+			}
+			takenPaths[w.server][w.fileName] = true
+		}
+	}
+
+	return nil
+}
+
 // Init starts the PHP runtime and the configured workers.
 func Init(options ...Option) error {
 	if !isRunning.CompareAndSwap(false, true) {
@@ -351,6 +396,9 @@ func Init(options ...Option) error {
 	}
 
 	metrics.TotalThreads(opt.numThreads)
+	for _, w := range opt.workers {
+		metrics.TotalWorkers(w.name, w.num)
+	}
 
 	config := Config()
 

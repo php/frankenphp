@@ -17,7 +17,7 @@ For a minimal example see [https://pkg.go.dev](https://pkg.go.dev/github.com/dun
 
 `NewServer()` takes a human-readable name used to attribute workers, metrics and logs to the server (defaults to `server_<idx>` at registration when empty), the document root, the split path suffixes (defaults to `[".php"]`), environment variables made available to every request, and a `*slog.Logger` (defaults to the global logger).
 
-`Init()` starts the PHP runtime and must be called exactly once before serving requests; `Shutdown()` stops it. Calling `Server.ServeHTTP()` before `Init()` or after `Shutdown()` returns `ErrNotRunning`. The same `*Server` may be passed to `Init()` again after a `Shutdown()`, for instance to reload the configuration.
+`Init()` starts the PHP runtime and must be called exactly once before serving requests; `Shutdown()` stops it. `Validate()` takes the same options and reports whether `Init()` would accept them, without starting anything: a host replacing a running configuration should call it before stopping the one in place, since `Init()` only reports a declaration error once the previous runtime is gone. Calling `Server.ServeHTTP()` before `Init()` or after `Shutdown()` returns `ErrNotRunning`. The same `*Server` may be passed to `Init()` again after a `Shutdown()`, for instance to reload the configuration.
 
 ## Multiple servers
 
