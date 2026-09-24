@@ -21,7 +21,7 @@ import (
 
 func TestRestartWorkerViaAdminApi(t *testing.T) {
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initTestServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -54,7 +54,7 @@ func TestRestartWorkerViaAdminApi(t *testing.T) {
 
 func TestShowTheCorrectThreadDebugStatus(t *testing.T) {
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initTestServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -77,6 +77,12 @@ func TestShowTheCorrectThreadDebugStatus(t *testing.T) {
 		}
 		`, "caddyfile")
 
+	// Regular threads finish their startup transition asynchronously.
+	require.Eventually(t, func() bool {
+		threads := frankenphp.DebugState().ThreadDebugStates
+		return len(threads) == 3 && threads[0].State == "ready"
+	}, 5*time.Second, 10*time.Millisecond, "regular PHP thread did not become ready")
+
 	debugState := getDebugState(t, tester)
 
 	// assert that the correct threads are present in the thread info
@@ -89,7 +95,7 @@ func TestShowTheCorrectThreadDebugStatus(t *testing.T) {
 
 func TestThreadDebugStateMetricsAfterRequests(t *testing.T) {
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initTestServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -132,7 +138,7 @@ func TestAutoScaleWorkerThreads(t *testing.T) {
 	maxTries := 10
 	requestsPerTry := 200
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initTestServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -189,7 +195,7 @@ func TestAutoScaleRegularThreadsOnAutomaticThreadLimit(t *testing.T) {
 	maxTries := 10
 	requestsPerTry := 200
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initTestServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -278,7 +284,7 @@ func getNumThreads(t *testing.T, tester *caddytest.Tester) int {
 func TestAddModuleWorkerViaAdminApi(t *testing.T) {
 	// Initialize a server with admin API enabled
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initTestServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
