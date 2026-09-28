@@ -33,7 +33,9 @@ env:
   GOTOOLCHAIN: local
   GOTESTSUM_FORMAT: pkgname-and-test-fails
   GOFLAGS: "-ldflags=-extldflags=-fuse-ld=lld -tags=nobadger,nomysql,nopgx"
-  PHP_DOWNLOAD_BASE: "https://downloads.php.net/~windows/releases/"
+  DIR_NAME: frankenphp-windows-x86_64
+  # Scheduled runs reuse the published PHP.
+  PHP_RELEASE_BUILD: ${{ github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.version != '') }}
   CC: clang
   CXX: clang++
 
@@ -44,7 +46,8 @@ jobs:
       id-token: write
       attestations: write
       artifact-metadata: write
-    runs-on: windows-latest
+    # Matches PHP 8.6's VS18 toolchain; provides clang-cl >= 19.
+    runs-on: windows-2025-vs2026
     steps:
       - name: Determine ref
         run: |
@@ -96,41 +99,63 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Download PHP
-        run: |
-          $webContent = Invoke-WebRequest -Uri $env:PHP_DOWNLOAD_BASE
-          $links = $webContent.Links.Href | Where-Object { $_ -match "php-\d+\.\d+\.\d+-Win32-vs17-x64\.zip$" }
+      - name: Restore released PHP bundle
+        id: php
+        if: env.PHP_RELEASE_BUILD != 'true'
+        run: >-
+          ./frankenphp/.github/scripts/restore-php-windows.ps1
+          -Destination php-build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-          if (-not $links) { throw "Could not find PHP zip files at $env:PHP_DOWNLOAD_BASE" }
+      - name: Checkout PHP 8.6
+        if: steps.php.outputs.restored != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: php/php-src
+          ref: PHP-8.6
+          path: php-src
+          persist-credentials: false
 
-          $latestFile = $links | Sort-Object { if ($_ -match '(\d+\.\d+\.\d+)') { [version]$matches[1] } } | Select-Object -Last 1
+      - name: Checkout PHP SDK
+        if: steps.php.outputs.restored != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: php/php-sdk-binary-tools
+          ref: cfe7325dfdc9f20e54e85fb8929e32625d5f624e # php-sdk-2.8.4
+          path: php-sdk
+          persist-credentials: false
 
-          $version = if ($latestFile -match '(\d+\.\d+\.\d+)') { $matches[1] }
-          Write-Host "Detected latest PHP version: $version"
-
-          "PHP_VERSION=$version" >> $env:GITHUB_ENV
-
-          $phpZip = "php-$version-Win32-vs17-x64.zip"
-          $develZip = "php-devel-pack-$version-Win32-vs17-x64.zip"
-
-          $dirName = "frankenphp-windows-x86_64"
-
-          "DIR_NAME=$dirName" >> $env:GITHUB_ENV
-
-          Invoke-WebRequest -Uri "$env:PHP_DOWNLOAD_BASE/$phpZip" -OutFile "$env:TEMP\php.zip"
-          Expand-Archive -Path "$env:TEMP\php.zip" -DestinationPath "$env:GITHUB_WORKSPACE\$dirName"
-
-          Invoke-WebRequest -Uri "$env:PHP_DOWNLOAD_BASE/$develZip" -OutFile "$env:TEMP\php-devel.zip"
-          Expand-Archive -Path "$env:TEMP\php-devel.zip" -DestinationPath "$env:GITHUB_WORKSPACE\php-devel"
+      - name: Build PHP
+        if: steps.php.outputs.restored != 'true'
+        run: >-
+          ./frankenphp/.github/scripts/build-php-windows.ps1
+          -SourceDirectory php-src
+          -SdkDirectory php-sdk
+          -Destination php-build
 
       - name: Prepare env
         run: |
           $vcpkgRoot = "$env:GITHUB_WORKSPACE\frankenphp\vcpkg_installed\x64-windows"
           $watcherRoot = "$env:GITHUB_WORKSPACE\watcher"
           $phpBin = "$env:GITHUB_WORKSPACE\$env:DIR_NAME"
-          $phpDevel = "$env:GITHUB_WORKSPACE\php-devel\php-$env:PHP_VERSION-devel-vs17-x64"
+          $phpDevel = "$env:GITHUB_WORKSPACE\php-build\devel"
+          Copy-Item php-build\runtime $phpBin -Recurse
 
-          "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\Llvm\bin" >> $env:GITHUB_PATH
+          # Restored bundles have no sources to read the version from.
+          $phpVersion = & "$phpBin\php.exe" -n -r 'echo PHP_VERSION;'
+          if ($LASTEXITCODE -ne 0 -or $phpVersion -notmatch '^8\.6\.') { throw "Invalid PHP bundle: $phpVersion" }
+          foreach ($file in "$phpDevel\include\main\php.h", "$phpDevel\lib\php8ts.lib", "$phpBin\php8embed.lib") {
+            if (-not (Test-Path $file)) { throw "Incomplete PHP bundle: $file" }
+          }
+          "PHP_VERSION=$phpVersion" >> $env:GITHUB_ENV
+          "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\Llvm\x64\bin" >> $env:GITHUB_PATH
+
+          # Go's cache ignores external C libraries, and different builds can share a PHP version.
+          $phpHash = (Get-FileHash "$phpBin\php8ts.dll").Hash.Substring(0, 16)
+          $embedHash = (Get-FileHash "$phpBin\php8embed.lib").Hash.Substring(0, 16)
+          "GOCACHE=$env:RUNNER_TEMP\go-$phpHash-$embedHash" >> $env:GITHUB_ENV
+
           "$vcpkgRoot\bin" >> $env:GITHUB_PATH
           "$watcherRoot" >> $env:GITHUB_PATH
           "$phpBin" >> $env:GITHUB_PATH
@@ -198,6 +223,19 @@ jobs:
           Copy-Item frankenphp\vcpkg_installed\x64-windows\bin\brotlicommon.dll $env:DIR_NAME
           Copy-Item frankenphp\vcpkg_installed\x64-windows\bin\pthreadVC3.dll $env:DIR_NAME
 
+      - name: Run Tests
+        run: |
+          "opcache.enable=0`r`nopcache.enable_cli=0" | Out-File php.ini
+          $env:PHPRC = Get-Location
+
+          go install gotest.tools/gotestsum@latest
+          gotestsum -- -race ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cd caddy
+          gotestsum -- -race ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        working-directory: ${{ github.workspace }}\frankenphp
+
       - name: Upload Artifact
         if: env.BUILD_RELEASE == 'true' && !env.REF
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -216,20 +254,17 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Publish PHP bundle
+        if: env.REF && steps.php.outputs.restored != 'true'
+        run: |
+          $asset = "php-$($env:PHP_VERSION)-Win32-clang-x64.zip"
+          Compress-Archive -Path php-build\* -DestinationPath $asset
+          gh release upload "$env:REF" $asset --repo php/frankenphp --clobber
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - if: ${{ env.REF }}
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: ${{ github.workspace }}\${{ env.DIR_NAME }}.zip
-
-      - name: Run Tests
-        run: |
-          "opcache.enable=0`r`nopcache.enable_cli=0" | Out-File php.ini
-          $env:PHPRC = Get-Location
-
-          go install gotest.tools/gotestsum@latest
-          gotestsum -- -race ./...
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cd caddy
-          gotestsum -- -race ./...
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        working-directory: ${{ github.workspace }}\frankenphp
