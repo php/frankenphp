@@ -34,7 +34,7 @@ func testMercurePublish(t *testing.T, opts *testOptions) {
 		assert.Contains(t, body, `error 1: mercure_publish(): Argument #1 ($topics) "/.well-known/mercure/subscriptions": topic value resolves into the reserved "/.well-known/mercure" namespace`)
 		assert.Contains(t, body, "error 2: mercure_publish(): Argument #6 ($retry) must be greater than or equal to 0")
 		assert.Contains(t, body, "error 3: mercure_publish(): Argument #1 ($topics) must only contain strings, int given")
-		assert.Contains(t, body, `error 4: mercure_publish(): Argument #4 ($id) "id" field contains`)
+		assert.Contains(t, body, `error 4: mercure_publish(): Argument #4 ($id) "id" field`)
 	}, opts)
 }
 

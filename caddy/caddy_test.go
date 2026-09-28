@@ -707,6 +707,7 @@ func TestMetrics(t *testing.T) {
 	example.com:`+testPort+` {
 		route {
 			mercure {
+				name example
 				transport local
 				anonymous
 			}
