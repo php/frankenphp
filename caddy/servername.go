@@ -53,6 +53,13 @@ func findHostInRoutes(routes caddyhttp.RouteList, target caddyhttp.MiddlewareHan
 				return (*hp)[0]
 			}
 		}
+		for _, handler := range route.Handlers {
+			if subroute, ok := handler.(*caddyhttp.Subroute); ok {
+				if host := findHostInRoutes(subroute.Routes, target); host != "" {
+					return host
+				}
+			}
+		}
 	}
 
 	return ""
