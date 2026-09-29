@@ -57,6 +57,7 @@ Access tokens must carry the identifier of the `issuer` they were signed by in t
 - `MERCURE_PUBLISHER_JWT_KEY` and `MERCURE_SUBSCRIBER_JWT_KEY` (required): the keys verifying the publisher and subscriber tokens
 - `MERCURE_PUBLISHER_JWT_ALG` and `MERCURE_SUBSCRIBER_JWT_ALG` (default: `HS256`): the algorithms these tokens are signed with
 - `MERCURE_TRUSTED_ISSUERS` (default: `https://localhost`): the identifiers accepted in the `iss` claim of the tokens, separated by commas or spaces (the sample `Caddyfile` reads a single identifier from this variable)
+- `MERCURE_RESOURCE_IDENTIFIER` (default: the URL of the hub the client contacted): the value the `aud` claim of the tokens must contain; set it when `--domain` is empty, as the site then answers any `Host`
 
 The tokens must follow [the format described below](#using-file_get_contents): the ones issued for the 0.x hub are rejected.
 

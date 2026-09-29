@@ -76,7 +76,8 @@ func createMercureRoute() (caddyhttp.Route, error) {
 
 	mercureRoute := caddyhttp.Route{
 		HandlersRaw: []json.RawMessage{caddyconfig.JSONModuleObject(
-			mercureCaddy.Mercure{Issuers: issuers},
+			// Without a pinned identifier, the audience comes from the Host header, which a catch-all site doesn't check.
+			mercureCaddy.Mercure{Issuers: issuers, ResourceIdentifier: os.Getenv("MERCURE_RESOURCE_IDENTIFIER")},
 			"handler",
 			"mercure",
 			nil,
