@@ -976,6 +976,7 @@ PHP_FUNCTION(mercure_publish) {
   if (Z_TYPE_P(topics) == IS_ARRAY) {
     zval *topic;
     ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(topics), topic) {
+      ZVAL_DEREF(topic);
       if (Z_TYPE_P(topic) != IS_STRING) {
         zend_argument_type_error(1, "must only contain strings, %s given",
                                  zend_zval_type_name(topic));
