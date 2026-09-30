@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"unicode/utf8"
 	"unsafe"
@@ -354,23 +355,16 @@ func sanitizedPathJoin(root, reqPath string) string {
 		root = "."
 	}
 
-	// reqPath is an HTTP request path: nominally "/"-separated, regardless
-	// of host OS, but an attacker can smuggle literal "\" bytes in it too
-	// (e.g. via %5C). Normalize those to "/" before cleaning: filepath.Join
-	// below runs with the host's native separator semantics, and on
-	// Windows it treats "\" as a separator, so any ".." hidden behind a
-	// backslash must already be collapsed here or it survives path.Clean
-	// (POSIX-only, "\" is just an ordinary byte to it) and escapes root
-	// once filepath.Join resolves it.
-	//
-	// It must be cleaned with the "path" package (POSIX-only), not
-	// "path/filepath": on Windows, filepath.Clean does not treat a
-	// driveless "/"-rooted path as absolute, so a leading ".." isn't
-	// collapsed at the root the way it is on POSIX - it survives into the
-	// joined path instead, also escaping root.
-	cleanedReqPath := filepath.FromSlash(path.Clean("/" + strings.ReplaceAll(reqPath, `\`, "/")))
+	// Clean with "path", not "filepath": on Windows filepath.Clean keeps the
+	// ".." behind a leading "//" (UNC prefix), letting reqPath escape root.
+	relPath := path.Clean("/" + reqPath)[1:]
+	// A cleaned rooted path is always local on POSIX: only Windows needs the check
+	if runtime.GOOS == "windows" && relPath != "" && !filepath.IsLocal(relPath) {
+		// path is unsafe (see https://github.com/golang/go/issues/56336#issuecomment-1416214885)
+		return root
+	}
 
-	joined := filepath.Join(root, cleanedReqPath)
+	joined := filepath.Join(root, filepath.FromSlash(relPath))
 
 	// filepath.Join also cleans the path, and cleaning strips
 	// the trailing slash, so we need to re-add it afterward.
