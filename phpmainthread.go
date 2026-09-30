@@ -285,6 +285,11 @@ func go_frankenphp_shutdown_main_thread() {
 	mainThread.state.Set(state.Reserved)
 }
 
+//export go_is_hot_reload_enabled
+func go_is_hot_reload_enabled() C.bool {
+	return C.bool(hotReloadEnabled)
+}
+
 //export go_get_custom_php_ini
 func go_get_custom_php_ini(disableTimeouts C.bool) *C.char {
 	if mainThread.phpIni == nil {
