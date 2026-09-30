@@ -71,6 +71,8 @@ var (
 	// atomic: read by in-flight requests while a reload may rewrite it
 	maxWaitTime          atomic.Int64
 	maxRequestsPerThread int
+
+	hotReloadEnabled bool
 )
 
 type ErrRejected struct {
@@ -373,6 +375,8 @@ func Init(options ...Option) error {
 			globalLogger.LogAttrs(globalCtx, slog.LevelWarn, `ZTS is not enabled, only 1 thread will be available, recompile PHP using the "--enable-zts" configuration option or performance will be degraded`)
 		}
 	}
+
+	hotReloadEnabled = opt.hasHotReload()
 
 	mainThread, err := initPHPThreads(opt.numThreads, opt.maxThreads, opt.phpIni)
 	if err != nil {
@@ -876,6 +880,7 @@ func resetGlobals() {
 	globalWorkersByPath = nil
 	servers = nil
 	watcherIsEnabled = false
+	hotReloadEnabled = false
 	maxIdleTime = defaultMaxIdleTime
 	maxRequestsPerThread = 0
 }
