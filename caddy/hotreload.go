@@ -48,7 +48,7 @@ func (f *FrankenPHPModule) configureHotReload(app *FrankenPHPApp) error {
 		f.HotReload.Topic = "https://frankenphp.dev/hot-reload/" + uid
 	}
 
-	app.opts = append(app.opts, frankenphp.WithHotReload(f.HotReload.Topic, f.mercureHub, f.HotReload.Watch))
+	app.provisionOpts = append(app.provisionOpts, frankenphp.WithHotReload(f.HotReload.Topic, f.mercureHub, f.HotReload.Watch))
 
 	// add the hot reload to the env variables
 	if f.Env == nil {

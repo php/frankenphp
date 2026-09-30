@@ -26,7 +26,8 @@ func TestRegisterModulesWithSameServerIndexShareOneServer(t *testing.T) {
 	shared2 := &FrankenPHPModule{ServerIndex: 1, resolvedDocumentRoot: "../testdata"}
 	app.modules = []*FrankenPHPModule{shared1, shared2}
 
-	require.NoError(t, app.registerModules(caddy.NewReplacer()))
+	_, err := app.collectModuleOptions(caddy.NewReplacer(), map[string]bool{}, true)
+	require.NoError(t, err)
 
 	require.NotNil(t, shared1.server)
 	require.Same(t, shared1.server, shared2.server, "modules with the same server_idx must share one server instance")
@@ -39,7 +40,8 @@ func TestRegisterModulesWithoutServerIndexGetOwnServers(t *testing.T) {
 	indexed := &FrankenPHPModule{ServerIndex: 1, resolvedDocumentRoot: "../testdata"}
 	app.modules = []*FrankenPHPModule{auto1, indexed, auto2}
 
-	require.NoError(t, app.registerModules(caddy.NewReplacer()))
+	_, err := app.collectModuleOptions(caddy.NewReplacer(), map[string]bool{}, true)
+	require.NoError(t, err)
 
 	require.NotNil(t, auto1.server)
 	require.NotNil(t, auto2.server)
@@ -59,8 +61,9 @@ func TestRegisterModulesFirstModuleWinsPerIdx(t *testing.T) {
 	second := &FrankenPHPModule{ServerIndex: 2, resolvedDocumentRoot: "../testdata/env"}
 	app.modules = []*FrankenPHPModule{first, second}
 
-	require.NoError(t, app.registerModules(caddy.NewReplacer()))
+	opts, err := app.collectModuleOptions(caddy.NewReplacer(), map[string]bool{}, true)
+	require.NoError(t, err)
 
 	require.Same(t, first.server, second.server)
-	require.Len(t, app.opts, 1, "only one server must be registered for a shared index")
+	require.Len(t, opts, 1, "only one server must be registered for a shared index")
 }
