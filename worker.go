@@ -32,6 +32,7 @@ type worker struct {
 	maxConsecutiveFailures int
 	onThreadReady          func(int)
 	onThreadShutdown       func(int)
+	ticks                  []*tick
 	queuedRequests         atomic.Int32
 	server                 *Server
 }
@@ -167,6 +168,7 @@ func newWorker(o workerOpt) (*worker, error) {
 		onThreadReady:          o.onThreadReady,
 		onThreadShutdown:       o.onThreadShutdown,
 		server:                 o.server,
+		ticks:                  o.ticks,
 	}
 
 	w.configureMercure(&o)
@@ -232,6 +234,23 @@ func (worker *worker) isAtThreadLimit() bool {
 	worker.threadMutex.RUnlock()
 
 	return atMaxThreads
+}
+
+func (worker *worker) handleRequestOnThread(thread *phpThread, fc *frankenPHPContext) error {
+	metrics.StartWorkerRequest(worker.name)
+
+	select {
+	case thread.requestChan <- fc:
+		<-fc.done
+		metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
+
+		return nil
+	case <-timeoutChan(time.Duration(maxWaitTime.Load())):
+		metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
+		fc.reject(ErrMaxWaitTimeExceeded)
+
+		return ErrMaxWaitTimeExceeded
+	}
 }
 
 func (worker *worker) handleRequest(fc *frankenPHPContext) error {
