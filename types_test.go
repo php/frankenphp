@@ -125,6 +125,18 @@ func TestPHPAssociativeArrayToPacked(t *testing.T) {
 	})
 }
 
+// goArray runs in a cgo callback, where a panic aborts the process: a value
+// that doesn't fit T must come back as an error instead.
+func TestGoMapWithUnconvertibleValue(t *testing.T) {
+	testOnDummyPHPThread(t, func() {
+		phpArray := PHPMap(map[string]any{"foo": int64(123)})
+		defer zendHashDestroy(phpArray)
+
+		_, err := GoMap[string](phpArray)
+		require.Error(t, err)
+	})
+}
+
 func TestNestedMixedArray(t *testing.T) {
 	testOnDummyPHPThread(t, func() {
 		originalArray := map[string]any{

@@ -573,6 +573,7 @@ func testLog_frankenphp_log(t *testing.T, opts *testOptions) {
 			fmt.Sprintf(`level=INFO msg="some info message %d" "key string"=string`, i),
 			fmt.Sprintf(`level=WARN msg="some warn message %d"`, i),
 			fmt.Sprintf(`level=ERROR msg="some error message %d" err="[a v]"`, i),
+			fmt.Sprintf(`level=INFO msg="some null message %d" 8=<nil>`, i),
 		} {
 			assert.Contains(t, logs, message)
 		}
