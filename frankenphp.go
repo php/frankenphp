@@ -242,6 +242,13 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 		}
 	}
 
+	// num_threads counts the threads serving the requests no worker serves:
+	// the worker threads come on top of it, so raising a worker's num never
+	// takes capacity away from the rest of the site
+	if opt.numThreads > 0 {
+		opt.numThreads += numWorkers
+	}
+
 	numThreadsIsSet := opt.numThreads > 0
 	maxThreadsIsSet := opt.maxThreads != 0
 	maxThreadsIsAuto := opt.maxThreads < 0 // maxthreads < 0 signifies auto mode (see phpmaintread.go)
@@ -258,9 +265,6 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 
 	if numThreadsIsSet && !maxThreadsIsSet {
 		opt.maxThreads = opt.numThreads
-		if opt.numThreads <= numWorkers {
-			return 0, fmt.Errorf("num_threads (%d) must be greater than the number of worker threads (%d)", opt.numThreads, numWorkers)
-		}
 
 		return numWorkers, nil
 	}
@@ -275,8 +279,9 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 	}
 
 	if !numThreadsIsSet {
+		// default: what is left of 2x the CPUs once the workers have their
+		// threads, and one thread at the very least
 		if numWorkers >= maxProcs {
-			// Start at least as many threads as workers, and keep a free thread to handle requests in non-worker mode
 			opt.numThreads = numWorkers + 1
 		} else {
 			opt.numThreads = maxProcs
@@ -287,11 +292,11 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 	}
 
 	// both num_threads and max_threads are set
-	if opt.numThreads <= numWorkers {
-		return 0, fmt.Errorf("num_threads (%d) must be greater than the number of worker threads (%d)", opt.numThreads, numWorkers)
-	}
-
 	if !maxThreadsIsAuto && opt.maxThreads < opt.numThreads {
+		if numWorkers > 0 {
+			return 0, fmt.Errorf("max_threads (%d) must be greater than or equal to num_threads (%d) plus the worker threads (%d)", opt.maxThreads, opt.numThreads-numWorkers, numWorkers)
+		}
+
 		return 0, fmt.Errorf("max_threads (%d) must be greater than or equal to num_threads (%d)", opt.maxThreads, opt.numThreads)
 	}
 
@@ -402,7 +407,7 @@ func Init(options ...Option) error {
 	activateServers()
 
 	if globalLogger.Enabled(globalCtx, slog.LevelInfo) {
-		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "FrankenPHP started 🐘", slog.String("php_version", Version().Version), slog.Int("num_threads", mainThread.numThreads), slog.Int("max_threads", mainThread.maxThreads), slog.Int("max_requests", maxRequestsPerThread))
+		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "FrankenPHP started 🐘", slog.String("php_version", Version().Version), slog.Int("total_threads", mainThread.numThreads), slog.Int("worker_threads", workerThreadCount), slog.Int("max_threads", mainThread.maxThreads), slog.Int("max_requests", maxRequestsPerThread))
 
 		if EmbeddedAppPath != "" {
 			globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "embedded PHP app 📦", slog.String("path", EmbeddedAppPath))
