@@ -1600,6 +1600,13 @@ func TestValidateReportsDeclarationErrors(t *testing.T) {
 		frankenphp.WithWorkers("two", "testdata/worker.php", 1, frankenphp.WithWorkerServerScope(server), matchAll),
 	))
 
+	other, err := frankenphp.NewServer(testDataDir)
+	require.NoError(t, err)
+	assert.ErrorContains(t, frankenphp.Validate(
+		frankenphp.WithServer(server),
+		frankenphp.WithWorkers("one", "testdata/worker.php", 1, frankenphp.WithWorkerServerScope(other)),
+	), "was not passed to WithServer()")
+
 	// names are unique within their scope, not across servers
 	assert.NoError(t, frankenphp.Validate(
 		frankenphp.WithServer(server),

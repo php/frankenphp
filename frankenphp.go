@@ -354,7 +354,7 @@ func Validate(options ...Option) error {
 			return err
 		}
 
-		if err := checkWorkerDeclaration(w, nameTaken, pathTaken); err != nil {
+		if err := checkWorkerDeclaration(w, opt.servers, nameTaken, pathTaken); err != nil {
 			return err
 		}
 

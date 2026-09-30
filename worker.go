@@ -77,10 +77,6 @@ func initWorkers(opts []workerOpt) error {
 			return err
 		}
 
-		if w.server != fallbackServer && !slices.Contains(servers, w.server) {
-			return fmt.Errorf("worker %q is scoped to a server that was not passed to WithServer()", w.name)
-		}
-
 		// names and paths are unique within a server
 		if err := w.server.addWorker(w); err != nil {
 			return err
@@ -219,10 +215,12 @@ func resolveWorkerFile(o workerOpt, nameTaken func(*Server, string) bool) (worke
 // Validate() and newWorker() answer the same way. Names and paths are
 // unique within the scope a worker registers in, a nil server standing for
 // the global workers.
-func checkWorkerDeclaration(o workerOpt, nameTaken, pathTaken func(*Server, string) bool) error {
+func checkWorkerDeclaration(o workerOpt, servers []*Server, nameTaken, pathTaken func(*Server, string) bool) error {
 	scope := "two workers in a server"
 	if o.server == nil {
 		scope = "two global workers"
+	} else if !slices.Contains(servers, o.server) {
+		return fmt.Errorf("worker %q is scoped to a server that was not passed to WithServer()", o.name)
 	}
 
 	if o.isBackgroundWorker {
@@ -274,7 +272,7 @@ func newWorker(o workerOpt) (*worker, error) {
 		return nil, err
 	}
 
-	if err := checkWorkerDeclaration(o, nameTaken, pathTaken); err != nil {
+	if err := checkWorkerDeclaration(o, servers, nameTaken, pathTaken); err != nil {
 		return nil, err
 	}
 
