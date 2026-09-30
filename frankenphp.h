@@ -16,6 +16,7 @@
 
 #include <Zend/zend_modules.h>
 #include <Zend/zend_types.h>
+#include <php_version.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -40,6 +41,12 @@ typedef struct {
   HANDLE thread_handle;
 #endif
 } force_kill_slot;
+
+#if defined(ZTS) && PHP_VERSION_ID >= 80400
+#define FRANKENPHP_OPCACHE_RESTART_HOOK 1
+#else
+#define FRANKENPHP_OPCACHE_RESTART_HOOK 0
+#endif
 
 #ifndef FRANKENPHP_VERSION
 #define FRANKENPHP_VERSION dev
