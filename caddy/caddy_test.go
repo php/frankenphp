@@ -696,7 +696,6 @@ func TestMetrics(t *testing.T) {
 			mercure {
 				transport local
 				anonymous
-				publisher_jwt !ChangeMe!
 			}
 
 			php {
@@ -708,9 +707,9 @@ func TestMetrics(t *testing.T) {
 	example.com:`+testPort+` {
 		route {
 			mercure {
+				name example
 				transport local
 				anonymous
-				publisher_jwt !ChangeMe!
 			}
 
 			php {

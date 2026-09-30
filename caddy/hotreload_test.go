@@ -19,7 +19,7 @@ import (
 func TestHotReload(t *testing.T) {
 	const topic = "https://frankenphp.dev/hot-reload/test"
 
-	u := "/.well-known/mercure?topic=" + url.QueryEscape(topic)
+	u := "/.well-known/mercure?match=" + url.QueryEscape(topic)
 
 	tmpDir := t.TempDir()
 	indexFile := filepath.Join(tmpDir, "index.php")
@@ -39,7 +39,6 @@ func TestHotReload(t *testing.T) {
 		http://localhost:`+testPort+` {
 			mercure {
 				transport local
-				subscriber_jwt TestKey 
 				anonymous
 			}
 

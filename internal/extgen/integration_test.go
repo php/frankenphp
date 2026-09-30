@@ -184,7 +184,7 @@ func (s *IntegrationTestSuite) compileFrankenPHP(moduleDir string) (string, erro
 		"CGO_ENABLED=1",
 		"CGO_CFLAGS="+cgoCflags,
 		"CGO_LDFLAGS="+cgoLdflags,
-		fmt.Sprintf("XCADDY_GO_BUILD_FLAGS=-ldflags='-w -s' -tags=nobadger,nomysql,nopgx,nowatcher"),
+		fmt.Sprintf("XCADDY_GO_BUILD_FLAGS=-ldflags='-w -s' -tags=nobadger,nomysql,nopgx,deprecated_topic,deprecated_claim,nowatcher"),
 	)
 
 	cmd.Dir = s.tempDir

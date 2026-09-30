@@ -54,7 +54,7 @@ func (f *FrankenPHPModule) configureHotReload(app *FrankenPHPApp) error {
 	if f.Env == nil {
 		f.Env = make(map[string]string)
 	}
-	f.Env["FRANKENPHP_HOT_RELOAD"] = "/.well-known/mercure?topic=" + url.QueryEscape(f.HotReload.Topic)
+	f.Env["FRANKENPHP_HOT_RELOAD"] = "/.well-known/mercure?match=" + url.QueryEscape(f.HotReload.Topic)
 
 	return nil
 }

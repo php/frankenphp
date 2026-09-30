@@ -272,6 +272,10 @@ func goValue[T any](zval *C.zval) (res T, err error) {
 		resZero T
 	)
 	t := C.zval_get_type(zval)
+	if t == C.IS_REFERENCE {
+		zval = &(*(**C.zend_reference)(unsafe.Pointer(&zval.value[0]))).val
+		t = C.zval_get_type(zval)
+	}
 
 	switch t {
 	case C.IS_NULL:

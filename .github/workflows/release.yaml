@@ -25,7 +25,7 @@ jobs:
     environment: release
     env:
       GOTOOLCHAIN: local
-      GOFLAGS: "-tags=nobadger,nomysql,nopgx"
+      GOFLAGS: "-tags=nobadger,nomysql,nopgx,deprecated_topic,deprecated_claim"
       LIBRARY_PATH: ${{ github.workspace }}/watcher/target/lib
       BENCH_SEC: "30"
     steps:
