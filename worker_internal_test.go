@@ -120,3 +120,22 @@ func TestInitJoinsAThreadStuckInStartupTeardown(t *testing.T) {
 	assert.Error(t, <-initDone, "a worker failing to boot must fail Init")
 	assert.True(t, failedThread.state.Is(state.Reserved), "the thread must have exited and been reclaimed before Init returned, got: "+failedThread.state.Name())
 }
+
+// a reboot that meets a booting worker waits for its thread to settle, and a
+// worker that then gives up only reaches Done: Init() must still return
+func TestInitReturnsWhenARebootWaitsOnAWorkerThatGivesUp(t *testing.T) {
+	initDone := make(chan error, 1)
+	go func() {
+		initDone <- Init(
+			WithWorkers("reset-then-fail", testDataPath+"/worker-reset-then-fail.php", 1, WithWorkerMaxFailures(2)),
+			WithNumThreads(1),
+		)
+	}()
+
+	select {
+	case err := <-initDone:
+		require.ErrorContains(t, err, "too many consecutive failures")
+	case <-time.After(30 * time.Second):
+		t.Fatal("Init() hung behind a reboot waiting for a worker thread that ended on its own")
+	}
+}
