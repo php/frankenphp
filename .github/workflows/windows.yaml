@@ -80,9 +80,23 @@ jobs:
         with:
           working-directory: frankenphp
 
+      - name: Determine runner image
+        id: image
+        run: '"version=$env:ImageVersion" >> $env:GITHUB_OUTPUT'
+
+      # SourceForge sometimes serves runners a non-archive body for pthreads sources
+      - name: Cache Vcpkg Packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ github.workspace }}\vcpkg-cache
+          key: vcpkg-${{ runner.os }}-${{ steps.image.outputs.version }}-${{ hashFiles('frankenphp/vcpkg.json') }}
+          restore-keys: vcpkg-${{ runner.os }}-
+
       - name: Install Vcpkg Libraries
         working-directory: frankenphp
-        run: "vcpkg install"
+        run: |
+          New-Item -ItemType Directory -Force "$env:GITHUB_WORKSPACE\vcpkg-cache" | Out-Null
+          vcpkg install --binarysource="clear;files,$env:GITHUB_WORKSPACE\vcpkg-cache,readwrite"
 
       - name: Download Watcher
         run: |
