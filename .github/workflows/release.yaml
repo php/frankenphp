@@ -157,6 +157,8 @@ jobs:
           fi
       - if: steps.state.outputs.resume != 'true'
         uses: ./.github/actions/setup-go
+        with:
+          cache: "false"
       - if: steps.state.outputs.resume != 'true'
         uses: ./.github/actions/setup-php
       - if: steps.state.outputs.resume != 'true'
