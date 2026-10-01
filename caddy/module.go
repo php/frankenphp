@@ -315,6 +315,10 @@ func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	// Check if a worker with this filename already exists in this module
 	fileNames := make(map[string]struct{}, len(f.Workers))
 	for _, w := range f.Workers {
+		// background workers are keyed by name, several may share a script
+		if w.Background {
+			continue
+		}
 		if _, ok := fileNames[w.FileName]; ok {
 			return fmt.Errorf(`workers in a single "php" or "php_server" block must not have duplicate filenames: %q`, w.FileName)
 		}
