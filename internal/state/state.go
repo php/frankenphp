@@ -215,7 +215,7 @@ func (ts *ThreadState) RequestSafeStateChange(nextState State) bool {
 	}
 	ts.mu.Unlock()
 
-	// or Done: a thread that ended on its own goes ShuttingDown then Done without
+	// Done too: a thread that ends on its own goes ShuttingDown then Done without
 	// being stable again, and only Done means its C side is gone
 	ts.WaitFor(Ready, Inactive, Reserved, Done)
 
