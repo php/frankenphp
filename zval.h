@@ -12,7 +12,8 @@
  * one request).
  *
  * Fast paths:
- *   - Interned strings: shared memory, no copy.
+ *   - Permanent interned strings (opcache, startup): shared, no copy.
+ *     Strings interned during a request die with it, they are copied.
  *   - Opcache-immutable arrays: shared pointer, no copy, no free.
  *
  * Included by frankenphp.c; not a standalone compilation unit. */
@@ -81,6 +82,12 @@ static bool persistent_zval_validate(zval *z) {
   return persistent_zval_validate_depth(z, 0);
 }
 
+/* Only permanent interned strings outlive the request that interned them:
+ * those are the ones a persistent tree may share by pointer. */
+static bool persistent_zval_str_is_shared(zend_string *s) {
+  return ZSTR_IS_INTERNED(s) && (GC_FLAGS(s) & IS_STR_PERMANENT) != 0;
+}
+
 /* Deep-copy a zval from request memory into persistent (pemalloc) memory.
  * Callers must have already passed persistent_zval_validate on src.
  *
@@ -103,8 +110,8 @@ static void persistent_zval_persist(zval *dst, zval *src) {
     break;
   case IS_STRING: {
     zend_string *s = Z_STR_P(src);
-    if (ZSTR_IS_INTERNED(s)) {
-      ZVAL_STR(dst, s); /* interned strings live process-wide */
+    if (persistent_zval_str_is_shared(s)) {
+      ZVAL_STR(dst, s);
     } else {
       ZVAL_NEW_STR(dst, zend_string_init(ZSTR_VAL(s), ZSTR_LEN(s), 1));
     }
@@ -115,13 +122,13 @@ static void persistent_zval_persist(zval *dst, zval *src) {
     zend_class_entry *ce = Z_OBJCE_P(src);
     persistent_zval_enum_t *e = pemalloc(sizeof(*e), 1);
     e->class_name =
-        ZSTR_IS_INTERNED(ce->name)
+        persistent_zval_str_is_shared(ce->name)
             ? ce->name
             : zend_string_init(ZSTR_VAL(ce->name), ZSTR_LEN(ce->name), 1);
     zval *case_name_zval = zend_enum_fetch_case_name(Z_OBJ_P(src));
     zend_string *case_str = Z_STR_P(case_name_zval);
     e->case_name =
-        ZSTR_IS_INTERNED(case_str)
+        persistent_zval_str_is_shared(case_str)
             ? case_str
             : zend_string_init(ZSTR_VAL(case_str), ZSTR_LEN(case_str), 1);
     ZVAL_PTR(dst, e);
@@ -131,8 +138,10 @@ static void persistent_zval_persist(zval *dst, zval *src) {
     HashTable *src_ht = Z_ARRVAL_P(src);
     if ((GC_FLAGS(src_ht) & IS_ARRAY_IMMUTABLE) != 0) {
       /* Opcache-immutable arrays live for the process lifetime and are
-       * safe to share across threads by pointer. Zero-copy, zero-free. */
+       * safe to share across threads by pointer. Zero-copy, zero-free.
+       * Not refcounted: the zval must not count on the array. */
       ZVAL_ARR(dst, src_ht);
+      Z_TYPE_FLAGS_P(dst) = 0;
       break;
     }
     HashTable *dst_ht = pemalloc(sizeof(HashTable), 1);
@@ -146,7 +155,7 @@ static void persistent_zval_persist(zval *dst, zval *src) {
       zval pval;
       persistent_zval_persist(&pval, val);
       if (key) {
-        if (ZSTR_IS_INTERNED(key)) {
+        if (persistent_zval_str_is_shared(key)) {
           zend_hash_add_new(dst_ht, key, &pval);
         } else {
           zend_string *pkey = zend_string_init(ZSTR_VAL(key), ZSTR_LEN(key), 1);
@@ -258,8 +267,12 @@ static void persistent_zval_to_request(zval *dst, zval *src) {
   case IS_ARRAY: {
     HashTable *src_ht = Z_ARRVAL_P(src);
     if ((GC_FLAGS(src_ht) & IS_ARRAY_IMMUTABLE) != 0) {
-      /* Zero-copy: immutable arrays are safe to expose directly. */
+      /* Zero-copy: immutable arrays are safe to expose directly, as long
+       * as the zval does not count on them: opcache keeps their refcount
+       * at 2 as a safety net, so a refcounted zval exposing the same array
+       * twice would destroy shared memory on the second release. */
       ZVAL_ARR(dst, src_ht);
+      Z_TYPE_FLAGS_P(dst) = 0;
       break;
     }
     array_init_size(dst, zend_hash_num_elements(src_ht));

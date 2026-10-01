@@ -11,14 +11,26 @@ import (
 const (
 	StopReasonCrash = iota
 	StopReasonRestart
-	StopReasonBootFailure // worker crashed before reaching frankenphp_handle_request
+	StopReasonBootFailure // worker exited before reaching its ready point: frankenphp_handle_request, or WorkerHandle::tick() for background workers
 )
 
 type StopReason int
 
+// TaskOutcome is how a task sent to a background worker ended
+type TaskOutcome string
+
+const (
+	TaskOutcomeCompleted TaskOutcome = "completed" // the worker closed the task's stream
+	TaskOutcomeAborted   TaskOutcome = "aborted"   // the worker's script ended with the task open
+	TaskOutcomeAbandoned TaskOutcome = "abandoned" // the sender closed its stream first
+	TaskOutcomeTimeout   TaskOutcome = "timeout"   // no thread picked the task up in time
+)
+
 // Metrics reports what the workers and the threads of a FrankenPHP instance
-// are doing. An implementation that also satisfies OpcacheMetrics is told
-// about opcache restarts as well.
+// are doing. A worker is identified by its name alone, where a worker scoped
+// to a server is reported as "<server name>:<name>". An implementation that
+// also satisfies ServerMetrics gets the two apart instead, and one that
+// satisfies OpcacheMetrics is told about opcache restarts as well.
 type Metrics interface {
 	// StartWorker collects started workers
 	StartWorker(name string)
@@ -53,18 +65,180 @@ type OpcacheMetrics interface {
 	OpcacheRestart(reason string)
 }
 
+// ServerMetrics is the optional part of a Metrics implementation that keeps
+// the name of a worker and the name of its server apart, the latter empty for
+// a global worker, so a series keyed on the name alone still selects the
+// worker of every server. An implementation passed to WithMetrics() that
+// satisfies it never has the worker methods of Metrics called.
+type ServerMetrics interface {
+	StartWorkerOnServer(name, server string)
+	ReadyWorkerOnServer(name, server string)
+	StopWorkerOnServer(name, server string, reason StopReason)
+	TotalWorkersOnServer(name, server string, num int)
+	StopWorkerRequestOnServer(name, server string, duration time.Duration)
+	StartWorkerRequestOnServer(name, server string)
+	QueuedWorkerRequestOnServer(name, server string)
+	DequeuedWorkerRequestOnServer(name, server string)
+	// the tasks of background workers have no packed counterpart in
+	// Metrics, so they take the pair under their own name
+	// StartWorkerTask collects tasks picked up by a thread of a background worker
+	StartWorkerTask(name, server string)
+	// StopWorkerTask collects tasks a thread of a background worker is done with
+	StopWorkerTask(name, server string, duration time.Duration)
+	// WorkerTaskOutcome collects how tasks sent to a background worker ended
+	WorkerTaskOutcome(name, server string, outcome TaskOutcome)
+}
+
+// workerMetrics is what the runtime reports on: Metrics with the worker
+// methods taking the server as well
+type workerMetrics interface {
+	StartWorker(name, server string)
+	ReadyWorker(name, server string)
+	StopWorker(name, server string, reason StopReason)
+	TotalWorkers(name, server string, num int)
+	TotalThreads(num int)
+	StartRequest()
+	StopRequest()
+	StopWorkerRequest(name, server string, duration time.Duration)
+	StartWorkerRequest(name, server string)
+	Shutdown()
+	QueuedWorkerRequest(name, server string)
+	DequeuedWorkerRequest(name, server string)
+	QueuedRequest()
+	DequeuedRequest()
+	StartWorkerTask(name, server string)
+	StopWorkerTask(name, server string, duration time.Duration)
+	WorkerTaskOutcome(name, server string, outcome TaskOutcome)
+	OpcacheRestart(reason string)
+}
+
+// metricsAdapter routes the worker methods to ServerMetrics when the
+// implementation has it, and packs the server into the name otherwise;
+// opcache restarts reach it only when it satisfies OpcacheMetrics
+type metricsAdapter struct {
+	Metrics
+	server  ServerMetrics
+	opcache OpcacheMetrics
+}
+
+func adaptMetrics(m Metrics) workerMetrics {
+	a := metricsAdapter{Metrics: m}
+	a.server, _ = m.(ServerMetrics)
+	a.opcache, _ = m.(OpcacheMetrics)
+
+	return a
+}
+
+func (a metricsAdapter) OpcacheRestart(reason string) {
+	if a.opcache != nil {
+		a.opcache.OpcacheRestart(reason)
+	}
+}
+
+func packedWorkerName(name, server string) string {
+	if server == "" {
+		return name
+	}
+
+	return server + ":" + name
+}
+
+// the task methods have no packed form: an implementation that does not
+// satisfy ServerMetrics simply does not collect them
+func (a metricsAdapter) StartWorkerTask(name, server string) {
+	if a.server != nil {
+		a.server.StartWorkerTask(name, server)
+	}
+}
+
+func (a metricsAdapter) StopWorkerTask(name, server string, duration time.Duration) {
+	if a.server != nil {
+		a.server.StopWorkerTask(name, server, duration)
+	}
+}
+
+func (a metricsAdapter) WorkerTaskOutcome(name, server string, outcome TaskOutcome) {
+	if a.server != nil {
+		a.server.WorkerTaskOutcome(name, server, outcome)
+	}
+}
+
+func (a metricsAdapter) StartWorker(name, server string) {
+	if a.server != nil {
+		a.server.StartWorkerOnServer(name, server)
+		return
+	}
+	a.Metrics.StartWorker(packedWorkerName(name, server))
+}
+
+func (a metricsAdapter) ReadyWorker(name, server string) {
+	if a.server != nil {
+		a.server.ReadyWorkerOnServer(name, server)
+		return
+	}
+	a.Metrics.ReadyWorker(packedWorkerName(name, server))
+}
+
+func (a metricsAdapter) StopWorker(name, server string, reason StopReason) {
+	if a.server != nil {
+		a.server.StopWorkerOnServer(name, server, reason)
+		return
+	}
+	a.Metrics.StopWorker(packedWorkerName(name, server), reason)
+}
+
+func (a metricsAdapter) TotalWorkers(name, server string, num int) {
+	if a.server != nil {
+		a.server.TotalWorkersOnServer(name, server, num)
+		return
+	}
+	a.Metrics.TotalWorkers(packedWorkerName(name, server), num)
+}
+
+func (a metricsAdapter) StopWorkerRequest(name, server string, duration time.Duration) {
+	if a.server != nil {
+		a.server.StopWorkerRequestOnServer(name, server, duration)
+		return
+	}
+	a.Metrics.StopWorkerRequest(packedWorkerName(name, server), duration)
+}
+
+func (a metricsAdapter) StartWorkerRequest(name, server string) {
+	if a.server != nil {
+		a.server.StartWorkerRequestOnServer(name, server)
+		return
+	}
+	a.Metrics.StartWorkerRequest(packedWorkerName(name, server))
+}
+
+func (a metricsAdapter) QueuedWorkerRequest(name, server string) {
+	if a.server != nil {
+		a.server.QueuedWorkerRequestOnServer(name, server)
+		return
+	}
+	a.Metrics.QueuedWorkerRequest(packedWorkerName(name, server))
+}
+
+func (a metricsAdapter) DequeuedWorkerRequest(name, server string) {
+	if a.server != nil {
+		a.server.DequeuedWorkerRequestOnServer(name, server)
+		return
+	}
+	a.Metrics.DequeuedWorkerRequest(packedWorkerName(name, server))
+}
+
 type nullMetrics struct{}
 
-func (n nullMetrics) StartWorker(string) {
+func (n nullMetrics) StartWorker(string, string) {
 }
 
-func (n nullMetrics) ReadyWorker(string) {
+func (n nullMetrics) ReadyWorker(string, string) {
 }
 
-func (n nullMetrics) StopWorker(string, StopReason) {
+func (n nullMetrics) StopWorker(string, string, StopReason) {
 }
 
-func (n nullMetrics) TotalWorkers(string, int) {
+func (n nullMetrics) TotalWorkers(string, string, int) {
 }
 
 func (n nullMetrics) TotalThreads(int) {
@@ -76,21 +250,28 @@ func (n nullMetrics) StartRequest() {
 func (n nullMetrics) StopRequest() {
 }
 
-func (n nullMetrics) StopWorkerRequest(string, time.Duration) {
+func (n nullMetrics) StopWorkerRequest(string, string, time.Duration) {
 }
 
-func (n nullMetrics) StartWorkerRequest(string) {
+func (n nullMetrics) StartWorkerRequest(string, string) {
 }
 
 func (n nullMetrics) Shutdown() {
 }
 
-func (n nullMetrics) QueuedWorkerRequest(string) {}
+func (n nullMetrics) QueuedWorkerRequest(string, string) {}
 
-func (n nullMetrics) DequeuedWorkerRequest(string) {}
+func (n nullMetrics) DequeuedWorkerRequest(string, string) {}
 
-func (n nullMetrics) QueuedRequest()   {}
-func (n nullMetrics) DequeuedRequest() {}
+func (n nullMetrics) QueuedRequest()        {}
+func (n nullMetrics) DequeuedRequest()      {}
+func (n nullMetrics) OpcacheRestart(string) {}
+
+func (n nullMetrics) StartWorkerTask(string, string) {}
+
+func (n nullMetrics) StopWorkerTask(string, string, time.Duration) {}
+
+func (n nullMetrics) WorkerTaskOutcome(string, string, TaskOutcome) {}
 
 type PrometheusMetrics struct {
 	registry           prometheus.Registerer
@@ -104,6 +285,8 @@ type PrometheusMetrics struct {
 	workerRequestTime  *prometheus.CounterVec
 	workerRequestCount *prometheus.CounterVec
 	workerQueueDepth   *prometheus.GaugeVec
+	workerTaskCount    *prometheus.CounterVec
+	workerTaskTime     *prometheus.CounterVec
 	queueDepth         prometheus.Gauge
 	opcacheRestarts    *prometheus.CounterVec
 	mu                 sync.RWMutex
@@ -120,10 +303,33 @@ func (m *PrometheusMetrics) mustRegister(c prometheus.Collector) {
 
 var (
 	_ Metrics        = (*PrometheusMetrics)(nil)
+	_ ServerMetrics  = (*PrometheusMetrics)(nil)
 	_ OpcacheMetrics = (*PrometheusMetrics)(nil)
 )
 
-func (m *PrometheusMetrics) StartWorker(name string) {
+func (m *PrometheusMetrics) StartWorker(name string) { m.StartWorkerOnServer(name, "") }
+
+func (m *PrometheusMetrics) ReadyWorker(name string) { m.ReadyWorkerOnServer(name, "") }
+
+func (m *PrometheusMetrics) StopWorker(name string, reason StopReason) {
+	m.StopWorkerOnServer(name, "", reason)
+}
+
+func (m *PrometheusMetrics) TotalWorkers(name string, num int) { m.TotalWorkersOnServer(name, "", num) }
+
+func (m *PrometheusMetrics) StopWorkerRequest(name string, duration time.Duration) {
+	m.StopWorkerRequestOnServer(name, "", duration)
+}
+
+func (m *PrometheusMetrics) StartWorkerRequest(name string) { m.StartWorkerRequestOnServer(name, "") }
+
+func (m *PrometheusMetrics) QueuedWorkerRequest(name string) { m.QueuedWorkerRequestOnServer(name, "") }
+
+func (m *PrometheusMetrics) DequeuedWorkerRequest(name string) {
+	m.DequeuedWorkerRequestOnServer(name, "")
+}
+
+func (m *PrometheusMetrics) StartWorkerOnServer(name, server string) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -134,10 +340,10 @@ func (m *PrometheusMetrics) StartWorker(name string) {
 		return
 	}
 
-	m.totalWorkers.WithLabelValues(name).Inc()
+	m.totalWorkers.WithLabelValues(name, server).Inc()
 }
 
-func (m *PrometheusMetrics) ReadyWorker(name string) {
+func (m *PrometheusMetrics) ReadyWorkerOnServer(name, server string) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -145,10 +351,10 @@ func (m *PrometheusMetrics) ReadyWorker(name string) {
 		return
 	}
 
-	m.readyWorkers.WithLabelValues(name).Inc()
+	m.readyWorkers.WithLabelValues(name, server).Inc()
 }
 
-func (m *PrometheusMetrics) StopWorker(name string, reason StopReason) {
+func (m *PrometheusMetrics) StopWorkerOnServer(name, server string, reason StopReason) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -159,27 +365,29 @@ func (m *PrometheusMetrics) StopWorker(name string, reason StopReason) {
 		return
 	}
 
-	m.totalWorkers.WithLabelValues(name).Dec()
+	m.totalWorkers.WithLabelValues(name, server).Dec()
 
-	// only decrement readyWorkers if the worker actually reached frankenphp_handle_request
+	// only decrement readyWorkers if the worker actually reached its ready point
 	if reason != StopReasonBootFailure {
-		m.readyWorkers.WithLabelValues(name).Dec()
+		m.readyWorkers.WithLabelValues(name, server).Dec()
 	}
 
 	switch reason {
 	case StopReasonCrash, StopReasonBootFailure:
-		m.workerCrashes.WithLabelValues(name).Inc()
+		m.workerCrashes.WithLabelValues(name, server).Inc()
 	case StopReasonRestart:
-		m.workerRestarts.WithLabelValues(name).Inc()
+		m.workerRestarts.WithLabelValues(name, server).Inc()
 	}
 }
 
-func (m *PrometheusMetrics) TotalWorkers(string, int) {
+func (m *PrometheusMetrics) TotalWorkersOnServer(string, string, int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	const ns, sub = "frankenphp", "worker"
-	basicLabels := []string{"worker"}
+	// a worker of a php_server keeps its declared name, the block it belongs
+	// to is a label of its own, empty for a global worker
+	basicLabels := []string{"worker", "server"}
 
 	if m.totalWorkers == nil {
 		m.totalWorkers = prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -194,7 +402,7 @@ func (m *PrometheusMetrics) TotalWorkers(string, int) {
 		m.readyWorkers = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Namespace: ns,
 			Name:      "ready_workers",
-			Help:      "Running workers that have successfully called frankenphp_handle_request at least once",
+			Help:      "Running workers that have reached their ready point at least once: frankenphp_handle_request for HTTP workers, WorkerHandle::tick() for background workers",
 		}, basicLabels)
 		m.mustRegister(m.readyWorkers)
 	}
@@ -203,7 +411,7 @@ func (m *PrometheusMetrics) TotalWorkers(string, int) {
 		m.busyWorkers = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Namespace: ns,
 			Name:      "busy_workers",
-			Help:      "Number of busy PHP workers for this worker",
+			Help:      "Number of busy PHP workers for this worker: processing a request, or a task for a background worker",
 		}, basicLabels)
 		m.mustRegister(m.busyWorkers)
 	}
@@ -251,8 +459,29 @@ func (m *PrometheusMetrics) TotalWorkers(string, int) {
 			Namespace: "frankenphp",
 			Subsystem: sub,
 			Name:      "queue_depth",
+			Help:      "Number of queued requests for this worker, or of tasks waiting for a thread of a background worker",
 		}, basicLabels)
 		m.mustRegister(m.workerQueueDepth)
+	}
+
+	if m.workerTaskCount == nil {
+		m.workerTaskCount = prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: ns,
+			Subsystem: sub,
+			Name:      "task_count",
+			Help:      "Number of tasks sent to this background worker, by outcome: completed, aborted (the script ended with the task open), abandoned (the sender closed its stream first) or timeout (no thread picked the task up in time)",
+		}, []string{"worker", "server", "outcome"})
+		m.mustRegister(m.workerTaskCount)
+	}
+
+	if m.workerTaskTime == nil {
+		m.workerTaskTime = prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: ns,
+			Subsystem: sub,
+			Name:      "task_time",
+			Help:      "Time spent on tasks by all threads of this background worker, from pickup to the close of the task's stream",
+		}, basicLabels)
+		m.mustRegister(m.workerTaskTime)
 	}
 }
 
@@ -277,7 +506,7 @@ func (m *PrometheusMetrics) StopRequest() {
 	m.busyThreads.Dec()
 }
 
-func (m *PrometheusMetrics) StopWorkerRequest(name string, duration time.Duration) {
+func (m *PrometheusMetrics) StopWorkerRequestOnServer(name, server string, duration time.Duration) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -285,39 +514,39 @@ func (m *PrometheusMetrics) StopWorkerRequest(name string, duration time.Duratio
 		return
 	}
 
-	m.workerRequestCount.WithLabelValues(name).Inc()
-	m.busyWorkers.WithLabelValues(name).Dec()
-	m.workerRequestTime.WithLabelValues(name).Add(duration.Seconds())
+	m.workerRequestCount.WithLabelValues(name, server).Inc()
+	m.busyWorkers.WithLabelValues(name, server).Dec()
+	m.workerRequestTime.WithLabelValues(name, server).Add(duration.Seconds())
 }
 
-func (m *PrometheusMetrics) StartWorkerRequest(name string) {
+func (m *PrometheusMetrics) StartWorkerRequestOnServer(name, server string) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	if m.busyWorkers == nil {
 		return
 	}
-	m.busyWorkers.WithLabelValues(name).Inc()
+	m.busyWorkers.WithLabelValues(name, server).Inc()
 }
 
-func (m *PrometheusMetrics) QueuedWorkerRequest(name string) {
+func (m *PrometheusMetrics) QueuedWorkerRequestOnServer(name, server string) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	if m.workerQueueDepth == nil {
 		return
 	}
-	m.workerQueueDepth.WithLabelValues(name).Inc()
+	m.workerQueueDepth.WithLabelValues(name, server).Inc()
 }
 
-func (m *PrometheusMetrics) DequeuedWorkerRequest(name string) {
+func (m *PrometheusMetrics) DequeuedWorkerRequestOnServer(name, server string) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	if m.workerQueueDepth == nil {
 		return
 	}
-	m.workerQueueDepth.WithLabelValues(name).Dec()
+	m.workerQueueDepth.WithLabelValues(name, server).Dec()
 }
 
 func (m *PrometheusMetrics) QueuedRequest() {
@@ -341,6 +570,37 @@ func (m *PrometheusMetrics) OpcacheRestart(reason string) {
 	if m.opcacheRestarts != nil {
 		m.opcacheRestarts.WithLabelValues(reason).Inc()
 	}
+}
+
+func (m *PrometheusMetrics) StartWorkerTask(name, server string) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.busyWorkers == nil {
+		return
+	}
+	m.busyWorkers.WithLabelValues(name, server).Inc()
+}
+
+func (m *PrometheusMetrics) StopWorkerTask(name, server string, duration time.Duration) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.workerTaskTime == nil {
+		return
+	}
+	m.busyWorkers.WithLabelValues(name, server).Dec()
+	m.workerTaskTime.WithLabelValues(name, server).Add(duration.Seconds())
+}
+
+func (m *PrometheusMetrics) WorkerTaskOutcome(name, server string, outcome TaskOutcome) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.workerTaskCount == nil {
+		return
+	}
+	m.workerTaskCount.WithLabelValues(name, server, string(outcome)).Inc()
 }
 
 func (m *PrometheusMetrics) Shutdown() {
@@ -386,6 +646,14 @@ func (m *PrometheusMetrics) Shutdown() {
 	if m.workerQueueDepth != nil {
 		m.registry.Unregister(m.workerQueueDepth)
 	}
+
+	if m.workerTaskCount != nil {
+		m.registry.Unregister(m.workerTaskCount)
+	}
+
+	if m.workerTaskTime != nil {
+		m.registry.Unregister(m.workerTaskTime)
+	}
 }
 
 func NewPrometheusMetrics(registry prometheus.Registerer) *PrometheusMetrics {
@@ -420,6 +688,8 @@ func NewPrometheusMetrics(registry prometheus.Registerer) *PrometheusMetrics {
 		workerCrashes:      nil,
 		readyWorkers:       nil,
 		workerQueueDepth:   nil,
+		workerTaskCount:    nil,
+		workerTaskTime:     nil,
 	}
 
 	m.mustRegister(m.totalThreads)

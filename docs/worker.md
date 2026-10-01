@@ -199,6 +199,138 @@ frankenphp {
 }
 ```
 
+## Background workers
+
+This feature is experimental.
+
+A background worker runs its script in a loop outside the HTTP request cycle, on its own PHP thread. It is declared like any worker, with the `background` option; `name` is required and `num` defaults to one thread:
+
+```caddyfile
+php_server {
+	worker {
+		file jobs.php
+		num 1
+		name jobs
+		background
+	}
+}
+```
+
+The script takes a handle on the worker, `new FrankenPHP\WorkerHandle()`, and calls `tick()` on it once it is set up. The first call marks the worker ready: the server start waits for that point, and an exit before it counts as a failure. Until that call, `max_execution_time` applies as in any request, 30 seconds by default: a setup that outlives it is ended and counts as a boot failure, so raise the limit in `php_ini`, or call `set_time_limit()` in the script, when the setup legitimately takes longer. This bound only holds on PHP builds with Zend max execution timers (`--enable-zend-max-execution-timers`, see [the compilation guide](compile.md)): elsewhere FrankenPHP disables `max_execution_time`, and the `boot_timeout` of the worker is what ends the wait: 30 seconds by default, matching PHP's own `max_execution_time`, after which the start fails with the name of the worker that never ticked. Set it to `0` to wait forever, which is what happened before, with a warning logged after 10 seconds. From the first call on, the run has no time limit, like the CLI. Every call returns `false` once FrankenPHP drains the worker, on shutdown, reboot or restart, and `true` otherwise. It never blocks and never hands out work: like `frankenphp_handle_request()`, it is where the runtime and the script meet.
+
+Between two calls the script waits on the handle, which is an `Io\Poll\Handle`: an `Io\Poll\Context` takes it as it is, next to whatever else the script waits on.
+
+```php
+<?php
+
+use Io\Poll\{Context, Event};
+
+$handle = new FrankenPHP\WorkerHandle();
+
+$poll = new Context();
+$poll->add($handle, [Event::Read]);
+// plus the handles the script waits on
+
+while ($handle->tick()) {
+    foreach ($poll->wait() as $watcher) {
+        // the worker's handle triggered, or one of the script's
+    }
+
+    doSomeWork();
+}
+
+// drained: return, FrankenPHP re-runs or stops the script
+```
+
+The handle becomes readable when FrankenPHP needs the script's attention, its drain included, and `tick()` consumes whatever was written there. What it carries is not part of the contract. It is readable once right after the script starts, so a loop that waits on it ticks by itself and the worker is ready as soon as its loop runs.
+
+`Io\Poll` comes with PHP 8.6 and polls with `epoll` or `kqueue`. On 8.2 to 8.5 the handle implements the same interface, so the loop above runs unchanged with [symfony/polyfill-io-poll](https://github.com/symfony/polyfill/tree/1.x/src/Io/Poll), which backs the context with `stream_select()`.
+
+An event loop takes the handle through its stream, `getStream()`. With [Revolt](https://revolt.run), the loop of amphp:
+
+```php
+<?php
+
+use Revolt\EventLoop;
+
+$handle = new FrankenPHP\WorkerHandle();
+EventLoop::onReadable($handle->getStream(), function () use ($handle): void {
+    if (!$handle->tick()) {
+        // drained: stop the loop, the script returns and FrankenPHP moves on
+        EventLoop::getDriver()->stop();
+    }
+});
+
+// the script's own watchers go here
+
+EventLoop::run();
+```
+
+The wake-up sent at start makes the callback run as soon as the loop does, which is when the worker becomes ready.
+
+That stream is there for the libraries that take one, and waiting is all it supports: reading it steals the bytes `tick()` would have consumed, writing to it lands in a buffer FrankenPHP never drains, so a script that fills it blocks itself, and closing it is safe since the next `getStream()` on the same handle opens a fresh one over the same socket. A script with no loop of its own can wait on it directly, with a blocking read such as `fgets()` or with `stream_select()`, keeping in mind that `stream_select()` rejects a descriptor of `1024` or higher (`FD_SETSIZE`), which a worker re-run while the server holds more than a thousand connections will have. `tick()` itself uses `poll()` and is not affected.
+
+`$_SERVER['FRANKENPHP_WORKER_BACKGROUND']` holds the declared name. `FRANKENPHP_WORKER`, the variable of HTTP workers, is not set, so a script serving both roles tests which of the two is set. Background threads come on top of `num_threads` and `max_threads`; they don't autoscale, so `max_threads` is not allowed on them. From Go, declare one with `WithWorkerBackground()`.
+
+### Sharing state with background workers
+
+A background worker publishes a snapshot with `setVars()` on its handle; requests and other workers read it with `frankenphp_get_vars()`, by worker name, resolved like requests are: within the `php_server`, then among global workers. Publishing needs a handle because only a worker publishes its own vars, while reading only needs a name, since anyone reads anyone's. Values must be null, scalars, arrays or enums. Each call replaces the whole snapshot and readers get a copy, so the worker can publish at any time and a request always sees a consistent one. Publish before the first tick and the snapshot is in place before the server accepts requests; while the worker restarts, readers keep getting the last one.
+
+```php
+// background worker
+$handle = new FrankenPHP\WorkerHandle();
+$handle->setVars(['maintenance' => false, 'flags' => ['beta' => true]]);
+// ...
+
+// request, HTTP worker or another background worker
+$vars = frankenphp_get_vars('config');
+```
+
+`frankenphp_get_vars()` blocks until the worker reached its ready point, which can only happen between background workers reading each other while booting; a cycle between them throws instead of hanging. It also throws when the name is unknown, or when the worker is ready but has not published anything.
+
+### Sending tasks to background workers
+
+A request, an HTTP worker or another background worker hands work to a background worker by constructing a `FrankenPHP\SentTaskHandle`, naming it the way `frankenphp_get_vars()` does. The payload follows the same rules as `setVars()`: null, scalars, arrays or enums. Constructing blocks until a thread of the worker picks the task up and throws if none did before the timeout, so a busy worker pushes back on its senders instead of queueing without bounds. `read()` then blocks for the next update and returns `null` once the worker completed the task, and `abandon()`, like dropping the handle, gives up on the task. Waiting on a task, alone or with others, goes through a context as it does for the worker's handle, or through `getStream()` for a library that takes a stream: reading that stream steals the signal `read()` needs, writing to it goes nowhere, and closing it ends the task on that side.
+
+On the worker side, each task sent wakes one parked thread of the worker through its handle, in the loop of the previous section: `tick()` consumes the wake-up, which is not a count and in a pool may belong to a task a sibling thread took. `receive()` dequeues a task without blocking, a `FrankenPHP\ReceivedTaskHandle`, or `null` when another thread of the pool got there first, so the example below drains the queue on each wake-up and treats `null` as the normal outcome. A thread that ticks while tasks are queued finds its handle readable at once, whichever loop shape it uses. `update()` sends progress back, `complete()` ends the task with a last update when one is given, and a script that ends with a task still open, a `complete()` from a destructor or a shutdown function at that point included, makes the sender's next `read()` throw. When the sender gives up instead, the task's side of the worker becomes readable and its stream reaches EOF, so a context or a `feof()` tells a long task that nobody waits for its result, and `update()` throws.
+
+```php
+// background worker, in the loop of the previous section
+while ($handle->tick()) {
+    foreach ($poll->wait() as $watcher) {
+    }
+
+    while ($task = $handle->receive()) {
+        $task->update(['progress' => 50]);
+        $task->complete(['result' => process($task->getPayload())]);
+    }
+}
+
+// request, HTTP worker or another background worker
+$task = new FrankenPHP\SentTaskHandle('jobs', ['file' => 'photo.jpg']);
+while (null !== $update = $task->read()) {
+    // ['progress' => 50], then ['result' => ...]
+}
+```
+
+Both task handles are `Io\Poll\Handle` as well, so a context follows several tasks at once, and a script that never asks for a stream has none built for it:
+
+```php
+use Io\Poll\{Context, Event};
+
+$poll = new Context();
+$task = new FrankenPHP\SentTaskHandle('jobs', ['file' => 'photo.jpg']);
+$poll->add($task, [Event::Read], 'photo');
+
+foreach ($poll->wait() as $watcher) {
+    $update = $task->read();
+}
+```
+
+`getStream()` is there for the libraries that take a stream, and `stream_select()` or a blocking read work on it as they do on the worker's handle.
+
+Sixteen updates are buffered per task; past that, `update()` waits for the sender to read, and it throws once the sender gave up. The channel of a task is a pair of eventfd descriptors on Linux and of kqueue descriptors on macOS, pooled between tasks, and a socket pair elsewhere.
+
 ## Superglobals behavior
 
 [PHP superglobals](https://www.php.net/manual/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...)
