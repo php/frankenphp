@@ -96,7 +96,7 @@ func scaleWorkerThread(worker *worker, done chan struct{}, mstate *state.ThreadS
 	thread, err := addWorkerThread(worker)
 	if err != nil {
 		if globalLogger.Enabled(globalCtx, slog.LevelWarn) {
-			globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "could not increase max_threads, consider raising this limit", slog.String("worker", worker.name), slog.Any("error", err))
+			globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "could not increase max_threads, consider raising this limit", slog.String("worker", worker.qualifiedName), slog.Any("error", err))
 		}
 
 		return
@@ -105,7 +105,7 @@ func scaleWorkerThread(worker *worker, done chan struct{}, mstate *state.ThreadS
 	autoScaledThreads = append(autoScaledThreads, thread)
 
 	if globalLogger.Enabled(globalCtx, slog.LevelInfo) {
-		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "upscaling worker thread", slog.String("worker", worker.name), slog.Int("thread", thread.threadIndex), slog.Int("num_threads", len(autoScaledThreads)))
+		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "upscaling worker thread", slog.String("worker", worker.qualifiedName), slog.Int("thread", thread.threadIndex), slog.Int("num_threads", len(autoScaledThreads)))
 	}
 }
 
@@ -177,7 +177,7 @@ func startUpscalingThreads(maxScaledThreads int, scale chan *frankenPHPContext, 
 			// check for max worker threads here again in case requests overflowed while waiting
 			if fc.worker.isAtThreadLimit() {
 				if globalLogger.Enabled(globalCtx, slog.LevelInfo) {
-					globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "cannot scale worker thread, max threads reached for worker", slog.String("worker", fc.worker.name))
+					globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "cannot scale worker thread, max threads reached for worker", slog.String("worker", fc.worker.qualifiedName))
 				}
 
 				continue

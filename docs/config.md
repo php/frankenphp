@@ -106,11 +106,13 @@ You can also explicitly configure FrankenPHP using the [global option](https://c
 		php_ini <key> <value> # Set a php.ini directive. Can be used several times to set multiple directives.
 		worker {
 			file <path> # Sets the path to the worker script.
-			num <num> # Sets the number of PHP threads to start, defaults to 2x the number of available CPUs.
+			num <num> # Sets the number of PHP threads to start, defaults to 2x the number of available CPUs, 1 for background workers.
 			env <key> <value> # Sets an extra environment variable to the given value. Can be specified more than once for multiple environment variables.
 			watch <path> # Sets the path to watch for file changes. Can be specified more than once for multiple paths.
-			name <name> # Sets the name of the worker, used in logs and metrics. Default: absolute path of worker file
+			name <name> # Sets the name of the worker, used in logs and metrics. Must be unique among global workers. Default: absolute path of the worker file, with a number appended when several workers share a script.
 			max_consecutive_failures <num> # Sets the maximum number of consecutive failures before the worker is considered unhealthy, -1 means the worker will always restart. Default: 6.
+			boot_timeout <duration> # EXPERIMENTAL: how long a background worker may take to reach its first tick() before the start fails, 0 waits forever. Default: 30s.
+			background # EXPERIMENTAL: marks this worker as a background (non-HTTP) worker, requiring "name" and a script ticking its FrankenPHP\WorkerHandle at least once
 		}
 	}
 }
@@ -187,17 +189,18 @@ php_server [<matcher>] {
 	root <directory> # Sets the root folder to the site. Default: `root` directive.
 	split_path <delim...> # Sets the substrings for splitting the URI into two parts. The first matching substring will be used to split the "path info" from the path. The first piece is suffixed with the matching substring and will be assumed as the actual resource (CGI script) name. The second piece will be set to PATH_INFO for the script to use. Default: `.php`
 	resolve_root_symlink false # Disables resolving the `root` directory to its actual value by evaluating a symbolic link, if one exists (enabled by default).
-	name <name> # Sets the name for this server, used to attribute workers, metrics and logs. Default: the first host matcher of the enclosing route, or the first listener address.
+	name <name> # Sets the name for this server, used to attribute workers, metrics and logs. Default: the first host matcher of the enclosing route, or the first listener address. Suffixed with a number if another php_server resolves to the same name.
 	env <key> <value> # Sets an extra environment variable to the given value. Can be specified more than once for multiple environment variables.
 	file_server off # Disables the built-in file_server directive.
 	request_body_timeout <duration> # Sets an idle timeout on request body reads: a stalled (slow POST) client is cut off while a steady upload of any size succeeds. Default: 60s. Set to 0 to disable.
 	worker { # Creates a worker specific to this server. Can be specified more than once for multiple workers.
 		file <path> # Sets the path to the worker script, can be relative to the php_server root
-		num <num> # Sets the number of PHP threads to start, defaults to 2x the number of available
-		name <name> # Sets the name for the worker, used in logs and metrics. Default: absolute path of worker file. Postfixed with a number if name is already in use.
+		num <num> # Sets the number of PHP threads to start, defaults to 2x the number of available CPUs, 1 for background workers.
+		name <name> # Sets the name for the worker, used in logs and metrics. Must be unique within this php_server. In logs, the worker is reported as "<server name>:<name>", metrics carry the two as separate labels. Default: absolute path of the worker file, with a number appended when several workers share a script.
 		watch <path> # Sets the path to watch for file changes. Can be specified more than once for multiple paths.
 		env <key> <value> # Sets an extra environment variable to the given value. Can be specified more than once for multiple environment variables. Environment variables for this worker are also inherited from the php_server parent, but can be overwritten here.
 		match <path> # match the worker to a path pattern. Overrides try_files and can only be used in the php_server directive.
+		background # EXPERIMENTAL: marks this worker as a background (non-HTTP) worker, requiring "name" and a script ticking its FrankenPHP\WorkerHandle at least once
 	}
 	worker <other_file> <num> # Can also use the short form like in the global frankenphp block.
 }

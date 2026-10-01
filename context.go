@@ -132,20 +132,14 @@ func newWorkerDummyContext(w *worker) (*frankenPHPContext, error) {
 		return nil, err
 	}
 
-	server := w.server
-	if server == nil {
-		// global worker, not associated with a server
-		server = fallbackServer
-	}
-
 	fc := &frankenPHPContext{
 		done:      make(chan any),
 		ctx:       r.Context(),
-		server:    server,
+		server:    w.server,
 		request:   r,
 		startedAt: time.Now(),
 		// startup output of a scoped worker belongs to its server's logger
-		logger: server.logger,
+		logger: w.server.logger,
 		worker: w,
 	}
 
@@ -162,11 +156,6 @@ func newWorkerDummyContext(w *worker) (*frankenPHPContext, error) {
 
 // newContextFromMessage creates a context from a message (external workers)
 func newContextFromMessage(message any, rw http.ResponseWriter, ctx context.Context, w *worker) *frankenPHPContext {
-	server := w.server
-	if server == nil {
-		server = fallbackServer
-	}
-
 	if ctx == nil {
 		ctx = globalCtx
 	}
@@ -174,9 +163,9 @@ func newContextFromMessage(message any, rw http.ResponseWriter, ctx context.Cont
 	return &frankenPHPContext{
 		done:              make(chan any),
 		startedAt:         time.Now(),
-		server:            server,
+		server:            w.server,
 		worker:            w,
-		logger:            server.logger,
+		logger:            w.server.logger,
 		responseWriter:    rw,
 		handlerParameters: message,
 		ctx:               ctx,

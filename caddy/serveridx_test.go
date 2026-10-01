@@ -26,7 +26,7 @@ func TestRegisterModulesWithSameServerIndexShareOneServer(t *testing.T) {
 	shared2 := &FrankenPHPModule{ServerIndex: 1, resolvedDocumentRoot: "../testdata"}
 	app.modules = []*FrankenPHPModule{shared1, shared2}
 
-	_, err := app.collectModuleOptions(caddy.NewReplacer(), map[string]bool{}, true)
+	_, err := app.collectModuleOptions(caddy.NewReplacer(), true)
 	require.NoError(t, err)
 
 	require.NotNil(t, shared1.server)
@@ -40,7 +40,7 @@ func TestRegisterModulesWithoutServerIndexGetOwnServers(t *testing.T) {
 	indexed := &FrankenPHPModule{ServerIndex: 1, resolvedDocumentRoot: "../testdata"}
 	app.modules = []*FrankenPHPModule{auto1, indexed, auto2}
 
-	_, err := app.collectModuleOptions(caddy.NewReplacer(), map[string]bool{}, true)
+	_, err := app.collectModuleOptions(caddy.NewReplacer(), true)
 	require.NoError(t, err)
 
 	require.NotNil(t, auto1.server)
@@ -61,7 +61,7 @@ func TestRegisterModulesFirstModuleWinsPerIdx(t *testing.T) {
 	second := &FrankenPHPModule{ServerIndex: 2, resolvedDocumentRoot: "../testdata/env"}
 	app.modules = []*FrankenPHPModule{first, second}
 
-	opts, err := app.collectModuleOptions(caddy.NewReplacer(), map[string]bool{}, true)
+	opts, err := app.collectModuleOptions(caddy.NewReplacer(), true)
 	require.NoError(t, err)
 
 	require.Same(t, first.server, second.server)
