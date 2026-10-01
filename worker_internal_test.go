@@ -124,12 +124,10 @@ func TestInitJoinsAThreadStuckInStartupTeardown(t *testing.T) {
 // a reboot that meets a booting worker waits for its thread to settle, and a
 // worker that then gives up only reaches Done: Init() must still return
 func TestInitReturnsWhenARebootWaitsOnAWorkerThatGivesUp(t *testing.T) {
-	cwd, _ := os.Getwd()
-
 	initDone := make(chan error, 1)
 	go func() {
 		initDone <- Init(
-			WithWorkers("reset-then-fail", cwd+"/testdata/worker-reset-then-fail.php", 1, WithWorkerMaxFailures(2)),
+			WithWorkers("reset-then-fail", testDataPath+"/worker-reset-then-fail.php", 1, WithWorkerMaxFailures(2)),
 			WithNumThreads(1),
 		)
 	}()
