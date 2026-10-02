@@ -15,21 +15,41 @@ func (f *FrankenPHPModule) requestReload(w http.ResponseWriter, r *http.Request)
 	if app == nil {
 		return caddyhttp.Error(http.StatusServiceUnavailable, frankenphp.ErrNotRunning)
 	}
-	for _, m := range app.modules {
-		if m.server == nil || f.server == nil || m.server.Name() != f.server.Name() {
-			continue
-		}
-		select {
-		case <-m.app.started:
-		case <-r.Context().Done():
-			return r.Context().Err()
-		case <-time.After(10 * time.Second):
-			return caddyhttp.Error(http.StatusServiceUnavailable, frankenphp.ErrNotRunning)
-		}
-		if !m.app.hasStarted.Load() {
-			return caddyhttp.Error(http.StatusServiceUnavailable, frankenphp.ErrNotRunning)
-		}
+	select {
+	case <-app.started:
+	case <-r.Context().Done():
+		return r.Context().Err()
+	case <-time.After(10 * time.Second):
+		return caddyhttp.Error(http.StatusServiceUnavailable, frankenphp.ErrNotRunning)
+	}
+	if !app.hasStarted.Load() || f.server == nil {
+		return caddyhttp.Error(http.StatusServiceUnavailable, frankenphp.ErrNotRunning)
+	}
+
+	// Runtime-generated server_N names depend on registration order across reloads.
+	name := f.reloadName
+	if old := f.app.reloadModule(name); old == nil || old.server != f.server {
+		return caddyhttp.Error(http.StatusServiceUnavailable, frankenphp.ErrNotRunning)
+	}
+	if m := app.reloadModule(name); m != nil {
 		return m.ServeHTTP(w, r, nil)
 	}
 	return caddyhttp.Error(http.StatusServiceUnavailable, frankenphp.ErrNotRunning)
+}
+
+func (f *FrankenPHPApp) reloadModule(name string) *FrankenPHPModule {
+	var target *FrankenPHPModule
+	for _, m := range f.modules {
+		if m.server == nil || m.reloadName != name {
+			continue
+		}
+		// A php_server may embed several handlers sharing one server.
+		if target != nil && target.server != m.server {
+			return nil
+		}
+		if target == nil {
+			target = m
+		}
+	}
+	return target
 }

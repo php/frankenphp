@@ -183,22 +183,19 @@ func (f *FrankenPHPApp) Stop() error {
 func (f *FrankenPHPApp) registerModules(repl *caddy.Replacer) error {
 	modulesByIndex := make(map[int]*FrankenPHPModule, len(f.modules))
 	for _, module := range f.modules {
-		if module.ServerIndex == 0 {
-			if err := f.registerModule(repl, module); err != nil {
-				return err
-			}
-			continue
-		}
-
 		// modules with the same server_idx should share the same server instance
 		// example: the worker { match * } rule adds 2 "php" subroutes to the caddy handler
 		// the 2 handlers belong to the same "php_server" and must therefore share workers
-		if existingModule, ok := modulesByIndex[module.ServerIndex]; ok {
-			module.server = existingModule.server
-			continue
+		if module.ServerIndex != 0 {
+			if existingModule, ok := modulesByIndex[module.ServerIndex]; ok {
+				module.server = existingModule.server
+				module.reloadName = existingModule.reloadName
+				continue
+			}
+			modulesByIndex[module.ServerIndex] = module
 		}
 
-		modulesByIndex[module.ServerIndex] = module
+		module.reloadName = f.resolveServerName(module)
 		if err := f.registerModule(repl, module); err != nil {
 			return err
 		}
@@ -209,7 +206,7 @@ func (f *FrankenPHPApp) registerModules(repl *caddy.Replacer) error {
 
 // register a server instance and its workers for a single Caddy module
 func (f *FrankenPHPApp) registerModule(repl *caddy.Replacer, module *FrankenPHPModule) error {
-	serverName := f.resolveServerName(module)
+	serverName := module.reloadName
 	server, err := frankenphp.NewServer(
 		module.resolvedDocumentRoot,
 		frankenphp.WithServerName(serverName),

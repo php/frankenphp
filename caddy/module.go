@@ -59,6 +59,7 @@ type FrankenPHPModule struct {
 	requestEnv           frankenphp.PreparedEnv
 	requestOptions       []frankenphp.RequestOption
 	server               *frankenphp.Server
+	reloadName           string
 	logger               *slog.Logger
 	app                  *FrankenPHPApp
 }

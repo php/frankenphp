@@ -55,12 +55,31 @@ func TestRegisterModulesWithoutServerIndexGetOwnServers(t *testing.T) {
 // and the first registered module defines the server configuration
 func TestRegisterModulesFirstModuleWinsPerIdx(t *testing.T) {
 	app := &FrankenPHPApp{}
-	first := &FrankenPHPModule{ServerIndex: 2, resolvedDocumentRoot: "../testdata"}
-	second := &FrankenPHPModule{ServerIndex: 2, resolvedDocumentRoot: "../testdata/env"}
+	first := &FrankenPHPModule{Name: "first", ServerIndex: 2, resolvedDocumentRoot: "../testdata"}
+	second := &FrankenPHPModule{Name: "second", ServerIndex: 2, resolvedDocumentRoot: "../testdata/env"}
 	app.modules = []*FrankenPHPModule{first, second}
 
 	require.NoError(t, app.registerModules(caddy.NewReplacer()))
 
 	require.Same(t, first.server, second.server)
+	require.Equal(t, first.reloadName, second.reloadName)
+	require.Same(t, first, app.reloadModule("first"))
+	require.Nil(t, app.reloadModule("second"))
 	require.Len(t, app.opts, 1, "only one server must be registered for a shared index")
+}
+
+func TestReloadModuleUsesRegisteredLabels(t *testing.T) {
+	first := &FrankenPHPModule{Name: "site", ServerIndex: 1, resolvedDocumentRoot: "../testdata"}
+	shared := &FrankenPHPModule{Name: "site", ServerIndex: 1, resolvedDocumentRoot: "../testdata"}
+	other := &FrankenPHPModule{Name: "other", resolvedDocumentRoot: "../testdata"}
+	app := &FrankenPHPApp{modules: []*FrankenPHPModule{first, shared, other}}
+	require.NoError(t, app.registerModules(caddy.NewReplacer()))
+
+	first.Name = "changed"
+	shared.Name = "changed"
+	require.Same(t, first, app.reloadModule("site"))
+	require.Same(t, other, app.reloadModule("other"))
+
+	other.reloadName = "site"
+	require.Nil(t, app.reloadModule("site"))
 }
