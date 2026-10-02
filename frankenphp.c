@@ -973,24 +973,49 @@ PHP_FUNCTION(mercure_publish) {
     RETURN_THROWS();
   }
 
-  struct go_mercure_publish_return result = go_mercure_publish(
-      frankenphp_thread_index(), topics, data, private, id, type, retry);
+  if (Z_TYPE_P(topics) == IS_ARRAY) {
+    zval *topic;
+    ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(topics), topic) {
+      ZVAL_DEREF(topic);
+      if (Z_TYPE_P(topic) != IS_STRING) {
+        zend_argument_type_error(1, "must only contain strings, %s given",
+                                 zend_zval_type_name(topic));
+        RETURN_THROWS();
+      }
+    }
+    ZEND_HASH_FOREACH_END();
+  }
 
-  switch (result.r1) {
-  case 0:
-    RETURN_STR(result.r0);
-  case 1:
-    zend_throw_exception(spl_ce_RuntimeException, "No Mercure hub configured",
-                         0);
-    RETURN_THROWS();
-  case 2:
-    zend_throw_exception(spl_ce_RuntimeException, "Publish failed", 0);
+  /* The protocol only allows digits in the "retry" field. */
+  if (retry < 0) {
+    zend_argument_value_error(6, "must be greater than or equal to 0");
     RETURN_THROWS();
   }
 
-  zend_throw_exception(spl_ce_RuntimeException,
-                       "FrankenPHP not built with Mercure support", 0);
-  RETURN_THROWS();
+  struct go_mercure_publish_return result = go_mercure_publish(
+      frankenphp_thread_index(), topics, data, private, id, type, retry);
+
+  switch (result.r2) {
+  case FRANKENPHP_MERCURE_OK:
+    RETURN_STR(result.r0);
+  case FRANKENPHP_MERCURE_NO_HUB:
+    zend_throw_exception(spl_ce_RuntimeException, "No Mercure hub configured",
+                         0);
+    RETURN_THROWS();
+  case FRANKENPHP_MERCURE_INVALID_UPDATE:
+    zend_argument_value_error(result.r3, "%s", result.r1);
+    free(result.r1);
+    RETURN_THROWS();
+  case FRANKENPHP_MERCURE_PUBLISH_FAILED:
+    zend_throw_exception_ex(spl_ce_RuntimeException, 0, "Publish failed: %s",
+                            result.r1);
+    free(result.r1);
+    RETURN_THROWS();
+  case FRANKENPHP_MERCURE_UNSUPPORTED:
+    zend_throw_exception(spl_ce_RuntimeException,
+                         "FrankenPHP not built with Mercure support", 0);
+    RETURN_THROWS();
+  }
 }
 
 PHP_FUNCTION(frankenphp_log) {
@@ -1013,6 +1038,12 @@ PHP_FUNCTION(frankenphp_log) {
     RETURN_THROWS();
   }
 }
+
+#if FRANKENPHP_OPCACHE_RESTART_HOOK
+static void frankenphp_opcache_restart_hook(int reason) {
+  go_opcache_restart_scheduled(reason);
+}
+#endif
 
 /* {{{ thread-safe opcache reset */
 PHP_FUNCTION(frankenphp_opcache_reset) {
@@ -1790,6 +1821,11 @@ static void *php_main(void *arg) {
   }
 
   frankenphp_sapi_module.startup(&frankenphp_sapi_module);
+
+#if FRANKENPHP_OPCACHE_RESTART_HOOK
+  /* Report the opcache restarts that opcache schedules on its own */
+  zend_accel_schedule_restart_hook = frankenphp_opcache_restart_hook;
+#endif
 
   /* check if a default filter is set in php.ini and only filter if
    * it is, this is deprecated and will be removed in PHP 9 */

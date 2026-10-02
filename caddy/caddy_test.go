@@ -696,7 +696,6 @@ func TestMetrics(t *testing.T) {
 			mercure {
 				transport local
 				anonymous
-				publisher_jwt !ChangeMe!
 			}
 
 			php {
@@ -708,9 +707,9 @@ func TestMetrics(t *testing.T) {
 	example.com:`+testPort+` {
 		route {
 			mercure {
+				name example
 				transport local
 				anonymous
-				publisher_jwt !ChangeMe!
 			}
 
 			php {
@@ -1816,7 +1815,7 @@ func TestOpcacheReset(t *testing.T) {
 			metrics
 
 			frankenphp {
-				num_threads 40
+				num_threads 20
 				php_ini {
 					opcache.enable 1
 					opcache.log_verbosity_level 4

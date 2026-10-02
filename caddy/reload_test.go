@@ -144,7 +144,7 @@ func TestReloadPreservesRequestAndResponse(t *testing.T) {
 
 func newReloadTestApp(root string, worker bool) *FrankenPHPApp {
 	app := &FrankenPHPApp{
-		NumThreads: 2,
+		NumThreads: 1,
 		MaxThreads: 2,
 		ctx:        context.Background(),
 		logger:     slog.New(slog.DiscardHandler),
@@ -214,7 +214,7 @@ func TestReloadUsesNewRootWhileShutdownDrains(t *testing.T) {
 				activeApp.Store(nil)
 			})
 			old := newReloadTestApp(oldRoot, worker)
-			old.NumThreads, old.MaxThreads = 3, 3
+			old.NumThreads, old.MaxThreads = 1, 3
 			old.Workers = []workerConfig{{
 				Name: "shutdown-hook", FileName: "../testdata/worker-with-counter.php", Num: 1,
 				options: []frankenphp.WorkerOption{frankenphp.WithWorkerOnServerShutdown(func() {
@@ -266,7 +266,9 @@ func TestFailedReloadReturnsServiceUnavailable(t *testing.T) {
 	old := newReloadTestApp("../testdata", false)
 	require.NoError(t, old.Start())
 	invalid := newReloadTestApp("../testdata", false)
-	invalid.MaxThreads = 1
+	invalid.Workers = []workerConfig{{
+		Name: "boot-failure", FileName: "../testdata/failing-worker.php", Num: 1, MaxConsecutiveFailures: 0,
+	}}
 	require.Error(t, invalid.Start())
 	require.Nil(t, activeApp.Load())
 

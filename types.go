@@ -138,26 +138,30 @@ func goArray[T any](arr unsafe.Pointer, ordered bool) (map[string]T, []string, e
 			return nil, nil, err
 		}
 
+		var key string
 		if bucket.key != nil {
-			keyStr := GoString(unsafe.Pointer(bucket.key))
-			if v == nil {
-				entries[keyStr] = zeroVal
-			} else {
-				entries[keyStr] = v.(T)
-			}
-
-			if ordered {
-				order = append(order, keyStr)
-			}
-
-			continue
+			key = GoString(unsafe.Pointer(bucket.key))
+		} else {
+			// as fallback convert the bucket index to a string key
+			key = strconv.Itoa(int(bucket.h))
 		}
 
-		// as fallback convert the bucket index to a string key
-		strIndex := strconv.Itoa(int(bucket.h))
-		entries[strIndex] = v.(T)
+		// a PHP null becomes a nil any, and a type assertion on a nil any
+		// panics for every T: this runs in a cgo callback, where a panic
+		// aborts the whole process instead of failing the request
+		if v == nil {
+			entries[key] = zeroVal
+		} else {
+			e, ok := v.(T)
+			if !ok {
+				return nil, nil, fmt.Errorf("cannot cast value of type %T to type %T", v, zeroVal)
+			}
+
+			entries[key] = e
+		}
+
 		if ordered {
-			order = append(order, strIndex)
+			order = append(order, key)
 		}
 	}
 
@@ -272,6 +276,10 @@ func goValue[T any](zval *C.zval) (res T, err error) {
 		resZero T
 	)
 	t := C.zval_get_type(zval)
+	if t == C.IS_REFERENCE {
+		zval = &(*(**C.zend_reference)(unsafe.Pointer(&zval.value[0]))).val
+		t = C.zval_get_type(zval)
+	}
 
 	switch t {
 	case C.IS_NULL:

@@ -32,7 +32,7 @@ env:
   BUILD_RELEASE: "${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'CI: All jobs') }}"
   GOTOOLCHAIN: local
   GOTESTSUM_FORMAT: pkgname-and-test-fails
-  GOFLAGS: "-ldflags=-extldflags=-fuse-ld=lld -tags=nobadger,nomysql,nopgx"
+  GOFLAGS: "-ldflags=-extldflags=-fuse-ld=lld -tags=nobadger,nomysql,nopgx,deprecated_topic,deprecated_claim"
   PHP_DOWNLOAD_BASE: "https://downloads.php.net/~windows/releases/"
   CC: clang
   CXX: clang++
@@ -79,6 +79,20 @@ jobs:
         uses: ./frankenphp/.github/actions/setup-go
         with:
           working-directory: frankenphp
+          cache: ${{ !env.REF }}
+
+      - name: Determine runner image
+        id: image
+        run: '"version=$env:ImageVersion" >> $env:GITHUB_OUTPUT'
+
+      # SourceForge sometimes serves runners a non-archive body for pthreads sources; release runs skip the cache
+      - name: Cache Vcpkg Packages # zizmor: ignore[cache-poisoning]
+        if: ${{ !env.REF }}
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~\AppData\Local\vcpkg\archives
+          key: vcpkg-${{ runner.os }}-${{ steps.image.outputs.version }}-${{ hashFiles('frankenphp/vcpkg.json') }}
+          restore-keys: vcpkg-${{ runner.os }}-
 
       - name: Install Vcpkg Libraries
         working-directory: frankenphp

@@ -202,8 +202,8 @@ FrankenPHP can automatically scale the number of PHP threads based on demand (`s
 
 ### Auto-scaling configuration
 
-- `num_threads`: Initial number of threads started at boot
-- `max_threads`: Maximum number of threads allowed (includes auto-scaled)
+- `num_threads`: Threads started at boot for the requests no worker serves, the worker threads come on top
+- `max_threads`: Maximum number of threads allowed, workers and auto-scaled threads included
 
 ### Upscaling
 

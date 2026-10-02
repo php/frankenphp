@@ -2,6 +2,7 @@ package frankenphp
 
 import (
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -31,6 +32,95 @@ func TestEnsureLeadingSlash(t *testing.T) {
 
 			assert.Equal(t, tt.expected, ensureLeadingSlash(tt.input), "ensureLeadingSlash(%q)", tt.input)
 		})
+	}
+}
+
+// TestSanitizedPathJoin covers the common join/traversal behaviour on every
+// platform: whatever the request path, the result must stay inside root.
+func TestSanitizedPathJoin(t *testing.T) {
+	t.Parallel()
+
+	const root = "/var/www"
+
+	tests := []struct {
+		name     string
+		reqPath  string
+		expected string
+	}{
+		{"leading slash", "/index.php", filepath.Join(root, "index.php")},
+		{"no leading slash", "index.php", filepath.Join(root, "index.php")},
+		{"nested", "/foo/bar/index.php", filepath.Join(root, "foo", "bar", "index.php")},
+		{"empty req path returns root", "", filepath.Clean(root)},
+		{"root req path returns root", "/", filepath.Clean(root)},
+		{"trailing slash preserved", "/sub/", filepath.Join(root, "sub") + separator},
+		{"dot segments collapsed", "/foo/./bar", filepath.Join(root, "foo", "bar")},
+		// Traversal attempts must never escape root; the "../" segments are
+		// stripped and the result is re-anchored under root.
+		{"parent traversal contained", "../../etc/passwd", filepath.Join(root, "etc", "passwd")},
+		{"rooted parent traversal contained", "/../../etc/passwd", filepath.Join(root, "etc", "passwd")},
+		{"traversal up to root", "/../..", filepath.Clean(root)},
+		{"mid-path traversal contained", "foo/../../bar", filepath.Join(root, "bar")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := sanitizedPathJoin(root, tt.reqPath)
+			assert.Equal(t, tt.expected, got, "sanitizedPathJoin(%q, %q)", root, tt.reqPath)
+		})
+	}
+}
+
+// TestSanitizedPathJoinEmptyRoot guards the documented default: an empty root
+// is treated as the current directory.
+func TestSanitizedPathJoinEmptyRoot(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "index.php", sanitizedPathJoin("", "index.php"))
+}
+
+// Caddy path matchers treat "\" as a regular byte on POSIX: turning it into a
+// separator would execute a script that path-scoped rules never matched.
+func TestSanitizedPathJoinPOSIXBackslash(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("backslash is a separator on Windows")
+	}
+
+	t.Parallel()
+
+	assert.Equal(t, `/var/www/admin\panel.php`, sanitizedPathJoin("/var/www", `/admin\panel.php`))
+}
+
+// TestSanitizedPathJoinWindowsTraversal guards against path traversal on
+// Windows, where the previous filepath.Clean("/"+reqPath) treated a leading
+// "//" as a UNC/volume prefix, so drive- and UNC-prefixed request paths
+// survived cleaning and pointed SCRIPT_FILENAME outside the document root.
+// filepath.IsLocal must now reject them and fall back to root. It only runs
+// on Windows because filepath's volume handling is OS-specific.
+func TestSanitizedPathJoinWindowsTraversal(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows-specific volume/UNC handling")
+	}
+
+	t.Parallel()
+
+	const root = `C:\inetpub\wwwroot`
+
+	// Each of these is non-local on Windows and must collapse to root, never to
+	// a path with a drive letter or UNC share that escapes the document root.
+	payloads := []string{
+		`..\..\..\Windows\win.ini`,                      // backslash traversal, the canonical vector
+		`..\..\..\..\..\..\..\..\..\..\Windows\win.ini`, // deeper than root, must still not escape
+		`c:/Windows/win.ini`,                            // drive-relative
+		`C:\Windows\win.ini`,                            // drive-absolute
+		`\\server\share\evil.php`,                       // UNC share
+	}
+
+	for _, p := range payloads {
+		got := sanitizedPathJoin(root, p)
+		assert.Equalf(t, root, got, "payload %q must not escape root", p)
+		assert.Falsef(t, strings.Contains(got, ".."), "payload %q left a traversal segment", p)
 	}
 }
 

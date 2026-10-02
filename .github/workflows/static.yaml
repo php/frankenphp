@@ -447,6 +447,8 @@ jobs:
           ref: ${{ needs.prepare.outputs.ref }}
           persist-credentials: false
       - uses: ./.github/actions/setup-go
+        with:
+          cache: ${{ !(needs.prepare.outputs.ref || github.ref_type == 'tag') }}
       - id: version
         uses: ./.github/actions/version
         with:
