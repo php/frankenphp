@@ -151,6 +151,7 @@ func (f *FrankenPHPApp) Start() error {
 	activeApp.Store(f)
 	frankenphp.Shutdown()
 	if err := frankenphp.Init(f.opts...); err != nil {
+		activeApp.CompareAndSwap(f, nil)
 		return err
 	}
 
@@ -160,6 +161,9 @@ func (f *FrankenPHPApp) Start() error {
 }
 
 func (f *FrankenPHPApp) Stop() error {
+	f.hasStarted.Store(false)
+	activeApp.CompareAndSwap(f, nil)
+
 	if f.logger.Enabled(f.ctx, slog.LevelInfo) {
 		f.logger.LogAttrs(f.ctx, slog.LevelInfo, "FrankenPHP stopped 🐘")
 	}

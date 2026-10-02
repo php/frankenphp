@@ -1,11 +1,16 @@
 package caddy
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -135,4 +140,138 @@ func TestReloadPreservesRequestAndResponse(t *testing.T) {
 			}, result)
 		})
 	}
+}
+
+func newReloadTestApp(root string, worker bool) *FrankenPHPApp {
+	app := &FrankenPHPApp{
+		NumThreads: 2,
+		MaxThreads: 2,
+		ctx:        context.Background(),
+		logger:     slog.New(slog.DiscardHandler),
+		started:    make(chan any),
+	}
+	module := &FrankenPHPModule{Name: "site", resolvedDocumentRoot: root, app: app}
+	if worker {
+		module.Workers = []workerConfig{{Name: "site-worker", FileName: filepath.Join(root, "index.php"), Num: 1}}
+	}
+	app.modules = []*FrankenPHPModule{module}
+	return app
+}
+
+func newReloadTestRequest() *http.Request {
+	r := httptest.NewRequest(http.MethodGet, "http://app.example/index.php", nil)
+	ctx := context.WithValue(r.Context(), caddy.ReplacerCtxKey, caddy.NewReplacer())
+	ctx = context.WithValue(ctx, caddyhttp.OriginalRequestCtxKey, *r)
+	return r.WithContext(ctx)
+}
+
+func waitForReloadTest(t *testing.T, done <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("reload test did not finish")
+	}
+}
+
+type reloadTestWaitingContext struct {
+	context.Context
+	waiting chan struct{}
+	once    sync.Once
+}
+
+func (c *reloadTestWaitingContext) Done() <-chan struct{} {
+	c.once.Do(func() { close(c.waiting) })
+	return c.Context.Done()
+}
+
+func TestReloadUsesNewRootWhileShutdownDrains(t *testing.T) {
+	for _, worker := range []bool{false, true} {
+		t.Run(fmt.Sprintf("worker=%t", worker), func(t *testing.T) {
+			root := t.TempDir()
+			oldRoot, newRoot := filepath.Join(root, "old"), filepath.Join(root, "new")
+			for path, body := range map[string]string{oldRoot: "OLD", newRoot: "NEW"} {
+				require.NoError(t, os.Mkdir(path, 0700))
+				script := fmt.Sprintf("<?php echo %q;", body)
+				if worker {
+					script = fmt.Sprintf("<?php while (frankenphp_handle_request(function () { echo %q; })) {}", body)
+				}
+				require.NoError(t, os.WriteFile(filepath.Join(path, "index.php"), []byte(script), 0600))
+			}
+
+			draining, resume := make(chan struct{}), make(chan struct{})
+			release := sync.OnceFunc(func() { close(resume) })
+			var reloadDone, requestDone chan struct{}
+			t.Cleanup(func() {
+				release()
+				if reloadDone != nil {
+					waitForReloadTest(t, reloadDone)
+				}
+				if requestDone != nil {
+					waitForReloadTest(t, requestDone)
+				}
+				frankenphp.Shutdown()
+				activeApp.Store(nil)
+			})
+			old := newReloadTestApp(oldRoot, worker)
+			old.NumThreads, old.MaxThreads = 3, 3
+			old.Workers = []workerConfig{{
+				Name: "shutdown-hook", FileName: "../testdata/worker-with-counter.php", Num: 1,
+				options: []frankenphp.WorkerOption{frankenphp.WithWorkerOnServerShutdown(func() {
+					close(draining)
+					<-resume
+				})},
+			}}
+			require.NoError(t, old.Start())
+
+			current := newReloadTestApp(newRoot, worker)
+			waiting := &reloadTestWaitingContext{Context: context.Background(), waiting: make(chan struct{})}
+			current.ctx = waiting
+			reloadDone = make(chan struct{})
+			var reloadErr error
+			go func() {
+				defer close(reloadDone)
+				reloadErr = current.Start()
+			}()
+			waitForReloadTest(t, draining)
+
+			response := httptest.NewRecorder()
+			requestDone = make(chan struct{})
+			var requestErr error
+			go func() {
+				defer close(requestDone)
+				requestErr = old.modules[0].ServeHTTP(response, newReloadTestRequest(), nil)
+			}()
+			select {
+			case <-waiting.waiting:
+			case <-requestDone:
+			case <-time.After(5 * time.Second):
+				t.Fatal("request neither waited for startup nor finished")
+			}
+			release()
+			waitForReloadTest(t, reloadDone)
+			waitForReloadTest(t, requestDone)
+			require.NoError(t, reloadErr)
+			require.NoError(t, requestErr)
+			require.Equal(t, "NEW", response.Body.String())
+		})
+	}
+}
+
+func TestFailedReloadReturnsServiceUnavailable(t *testing.T) {
+	t.Cleanup(func() {
+		frankenphp.Shutdown()
+		activeApp.Store(nil)
+	})
+	old := newReloadTestApp("../testdata", false)
+	require.NoError(t, old.Start())
+	invalid := newReloadTestApp("../testdata", false)
+	invalid.MaxThreads = 1
+	require.Error(t, invalid.Start())
+	require.Nil(t, activeApp.Load())
+
+	err := old.modules[0].ServeHTTP(httptest.NewRecorder(), newReloadTestRequest(), nil)
+	var handlerErr caddyhttp.HandlerError
+	require.ErrorAs(t, err, &handlerErr)
+	require.Equal(t, http.StatusServiceUnavailable, handlerErr.StatusCode)
 }

@@ -17,10 +17,23 @@ func (f *FrankenPHPModule) requestReload(w http.ResponseWriter, r *http.Request)
 	}
 	select {
 	case <-app.started:
-	case <-r.Context().Done():
-		return r.Context().Err()
-	case <-time.After(10 * time.Second):
-		return caddyhttp.Error(http.StatusServiceUnavailable, frankenphp.ErrNotRunning)
+	default:
+		// A draining PHP request may be waiting on this request.
+		wait := 10 * time.Second
+		if app.MaxWaitTime != 0 && app.MaxWaitTime < wait {
+			wait = app.MaxWaitTime
+		}
+		timer := time.NewTimer(wait)
+		defer timer.Stop()
+		select {
+		case <-app.started:
+		case <-r.Context().Done():
+			return r.Context().Err()
+		case <-app.ctx.Done():
+			return caddyhttp.Error(http.StatusServiceUnavailable, frankenphp.ErrNotRunning)
+		case <-timer.C:
+			return caddyhttp.Error(http.StatusServiceUnavailable, frankenphp.ErrMaxWaitTimeExceeded)
+		}
 	}
 	if !app.hasStarted.Load() || f.server == nil {
 		return caddyhttp.Error(http.StatusServiceUnavailable, frankenphp.ErrNotRunning)

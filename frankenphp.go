@@ -436,6 +436,10 @@ func Shutdown() {
 
 // shutdown without any locking (for internal use)
 func shutdown() {
+	// Reject new requests before hooks or PHP threads begin draining.
+	// Requests already executing can finish on their original server.
+	unregisterServers()
+
 	// call the shutdown hooks (mainly useful for extensions)
 	for _, fn := range onServerShutdown {
 		fn()
@@ -443,7 +447,6 @@ func shutdown() {
 
 	drainWatchers()
 	drainPHPThreads()
-	unregisterServers()
 
 	metrics.Shutdown()
 
