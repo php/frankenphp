@@ -6,7 +6,7 @@ retract v1.0.0-rc.1 // Human error
 
 require (
 	github.com/Masterminds/sprig/v3 v3.3.0
-	github.com/dunglas/mercure v1.0.2
+	github.com/dunglas/mercure v1.0.3
 	github.com/e-dant/watcher v0.0.0-20260223030516-06f84a1314be
 	github.com/maypok86/otter/v2 v2.3.0
 	github.com/prometheus/client_golang v1.24.1
@@ -47,8 +47,8 @@ require (
 	github.com/unrolled/secure v1.17.0 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.etcd.io/bbolt v1.5.0 // indirect
-	go.opentelemetry.io/otel v1.46.0 // indirect
-	go.opentelemetry.io/otel/trace v1.46.0 // indirect
+	go.opentelemetry.io/otel v1.47.0 // indirect
+	go.opentelemetry.io/otel/trace v1.47.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/exp v0.0.0-20260908205506-85c1c2202aba // indirect
