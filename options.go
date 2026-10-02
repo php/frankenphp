@@ -37,6 +37,7 @@ type opt struct {
 	maxIdleTime time.Duration
 	maxRequests int
 	servers     []*Server
+	workerDrain time.Duration
 }
 
 type workerOpt struct {
@@ -81,6 +82,15 @@ func WithMaxThreads(maxThreads int) Option {
 	return func(o *opt) error {
 		o.maxThreads = maxThreads
 
+		return nil
+	}
+}
+
+// WithWorkerRequestDrainTimeout sets how long retired worker queues accept
+// requests for handoff. Zero waits until the configured context is canceled.
+func WithWorkerRequestDrainTimeout(timeout time.Duration) Option {
+	return func(o *opt) error {
+		o.workerDrain = timeout
 		return nil
 	}
 }

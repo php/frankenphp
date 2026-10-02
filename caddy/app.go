@@ -130,6 +130,9 @@ func (f *FrankenPHPApp) Start() error {
 		frankenphp.WithMaxIdleTime(f.MaxIdleTime),
 		frankenphp.WithMaxRequests(f.MaxRequests),
 	)
+	if f.httpApp != nil {
+		f.opts = append(f.opts, frankenphp.WithWorkerRequestDrainTimeout(time.Duration(f.httpApp.GracePeriod)))
+	}
 
 	// register global workers
 	for _, w := range f.Workers {

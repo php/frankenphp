@@ -313,7 +313,7 @@ func Init(options ...Option) error {
 
 	registerExtensions()
 
-	opt := &opt{}
+	opt := &opt{workerDrain: shutDownGracePeriod}
 	for _, o := range options {
 		if err := o(opt); err != nil {
 			shutdown()
@@ -336,6 +336,7 @@ func Init(options ...Option) error {
 	}
 
 	maxWaitTime.Store(int64(opt.maxWaitTime))
+	workerRequestDrainTimeout = opt.workerDrain
 	maxRequestsPerThread = opt.maxRequests
 
 	if opt.maxIdleTime > 0 {
@@ -447,6 +448,9 @@ func shutdown() {
 
 	drainWatchers()
 	drainPHPThreads()
+	for _, worker := range workers {
+		go worker.drainRequests(globalCtx, workerRequestDrainTimeout)
+	}
 
 	metrics.Shutdown()
 

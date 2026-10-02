@@ -1,10 +1,14 @@
 package frankenphp
 
 import (
+	"context"
+	"io"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -12,6 +16,68 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestDrainWorkerRequests(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stopped, resume := make(chan struct{}), make(chan struct{})
+	release := sync.OnceFunc(func() { close(resume) })
+	t.Cleanup(func() { release(); Shutdown() })
+	require.NoError(t, Init(
+		WithContext(ctx), WithWorkerRequestDrainTimeout(0),
+		WithNumThreads(2), WithMaxThreads(2), WithMaxWaitTime(time.Second),
+		WithWorkers("retired", testDataPath+"/worker-with-counter.php", 1,
+			WithWorkerOnShutdown(func(int) { close(stopped); <-resume }),
+		),
+	))
+	w := workersByName["retired"]
+	request := httptest.NewRequest("POST", "http://localhost/worker-with-counter.php", strings.NewReader("payload"))
+	response := httptest.NewRecorder()
+	fc, err := newContextFromRequest(request, response, fallbackServer, WithRequestDocumentRoot(testDataPath, false))
+	require.NoError(t, err)
+	require.Same(t, w, fc.worker)
+	shutdownDone := make(chan struct{})
+	go func() { defer close(shutdownDone); Shutdown() }()
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+		t.Fatal("worker did not reach shutdown")
+	}
+	result := make(chan error, 1)
+	go func() { result <- w.handleRequest(fc) }()
+	require.Eventually(t, func() bool { return w.queuedRequests.Load() == 1 }, time.Second, time.Millisecond)
+	release()
+	select {
+	case <-shutdownDone:
+	case <-time.After(time.Second):
+		t.Fatal("PHP shutdown did not finish")
+	}
+	select {
+	case err := <-result:
+		require.ErrorIs(t, err, ErrNotRunning)
+	case <-time.After(time.Second):
+		t.Fatal("retired worker request was not released")
+	}
+	require.Zero(t, w.queuedRequests.Load())
+	require.Empty(t, response.Body.String())
+	body, err := io.ReadAll(request.Body)
+	require.NoError(t, err)
+	require.Equal(t, "payload", string(body))
+}
+
+func TestWorkerRequestDrainerExpires(t *testing.T) {
+	w := &worker{requestChan: make(chan *frankenPHPContext)}
+	drained := make(chan struct{})
+	go func() {
+		defer close(drained)
+		w.drainRequests(context.Background(), 10*time.Millisecond)
+	}()
+	select {
+	case <-drained:
+	case <-time.After(time.Second):
+		t.Fatal("worker queue drainer exceeded its configured timeout")
+	}
+}
 
 // TestRestartWorkersForceKillsStuckThread verifies the drain path does
 // not hang when a worker is stuck in a blocking PHP call (sleep, etc.).

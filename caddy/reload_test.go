@@ -275,3 +275,30 @@ func TestFailedReloadReturnsServiceUnavailable(t *testing.T) {
 	require.ErrorAs(t, err, &handlerErr)
 	require.Equal(t, http.StatusServiceUnavailable, handlerErr.StatusCode)
 }
+
+func TestStartupWaitUsesConfiguredLimits(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		grace, maxWait time.Duration
+	}{
+		{"grace_period", 10 * time.Millisecond, 0},
+		{"max_wait_time", time.Hour, 10 * time.Millisecond},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			app := &FrankenPHPApp{
+				ctx: context.Background(), started: make(chan any), MaxWaitTime: tc.maxWait,
+				httpApp: &caddyhttp.App{GracePeriod: caddy.Duration(tc.grace)},
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			err := app.waitForStartup(ctx)
+			require.ErrorIs(t, err, frankenphp.ErrMaxWaitTimeExceeded)
+		})
+	}
+	t.Run("no_limit", func(t *testing.T) {
+		app := &FrankenPHPApp{ctx: context.Background(), started: make(chan any), httpApp: &caddyhttp.App{}}
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		require.ErrorIs(t, app.waitForStartup(ctx), context.Canceled)
+	})
+}

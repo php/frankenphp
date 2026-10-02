@@ -1,6 +1,7 @@
 package caddy
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -15,25 +16,8 @@ func (f *FrankenPHPModule) requestReload(w http.ResponseWriter, r *http.Request)
 	if app == nil {
 		return caddyhttp.Error(http.StatusServiceUnavailable, frankenphp.ErrNotRunning)
 	}
-	select {
-	case <-app.started:
-	default:
-		// A draining PHP request may be waiting on this request.
-		wait := 10 * time.Second
-		if app.MaxWaitTime != 0 && app.MaxWaitTime < wait {
-			wait = app.MaxWaitTime
-		}
-		timer := time.NewTimer(wait)
-		defer timer.Stop()
-		select {
-		case <-app.started:
-		case <-r.Context().Done():
-			return r.Context().Err()
-		case <-app.ctx.Done():
-			return caddyhttp.Error(http.StatusServiceUnavailable, frankenphp.ErrNotRunning)
-		case <-timer.C:
-			return caddyhttp.Error(http.StatusServiceUnavailable, frankenphp.ErrMaxWaitTimeExceeded)
-		}
+	if err := app.waitForStartup(r.Context()); err != nil {
+		return err
 	}
 	if !app.hasStarted.Load() || f.server == nil {
 		return caddyhttp.Error(http.StatusServiceUnavailable, frankenphp.ErrNotRunning)
@@ -48,6 +32,37 @@ func (f *FrankenPHPModule) requestReload(w http.ResponseWriter, r *http.Request)
 		return m.ServeHTTP(w, r, nil)
 	}
 	return caddyhttp.Error(http.StatusServiceUnavailable, frankenphp.ErrNotRunning)
+}
+
+func (f *FrankenPHPApp) waitForStartup(ctx context.Context) error {
+	select {
+	case <-f.started:
+		return nil
+	default:
+	}
+
+	wait := f.MaxWaitTime
+	if f.httpApp != nil {
+		if grace := time.Duration(f.httpApp.GracePeriod); grace > 0 && (wait == 0 || grace < wait) {
+			wait = grace
+		}
+	}
+	var expired <-chan time.Time
+	if wait > 0 {
+		timer := time.NewTimer(wait)
+		defer timer.Stop()
+		expired = timer.C
+	}
+	select {
+	case <-f.started:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-f.ctx.Done():
+		return caddyhttp.Error(http.StatusServiceUnavailable, frankenphp.ErrNotRunning)
+	case <-expired:
+		return caddyhttp.Error(http.StatusServiceUnavailable, frankenphp.ErrMaxWaitTimeExceeded)
+	}
 }
 
 func (f *FrankenPHPApp) reloadModule(name string) *FrankenPHPModule {
