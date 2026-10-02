@@ -188,7 +188,8 @@ func (c *reloadTestWaitingContext) Done() <-chan struct{} {
 func TestReloadUsesNewRootWhileShutdownDrains(t *testing.T) {
 	for _, worker := range []bool{false, true} {
 		t.Run(fmt.Sprintf("worker=%t", worker), func(t *testing.T) {
-			root := t.TempDir()
+			root, err := filepath.EvalSymlinks(t.TempDir())
+			require.NoError(t, err)
 			oldRoot, newRoot := filepath.Join(root, "old"), filepath.Join(root, "new")
 			for path, body := range map[string]string{oldRoot: "OLD", newRoot: "NEW"} {
 				require.NoError(t, os.Mkdir(path, 0700))
