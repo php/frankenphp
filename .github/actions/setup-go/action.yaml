@@ -5,6 +5,10 @@ inputs:
     description: Path prefix for go.mod / go.sum files (used when the repo is checked out into a subdirectory)
     required: false
     default: "."
+  cache:
+    description: Whether to cache Go modules and build outputs
+    required: false
+    default: "true"
 runs:
   using: composite
   steps:
@@ -14,5 +18,5 @@ runs:
         cache-dependency-path: |
           ${{ inputs.working-directory }}/go.sum
           ${{ inputs.working-directory }}/caddy/go.sum
-        cache: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        cache: ${{ inputs.cache == 'true' && !startsWith(github.ref, 'refs/tags/') }}
         check-latest: true
