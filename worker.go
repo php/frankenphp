@@ -3,6 +3,7 @@ package frankenphp
 // #include "frankenphp.h"
 import "C"
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -27,6 +28,7 @@ type worker struct {
 	maxThreads             int
 	requestOptions         []RequestOption
 	requestChan            chan *frankenPHPContext
+	done                   <-chan struct{}
 	threads                []*phpThread
 	threadMutex            sync.RWMutex
 	maxConsecutiveFailures int
@@ -34,14 +36,16 @@ type worker struct {
 	onThreadShutdown       func(int)
 	queuedRequests         atomic.Int32
 	server                 *Server
+	metrics                Metrics
 }
 
 var (
-	workers             []*worker
-	workersByName       map[string]*worker
-	globalWorkersByPath map[string]*worker
-	watcherIsEnabled    bool
-	startupFailChan     chan error
+	workers                   []*worker
+	workersByName             map[string]*worker
+	globalWorkersByPath       map[string]*worker
+	watcherIsEnabled          bool
+	startupFailChan           chan error
+	workerRequestDrainTimeout time.Duration
 )
 
 func initWorkers(opts []workerOpt) error {
@@ -63,6 +67,8 @@ func initWorkers(opts []workerOpt) error {
 		if err != nil {
 			return err
 		}
+
+		w.done = mainThread.done
 
 		totalThreadsToStart += w.num
 		workers = append(workers, w)
@@ -205,6 +211,7 @@ func newWorker(o workerOpt) (*worker, error) {
 		onThreadReady:          o.onThreadReady,
 		onThreadShutdown:       o.onThreadShutdown,
 		server:                 o.server,
+		metrics:                metrics,
 	}
 
 	w.configureMercure(&o)
@@ -273,7 +280,7 @@ func (worker *worker) isAtThreadLimit() bool {
 }
 
 func (worker *worker) handleRequest(fc *frankenPHPContext) error {
-	metrics.StartWorkerRequest(worker.name)
+	worker.metrics.StartWorkerRequest(worker.name)
 
 	runtime.Gosched()
 
@@ -285,7 +292,7 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) error {
 			case thread.requestChan <- fc:
 				worker.threadMutex.RUnlock()
 				<-fc.done
-				metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
+				worker.metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
 
 				return nil
 			default:
@@ -297,7 +304,7 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) error {
 
 	// if no thread was available, mark the request as queued and apply the scaling strategy
 	worker.queuedRequests.Add(1)
-	metrics.QueuedWorkerRequest(worker.name)
+	worker.metrics.QueuedWorkerRequest(worker.name)
 
 	for {
 		workerScaleChan := scaleChan
@@ -308,22 +315,44 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) error {
 		select {
 		case worker.requestChan <- fc:
 			worker.queuedRequests.Add(-1)
-			metrics.DequeuedWorkerRequest(worker.name)
-			<-fc.done
-			metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
+			worker.metrics.DequeuedWorkerRequest(worker.name)
+			err := <-fc.done
+			worker.metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
 
-			return nil
+			return err
 		case workerScaleChan <- fc:
 			// the request has triggered scaling, continue to wait for a thread
 		case <-timeoutChan(time.Duration(maxWaitTime.Load())):
 			// the request has timed out stalling
 			worker.queuedRequests.Add(-1)
-			metrics.DequeuedWorkerRequest(worker.name)
-			metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
+			worker.metrics.DequeuedWorkerRequest(worker.name)
+			worker.metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
 
 			fc.reject(ErrMaxWaitTimeExceeded)
 
 			return ErrMaxWaitTimeExceeded
+		}
+	}
+}
+
+// drainRequests releases requests still arriving on a retired worker's queue.
+// PHP threads must have stopped before it starts, so these requests were never executed.
+func (worker *worker) drainRequests(ctx context.Context, timeout time.Duration) {
+	var expired <-chan time.Time
+	if timeout > 0 {
+		timer := time.NewTimer(timeout)
+		defer timer.Stop()
+		expired = timer.C
+	}
+
+	for {
+		select {
+		case fc := <-worker.requestChan:
+			fc.done <- ErrNotRunning
+		case <-ctx.Done():
+			return
+		case <-expired:
+			return
 		}
 	}
 }

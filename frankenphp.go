@@ -363,7 +363,7 @@ func Init(options ...Option) error {
 
 	registerExtensions()
 
-	opt := &opt{}
+	opt := &opt{workerDrain: shutDownGracePeriod}
 	for _, o := range options {
 		if err := o(opt); err != nil {
 			shutdown()
@@ -386,6 +386,7 @@ func Init(options ...Option) error {
 	}
 
 	maxWaitTime.Store(int64(opt.maxWaitTime))
+	workerRequestDrainTimeout = opt.workerDrain
 	maxRequestsPerThread = opt.maxRequests
 
 	if opt.maxIdleTime > 0 {
@@ -489,6 +490,10 @@ func Shutdown() {
 
 // shutdown without any locking (for internal use)
 func shutdown() {
+	// Reject new requests before hooks or PHP threads begin draining.
+	// Requests already executing can finish on their original server.
+	unregisterServers()
+
 	// call the shutdown hooks (mainly useful for extensions)
 	for _, fn := range onServerShutdown {
 		fn()
@@ -496,7 +501,9 @@ func shutdown() {
 
 	drainWatchers()
 	drainPHPThreads()
-	unregisterServers()
+	for _, worker := range workers {
+		go worker.drainRequests(globalCtx, workerRequestDrainTimeout)
+	}
 
 	metrics.Shutdown()
 

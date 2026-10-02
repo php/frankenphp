@@ -51,7 +51,7 @@ type frankenPHPContext struct {
 	handlerParameters  any
 	handlerReturn      any
 
-	done      chan any
+	done      chan error
 	startedAt time.Time
 }
 
@@ -76,7 +76,7 @@ func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Reques
 func newContextFromRequest(request *http.Request, responseWriter http.ResponseWriter, s *Server, opts ...RequestOption) (*frankenPHPContext, error) {
 	fc := &frankenPHPContext{
 		ctx:            request.Context(),
-		done:           make(chan any),
+		done:           make(chan error),
 		startedAt:      time.Now(),
 		server:         s,
 		splitPath:      s.splitPath,
@@ -139,7 +139,7 @@ func newWorkerDummyContext(w *worker) (*frankenPHPContext, error) {
 	}
 
 	fc := &frankenPHPContext{
-		done:      make(chan any),
+		done:      make(chan error),
 		ctx:       r.Context(),
 		server:    server,
 		request:   r,
@@ -172,7 +172,7 @@ func newContextFromMessage(message any, rw http.ResponseWriter, ctx context.Cont
 	}
 
 	return &frankenPHPContext{
-		done:              make(chan any),
+		done:              make(chan error),
 		startedAt:         time.Now(),
 		server:            server,
 		worker:            w,

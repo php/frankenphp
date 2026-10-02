@@ -59,6 +59,7 @@ type FrankenPHPModule struct {
 	requestEnv           frankenphp.PreparedEnv
 	requestOptions       []frankenphp.RequestOption
 	server               *frankenphp.Server
+	reloadName           string
 	logger               *slog.Logger
 	app                  *FrankenPHPApp
 }
@@ -187,11 +188,8 @@ func needReplacement(s string) bool {
 // ServeHTTP implements caddyhttp.MiddlewareHandler.
 func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ caddyhttp.Handler) error {
 	if !f.app.hasStarted.Load() {
-		// stall any incoming request if FrankenPHP has not started yet, blocking for up to 10 seconds
-		select {
-		case <-f.app.started:
-		case <-time.After(10 * time.Second):
-			return caddyhttp.Error(http.StatusServiceUnavailable, frankenphp.ErrNotRunning)
+		if err := f.app.waitForStartup(r.Context()); err != nil {
+			return err
 		}
 	}
 
@@ -226,9 +224,17 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 	}
 
 	err := f.server.ServeHTTP(w, r, opts...)
+	if err != nil {
+		if errors.Is(err, frankenphp.ErrNotRunning) {
+			if app := activeApp.Load(); app != nil && app != f.app {
+				return f.requestReload(w, r)
+			}
+			return caddyhttp.Error(http.StatusServiceUnavailable, err)
+		}
 
-	if _, rejected := errors.AsType[frankenphp.ErrRejected](err); err != nil && !rejected {
-		return caddyhttp.Error(http.StatusInternalServerError, err)
+		if _, rejected := errors.AsType[frankenphp.ErrRejected](err); !rejected {
+			return caddyhttp.Error(http.StatusInternalServerError, err)
+		}
 	}
 
 	return nil

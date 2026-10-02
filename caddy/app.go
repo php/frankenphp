@@ -23,6 +23,7 @@ import (
 var (
 	options   []frankenphp.Option
 	optionsMU sync.RWMutex
+	activeApp atomic.Pointer[FrankenPHPApp]
 )
 
 // EXPERIMENTAL: RegisterWorkers provides a way for extensions to register frankenphp.Workers
@@ -140,6 +141,9 @@ func (f *FrankenPHPApp) collectOptions(repl *caddy.Replacer, keep bool) ([]frank
 		frankenphp.WithMaxIdleTime(f.MaxIdleTime),
 		frankenphp.WithMaxRequests(f.MaxRequests),
 	)
+	if f.httpApp != nil {
+		opts = append(opts, frankenphp.WithWorkerRequestDrainTimeout(time.Duration(f.httpApp.GracePeriod)))
+	}
 
 	usedWorkerNames := make(map[string]bool, len(f.Workers))
 
@@ -182,8 +186,10 @@ func (f *FrankenPHPApp) Start() error {
 
 	// if FrankenPHP is currently running, shut it down first
 	// this will happen in admin API reloads and caddy tests
+	activeApp.Store(f)
 	frankenphp.Shutdown()
 	if err := frankenphp.Init(f.opts...); err != nil {
+		activeApp.CompareAndSwap(f, nil)
 		return err
 	}
 
@@ -193,6 +199,9 @@ func (f *FrankenPHPApp) Start() error {
 }
 
 func (f *FrankenPHPApp) Stop() error {
+	f.hasStarted.Store(false)
+	activeApp.CompareAndSwap(f, nil)
+
 	if f.logger.Enabled(f.ctx, slog.LevelInfo) {
 		f.logger.LogAttrs(f.ctx, slog.LevelInfo, "FrankenPHP stopped 🐘")
 	}
@@ -215,32 +224,39 @@ func (f *FrankenPHPApp) Stop() error {
 // register workers and servers for "php" and "php_server" modules
 func (f *FrankenPHPApp) collectModuleOptions(repl *caddy.Replacer, usedWorkerNames map[string]bool, keep bool) ([]frankenphp.Option, error) {
 	opts := make([]frankenphp.Option, 0, len(f.modules))
-	serversByIndex := make(map[int]*frankenphp.Server, len(f.modules))
+	type registeredServer struct {
+		server *frankenphp.Server
+		name   string
+	}
+	serversByIndex := make(map[int]registeredServer, len(f.modules))
 
 	for _, module := range f.modules {
 		// modules with the same server_idx should share the same server instance
 		// example: the worker { match * } rule adds 2 "php" subroutes to the caddy handler
 		// the 2 handlers belong to the same "php_server" and must therefore share workers
 		if module.ServerIndex != 0 {
-			if server, ok := serversByIndex[module.ServerIndex]; ok {
+			if registered, ok := serversByIndex[module.ServerIndex]; ok {
 				if keep {
-					module.server = server
+					module.server = registered.server
+					module.reloadName = registered.name
 				}
 
 				continue
 			}
 		}
 
-		server, moduleOpts, err := f.collectModule(repl, module, usedWorkerNames)
+		serverName := f.resolveServerName(module)
+		server, moduleOpts, err := f.collectModule(repl, module, usedWorkerNames, serverName)
 		if err != nil {
 			return nil, err
 		}
 
 		if keep {
 			module.server = server
+			module.reloadName = serverName
 		}
 		if module.ServerIndex != 0 {
-			serversByIndex[module.ServerIndex] = server
+			serversByIndex[module.ServerIndex] = registeredServer{server: server, name: serverName}
 		}
 		opts = append(opts, moduleOpts...)
 	}
@@ -248,8 +264,7 @@ func (f *FrankenPHPApp) collectModuleOptions(repl *caddy.Replacer, usedWorkerNam
 	return opts, nil
 }
 
-func (f *FrankenPHPApp) collectModule(repl *caddy.Replacer, module *FrankenPHPModule, usedWorkerNames map[string]bool) (*frankenphp.Server, []frankenphp.Option, error) {
-	serverName := f.resolveServerName(module)
+func (f *FrankenPHPApp) collectModule(repl *caddy.Replacer, module *FrankenPHPModule, usedWorkerNames map[string]bool, serverName string) (*frankenphp.Server, []frankenphp.Option, error) {
 	server, err := frankenphp.NewServer(
 		module.resolvedDocumentRoot,
 		frankenphp.WithServerName(serverName),
