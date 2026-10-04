@@ -39,6 +39,14 @@
 
 cli_exec_args_t *cli_args;
 
+static int (*previous_embed_startup)(sapi_module_struct *sapi_module) = NULL;
+
+static int cli_embed_startup(sapi_module_struct *sapi_module) {
+  sapi_module->executable_location = cli_args->argv[0];
+
+  return previous_embed_startup(sapi_module);
+}
+
 static void register_server_variable_filtered(const char *key, char **val,
                                               size_t *val_len,
                                               zval *track_vars_array) {
@@ -148,13 +156,16 @@ void *emulate_script_cli(void *arg) {
   /* Parse argv to detect -r (eval mode) and find the script path */
   bool eval = false;
   char *script = NULL;
+  int script_index = 0;
   for (int i = 1; i < args->argc; i++) {
     if (strcmp(args->argv[i], "-r") == 0 && i + 1 < args->argc) {
       eval = true;
       script = args->argv[i + 1];
+      script_index = i + 1;
       break;
     } else if (args->argv[i][0] != '-') {
       script = args->argv[i];
+      script_index = i;
       break;
     }
   }
@@ -170,6 +181,18 @@ void *emulate_script_cli(void *arg) {
   cli_args->script = script;
 
   /*
+   * Like the CLI SAPI's do_cli(): script path must become $argv[0].
+   * In -r mode the CLI SAPI reports "Standard input code" as $argv[0].
+   */
+  int argc = args->argc - script_index;
+  char **argv = args->argv + script_index;
+  char *code = NULL;
+  if (eval) {
+    code = argv[0];
+    argv[0] = "Standard input code";
+  }
+
+  /*
    * The SAPI name "cli" is hardcoded into too many programs... let's usurp it.
    */
   php_embed_module.name = "cli";
@@ -178,7 +201,12 @@ void *emulate_script_cli(void *arg) {
   /* the CLI SAPI prints phpinfo() as plain text, not as HTML */
   php_embed_module.phpinfo_as_text = 1;
 
-  php_embed_init(cli_args->argc, cli_args->argv);
+  if (php_embed_module.startup != cli_embed_startup) {
+    previous_embed_startup = php_embed_module.startup;
+    php_embed_module.startup = cli_embed_startup;
+  }
+
+  php_embed_init(argc, argv);
 
   cli_register_file_handles();
   zend_first_try {
@@ -198,6 +226,10 @@ void *emulate_script_cli(void *arg) {
   exit_status = (void *)(intptr_t)EG(exit_status);
 
   php_embed_shutdown();
+
+  if (eval) {
+    argv[0] = code;
+  }
 
   return exit_status;
 }

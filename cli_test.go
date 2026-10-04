@@ -37,6 +37,30 @@ func TestExecuteScriptCLI(t *testing.T) {
 	assert.Contains(t, stdoutStderrStr, "From the CLI")
 }
 
+// https://github.com/php/frankenphp/issues/2690
+func TestExecuteScriptCLIArgv(t *testing.T) {
+	if _, err := os.Stat("internal/testcli/testcli"); err != nil {
+		t.Skip("internal/testcli/testcli has not been compiled, run `cd internal/testcli/ && go build`")
+	}
+
+	code := `printf("argv0=%s argc=%d args=%s\n", $argv[0], $argc, json_encode(array_slice($argv, 1)));`
+	for _, tt := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"script", []string{"testdata/argv.php", "foo", "bar"}, "argv0=testdata/argv.php argc=3 args=[\"foo\",\"bar\"]\n"},
+		{"eval", []string{"-r", code, "a", "b"}, "argv0=Standard input code argc=3 args=[\"a\",\"b\"]\n"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := exec.Command("internal/testcli/testcli", tt.args...)
+			stdoutStderr, err := cmd.CombinedOutput()
+			require.NoError(t, err, "output: %s", stdoutStderr)
+			assert.Equal(t, tt.want, string(stdoutStderr))
+		})
+	}
+}
+
 func TestExecuteCLICode(t *testing.T) {
 	if _, err := os.Stat("internal/testcli/testcli"); err != nil {
 		t.Skip("internal/testcli/testcli has not been compiled, run `cd internal/testcli/ && go build`")
