@@ -57,14 +57,16 @@ type frankenPHPContext struct {
 
 // NewRequestWithContext creates a new FrankenPHP request context.
 //
-// FrankenPHP does not strip request headers whose name contains an underscore.
-// Because CGI maps dashes to underscores ("Foo-Bar" becomes the HTTP_FOO_BAR
-// variable), a client-supplied "Foo_Bar" header is indistinguishable from the
-// legitimate "Foo-Bar" in $_SERVER and can spoof it. This affects any such
-// header an application or upstream proxy trusts (forwarded-for, auth, etc.).
-// Drop headers containing an underscore before calling this function, unless
-// you explicitly need (and whitelist) them. The Caddy-based server and reverse
-// proxies such as nginx (underscores_in_headers off) already do this.
+// FrankenPHP does not strip request headers whose name contains an underscore
+// or a dot. Because CGI maps dashes to underscores ("Foo-Bar" becomes the
+// HTTP_FOO_BAR variable) and PHP maps dots to underscores when registering
+// variables ("Foo.Bar" also becomes HTTP_FOO_BAR), a client-supplied "Foo_Bar"
+// or "Foo.Bar" header is indistinguishable from the legitimate "Foo-Bar" in
+// $_SERVER and can spoof it. This affects any such header an application or
+// upstream proxy trusts (forwarded-for, auth, etc.). Drop headers containing
+// an underscore or a dot before calling this function, unless you explicitly
+// need (and whitelist) them. The Caddy-based server and reverse proxies such
+// as nginx (underscores_in_headers off) already do this.
 func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Request, error) {
 	c := context.WithValue(r.Context(), contextKey, opts)
 

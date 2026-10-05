@@ -16,6 +16,9 @@ const (
 
 type StopReason int
 
+// Metrics reports what the workers and the threads of a FrankenPHP instance
+// are doing. An implementation that also satisfies OpcacheMetrics is told
+// about opcache restarts as well.
 type Metrics interface {
 	// StartWorker collects started workers
 	StartWorker(name string)
@@ -40,6 +43,14 @@ type Metrics interface {
 	DequeuedWorkerRequest(name string)
 	QueuedRequest()
 	DequeuedRequest()
+}
+
+// OpcacheMetrics is the optional part of a Metrics implementation that counts
+// the restarts of opcache's shared memory, by reason, where the build reports
+// them (ZTS, PHP 8.4 and up). An implementation passed to WithMetrics() that
+// lacks it only misses the counter, the restart is logged either way.
+type OpcacheMetrics interface {
+	OpcacheRestart(reason string)
 }
 
 type nullMetrics struct{}
@@ -94,6 +105,7 @@ type PrometheusMetrics struct {
 	workerRequestCount *prometheus.CounterVec
 	workerQueueDepth   *prometheus.GaugeVec
 	queueDepth         prometheus.Gauge
+	opcacheRestarts    *prometheus.CounterVec
 	mu                 sync.RWMutex
 }
 
@@ -105,6 +117,11 @@ func (m *PrometheusMetrics) mustRegister(c prometheus.Collector) {
 		}
 	}
 }
+
+var (
+	_ Metrics        = (*PrometheusMetrics)(nil)
+	_ OpcacheMetrics = (*PrometheusMetrics)(nil)
+)
 
 func (m *PrometheusMetrics) StartWorker(name string) {
 	m.mu.RLock()
@@ -317,6 +334,15 @@ func (m *PrometheusMetrics) DequeuedRequest() {
 	m.queueDepth.Dec()
 }
 
+func (m *PrometheusMetrics) OpcacheRestart(reason string) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.opcacheRestarts != nil {
+		m.opcacheRestarts.WithLabelValues(reason).Inc()
+	}
+}
+
 func (m *PrometheusMetrics) Shutdown() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -324,6 +350,10 @@ func (m *PrometheusMetrics) Shutdown() {
 	m.registry.Unregister(m.totalThreads)
 	m.registry.Unregister(m.busyThreads)
 	m.registry.Unregister(m.queueDepth)
+
+	if m.opcacheRestarts != nil {
+		m.registry.Unregister(m.opcacheRestarts)
+	}
 
 	if m.totalWorkers != nil {
 		m.registry.Unregister(m.totalWorkers)
@@ -377,6 +407,11 @@ func NewPrometheusMetrics(registry prometheus.Registerer) *PrometheusMetrics {
 			Name: "frankenphp_queue_depth",
 			Help: "Number of regular queued requests",
 		}),
+		// experimental: to be removed once opcache handles restarts safely under ZTS
+		opcacheRestarts: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "frankenphp_opcache_restarts",
+			Help: "Number of restarts of opcache's shared memory scheduled, by reason (experimental, should stay at zero)",
+		}, []string{"reason"}),
 		totalWorkers:       nil,
 		busyWorkers:        nil,
 		workerRequestTime:  nil,
@@ -392,6 +427,18 @@ func NewPrometheusMetrics(registry prometheus.Registerer) *PrometheusMetrics {
 	m.mustRegister(m.busyThreads)
 
 	m.mustRegister(m.queueDepth)
+
+	// only where the hook exists: a series stuck at zero would read as "no
+	// restart" on a build that cannot report one
+	if opcacheRestartHook {
+		m.mustRegister(m.opcacheRestarts)
+
+		// expose the series at zero so a rate or an alert on it works from the
+		// first restart on, instead of missing it for lack of a previous sample
+		for _, reason := range opcacheRestartReasons {
+			m.opcacheRestarts.WithLabelValues(reason)
+		}
+	}
 
 	return m
 }

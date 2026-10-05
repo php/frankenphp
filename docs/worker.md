@@ -339,6 +339,7 @@ Because worker mode keeps the PHP process alive between requests, the following 
 - **Class static properties**: Static properties on classes persist between requests.
 - **Global variables**: Variables in the global scope of the worker script persist between requests.
 - **In-memory caches**: Any data stored in memory (arrays, objects) outside the request handler persists.
+- **Runtime engine settings**: Changes made with `ini_set()`, `stream_context_set_default()`, `date_default_timezone_set()`, `chdir()`, `stream_wrapper_register()`, `set_error_handler()` or `set_exception_handler()` stay in effect for later requests. Never store request- or user-specific values there, such as credentials in the default stream context: pass an explicit context to each call instead.
 
 This is by design and is what makes worker mode fast. However, it requires attention to avoid unintended side effects:
 

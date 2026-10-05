@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 75c35be7402fbfa437d8ef78b227bb77d8671f4e */
+ * Stub hash: 0c8dbd6c553b416b92c25a772509ed42fc512ea2 */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_frankenphp_handle_request, 0, 1, MAY_BE_LONG|MAY_BE_BOOL)
 	ZEND_ARG_TYPE_INFO(0, callback, IS_CALLABLE, 0)

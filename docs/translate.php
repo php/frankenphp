@@ -50,6 +50,8 @@ function makeGeminiRequest(string $systemPrompt, string $userPrompt, string $mod
             'header' => "Content-Type: application/json\r\nX-Goog-Api-Key: $apiKey\r\nContent-Length: " . strlen($body) . "\r\n",
             'content' => $body,
             'timeout' => 300,
+            // keep the response body on 4xx/5xx, the API error message is the only usable diagnostic
+            'ignore_errors' => true,
         ]
     ]));
     $generatedDocs = json_decode($response, true)['candidates'][0]['content']['parts'][0]['text'] ?? '';

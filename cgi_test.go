@@ -2,6 +2,7 @@ package frankenphp
 
 import (
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -31,6 +32,95 @@ func TestEnsureLeadingSlash(t *testing.T) {
 
 			assert.Equal(t, tt.expected, ensureLeadingSlash(tt.input), "ensureLeadingSlash(%q)", tt.input)
 		})
+	}
+}
+
+// TestSanitizedPathJoin covers the common join/traversal behaviour on every
+// platform: whatever the request path, the result must stay inside root.
+func TestSanitizedPathJoin(t *testing.T) {
+	t.Parallel()
+
+	const root = "/var/www"
+
+	tests := []struct {
+		name     string
+		reqPath  string
+		expected string
+	}{
+		{"leading slash", "/index.php", filepath.Join(root, "index.php")},
+		{"no leading slash", "index.php", filepath.Join(root, "index.php")},
+		{"nested", "/foo/bar/index.php", filepath.Join(root, "foo", "bar", "index.php")},
+		{"empty req path returns root", "", filepath.Clean(root)},
+		{"root req path returns root", "/", filepath.Clean(root)},
+		{"trailing slash preserved", "/sub/", filepath.Join(root, "sub") + separator},
+		{"dot segments collapsed", "/foo/./bar", filepath.Join(root, "foo", "bar")},
+		// Traversal attempts must never escape root; the "../" segments are
+		// stripped and the result is re-anchored under root.
+		{"parent traversal contained", "../../etc/passwd", filepath.Join(root, "etc", "passwd")},
+		{"rooted parent traversal contained", "/../../etc/passwd", filepath.Join(root, "etc", "passwd")},
+		{"traversal up to root", "/../..", filepath.Clean(root)},
+		{"mid-path traversal contained", "foo/../../bar", filepath.Join(root, "bar")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := sanitizedPathJoin(root, tt.reqPath)
+			assert.Equal(t, tt.expected, got, "sanitizedPathJoin(%q, %q)", root, tt.reqPath)
+		})
+	}
+}
+
+// TestSanitizedPathJoinEmptyRoot guards the documented default: an empty root
+// is treated as the current directory.
+func TestSanitizedPathJoinEmptyRoot(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "index.php", sanitizedPathJoin("", "index.php"))
+}
+
+// Caddy path matchers treat "\" as a regular byte on POSIX: turning it into a
+// separator would execute a script that path-scoped rules never matched.
+func TestSanitizedPathJoinPOSIXBackslash(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("backslash is a separator on Windows")
+	}
+
+	t.Parallel()
+
+	assert.Equal(t, `/var/www/admin\panel.php`, sanitizedPathJoin("/var/www", `/admin\panel.php`))
+}
+
+// TestSanitizedPathJoinWindowsTraversal guards against path traversal on
+// Windows, where the previous filepath.Clean("/"+reqPath) treated a leading
+// "//" as a UNC/volume prefix, so drive- and UNC-prefixed request paths
+// survived cleaning and pointed SCRIPT_FILENAME outside the document root.
+// filepath.IsLocal must now reject them and fall back to root. It only runs
+// on Windows because filepath's volume handling is OS-specific.
+func TestSanitizedPathJoinWindowsTraversal(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows-specific volume/UNC handling")
+	}
+
+	t.Parallel()
+
+	const root = `C:\inetpub\wwwroot`
+
+	// Each of these is non-local on Windows and must collapse to root, never to
+	// a path with a drive letter or UNC share that escapes the document root.
+	payloads := []string{
+		`..\..\..\Windows\win.ini`,                      // backslash traversal, the canonical vector
+		`..\..\..\..\..\..\..\..\..\..\Windows\win.ini`, // deeper than root, must still not escape
+		`c:/Windows/win.ini`,                            // drive-relative
+		`C:\Windows\win.ini`,                            // drive-absolute
+		`\\server\share\evil.php`,                       // UNC share
+	}
+
+	for _, p := range payloads {
+		got := sanitizedPathJoin(root, p)
+		assert.Equalf(t, root, got, "payload %q must not escape root", p)
+		assert.Falsef(t, strings.Contains(got, ".."), "payload %q left a traversal segment", p)
 	}
 }
 
@@ -142,6 +232,12 @@ func TestSplitPos(t *testing.T) {
 			name:      "unicode in filename with multiple php occurrences",
 			path:      "/ȺȺȺȺshell.php.txt.php",
 			splitPath: []string{".php"},
+			wantPos:   -1, // the first .php doesn't end a segment, so no split
+		},
+		{
+			name:      "unicode filename split at a segment boundary",
+			path:      "/ȺȺȺȺshell.php/txt.php",
+			splitPath: []string{".php"},
 			wantPos:   18, // should match first .php, not be confused by byte offset shift
 		},
 		{
@@ -183,11 +279,33 @@ func TestSplitPos(t *testing.T) {
 			splitPath: []string{".php"},
 			wantPos:   10,
 		},
+		// Regression tests for GHSA-xxjp-cjxr-2x6m: the split has to end the
+		// path or a whole path segment, otherwise ".php" embedded in a
+		// filename splits inside it and executes a script the router never
+		// matched (e.g. one a deny rule or a WAF protects).
 		{
-			name:      "extension in middle of filename",
+			name:      "extension in middle of filename must not match",
 			path:      "/test.php.bak",
 			splitPath: []string{".php"},
-			wantPos:   9,
+			wantPos:   -1,
+		},
+		{
+			name:      "extension inside a segment followed by a real one must not match",
+			path:      "/uploads/a.php.txt/b.php",
+			splitPath: []string{".php"},
+			wantPos:   -1,
+		},
+		{
+			name:      "any byte after the extension must not match",
+			path:      "/a.phpx/b.php",
+			splitPath: []string{".php"},
+			wantPos:   -1,
+		},
+		{
+			name:      "a non-boundary match gives up on that split, not on the next one",
+			path:      "/a.phpx/b.phtml",
+			splitPath: []string{".php", ".phtml"},
+			wantPos:   15,
 		},
 		// Regression tests for GHSA-3g8v-8r37-cgjm: an inner non-ASCII byte
 		// caused the loop to break without resetting match=false, so a path
@@ -285,7 +403,7 @@ func TestSplitPos(t *testing.T) {
 // incorrect SCRIPT_NAME/PATH_INFO splitting
 func TestSplitPosUnicodeSecurityRegression(t *testing.T) {
 	// U+023A: Ⱥ (UTF-8: C8 BA). Lowercase is ⱥ (UTF-8: E2 B1 A5), longer in bytes.
-	path := "/ȺȺȺȺshell.php.txt.php"
+	path := "/ȺȺȺȺshell.php/txt.php"
 	split := []string{".php"}
 
 	pos := splitPos(path, split)
@@ -301,7 +419,7 @@ func TestSplitPosUnicodeSecurityRegression(t *testing.T) {
 		pathInfo := path[pos:]
 
 		assert.Equal(t, "/ȺȺȺȺshell.php", scriptName, "script name should be the path up to first .php")
-		assert.Equal(t, ".txt.php", pathInfo, "path info should be the remainder after first .php")
+		assert.Equal(t, "/txt.php", pathInfo, "path info should be the remainder after first .php")
 	}
 }
 
@@ -341,12 +459,20 @@ func FuzzSplitPos(f *testing.F) {
 	f.Add("/path/to/script.php/some/path", ".php")
 	f.Add("/ȺȺȺȺshell.php.txt.php", ".php")
 	f.Add("/shell﹒php", ".php")
+	f.Add("/uploads/a.php.txt/b.php", ".php")
 	f.Add("", "")
 
 	f.Fuzz(func(t *testing.T, path, splitMarker string) {
 		pos := splitPos(path, []string{splitMarker})
 		if pos < -1 || pos > len(path) {
 			t.Fatalf("splitPos(%q, %q) returned out-of-bounds position %d for a %d-byte path", path, splitMarker, pos, len(path))
+		}
+
+		// GHSA-xxjp-cjxr-2x6m: a split inside a filename executes a script the
+		// router never matched, so any position returned must end the path or
+		// a whole path segment.
+		if pos > 0 && pos != len(path) && path[pos] != '/' {
+			t.Fatalf("splitPos(%q, %q) returned %d, which splits inside the %q segment", path, splitMarker, pos, path)
 		}
 	})
 }

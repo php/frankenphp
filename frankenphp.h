@@ -16,6 +16,7 @@
 
 #include <Zend/zend_modules.h>
 #include <Zend/zend_types.h>
+#include <php_version.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -40,6 +41,12 @@ typedef struct {
   HANDLE thread_handle;
 #endif
 } force_kill_slot;
+
+#if defined(ZTS) && PHP_VERSION_ID >= 80400
+#define FRANKENPHP_OPCACHE_RESTART_HOOK 1
+#else
+#define FRANKENPHP_OPCACHE_RESTART_HOOK 0
+#endif
 
 #ifndef FRANKENPHP_VERSION
 #define FRANKENPHP_VERSION dev
@@ -200,6 +207,17 @@ size_t frankenphp_get_thread_memory_usage(uintptr_t thread_index);
  * handle). */
 void frankenphp_force_kill_thread(force_kill_slot slot);
 void frankenphp_release_thread_for_kill(force_kill_slot slot);
+
+/* Outcome of go_mercure_publish(). INVALID_UPDATE and PUBLISH_FAILED carry a
+ * malloc'ed message the caller must free, INVALID_UPDATE the position of the
+ * argument at fault. */
+typedef enum {
+  FRANKENPHP_MERCURE_OK = 0,
+  FRANKENPHP_MERCURE_NO_HUB = 1,
+  FRANKENPHP_MERCURE_INVALID_UPDATE = 2,
+  FRANKENPHP_MERCURE_PUBLISH_FAILED = 3,
+  FRANKENPHP_MERCURE_UNSUPPORTED = 4,
+} frankenphp_mercure_status;
 
 void register_extensions(zend_module_entry **m, int len);
 

@@ -37,7 +37,7 @@ import (
 	"time"
 	"unsafe"
 	// debug on Linux
-	//_ "github.com/ianlancetaylor/cgosymbolizer"
+	// _ "github.com/ianlancetaylor/cgosymbolizer"
 )
 
 type contextKeyStruct struct{}
@@ -46,6 +46,7 @@ var (
 	ErrInvalidRequest     = errors.New("not a FrankenPHP request")
 	ErrAlreadyStarted     = errors.New("FrankenPHP is already started")
 	ErrInvalidPHPVersion  = errors.New("FrankenPHP is only compatible with PHP 8.2+")
+	ErrZendSignals        = errors.New(`FrankenPHP is not compatible with Zend Signals, recompile PHP with the "--disable-zend-signals" configuration option`)
 	ErrMainThreadCreation = errors.New("error creating the main thread")
 	ErrScriptExecution    = errors.New("error during PHP script execution")
 	ErrNotRunning         = errors.New("server is not registered, you must first call frankenphp.Init() with the WithServer() option")
@@ -131,6 +132,50 @@ type PHPConfig struct {
 	ZendMaxExecutionTimers bool
 }
 
+// EXPERIMENTAL: PHPThread exposes a PHP thread's request context.
+type PHPThread struct {
+	Request *http.Request
+	thread  *phpThread
+}
+
+// EXPERIMENTAL: IsRequestDone determines whether the request associated with the PHPThread has been closed.
+func (p *PHPThread) IsRequestDone() bool {
+	fc := p.thread.currentContext()
+
+	return fc == nil || fc.isDone
+}
+
+// EXPERIMENTAL: Pin pins a Go object, preventing it from being moved or freed by the garbage
+// collector until the Pinner.Unpin method has been called.
+func (p *PHPThread) Pin(pointer any) {
+	p.thread.Pin(pointer)
+}
+
+// EXPERIMENTAL: Thread retrieves a PHP thread by its index.
+// Returns nil and false if the system is not running or no thread exists at the given index.
+func Thread(index uint) (*PHPThread, bool) {
+	if !isRunning.Load() {
+		return nil, false
+	}
+
+	if index >= uint(len(phpThreads)) {
+		return nil, false
+	}
+
+	thread := phpThreads[index]
+	if thread == nil {
+		return nil, false
+	}
+
+	fc := thread.currentContext()
+	var request *http.Request
+	if fc != nil {
+		request = fc.request
+	}
+
+	return &PHPThread{request, thread}, true
+}
+
 // Version returns infos about the PHP version.
 func Version() PHPVersion {
 	cVersion := C.frankenphp_get_version()
@@ -156,6 +201,21 @@ func Config() PHPConfig {
 	}
 }
 
+// checkPHPConfig rejects the PHP builds FrankenPHP cannot run on
+func checkPHPConfig(config PHPConfig) error {
+	if config.Version.MajorVersion < 8 || (config.Version.MajorVersion == 8 && config.Version.MinorVersion < 2) {
+		return ErrInvalidPHPVersion
+	}
+
+	// FrankenPHP never calls zend_signal_startup(), so in ZTS the ini entries
+	// of the signal globals overwrite the TSRM entry of each thread
+	if config.ZTS && config.ZendSignals {
+		return ErrZendSignals
+	}
+
+	return nil
+}
+
 func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 	maxProcs := runtime.GOMAXPROCS(0) * 2
 	maxThreadsFromWorkers := 0
@@ -165,8 +225,6 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 			// https://github.com/php/frankenphp/issues/126
 			opt.workers[i].num = maxProcs
 		}
-		metrics.TotalWorkers(w.name, w.num)
-
 		numWorkers += opt.workers[i].num
 
 		if w.maxThreads > 0 {
@@ -180,6 +238,13 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 
 			maxThreadsFromWorkers += w.maxThreads - w.num
 		}
+	}
+
+	// num_threads counts the threads serving the requests no worker serves:
+	// the worker threads come on top of it, so raising a worker's num never
+	// takes capacity away from the rest of the site
+	if opt.numThreads > 0 {
+		opt.numThreads += numWorkers
 	}
 
 	numThreadsIsSet := opt.numThreads > 0
@@ -198,9 +263,6 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 
 	if numThreadsIsSet && !maxThreadsIsSet {
 		opt.maxThreads = opt.numThreads
-		if opt.numThreads <= numWorkers {
-			return 0, fmt.Errorf("num_threads (%d) must be greater than the number of worker threads (%d)", opt.numThreads, numWorkers)
-		}
 
 		return numWorkers, nil
 	}
@@ -215,8 +277,9 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 	}
 
 	if !numThreadsIsSet {
+		// default: what is left of 2x the CPUs once the workers have their
+		// threads, and one thread at the very least
 		if numWorkers >= maxProcs {
-			// Start at least as many threads as workers, and keep a free thread to handle requests in non-worker mode
 			opt.numThreads = numWorkers + 1
 		} else {
 			opt.numThreads = maxProcs
@@ -227,15 +290,62 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 	}
 
 	// both num_threads and max_threads are set
-	if opt.numThreads <= numWorkers {
-		return 0, fmt.Errorf("num_threads (%d) must be greater than the number of worker threads (%d)", opt.numThreads, numWorkers)
-	}
-
 	if !maxThreadsIsAuto && opt.maxThreads < opt.numThreads {
+		if numWorkers > 0 {
+			return 0, fmt.Errorf("max_threads (%d) must be greater than or equal to num_threads (%d) plus the worker threads (%d)", opt.maxThreads, opt.numThreads-numWorkers, numWorkers)
+		}
+
 		return 0, fmt.Errorf("max_threads (%d) must be greater than or equal to num_threads (%d)", opt.maxThreads, opt.numThreads)
 	}
 
 	return numWorkers, nil
+}
+
+// Validate reports whether Init() would accept a configuration, without
+// starting anything: the thread budget, the worker files, and the names and
+// scopes workers may take. A host replacing a running configuration should
+// call it before stopping the one in place, since Init() only reports these
+// errors once the previous runtime is gone.
+func Validate(options ...Option) error {
+	opt := &opt{}
+	for _, o := range options {
+		if err := o(opt); err != nil {
+			return err
+		}
+	}
+
+	if _, err := calculateMaxThreads(opt); err != nil {
+		return err
+	}
+
+	if err := validateWatchers(opt); err != nil {
+		return err
+	}
+
+	takenNames := make(map[string]bool, len(opt.workers))
+	takenPaths := make(map[*Server]map[string]bool, 1)
+	nameTaken := func(name string) bool { return takenNames[name] }
+	pathTaken := func(server *Server, path string) bool { return takenPaths[server][path] }
+	for _, w := range opt.workers {
+		w, err := resolveWorkerFile(w)
+		if err != nil {
+			return err
+		}
+
+		if err := checkWorkerDeclaration(w, nameTaken, pathTaken); err != nil {
+			return err
+		}
+
+		takenNames[w.name] = true
+		if w.matchRequest == nil {
+			if takenPaths[w.server] == nil {
+				takenPaths[w.server] = make(map[string]bool)
+			}
+			takenPaths[w.server][w.fileName] = true
+		}
+	}
+
+	return nil
 }
 
 // Init starts the PHP runtime and the configured workers.
@@ -291,12 +401,16 @@ func Init(options ...Option) error {
 	}
 
 	metrics.TotalThreads(opt.numThreads)
+	for _, w := range opt.workers {
+		metrics.TotalWorkers(w.name, w.num)
+	}
 
 	config := Config()
 
-	if config.Version.MajorVersion < 8 || (config.Version.MajorVersion == 8 && config.Version.MinorVersion < 2) {
+	if err := checkPHPConfig(config); err != nil {
 		shutdown()
-		return ErrInvalidPHPVersion
+
+		return err
 	}
 
 	if config.ZTS {
@@ -341,7 +455,7 @@ func Init(options ...Option) error {
 	activateServers()
 
 	if globalLogger.Enabled(globalCtx, slog.LevelInfo) {
-		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "FrankenPHP started 🐘", slog.String("php_version", Version().Version), slog.Int("num_threads", mainThread.numThreads), slog.Int("max_threads", mainThread.maxThreads), slog.Int("max_requests", maxRequestsPerThread))
+		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "FrankenPHP started 🐘", slog.String("php_version", Version().Version), slog.Int("total_threads", mainThread.numThreads), slog.Int("worker_threads", workerThreadCount), slog.Int("max_threads", mainThread.maxThreads), slog.Int("max_requests", maxRequestsPerThread))
 
 		if EmbeddedAppPath != "" {
 			globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "embedded PHP app 📦", slog.String("path", EmbeddedAppPath))
@@ -602,7 +716,11 @@ func go_sapi_flush(threadIndex C.uintptr_t) bool {
 		return false
 	}
 
-	if fc.clientHasClosed() && !fc.isDone {
+	if fc.isDone {
+		return fc.clientHadClosed
+	}
+
+	if fc.clientHasClosed() {
 		return true
 	}
 
@@ -778,6 +896,43 @@ func go_schedule_opcache_reset(threadIndex C.uintptr_t) {
 	if mainThread != nil {
 		go mainThread.rebootAllThreads()
 	}
+}
+
+// opcacheRestartHook tells whether this build reports the restarts opcache
+// schedules on its own: PHP 8.4 brought the hook, and only ZTS builds are
+// exposed to them
+var opcacheRestartHook = C.FRANKENPHP_OPCACHE_RESTART_HOOK != 0
+
+// Restart reasons opcache reports to the hook, in the order of
+// zend_accel_restart_reason (ext/opcache/ZendAccelerator.h), named like the
+// counters of opcache_get_status()
+var opcacheRestartReasons = [...]string{"oom", "hash", "manual"}
+
+//export go_opcache_restart_scheduled
+func go_opcache_restart_scheduled(reason C.int) {
+	opcacheRestartScheduled(int(reason))
+}
+
+func opcacheRestartScheduled(reason int) {
+	reasonText := "unknown"
+	if reason >= 0 && reason < len(opcacheRestartReasons) {
+		reasonText = opcacheRestartReasons[reason]
+	}
+
+	if m, ok := metrics.(OpcacheMetrics); ok {
+		m.OpcacheRestart(reasonText)
+	}
+
+	if !globalLogger.Enabled(globalCtx, slog.LevelWarn) {
+		return
+	}
+
+	// written synchronously, under opcache's lock: a line deferred to a
+	// goroutine is lost if the restart crashes the process
+	globalLogger.LogAttrs(globalCtx, slog.LevelWarn,
+		"opcache restart scheduled, caching stops until the next request start carries it out while other threads may still reference the old memory: raise opcache.memory_consumption, opcache.max_accelerated_files or opcache.max_wasted_percentage",
+		slog.String("reason", reasonText),
+	)
 }
 
 func convertArgs(args []string) (C.int, []*C.char) {

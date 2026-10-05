@@ -96,7 +96,7 @@ To use it, add the following to your main layout:
 <title>FrankenPHP Hot Reload</title>
 <?php if (isset($_SERVER['FRANKENPHP_HOT_RELOAD'])): ?>
 <meta name="frankenphp-hot-reload:url" content="<?=$_SERVER['FRANKENPHP_HOT_RELOAD']?>">
-<script src="https://cdn.jsdelivr.net/npm/idiomorph"></script>
+<script src="https://cdn.jsdelivr.net/npm/idiomorph/dist/idiomorph.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/frankenphp-hot-reload/+esm" type="module"></script>
 <?php endif ?>
 ```

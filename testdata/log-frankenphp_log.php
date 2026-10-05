@@ -18,4 +18,9 @@ return function () {
 	frankenphp_log("some error message {$_GET['i']}", FRANKENPHP_LOG_LEVEL_ERROR, [
 		"err" => ["a", "v"],
 	]);
+
+	// an integer key holding null used to abort the whole process
+	frankenphp_log("some null message {$_GET['i']}", FRANKENPHP_LOG_LEVEL_INFO, [
+		8 => null,
+	]);
 };

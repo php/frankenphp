@@ -12,6 +12,8 @@ runs:
       with:
         php-version: ${{ inputs.php-version }}
         ini-file: development
+        # JIT's fixed-address mappings can race Go thread creation during startup.
+        ini-values: opcache.jit=disable
         coverage: none
         tools: none
       env:

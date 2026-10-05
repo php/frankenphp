@@ -158,15 +158,15 @@ Questa tabella riassume il necessario:
 | `array` | `frankenphp.AssociativeArray` | ❌| `frankenphp.GoAssociativeArray()` | `frankenphp.PHPAssociativeArray()` | ✅ |
 | `array` | `map[string]any` | ❌| `frankenphp.GoMap()` | `frankenphp.PHPMap()` | ✅ |
 | `array` | `[]any` | ❌| `frankenphp.GoPackedArray()` | `frankenphp.PHPPackedArray()` | ✅ |
-| `mixed` | `any` | ❌| `GoValue()` | `PHPValue()` | ❌|
-| `callable` | `*C.zval` | ❌| - | frankenphp.CallPHPCallable() | ❌|
+| `mixed` | `*C.zval` | ❌| `frankenphp.GoValue()` | `frankenphp.PHPValue()` | ✅|
+| `callable` | `*C.zval` | ❌| - | frankenphp.CallPHPCallable() | ✅|
 | `object` | `struct` | ❌| _Non ancora implementato_ | _Non ancora implementato_ | ❌|
 
 > [!NOTE]
 >
 > Questa tabella non è ancora esaustiva e verrà completata man mano che l'API dei tipi FrankenPHP diventerà più completa.
 >
-> Per i metodi di classe, in particolare, sono attualmente supportati i tipi primitivi e gli array. Gli oggetti non possono ancora essere utilizzati come parametri di metodo o tipi di ritorno.
+> Per i metodi di classe, in particolare, sono attualmente supportati i tipi primitivi, gli array, `mixed` e `callable`. Gli oggetti non possono ancora essere utilizzati come parametri di metodo o tipi di ritorno.
 
 Facendo riferimento allo snippet di codice della sezione precedente, si può vedere che gli helper vengono utilizzati per convertire il primo parametro e il valore restituito. Non è necessario convertire il secondo e il terzo parametro della nostra funzione `repeat_this()`, poiché la rappresentazione in memoria dei tipi sottostanti è la stessa sia per C sia per Go.
 

@@ -99,15 +99,15 @@ Esta tabla resume lo que necesitas saber:
 | `array`            | `frankenphp.AssociativeArray` | ❌                 | `frankenphp.GoAssociativeArray()` | `frankenphp.PHPAssociativeArray()` | ✅                            |
 | `array`            | `map[string]any`              | ❌                 | `frankenphp.GoMap()`              | `frankenphp.PHPMap()`              | ✅                            |
 | `array`            | `[]any`                       | ❌                 | `frankenphp.GoPackedArray()`      | `frankenphp.PHPPackedArray()`      | ✅                            |
-| `mixed`            | `any`                         | ❌                 | `GoValue()`                       | `PHPValue()`                       | ❌                            |
-| `callable`         | `*C.zval`                     | ❌                 | -                                 | frankenphp.CallPHPCallable()       | ❌                            |
+| `mixed`            | `*C.zval`                     | ❌                 | `frankenphp.GoValue()`            | `frankenphp.PHPValue()`            | ✅                            |
+| `callable`         | `*C.zval`                     | ❌                 | -                                 | frankenphp.CallPHPCallable()       | ✅                            |
 | `object`           | `struct`                      | ❌                 | _Aún no implementado_             | _Aún no implementado_              | ❌                            |
 
 > [!NOTE]
 >
 > Esta tabla aún no es exhaustiva y se completará a medida que la API de tipos de FrankenPHP se vuelva más completa.
 >
-> Para métodos de clase específicamente, los tipos primitivos y los arrays están actualmente soportados. Los objetos aún no pueden usarse como parámetros de métodos o tipos de retorno.
+> Para métodos de clase específicamente, los tipos primitivos, los arrays, `mixed` y `callable` están actualmente soportados. Los objetos aún no pueden usarse como parámetros de métodos o tipos de retorno.
 
 Si te refieres al fragmento de código de la sección anterior, puedes ver que se usan helpers para convertir el primer parámetro y el valor de retorno. El segundo y tercer parámetro de nuestra función `repeat_this()` no necesitan ser convertidos ya que la representación en memoria de los tipos subyacentes es la misma para C y Go.
 
