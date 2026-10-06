@@ -1730,11 +1730,11 @@ static void *php_thread(void *arg) {
     return NULL;
   }
 
-  frankenphp_log_message("Restarting unhealthy thread", LOG_WARNING);
+  go_log(thread_index, "Restarting unhealthy thread", LOG_WARNING);
 
   if (!frankenphp_new_php_thread(thread_index)) {
     /* probably unreachable */
-    frankenphp_log_message("Failed to restart an unhealthy thread", LOG_ERR);
+    go_log(thread_index, "Failed to restart an unhealthy thread", LOG_ERR);
   }
 
   return NULL;
