@@ -101,12 +101,19 @@ func (handler *regularThread) waitForRequest() string {
 
 	var fc *frankenPHPContext
 
-	select {
-	case <-handler.thread.drainChan:
-		// go back to beforeScriptExecution
-		return handler.beforeScriptExecution()
-	case fc = <-regularRequestChan:
-	case fc = <-handler.thread.requestChan:
+	for {
+		select {
+		case <-handler.thread.drainChan:
+			return handler.beforeScriptExecution()
+		case fc = <-regularRequestChan:
+		case fc = <-handler.thread.requestChan:
+		}
+		if fc.server.regularRequestsRetired.Load() {
+			fc.done <- ErrNotRunning
+			continue
+		}
+
+		break
 	}
 
 	handler.requestCount++
@@ -126,7 +133,7 @@ func (handler *regularThread) afterRequest() {
 }
 
 func handleRequestWithRegularPHPThreads(fc *frankenPHPContext) error {
-	metrics.StartRequest()
+	fc.metrics.StartRequest()
 
 	runtime.Gosched()
 
@@ -136,8 +143,14 @@ func handleRequestWithRegularPHPThreads(fc *frankenPHPContext) error {
 			select {
 			case thread.requestChan <- fc:
 				regularThreadMu.RUnlock()
-				<-fc.done
-				metrics.StopRequest()
+				_, retired := <-fc.done
+
+				if retired {
+					fc.metrics.StopRequest()
+					return ErrNotRunning
+				}
+
+				fc.metrics.StopRequest()
 
 				return nil
 			default:
@@ -149,16 +162,22 @@ func handleRequestWithRegularPHPThreads(fc *frankenPHPContext) error {
 
 	// if no thread was available, mark the request as queued and fan it out to all threads
 	queuedRegularThreads.Add(1)
-	metrics.QueuedRequest()
+	fc.metrics.QueuedRequest()
 
 	for {
 		select {
 		case regularRequestChan <- fc:
 			queuedRegularThreads.Add(-1)
-			metrics.DequeuedRequest()
+			fc.metrics.DequeuedRequest()
 
-			<-fc.done
-			metrics.StopRequest()
+			_, retired := <-fc.done
+
+			if retired {
+				fc.metrics.StopRequest()
+				return ErrNotRunning
+			}
+
+			fc.metrics.StopRequest()
 
 			return nil
 		case scaleChan <- fc:
@@ -166,8 +185,8 @@ func handleRequestWithRegularPHPThreads(fc *frankenPHPContext) error {
 		case <-timeoutChan(time.Duration(maxWaitTime.Load())):
 			// the request has timed out stalling
 			queuedRegularThreads.Add(-1)
-			metrics.DequeuedRequest()
-			metrics.StopRequest()
+			fc.metrics.DequeuedRequest()
+			fc.metrics.StopRequest()
 
 			fc.reject(ErrMaxWaitTimeExceeded)
 

@@ -25,6 +25,7 @@ type frankenPHPContext struct {
 	request      *http.Request
 	worker       *worker
 	server       *Server
+	metrics      Metrics
 
 	// idle timeout per body read; zero disables it
 	requestBodyTimeout time.Duration
@@ -79,6 +80,7 @@ func newContextFromRequest(request *http.Request, responseWriter http.ResponseWr
 		done:           make(chan any),
 		startedAt:      time.Now(),
 		server:         s,
+		metrics:        metrics,
 		splitPath:      s.splitPath,
 		logger:         s.logger,
 		request:        request,

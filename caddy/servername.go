@@ -36,6 +36,18 @@ func (f *FrankenPHPApp) resolveServerName(module *FrankenPHPModule) string {
 	return ""
 }
 
+func (f *FrankenPHPApp) httpServerFor(module *FrankenPHPModule) *caddyhttp.Server {
+	if f.httpApp == nil {
+		return nil
+	}
+	for _, srv := range f.httpApp.Servers {
+		if serverContainsHandler(srv, module) {
+			return srv
+		}
+	}
+	return nil
+}
+
 // findHostInRoutes walks routes (recursing into Subroute handlers) to locate
 // the route that contains target, then returns the first host of that route's
 // host matcher. Returns "" if no enclosing route or no host matcher is found.
@@ -51,6 +63,13 @@ func findHostInRoutes(routes caddyhttp.RouteList, target caddyhttp.MiddlewareHan
 					continue
 				}
 				return (*hp)[0]
+			}
+		}
+		for _, handler := range route.Handlers {
+			if subroute, ok := handler.(*caddyhttp.Subroute); ok {
+				if host := findHostInRoutes(subroute.Routes, target); host != "" {
+					return host
+				}
 			}
 		}
 	}

@@ -34,7 +34,7 @@ func TestRequestsQueuedBeforeThreadsAreReadyAreHandedOver(t *testing.T) {
 	const requests = 5
 	errChans := make([]chan error, requests)
 	for i := range errChans {
-		fc := &frankenPHPContext{done: make(chan any)}
+		fc := &frankenPHPContext{done: make(chan any), metrics: metrics}
 		errChan := make(chan error, 1)
 		go func() {
 			errChan <- handleRequestWithRegularPHPThreads(fc)

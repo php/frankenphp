@@ -34,6 +34,7 @@ type worker struct {
 	onThreadShutdown       func(int)
 	queuedRequests         atomic.Int32
 	server                 *Server
+	metrics                Metrics
 }
 
 var (
@@ -205,6 +206,7 @@ func newWorker(o workerOpt) (*worker, error) {
 		onThreadReady:          o.onThreadReady,
 		onThreadShutdown:       o.onThreadShutdown,
 		server:                 o.server,
+		metrics:                metrics,
 	}
 
 	w.configureMercure(&o)
@@ -273,7 +275,7 @@ func (worker *worker) isAtThreadLimit() bool {
 }
 
 func (worker *worker) handleRequest(fc *frankenPHPContext) error {
-	metrics.StartWorkerRequest(worker.name)
+	worker.metrics.StartWorkerRequest(worker.name)
 
 	runtime.Gosched()
 
@@ -285,7 +287,7 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) error {
 			case thread.requestChan <- fc:
 				worker.threadMutex.RUnlock()
 				<-fc.done
-				metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
+				worker.metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
 
 				return nil
 			default:
@@ -296,8 +298,13 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) error {
 	}
 
 	// if no thread was available, mark the request as queued and apply the scaling strategy
-	worker.queuedRequests.Add(1)
-	metrics.QueuedWorkerRequest(worker.name)
+	// The sign bit is sticky after retirement: counting first lets retire see every sender that could park.
+	if worker.queuedRequests.Add(1) < 0 {
+		worker.queuedRequests.Add(-1)
+		worker.metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
+		return ErrNotRunning
+	}
+	worker.metrics.QueuedWorkerRequest(worker.name)
 
 	for {
 		workerScaleChan := scaleChan
@@ -308,22 +315,39 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) error {
 		select {
 		case worker.requestChan <- fc:
 			worker.queuedRequests.Add(-1)
-			metrics.DequeuedWorkerRequest(worker.name)
-			<-fc.done
-			metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
+			worker.metrics.DequeuedWorkerRequest(worker.name)
+			_, retired := <-fc.done
+			worker.metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
 
+			if retired {
+				return ErrNotRunning
+			}
 			return nil
 		case workerScaleChan <- fc:
 			// the request has triggered scaling, continue to wait for a thread
 		case <-timeoutChan(time.Duration(maxWaitTime.Load())):
 			// the request has timed out stalling
 			worker.queuedRequests.Add(-1)
-			metrics.DequeuedWorkerRequest(worker.name)
-			metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
+			worker.metrics.DequeuedWorkerRequest(worker.name)
+			worker.metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
 
 			fc.reject(ErrMaxWaitTimeExceeded)
 
 			return ErrMaxWaitTimeExceeded
+		}
+	}
+}
+
+// The sticky sign bit rejects senders arriving after the drain.
+func (worker *worker) retire() {
+	const retired = -1 << 31
+	worker.queuedRequests.Add(retired)
+	for worker.queuedRequests.Load() != retired {
+		select {
+		case fc := <-worker.requestChan:
+			fc.done <- ErrNotRunning
+		default:
+			time.Sleep(time.Millisecond)
 		}
 	}
 }

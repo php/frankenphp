@@ -494,9 +494,17 @@ func shutdown() {
 		fn()
 	}
 
+	// Shutdown hooks may still dispatch to their live workers.
+	retiringServers := servers
+	unregisterServers()
 	drainWatchers()
 	drainPHPThreads()
-	unregisterServers()
+	for _, s := range retiringServers {
+		s.regularRequestsRetired.Store(true)
+	}
+	for _, w := range workers {
+		w.retire()
+	}
 
 	metrics.Shutdown()
 
