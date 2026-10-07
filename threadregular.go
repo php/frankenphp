@@ -144,13 +144,11 @@ func handleRequestWithRegularPHPThreads(fc *frankenPHPContext) error {
 			case thread.requestChan <- fc:
 				regularThreadMu.RUnlock()
 				_, retired := <-fc.done
+				fc.metrics.StopRequest()
 
 				if retired {
-					fc.metrics.StopRequest()
 					return ErrNotRunning
 				}
-
-				fc.metrics.StopRequest()
 
 				return nil
 			default:
@@ -171,13 +169,11 @@ func handleRequestWithRegularPHPThreads(fc *frankenPHPContext) error {
 			fc.metrics.DequeuedRequest()
 
 			_, retired := <-fc.done
+			fc.metrics.StopRequest()
 
 			if retired {
-				fc.metrics.StopRequest()
 				return ErrNotRunning
 			}
-
-			fc.metrics.StopRequest()
 
 			return nil
 		case scaleChan <- fc:
