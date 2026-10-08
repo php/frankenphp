@@ -45,7 +45,7 @@ func TestTransitionRegularThreadToWorkerThread(t *testing.T) {
 	assert.NoError(t, err)
 
 	// transition to regular thread
-	convertToRegularThread(phpThreads[0])
+	convertToRegularThread(phpThreads[0], mainThread)
 	assert.IsType(t, &regularThread{}, phpThreads[0].handler)
 
 	// transition to worker thread
@@ -308,7 +308,7 @@ func assertRequestBody(t *testing.T, url string, expected string) {
 // create a mix of possible transitions of workers and regular threads
 func allPossibleTransitions(worker1Path string, worker2Path string) []func(*phpThread) {
 	return []func(*phpThread){
-		convertToRegularThread,
+		func(thread *phpThread) { convertToRegularThread(thread, mainThread) },
 		func(thread *phpThread) { thread.shutdown() },
 		func(thread *phpThread) {
 			if thread.state.Is(state.Reserved) {

@@ -26,6 +26,7 @@ type phpMainThread struct {
 	maxThreads  int
 	phpIni      map[string]string
 	isRebooting atomic.Bool
+	regularRequestChan chan *frankenPHPContext
 }
 
 var (
@@ -48,6 +49,7 @@ func initPHPThreads(numThreads int, numMaxThreads int, phpIni map[string]string)
 		numThreads: numThreads,
 		maxThreads: numMaxThreads,
 		phpIni:     phpIni,
+		regularRequestChan: make(chan *frankenPHPContext),
 	}
 
 	// initialize the first thread

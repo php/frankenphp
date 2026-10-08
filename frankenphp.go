@@ -427,7 +427,7 @@ func Init(options ...Option) error {
 		}
 	}
 
-	mainThread, err := initPHPThreads(opt.numThreads, opt.maxThreads, opt.phpIni)
+	mThread, err := initPHPThreads(opt.numThreads, opt.maxThreads, opt.phpIni)
 	if err != nil {
 		shutdown()
 		return err
@@ -435,7 +435,7 @@ func Init(options ...Option) error {
 
 	regularThreads = make([]*phpThread, 0, opt.numThreads-workerThreadCount)
 	for range opt.numThreads - workerThreadCount {
-		convertToRegularThread(getInactivePHPThread())
+		convertToRegularThread(getInactivePHPThread(), mThread)
 	}
 
 	if err := initWorkers(opt.workers); err != nil {
@@ -449,7 +449,7 @@ func Init(options ...Option) error {
 		return err
 	}
 
-	initAutoScaling(mainThread)
+	initAutoScaling(mThread)
 
 	// only now that the workers and threads are up may requests reach a server
 	activateServers()

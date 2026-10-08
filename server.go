@@ -23,6 +23,7 @@ type Server struct {
 	workers                   []*worker
 	workersByPath             map[string]*worker
 	workersWithRequestMatcher []*worker
+	mainThread                *phpMainThread
 
 	// registered while FrankenPHP runs with this server; read by concurrent
 	// ServeHTTP calls while Init()/Shutdown() flip it, hence atomic
@@ -41,6 +42,7 @@ func newFallbackServer() *Server {
 		workersByPath: make(map[string]*worker),
 		env:           make(map[string]string),
 		logger:        globalLogger,
+		mainThread:    mainThread,
 	}
 
 	return s
@@ -68,8 +70,10 @@ func registerServers(newServers []*Server) {
 // it runs once workers and threads are up, so a request cannot reach a server before them
 func activateServers() {
 	fallbackServer.isRegistered.Store(true)
+	fallbackServer.mainThread = mainThread
 	for _, s := range servers {
 		s.isRegistered.Store(true)
+		s.mainThread = mainThread
 	}
 }
 
