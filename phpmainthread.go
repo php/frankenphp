@@ -30,6 +30,7 @@ type phpMainThread struct {
 	workers            []*worker
 
 	fallbackServer *Server
+	servers        []*Server
 }
 
 var (
@@ -56,6 +57,7 @@ func initPHPThreads(numThreads int, numMaxThreads int, phpIni map[string]string)
 		phpIni:             phpIni,
 		regularRequestChan: make(chan *frankenPHPContext),
 		fallbackServer:     newFallbackServer(),
+		servers:            []*Server{},
 	}
 
 	// initialize the first thread

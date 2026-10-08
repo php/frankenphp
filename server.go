@@ -31,10 +31,6 @@ type Server struct {
 	logger       *slog.Logger
 }
 
-var (
-	servers []*Server
-)
-
 func newFallbackServer() *Server {
 	s := &Server{
 		idx:           -1,
@@ -46,13 +42,9 @@ func newFallbackServer() *Server {
 	return s
 }
 
-// registerServers assigns the identity of every server and clears the workers of a previous run,
-// so the same *Server can be passed to Init() again after a Shutdown()
-// servers do not accept requests yet at this point, see activateServers()
-func registerServers(newServers []*Server) {
-	servers = newServers
-
-	for i, s := range servers {
+// ensure that all servers have a name
+func ensureServersHaveNames(newServers []*Server) {
+	for i, s := range newServers {
 		s.idx = i
 		s.name = s.configuredName
 		if s.name == "" {
@@ -61,19 +53,15 @@ func registerServers(newServers []*Server) {
 	}
 }
 
-// activateServers lets registered servers accept requests
-// it runs once workers and threads are up, so a request cannot reach a server before them
-func activateServers() {
-	mainThread.fallbackServer.regularRequestChan = mainThread.regularRequestChan
-	mainThread.fallbackServer.isRegistered.Store(true)
-	for _, s := range servers {
-		s.regularRequestChan = mainThread.regularRequestChan
+// registerServers registers the servers with the main thread and lets them accept requests
+func registerServers(mthread *phpMainThread, newServers []*Server) {
+	mthread.servers = newServers
+	mthread.fallbackServer.regularRequestChan = mthread.regularRequestChan
+	mthread.fallbackServer.isRegistered.Store(true)
+	for _, s := range mthread.servers {
+		s.regularRequestChan = mthread.regularRequestChan
 		s.isRegistered.Store(true)
 	}
-}
-
-func unregisterServers() {
-	servers = nil
 }
 
 // NewServer creates a Server that can be registered via WithServer().
