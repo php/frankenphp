@@ -269,7 +269,6 @@ func (newMainThread *phpMainThread) reQueueRequests(oldMainThread *phpMainThread
 		}
 	}()
 
-	globalLogger.Info("re-queuing requests for workers", "oldWorkers", oldMainThread.workers, "newWorkers", newMainThread.workers)
 	for _, oldWorker := range oldMainThread.workers {
 		for _, newWorker := range newMainThread.workers {
 			if oldWorker.name == newWorker.name {
