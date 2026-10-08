@@ -28,6 +28,8 @@ type phpMainThread struct {
 	isRebooting        atomic.Bool
 	regularRequestChan chan *frankenPHPContext
 	workers            []*worker
+
+	fallbackServer *Server
 }
 
 var (
@@ -53,6 +55,7 @@ func initPHPThreads(numThreads int, numMaxThreads int, phpIni map[string]string)
 		maxThreads:         numMaxThreads,
 		phpIni:             phpIni,
 		regularRequestChan: make(chan *frankenPHPContext),
+		fallbackServer:     newFallbackServer(),
 	}
 
 	// initialize the first thread

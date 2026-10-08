@@ -526,7 +526,7 @@ func ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) error 
 		return ErrInvalidRequest
 	}
 
-	return fallbackServer.ServeHTTP(responseWriter, request, opts...)
+	return mainThread.fallbackServer.ServeHTTP(responseWriter, request, opts...)
 }
 
 //export go_ub_write

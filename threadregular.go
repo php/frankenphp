@@ -154,7 +154,7 @@ func handleRequestWithRegularPHPThreads(fc *frankenPHPContext) error {
 
 	for {
 		select {
-		case fc.server.mainThread.regularRequestChan <- fc:
+		case fc.server.regularRequestChan <- fc:
 			queuedRegularThreads.Add(-1)
 			metrics.DequeuedRequest()
 
