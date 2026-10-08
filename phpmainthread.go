@@ -20,18 +20,20 @@ import (
 // represents the main PHP thread
 // the thread needs to keep running as long as all other threads are running
 type phpMainThread struct {
-	state       *state.ThreadState
-	done        chan struct{}
-	numThreads  int
-	maxThreads  int
-	phpIni      map[string]string
-	isRebooting atomic.Bool
+	state              *state.ThreadState
+	done               chan struct{}
+	numThreads         int
+	maxThreads         int
+	phpIni             map[string]string
+	isRebooting        atomic.Bool
 	regularRequestChan chan *frankenPHPContext
+	workers            []*worker
 }
 
 var (
 	phpThreads    []*phpThread
 	mainThread    *phpMainThread
+	oldMainThread *phpMainThread
 	commonHeaders map[string]*C.zend_string
 
 	// timeouts to wait for threads to yield before arming force-kill
@@ -43,12 +45,13 @@ var (
 // a fixed number of inactive PHP threads
 // and reserves a fixed number of possible PHP threads
 func initPHPThreads(numThreads int, numMaxThreads int, phpIni map[string]string) (*phpMainThread, error) {
+	oldMainThread = mainThread
 	mainThread = &phpMainThread{
-		state:      state.NewThreadState(),
-		done:       make(chan struct{}),
-		numThreads: numThreads,
-		maxThreads: numMaxThreads,
-		phpIni:     phpIni,
+		state:              state.NewThreadState(),
+		done:               make(chan struct{}),
+		numThreads:         numThreads,
+		maxThreads:         numMaxThreads,
+		phpIni:             phpIni,
 		regularRequestChan: make(chan *frankenPHPContext),
 	}
 
@@ -245,6 +248,21 @@ func getInactivePHPThread() *phpThread {
 	}
 
 	return nil
+}
+
+func (mainThread *phpMainThread) reQueueRequests(oldMainThread *phpMainThread) {
+	go func(oldMainThread *phpMainThread) {
+		for {
+			select {
+			case <-mainThread.done:
+				return
+			case <-time.After(5 * time.Second):
+				return
+			case fc := <-oldMainThread.regularRequestChan:
+				mainThread.regularRequestChan <- fc
+			}
+		}
+	}(oldMainThread)
 }
 
 //export go_frankenphp_main_thread_is_ready

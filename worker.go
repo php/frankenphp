@@ -55,6 +55,7 @@ func initWorkers(opts []workerOpt) error {
 	)
 
 	workers = make([]*worker, 0, len(opts))
+	mainThread.workers = workers
 	workersByName = make(map[string]*worker, len(opts))
 	globalWorkersByPath = make(map[string]*worker, len(opts))
 

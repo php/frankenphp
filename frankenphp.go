@@ -473,6 +473,10 @@ func Init(options ...Option) error {
 		}
 	}
 
+	if oldMainThread != nil {
+		mainThread.reQueueRequests(oldMainThread)
+	}
+
 	return nil
 }
 

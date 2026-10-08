@@ -31,8 +31,8 @@ var (
 
 func convertToRegularThread(thread *phpThread, mThread *phpMainThread) {
 	thread.setHandler(&regularThread{
-		thread: thread,
-		state:  thread.state,
+		thread:      thread,
+		state:       thread.state,
 		requestChan: mThread.regularRequestChan,
 	})
 	attachRegularThread(thread)
