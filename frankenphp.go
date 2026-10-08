@@ -438,7 +438,8 @@ func Init(options ...Option) error {
 		convertToRegularThread(getInactivePHPThread(), mThread)
 	}
 
-	if err := initWorkers(opt.workers); err != nil {
+	mThread.workers, err = initWorkers(opt.workers)
+	if err != nil {
 		shutdown()
 
 		return err

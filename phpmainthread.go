@@ -255,19 +255,39 @@ func getInactivePHPThread() *phpThread {
 	return nil
 }
 
-func (mainThread *phpMainThread) reQueueRequests(oldMainThread *phpMainThread) {
-	go func(oldMainThread *phpMainThread) {
+func (newMainThread *phpMainThread) reQueueRequests(oldMainThread *phpMainThread) {
+	go func() {
 		for {
 			select {
-			case <-mainThread.done:
+			case <-newMainThread.done:
 				return
 			case <-time.After(5 * time.Second):
 				return
 			case fc := <-oldMainThread.regularRequestChan:
-				mainThread.regularRequestChan <- fc
+				newMainThread.regularRequestChan <- fc
 			}
 		}
-	}(oldMainThread)
+	}()
+
+	globalLogger.Info("re-queuing requests for workers", "oldWorkers", oldMainThread.workers, "newWorkers", newMainThread.workers)
+	for _, oldWorker := range oldMainThread.workers {
+		for _, newWorker := range newMainThread.workers {
+			if oldWorker.name == newWorker.name {
+				go func() {
+					for {
+						select {
+						case <-newMainThread.done:
+							return
+						case <-time.After(5 * time.Second):
+							return
+						case fc := <-oldWorker.requestChan:
+							newWorker.requestChan <- fc
+						}
+					}
+				}()
+			}
+		}
+	}
 }
 
 //export go_frankenphp_main_thread_is_ready
