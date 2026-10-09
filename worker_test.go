@@ -92,6 +92,19 @@ func TestWorkerEnv(t *testing.T) {
 	}, &testOptions{workerScript: "worker-env.php", nbWorkers: 1, env: map[string]string{"FOO": "bar"}, nbParallelRequests: 10})
 }
 
+// https://github.com/php/frankenphp/issues/2697
+func TestWorkerBootHasRequestURI(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		req := httptest.NewRequest("GET", "http://example.com/worker-boot-request-uri.php", nil)
+		w := httptest.NewRecorder()
+		handler(w, req)
+
+		body, _ := io.ReadAll(w.Result().Body)
+
+		assert.Equal(t, "worker-boot-request-uri.php", string(body))
+	}, &testOptions{workerScript: "worker-boot-request-uri.php", nbWorkers: 1, nbParallelRequests: 1})
+}
+
 func TestWorkerGetOpt(t *testing.T) {
 	logger, buf := newTestLogger(t)
 

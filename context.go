@@ -155,6 +155,10 @@ func newWorkerDummyContext(w *worker) (*frankenPHPContext, error) {
 		}
 	}
 
+	if fc.requestURI == "" {
+		fc.requestURI = r.URL.RequestURI()
+	}
+
 	splitCgiPath(fc)
 
 	return fc, nil
