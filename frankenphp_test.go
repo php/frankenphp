@@ -1623,3 +1623,32 @@ func TestValidateReportsDeclarationErrors(t *testing.T) {
 		frankenphp.WithMaxThreads(1),
 	), "max_threads")
 }
+
+func TestUnhealthyThreadIsRestarted(t *testing.T) {
+	if os.Getenv("USE_ZEND_ALLOC") == "0" {
+		t.Skip("memory_limit is not enforced without the Zend allocator")
+	}
+
+	var buf fmt.Stringer
+	opts := &testOptions{
+		nbParallelRequests: 1,
+		initOpts:           []frankenphp.Option{frankenphp.WithNumThreads(1)},
+		phpIni:             map[string]string{"memory_limit": "8M"},
+	}
+	opts.logger, buf = newTestLogger(t)
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		// Warm-up request, so that the failing request below is not the thread's first:
+		// ext/date initializes DATEG(last_errors) only in RINIT, yet request shutdown
+		// frees it even when startup failed before RINIT ran. A new ZTS thread then
+		// frees garbage (observed with PHP 8.5.12; same GINIT in PHP 8.2 to 8.5).
+		testGet("http://example.com/hello.php", handler, t)
+
+		// fails request startup: $_GET is populated before the script runs
+		testGet("http://example.com/hello.php?q="+strings.Repeat("a", 16<<20), handler, t)
+
+		body, _ := testGet("http://example.com/hello.php", handler, t)
+		assert.Equal(t, "Hello from PHP", body)
+		assert.Contains(t, buf.String(), "Restarting unhealthy thread")
+	}, opts)
+}
