@@ -71,6 +71,12 @@ if [ "${bin_os}" = "linux" ]; then
 	export SPC_TOOLCHAIN="${SPC_TOOLCHAIN:-}"
 fi
 
+# TODO: drop once the macOS spc nightly ships https://github.com/crazywhalecc/static-php-cli/pull/1241,
+# without it PHP's configure probes can't resolve krb5's Kerberos framework symbols
+if [ "${bin_os}" = "mac" ]; then
+	export SPC_CMD_VAR_PHP_MAKE_EXTRA_LDFLAGS="${SPC_CMD_VAR_PHP_MAKE_EXTRA_LDFLAGS:--framework Kerberos}"
+fi
+
 # Check out the requested version, if any
 if [ -z "${FRANKENPHP_VERSION}" ]; then
 	FRANKENPHP_VERSION="$(git -C "${CURRENT_DIR}" rev-parse --verify HEAD)"
