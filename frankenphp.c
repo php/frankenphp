@@ -178,6 +178,10 @@ static void *frankenphp_parent_death_watcher(void *arg) {
 #endif
 
 static void frankenphp_fork_child(void) {
+  // a fork of a fork (e.g. a daemonizer) must outlive its short-lived parent
+  if (is_forked_child) {
+    return;
+  }
   frankenphp_mark_fork_child();
 #if defined(__linux__)
   // if the parent process dies between fork() and this prctl()
