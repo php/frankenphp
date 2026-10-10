@@ -93,6 +93,10 @@ func scaleWorkerThread(worker *worker, done chan struct{}, mstate *state.ThreadS
 		return
 	}
 
+	if worker.queuedRequests.Load() < 0 {
+		return
+	}
+
 	thread, err := addWorkerThread(worker)
 	if err != nil {
 		if globalLogger.Enabled(globalCtx, slog.LevelWarn) {

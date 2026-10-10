@@ -26,8 +26,9 @@ type Server struct {
 
 	// registered while FrankenPHP runs with this server; read by concurrent
 	// ServeHTTP calls while Init()/Shutdown() flip it, hence atomic
-	isRegistered atomic.Bool
-	logger       *slog.Logger
+	isRegistered           atomic.Bool
+	regularRequestsRetired atomic.Bool
+	logger                 *slog.Logger
 }
 
 var (
@@ -55,6 +56,7 @@ func registerServers(newServers []*Server) {
 	fallbackServer.resetWorkers()
 
 	for i, s := range servers {
+		s.regularRequestsRetired.Store(false)
 		s.idx = i
 		s.name = s.configuredName
 		if s.name == "" {

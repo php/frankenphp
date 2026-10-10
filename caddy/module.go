@@ -1,6 +1,7 @@
 package caddy
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -175,6 +176,7 @@ func (f *FrankenPHPModule) Provision(ctx caddy.Context) error {
 	}
 
 	fapp.modules = append(fapp.modules, f)
+	captureReloadRequest(ctx)
 
 	return nil
 }
@@ -187,6 +189,9 @@ func needReplacement(s string) bool {
 // ServeHTTP implements caddyhttp.MiddlewareHandler.
 func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ caddyhttp.Handler) error {
 	if !f.app.hasStarted.Load() {
+		if app := activeApp.Load(); app != nil && app != f.app && f.canNameServer() {
+			return f.requestReload(w, r, app)
+		}
 		// stall any incoming request if FrankenPHP has not started yet, blocking for up to 10 seconds
 		select {
 		case <-f.app.started:
@@ -226,12 +231,112 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 	}
 
 	err := f.server.ServeHTTP(w, r, opts...)
+	if err != nil {
+		if errors.Is(err, frankenphp.ErrNotRunning) {
+			return f.requestReload(w, r, activeApp.Load())
+		}
 
-	if _, rejected := errors.AsType[frankenphp.ErrRejected](err); err != nil && !rejected {
-		return caddyhttp.Error(http.StatusInternalServerError, err)
+		if _, rejected := errors.AsType[frankenphp.ErrRejected](err); !rejected {
+			return caddyhttp.Error(http.StatusInternalServerError, err)
+		}
 	}
 
 	return nil
+}
+
+// The receive also orders the f.server read with its assignment in the app's Start.
+func (f *FrankenPHPModule) canNameServer() bool {
+	select {
+	case <-f.app.started:
+		return f.server != nil
+	default:
+		return false
+	}
+}
+
+// Only requests that have not entered PHP can be handed over: nothing was written and the body is unread.
+func (f *FrankenPHPModule) requestReload(w http.ResponseWriter, r *http.Request, app *FrankenPHPApp) error {
+	unavailable := caddyhttp.Error(http.StatusServiceUnavailable, frankenphp.ErrNotRunning)
+	if app == nil || app == f.app {
+		return unavailable
+	}
+	select {
+	case <-app.started:
+	case <-r.Context().Done():
+		if errors.Is(r.Context().Err(), context.Canceled) {
+			return nil
+		}
+		return r.Context().Err()
+	case <-time.After(10 * time.Second):
+		return unavailable
+	}
+	if !app.hasStarted.Load() || f.server == nil {
+		return unavailable
+	}
+	if f.app.resolveServerName(f) == "" {
+		return unavailable
+	}
+	var target *FrankenPHPModule
+	var srv *caddyhttp.Server
+	for _, m := range app.modules {
+		if m.server == nil || m.server.Name() != f.server.Name() {
+			continue
+		}
+		if target == nil {
+			target = m
+			if app.httpApp != nil {
+				srv = app.httpServerFor(m)
+			}
+			continue
+		}
+		// The replay re-dispatches through one HTTP server, so several PHP
+		// instances behind it are unambiguous; across servers they are not.
+		if target.server != m.server && (srv == nil || app.httpServerFor(m) != srv) {
+			return unavailable
+		}
+	}
+	if target == nil || app.resolveServerName(target) == "" {
+		return unavailable
+	}
+	if app.httpApp != nil && srv == nil {
+		return unavailable
+	}
+	if srv != nil {
+		// Replay the request as the client sent it; the old chain may have
+		// rewritten r in the meantime.
+		var original *reloadRequest
+		if o, ok := caddyhttp.GetVar(r.Context(), reloadRequestKey).(*reloadRequest); ok {
+			original = o
+			body, complete := original.replayBody(r.Body)
+			if !complete {
+				// The old chain consumed body bytes the replay cannot recover.
+				return unavailable
+			}
+			r = r.WithContext(original.context)
+			r.Header = original.header.Clone()
+			r.Host = original.host
+			r.Body = body
+			r.ContentLength = original.contentLength
+		}
+		if orig, ok := r.Context().Value(caddyhttp.OriginalRequestCtxKey).(http.Request); ok && orig.URL != nil {
+			replay := *r
+			replay.Method = orig.Method
+			replay.RemoteAddr = orig.RemoteAddr
+			replay.RequestURI = orig.RequestURI
+			replay.URL = orig.URL.Clone()
+			r = &replay
+		}
+		writer, available := replayReloadWriter(original, w)
+		if !available {
+			return unavailable
+		}
+		// The replacement server owns access logging for the handed-over request.
+		caddyhttp.SetVar(r.Context(), caddyhttp.LogSkipVar, true)
+		srv.ServeHTTP(writer, r)
+		return nil
+	}
+	// No HTTP app: no middleware exists to bypass.
+	return target.ServeHTTP(w, r, nil)
 }
 
 // UnmarshalCaddyfile implements caddyfile.Unmarshaler.
