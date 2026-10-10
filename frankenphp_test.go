@@ -508,6 +508,24 @@ func testPhpInfoForkChild(t *testing.T, opts *testOptions) {
 	}, opts)
 }
 
+func TestDoubleForkGrandchild_module(t *testing.T) { testDoubleForkGrandchild(t, nil) }
+func TestDoubleForkGrandchild_worker(t *testing.T) {
+	testDoubleForkGrandchild(t, &testOptions{workerScript: "double-fork.php"})
+}
+func testDoubleForkGrandchild(t *testing.T, opts *testOptions) {
+	if opts == nil {
+		opts = &testOptions{}
+	}
+	opts.nbParallelRequests = 1
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/double-fork.php", handler, t)
+		if body == "pcntl-unavailable" {
+			t.Skip("pcntl/posix not fully loaded")
+		}
+		require.Equal(t, "grandchild-alive", body)
+	}, opts)
+}
+
 func TestPersistentObject_module(t *testing.T) { testPersistentObject(t, nil) }
 func TestPersistentObject_worker(t *testing.T) {
 	testPersistentObject(t, &testOptions{workerScript: "persistent-object.php"})
