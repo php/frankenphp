@@ -185,14 +185,9 @@ func needReplacement(s string) bool {
 }
 
 // ServeHTTP implements caddyhttp.MiddlewareHandler.
-func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ caddyhttp.Handler) error {
-	if !f.app.hasStarted.Load() {
-		// stall any incoming request if FrankenPHP has not started yet, blocking for up to 10 seconds
-		select {
-		case <-f.app.started:
-		case <-time.After(10 * time.Second):
-			return caddyhttp.Error(http.StatusServiceUnavailable, frankenphp.ErrNotRunning)
-		}
+func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyhttp.Handler) error {
+	if !waitForStart(f.app) {
+		return caddyhttp.Error(http.StatusServiceUnavailable, frankenphp.ErrNotRunning)
 	}
 
 	ctx := r.Context()
@@ -226,12 +221,58 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 	}
 
 	err := f.server.ServeHTTP(w, r, opts...)
+	if errors.Is(err, frankenphp.ErrNotRunning) {
+		return f.serveWithReplacement(w, r, next)
+	}
 
 	if _, rejected := errors.AsType[frankenphp.ErrRejected](err); err != nil && !rejected {
 		return caddyhttp.Error(http.StatusInternalServerError, err)
 	}
 
 	return nil
+}
+
+// waitForStart stalls the request for up to 10 seconds if FrankenPHP has not started yet
+func waitForStart(app *FrankenPHPApp) bool {
+	if app.hasStarted.Load() {
+		return true
+	}
+
+	select {
+	case <-app.started:
+		return true
+	case <-time.After(10 * time.Second):
+		return false
+	}
+}
+
+// serveWithReplacement hands the request to the configuration Caddy started before this one stopped routing
+func (f *FrankenPHPModule) serveWithReplacement(w http.ResponseWriter, r *http.Request, next caddyhttp.Handler) error {
+	notRunning := caddyhttp.Error(http.StatusServiceUnavailable, frankenphp.ErrNotRunning)
+
+	app := activeApp.Load()
+	if app == nil || app == f.app || !waitForStart(app) {
+		return notRunning
+	}
+
+	var target *FrankenPHPModule
+	for _, m := range app.modules {
+		if m.server == nil || m.server.Name() != f.server.Name() {
+			continue
+		}
+
+		// modules sharing a server are interchangeable, distinct servers with the same name are not
+		if target != nil && target.server != m.server {
+			return notRunning
+		}
+		target = m
+	}
+
+	if target == nil {
+		return notRunning
+	}
+
+	return target.ServeHTTP(w, r, next)
 }
 
 // UnmarshalCaddyfile implements caddyfile.Unmarshaler.

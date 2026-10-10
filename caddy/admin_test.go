@@ -540,6 +540,89 @@ func TestRejectedReloadWithAModuleWorkerKeepsThePreviousSiteServing(t *testing.T
 	require.Equal(t, servedBefore+1, countedRequests(t, workerURL))
 }
 
+// requests still routed by the previous configuration must reach the new workers once booted
+func TestReloadKeepsServingWhileWorkersBoot(t *testing.T) {
+	config := `
+	{
+		skip_install_trust
+		admin localhost:2999
+		http_port ` + testPort + `
+	}
+
+	localhost:` + testPort + ` {
+		php_server {
+			root ../testdata
+			worker {
+				file worker-slow-boot.php
+				num 1
+			}
+		}
+	}
+	`
+
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, config, "caddyfile")
+
+	workerURL := "http://localhost:" + testPort + "/worker-slow-boot.php"
+	client := &http.Client{Timeout: 3 * time.Second}
+	done := make(chan struct{})
+	var (
+		wg       sync.WaitGroup
+		mu       sync.Mutex
+		statuses = map[int]int{}
+	)
+	stop := sync.OnceFunc(func() {
+		close(done)
+		wg.Wait()
+	})
+	t.Cleanup(stop)
+
+	// one request per tick: a request stuck on a draining worker must not stop the probing
+	wg.Go(func() {
+		ticker := time.NewTicker(5 * time.Millisecond)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+			}
+
+			wg.Go(func() {
+				resp, err := client.Get(workerURL)
+				if err != nil {
+					return
+				}
+				_, _ = io.Copy(io.Discard, resp.Body)
+				_ = resp.Body.Close()
+
+				mu.Lock()
+				statuses[resp.StatusCode]++
+				mu.Unlock()
+			})
+		}
+	})
+
+	for range 3 {
+		r, err := http.NewRequest("POST", "http://localhost:2999/load", strings.NewReader(config))
+		require.NoError(t, err)
+		r.Header.Set("Content-Type", "text/caddyfile")
+		// reload even though the configuration did not change
+		r.Header.Set("Cache-Control", "must-revalidate")
+		resp, err := http.DefaultClient.Do(r)
+		require.NoError(t, err)
+		_, _ = io.Copy(io.Discard, resp.Body)
+		require.NoError(t, resp.Body.Close())
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+	}
+
+	stop()
+
+	require.NotZero(t, statuses[http.StatusOK])
+	assert.Equal(t, map[int]int{http.StatusOK: statuses[http.StatusOK]}, statuses)
+}
+
 // the number of requests testdata/worker-with-counter.php has served
 func countedRequests(t *testing.T, workerURL string) int {
 	t.Helper()
