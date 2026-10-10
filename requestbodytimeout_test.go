@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -166,6 +167,72 @@ func TestFinishRequestThenReadBodyHTTP2(t *testing.T) {
 	_, err = io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+// lateReadBody mimics Caddy's IdleTimeoutReader and counts reads made after the handler returned
+type lateReadBody struct {
+	io.ReadCloser
+	rc        *http.ResponseController
+	returned  *atomic.Bool
+	lateReads *atomic.Int32
+}
+
+func (b *lateReadBody) Read(p []byte) (int, error) {
+	if b.returned.Load() {
+		b.lateReads.Add(1)
+
+		return 0, io.EOF
+	}
+
+	_ = b.rc.SetReadDeadline(time.Now().Add(time.Minute))
+
+	return b.ReadCloser.Read(p)
+}
+
+// https://github.com/php/frankenphp/issues/2694
+func TestFinishRequestThenShutdownDoesNotReadBodyHTTP2(t *testing.T) {
+	require.NoError(t, frankenphp.Init())
+	defer frankenphp.Shutdown()
+
+	var returned atomic.Bool
+	var lateReads atomic.Int32
+
+	cwd, _ := os.Getwd()
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		defer returned.Store(true)
+
+		r.Body = &lateReadBody{
+			ReadCloser: r.Body,
+			rc:         http.NewResponseController(w),
+			returned:   &returned,
+			lateReads:  &lateReads,
+		}
+
+		req, err := frankenphp.NewRequestWithContext(r, frankenphp.WithRequestDocumentRoot(cwd+"/testdata/", false))
+		require.NoError(t, err)
+		require.NoError(t, frankenphp.ServeHTTP(w, req))
+	}
+
+	addr, client := newH2CServer(t, handler)
+
+	// PUT bodies are not read at startup, so PHP drains them at shutdown.
+	req, err := http.NewRequest(http.MethodPut, "http://"+addr+"/finish-without-reading-input.php", strings.NewReader("hello world"))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/octet-stream")
+
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+
+	_, err = io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// waits for PHP's request shutdown, which drains the body
+	frankenphp.Shutdown()
+
+	require.True(t, returned.Load())
+	require.Zero(t, lateReads.Load(), "request body read after the handler returned")
 }
 
 // rawServer is a minimal HTTP server exposing its listener address so a test

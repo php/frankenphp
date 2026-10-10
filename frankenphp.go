@@ -747,17 +747,13 @@ func go_sapi_flush(threadIndex C.uintptr_t) bool {
 func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (readBytes C.size_t) {
 	fc := phpThreads[threadIndex].handler.frankenPHPContext()
 
-	if fc.responseWriter == nil {
+	// net/http forbids reading the body after the handler returns; body wrappers may touch the dead stream
+	if fc.responseWriter == nil || fc.isDone {
 		return 0
 	}
 
-	// The read deadline is set on the responseWriter, which is only valid until
-	// the response is finished. A script that finishes the request (e.g. via
-	// frankenphp_finish_request()) and then reads the body would otherwise set a
-	// deadline on a finalized HTTP/2 stream, dereferencing a nil pointer and
-	// crashing the process. See https://github.com/php/frankenphp/issues/2535.
 	var rc *http.ResponseController
-	if fc.requestBodyTimeout > 0 && !fc.isDone {
+	if fc.requestBodyTimeout > 0 {
 		if fc.responseController == nil {
 			fc.responseController = http.NewResponseController(fc.responseWriter)
 		}
