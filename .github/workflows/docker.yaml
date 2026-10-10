@@ -131,12 +131,12 @@ jobs:
             *.tags=
             *.platform=${{ matrix.platform }}
             *.attest=type=provenance,disabled=true
-            ${{ fromJson(needs.prepare.outputs.push) && '' || format('builder-{0}.cache-from=type=gha,scope=builder-{0}-{1}-{2}', matrix.variant, needs.prepare.outputs.ref || github.ref, matrix.platform) }}
-            ${{ fromJson(needs.prepare.outputs.push) && '' || format('builder-{0}.cache-from=type=gha,scope=refs/heads/main-builder-{0}-{1}', matrix.variant, matrix.platform) }}
-            ${{ fromJson(needs.prepare.outputs.push) && '' || format('builder-{0}.cache-to=type=gha,scope=builder-{0}-{1}-{2},ignore-error=true', matrix.variant, needs.prepare.outputs.ref || github.ref, matrix.platform) }}
-            ${{ fromJson(needs.prepare.outputs.push) && '' || format('runner-{0}.cache-from=type=gha,scope=runner-{0}-{1}-{2}', matrix.variant, needs.prepare.outputs.ref || github.ref, matrix.platform) }}
-            ${{ fromJson(needs.prepare.outputs.push) && '' || format('runner-{0}.cache-from=type=gha,scope=refs/heads/main-runner-{0}-{1}', matrix.variant, matrix.platform) }}
-            ${{ fromJson(needs.prepare.outputs.push) && '' || format('runner-{0}.cache-to=type=gha,scope=runner-{0}-{1}-{2},ignore-error=true', matrix.variant, needs.prepare.outputs.ref || github.ref, matrix.platform) }}
+            ${{ !fromJson(needs.prepare.outputs.push) && format('builder-{0}.cache-from=type=gha,scope=builder-{0}-{1}-{2}', matrix.variant, needs.prepare.outputs.ref || github.ref, matrix.platform) || '' }}
+            ${{ !fromJson(needs.prepare.outputs.push) && format('builder-{0}.cache-from=type=gha,scope=refs/heads/main-builder-{0}-{1}', matrix.variant, matrix.platform) || '' }}
+            ${{ format('builder-{0}.cache-to=type=gha,scope=builder-{0}-{1}-{2},ignore-error=true', matrix.variant, needs.prepare.outputs.ref || github.ref, matrix.platform) }}
+            ${{ !fromJson(needs.prepare.outputs.push) && format('runner-{0}.cache-from=type=gha,scope=runner-{0}-{1}-{2}', matrix.variant, needs.prepare.outputs.ref || github.ref, matrix.platform) || '' }}
+            ${{ !fromJson(needs.prepare.outputs.push) && format('runner-{0}.cache-from=type=gha,scope=refs/heads/main-runner-{0}-{1}', matrix.variant, matrix.platform) || '' }}
+            ${{ format('runner-{0}.cache-to=type=gha,scope=runner-{0}-{1}-{2},ignore-error=true', matrix.variant, needs.prepare.outputs.ref || github.ref, matrix.platform) }}
             ${{ fromJson(needs.prepare.outputs.push) && format('*.output=type=image,name={0},push-by-digest=true,name-canonical=true,push=true,rewrite-timestamp=true', env.IMAGE_NAME) || '' }}
         env:
           SHA: ${{ needs.prepare.outputs.sha || github.sha }}
