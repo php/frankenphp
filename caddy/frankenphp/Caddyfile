@@ -26,7 +26,9 @@
 	#}
 
 	root {$SERVER_ROOT:public/}
-	encode zstd br gzip
+	# Compressed SSE streams cost memory per subscriber and enable BREACH-style attacks.
+	@compressible not path /.well-known/mercure
+	encode @compressible zstd br gzip
 
 	# Uncomment the following lines to enable Mercure and Vulcain modules
 	#mercure {

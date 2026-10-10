@@ -50,6 +50,14 @@ Access tokens must carry the identifier of the `issuer` they were signed by in t
 >
 > Uncomment the Mercure section in `/etc/frankenphp/Caddyfile` to enable it.
 
+If you enable compression with the `encode` directive, exclude the hub from it:
+compressed SSE streams cost memory per subscriber and enable BREACH-style attacks.
+
+```caddyfile
+@compressible not path /.well-known/mercure
+encode @compressible zstd br gzip
+```
+
 ### With `php-server`
 
 `frankenphp php-server --mercure` starts the hub without a `Caddyfile`, configured by environment variables:
