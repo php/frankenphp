@@ -29,10 +29,6 @@ variable "CREATED" {
     default = ""
 }
 
-variable "SPC_OPT_BUILD_ARGS" {
-    default = ""
-}
-
 variable "SHA" {}
 
 variable "LATEST" {
@@ -150,21 +146,13 @@ target "default" {
     secret = ["id=github-token,env=GITHUB_TOKEN"]
 }
 
-target "static-builder-musl" {
-    contexts = {
-        golang-base = "docker-image://golang:${GO_VERSION}-alpine"
-    }
-    dockerfile = "static-builder-musl.Dockerfile"
+target "static-builder" {
+    dockerfile = "static-builder.Dockerfile"
     context = "./"
     platforms = [
         "linux/amd64",
         "linux/arm64",
     ]
-    tags = distinct(flatten([
-        LATEST ? "${IMAGE_NAME}:static-builder-musl" : "",
-        SHA == "" || VERSION != "dev" ? "" : "${IMAGE_NAME}:static-builder-musl-sha-${substr(SHA, 0, 7)}",
-        VERSION == "dev" ? [] : [for v in semver(VERSION) : "${IMAGE_NAME}:static-builder-musl-${v}"]
-    ]))
     labels = {
         "org.opencontainers.image.created" = CREATED != "" ? CREATED : timestamp()
         "org.opencontainers.image.version" = VERSION
@@ -173,35 +161,28 @@ target "static-builder-musl" {
     }
     args = {
         FRANKENPHP_VERSION = VERSION
-        CI = CI
-        SPC_OPT_BUILD_ARGS = SPC_OPT_BUILD_ARGS
     }
-    secret = ["id=github-token,env=GITHUB_TOKEN"]
+}
+
+# static_builder_tags builds the tag list for one libc flavor
+function "static_builder_tags" {
+    params = [libc]
+    result = distinct(flatten([
+        LATEST ? "${IMAGE_NAME}:static-builder-${libc}" : "",
+        SHA == "" || VERSION != "dev" ? "" : "${IMAGE_NAME}:static-builder-${libc}-sha-${substr(SHA, 0, 7)}",
+        VERSION == "dev" ? [] : [for v in semver(VERSION) : "${IMAGE_NAME}:static-builder-${libc}-${v}"]
+    ]))
+}
+
+target "static-builder-musl" {
+    inherits = ["static-builder"]
+    tags = static_builder_tags("musl")
+    args = {
+        LIBC = "musl"
+    }
 }
 
 target "static-builder-gnu" {
-    dockerfile = "static-builder-gnu.Dockerfile"
-    context = "./"
-    platforms = [
-        "linux/amd64",
-        "linux/arm64"
-    ]
-    tags = distinct(flatten([
-        LATEST ? "${IMAGE_NAME}:static-builder-gnu" : "",
-        SHA == "" || VERSION != "dev" ? "" : "${IMAGE_NAME}:static-builder-gnu-sha-${substr(SHA, 0, 7)}",
-        VERSION == "dev" ? [] : [for v in semver(VERSION) : "${IMAGE_NAME}:static-builder-gnu-${v}"]
-    ]))
-    labels = {
-        "org.opencontainers.image.created" = CREATED != "" ? CREATED : timestamp()
-        "org.opencontainers.image.version" = VERSION
-        "org.opencontainers.image.revision" = SHA
-        "dev.frankenphp.base.fingerprint" = BASE_FINGERPRINT
-    }
-    args = {
-        FRANKENPHP_VERSION = VERSION
-        GO_VERSION = GO_VERSION
-        CI = CI
-        SPC_OPT_BUILD_ARGS = SPC_OPT_BUILD_ARGS
-    }
-    secret = ["id=github-token,env=GITHUB_TOKEN"]
+    inherits = ["static-builder"]
+    tags = static_builder_tags("gnu")
 }
