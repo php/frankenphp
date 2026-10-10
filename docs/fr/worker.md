@@ -3,9 +3,9 @@
 Démarrez votre application une fois et gardez-la en mémoire.
 FrankenPHP traitera les requêtes entrantes en quelques millisecondes.
 
-## Démarrage des scripts workers
+## Démarrer des scripts workers FrankenPHP
 
-### Docker
+### Exécuter un worker FrankenPHP avec Docker
 
 Définissez la valeur de la variable d'environnement `FRANKENPHP_CONFIG` à `worker /path/to/your/worker/script.php` :
 
@@ -17,7 +17,7 @@ docker run \
     dunglas/frankenphp
 ```
 
-### Binaire autonome
+### Exécuter un worker FrankenPHP avec le binaire autonome
 
 Utilisez l'option `--worker` de la commande `php-server` pour servir le contenu du répertoire courant en utilisant un worker :
 
@@ -37,34 +37,15 @@ frankenphp php-server --worker /path/to/your/worker/script.php --watch="/path/to
 
 Cette fonctionnalité se combine très bien avec le [rechargement à chaud](hot-reload.md).
 
-## Runtime Symfony
+## Le mode worker pour Symfony
 
-> [!TIP]
-> La section suivante est nécessaire uniquement avant Symfony 7.4, où le support natif du mode worker de FrankenPHP a été introduit.
+Consultez [la documentation du mode worker de FrankenPHP pour Symfony](symfony.md#le-mode-worker-de-symfony-avec-frankenphp).
 
-Le mode worker de FrankenPHP est pris en charge par le [composant Runtime de Symfony](https://symfony.com/doc/current/components/runtime.html).
-Pour démarrer une application Symfony dans un worker, installez le package FrankenPHP de [PHP Runtime](https://github.com/php-runtime/runtime) :
+## Le mode worker pour Laravel Octane
 
-```console
-composer require runtime/frankenphp-symfony
-```
+Consultez [la documentation de FrankenPHP pour Laravel Octane](laravel.md#laravel-octane).
 
-Démarrez votre serveur d'application en définissant la variable d'environnement `APP_RUNTIME` pour utiliser le Runtime Symfony de FrankenPHP :
-
-```console
-docker run \
-    -e FRANKENPHP_CONFIG="worker ./public/index.php" \
-    -e APP_RUNTIME=Runtime\\FrankenPhpSymfony\\Runtime \
-    -v $PWD:/app \
-    -p 80:80 -p 443:443 -p 443:443/udp \
-    dunglas/frankenphp
-```
-
-## Laravel Octane
-
-Voir [la documentation dédiée](laravel.md#laravel-octane).
-
-## Applications personnalisées
+## Écrire un script worker FrankenPHP personnalisé
 
 L'exemple suivant montre comment créer votre propre script worker sans dépendre d'une bibliothèque tierce :
 
@@ -129,6 +110,54 @@ docker run \
     dunglas/frankenphp
 ```
 
+### Utiliser PSR-15
+
+Si votre application utilise [PSR-15](https://www.php-fig.org/psr/psr-15/) plutôt que les superglobales, convertissez la requête et la réponse aux extrémités du handler avec [`nyholm/psr7`](https://github.com/Nyholm/psr7) et [`nyholm/psr7-server`](https://github.com/Nyholm/psr7-server) :
+
+```console
+composer require nyholm/psr7 nyholm/psr7-server psr/http-server-handler
+```
+
+```php
+<?php
+// public/index.php
+
+require __DIR__.'/vendor/autoload.php';
+
+use Nyholm\Psr7\Factory\Psr17Factory;
+use Nyholm\Psr7Server\ServerRequestCreator;
+
+$myApp = new \App\Kernel(); // implémente Psr\Http\Server\RequestHandlerInterface
+$myApp->boot();
+
+$psr17Factory = new Psr17Factory();
+$creator = new ServerRequestCreator(
+    $psr17Factory, // ServerRequestFactory
+    $psr17Factory, // UriFactory
+    $psr17Factory, // UploadedFileFactory
+    $psr17Factory, // StreamFactory
+);
+
+$handler = static function () use ($myApp, $creator) {
+    $response = $myApp->handle($creator->fromGlobals());
+
+    http_response_code($response->getStatusCode());
+    foreach ($response->getHeaders() as $name => $values) {
+        foreach ($values as $value) {
+            header("$name: $value", false);
+        }
+    }
+    echo $response->getBody();
+};
+
+$maxRequests = (int)($_SERVER['MAX_REQUESTS'] ?? 0);
+for ($nbRequests = 0; !$maxRequests || $nbRequests < $maxRequests; ++$nbRequests) {
+    $keepRunning = \frankenphp_handle_request($handler);
+    gc_collect_cycles();
+    if (!$keepRunning) break;
+}
+```
+
 ### Redémarrer le worker après un certain nombre de requêtes
 
 Comme PHP n'a pas été initialement conçu pour des processus de longue durée, de nombreuses bibliothèques et codes anciens présentent encore des fuites de mémoire.
@@ -187,3 +216,39 @@ $handler = static function () use ($workerServer) {
 
 // ...
 ```
+
+La plupart des superglobales (`$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, `$_SERVER`, `$_REQUEST`) sont automatiquement réinitialisées entre les requêtes.
+Cependant, **`$_ENV` n'est actuellement pas réinitialisée entre les requêtes**.
+Cela signifie que toute modification apportée à `$_ENV` pendant une requête persistera et sera visible par les requêtes suivantes traitées par le même thread worker.
+Évitez de stocker des données spécifiques à une requête ou sensibles dans `$_ENV`.
+
+## Persistance de l'état
+
+Comme le mode worker garde le processus PHP en vie entre les requêtes, l'état suivant persiste d'une requête à l'autre :
+
+- **Variables statiques** : les variables déclarées avec `static` dans des fonctions ou des méthodes conservent leur valeur entre les requêtes.
+- **Propriétés statiques de classe** : les propriétés statiques des classes persistent entre les requêtes.
+- **Variables globales** : les variables de la portée globale du script worker persistent entre les requêtes.
+- **Caches en mémoire** : toute donnée stockée en mémoire (tableaux, objets) en dehors du handler de requête persiste.
+- **Paramètres du moteur d'exécution** : les modifications effectuées avec `ini_set()`, `stream_context_set_default()`, `date_default_timezone_set()`, `chdir()`, `stream_wrapper_register()`, `set_error_handler()` ou `set_exception_handler()` restent en vigueur pour les requêtes suivantes. N'y stockez jamais de valeurs spécifiques à une requête ou à un utilisateur, comme des identifiants dans le contexte de flux par défaut : passez plutôt un contexte explicite à chaque appel.
+
+C'est voulu, et c'est ce qui rend le mode worker rapide. Cela demande toutefois de l'attention pour éviter des effets de bord indésirables :
+
+```php
+<?php
+function getCounter(): int {
+    static $count = 0;
+    return ++$count; // S'incrémente d'une requête à l'autre !
+}
+
+$handler = static function () {
+    echo getCounter(); // 1, 2, 3, ... pour chaque requête sur ce thread
+};
+
+while (\frankenphp_handle_request($handler)) {
+    // ...
+}
+```
+
+Lorsque vous écrivez des scripts workers, veillez à réinitialiser tout état spécifique à une requête entre les requêtes.
+Les frameworks comme [Symfony](symfony.md) et [Laravel Octane](laravel.md) se chargent de réinitialiser la plupart de l'état pour vous, mais vous devrez peut-être encore réinitialiser vos propres services. Avec Symfony, les services qui conservent un état spécifique à la requête doivent implémenter [`Symfony\Contracts\Service\ResetInterface`](https://github.com/symfony/contracts/blob/main/Service/ResetInterface.php) afin d'être réinitialisés par le kernel entre les requêtes.
