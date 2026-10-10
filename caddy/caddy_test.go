@@ -245,6 +245,35 @@ func TestModuleWorkerInheritsEnv(t *testing.T) {
 	tester.AssertGetResponse("http://localhost:"+testPort+"/worker-with-env.php", http.StatusOK, "Worker has APP_ENV=inherit_this")
 }
 
+func TestWorkerRetriesBootFailureByDefault(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "booted")
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+
+			frankenphp {
+				worker {
+					file ../testdata/worker-fail-first-boot.php
+					num 1
+					env BOOT_MARKER `+marker+`
+				}
+			}
+		}
+
+		http://localhost:`+testPort+` {
+			route {
+				php {
+					root ../testdata
+				}
+			}
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/worker-fail-first-boot.php", http.StatusOK, "booted after a failure")
+}
+
 func TestNamedModuleWorkers(t *testing.T) {
 	var wg sync.WaitGroup
 	testPortNum, _ := strconv.Atoi(testPort)
