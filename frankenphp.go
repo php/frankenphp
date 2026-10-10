@@ -392,7 +392,7 @@ func Init(options ...Option) error {
 		maxIdleTime = opt.maxIdleTime
 	}
 
-	registerServers(opt.servers)
+	ensureServersHaveNames(opt.servers)
 
 	workerThreadCount, err := calculateMaxThreads(opt)
 	if err != nil {
@@ -427,7 +427,7 @@ func Init(options ...Option) error {
 		}
 	}
 
-	mainThread, err := initPHPThreads(opt.numThreads, opt.maxThreads, opt.phpIni)
+	mThread, err := initPHPThreads(opt.numThreads, opt.maxThreads, opt.phpIni)
 	if err != nil {
 		shutdown()
 		return err
@@ -435,10 +435,11 @@ func Init(options ...Option) error {
 
 	regularThreads = make([]*phpThread, 0, opt.numThreads-workerThreadCount)
 	for range opt.numThreads - workerThreadCount {
-		convertToRegularThread(getInactivePHPThread())
+		convertToRegularThread(getInactivePHPThread(), mThread)
 	}
 
-	if err := initWorkers(opt.workers); err != nil {
+	mThread.workers, err = initWorkers(opt.workers)
+	if err != nil {
 		shutdown()
 
 		return err
@@ -449,10 +450,10 @@ func Init(options ...Option) error {
 		return err
 	}
 
-	initAutoScaling(mainThread)
+	initAutoScaling(mThread)
 
 	// only now that the workers and threads are up may requests reach a server
-	activateServers()
+	registerServers(mainThread, opt.servers)
 
 	if globalLogger.Enabled(globalCtx, slog.LevelInfo) {
 		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "FrankenPHP started 🐘", slog.String("php_version", Version().Version), slog.Int("total_threads", mainThread.numThreads), slog.Int("worker_threads", workerThreadCount), slog.Int("max_threads", mainThread.maxThreads), slog.Int("max_requests", maxRequestsPerThread))
@@ -471,6 +472,10 @@ func Init(options ...Option) error {
 		if w.onServerShutdown != nil {
 			onServerShutdown = append(onServerShutdown, w.onServerShutdown)
 		}
+	}
+
+	if oldMainThread != nil {
+		mainThread.reQueueRequests(oldMainThread)
 	}
 
 	return nil
@@ -496,7 +501,6 @@ func shutdown() {
 
 	drainWatchers()
 	drainPHPThreads()
-	unregisterServers()
 
 	metrics.Shutdown()
 
@@ -522,7 +526,7 @@ func ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) error 
 		return ErrInvalidRequest
 	}
 
-	return fallbackServer.ServeHTTP(responseWriter, request, opts...)
+	return mainThread.fallbackServer.ServeHTTP(responseWriter, request, opts...)
 }
 
 //export go_ub_write
@@ -964,7 +968,7 @@ func resetGlobals() {
 	workers = nil
 	workersByName = nil
 	globalWorkersByPath = nil
-	servers = nil
+	mainThread.servers = nil
 	watcherIsEnabled = false
 	maxIdleTime = defaultMaxIdleTime
 	maxRequestsPerThread = 0

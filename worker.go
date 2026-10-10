@@ -44,9 +44,9 @@ var (
 	startupFailChan     chan error
 )
 
-func initWorkers(opts []workerOpt) error {
+func initWorkers(opts []workerOpt) ([]*worker, error) {
 	if len(opts) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	var (
@@ -61,7 +61,7 @@ func initWorkers(opts []workerOpt) error {
 	for _, o := range opts {
 		w, err := newWorker(o)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		totalThreadsToStart += w.num
@@ -70,7 +70,7 @@ func initWorkers(opts []workerOpt) error {
 		if w.server == nil {
 			globalWorkersByPath[w.fileName] = w
 		} else if err := w.server.addWorker(w); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -92,13 +92,13 @@ func initWorkers(opts []workerOpt) error {
 	select {
 	case err := <-startupFailChan:
 		// at least 1 worker has failed, return an error
-		return fmt.Errorf("failed to initialize workers: %w", err)
+		return nil, fmt.Errorf("failed to initialize workers: %w", err)
 	default:
 		// all workers started successfully
 		startupFailChan = nil
 	}
 
-	return nil
+	return workers, nil
 }
 
 // resolveWorkerFile turns a declared filename into the path a worker runs,

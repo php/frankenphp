@@ -299,6 +299,9 @@ func withExtensionWorkers(w *extensionWorkers) WorkerOption {
 // After registering, it will be possible to call Server.ServeHTTP()
 func WithServer(s *Server) Option {
 	return func(o *opt) error {
+		if s.isRegistered.Load() {
+			return fmt.Errorf("cannot Init() with the same server twice: %s", s.name)
+		}
 		o.servers = append(o.servers, s)
 
 		return nil

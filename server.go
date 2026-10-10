@@ -23,17 +23,13 @@ type Server struct {
 	workers                   []*worker
 	workersByPath             map[string]*worker
 	workersWithRequestMatcher []*worker
+	regularRequestChan        chan *frankenPHPContext
 
 	// registered while FrankenPHP runs with this server; read by concurrent
 	// ServeHTTP calls while Init()/Shutdown() flip it, hence atomic
 	isRegistered atomic.Bool
 	logger       *slog.Logger
 }
-
-var (
-	servers        []*Server
-	fallbackServer = newFallbackServer()
-)
 
 func newFallbackServer() *Server {
 	s := &Server{
@@ -46,46 +42,26 @@ func newFallbackServer() *Server {
 	return s
 }
 
-// registerServers assigns the identity of every server and clears the workers of a previous run,
-// so the same *Server can be passed to Init() again after a Shutdown()
-// servers do not accept requests yet at this point, see activateServers()
-func registerServers(newServers []*Server) {
-	servers = newServers
-	fallbackServer.logger = globalLogger
-	fallbackServer.resetWorkers()
-
-	for i, s := range servers {
+// ensure that all servers have a name
+func ensureServersHaveNames(newServers []*Server) {
+	for i, s := range newServers {
 		s.idx = i
 		s.name = s.configuredName
 		if s.name == "" {
 			s.name = "server_" + strconv.Itoa(i)
 		}
-		s.resetWorkers()
 	}
 }
 
-// activateServers lets registered servers accept requests
-// it runs once workers and threads are up, so a request cannot reach a server before them
-func activateServers() {
-	fallbackServer.isRegistered.Store(true)
-	for _, s := range servers {
+// registerServers registers the servers with the main thread and lets them accept requests
+func registerServers(mthread *phpMainThread, newServers []*Server) {
+	mthread.servers = newServers
+	mthread.fallbackServer.regularRequestChan = mthread.regularRequestChan
+	mthread.fallbackServer.isRegistered.Store(true)
+	for _, s := range mthread.servers {
+		s.regularRequestChan = mthread.regularRequestChan
 		s.isRegistered.Store(true)
 	}
-}
-
-func unregisterServers() {
-	fallbackServer.isRegistered.Store(false)
-	for _, server := range servers {
-		server.isRegistered.Store(false)
-	}
-	servers = nil
-}
-
-// resetWorkers drops the workers of a previous run; initWorkers() adds them back
-func (s *Server) resetWorkers() {
-	s.workers = nil
-	s.workersByPath = make(map[string]*worker)
-	s.workersWithRequestMatcher = nil
 }
 
 // NewServer creates a Server that can be registered via WithServer().

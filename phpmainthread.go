@@ -20,17 +20,23 @@ import (
 // represents the main PHP thread
 // the thread needs to keep running as long as all other threads are running
 type phpMainThread struct {
-	state       *state.ThreadState
-	done        chan struct{}
-	numThreads  int
-	maxThreads  int
-	phpIni      map[string]string
-	isRebooting atomic.Bool
+	state              *state.ThreadState
+	done               chan struct{}
+	numThreads         int
+	maxThreads         int
+	phpIni             map[string]string
+	isRebooting        atomic.Bool
+	regularRequestChan chan *frankenPHPContext
+	workers            []*worker
+
+	fallbackServer *Server
+	servers        []*Server
 }
 
 var (
 	phpThreads    []*phpThread
 	mainThread    *phpMainThread
+	oldMainThread *phpMainThread
 	commonHeaders map[string]*C.zend_string
 
 	// timeouts to wait for threads to yield before arming force-kill
@@ -42,12 +48,16 @@ var (
 // a fixed number of inactive PHP threads
 // and reserves a fixed number of possible PHP threads
 func initPHPThreads(numThreads int, numMaxThreads int, phpIni map[string]string) (*phpMainThread, error) {
+	oldMainThread = mainThread
 	mainThread = &phpMainThread{
-		state:      state.NewThreadState(),
-		done:       make(chan struct{}),
-		numThreads: numThreads,
-		maxThreads: numMaxThreads,
-		phpIni:     phpIni,
+		state:              state.NewThreadState(),
+		done:               make(chan struct{}),
+		numThreads:         numThreads,
+		maxThreads:         numMaxThreads,
+		phpIni:             phpIni,
+		regularRequestChan: make(chan *frankenPHPContext),
+		fallbackServer:     newFallbackServer(),
+		servers:            []*Server{},
 	}
 
 	// initialize the first thread
@@ -243,6 +253,40 @@ func getInactivePHPThread() *phpThread {
 	}
 
 	return nil
+}
+
+func (newMainThread *phpMainThread) reQueueRequests(oldMainThread *phpMainThread) {
+	go func() {
+		for {
+			select {
+			case <-newMainThread.done:
+				return
+			case <-time.After(5 * time.Second):
+				return
+			case fc := <-oldMainThread.regularRequestChan:
+				newMainThread.regularRequestChan <- fc
+			}
+		}
+	}()
+
+	for _, oldWorker := range oldMainThread.workers {
+		for _, newWorker := range newMainThread.workers {
+			if oldWorker.name == newWorker.name {
+				go func() {
+					for {
+						select {
+						case <-newMainThread.done:
+							return
+						case <-time.After(5 * time.Second):
+							return
+						case fc := <-oldWorker.requestChan:
+							newWorker.requestChan <- fc
+						}
+					}
+				}()
+			}
+		}
+	}
 }
 
 //export go_frankenphp_main_thread_is_ready

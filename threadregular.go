@@ -20,19 +20,20 @@ type regularThread struct {
 	state        *state.ThreadState
 	thread       *phpThread
 	requestCount int
+	requestChan  chan *frankenPHPContext
 }
 
 var (
 	regularThreads       []*phpThread
 	regularThreadMu      = &sync.RWMutex{}
-	regularRequestChan   = make(chan *frankenPHPContext)
 	queuedRegularThreads = atomic.Int32{}
 )
 
-func convertToRegularThread(thread *phpThread) {
+func convertToRegularThread(thread *phpThread, mThread *phpMainThread) {
 	thread.setHandler(&regularThread{
-		thread: thread,
-		state:  thread.state,
+		thread:      thread,
+		state:       thread.state,
+		requestChan: mThread.regularRequestChan,
 	})
 	attachRegularThread(thread)
 }
@@ -105,7 +106,7 @@ func (handler *regularThread) waitForRequest() string {
 	case <-handler.thread.drainChan:
 		// go back to beforeScriptExecution
 		return handler.beforeScriptExecution()
-	case fc = <-regularRequestChan:
+	case fc = <-handler.requestChan:
 	case fc = <-handler.thread.requestChan:
 	}
 
@@ -153,7 +154,7 @@ func handleRequestWithRegularPHPThreads(fc *frankenPHPContext) error {
 
 	for {
 		select {
-		case regularRequestChan <- fc:
+		case fc.server.regularRequestChan <- fc:
 			queuedRegularThreads.Add(-1)
 			metrics.DequeuedRequest()
 
