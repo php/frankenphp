@@ -141,7 +141,7 @@ typedef struct {
 } frankenphp_server_ctx;
 static THREAD_LOCAL frankenphp_server_ctx frankenphp_local_server_ctx;
 
-static inline uintptr_t frankenphp_thread_index(void) {
+uintptr_t frankenphp_thread_index(void) {
   frankenphp_server_ctx *ctx = (frankenphp_server_ctx *)SG(server_context);
   /* Fall back to the OS thread's own TLS before
    * frankenphp_update_request_context(). */

@@ -221,4 +221,7 @@ typedef enum {
 
 void register_extensions(zend_module_entry **m, int len);
 
+// This function is exported for use by extensions, as proposed in PR #2305
+uintptr_t frankenphp_thread_index(void);
+
 #endif
