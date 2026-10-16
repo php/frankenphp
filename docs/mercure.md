@@ -41,6 +41,8 @@ php_server
 
 Access tokens must carry the identifier of the `issuer` they were signed by in their `iss` claim.
 `mercure_publish()` doesn't need any token: it publishes directly, in-process.
+The `publisher` block enables the POST endpoint of the hub, required to publish from outside the server, such as from [CLI commands](#publishing-from-cli-commands).
+Without it, the hub only accepts updates from `mercure_publish()`.
 
 > [!TIP]
 >
@@ -124,6 +126,19 @@ The returned string is the ID of the update, to be used as `Last-Event-ID` to re
 
 A `TypeError` is thrown when `$topics` is an array holding a value that isn't a string.
 A `RuntimeException` is thrown when no hub is configured, or when the hub fails to dispatch the update.
+
+#### Publishing from CLI commands
+
+`mercure_publish()` is only available in the web server and workers.
+`frankenphp php-cli` doesn't run the hub, so the function doesn't exist there.
+Commands, such as cron jobs or queue consumers, publish through the POST endpoint of the hub instead,
+using [`file_get_contents()`](#using-file_get_contents) or [the Symfony Mercure Component](#using-symfony-mercure).
+
+> [!WARNING]
+>
+> Be careful with feature detection: many frameworks, including Symfony and Laravel, run code in CLI to build the service container and warm up caches.
+> A `function_exists('mercure_publish')` call evaluated there returns `false`, and the cached result then disables `mercure_publish()` in the web server too.
+> Detect the function when publishing, not when building the container or the configuration.
 
 ### Using `file_get_contents()`
 
