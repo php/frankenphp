@@ -119,6 +119,7 @@ func (f *FrankenPHPApp) Provision(ctx caddy.Context) error {
 						break
 					}
 					if !bytes.Equal(caddyconfig.JSON(oldModule, nil), caddyconfig.JSON(f.modules[i], nil)) {
+						hasChanged = true
 						break
 					}
 				}

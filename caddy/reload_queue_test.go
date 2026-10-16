@@ -130,7 +130,7 @@ func testQueuedRequestSurvivesReload(t *testing.T, config string) {
 	}
 }
 
-func TestQueuedRequestRejectedWhenFrankenPHPConfigChanges(t *testing.T) {
+func TestQueuedRequestAreRejectedWhenFrankenPHPConfigChanges(t *testing.T) {
 	memoryLimit := 5000000 // ~5MB
 	initial := `
 		{
@@ -147,11 +147,9 @@ func TestQueuedRequestRejectedWhenFrankenPHPConfigChanges(t *testing.T) {
 		}
 
 		localhost:` + testPort + ` {
-			route {
-				root ../testdata
-				rewrite sleep.php
-				php
-			}
+			root ../testdata
+			rewrite sleep.php
+			php
 		}
 	`
 
@@ -179,6 +177,67 @@ func TestQueuedRequestRejectedWhenFrankenPHPConfigChanges(t *testing.T) {
 	require.Eventually(t, func() bool {
 		sleepMilliseconds++
 		changedCaddyConfig := strings.Replace(initial, strconv.Itoa(memoryLimit), strconv.Itoa(memoryLimit+sleepMilliseconds), 1)
+		doRequest("sleep=" + strconv.Itoa(sleepMilliseconds))
+		doRequest("sleep=" + strconv.Itoa(sleepMilliseconds))
+		reloadCaddyConfig(t, changedCaddyConfig)
+		return requestWasRejected.Load()
+	}, 10*time.Second, time.Millisecond, "no queued request was ever rejected")
+}
+
+func TestQueuedRequestsAreRejectedOnChangedModulePHPConfig(t *testing.T) {
+	requestBodyTimeout := 1000
+	initial := `
+		{
+			skip_install_trust
+			admin localhost:2999
+			http_port ` + testPort + `
+			metrics
+
+			frankenphp {
+				num_threads 1
+				max_threads 1
+			}
+		}
+
+		localhost:9163 {
+			root ../testdata
+			rewrite sleep.php
+			php
+		}
+
+		localhost:` + testPort + ` {
+			root ../testdata
+			rewrite sleep.php
+			php {
+				request_body_timeout ` + strconv.Itoa(requestBodyTimeout) + `ms
+			}
+		}
+	`
+
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, initial, "caddyfile")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	baseURL := "http://localhost:" + testPort + "/sleep.php"
+	requestWasRejected := atomic.Bool{}
+
+	doRequest := func(query string) {
+		go func() {
+			req, err := http.NewRequest(http.MethodGet, baseURL+"?"+query, nil)
+			require.NoError(t, err)
+			resp, err := client.Do(req)
+			require.NoError(t, err, "request must not error")
+			require.NoError(t, resp.Body.Close())
+			if resp.StatusCode != http.StatusOK {
+				requestWasRejected.Store(true)
+			}
+		}()
+	}
+
+	sleepMilliseconds := 0
+	require.Eventually(t, func() bool {
+		sleepMilliseconds++
+		changedCaddyConfig := strings.Replace(initial, strconv.Itoa(requestBodyTimeout), strconv.Itoa(requestBodyTimeout+sleepMilliseconds), 1)
 		doRequest("sleep=" + strconv.Itoa(sleepMilliseconds))
 		doRequest("sleep=" + strconv.Itoa(sleepMilliseconds))
 		reloadCaddyConfig(t, changedCaddyConfig)
