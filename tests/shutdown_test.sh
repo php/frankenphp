@@ -38,8 +38,8 @@ request() {
 	case "$error" in
 	0) printf '%s' "$status" ;;
 	7) printf 'closed' ;;
-	# An accepted connection can close while HTTP shutdown begins.
-	52 | 56) printf 'closing' ;;
+	# HTTP shutdown can drop a connection before curl sends (55), before any reply (52) or mid-read (56).
+	52 | 55 | 56) printf 'closing' ;;
 	*) printf 'error-%s' "$error" ;;
 	esac
 }
