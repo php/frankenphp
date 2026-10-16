@@ -87,7 +87,7 @@ func testQueuedRequestSurvivesReload(t *testing.T, config string) {
 			req, err := http.NewRequest(http.MethodGet, baseURL+"?"+query, nil)
 			require.NoError(t, err)
 			resp, err := client.Do(req)
-			require.NoError(t, err, "request must not be rejected")
+			require.NoError(t, err, "request must not error")
 			require.NoError(t, resp.Body.Close())
 			require.Equal(t, http.StatusOK, resp.StatusCode, "request must not be rejected")
 		}()
@@ -167,7 +167,7 @@ func TestQueuedRequestRejectedWhenFrankenPHPConfigChanges(t *testing.T) {
 			req, err := http.NewRequest(http.MethodGet, baseURL+"?"+query, nil)
 			require.NoError(t, err)
 			resp, err := client.Do(req)
-			require.NoError(t, err, "request must not be rejected")
+			require.NoError(t, err, "request must not error")
 			require.NoError(t, resp.Body.Close())
 			if resp.StatusCode != http.StatusOK {
 				requestWasRejected.Store(true)
