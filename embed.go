@@ -10,10 +10,8 @@ import (
 	"io/fs"
 	"log"
 	"os"
-	"path"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"time"
 )
 
@@ -75,11 +73,10 @@ func untar(dir string) (err error) {
 			// Ignore it.
 			continue
 		}
-		rel, err := nativeRelPath(f.Name)
-		if err != nil {
-			return fmt.Errorf("tar file contained invalid name %q: %v", f.Name, err)
+		if !filepath.IsLocal(f.Name) {
+			return fmt.Errorf("tar file contained invalid name %q", f.Name)
 		}
-		abs := filepath.Join(dir, rel)
+		abs := filepath.Join(dir, f.Name)
 
 		fi := f.FileInfo()
 		mode := fi.Mode()
@@ -154,43 +151,4 @@ func untar(dir string) (err error) {
 		}
 	}
 	return nil
-}
-
-// nativeRelPath verifies that p is a non-empty relative path
-// using either slashes or the buildlet's native path separator,
-// and returns it canonicalized to the native path separator.
-func nativeRelPath(p string) (string, error) {
-	if p == "" {
-		return "", errors.New("path not provided")
-	}
-
-	if filepath.Separator != '/' && strings.Contains(p, string(filepath.Separator)) {
-		clean := filepath.Clean(p)
-		if filepath.IsAbs(clean) {
-			return "", fmt.Errorf("path %q is not relative", p)
-		}
-		if clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-			return "", fmt.Errorf("path %q refers to a parent directory", p)
-		}
-		if strings.HasPrefix(p, string(filepath.Separator)) || filepath.VolumeName(clean) != "" {
-			// On Windows, this catches semi-relative paths like "C:" (meaning “the
-			// current working directory on volume C:”) and "\windows" (meaning “the
-			// windows subdirectory of the current drive letter”).
-			return "", fmt.Errorf("path %q is relative to volume", p)
-		}
-		return p, nil
-	}
-
-	clean := path.Clean(p)
-	if path.IsAbs(clean) {
-		return "", fmt.Errorf("path %q is not relative", p)
-	}
-	if clean == ".." || strings.HasPrefix(clean, "../") {
-		return "", fmt.Errorf("path %q refers to a parent directory", p)
-	}
-	canon := filepath.FromSlash(p)
-	if filepath.VolumeName(canon) != "" {
-		return "", fmt.Errorf("path %q begins with a native volume name", p)
-	}
-	return canon, nil
 }
