@@ -37,14 +37,10 @@ type worker struct {
 }
 
 var (
-	workers             []*worker
-	workersByName       map[string]*worker
-	globalWorkersByPath map[string]*worker
-	watcherIsEnabled    bool
-	startupFailChan     chan error
+	startupFailChan chan error
 )
 
-func initWorkers(opts []workerOpt) error {
+func initWorkers(opts []workerOpt, m *phpMainThread) error {
 	if len(opts) == 0 {
 		return nil
 	}
@@ -54,21 +50,17 @@ func initWorkers(opts []workerOpt) error {
 		totalThreadsToStart int
 	)
 
-	workers = make([]*worker, 0, len(opts))
-	workersByName = make(map[string]*worker, len(opts))
-	globalWorkersByPath = make(map[string]*worker, len(opts))
-
 	for _, o := range opts {
-		w, err := newWorker(o)
+		w, err := newWorker(o, m)
 		if err != nil {
 			return err
 		}
 
 		totalThreadsToStart += w.num
-		workers = append(workers, w)
-		workersByName[w.name] = w
+		m.workers = append(m.workers, w)
+		m.workersByName[w.name] = w
 		if w.server == nil {
-			globalWorkersByPath[w.fileName] = w
+			m.workersByPath[w.fileName] = w
 		} else if err := w.server.addWorker(w); err != nil {
 			return err
 		}
@@ -76,7 +68,7 @@ func initWorkers(opts []workerOpt) error {
 
 	startupFailChan = make(chan error, totalThreadsToStart)
 
-	for _, w := range workers {
+	for _, w := range m.workers {
 		for range w.num {
 			thread := getInactivePHPThread()
 			convertToWorkerThread(thread, w)
@@ -155,16 +147,16 @@ func checkWorkerDeclaration(o workerOpt, nameTaken func(string) bool, pathTaken 
 	return nil
 }
 
-func newWorker(o workerOpt) (*worker, error) {
+func newWorker(o workerOpt, m *phpMainThread) (*worker, error) {
 	o, err := resolveWorkerFile(o)
 	if err != nil {
 		return nil, err
 	}
 
-	nameTaken := func(name string) bool { return workersByName[name] != nil }
+	nameTaken := func(name string) bool { return m.workersByName[name] != nil }
 	pathTaken := func(server *Server, path string) bool {
 		if server == nil {
-			return globalWorkersByPath[path] != nil
+			return m.workersByPath[path] != nil
 		}
 
 		return server.workersByPath[path] != nil
@@ -230,7 +222,9 @@ func newWorker(o workerOpt) (*worker, error) {
 // full duration of the syscall.
 func RestartWorkers() {
 	if mainThread != nil {
+		startupMu.Lock()
 		mainThread.rebootAllThreads()
+		startupMu.Unlock()
 	}
 }
 
@@ -300,7 +294,7 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) error {
 	metrics.QueuedWorkerRequest(worker.name)
 
 	for {
-		workerScaleChan := scaleChan
+		workerScaleChan := fc.server.mainThread.scaleChan
 		if worker.isAtThreadLimit() {
 			workerScaleChan = nil // max_threads for this worker reached, do not attempt scaling
 		}
@@ -315,7 +309,7 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) error {
 			return nil
 		case workerScaleChan <- fc:
 			// the request has triggered scaling, continue to wait for a thread
-		case <-timeoutChan(time.Duration(maxWaitTime.Load())):
+		case <-timeoutChan(fc.server.mainThread.maxWaitTime):
 			// the request has timed out stalling
 			worker.queuedRequests.Add(-1)
 			metrics.DequeuedWorkerRequest(worker.name)

@@ -1,6 +1,7 @@
 package caddy
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -68,6 +69,7 @@ type FrankenPHPApp struct {
 	httpApp       *caddyhttp.App
 	hasStarted    atomic.Bool
 	started       chan any
+	shouldRequeue bool
 }
 
 var errIni = errors.New(`"php_ini" must be in the format: php_ini "<key>" "<value>"`)
@@ -100,6 +102,27 @@ func (f *FrankenPHPApp) Provision(ctx caddy.Context) error {
 		} else {
 			// the http module failed to provision due to invalid configuration
 			return fmt.Errorf("failed to provision caddy http: %w", err)
+		}
+	}
+
+	// if FrankenPHP was running previously and the configuration has not changed, instruct request re-queueing
+	if old := caddy.ActiveContext(); old.Context != nil {
+		if prev, err := old.AppIfConfigured("frankenphp"); err == nil && prev != nil {
+			if p, ok := prev.(*FrankenPHPApp); ok {
+				hasChanged := false
+				if !bytes.Equal(caddyconfig.JSON(p, nil), caddyconfig.JSON(f, nil)) {
+					hasChanged = true
+				}
+				for i, oldModule := range p.modules {
+					if i >= len(f.modules) {
+						break
+					}
+					if !bytes.Equal(caddyconfig.JSON(oldModule, nil), caddyconfig.JSON(f.modules[i], nil)) {
+						break
+					}
+				}
+				f.shouldRequeue = !hasChanged
+			}
 		}
 	}
 
@@ -138,6 +161,7 @@ func (f *FrankenPHPApp) collectOptions(repl *caddy.Replacer, keep bool) ([]frank
 		frankenphp.WithMaxWaitTime(f.MaxWaitTime),
 		frankenphp.WithMaxIdleTime(f.MaxIdleTime),
 		frankenphp.WithMaxRequests(f.MaxRequests),
+		frankenphp.WithRequestRequeueOnReload(f.shouldRequeue),
 	)
 
 	usedWorkerNames := make(map[string]bool, len(f.Workers))
@@ -158,7 +182,9 @@ func (f *FrankenPHPApp) collectOptions(repl *caddy.Replacer, keep bool) ([]frank
 		return nil, err
 	}
 
-	return append(opts, moduleOpts...), nil
+	opts = append(opts, moduleOpts...)
+
+	return opts, nil
 }
 
 func (f *FrankenPHPApp) Start() error {

@@ -26,17 +26,18 @@ type ServerOption func(*Server) error
 type opt struct {
 	hotReloadOpt
 
-	ctx         context.Context
-	numThreads  int
-	maxThreads  int
-	workers     []workerOpt
-	logger      *slog.Logger
-	metrics     Metrics
-	phpIni      map[string]string
-	maxWaitTime time.Duration
-	maxIdleTime time.Duration
-	maxRequests int
-	servers     []*Server
+	ctx           context.Context
+	numThreads    int
+	maxThreads    int
+	workers       []workerOpt
+	logger        *slog.Logger
+	metrics       Metrics
+	phpIni        map[string]string
+	maxWaitTime   time.Duration
+	maxIdleTime   time.Duration
+	maxRequests   int
+	servers       []*Server
+	shouldRequeue bool
 }
 
 type workerOpt struct {
@@ -176,6 +177,15 @@ func WithMaxIdleTime(maxIdleTime time.Duration) Option {
 	}
 }
 
+// WithRequestRequeueOnReload sets if requests should be queued on reload.
+func WithRequestRequeueOnReload(shouldRequeue bool) Option {
+	return func(o *opt) error {
+		o.shouldRequeue = shouldRequeue
+
+		return nil
+	}
+}
+
 // EXPERIMENTAL: WithMaxRequests sets the default max requests before restarting a PHP thread (0 = unlimited). Applies to regular and worker threads.
 func WithMaxRequests(maxRequests int) Option {
 	return func(o *opt) error {
@@ -299,6 +309,9 @@ func withExtensionWorkers(w *extensionWorkers) WorkerOption {
 // After registering, it will be possible to call Server.ServeHTTP()
 func WithServer(s *Server) Option {
 	return func(o *opt) error {
+		if s.isRegistered.Load() {
+			return fmt.Errorf("cannot Init() with the same server twice: %s", s.name)
+		}
 		o.servers = append(o.servers, s)
 
 		return nil

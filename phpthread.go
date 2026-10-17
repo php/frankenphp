@@ -25,6 +25,7 @@ type phpThread struct {
 	contextMu    sync.RWMutex
 	state        *state.ThreadState
 	requestCount atomic.Int64
+	mainThread   *phpMainThread
 	// forceKill holds &EG() pointers captured on the PHP thread itself.
 	// forceKillMu pairs with go_frankenphp_clear_force_kill_slot's write
 	// lock so a concurrent kill never dereferences pointers freed by
@@ -52,6 +53,7 @@ func newPHPThread(threadIndex int) *phpThread {
 		threadIndex: threadIndex,
 		requestChan: make(chan *frankenPHPContext),
 		state:       state.NewThreadState(),
+		mainThread:  mainThread,
 	}
 }
 
