@@ -137,6 +137,19 @@ func TestWorkerGetOpt(t *testing.T) {
 	assert.NotRegexp(t, buf.String(), "exit_status=[1-9]")
 }
 
+// Ending the worker loop right after a non-form POST must not free its Content-Type twice.
+func TestWorkerScriptEndsAfterNonFormPost(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		req := httptest.NewRequest("POST", fmt.Sprintf("http://example.com/worker-restart.php?i=%d", i), strings.NewReader("{}"))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		handler(w, req)
+
+		body, _ := io.ReadAll(w.Result().Body)
+		assert.Equal(t, fmt.Sprintf("Counter (%d)", i), string(body))
+	}, &testOptions{workerScript: "worker-restart.php", nbWorkers: 1, nbParallelRequests: 1, env: map[string]string{"EVERY": "1"}})
+}
+
 func TestWorkerCrashIsLoggedAboveDebugLevel(t *testing.T) {
 	logger, buf := newTestLogger(t)
 

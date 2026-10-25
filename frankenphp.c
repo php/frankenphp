@@ -569,6 +569,11 @@ static void frankenphp_worker_request_shutdown() {
   /* SAPI related shutdown (free stuff) */
   zend_try { sapi_deactivate(); }
   zend_end_try();
+  /* sapi_deactivate() frees these without clearing them (fixed in PHP 8.6),
+   * php_request_shutdown() would free them again when the worker script ends */
+  SG(request_info).content_type_dup = NULL;
+  SG(request_info).current_user = NULL;
+  SG(request_info).current_user_length = 0;
   frankenphp_free_request_context();
 
   zend_set_memory_limit(PG(memory_limit));
