@@ -24,6 +24,9 @@ set -o pipefail
 #   DEBUG_SYMBOLS is set (default: none)
 # - MIMALLOC: when set, use mimalloc as the allocator (default: none)
 # - OUTPUT_DIR: where to write the resulting binary (default: dist/)
+# - SPC: spc binary, or bin/spc of a static-php-cli checkout, to use (default: the nightly)
+# - SPC_REGISTRIES: comma-separated static-php-cli registries providing more
+#   extensions for PHP_EXTENSIONS (read by static-php-cli itself)
 # - RELEASE: [maintainer only] create a GitHub release if set to 1 (default: none)
 #
 # The libc to link against (Linux only) is selected with:
@@ -110,7 +113,7 @@ if type "brew" >/dev/null 2>&1; then
 fi
 
 # Fetch the spc binary if we don't have it yet, falling back to source
-spc="${DIST_DIR}/spc"
+spc="${SPC:-${DIST_DIR}/spc}"
 if [ ! -x "${spc}" ]; then
 	# the nightly endpoint occasionally answers 500, retry instead of failing the build
 	if curl -fsSL --retry 5 -o "${spc}" "https://dl.static-php.dev/v3/spc-bin/nightly/spc-${spc_os}-${spc_arch}"; then

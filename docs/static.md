@@ -80,6 +80,19 @@ docker run --rm -v "$PWD/output:/output" -e OUTPUT_DIR=/output -e SPC_LOGS_DIR=/
   dunglas/frankenphp:static-builder-musl
 ```
 
+### Third-party and private extensions
+
+Extensions that static-php-cli doesn't know about, including private ones shipped as
+prebuilt archives, can be provided by an [external static-php-cli registry](https://static-php.dev/en/develop/registry).
+Point `SPC_REGISTRIES` to its declaration file and add the extension to `PHP_EXTENSIONS`:
+
+```console
+SPC_REGISTRIES=/path/to/spc.registry.yml PHP_EXTENSIONS=opcache,my_extension ./build-static.sh
+```
+
+To use a static-php-cli version other than the nightly binary, for instance a checkout of its
+source, set `SPC` to the `spc` binary or to the `bin/spc` script of the checkout.
+
 ### Extra Caddy modules
 
 To add extra Caddy modules or pass other arguments to [xcaddy](https://github.com/caddyserver/xcaddy), use the `XCADDY_ARGS` variable:
