@@ -633,33 +633,3 @@ func FuzzSplitPosEquivalent(f *testing.F) {
 		}
 	})
 }
-
-func BenchmarkSplitPos(b *testing.B) {
-	cases := []struct {
-		name, path string
-		markers    []string
-	}{
-		{"short", "/index.php", []string{".php"}},
-		{"long", "/some/long/application/public/directory/routes/controller/index.php/path/info", []string{".php"}},
-		{"no_match", "/some/long/application/public/directory/assets/styles/main.css", []string{".php"}},
-		{"uppercase", "/INDEX.PHP/path", []string{".php"}},
-		{"many_dots", "/" + strings.Repeat(".", 64) + "/index.php", []string{".php"}},
-		{"partial_matches", "/" + strings.Repeat(".phx/", 16) + "index.php", []string{".php"}},
-		{"invalid_first", "/a.php.txt/b.php", []string{".php"}},
-		{"second_marker", "/index.phtml/info", []string{".php", ".phtml"}},
-		{"letter_prefix", "/INDEX.PHP/path", []string{"php"}},
-		{"unicode_path", "/приложение/публичный/index.PHP/info", []string{".php"}},
-		{"empty_path", "", []string{".php"}},
-		{"empty_markers", "/index.php", nil},
-	}
-	for _, tt := range cases {
-		b.Run(tt.name, func(b *testing.B) {
-			b.ReportAllocs()
-			for b.Loop() {
-				benchmarkSplitPosResult = splitPos(tt.path, tt.markers)
-			}
-		})
-	}
-}
-
-var benchmarkSplitPosResult int

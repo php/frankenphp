@@ -239,12 +239,12 @@ func splitPos(path string, splitPath []string) int {
 		return 0
 	}
 	for _, split := range splitPath {
-		n := len(split)
-		if n == 0 || n > len(path) {
+		splitLen := len(split)
+		if splitLen == 0 || splitLen > len(path) {
 			continue
 		}
 		first, mask := split[0], foldMask(split[0])
-		last := len(path) - n
+		last := len(path) - splitLen
 		i := 0
 		if mask == 0 {
 			if i = strings.IndexByte(path[:last+1], first); i < 0 {
@@ -252,13 +252,13 @@ func splitPos(path string, splitPath []string) int {
 			}
 		}
 		for ; i <= last; i++ {
-			if path[i]|mask != first || !hasFoldedPrefix(path[i+1:i+n], split[1:]) {
+			if path[i]|mask != first || !hasFoldedPrefix(path[i+1:i+splitLen], split[1:]) {
 				continue
 			}
-			if pos := i + n; pos == len(path) || path[pos] == '/' {
+			if pos := i + splitLen; pos == len(path) || path[pos] == '/' {
 				return pos
 			}
-			// Stop at the first occurrence to match Caddy's file matcher.
+			// Reject an embedded match (e.g. /a.php.txt/b.php) without trying later occurrences.
 			break
 		}
 	}
