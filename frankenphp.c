@@ -896,9 +896,16 @@ PHP_FUNCTION(frankenphp_handle_request) {
 
   struct go_frankenphp_worker_handle_request_start_return result =
       go_frankenphp_worker_handle_request_start(thread_index);
-  if (frankenphp_worker_request_startup() == FAILURE
-      /* Shutting down */
-      || !result.r0) {
+  /* Startup also runs when shutting down, to keep sapi_activate() and
+   * sapi_deactivate() balanced for the code after the worker loop */
+  if (frankenphp_worker_request_startup() == FAILURE) {
+    /* The engine can't run userland code after a caught bailout, end the
+     * script so the pending request gets closed */
+    zend_bailout();
+  }
+
+  if (!result.r0) {
+    /* Shutting down */
     RETURN_FALSE;
   }
 
