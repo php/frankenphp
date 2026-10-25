@@ -128,11 +128,16 @@ HashTable *main_thread_env = NULL;
 
 static THREAD_LOCAL uintptr_t thread_index;
 static THREAD_LOCAL bool is_worker_thread = false;
+/* putenv() overrides layered over the other env tables, an IS_NULL entry
+ * unsets the variable */
 static THREAD_LOCAL HashTable *sandboxed_env = NULL;
 /* prepared_env holds entries from php(_server)'s `env KEY VAL`, exposed to
  * getenv() and merged into $_ENV when 'E' is in variables_order. Separate from
- * putenv() so those don't leak into $_ENV. */
+ * putenv() so those don't leak into $_ENV. Released after each worker request
+ * so its entries don't leak into the next one. */
 static THREAD_LOCAL HashTable *prepared_env = NULL;
+/* prepared_env of the worker script boot, kept for all its requests */
+static THREAD_LOCAL HashTable *worker_env = NULL;
 
 /* Published via SG(server_context) so ext-parallel children, which inherit
  * the parent's SG(server_context), can route SAPI callbacks back to the
@@ -595,6 +600,11 @@ static void frankenphp_worker_request_shutdown() {
   }
   frankenphp_free_request_context();
 
+  if (prepared_env != NULL) {
+    zend_hash_release(prepared_env);
+    prepared_env = NULL;
+  }
+
   zend_set_memory_limit(PG(memory_limit));
 }
 
@@ -604,22 +614,33 @@ bool frankenphp_shutdown_dummy_request(void) {
     return false;
   }
 
+  worker_env = prepared_env;
+  prepared_env = NULL;
   frankenphp_worker_request_shutdown();
 
   return true;
 }
 
-void get_full_env(zval *track_vars_array) {
-  size_t total = zend_hash_num_elements(main_thread_env);
-  if (prepared_env != NULL) {
-    // perf: doesn't matter if we get the exact count, just >= needed
-    total += zend_hash_num_elements(prepared_env);
+/* Copies worker_env then prepared_env into ht, the latter wins */
+static void frankenphp_copy_prepared_env(HashTable *ht) {
+  if (worker_env != NULL) {
+    zend_hash_copy(ht, worker_env, (copy_ctor_func_t)zval_add_ref);
   }
-  zend_hash_extend(Z_ARR_P(track_vars_array), total, 0);
-  zend_hash_copy(Z_ARR_P(track_vars_array), main_thread_env, NULL);
   if (prepared_env != NULL) {
-    zend_hash_copy(Z_ARR_P(track_vars_array), prepared_env,
-                   (copy_ctor_func_t)zval_add_ref);
+    zend_hash_copy(ht, prepared_env, (copy_ctor_func_t)zval_add_ref);
+  }
+}
+
+void get_full_env(zval *track_vars_array) {
+  HashTable *ht = Z_ARR_P(track_vars_array);
+  zend_hash_extend(ht, zend_hash_num_elements(main_thread_env), 0);
+  zend_hash_copy(ht, main_thread_env, NULL);
+
+  /* $_ENV outlives worker requests, it must not capture the env of the
+   * request that first used it */
+  HashTable *env = worker_env != NULL ? worker_env : prepared_env;
+  if (env != NULL) {
+    zend_hash_copy(ht, env, (copy_ctor_func_t)zval_add_ref);
   }
 }
 
@@ -728,14 +749,7 @@ PHP_FUNCTION(frankenphp_putenv) {
   }
 
   if (sandboxed_env == NULL) {
-    sandboxed_env = zend_array_dup(main_thread_env);
-    /* prepared_env overrides the OS env and putenv() overrides both, so layer
-     * the prepared vars onto the dup before sandboxed_env starts shadowing the
-     * other two layers in getenv(). */
-    if (prepared_env != NULL) {
-      zend_hash_copy(sandboxed_env, prepared_env,
-                     (copy_ctor_func_t)zval_add_ref);
-    }
+    sandboxed_env = zend_new_array(0);
   }
 
   /* cut at null byte to stay consistent with regular putenv */
@@ -749,7 +763,9 @@ PHP_FUNCTION(frankenphp_putenv) {
 
   /* no '=' found, delete the variable */
   if (eq_pos == NULL) {
-    zend_hash_str_del(sandboxed_env, setting, setting_len);
+    zval unset;
+    ZVAL_NULL(&unset);
+    zend_hash_str_update(sandboxed_env, setting, setting_len, &unset);
 
     RETURN_TRUE;
   }
@@ -764,33 +780,40 @@ PHP_FUNCTION(frankenphp_putenv) {
   RETURN_TRUE;
 } /* }}} */
 
-/* getenv() lookup: sandboxed_env if present (it already holds prepared + OS),
- * otherwise prepared_env then main_thread_env. */
+/* getenv() lookup, the first layer holding the name wins. Returns an IS_NULL
+ * zval for a variable unset by putenv(). */
 static inline zval *frankenphp_lookup_env(const char *name, size_t name_len) {
-  if (sandboxed_env != NULL) {
-    return zend_hash_str_find(sandboxed_env, name, name_len);
+  HashTable *layers[] = {sandboxed_env, prepared_env, worker_env,
+                         main_thread_env};
+  for (size_t i = 0; i < sizeof(layers) / sizeof(layers[0]); i++) {
+    if (layers[i] != NULL) {
+      zval *env_val = zend_hash_str_find(layers[i], name, name_len);
+      if (env_val != NULL) {
+        return env_val;
+      }
+    }
   }
 
-  zval *env_val = NULL;
-  if (prepared_env != NULL) {
-    env_val = zend_hash_str_find(prepared_env, name, name_len);
-  }
-  if (env_val == NULL) {
-    env_val = zend_hash_str_find(main_thread_env, name, name_len);
-  }
-
-  return env_val;
+  return NULL;
 }
 
 /* Returns a fresh copy of the full environment, merging the layers above. */
 static inline HashTable *frankenphp_dup_env(void) {
-  if (sandboxed_env != NULL) {
-    return zend_array_dup(sandboxed_env);
-  }
-
   HashTable *env = zend_array_dup(main_thread_env);
-  if (prepared_env != NULL) {
-    zend_hash_copy(env, prepared_env, (copy_ctor_func_t)zval_add_ref);
+  frankenphp_copy_prepared_env(env);
+
+  if (sandboxed_env != NULL) {
+    zend_string *key;
+    zval *val;
+    ZEND_HASH_FOREACH_STR_KEY_VAL(sandboxed_env, key, val) {
+      if (Z_TYPE_P(val) == IS_NULL) {
+        zend_hash_del(env, key);
+      } else {
+        Z_TRY_ADDREF_P(val);
+        zend_hash_update(env, key, val);
+      }
+    }
+    ZEND_HASH_FOREACH_END();
   }
 
   return env;
@@ -1467,10 +1490,7 @@ void frankenphp_register_server_vars(zval *track_vars_array,
 }
 
 void frankenphp_merge_with_prepared_env(zval *track_vars_array) {
-  if (prepared_env != NULL) {
-    HashTable *ht = Z_ARRVAL_P(track_vars_array);
-    zend_hash_copy(ht, prepared_env, (copy_ctor_func_t)zval_add_ref);
-  }
+  frankenphp_copy_prepared_env(Z_ARRVAL_P(track_vars_array));
 }
 
 /** Create an immutable zend_string that lasts for the whole process **/
@@ -1654,6 +1674,10 @@ static inline void reset_sandboxed_environment() {
   if (prepared_env != NULL) {
     zend_hash_release(prepared_env);
     prepared_env = NULL;
+  }
+  if (worker_env != NULL) {
+    zend_hash_release(worker_env);
+    worker_env = NULL;
   }
 }
 

@@ -16,6 +16,7 @@ import (
 
 	"github.com/dunglas/frankenphp"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestWorker(t *testing.T) {
@@ -268,6 +269,29 @@ func TestKeepRunningOnConnectionAbort(t *testing.T) {
 
 		assert.Equal(t, "requests:2", body2, "should not have stopped execution after the first request was aborted")
 	}, &testOptions{workerScript: "worker-with-counter.php", nbWorkers: 1, nbParallelRequests: 1})
+}
+
+// Per-request env must not leak into later requests on the same worker thread, even after putenv().
+func TestWorkerRequestEnvDoesNotLeak(t *testing.T) {
+	runTest(t, func(_ func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		serve := func(query string, env map[string]string) string {
+			r := httptest.NewRequest("GET", "http://example.com/worker-request-env.php?"+query, nil)
+			req, err := frankenphp.NewRequestWithContext(r, frankenphp.WithRequestDocumentRoot(testDataDir, false), frankenphp.WithRequestEnv(env))
+			require.NoError(t, err)
+
+			w := httptest.NewRecorder()
+			require.NoError(t, frankenphp.ServeHTTP(w, req))
+			body, _ := io.ReadAll(w.Result().Body)
+
+			return string(body)
+		}
+
+		assert.JSONEq(t, `{"server":"a","secret":"a","other":"a","worker":"bar","put":false,"all":true,"env":false}`, serve("", map[string]string{"SECRET": "a", "OTHER": "a"}))
+		assert.JSONEq(t, `{"server":false,"secret":false,"other":"b","worker":"bar","put":false,"all":false,"env":false}`, serve("", map[string]string{"OTHER": "b"}))
+		assert.JSONEq(t, `{"server":false,"secret":false,"other":false,"worker":"bar","put":false,"all":false,"env":false}`, serve("", nil))
+		assert.JSONEq(t, `{"server":"c","secret":"c","other":"c","worker":"bar","put":"1","all":true,"env":false}`, serve("put=1", map[string]string{"SECRET": "c", "OTHER": "c"}))
+		assert.JSONEq(t, `{"server":false,"secret":false,"other":"d","worker":"bar","put":"1","all":false,"env":false}`, serve("", map[string]string{"OTHER": "d"}))
+	}, &testOptions{workerScript: "worker-request-env.php", nbWorkers: 1, nbParallelRequests: 1, env: map[string]string{"FOO": "bar"}, phpIni: map[string]string{"variables_order": "EGPCS"}})
 }
 
 // TestWorkerMaxRequests verifies that a worker restarts after reaching max_requests.

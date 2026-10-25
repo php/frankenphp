@@ -173,7 +173,7 @@ func go_register_server_variables(threadIndex C.uintptr_t, trackVarsArray *C.zva
 	fc := thread.handler.frankenPHPContext()
 
 	if fc.request == nil {
-		// go_update_request_info() never ran, the thread-local prepared env still holds the previous request
+		// go_update_request_info() never ran
 		return
 	}
 
