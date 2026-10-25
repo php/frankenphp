@@ -7,6 +7,7 @@
 #include <ext/spl/spl_exceptions.h>
 #include <ext/standard/head.h>
 #include <ext/standard/info.h>
+#include <ext/standard/php_fopen_wrappers.h>
 #ifdef HAVE_PHP_SESSION
 #include <ext/session/php_session.h>
 #endif
@@ -442,26 +443,37 @@ static void frankenphp_reset_super_globals() {
   ZEND_HASH_FOREACH_END();
 }
 
-/*
- * free php_stream resources that are temporary (php_stream_temp_ops)
- * streams are globally registered in EG(regular_list), see zend_list.c
- * this fixes a leak when reading the body of a request
- */
-static void frankenphp_release_temporary_streams() {
-  zend_resource *val;
-  int stream_type = php_file_le_stream();
-  ZEND_HASH_FOREACH_PTR(&EG(regular_list), val) {
-    /* verify the resource is a stream */
-    if (val->type == stream_type) {
-      php_stream *stream = (php_stream *)val->ptr;
-      if (stream != NULL && stream->ops == &php_stream_temp_ops &&
-          stream->__exposed == 0 && GC_REFCOUNT(val) == 1) {
-        ZEND_ASSERT(!stream->is_persistent);
-        zend_list_delete(val);
-      }
+/* Mirrors php_stream_input_t from ext/standard/php_fopen_wrapper.c */
+typedef struct {
+  php_stream *body;
+  zend_off_t position;
+} frankenphp_stream_input;
+
+/* Matches the body by address: userland may already have closed and freed it.
+ * A php://input stream kept by the application reads it through a raw
+ * pointer, the body then lives as long as the worker script. */
+static void frankenphp_release_request_body(php_stream *request_body) {
+  zend_resource *body_res = NULL;
+  zend_resource *res;
+  ZEND_HASH_FOREACH_PTR(&EG(regular_list), res) {
+    if (res->type != php_file_le_stream()) {
+      continue;
+    }
+    php_stream *stream = (php_stream *)res->ptr;
+    if (stream == request_body) {
+      body_res = res;
+    } else if (stream->wrapper == &php_stream_php_wrapper &&
+               strcmp(stream->ops->label, "Input") == 0 &&
+               ((frankenphp_stream_input *)stream->abstract)->body ==
+                   request_body) {
+      return;
     }
   }
   ZEND_HASH_FOREACH_END();
+
+  if (body_res != NULL) {
+    zend_list_delete(body_res);
+  }
 }
 
 #ifdef HAVE_PHP_SESSION
@@ -566,6 +578,10 @@ static void frankenphp_worker_request_shutdown() {
   zend_try { php_output_deactivate(); }
   zend_end_try();
 
+  /* sapi_deactivate() drops the request body stream without closing it, it
+   * would otherwise stay open until the worker script ends */
+  php_stream *request_body = SG(request_info).request_body;
+
   /* SAPI related shutdown (free stuff) */
   zend_try { sapi_deactivate(); }
   zend_end_try();
@@ -574,6 +590,9 @@ static void frankenphp_worker_request_shutdown() {
   SG(request_info).content_type_dup = NULL;
   SG(request_info).current_user = NULL;
   SG(request_info).current_user_length = 0;
+  if (request_body != NULL) {
+    frankenphp_release_request_body(request_body);
+  }
   frankenphp_free_request_context();
 
   zend_set_memory_limit(PG(memory_limit));
@@ -611,7 +630,6 @@ static int frankenphp_worker_request_startup() {
   frankenphp_update_request_context();
 
   zend_try {
-    frankenphp_release_temporary_streams();
     php_output_activate();
 
     /* initialize global variables */

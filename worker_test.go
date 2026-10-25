@@ -192,6 +192,54 @@ func ExampleServeHTTP_workers() {
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
+// Request bodies must be released between requests without freeing temp streams the application still holds.
+func TestWorkerTemporaryStreams(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		var first string
+		for i := range 5 {
+			req := httptest.NewRequest("POST", "http://example.com/worker-temp-streams.php", strings.NewReader("body"))
+			req.Header.Set("Content-Type", "text/plain")
+			w := httptest.NewRecorder()
+			handler(w, req)
+
+			body, _ := io.ReadAll(w.Result().Body)
+			assert.True(t, strings.HasPrefix(string(body), "hello "), string(body))
+			if i == 0 {
+				first = string(body)
+			}
+			assert.Equal(t, first, string(body), "streams leaked across requests")
+		}
+	}, &testOptions{workerScript: "worker-temp-streams.php", nbWorkers: 1, nbParallelRequests: 1})
+}
+
+// A php://input handle kept across requests must keep reading the body it was opened on.
+func TestWorkerKeptInputStream(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		for i, expected := range []string{"body0", "body0", "body0"} {
+			req := httptest.NewRequest("POST", "http://example.com/worker-input-stream.php", strings.NewReader(fmt.Sprintf("body%d", i)))
+			req.Header.Set("Content-Type", "text/plain")
+			w := httptest.NewRecorder()
+			handler(w, req)
+
+			body, _ := io.ReadAll(w.Result().Body)
+			assert.Equal(t, expected, string(body))
+		}
+	}, &testOptions{workerScript: "worker-input-stream.php", nbWorkers: 1, nbParallelRequests: 1})
+}
+
+// A request body closed by the application must not be released a second time.
+func TestWorkerClosedRequestBody(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		req := httptest.NewRequest("POST", "http://example.com/worker-input-stream.php?close=1", strings.NewReader(fmt.Sprintf("body%d", i)))
+		req.Header.Set("Content-Type", "text/plain")
+		w := httptest.NewRecorder()
+		handler(w, req)
+
+		body, _ := io.ReadAll(w.Result().Body)
+		assert.Equal(t, fmt.Sprintf("body%d", i), string(body))
+	}, &testOptions{workerScript: "worker-input-stream.php", nbWorkers: 1, nbParallelRequests: 1})
+}
+
 func TestWorkerHasOSEnvironmentVariableInSERVER(t *testing.T) {
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
 		req := httptest.NewRequest("GET", "http://example.com/worker.php", nil)
