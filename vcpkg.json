@@ -1,10 +1,4 @@
 {
   "dependencies": ["brotli", "pthreads"],
-  "vcpkg-configuration": {
-    "default-registry": {
-      "kind": "git",
-      "repository": "https://github.com/microsoft/vcpkg",
-      "baseline": "817892b0ecbc6af994dd6df999c73faf795adbf2"
-    }
-  }
+  "builtin-baseline": "817892b0ecbc6af994dd6df999c73faf795adbf2"
 }

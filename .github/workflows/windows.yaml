@@ -94,6 +94,15 @@ jobs:
           key: vcpkg-${{ runner.os }}-${{ steps.image.outputs.version }}-${{ hashFiles('frankenphp/vcpkg.json') }}
           restore-keys: vcpkg-${{ runner.os }}-
 
+      # The runner's preinstalled vcpkg lags behind; port scripts must match the baseline
+      - name: Sync Vcpkg With Baseline
+        working-directory: frankenphp
+        run: |
+          $baseline = (Get-Content vcpkg.json | ConvertFrom-Json).'builtin-baseline'
+          git -C $env:VCPKG_INSTALLATION_ROOT fetch --quiet origin $baseline
+          git -C $env:VCPKG_INSTALLATION_ROOT checkout --quiet $baseline
+          & "$env:VCPKG_INSTALLATION_ROOT\bootstrap-vcpkg.bat" -disableMetrics
+
       - name: Install Vcpkg Libraries
         working-directory: frankenphp
         run: "vcpkg install"
