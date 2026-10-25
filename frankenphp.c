@@ -3,8 +3,10 @@
 #include <Zend/zend_alloc.h>
 #include <Zend/zend_exceptions.h>
 #include <Zend/zend_interfaces.h>
+#include <Zend/zend_smart_str.h>
 #include <errno.h>
 #include <ext/spl/spl_exceptions.h>
+#include <ext/standard/basic_functions.h>
 #include <ext/standard/head.h>
 #include <ext/standard/info.h>
 #include <ext/standard/php_fopen_wrappers.h>
@@ -543,6 +545,12 @@ static void frankenphp_reset_last_errors(void) {
   PG(last_error_type) = 0;
   PG(last_error_lineno) = 0;
 
+#if PHP_VERSION_ID >= 80400
+  /* http_get_last_response_headers() */
+  zval_ptr_dtor(&BG(last_http_headers));
+  ZVAL_UNDEF(&BG(last_http_headers));
+#endif
+
   /* Called by name to avoid depending on libxml2 headers */
   zend_function *libxml_clear_errors = zend_hash_str_find_ptr(
       CG(function_table), ZEND_STRL("libxml_clear_errors"));
@@ -550,6 +558,32 @@ static void frankenphp_reset_last_errors(void) {
     zend_call_known_function(libxml_clear_errors, NULL, NULL, NULL, 0, NULL,
                              NULL);
   }
+}
+
+/* Adapted from the url_scanner RSHUTDOWN, which isn't exported */
+static void frankenphp_reset_url_scanner(url_adapt_state_ex_t *ctx) {
+  smart_str_free(&ctx->result);
+  smart_str_free(&ctx->buf);
+  smart_str_free(&ctx->tag);
+  smart_str_free(&ctx->arg);
+  smart_str_free(&ctx->attr_val);
+  smart_str_free(&ctx->form_app);
+  smart_str_free(&ctx->url_app);
+  ctx->active = 0;
+  ctx->tag_type = 0;
+  ctx->attr_type = 0;
+}
+
+/* Request state of the standard extension, freed by its RSHUTDOWN */
+static void frankenphp_reset_basic_state(void) {
+  if (BG(strtok_string)) {
+    zend_string_release(BG(strtok_string));
+    BG(strtok_string) = NULL;
+  }
+
+  /* output_add_rewrite_var() and session.use_trans_sid */
+  frankenphp_reset_url_scanner(&BG(url_adapt_session_ex));
+  frankenphp_reset_url_scanner(&BG(url_adapt_output_ex));
 }
 
 static frankenphp_thread_metrics *thread_metrics = NULL;
@@ -582,6 +616,7 @@ static void frankenphp_worker_request_shutdown() {
    * etc.) */
   zend_try { php_output_deactivate(); }
   zend_end_try();
+  frankenphp_reset_basic_state();
 
   /* sapi_deactivate() drops the request body stream without closing it, it
    * would otherwise stay open until the worker script ends */
