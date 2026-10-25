@@ -853,6 +853,16 @@ func TestPutenvDoesNotLeakToOSEnvironment(t *testing.T) {
 	}, &testOptions{nbParallelRequests: 1})
 }
 
+// putenv() in a shutdown function must not leave the next script on the thread a freed sandbox.
+func TestPutenvInShutdownFunction(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		for range 3 {
+			body, _ := testGet("http://example.com/env/putenv-in-shutdown.php?put=1", handler, t)
+			assert.Equal(t, "false", body)
+		}
+	}, &testOptions{nbParallelRequests: 1, initOpts: []frankenphp.Option{frankenphp.WithNumThreads(1)}})
+}
+
 // TODO: should it actually get reset in worker mode?
 func TestEnvIsNotResetInWorkerMode(t *testing.T) {
 	assert.NoError(t, os.Setenv("index", ""))

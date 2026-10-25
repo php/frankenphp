@@ -1729,6 +1729,9 @@ static void *php_thread(void *arg) {
 
       /* shutdown the request, potential bailout to zend_catch */
       php_request_shutdown((void *)0);
+      /* a putenv() from a shutdown function or destructor created a new
+       * sandbox on the request heap, which php_request_shutdown() just freed */
+      sandboxed_env = NULL;
       frankenphp_free_request_context();
       go_frankenphp_after_script_execution(thread_index, EG(exit_status));
     }
@@ -1749,6 +1752,7 @@ static void *php_thread(void *arg) {
       zend_try { php_request_shutdown((void *)0); }
       zend_catch {}
       zend_end_try();
+      sandboxed_env = NULL;
     }
 
     /* Log the last error message, it must be cleared to prevent a crash when
