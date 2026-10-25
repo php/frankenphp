@@ -97,6 +97,20 @@ In this example, we add the [Souin](https://souin.io) HTTP cache module for Cadd
 > The cbrotli, Mercure, and Vulcain modules are included by default if `XCADDY_ARGS` is empty or not set.
 > If you customize the value of `XCADDY_ARGS`, you must include them explicitly if you want them to be included.
 
+### Go build flags
+
+To pass extra flags to the Go build, use the `GO_BUILD_FLAGS`, `GO_LDFLAGS` (linker flags, without double quotes) and `GO_TAGS` (comma-separated build tags) variables.
+Linker flags and tags are merged with the ones FrankenPHP needs:
+
+```console
+docker run --rm -v "$PWD/output:/output" -e OUTPUT_DIR=/output -e SPC_LOGS_DIR=/output/log \
+  -e GO_BUILD_FLAGS=-trimpath \
+  -e GO_LDFLAGS="-X github.com/dunglas/frankenphp.EmbeddedAppPath=/opt/my-app" \
+  dunglas/frankenphp:static-builder-musl
+```
+
+These variables are applied by static-php-cli (`SPC_CMD_VAR_FRANKENPHP_GO_*`), older versions ignore them.
+
 See also how to [customize the FrankenPHP static build](#customizing-the-frankenphp-static-build)
 
 ### GitHub token

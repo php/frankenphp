@@ -30,6 +30,9 @@ download-options:
 
 extra-env:
   SPC_CMD_VAR_FRANKENPHP_XCADDY_MODULES: "--with github.com/dunglas/caddy-cbrotli --with github.com/dunglas/mercure/caddy --with github.com/dunglas/vulcain/caddy"
+  SPC_CMD_VAR_FRANKENPHP_GO_BUILD_FLAGS: ""
+  SPC_CMD_VAR_FRANKENPHP_GO_LDFLAGS: ""
+  SPC_CMD_VAR_FRANKENPHP_GO_TAGS: ""
   EXTENSION_DIR: "/usr/lib/frankenphp/modules"
   OPENSSLDIR: "/etc/ssl"
 

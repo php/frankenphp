@@ -16,6 +16,9 @@ set -o pipefail
 # - PHP_EXTENSIONS: comma-separated extensions (default: the list in craft.yml)
 # - PHP_EXTENSION_LIBS: comma-separated extra libraries (default: the list in craft.yml)
 # - XCADDY_ARGS: extra Caddy modules to pass to xcaddy (default: the list in craft.yml)
+# - GO_BUILD_FLAGS: extra flags to pass to go build (default: none)
+# - GO_LDFLAGS: extra Go linker flags, without double quotes (default: none)
+# - GO_TAGS: extra comma-separated Go build tags (default: none)
 # - FRANKENPHP_VERSION: FrankenPHP version (default: current Git commit)
 # - EMBED: path to the PHP app to embed (default: none)
 # - CLEAN: when set, rebuild everything from scratch (default: none)
@@ -212,6 +215,15 @@ while IFS= read -r line || [ -n "${line}" ]; do
 		;;
 	*"SPC_CMD_VAR_FRANKENPHP_XCADDY_MODULES:"*)
 		[ -n "${XCADDY_ARGS}" ] && line="  SPC_CMD_VAR_FRANKENPHP_XCADDY_MODULES: \"${XCADDY_ARGS}\""
+		;;
+	*"SPC_CMD_VAR_FRANKENPHP_GO_BUILD_FLAGS:"*)
+		line="  SPC_CMD_VAR_FRANKENPHP_GO_BUILD_FLAGS: \"${GO_BUILD_FLAGS}\""
+		;;
+	*"SPC_CMD_VAR_FRANKENPHP_GO_LDFLAGS:"*)
+		line="  SPC_CMD_VAR_FRANKENPHP_GO_LDFLAGS: \"${GO_LDFLAGS}\""
+		;;
+	*"SPC_CMD_VAR_FRANKENPHP_GO_TAGS:"*)
+		line="  SPC_CMD_VAR_FRANKENPHP_GO_TAGS: \"${GO_TAGS}\""
 		;;
 	esac
 

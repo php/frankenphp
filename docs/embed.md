@@ -131,6 +131,20 @@ You can also run the PHP CLI scripts embedded in your binary:
 ./my-app php-cli bin/console
 ```
 
+## Extraction path
+
+At startup, the embedded app is extracted to a private temporary directory whose name changes
+with the content of the app. Some apps need a fixed path, for instance because they ship
+precompiled code referencing absolute paths, such as an OPcache file cache.
+Set it at build time with Go linker flags:
+
+```console
+EMBED=/path/to/your/app GO_LDFLAGS="-X github.com/dunglas/frankenphp.EmbeddedAppPath=/opt/my-app" ./build-static.sh
+```
+
+Files already present at this path are kept as is: it must only be writable by the user
+running the binary.
+
 ## PHP extensions
 
 By default, the script will build extensions required by the `composer.json` file of your project, if any.
