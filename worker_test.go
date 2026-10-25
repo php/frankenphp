@@ -92,6 +92,18 @@ func TestWorkerEnv(t *testing.T) {
 	}, &testOptions{workerScript: "worker-env.php", nbWorkers: 1, env: map[string]string{"FOO": "bar"}, nbParallelRequests: 10})
 }
 
+// A client that disconnects before its request reaches a worker thread must not crash the process.
+func TestWorkerCanceledRequestWithUncommonHeader(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+
+		req := httptest.NewRequestWithContext(ctx, "GET", "http://example.com/worker.php", nil)
+		req.Header.Set(fmt.Sprintf("X-Uncached-%d", i), "1")
+		handler(httptest.NewRecorder(), req)
+	}, &testOptions{workerScript: "worker.php", nbWorkers: 1, nbParallelRequests: 5})
+}
+
 // https://github.com/php/frankenphp/issues/2697
 func TestWorkerBootHasRequestURI(t *testing.T) {
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
