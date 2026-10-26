@@ -43,7 +43,7 @@ func initWatchers(o *opt, mThread *phpMainThread) error {
 		watchPatterns = append(watchPatterns, &watcher.PatternGroup{
 			Callback: func(_ []*watcherGo.Event) {
 				if restartWorkers.Swap(false) {
-					RestartWorkers()
+					mainThread.rebootAllThreads()
 				}
 			},
 		})
