@@ -62,6 +62,7 @@ func initWorkers(opts []workerOpt, m *phpMainThread) error {
 		m.workersByName[w.name] = w
 		if w.server == nil {
 			m.workersByPath[w.declaredFileName] = w
+			m.workersByPath[w.fileName] = w
 		} else if err := w.server.addWorker(w); err != nil {
 			return err
 		}
