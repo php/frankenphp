@@ -30,7 +30,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LINTER_RULES_PATH: /
           MARKDOWN_CONFIG_FILE: .markdown-lint.yaml
-          FILTER_REGEX_EXCLUDE: docs/(cn|es|fr|ja|pt-br|ru|tr)/
+          # Dependabot rewrites vcpkg.json in its own style (expanded arrays, no final newline)
+          FILTER_REGEX_EXCLUDE: (docs/(cn|es|fr|ja|pt-br|ru|tr)/|vcpkg\.json$)
           VALIDATE_CPP: false
           VALIDATE_JSCPD: false
           VALIDATE_GO: false
