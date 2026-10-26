@@ -20,11 +20,9 @@ package frankenphp
 // #include <SAPI.h>
 import "C"
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -554,23 +552,17 @@ func go_ub_write(threadIndex C.uintptr_t, cBuf *C.char, length C.size_t) (C.size
 		return C.size_t(length), C.bool(fc.clientHadClosed)
 	}
 
-	var writer io.Writer
 	if fc.responseWriter == nil {
-		var b bytes.Buffer
-		// log the output of the worker
-		writer = &b
-	} else {
-		writer = fc.responseWriter
+		if fc.logger.Enabled(fc.ctx, slog.LevelInfo) {
+			message := string(unsafe.Slice((*byte)(unsafe.Pointer(cBuf)), length))
+			fc.logger.LogAttrs(fc.ctx, slog.LevelInfo, message)
+		}
+		return length, C.bool(fc.clientHasClosed())
 	}
 
-	i, e := writer.Write(unsafe.Slice((*byte)(unsafe.Pointer(cBuf)), length))
+	i, e := fc.responseWriter.Write(unsafe.Slice((*byte)(unsafe.Pointer(cBuf)), length))
 	if e != nil && fc.logger.Enabled(fc.ctx, slog.LevelDebug) {
 		fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "write error", slog.Any("error", e))
-	}
-
-	if fc.responseWriter == nil && fc.logger.Enabled(fc.ctx, slog.LevelInfo) {
-		// probably starting a worker script, log the output
-		fc.logger.LogAttrs(fc.ctx, slog.LevelInfo, writer.(*bytes.Buffer).String())
 	}
 
 	return C.size_t(i), C.bool(fc.clientHasClosed())
