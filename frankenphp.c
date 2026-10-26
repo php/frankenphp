@@ -3,10 +3,13 @@
 #include <Zend/zend_alloc.h>
 #include <Zend/zend_exceptions.h>
 #include <Zend/zend_interfaces.h>
+#include <Zend/zend_smart_str.h>
 #include <errno.h>
 #include <ext/spl/spl_exceptions.h>
+#include <ext/standard/basic_functions.h>
 #include <ext/standard/head.h>
 #include <ext/standard/info.h>
+#include <ext/standard/php_fopen_wrappers.h>
 #ifdef HAVE_PHP_SESSION
 #include <ext/session/php_session.h>
 #endif
@@ -127,11 +130,16 @@ HashTable *main_thread_env = NULL;
 
 static THREAD_LOCAL uintptr_t thread_index;
 static THREAD_LOCAL bool is_worker_thread = false;
+/* putenv() overrides layered over the other env tables, an IS_NULL entry
+ * unsets the variable */
 static THREAD_LOCAL HashTable *sandboxed_env = NULL;
 /* prepared_env holds entries from php(_server)'s `env KEY VAL`, exposed to
  * getenv() and merged into $_ENV when 'E' is in variables_order. Separate from
- * putenv() so those don't leak into $_ENV. */
+ * putenv() so those don't leak into $_ENV. Released after each worker request
+ * so its entries don't leak into the next one. */
 static THREAD_LOCAL HashTable *prepared_env = NULL;
+/* prepared_env of the worker script boot, kept for all its requests */
+static THREAD_LOCAL HashTable *worker_env = NULL;
 
 /* Published via SG(server_context) so ext-parallel children, which inherit
  * the parent's SG(server_context), can route SAPI callbacks back to the
@@ -442,26 +450,37 @@ static void frankenphp_reset_super_globals() {
   ZEND_HASH_FOREACH_END();
 }
 
-/*
- * free php_stream resources that are temporary (php_stream_temp_ops)
- * streams are globally registered in EG(regular_list), see zend_list.c
- * this fixes a leak when reading the body of a request
- */
-static void frankenphp_release_temporary_streams() {
-  zend_resource *val;
-  int stream_type = php_file_le_stream();
-  ZEND_HASH_FOREACH_PTR(&EG(regular_list), val) {
-    /* verify the resource is a stream */
-    if (val->type == stream_type) {
-      php_stream *stream = (php_stream *)val->ptr;
-      if (stream != NULL && stream->ops == &php_stream_temp_ops &&
-          stream->__exposed == 0 && GC_REFCOUNT(val) == 1) {
-        ZEND_ASSERT(!stream->is_persistent);
-        zend_list_delete(val);
-      }
+/* Mirrors php_stream_input_t from ext/standard/php_fopen_wrapper.c */
+typedef struct {
+  php_stream *body;
+  zend_off_t position;
+} frankenphp_stream_input;
+
+/* Matches the body by address: userland may already have closed and freed it.
+ * A php://input stream kept by the application reads it through a raw
+ * pointer, the body then lives as long as the worker script. */
+static void frankenphp_release_request_body(php_stream *request_body) {
+  zend_resource *body_res = NULL;
+  zend_resource *res;
+  ZEND_HASH_FOREACH_PTR(&EG(regular_list), res) {
+    if (res->type != php_file_le_stream()) {
+      continue;
+    }
+    php_stream *stream = (php_stream *)res->ptr;
+    if (stream == request_body) {
+      body_res = res;
+    } else if (stream->wrapper == &php_stream_php_wrapper &&
+               strcmp(stream->ops->label, "Input") == 0 &&
+               ((frankenphp_stream_input *)stream->abstract)->body ==
+                   request_body) {
+      return;
     }
   }
   ZEND_HASH_FOREACH_END();
+
+  if (body_res != NULL) {
+    zend_list_delete(body_res);
+  }
 }
 
 #ifdef HAVE_PHP_SESSION
@@ -526,6 +545,12 @@ static void frankenphp_reset_last_errors(void) {
   PG(last_error_type) = 0;
   PG(last_error_lineno) = 0;
 
+#if PHP_VERSION_ID >= 80400
+  /* http_get_last_response_headers() */
+  zval_ptr_dtor(&BG(last_http_headers));
+  ZVAL_UNDEF(&BG(last_http_headers));
+#endif
+
   /* Called by name to avoid depending on libxml2 headers */
   zend_function *libxml_clear_errors = zend_hash_str_find_ptr(
       CG(function_table), ZEND_STRL("libxml_clear_errors"));
@@ -533,6 +558,32 @@ static void frankenphp_reset_last_errors(void) {
     zend_call_known_function(libxml_clear_errors, NULL, NULL, NULL, 0, NULL,
                              NULL);
   }
+}
+
+/* Adapted from the url_scanner RSHUTDOWN, which isn't exported */
+static void frankenphp_reset_url_scanner(url_adapt_state_ex_t *ctx) {
+  smart_str_free(&ctx->result);
+  smart_str_free(&ctx->buf);
+  smart_str_free(&ctx->tag);
+  smart_str_free(&ctx->arg);
+  smart_str_free(&ctx->attr_val);
+  smart_str_free(&ctx->form_app);
+  smart_str_free(&ctx->url_app);
+  ctx->active = 0;
+  ctx->tag_type = 0;
+  ctx->attr_type = 0;
+}
+
+/* Request state of the standard extension, freed by its RSHUTDOWN */
+static void frankenphp_reset_basic_state(void) {
+  if (BG(strtok_string)) {
+    zend_string_release(BG(strtok_string));
+    BG(strtok_string) = NULL;
+  }
+
+  /* output_add_rewrite_var() and session.use_trans_sid */
+  frankenphp_reset_url_scanner(&BG(url_adapt_session_ex));
+  frankenphp_reset_url_scanner(&BG(url_adapt_output_ex));
 }
 
 static frankenphp_thread_metrics *thread_metrics = NULL;
@@ -565,11 +616,29 @@ static void frankenphp_worker_request_shutdown() {
    * etc.) */
   zend_try { php_output_deactivate(); }
   zend_end_try();
+  frankenphp_reset_basic_state();
+
+  /* sapi_deactivate() drops the request body stream without closing it, it
+   * would otherwise stay open until the worker script ends */
+  php_stream *request_body = SG(request_info).request_body;
 
   /* SAPI related shutdown (free stuff) */
   zend_try { sapi_deactivate(); }
   zend_end_try();
+  /* sapi_deactivate() frees these without clearing them (fixed in PHP 8.6),
+   * php_request_shutdown() would free them again when the worker script ends */
+  SG(request_info).content_type_dup = NULL;
+  SG(request_info).current_user = NULL;
+  SG(request_info).current_user_length = 0;
+  if (request_body != NULL) {
+    frankenphp_release_request_body(request_body);
+  }
   frankenphp_free_request_context();
+
+  if (prepared_env != NULL) {
+    zend_hash_release(prepared_env);
+    prepared_env = NULL;
+  }
 
   zend_set_memory_limit(PG(memory_limit));
 }
@@ -580,22 +649,33 @@ bool frankenphp_shutdown_dummy_request(void) {
     return false;
   }
 
+  worker_env = prepared_env;
+  prepared_env = NULL;
   frankenphp_worker_request_shutdown();
 
   return true;
 }
 
-void get_full_env(zval *track_vars_array) {
-  size_t total = zend_hash_num_elements(main_thread_env);
-  if (prepared_env != NULL) {
-    // perf: doesn't matter if we get the exact count, just >= needed
-    total += zend_hash_num_elements(prepared_env);
+/* Copies worker_env then prepared_env into ht, the latter wins */
+static void frankenphp_copy_prepared_env(HashTable *ht) {
+  if (worker_env != NULL) {
+    zend_hash_copy(ht, worker_env, (copy_ctor_func_t)zval_add_ref);
   }
-  zend_hash_extend(Z_ARR_P(track_vars_array), total, 0);
-  zend_hash_copy(Z_ARR_P(track_vars_array), main_thread_env, NULL);
   if (prepared_env != NULL) {
-    zend_hash_copy(Z_ARR_P(track_vars_array), prepared_env,
-                   (copy_ctor_func_t)zval_add_ref);
+    zend_hash_copy(ht, prepared_env, (copy_ctor_func_t)zval_add_ref);
+  }
+}
+
+void get_full_env(zval *track_vars_array) {
+  HashTable *ht = Z_ARR_P(track_vars_array);
+  zend_hash_extend(ht, zend_hash_num_elements(main_thread_env), 0);
+  zend_hash_copy(ht, main_thread_env, NULL);
+
+  /* $_ENV outlives worker requests, it must not capture the env of the
+   * request that first used it */
+  HashTable *env = worker_env != NULL ? worker_env : prepared_env;
+  if (env != NULL) {
+    zend_hash_copy(ht, env, (copy_ctor_func_t)zval_add_ref);
   }
 }
 
@@ -606,7 +686,6 @@ static int frankenphp_worker_request_startup() {
   frankenphp_update_request_context();
 
   zend_try {
-    frankenphp_release_temporary_streams();
     php_output_activate();
 
     /* initialize global variables */
@@ -705,14 +784,7 @@ PHP_FUNCTION(frankenphp_putenv) {
   }
 
   if (sandboxed_env == NULL) {
-    sandboxed_env = zend_array_dup(main_thread_env);
-    /* prepared_env overrides the OS env and putenv() overrides both, so layer
-     * the prepared vars onto the dup before sandboxed_env starts shadowing the
-     * other two layers in getenv(). */
-    if (prepared_env != NULL) {
-      zend_hash_copy(sandboxed_env, prepared_env,
-                     (copy_ctor_func_t)zval_add_ref);
-    }
+    sandboxed_env = zend_new_array(0);
   }
 
   /* cut at null byte to stay consistent with regular putenv */
@@ -726,7 +798,9 @@ PHP_FUNCTION(frankenphp_putenv) {
 
   /* no '=' found, delete the variable */
   if (eq_pos == NULL) {
-    zend_hash_str_del(sandboxed_env, setting, setting_len);
+    zval unset;
+    ZVAL_NULL(&unset);
+    zend_hash_str_update(sandboxed_env, setting, setting_len, &unset);
 
     RETURN_TRUE;
   }
@@ -741,33 +815,40 @@ PHP_FUNCTION(frankenphp_putenv) {
   RETURN_TRUE;
 } /* }}} */
 
-/* getenv() lookup: sandboxed_env if present (it already holds prepared + OS),
- * otherwise prepared_env then main_thread_env. */
+/* getenv() lookup, the first layer holding the name wins. Returns an IS_NULL
+ * zval for a variable unset by putenv(). */
 static inline zval *frankenphp_lookup_env(const char *name, size_t name_len) {
-  if (sandboxed_env != NULL) {
-    return zend_hash_str_find(sandboxed_env, name, name_len);
+  HashTable *layers[] = {sandboxed_env, prepared_env, worker_env,
+                         main_thread_env};
+  for (size_t i = 0; i < sizeof(layers) / sizeof(layers[0]); i++) {
+    if (layers[i] != NULL) {
+      zval *env_val = zend_hash_str_find(layers[i], name, name_len);
+      if (env_val != NULL) {
+        return env_val;
+      }
+    }
   }
 
-  zval *env_val = NULL;
-  if (prepared_env != NULL) {
-    env_val = zend_hash_str_find(prepared_env, name, name_len);
-  }
-  if (env_val == NULL) {
-    env_val = zend_hash_str_find(main_thread_env, name, name_len);
-  }
-
-  return env_val;
+  return NULL;
 }
 
 /* Returns a fresh copy of the full environment, merging the layers above. */
 static inline HashTable *frankenphp_dup_env(void) {
-  if (sandboxed_env != NULL) {
-    return zend_array_dup(sandboxed_env);
-  }
-
   HashTable *env = zend_array_dup(main_thread_env);
-  if (prepared_env != NULL) {
-    zend_hash_copy(env, prepared_env, (copy_ctor_func_t)zval_add_ref);
+  frankenphp_copy_prepared_env(env);
+
+  if (sandboxed_env != NULL) {
+    zend_string *key;
+    zval *val;
+    ZEND_HASH_FOREACH_STR_KEY_VAL(sandboxed_env, key, val) {
+      if (Z_TYPE_P(val) == IS_NULL) {
+        zend_hash_del(env, key);
+      } else {
+        Z_TRY_ADDREF_P(val);
+        zend_hash_update(env, key, val);
+      }
+    }
+    ZEND_HASH_FOREACH_END();
   }
 
   return env;
@@ -891,9 +972,16 @@ PHP_FUNCTION(frankenphp_handle_request) {
 
   struct go_frankenphp_worker_handle_request_start_return result =
       go_frankenphp_worker_handle_request_start(thread_index);
-  if (frankenphp_worker_request_startup() == FAILURE
-      /* Shutting down */
-      || !result.r0) {
+  /* Startup also runs when shutting down, to keep sapi_activate() and
+   * sapi_deactivate() balanced for the code after the worker loop */
+  if (frankenphp_worker_request_startup() == FAILURE) {
+    /* The engine can't run userland code after a caught bailout, end the
+     * script so the pending request gets closed */
+    zend_bailout();
+  }
+
+  if (!result.r0) {
+    /* Shutting down */
     RETURN_FALSE;
   }
 
@@ -1437,10 +1525,7 @@ void frankenphp_register_server_vars(zval *track_vars_array,
 }
 
 void frankenphp_merge_with_prepared_env(zval *track_vars_array) {
-  if (prepared_env != NULL) {
-    HashTable *ht = Z_ARRVAL_P(track_vars_array);
-    zend_hash_copy(ht, prepared_env, (copy_ctor_func_t)zval_add_ref);
-  }
+  frankenphp_copy_prepared_env(Z_ARRVAL_P(track_vars_array));
 }
 
 /** Create an immutable zend_string that lasts for the whole process **/
@@ -1625,6 +1710,10 @@ static inline void reset_sandboxed_environment() {
     zend_hash_release(prepared_env);
     prepared_env = NULL;
   }
+  if (worker_env != NULL) {
+    zend_hash_release(worker_env);
+    worker_env = NULL;
+  }
 }
 
 /* Adds a key/value pair to the per-thread prepared environment, exposing
@@ -1729,6 +1818,9 @@ static void *php_thread(void *arg) {
 
       /* shutdown the request, potential bailout to zend_catch */
       php_request_shutdown((void *)0);
+      /* a putenv() from a shutdown function or destructor created a new
+       * sandbox on the request heap, which php_request_shutdown() just freed */
+      sandboxed_env = NULL;
       frankenphp_free_request_context();
       go_frankenphp_after_script_execution(thread_index, EG(exit_status));
     }
@@ -1749,6 +1841,7 @@ static void *php_thread(void *arg) {
       zend_try { php_request_shutdown((void *)0); }
       zend_catch {}
       zend_end_try();
+      sandboxed_env = NULL;
     }
 
     /* Log the last error message, it must be cleared to prevent a crash when
