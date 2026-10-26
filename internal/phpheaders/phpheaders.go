@@ -127,8 +127,9 @@ var (
 	})
 )
 
-func GetUnCommonHeader(ctx context.Context, key string) string {
-	phpHeaderKey, err := headerKeyCache.Get(ctx, key, loader)
+// GetUnCommonHeader must not take the request context: otter returns its error on a cache miss once it is canceled.
+func GetUnCommonHeader(key string) string {
+	phpHeaderKey, err := headerKeyCache.Get(context.Background(), key, loader)
 	if err != nil {
 		panic(err)
 	}
