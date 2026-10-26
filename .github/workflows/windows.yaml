@@ -122,19 +122,20 @@ jobs:
       - name: Download PHP
         run: |
           $webContent = Invoke-WebRequest -Uri $env:PHP_DOWNLOAD_BASE
-          $links = $webContent.Links.Href | Where-Object { $_ -match "php-\d+\.\d+\.\d+-Win32-vs17-x64\.zip$" }
+          # Rebuilt binaries get a build number suffix, e.g. php-8.5.12-1-Win32-vs17-x64.zip
+          $links = $webContent.Links.Href | Where-Object { $_ -match "php-\d+\.\d+\.\d+(-\d+)?-Win32-vs17-x64\.zip$" }
 
           if (-not $links) { throw "Could not find PHP zip files at $env:PHP_DOWNLOAD_BASE" }
 
-          $latestFile = $links | Sort-Object { if ($_ -match '(\d+\.\d+\.\d+)') { [version]$matches[1] } } | Select-Object -Last 1
+          $latestFile = $links | Sort-Object { if ($_ -match '(\d+\.\d+\.\d+)(?:-(\d+))?-Win32') { [version]"$($matches[1]).$([int]$matches[2])" } } | Select-Object -Last 1
 
-          $version = if ($latestFile -match '(\d+\.\d+\.\d+)') { $matches[1] }
+          if ($latestFile -match '((\d+\.\d+\.\d+)(?:-\d+)?)-Win32') { $build = $matches[1]; $version = $matches[2] }
           Write-Host "Detected latest PHP version: $version"
 
           "PHP_VERSION=$version" >> $env:GITHUB_ENV
 
-          $phpZip = "php-$version-Win32-vs17-x64.zip"
-          $develZip = "php-devel-pack-$version-Win32-vs17-x64.zip"
+          $phpZip = "php-$build-Win32-vs17-x64.zip"
+          $develZip = "php-devel-pack-$build-Win32-vs17-x64.zip"
 
           $dirName = "frankenphp-windows-x86_64"
 
@@ -151,7 +152,7 @@ jobs:
           $vcpkgRoot = "$env:GITHUB_WORKSPACE\frankenphp\vcpkg_installed\x64-windows"
           $watcherRoot = "$env:GITHUB_WORKSPACE\watcher"
           $phpBin = "$env:GITHUB_WORKSPACE\$env:DIR_NAME"
-          $phpDevel = "$env:GITHUB_WORKSPACE\php-devel\php-$env:PHP_VERSION-devel-vs17-x64"
+          $phpDevel = (Get-ChildItem "$env:GITHUB_WORKSPACE\php-devel" -Directory | Select-Object -First 1).FullName
 
           "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\Llvm\bin" >> $env:GITHUB_PATH
           "$vcpkgRoot\bin" >> $env:GITHUB_PATH
