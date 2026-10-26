@@ -52,6 +52,7 @@ var (
 	ErrInvalidRequestPath         = ErrRejected{"invalid request path", http.StatusBadRequest}
 	ErrInvalidContentLengthHeader = ErrRejected{"invalid Content-Length header", http.StatusBadRequest}
 	ErrMaxWaitTimeExceeded        = ErrRejected{"maximum request handling time exceeded", http.StatusServiceUnavailable}
+	ErrRequestBodyTooLarge        = ErrRejected{"request body too large", http.StatusRequestEntityTooLarge}
 
 	contextKey   = contextKeyStruct{}
 	serverHeader = []string{"FrankenPHP"}
@@ -688,6 +689,7 @@ func go_write_headers(threadIndex C.uintptr_t, status C.int, headers *C.zend_lli
 	}
 
 	fc.responseWriter.WriteHeader(goStatus)
+	fc.headersWritten = goStatus >= 200
 
 	if goStatus < 200 {
 		// Clear headers, it's not automatically done by ResponseWriter.WriteHeader() for 1xx responses
@@ -771,6 +773,11 @@ func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (r
 
 	if rc != nil {
 		_ = rc.SetReadDeadline(time.Time{})
+	}
+
+	// PHP can't see read errors: fail the request rather than expose a truncated body
+	if _, ok := errors.AsType[*http.MaxBytesError](err); ok && !fc.headersWritten {
+		fc.reject(ErrRequestBodyTooLarge)
 	}
 
 	return
