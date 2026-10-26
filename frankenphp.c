@@ -625,11 +625,13 @@ static void frankenphp_worker_request_shutdown() {
   /* SAPI related shutdown (free stuff) */
   zend_try { sapi_deactivate(); }
   zend_end_try();
+#if PHP_VERSION_ID < 80600
   /* sapi_deactivate() frees these without clearing them (fixed in PHP 8.6),
    * php_request_shutdown() would free them again when the worker script ends */
   SG(request_info).content_type_dup = NULL;
   SG(request_info).current_user = NULL;
   SG(request_info).current_user_length = 0;
+#endif
   if (request_body != NULL) {
     frankenphp_release_request_body(request_body);
   }
