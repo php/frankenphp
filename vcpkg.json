@@ -1,4 +1,7 @@
 {
-  "dependencies": ["brotli", "pthreads"],
-  "builtin-baseline": "817892b0ecbc6af994dd6df999c73faf795adbf2"
+  "dependencies": [
+    "brotli",
+    "pthreads"
+  ],
+  "builtin-baseline": "9eec002df1cd109f8f104cd966a763daf9751489"
 }
