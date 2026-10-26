@@ -241,6 +241,7 @@ $handler = static function () use ($workerServer) {
 - **全局变量**：worker 脚本全局范围内的变量在请求之间持久化。
 - **内存缓存**：在请求处理器之外存储在内存中的任何数据（数组、对象）都将持久化。
 - **运行时引擎设置**：使用 `ini_set()`、`stream_context_set_default()`、`date_default_timezone_set()`、`chdir()`、`stream_wrapper_register()`、`set_error_handler()` 或 `set_exception_handler()` 进行的更改对后续请求仍然有效。切勿在此处存储与请求或用户相关的特定值，例如默认流上下文中的凭据：请为每个调用传递一个显式上下文。
+- **进程范围设置**：`umask()` 和 `setlocale()` 会更改整个 FrankenPHP 进程，而不仅仅是当前线程。Worker 模式不会在请求之间恢复它们，并且在任何模式下它们也会影响同时运行的请求。请在启动时设置一次，或者对创建的文件调用 `chmod()` 而不是更改 umask。
 
 这是设计使然，也是 worker 模式快速的原因。然而，它需要注意避免意外的副作用：
 

@@ -119,7 +119,7 @@ docker run \
 
 Si votre application utilise [PSR-15](https://www.php-fig.org/psr/psr-15/) au lieu des superglobales, convertissez la requête/réponse aux limites du handler avec [`nyholm/psr7`](https://github.com/Nyholm/psr7) et [`nyholm/psr7-server`](https://github.com/Nyholm/psr7-server) :
 
-```bash
+```console
 composer require nyholm/psr7 nyholm/psr7-server psr/http-server-handler
 ```
 
@@ -244,6 +244,7 @@ Parce que le mode worker maintient le processus PHP en vie entre les requêtes, 
 - **Variables globales** : Les variables dans la portée globale du script worker persistent entre les requêtes.
 - **Caches en mémoire** : Toute donnée stockée en mémoire (tableaux, objets) en dehors du gestionnaire de requêtes persiste.
 - **Paramètres du moteur d'exécution** : Les modifications effectuées avec `ini_set()`, `stream_context_set_default()`, `date_default_timezone_set()`, `chdir()`, `stream_wrapper_register()`, `set_error_handler()` ou `set_exception_handler()` restent en vigueur pour les requêtes ultérieures. Ne stockez jamais de valeurs spécifiques à la requête ou à l'utilisateur, telles que des identifiants dans le contexte de flux par défaut : passez plutôt un contexte explicite à chaque appel.
+- **Paramètres à l'échelle du processus** : `umask()` et `setlocale()` modifient l'ensemble du processus FrankenPHP, pas seulement le thread actuel. Le mode worker ne les restaure pas entre les requêtes, et dans tous les modes, ils affectent également les requêtes exécutées simultanément. Définissez-les une fois au démarrage, ou appelez `chmod()` sur les fichiers créés au lieu de modifier l'umask.
 
 C'est un comportement intentionnel et c'est ce qui rend le mode worker rapide. Cependant, cela demande de l'attention pour éviter les effets secondaires involontaires :
 

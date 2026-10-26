@@ -33,27 +33,27 @@ FrankenPHP 在一个包含四个不同参与者的栈中运行：
 
 可信计算基有三项职责。FrankenPHP 中的安全缺陷存在于其中之一：
 
-1.  **忠实传输**：将请求映射到 PHP 超全局变量和 php://input 中，并将 PHP 的输出和请求头传回客户端，而不引入注入（请求头/CRLF 注入、请求走私、执行错误文件）。
-2.  **隔离**：防止请求范围的状态在不同请求之间、PHP 线程之间以及工作进程迭代之间交叉。
-3.  **内存安全**：管理 CGO 边界（Go ↔ C/PHP），不损坏内存。
+1. **忠实传输**：将请求映射到 PHP 超全局变量和 php://input 中，并将 PHP 的输出和请求头传回客户端，而不引入注入（请求头/CRLF 注入、请求走私、执行错误文件）。
+2. **隔离**：防止请求范围的状态在不同请求之间、PHP 线程之间以及工作进程迭代之间交叉。
+3. **内存安全**：管理 CGO 边界（Go ↔ C/PHP），不损坏内存。
 
 ## 范围：FrankenPHP 自身的攻击面
 
 以下是 FrankenPHP 拥有的攻击面。这里的漏洞是 FrankenPHP 的漏洞：
 
--   **请求到超全局变量映射**（`cgi.go`、`frankenphp_register_server_vars`）：从请求构建 `$_SERVER`、`REMOTE_ADDR`、`SCRIPT_NAME`、`PATH_INFO` 和其他 CGI 变量。
--   **PHP 脚本路径解析**：请求路径在 `split_path`（默认为 `.php`）处被分割为 `SCRIPT_NAME` / `PATH_INFO`，然后通过 `sanitizedPathJoin`（`filepath.Join(root, filepath.Clean("/"+reqPath))`）与文档根目录连接，这可以防止 `SCRIPT_FILENAME` 逃逸文档根目录（路径遍历）。`php_server` 指令还会额外设置一个默认的 `try_files` 重写规则，将请求路由到现有文件或前端控制器，从而缓解了 PHP-FPM 经典陷阱——执行错误文件的问题。
--   **工作模式状态隔离**：FrankenPHP 在请求之间重置 `$_GET`、`$_POST`、`$_COOKIE`、`$_FILES`、`$_SERVER` 和 `$_REQUEST`，显式清除 `$_SESSION`（否则会在请求之间泄露），以及 `error_get_last()` 和 `libxml_get_errors()` 返回的错误，`http_get_last_response_headers()` 返回的请求头，`strtok()` 状态，以及 `output_add_rewrite_var()` 添加的变量，但 **`$_ENV` 不会被重置**，并且 `putenv()` 写入、`static` 变量、类静态属性、全局变量和运行时引擎设置（`ini_set()`、默认流上下文、默认时区、工作目录等）会在同一线程的请求之间持久存在。留在该状态中的请求或用户特定数据可能会泄露到后续请求中（参见 [工作模式](worker.md#state-persistence)）。
--   **每线程环境沙盒**：`frankenphp_putenv()` / `frankenphp_getenv()` 操作的是线程本地的 `sandboxed_env`。`putenv()` 写入保留在该沙盒内，绝不会到达进程全局的操作系统环境，因此一个请求设置的秘密不会泄露给子进程（`proc_open`、`exec` 等）、Go/Caddy 端或其他请求。必须看到此类变量的子进程必须通过 `proc_open()` 或 `exec()` 的环境参数明确地提供给它（参见 [内部原理](internals.md#per-thread-environment-sandboxing)）。
--   **CGO 内存边界**：Go 字符串固定以及 `C.CString()` / `free()` 在 Go ↔ C 边界上的生命周期。
--   **Caddy 管理 API**：`/frankenphp/workers/restart` 和 `/frankenphp/threads` 端点，通过 Caddy 的管理 API（默认监听 `localhost:2019`）暴露。将该端点暴露到 localhost 之外是操作员的决定。
--   **受信任代理处理**：传入的 `X-Forwarded-*` 请求头总是作为不可信的 `$_SERVER['HTTP_X_FORWARDED_*']` 值到达 PHP；只有当配置了 [`trusted_proxies`](production.md#running-behind-a-reverse-proxy) 时，它们才被信任用于推导真实的客户端 IP 和协议。
--   **慢速请求体**：客户端宣布请求体后，如果缓慢发送或停滞，会长时间占用处理线程。在一个有界线程池中，足够多的此类连接会耗尽线程池（慢速 POST DoS）。FrankenPHP 默认对请求体读取应用 60 秒的空闲超时（[`request_body_timeout`](config.md#caddyfile-config)），并在每次读取前重置截止时间，这样任何大小的稳定上传都能成功，而停滞的上传会被切断并释放线程。
+- **请求到超全局变量映射**（`cgi.go`、`frankenphp_register_server_vars`）：从请求构建 `$_SERVER`、`REMOTE_ADDR`、`SCRIPT_NAME`、`PATH_INFO` 和其他 CGI 变量。
+- **PHP 脚本路径解析**：请求路径在 `split_path`（默认为 `.php`）处被分割为 `SCRIPT_NAME` / `PATH_INFO`，然后通过 `sanitizedPathJoin`（`filepath.Join(root, filepath.Clean("/"+reqPath))`）与文档根目录连接，这可以防止 `SCRIPT_FILENAME` 逃逸文档根目录（路径遍历）。`php_server` 指令还会额外设置一个默认的 `try_files` 重写规则，将请求路由到现有文件或前端控制器，从而缓解了 PHP-FPM 经典陷阱——执行错误文件的问题。
+- **工作模式状态隔离**：FrankenPHP 在请求之间重置 `$_GET`、`$_POST`、`$_COOKIE`、`$_FILES`、`$_SERVER` 和 `$_REQUEST`，显式清除 `$_SESSION`（否则会在请求之间泄露），以及 `error_get_last()` 和 `libxml_get_errors()` 返回的错误，`http_get_last_response_headers()` 返回的请求头，`strtok()` 状态，以及 `output_add_rewrite_var()` 添加的变量，但 **`$_ENV` 不会被重置**，并且 `putenv()` 写入、`static` 变量、类静态属性、全局变量和运行时引擎设置（`ini_set()`、默认流上下文、默认时区、工作目录等）会在同一线程的请求之间持久存在。留在该状态中的请求或用户特定数据可能会泄露到后续请求中（参见 [工作模式](worker.md#state-persistence)）。
+- **每线程环境沙盒**：`frankenphp_putenv()` / `frankenphp_getenv()` 操作的是线程本地的 `sandboxed_env`。`putenv()` 写入保留在该沙盒内，绝不会到达进程全局的操作系统环境，因此一个请求设置的秘密不会泄露给子进程（`proc_open`、`exec` 等）、Go/Caddy 端或其他请求。必须看到此类变量的子进程必须通过 `proc_open()` 或 `exec()` 的环境参数明确地提供给它（参见 [内部原理](internals.md#per-thread-environment-sandboxing)）。
+- **CGO 内存边界**：Go 字符串固定以及 `C.CString()` / `free()` 在 Go ↔ C 边界上的生命周期。
+- **Caddy 管理 API**：`/frankenphp/workers/restart` 和 `/frankenphp/threads` 端点，通过 Caddy 的管理 API（默认监听 `localhost:2019`）暴露。将该端点暴露到 localhost 之外是操作员的决定。
+- **受信任代理处理**：传入的 `X-Forwarded-*` 请求头总是作为不可信的 `$_SERVER['HTTP_X_FORWARDED_*']` 值到达 PHP；只有当配置了 [`trusted_proxies`](production.md#running-behind-a-reverse-proxy) 时，它们才被信任用于推导真实的客户端 IP 和协议。
+- **慢速请求体**：客户端宣布请求体后，如果缓慢发送或停滞，会长时间占用处理线程。在一个有界线程池中，足够多的此类连接会耗尽线程池（慢速 POST DoS）。FrankenPHP 默认对请求体读取应用 60 秒的空闲超时（[`request_body_timeout`](config.md#caddyfile-config)），并在每次读取前重置截止时间，这样任何大小的稳定上传都能成功，而停滞的上传会被切断并释放线程。
 
 ## 范围之外
 
--   **应用程序 PHP 代码中的漏洞**（SQL 注入、XSS、不安全的反序列化等）。FrankenPHP 将不可信的请求数据原封不动地传递给应用程序；防御这些漏洞是应用程序的职责，就像任何 SAPI 一样。
--   **FrankenPHP 使用的上游组件（PHP、Caddy、Go）或在其之上构建的项目（Laravel Octane、Symfony Runtime）中的缺陷。** 请将这些报告给相关项目。
+- **应用程序 PHP 代码中的漏洞**（SQL 注入、XSS、不安全的反序列化等）。FrankenPHP 将不可信的请求数据原封不动地传递给应用程序；防御这些漏洞是应用程序的职责，就像任何 SAPI 一样。
+- **FrankenPHP 使用的上游组件（PHP、Caddy、Go）或在其之上构建的项目（Laravel Octane、Symfony Runtime）中的缺陷。** 请将这些报告给相关项目。
 
 ## 报告漏洞
 
