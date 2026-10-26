@@ -771,7 +771,7 @@ PHP_FUNCTION(frankenphp_finish_request) { /* {{{ */
 /* {{{ Sandboxed putenv() that never mutates the process-global OS environment.
  * Writes land only in the thread-local sandboxed_env, so a secret passed to
  * putenv() by one request cannot leak to the Go/Caddy side, to child processes
- * (proc_open, exec, ...), or to requests handled by other threads. */
+ * (proc_open, exec, ...), or to other threads. */
 PHP_FUNCTION(frankenphp_putenv) {
   char *setting;
   size_t setting_len;
