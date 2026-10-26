@@ -1724,8 +1724,8 @@ func testOutOfMemory(t *testing.T, opts *testOptions) {
 		body, _ = testGet("http://example.com/out-of-memory.php", handler, t)
 		assert.Equal(t, "ok", body)
 
-		// $_GET is populated before the script runs; stay under the hard limit (twice memory_limit), past which PHP exits
-		body, _ = testGet("http://example.com/out-of-memory.php?q="+strings.Repeat("a", 5<<20), handler, t)
+		// $_GET is populated before the script runs; its copies (4 in worker mode) must cross memory_limit but stay under the hard limit (twice memory_limit), past which PHP exits
+		body, _ = testGet("http://example.com/out-of-memory.php?q="+strings.Repeat("a", 3<<20), handler, t)
 		if hardLimit {
 			assert.Contains(t, body, "Allowed memory size of 8388608 bytes exhausted")
 		}
