@@ -58,21 +58,21 @@ O exemplo a seguir mostra como criar seu próprio script de worker sem depender 
 <?php
 // public/index.php
 
-// Boot your app
+// Inicialize sua aplicação
 require __DIR__.'/vendor/autoload.php';
 
 $myApp = new \App\Kernel();
 $myApp->boot();
 
-// Handler outside the loop for better performance (doing less work)
+// Manipulador fora do loop para melhor desempenho (fazendo menos trabalho)
 $handler = static function () use ($myApp) {
     try {
-        // Called when a request is received,
-        // superglobals, php://input and the like are reset
+        // Chamado quando uma requisição é recebida,
+        // superglobais, php://input e similares são redefinidos
         echo $myApp->handle($_GET, $_POST, $_COOKIE, $_FILES, $_SERVER);
     } catch (\Throwable $exception) {
-        // `set_exception_handler` is called only when the worker script ends,
-        // which may not be what you expect, so catch and handle exceptions here
+        // `set_exception_handler` é chamado apenas quando o script do worker termina,
+        // o que pode não ser o que você espera, então capture e trate as exceções aqui
         (new \MyCustomExceptionHandler)->handleException($exception);
     }
 };
@@ -81,16 +81,16 @@ $maxRequests = (int)($_SERVER['MAX_REQUESTS'] ?? 0);
 for ($nbRequests = 0; !$maxRequests || $nbRequests < $maxRequests; ++$nbRequests) {
     $keepRunning = \frankenphp_handle_request($handler);
 
-    // Do something after sending the HTTP response
+    // Faça algo depois de enviar a resposta HTTP
     $myApp->terminate();
 
-    // Call the garbage collector to reduce the chances of it being triggered in the middle of a page generation
+    // Chame o coletor de lixo para reduzir as chances de ele ser acionado no meio de uma geração de página
     gc_collect_cycles();
 
     if (!$keepRunning) break;
 }
 
-// Cleanup
+// Limpeza
 $myApp->shutdown();
 ```
 
@@ -132,7 +132,7 @@ require __DIR__.'/vendor/autoload.php';
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Nyholm\Psr7Server\ServerRequestCreator;
 
-$myApp = new \App\Kernel(); // implements Psr\Http\Server\RequestHandlerInterface
+$myApp = new \App\Kernel(); // implementa Psr\Http\Server\RequestHandlerInterface
 $myApp->boot();
 
 $psr17Factory = new Psr17Factory();
@@ -203,6 +203,7 @@ frankenphp {
 
 Quando o modo worker está habilitado, um thread adicional é necessário para lidar com as requisições recebidas,
 portanto, o valor padrão de `num_threads` é `1 + 2x(número de CPUs disponíveis)`.
+
 Assim, nesse modo, se `num_threads` e `num` forem definidos explicitamente, `num_threads` deve ser estritamente maior que `num`.
 
 ## Comportamento das superglobais
@@ -217,12 +218,12 @@ Para acessar as superglobais do script de worker dentro do retorno de chamada, v
 
 ```php
 <?php
-// Copy worker's $_SERVER superglobal before the first call to frankenphp_handle_request()
+// Copie a superglobal $_SERVER do worker antes da primeira chamada para frankenphp_handle_request()
 $workerServer = $_SERVER;
 
 $handler = static function () use ($workerServer) {
-    var_dump($_SERVER); // Request-bound $_SERVER
-    var_dump($workerServer); // $_SERVER of the worker script
+    var_dump($_SERVER); // $_SERVER vinculado à requisição
+    var_dump($workerServer); // $_SERVER do script do worker
 };
 
 // ...
@@ -242,6 +243,7 @@ Como o modo worker mantém o processo PHP ativo entre as requisições, o seguin
 - **Variáveis globais**: Variáveis no escopo global do script de worker persistem entre as requisições.
 - **Caches em memória**: Quaisquer dados armazenados em memória (arrays, objetos) fora do manipulador de requisições persistem.
 - **Configurações do motor de tempo de execução**: Alterações feitas com `ini_set()`, `stream_context_set_default()`, `date_default_timezone_set()`, `chdir()`, `stream_wrapper_register()`, `set_error_handler()` ou `set_exception_handler()` permanecem em vigor para requisições posteriores. Nunca armazene valores específicos da requisição ou do usuário ali, como credenciais no contexto de fluxo padrão: passe um contexto explícito para cada chamada.
+- **Configurações de processo**: `umask()` e `setlocale()` mudam todo o processo FrankenPHP, não apenas o thread atual. O modo worker não os restaura entre as requisições, e em qualquer modo eles também afetam requisições em execução ao mesmo tempo. Defina-os uma vez na inicialização, ou chame `chmod()` em arquivos criados em vez de mudar o umask.
 
 Isso é intencional e é o que torna o modo worker rápido. No entanto, exige atenção para evitar efeitos colaterais indesejados:
 
@@ -249,11 +251,11 @@ Isso é intencional e é o que torna o modo worker rápido. No entanto, exige at
 <?php
 function getCounter(): int {
     static $count = 0;
-    return ++$count; // Increments across requests!
+    return ++$count; // Incrementa entre requisições!
 }
 
 $handler = static function () {
-    echo getCounter(); // 1, 2, 3, ... for each request on this thread
+    echo getCounter(); // 1, 2, 3, ... para cada requisição neste thread
 };
 
 while (\frankenphp_handle_request($handler)) {

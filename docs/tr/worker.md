@@ -33,7 +33,7 @@ frankenphp php-server --worker /path/to/your/worker/script.php
 PHP uygulamanız [ikili dosyaya gömülü](embed.md) ise, uygulamanın kök dizinine özel bir `Caddyfile` ekleyebilirsiniz.
 Otomatik olarak kullanılacaktır.
 
-Dosya değişikliklerinde worker'ı yeniden başlatmak ([dosya değişikliklerini izleme](config.md#watching-for-file-changes)) `--watch` seçeneğiyle de mümkündür.
+Dosya değişikliklerinde worker'ı yeniden başlatmak ([dosya değişikliklerini izleme](config.md#dosya-değişikliklerini-izleme)) `--watch` seçeneğiyle de mümkündür.
 Aşağıdaki komut, `/path/to/your/app/` dizininde veya alt dizinlerde `.php` ile biten herhangi bir dosya değiştirilirse yeniden başlatmayı tetikleyecektir:
 
 ```bash
@@ -172,9 +172,9 @@ Bu tür kodları worker modunda kullanmak için geçici bir çözüm, belirli sa
 
 ### Worker'ları manuel olarak yeniden başlatma
 
-Worker'ları [dosya değişikliklerinde](config.md#watching-for-file-changes) yeniden başlatmak mümkünken, tüm worker'ları
-[Caddy admin API](https://caddyserver.com/docs/api) aracılığıyla sorunsuz bir şekilde yeniden başlatmak da mümkündür. Yönetici
-[Caddyfile](config.md#caddyfile-config)'ınızda etkinleştirilmişse, yeniden başlatma uç noktasına aşağıdaki gibi basit bir POST isteği gönderebilirsiniz:
+Worker'ları [dosya değişikliklerinde](config.md#dosya-değişikliklerini-izleme) yeniden başlatmak mümkünken, tüm worker'ları
+[Caddy yönetici API'si](https://caddyserver.com/docs/api) aracılığıyla sorunsuz bir şekilde yeniden başlatmak da mümkündür. Yönetici
+[Caddyfile](config.md#caddyfile-yapılandırması)'ınızda etkinleştirilmişse, yeniden başlatma uç noktasına aşağıdaki gibi basit bir POST isteği gönderebilirsiniz:
 
 ```bash
 curl -X POST http://localhost:2019/frankenphp/workers/restart
@@ -188,7 +188,7 @@ worker betiğini cezalandırmayacak ve tekrar yeniden başlatacaktır.
 Ancak, worker betiği kısa bir süre içinde sıfır olmayan bir çıkış koduyla başarısız olmaya devam ederse
 (örneğin, bir betikte yazım hatası olması durumunda), FrankenPHP `too many consecutive failures` hatasıyla çökecektir.
 
-Ardışık hata sayısı, [Caddyfile](config.md#caddyfile-config)'ınızda `max_consecutive_failures` seçeneği ile yapılandırılabilir:
+Ardışık hata sayısı, [Caddyfile](config.md#caddyfile-yapılandırması)'ınızda `max_consecutive_failures` seçeneği ile yapılandırılabilir:
 
 ```caddyfile
 frankenphp {
@@ -242,6 +242,7 @@ Worker modu, PHP sürecini istekler arasında canlı tuttuğu için, aşağıdak
 - **Küresel değişkenler**: Worker betiğinin küresel kapsamındaki değişkenler, istekler arasında kalıcı olur.
 - **Bellek içi önbellekler**: İstek işleyicisi dışında bellekte depolanan herhangi bir veri (diziler, nesneler) kalıcı olur.
 - **Çalışma zamanı motoru ayarları**: `ini_set()`, `stream_context_set_default()`, `date_default_timezone_set()`, `chdir()`, `stream_wrapper_register()`, `set_error_handler()` veya `set_exception_handler()` ile yapılan değişiklikler sonraki istekler için geçerliliğini korur. Varsayılan akış bağlamında kimlik bilgileri gibi isteğe veya kullanıcıya özgü değerleri asla orada saklamayın: bunun yerine her çağrıya açık bir bağlam geçirin.
+- **Süreç genelindeki ayarlar**: `umask()` ve `setlocale()` tüm FrankenPHP sürecini değiştirir, yalnızca mevcut iş parçacığını değil. Worker modu bunları istekler arasında geri yüklemez ve her modda aynı anda çalışan istekleri de etkiler. Bunları başlangıçta bir kez ayarlayın veya umask'ı değiştirmek yerine oluşturulan dosyalarda `chmod()` çağırın.
 
 Bu, tasarım gereğidir ve worker modunu hızlı yapan şey budur. Ancak, istenmeyen yan etkilerden kaçınmak için dikkat gerektirir:
 
