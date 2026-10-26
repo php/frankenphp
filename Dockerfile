@@ -83,17 +83,15 @@ RUN apt-get update && \
 	&& \
 	apt-get clean
 
-# Bookworm ships libbrotli 1.0.9, cbrotli needs >= 1.1 and 1.2.1 fixes CVE-2026-111497
-ARG BROTLI_VERSION=1.2.1
-ARG BROTLI_SHA256=98d35d11a78dc453aebb7d10c3748f3f73ff78c8267c0dc697b8631f67bf7e8f
+# TODO: temporary, remove with Bookworm (and in the runner): it ships libbrotli 1.0.9, cbrotli needs >= 1.1 and 1.2.1 fixes CVE-2026-111497
 WORKDIR /usr/local/src/brotli
 RUN <<'EOF'
 set -e
 if pkg-config --atleast-version=1.1 libbrotlienc; then
 	exit 0
 fi
-curl -fsSL -o brotli.tar.gz "https://github.com/google/brotli/archive/refs/tags/v${BROTLI_VERSION}.tar.gz"
-echo "${BROTLI_SHA256}  brotli.tar.gz" | sha256sum -c -
+curl -fsSL -o brotli.tar.gz https://github.com/google/brotli/archive/refs/tags/v1.2.1.tar.gz
+echo "98d35d11a78dc453aebb7d10c3748f3f73ff78c8267c0dc697b8631f67bf7e8f  brotli.tar.gz" | sha256sum -c -
 tar xzf brotli.tar.gz --strip-components 1
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
 cmake --build build
@@ -157,7 +155,7 @@ FROM common AS runner
 
 ENV GODEBUG=cgocheck=0
 
-# copy watcher and brotli (bookworm only) shared libraries
+# copy watcher and brotli (Bookworm only, temporary) shared libraries
 COPY --from=builder /usr/local/lib/libwatcher* /usr/local/lib/libbrotli* /usr/local/lib/
 # fix for the file watcher on arm
 RUN apt-get install -y --no-install-recommends libstdc++6 && \
