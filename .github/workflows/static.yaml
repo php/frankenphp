@@ -73,7 +73,7 @@ jobs:
           } >> "${GITHUB_OUTPUT}"
         env:
           SHA: ${{ github.sha }}
-          VERSION: ${{ steps.check.outputs.ref || 'dev' }}
+          VERSION: ${{ (github.ref_type == 'tag' && github.ref_name) || steps.check.outputs.ref || 'dev' }}
 
   build-linux-musl:
     permissions:
@@ -457,7 +457,7 @@ jobs:
       - name: Inspect GNU image
         run: |
           # shellcheck disable=SC2046,SC2086
-          docker buildx imagetools inspect "$(jq -cr '.target."static-builder-gnu".tags | first' <<< "${GNU_METADATA}")-gnu"
+          docker buildx imagetools inspect "$(jq -cr '.target."static-builder-gnu".tags | first' <<< "${GNU_METADATA}")"
         env:
           GNU_METADATA: ${{ needs.prepare.outputs.gnu_metadata }}
 
