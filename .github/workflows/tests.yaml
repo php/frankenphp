@@ -7,8 +7,6 @@ on:
   pull_request:
     branches:
       - main
-    paths-ignore:
-      - "docs/**"
   push:
     branches:
       - main
@@ -21,8 +19,31 @@ env:
   GOEXPERIMENT: cgocheck2
   GOTESTSUM_FORMAT: pkgname-and-test-fails
 jobs:
+  # Docs-only PRs skip the jobs below instead of the whole workflow, so the required gate check still reports
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -o pipefail
+          if [ -z "${PR}" ] || gh api --paginate "repos/${REPO}/pulls/${PR}/files" --jq '.[].filename' | grep -qv '^docs/'; then
+            echo "code=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "code=false" >> "${GITHUB_OUTPUT}"
+          fi
   tests-linux:
     name: Tests (Linux, PHP ${{ matrix.php-versions }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     continue-on-error: ${{ matrix.experimental || false }}
     strategy:
@@ -98,6 +119,8 @@ jobs:
         working-directory: caddy/
   integration-tests:
     name: Integration Tests (Linux, PHP ${{ matrix.php-versions }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -134,6 +157,8 @@ jobs:
         run: gotestsum -- -tags integration -timeout 30m
   tests-mac:
     name: Tests (macOS, PHP 8.5)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: macos-latest
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
@@ -159,3 +184,21 @@ jobs:
       - name: Run Caddy module tests
         working-directory: caddy/
         run: gotestsum -- -race ./...
+  gate:
+    name: Tests passed
+    if: always()
+    needs: [changes, tests-linux, integration-tests, tests-mac]
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for result in ${RESULTS}; do
+            case "${result}" in
+            success | skipped) ;;
+            *)
+              echo "::error::A required job ended with ${result}"
+              exit 1
+              ;;
+            esac
+          done

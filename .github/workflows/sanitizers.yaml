@@ -7,8 +7,6 @@ on:
   pull_request:
     branches:
       - main
-    paths-ignore:
-      - "docs/**"
   push:
     branches:
       - main
@@ -20,9 +18,32 @@ env:
   GOTOOLCHAIN: local
   GOTESTSUM_FORMAT: pkgname-and-test-fails
 jobs:
+  # Docs-only PRs skip the jobs below instead of the whole workflow, so the required gate check still reports
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -o pipefail
+          if [ -z "${PR}" ] || gh api --paginate "repos/${REPO}/pulls/${PR}/files" --jq '.[].filename' | grep -qv '^docs/'; then
+            echo "code=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "code=false" >> "${GITHUB_OUTPUT}"
+          fi
   # Adapted from https://github.com/beberlei/hdrhistogram-php
   sanitizers:
     name: ${{ matrix.sanitizer }}
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -108,3 +129,21 @@ jobs:
           } >> "$GITHUB_ENV"
       - name: Run tests
         run: gotestsum -- ${{ matrix.sanitizer == 'msan' && '-tags=nowatcher' || '' }} -${{ matrix.sanitizer }} -timeout ${{ matrix.sanitizer == 'msan' && '60m' || '30m' }} ./...
+  gate:
+    name: Sanitizers passed
+    if: always()
+    needs: [changes, sanitizers]
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for result in ${RESULTS}; do
+            case "${result}" in
+            success | skipped) ;;
+            *)
+              echo "::error::A required job ended with ${result}"
+              exit 1
+              ;;
+            esac
+          done
