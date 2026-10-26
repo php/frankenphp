@@ -32,10 +32,8 @@ func cmdPHPCLI(fs caddycmd.Flags) (int, error) {
 	// php's cli sapi expects the 0th arg to be the program itself, only filter out 'php-cli' arg
 	args := append([]string{os.Args[0]}, os.Args[2:]...)
 
-	if frankenphp.EmbeddedAppPath != "" && len(args) > 1 && !strings.HasPrefix(args[1], "-") && strings.HasSuffix(args[1], ".php") {
-		if _, err := os.Stat(args[1]); err != nil {
-			args[1] = filepath.Join(frankenphp.EmbeddedAppPath, args[1])
-		}
+	if len(args) > 1 {
+		args[1] = resolveEmbeddedScript(args[1])
 	}
 
 	logger := slog.New(zapslog.NewHandler(caddy.Log().Core(), zapslog.WithName("frankenphp")))
@@ -44,4 +42,22 @@ func cmdPHPCLI(fs caddycmd.Flags) (int, error) {
 	os.Exit(status)
 
 	return status, nil
+}
+
+// resolveEmbeddedScript resolves relative scripts missing from the working directory,
+// including extension-less ones such as bin/console, against the embedded app.
+func resolveEmbeddedScript(script string) string {
+	if frankenphp.EmbeddedAppPath == "" || strings.HasPrefix(script, "-") || !filepath.IsLocal(script) {
+		return script
+	}
+	if _, err := os.Stat(script); err == nil {
+		return script
+	}
+
+	embedded := filepath.Join(frankenphp.EmbeddedAppPath, script)
+	if _, err := os.Stat(embedded); err != nil {
+		return script
+	}
+
+	return embedded
 }
