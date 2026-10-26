@@ -1,6 +1,6 @@
 module github.com/dunglas/frankenphp
 
-go 1.27.0
+go 1.27
 
 retract v1.0.0-rc.1 // Human error
 

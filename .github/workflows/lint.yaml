@@ -24,6 +24,13 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      # A patch release in go.mod stops setup-go from picking the latest one
+      - name: Reject Go patch releases in go.mod
+        run: |
+          if git ls-files -z '*go.mod' | xargs -0 grep -nE '^(toolchain |go [0-9]+\.[0-9]+\.)'; then
+            echo "::error::Use the minor version only (go mod edit -go=1.N -toolchain=none)"
+            exit 1
+          fi
       - name: Lint Code Base
         uses: super-linter/super-linter/slim@2da136927bd4a73596db63044b504547c62cb854 # v9.0.0
         env:
