@@ -11,6 +11,8 @@ RUN apt-get update && \
 		mailcap \
 		libcap2-bin \
 	&& \
+	# TODO: remove once the php base images ship the CVE-2026-111497 fix
+	apt-get -y --no-install-recommends install --only-upgrade libbrotli1 && \
 	apt-get clean && \
 	# Remove files with non-deterministic content (embedded timestamps and mtimes) to keep image digests reproducible
 	rm -rf /var/lib/apt/lists/* /var/log/apt /var/log/dpkg.log /var/log/alternatives.log /var/cache/ldconfig/aux-cache
