@@ -42,6 +42,8 @@ Windows archives contain the official PHP binary for Windows.
 
 [Download FrankenPHP](https://github.com/php/frankenphp/releases)
 
+The binaries of the latest release are rebuilt daily to include PHP security fixes. See [how to verify and pin them](https://frankenphp.dev/docs/production/#standalone-binary-updates).
+
 ### rpm packages
 
 Our maintainers offer rpm packages for all systems using `dnf`. To install, run:

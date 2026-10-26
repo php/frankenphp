@@ -234,3 +234,25 @@ Windows services cannot be reloaded. To apply configuration changes gracefully, 
 ```powershell
 .\frankenphp.exe reload --config Caddyfile
 ```
+
+## Standalone binary updates
+
+To ship PHP and library security fixes without waiting for a new FrankenPHP release, the binaries attached to the latest release are rebuilt every day
+(at midnight UTC for Linux and macOS, at 8 am UTC for Windows) and replace the previous ones under the same name.
+Their checksums therefore change from one day to the next. Binaries attached to older releases are not rebuilt.
+
+To find out which PHP version a binary contains, run:
+
+```console
+frankenphp version
+```
+
+Every binary is signed with a [GitHub artifact attestation](https://docs.github.com/actions/security-for-github-actions/using-artifact-attestations).
+To check that a binary was built by the FrankenPHP CI, whatever the day it was downloaded, use the [GitHub CLI](https://cli.github.com):
+
+```console
+gh attestation verify frankenphp-linux-x86_64 --repo php/frankenphp
+```
+
+If your deployments need a byte-for-byte reproducible binary (for instance, to pin its checksum), don't download it from the releases page at deploy time.
+Instead, store a verified copy in your own artifact repository, or use [the Docker images](docker.md) pinned by digest (`dunglas/frankenphp@sha256:...`).
