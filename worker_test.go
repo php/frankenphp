@@ -16,6 +16,7 @@ import (
 
 	"github.com/dunglas/frankenphp"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestWorker(t *testing.T) {
@@ -92,6 +93,18 @@ func TestWorkerEnv(t *testing.T) {
 	}, &testOptions{workerScript: "worker-env.php", nbWorkers: 1, env: map[string]string{"FOO": "bar"}, nbParallelRequests: 10})
 }
 
+// A client that disconnects before its request reaches a worker thread must not crash the process.
+func TestWorkerCanceledRequestWithUncommonHeader(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+
+		req := httptest.NewRequestWithContext(ctx, "GET", "http://example.com/worker.php", nil)
+		req.Header.Set(fmt.Sprintf("X-Uncached-%d", i), "1")
+		handler(httptest.NewRecorder(), req)
+	}, &testOptions{workerScript: "worker.php", nbWorkers: 1, nbParallelRequests: 5})
+}
+
 // https://github.com/php/frankenphp/issues/2697
 func TestWorkerBootHasRequestURI(t *testing.T) {
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
@@ -123,6 +136,19 @@ func TestWorkerGetOpt(t *testing.T) {
 	}, &testOptions{logger: logger, workerScript: "worker-getopt.php", env: map[string]string{"FOO": "bar"}})
 
 	assert.NotRegexp(t, buf.String(), "exit_status=[1-9]")
+}
+
+// Ending the worker loop right after a non-form POST must not free its Content-Type twice.
+func TestWorkerScriptEndsAfterNonFormPost(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		req := httptest.NewRequest("POST", fmt.Sprintf("http://example.com/worker-restart.php?i=%d", i), strings.NewReader("{}"))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		handler(w, req)
+
+		body, _ := io.ReadAll(w.Result().Body)
+		assert.Equal(t, fmt.Sprintf("Counter (%d)", i), string(body))
+	}, &testOptions{workerScript: "worker-restart.php", nbWorkers: 1, nbParallelRequests: 1, env: map[string]string{"EVERY": "1"}})
 }
 
 func TestWorkerCrashIsLoggedAboveDebugLevel(t *testing.T) {
@@ -167,6 +193,54 @@ func ExampleServeHTTP_workers() {
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
+// Request bodies must be released between requests without freeing temp streams the application still holds.
+func TestWorkerTemporaryStreams(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		var first string
+		for i := range 5 {
+			req := httptest.NewRequest("POST", "http://example.com/worker-temp-streams.php", strings.NewReader("body"))
+			req.Header.Set("Content-Type", "text/plain")
+			w := httptest.NewRecorder()
+			handler(w, req)
+
+			body, _ := io.ReadAll(w.Result().Body)
+			assert.True(t, strings.HasPrefix(string(body), "hello "), string(body))
+			if i == 0 {
+				first = string(body)
+			}
+			assert.Equal(t, first, string(body), "streams leaked across requests")
+		}
+	}, &testOptions{workerScript: "worker-temp-streams.php", nbWorkers: 1, nbParallelRequests: 1})
+}
+
+// A php://input handle kept across requests must keep reading the body it was opened on.
+func TestWorkerKeptInputStream(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		for i, expected := range []string{"body0", "body0", "body0"} {
+			req := httptest.NewRequest("POST", "http://example.com/worker-input-stream.php", strings.NewReader(fmt.Sprintf("body%d", i)))
+			req.Header.Set("Content-Type", "text/plain")
+			w := httptest.NewRecorder()
+			handler(w, req)
+
+			body, _ := io.ReadAll(w.Result().Body)
+			assert.Equal(t, expected, string(body))
+		}
+	}, &testOptions{workerScript: "worker-input-stream.php", nbWorkers: 1, nbParallelRequests: 1})
+}
+
+// A request body closed by the application must not be released a second time.
+func TestWorkerClosedRequestBody(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		req := httptest.NewRequest("POST", "http://example.com/worker-input-stream.php?close=1", strings.NewReader(fmt.Sprintf("body%d", i)))
+		req.Header.Set("Content-Type", "text/plain")
+		w := httptest.NewRecorder()
+		handler(w, req)
+
+		body, _ := io.ReadAll(w.Result().Body)
+		assert.Equal(t, fmt.Sprintf("body%d", i), string(body))
+	}, &testOptions{workerScript: "worker-input-stream.php", nbWorkers: 1, nbParallelRequests: 1})
+}
+
 func TestWorkerHasOSEnvironmentVariableInSERVER(t *testing.T) {
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
 		req := httptest.NewRequest("GET", "http://example.com/worker.php", nil)
@@ -186,15 +260,51 @@ func TestKeepRunningOnConnectionAbort(t *testing.T) {
 		req := httptest.NewRequest("GET", "http://example.com/worker-with-counter.php", nil)
 
 		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
 		req = req.WithContext(ctx)
-		cancel()
-		body1, _ := testRequest(req, handler, t)
+		w := &cancelOnWriteResponseWriter{ResponseRecorder: httptest.NewRecorder(), cancel: cancel}
+		handler(w, req)
 
-		assert.Equal(t, "requests:1", body1, "should have handled exactly one request")
+		assert.ErrorIs(t, ctx.Err(), context.Canceled, "should have aborted during the response")
+		assert.Equal(t, "requests:1", w.Body.String(), "should have handled exactly one request")
 		body2, _ := testGet("http://example.com/worker-with-counter.php", handler, t)
 
 		assert.Equal(t, "requests:2", body2, "should not have stopped execution after the first request was aborted")
 	}, &testOptions{workerScript: "worker-with-counter.php", nbWorkers: 1, nbParallelRequests: 1})
+}
+
+// Cancel only once the worker writes, so dispatch cannot discard the request first.
+type cancelOnWriteResponseWriter struct {
+	*httptest.ResponseRecorder
+	cancel context.CancelFunc
+}
+
+func (w *cancelOnWriteResponseWriter) Write(p []byte) (int, error) {
+	w.cancel()
+	return w.ResponseRecorder.Write(p)
+}
+
+// Per-request env must not leak into later requests on the same worker thread, even after putenv().
+func TestWorkerRequestEnvDoesNotLeak(t *testing.T) {
+	runTest(t, func(_ func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		serve := func(query string, env map[string]string) string {
+			r := httptest.NewRequest("GET", "http://example.com/worker-request-env.php?"+query, nil)
+			req, err := frankenphp.NewRequestWithContext(r, frankenphp.WithRequestDocumentRoot(testDataDir, false), frankenphp.WithRequestEnv(env))
+			require.NoError(t, err)
+
+			w := httptest.NewRecorder()
+			require.NoError(t, frankenphp.ServeHTTP(w, req))
+			body, _ := io.ReadAll(w.Result().Body)
+
+			return string(body)
+		}
+
+		assert.JSONEq(t, `{"server":"a","secret":"a","other":"a","worker":"bar","put":false,"all":true,"env":false}`, serve("", map[string]string{"SECRET": "a", "OTHER": "a"}))
+		assert.JSONEq(t, `{"server":false,"secret":false,"other":"b","worker":"bar","put":false,"all":false,"env":false}`, serve("", map[string]string{"OTHER": "b"}))
+		assert.JSONEq(t, `{"server":false,"secret":false,"other":false,"worker":"bar","put":false,"all":false,"env":false}`, serve("", nil))
+		assert.JSONEq(t, `{"server":"c","secret":"c","other":"c","worker":"bar","put":"1","all":true,"env":false}`, serve("put=1", map[string]string{"SECRET": "c", "OTHER": "c"}))
+		assert.JSONEq(t, `{"server":false,"secret":false,"other":"d","worker":"bar","put":"1","all":false,"env":false}`, serve("", map[string]string{"OTHER": "d"}))
+	}, &testOptions{workerScript: "worker-request-env.php", nbWorkers: 1, nbParallelRequests: 1, env: map[string]string{"FOO": "bar"}, phpIni: map[string]string{"variables_order": "EGPCS"}})
 }
 
 // TestWorkerMaxRequests verifies that a worker restarts after reaching max_requests.

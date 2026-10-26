@@ -2062,6 +2062,31 @@ func TestSymlinkWorkerPaths(t *testing.T) {
 
 		tester.AssertGetResponse("http://localhost:"+testPort+"/index.php", http.StatusOK, "Request: 0\n")
 	})
+
+	t.Run("PhpServerWorkerWithoutResolveRootSymlink", func(t *testing.T) {
+		tester := caddytest.NewTester(t)
+		initServer(t, tester, `
+			{
+				skip_install_trust
+				admin localhost:2999
+				http_port `+testPort+`
+			}
+
+			localhost:`+testPort+` {
+				root `+publicDir+`
+				php_server {
+					worker {
+						file `+publicDir+`/index.php
+						num 1
+					}
+					resolve_root_symlink false
+				}
+			}
+			`, "caddyfile")
+
+		// the readiness probe of initServer falls back to index.php and was request 0
+		tester.AssertGetResponse("http://localhost:"+testPort+"/index.php", http.StatusOK, "Request: 1\n")
+	})
 }
 
 // TestSymlinkResolveRoot tests the resolve_root_symlink directive behavior

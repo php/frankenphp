@@ -118,6 +118,8 @@ func (s *Server) addWorker(w *worker) error {
 		return fmt.Errorf("two workers in a server cannot have the same filename: %q", w.fileName)
 	}
 	s.workersByPath[w.fileName] = w
+	// a document root whose symlinks are kept yields the declared path, not the resolved one
+	s.workersByPath[w.declaredFileName] = w
 
 	return nil
 }

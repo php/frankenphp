@@ -1,7 +1,7 @@
 package frankenphp
 
 // #include "frankenphp.h"
-// #include "types.h"
+// #include "frankenphp_types.h"
 import "C"
 import (
 	"os"

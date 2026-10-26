@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -335,12 +334,12 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					return d.ArgErr()
 				}
 
-				v, err := strconv.ParseUint(d.Val(), 10, 32)
+				v, err := parseNonNegativeInt(d)
 				if err != nil {
 					return err
 				}
 
-				f.NumThreads = int(v)
+				f.NumThreads = v
 			case "max_threads":
 				if !d.NextArg() {
 					return d.ArgErr()
@@ -351,12 +350,12 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					continue
 				}
 
-				v, err := strconv.ParseUint(d.Val(), 10, 32)
+				v, err := parseNonNegativeInt(d)
 				if err != nil {
 					return err
 				}
 
-				f.MaxThreads = int(v)
+				f.MaxThreads = v
 			case "max_wait_time":
 				if !d.NextArg() {
 					return d.ArgErr()
@@ -384,12 +383,12 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					return d.ArgErr()
 				}
 
-				v, err := strconv.ParseUint(d.Val(), 10, 32)
+				v, err := parseNonNegativeInt(d)
 				if err != nil {
-					return d.WrapErr(err)
+					return err
 				}
 
-				f.MaxRequests = int(v)
+				f.MaxRequests = v
 			case "php_ini":
 				parseIniLine := func(d *caddyfile.Dispenser) error {
 					key := d.Val()

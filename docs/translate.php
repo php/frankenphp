@@ -27,6 +27,7 @@ You will receive the English version (authoritative) and a translation (possibly
 * **General Links:** You must not translate link URLs, only the link text.
 * **php.net Exception:** You must rewrite all `php.net` URLs to use their language-agnostic format by removing the language segment (e.g., change `https://www.php.net/manual/en/function.echo.php` to `https://www.php.net/manual/function.echo.php`).
 * **Anchors:** You may translate anchors to translation pages (e.g., `config.md#translated-anchor`), but keep existing anchors as they are.
+* **Same-page Anchors:** Headings are translated, so every link to a heading of the same document (e.g., `#customizing-the-frankenphp-static-build`) must use the anchor GitHub generates from the translated heading (lowercase, spaces replaced by hyphens, punctuation removed).
 * **Content Integrity:** You must not add or remove any content; only translate what is present.
 * **Accuracy:** You must ensure that the translation is accurate and faithful to the original meaning.
 * **Style:** You must write in a natural and fluent style appropriate for technical documentation.

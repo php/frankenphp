@@ -6,9 +6,11 @@ package caddy
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/caddyserver/caddy/v2"
+	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
 	"github.com/dunglas/frankenphp"
 )
@@ -50,4 +52,17 @@ func init() {
 // wrongSubDirectiveError returns a nice error message.
 func wrongSubDirectiveError(module string, allowedDirectives string, wrongValue string) error {
 	return fmt.Errorf("unknown %q subdirective: %s (allowed directives are: %s)", module, wrongValue, allowedDirectives)
+}
+
+// parseNonNegativeInt rejects negative values, which the runtime treats as sentinels (auto, default).
+func parseNonNegativeInt(d *caddyfile.Dispenser) (int, error) {
+	v, err := strconv.Atoi(d.Val())
+	if err != nil {
+		return 0, d.WrapErr(err)
+	}
+	if v < 0 {
+		return 0, d.Errf("%q must not be negative", d.Val())
+	}
+
+	return v, nil
 }

@@ -199,6 +199,13 @@ frankenphp {
 }
 ```
 
+### Number of threads
+
+When the worker mode is enabled, an additional thread is required to handle the incoming requests,
+so the default `num_threads` value is `1 + 2x(number of available CPUs)`.
+
+Thus, in that mode if `num_threads` and `num` are explicitly set, `num_threads` must be strictly greater then `num`.
+
 ## Superglobals behavior
 
 [PHP superglobals](https://www.php.net/manual/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...)
@@ -236,6 +243,7 @@ Because worker mode keeps the PHP process alive between requests, the following 
 - **Global variables**: Variables in the global scope of the worker script persist between requests.
 - **In-memory caches**: Any data stored in memory (arrays, objects) outside the request handler persists.
 - **Runtime engine settings**: Changes made with `ini_set()`, `stream_context_set_default()`, `date_default_timezone_set()`, `chdir()`, `stream_wrapper_register()`, `set_error_handler()` or `set_exception_handler()` stay in effect for later requests. Never store request- or user-specific values there, such as credentials in the default stream context: pass an explicit context to each call instead.
+- **Process-wide settings**: `umask()` and `setlocale()` change the whole FrankenPHP process, not only the current thread. Worker mode doesn't restore them between requests, and in every mode they also affect requests running at the same time. Set them once at startup, or call `chmod()` on created files instead of changing the umask.
 
 This is by design and is what makes worker mode fast. However, it requires attention to avoid unintended side effects:
 

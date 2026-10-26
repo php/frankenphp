@@ -25,6 +25,17 @@ func TestWorkerOptionsKeepProvisionedOptions(t *testing.T) {
 	require.Len(t, opts, base+1, "worker options set during provisioning must be forwarded")
 }
 
+// negative counts are runtime sentinels (auto, default) and must not be reachable from the Caddyfile
+func TestAppRejectsNegativeCounts(t *testing.T) {
+	for _, directive := range []string{"num_threads -1", "max_threads -1", "max_requests -1", "worker index.php -1", "worker {\n num -1\n }", "worker {\n max_threads -1\n }"} {
+		t.Run(directive, func(t *testing.T) {
+			d := caddyfile.NewTestDispenser("frankenphp {\n" + directive + "\n}")
+
+			require.ErrorContains(t, (&FrankenPHPApp{}).UnmarshalCaddyfile(d), "must not be negative")
+		})
+	}
+}
+
 func TestModuleRequestBodyTimeout(t *testing.T) {
 	d := caddyfile.NewTestDispenser(`
 	{

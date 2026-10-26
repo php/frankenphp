@@ -1,5 +1,5 @@
-#ifndef TYPES_H
-#define TYPES_H
+#ifndef _FRANKENPHP_TYPES_H
+#define _FRANKENPHP_TYPES_H
 
 #include "frankenphp.h"
 #include <Zend/zend.h>
@@ -10,6 +10,10 @@
 
 zval *get_ht_packed_data(HashTable *, uint32_t index);
 Bucket *get_ht_bucket_data(HashTable *, uint32_t index);
+
+bool __zend_array_is_recursive__(zend_array *arr);
+void __zend_array_protect_recursion__(zend_array *arr);
+void __zend_array_unprotect_recursion__(zend_array *arr);
 
 void *__emalloc__(size_t size);
 void __efree__(void *ptr);

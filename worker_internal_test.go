@@ -1,17 +1,46 @@
 package frankenphp
 
 import (
+	"context"
+	"log/slog"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/dunglas/frankenphp/internal/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestCancelledRequestLeavesWorkerQueue(t *testing.T) {
+	savedMaxWaitTime := maxWaitTime.Swap(0)
+	savedScaleChan := scaleChan
+	scaleChan = nil
+	t.Cleanup(func() {
+		maxWaitTime.Store(savedMaxWaitTime)
+		scaleChan = savedScaleChan
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequest("GET", "/index.php", nil).WithContext(ctx)
+	cancel()
+	w := &worker{name: "test", requestChan: make(chan *frankenPHPContext), maxThreads: 1}
+
+	err := w.handleRequest(&frankenPHPContext{
+		request:   req,
+		ctx:       ctx,
+		done:      make(chan any),
+		startedAt: time.Now(),
+	})
+
+	assert.NoError(t, err)
+	assert.Zero(t, w.queuedRequests.Load())
+}
 
 // TestRestartWorkersForceKillsStuckThread verifies the drain path does
 // not hang when a worker is stuck in a blocking PHP call (sleep, etc.).
@@ -139,3 +168,44 @@ func TestInitReturnsWhenARebootWaitsOnAWorkerThatGivesUp(t *testing.T) {
 		t.Fatal("Init() hung behind a reboot waiting for a worker thread that ended on its own")
 	}
 }
+
+func TestWorkerStartupLogOwnsMessage(t *testing.T) {
+	const message = "worker startup\x00\xff"
+	data := []byte(message)
+	capture := &workerStartupLogCapture{}
+	fc := &frankenPHPContext{ctx: context.Background(), logger: slog.New(capture)}
+	oldThreads := phpThreads
+	phpThreads = []*phpThread{{handler: &regularThread{fc: fc}}}
+	t.Cleanup(func() { phpThreads = oldThreads })
+
+	// Reflection bridges C argument types, which cannot be imported in a Go test file.
+	fn := reflect.ValueOf(go_ub_write)
+	signature := fn.Type()
+	result := fn.Call([]reflect.Value{
+		reflect.Zero(signature.In(0)),
+		reflect.NewAt(signature.In(1).Elem(), unsafe.Pointer(unsafe.SliceData(data))),
+		reflect.ValueOf(len(data)).Convert(signature.In(2)),
+	})
+	require.Equal(t, uint64(len(data)), result[0].Uint())
+	require.False(t, result[1].Bool())
+
+	// A log handler may retain the record after PHP reuses its output buffer.
+	for i := range data {
+		data[i] = 'Z'
+	}
+	require.Len(t, capture.records, 1)
+	assert.Equal(t, message, capture.records[0].Message)
+	assert.Equal(t, slog.LevelInfo, capture.records[0].Level)
+}
+
+type workerStartupLogCapture struct {
+	records []slog.Record
+}
+
+func (h *workerStartupLogCapture) Enabled(context.Context, slog.Level) bool { return true }
+func (h *workerStartupLogCapture) Handle(_ context.Context, record slog.Record) error {
+	h.records = append(h.records, record.Clone())
+	return nil
+}
+func (h *workerStartupLogCapture) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *workerStartupLogCapture) WithGroup(string) slog.Handler      { return h }

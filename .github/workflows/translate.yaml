@@ -44,13 +44,12 @@ jobs:
           php ./docs/translate.php "$MD_FILES"
       - name: Run Linter
         if: steps.md_files.outputs.found == 'true'
-        continue-on-error: true
         uses: super-linter/super-linter/slim@2da136927bd4a73596db63044b504547c62cb854 # v9.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LINTER_RULES_PATH: /
           MARKDOWN_CONFIG_FILE: .markdown-lint.yaml
-          VALIDATE_NATURAL_LANGUAGE: false
+          VALIDATE_MARKDOWN: true
           FIX_MARKDOWN: true
       - name: Create Pull Request
         if: steps.md_files.outputs.found == 'true'

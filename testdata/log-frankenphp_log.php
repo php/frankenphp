@@ -23,4 +23,19 @@ return function () {
 	frankenphp_log("some null message {$_GET['i']}", FRANKENPHP_LOG_LEVEL_INFO, [
 		8 => null,
 	]);
+
+	// a cyclic array used to overflow the Go stack and abort the whole process
+	$cyclic = ['tag' => 'cyclic'];
+	$cyclic['self'] = &$cyclic;
+	try {
+		frankenphp_log("some cyclic message {$_GET['i']}", FRANKENPHP_LOG_LEVEL_INFO, $cyclic);
+	} catch (RuntimeException $e) {
+		frankenphp_log("cyclic rejected {$_GET['i']}", FRANKENPHP_LOG_LEVEL_INFO, ['err' => $e->getMessage()]);
+	}
+
+	$shared = ['a', 'b'];
+	frankenphp_log("some shared message {$_GET['i']}", FRANKENPHP_LOG_LEVEL_INFO, [
+		'first'  => $shared,
+		'second' => $shared,
+	]);
 };

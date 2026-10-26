@@ -49,9 +49,8 @@ jobs:
           php-version: ${{ matrix.php-versions }}
       - name: Install e-dant/watcher
         uses: ./.github/actions/watcher
-      - name: Reinstall libbrotli-dev
-        # TODO: remove this workaround when fixed upstream
-        run: sudo apt-get install --reinstall -y libbrotli-dev
+      - name: Install libbrotli-dev
+        run: sudo apt-get install -y libbrotli-dev
       - name: Set CGO flags
         run: echo "CGO_CFLAGS=-I${PWD}/watcher/target/include -DFRANKENPHP_TEST $(php-config --includes)" >> "${GITHUB_ENV}"
       - name: Build

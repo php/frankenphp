@@ -59,6 +59,9 @@ When viewing the logs (e.g., via `docker compose logs`), the output will appear 
 {"level":"warn","ts":1704067200,"logger":"frankenphp","msg":"Memory usage high","current_usage":10485760,"peak_usage":12582912}
 ```
 
+`frankenphp_log()` is also available in `frankenphp php-cli`, where it writes to the standard error output.
+`php-cli` doesn't load the `Caddyfile`, so its `log` directives don't apply there.
+
 ## `error_log()`
 
 FrankenPHP also allows logging using the standard `error_log()` function. If the `$message_type` parameter is `4` (SAPI),

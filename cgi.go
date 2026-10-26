@@ -14,7 +14,6 @@ package frankenphp
 // #include <php_variables.h>
 import "C"
 import (
-	"context"
 	"crypto/tls"
 	"net"
 	"net/http"
@@ -142,7 +141,7 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 	})
 }
 
-func addHeadersToServer(ctx context.Context, request *http.Request, trackVarsArray *C.zval) {
+func addHeadersToServer(request *http.Request, trackVarsArray *C.zval) {
 	for field, val := range request.Header {
 		if k := commonHeaders[field]; k != nil {
 			v := strings.Join(val, ", ")
@@ -152,7 +151,7 @@ func addHeadersToServer(ctx context.Context, request *http.Request, trackVarsArr
 
 		// if the header name could not be cached, it needs to be registered safely
 		// this is more inefficient but allows additional sanitizing by PHP
-		k := phpheaders.GetUnCommonHeader(ctx, field)
+		k := phpheaders.GetUnCommonHeader(field)
 		v := strings.Join(val, ", ")
 		C.frankenphp_register_variable_safe(toUnsafeChar(k), toUnsafeChar(v), C.size_t(len(v)), trackVarsArray)
 	}
@@ -174,12 +173,12 @@ func go_register_server_variables(threadIndex C.uintptr_t, trackVarsArray *C.zva
 	fc := thread.handler.frankenPHPContext()
 
 	if fc.request == nil {
-		// go_update_request_info() never ran, the thread-local prepared env still holds the previous request
+		// go_update_request_info() never ran
 		return
 	}
 
 	addKnownVariablesToServer(fc, trackVarsArray)
-	addHeadersToServer(fc.ctx, fc.request, trackVarsArray)
+	addHeadersToServer(fc.request, trackVarsArray)
 
 	// The Prepared Environment is registered last and can overwrite any previous values
 	if len(fc.env) != 0 || len(fc.server.env) != 0 {
@@ -204,9 +203,8 @@ func splitCgiPath(fc *frankenPHPContext) {
 	// If a worker is already assigned explicitly, derive SCRIPT_NAME from its filename
 	if fc.worker != nil {
 		fc.scriptFilename = fc.worker.fileName
-		docRootWithSep := fc.documentRoot + string(filepath.Separator)
-		if strings.HasPrefix(fc.worker.fileName, docRootWithSep) {
-			fc.scriptName = filepath.ToSlash(strings.TrimPrefix(fc.worker.fileName, fc.documentRoot))
+		if rest, ok := strings.CutPrefix(fc.worker.fileName, fc.documentRoot); ok && rest != "" && rest[0] == filepath.Separator {
+			fc.scriptName = filepath.ToSlash(rest)
 		} else {
 			fc.docURI = ""
 			fc.pathInfo = ""

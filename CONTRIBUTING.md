@@ -13,7 +13,7 @@ docker build -t frankenphp-dev -f dev.Dockerfile .
 docker run --cap-add=SYS_PTRACE --security-opt seccomp=unconfined -p 8080:8080 -p 443:443 -p 443:443/udp -v $PWD:/go/src/app -it frankenphp-dev
 ```
 
-The image contains the usual development tools (Go, GDB, Valgrind, Neovim...) and uses the following php setting locations
+The image contains the usual development tools (Go, GDB, Valgrind...) and uses the following php setting locations
 
 - php.ini: `/etc/frankenphp/php.ini` A php.ini file with development presets is provided by default.
 - additional configuration files: `/etc/frankenphp/php.d/*.ini`

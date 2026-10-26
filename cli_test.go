@@ -241,7 +241,6 @@ func TestExecuteCLIHTTPFunctionsUnavailable(t *testing.T) {
 		{"frankenphp_handle_request", "static function () {}"},
 		{"headers_send", "103"},
 		{"mercure_publish", "'https://example.com/topic', 'test'"},
-		{"frankenphp_log", "'CLI feature detection'"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
@@ -264,6 +263,29 @@ var_export(function_exists($function));
 			require.Equal(t, "false", string(output))
 		})
 	}
+}
+
+func TestExecuteCLILog(t *testing.T) {
+	if _, err := os.Stat("internal/testcli/testcli"); err != nil {
+		t.Skip("internal/testcli/testcli has not been compiled, run `cd internal/testcli/ && go build`")
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "internal/testcli/testcli", "-r", `
+frankenphp_log('hello', FRANKENPHP_LOG_LEVEL_WARN, ['k' => 'v']);
+try {
+    frankenphp_log('invalid context', FRANKENPHP_LOG_LEVEL_ERROR, ['k' => new stdClass()]);
+} catch (RuntimeException $e) {
+    echo 'caught';
+}
+`)
+	cmd.WaitDelay = time.Second
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, ctx.Err(), "output: %s", output)
+	require.NoError(t, err, "output: %s", output)
+	assert.Contains(t, string(output), "WARN hello k=v")
+	assert.Contains(t, string(output), "caught")
 }
 
 func TestExecuteCLINativeHTTPFunctions(t *testing.T) {

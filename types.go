@@ -17,7 +17,13 @@ package frankenphp
 #cgo noescape __zval_arr__
 #cgo noescape __emalloc__
 #cgo noescape __efree__
-#include "types.h"
+#cgo nocallback __zend_array_is_recursive__
+#cgo nocallback __zend_array_protect_recursion__
+#cgo nocallback __zend_array_unprotect_recursion__
+#cgo noescape __zend_array_is_recursive__
+#cgo noescape __zend_array_protect_recursion__
+#cgo noescape __zend_array_unprotect_recursion__
+#include "frankenphp_types.h"
 */
 import "C"
 import (
@@ -94,6 +100,11 @@ func goArray[T any](arr unsafe.Pointer, ordered bool) (map[string]T, []string, e
 	if array == nil {
 		return nil, nil, fmt.Errorf("received a *zval that wasn't a HashTable on array conversion")
 	}
+
+	if err := protectRecursion(array); err != nil {
+		return nil, nil, err
+	}
+	defer C.__zend_array_unprotect_recursion__(array)
 
 	nNumUsed := array.nNumUsed
 	entries := make(map[string]T, nNumUsed)
@@ -179,6 +190,11 @@ func GoPackedArray[T any](arr unsafe.Pointer) ([]T, error) {
 	if array == nil {
 		return nil, fmt.Errorf("GoPackedArray received *zval that wasn't a HashTable")
 	}
+
+	if err := protectRecursion(array); err != nil {
+		return nil, err
+	}
+	defer C.__zend_array_unprotect_recursion__(array)
 
 	nNumUsed := array.nNumUsed
 	result := make([]T, 0, nNumUsed)
@@ -441,6 +457,18 @@ func htIsPacked(ht *C.zend_array) bool {
 	flags := *(*C.uint32_t)(unsafe.Pointer(&ht.u[0]))
 
 	return (flags & C.HASH_FLAG_PACKED) != 0
+}
+
+// protectRecursion marks ht as being converted, like json_encode() does:
+// following a cycle would overflow the Go stack and abort the whole process.
+func protectRecursion(ht *C.zend_array) error {
+	if C.__zend_array_is_recursive__(ht) {
+		return errors.New("cannot convert a recursive array")
+	}
+
+	C.__zend_array_protect_recursion__(ht)
+
+	return nil
 }
 
 // extractZvalValue returns a pointer to the zval value cast to the expected type

@@ -585,6 +585,7 @@ func testLog_frankenphp_log(t *testing.T, opts *testOptions) {
 		handler(w, req)
 
 		logs := buf.String()
+		assert.NotContains(t, logs, "some cyclic message")
 		for _, message := range []string{
 			`level=INFO msg="default level message"`,
 			fmt.Sprintf(`level=DEBUG msg="some debug message %d" "key int"=1`, i),
@@ -592,6 +593,8 @@ func testLog_frankenphp_log(t *testing.T, opts *testOptions) {
 			fmt.Sprintf(`level=WARN msg="some warn message %d"`, i),
 			fmt.Sprintf(`level=ERROR msg="some error message %d" err="[a v]"`, i),
 			fmt.Sprintf(`level=INFO msg="some null message %d" 8=<nil>`, i),
+			fmt.Sprintf(`level=INFO msg="cyclic rejected %d" err="Failed to log message: converting attrs: cannot convert a recursive array"`, i),
+			fmt.Sprintf(`level=INFO msg="some shared message %d"`, i),
 		} {
 			assert.Contains(t, logs, message)
 		}
@@ -603,6 +606,8 @@ func TestConnectionAbort_worker(t *testing.T) {
 	testConnectionAbort(t, &testOptions{workerScript: "connection_status.php"})
 }
 func testConnectionAbort(t *testing.T, opts *testOptions) {
+	opts.nbParallelRequests = 1
+
 	testFinish := func(finish string) {
 		t.Run(fmt.Sprintf("finish=%s", finish), func(t *testing.T) {
 			var buf syncBuffer
@@ -846,6 +851,16 @@ func TestPutenvDoesNotLeakToOSEnvironment(t *testing.T) {
 		childOut, _ := exec.Command("printenv", key).Output()
 		assert.Empty(t, strings.TrimSpace(string(childOut)), "child process must not inherit the putenv value")
 	}, &testOptions{nbParallelRequests: 1})
+}
+
+// putenv() in a shutdown function must not leave the next script on the thread a freed sandbox.
+func TestPutenvInShutdownFunction(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		for range 3 {
+			body, _ := testGet("http://example.com/env/putenv-in-shutdown.php?put=1", handler, t)
+			assert.Equal(t, "false", body)
+		}
+	}, &testOptions{nbParallelRequests: 1, initOpts: []frankenphp.Option{frankenphp.WithNumThreads(1)}})
 }
 
 // TODO: should it actually get reset in worker mode?
@@ -1239,6 +1254,63 @@ func TestFileStreamInWorkerMode(t *testing.T) {
 	}, &testOptions{workerScript: "file-stream.php", nbParallelRequests: 1, nbWorkers: 1})
 }
 
+func TestLastErrorsNoLeakBetweenRequests_worker(t *testing.T) {
+	type lastErrors struct {
+		LastError       *string   `json:"last_error"`
+		LibxmlErrors    *[]string `json:"libxml_errors"`
+		LibxmlLastError *string   `json:"libxml_last_error"`
+		InternalErrors  *bool     `json:"internal_errors"`
+		LastResponse    *[]string `json:"last_response_headers"`
+		Strtok          any       `json:"strtok"`
+		Rewriter        *bool     `json:"rewriter"`
+	}
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Secret", r.URL.Query().Get("s"))
+	}))
+	t.Cleanup(upstream.Close)
+
+	get := func(url string, handler func(http.ResponseWriter, *http.Request)) lastErrors {
+		body, _ := testGet(url, handler, t)
+
+		var e lastErrors
+		require.NoError(t, json.Unmarshal([]byte(body), &e), body)
+
+		return e
+	}
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		fetch := url.QueryEscape(fmt.Sprintf("%s/?s=secret_%d", upstream.URL, i))
+		leaked := get(fmt.Sprintf("http://example.com/worker-last-errors.php?leak=%d&fetch=%s", i, fetch), handler)
+		require.NotNil(t, leaked.LastError)
+		assert.Equal(t, fmt.Sprintf("secret %d", i), *leaked.LastError)
+
+		e := get("http://example.com/worker-last-errors.php", handler)
+		assert.Nil(t, e.LastError)
+		assert.Equal(t, false, e.Strtok)
+		require.NotNil(t, e.Rewriter)
+		assert.True(t, *e.Rewriter, "the URL rewriter must restart in each request")
+
+		if leaked.LastResponse != nil {
+			assert.Contains(t, *leaked.LastResponse, fmt.Sprintf("X-Secret: secret_%d", i))
+			assert.Nil(t, e.LastResponse)
+		}
+
+		if leaked.LibxmlErrors == nil {
+			t.Log("libxml not available, skipping libxml assertions")
+
+			return
+		}
+
+		require.NotEmpty(t, *leaked.LibxmlErrors)
+		assert.Contains(t, (*leaked.LibxmlErrors)[0], fmt.Sprintf("secret_%d", i))
+
+		assert.Empty(t, *e.LibxmlErrors)
+		assert.Nil(t, e.LibxmlLastError)
+		assert.True(t, *e.InternalErrors)
+	}, &testOptions{workerScript: "worker-last-errors.php", nbParallelRequests: 1, nbWorkers: 1})
+}
+
 // To run this fuzzing test use: go test -fuzz FuzzRequest
 // TODO: Cover more potential cases
 func FuzzRequest(f *testing.F) {
@@ -1624,31 +1696,44 @@ func TestValidateReportsDeclarationErrors(t *testing.T) {
 	), "max_threads")
 }
 
-func TestUnhealthyThreadIsRestarted(t *testing.T) {
+func TestOutOfMemory_module(t *testing.T) { testOutOfMemory(t, &testOptions{}) }
+func TestOutOfMemory_worker(t *testing.T) {
+	testOutOfMemory(t, &testOptions{workerScript: "out-of-memory.php", nbWorkers: 1})
+}
+func testOutOfMemory(t *testing.T, opts *testOptions) {
 	if os.Getenv("USE_ZEND_ALLOC") == "0" {
 		t.Skip("memory_limit is not enforced without the Zend allocator")
 	}
 
 	var buf fmt.Stringer
-	opts := &testOptions{
-		nbParallelRequests: 1,
-		initOpts:           []frankenphp.Option{frankenphp.WithNumThreads(1)},
-		phpIni:             map[string]string{"memory_limit": "8M"},
-	}
+	opts.nbParallelRequests = 1
+	opts.initOpts = []frankenphp.Option{frankenphp.WithNumThreads(2)}
+	opts.phpIni = map[string]string{"memory_limit": "8M"}
 	opts.logger, buf = newTestLogger(t)
 
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
-		// Warm-up request, so that the failing request below is not the thread's first:
+		// Also a warm-up request, so that the failing request below is not the thread's first:
 		// ext/date initializes DATEG(last_errors) only in RINIT, yet request shutdown
 		// frees it even when startup failed before RINIT ran. A new ZTS thread then
-		// frees garbage (observed with PHP 8.5.12; same GINIT in PHP 8.2 to 8.5).
-		testGet("http://example.com/hello.php", handler, t)
+		// frees garbage (same GINIT in PHP 8.2 to 8.5).
+		body, _ := testGet("http://example.com/out-of-memory.php?hard_limit", handler, t)
+		hardLimit := body == "true"
 
-		// fails request startup: $_GET is populated before the script runs
-		testGet("http://example.com/hello.php?q="+strings.Repeat("a", 16<<20), handler, t)
+		body, _ = testGet("http://example.com/out-of-memory.php?exhaust", handler, t)
+		assert.Contains(t, body, "Allowed memory size of 8388608 bytes exhausted")
+		body, _ = testGet("http://example.com/out-of-memory.php", handler, t)
+		assert.Equal(t, "ok", body)
 
-		body, _ := testGet("http://example.com/hello.php", handler, t)
-		assert.Equal(t, "Hello from PHP", body)
-		assert.Contains(t, buf.String(), "Restarting unhealthy thread")
+		// $_GET is populated before the script runs; its copies (4 in worker mode) must cross memory_limit but stay under the hard limit (twice memory_limit), past which PHP exits
+		body, _ = testGet("http://example.com/out-of-memory.php?q="+strings.Repeat("a", 3<<20), handler, t)
+		if hardLimit {
+			assert.Contains(t, body, "Allowed memory size of 8388608 bytes exhausted")
+		}
+		body, _ = testGet("http://example.com/out-of-memory.php", handler, t)
+		assert.Equal(t, "ok", body)
+		if !hardLimit && opts.workerScript == "" {
+			// Older PHP versions fail the request startup instead
+			assert.Contains(t, buf.String(), "Restarting unhealthy thread")
+		}
 	}, opts)
 }

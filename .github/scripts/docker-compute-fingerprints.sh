@@ -56,6 +56,14 @@ get_existing_fingerprint() {
 		jq -r '.Labels["dev.frankenphp.base.fingerprint"] // empty' || true
 }
 
+get_existing_version() {
+	local tag="$1"
+	skopeo inspect "docker://docker.io/dunglas/frankenphp:${tag}" \
+		--override-os linux \
+		--override-arch amd64 2>/dev/null |
+		jq -r '.Labels["org.opencontainers.image.version"] // empty' || true
+}
+
 # Everything runs from main(), parsed before execution starts: this script checks out
 # another Git reference (and thus replaces itself on disk) while running, and bash
 # reads script files lazily.
@@ -158,6 +166,7 @@ main() {
 	# fingerprint label is read from the versioned builder tag; images built before the
 	# per-variant split carry the legacy all-variants fingerprint, so accept it too.
 	local version_no_prefix="${FRANKENPHP_LATEST_TAG#v}"
+	local major="${version_no_prefix%%.*}"
 	local rebuild_variants=() php_full php_minor os builder_tag existing
 	for variant_key in "${!VARIANT_FINGERPRINTS[@]}"; do
 		php_full="${variant_key%-*}"
@@ -165,8 +174,11 @@ main() {
 		os="${variant_key##*-}"
 		builder_tag="${version_no_prefix}-builder-php${php_minor}-${os}"
 		existing="$(get_existing_fingerprint "${builder_tag}")"
+		# Skip only when the floating major tag also carries the latest release: a scheduled
+		# run that happened while the release was still a draft can leave it on the previous one
 		if [[ -n "${existing}" ]] &&
-			{ [[ "${existing}" == "${VARIANT_FINGERPRINTS["${variant_key}"]}" ]] || [[ "${existing}" == "${BASE_FINGERPRINT}" ]]; }; then
+			{ [[ "${existing}" == "${VARIANT_FINGERPRINTS["${variant_key}"]}" ]] || [[ "${existing}" == "${BASE_FINGERPRINT}" ]]; } &&
+			[[ "$(get_existing_version "${major}-builder-php${php_minor}-${os}")" == "${FRANKENPHP_LATEST_TAG}" ]]; then
 			continue
 		fi
 		rebuild_variants+=("${VARIANT_NAMES["${variant_key}"]}")

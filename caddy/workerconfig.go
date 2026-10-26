@@ -52,12 +52,12 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 		if d.Val() == "watch" {
 			wc.Watch = append(wc.Watch, defaultWatchPattern)
 		} else {
-			v, err := strconv.ParseUint(d.Val(), 10, 32)
+			v, err := parseNonNegativeInt(d)
 			if err != nil {
 				return wc, err
 			}
 
-			wc.Num = int(v)
+			wc.Num = v
 		}
 	}
 
@@ -82,23 +82,23 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 				return wc, d.ArgErr()
 			}
 
-			v, err := strconv.ParseUint(d.Val(), 10, 32)
+			v, err := parseNonNegativeInt(d)
 			if err != nil {
-				return wc, d.WrapErr(err)
+				return wc, err
 			}
 
-			wc.Num = int(v)
+			wc.Num = v
 		case "max_threads":
 			if !d.NextArg() {
 				return wc, d.ArgErr()
 			}
 
-			v, err := strconv.ParseUint(d.Val(), 10, 32)
+			v, err := parseNonNegativeInt(d)
 			if err != nil {
-				return wc, d.WrapErr(err)
+				return wc, err
 			}
 
-			wc.MaxThreads = int(v)
+			wc.MaxThreads = v
 		case "env":
 			args := d.RemainingArgs()
 			if len(args) != 2 {

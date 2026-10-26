@@ -91,12 +91,12 @@ func cmdPHPServer(fs caddycmd.Flags) (int, error) {
 		for _, worker := range workers {
 			parts := strings.SplitN(worker, ",", 2)
 
-			var num uint64
+			var num int
 			if len(parts) > 1 {
-				num, _ = strconv.ParseUint(parts[1], 10, 32)
+				num, _ = strconv.Atoi(parts[1])
 			}
 
-			workersOption = append(workersOption, workerConfig{FileName: parts[0], Num: int(num)})
+			workersOption = append(workersOption, workerConfig{FileName: parts[0], Num: num})
 		}
 		workersOption[0].Watch = watch
 	}
