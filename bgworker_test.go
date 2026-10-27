@@ -678,3 +678,19 @@ func TestWorkerHandleBuiltBehindTheConstructor(t *testing.T) {
 	assert.Contains(t, body, "reflection: ReflectionException:")
 	assert.Contains(t, body, "construct: RuntimeException: FrankenPHP\\WorkerHandle can only be created from a background worker")
 }
+
+// a script that parks without ever ticking fails Init() instead of hanging it,
+// the only failure mode available where Zend max execution timers are not
+func TestBackgroundWorkerBootTimeout(t *testing.T) {
+	err := frankenphp.Init(
+		frankenphp.WithWorkers("bg-mute", "testdata/bgworker/never-ticks.php", 1,
+			frankenphp.WithWorkerBackground(),
+			frankenphp.WithWorkerBootTimeout(300*time.Millisecond),
+		),
+		frankenphp.WithNumThreads(2),
+	)
+	if err == nil {
+		frankenphp.Shutdown()
+	}
+	require.ErrorContains(t, err, `background worker "bg-mute" did not call WorkerHandle::tick() within 300ms`)
+}

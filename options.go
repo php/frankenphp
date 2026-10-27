@@ -59,6 +59,8 @@ type workerOpt struct {
 	onServerShutdown       func()
 	server                 *Server
 	isBackgroundWorker     bool
+	bootTimeout            time.Duration
+	bootTimeoutIsSet       bool
 }
 
 // WithContext sets the main context to use.
@@ -251,6 +253,23 @@ func WithWorkerServerScope(s *Server) WorkerOption {
 func WithWorkerBackground() WorkerOption {
 	return func(w *workerOpt) error {
 		w.isBackgroundWorker = true
+
+		return nil
+	}
+}
+
+// EXPERIMENTAL: WithWorkerBootTimeout bounds how long a background worker may
+// take to reach its ready point, its first WorkerHandle::tick(), before Init()
+// gives up and returns an error. Zero waits for ever, as a build with Zend max
+// execution timers does anyway. Defaults to DefaultWorkerBootTimeout, and has
+// no effect on HTTP workers.
+func WithWorkerBootTimeout(timeout time.Duration) WorkerOption {
+	return func(w *workerOpt) error {
+		if timeout < 0 {
+			return fmt.Errorf("worker boot timeout must be >= 0, got %s", timeout)
+		}
+		w.bootTimeout = timeout
+		w.bootTimeoutIsSet = true
 
 		return nil
 	}
