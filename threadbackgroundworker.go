@@ -201,16 +201,8 @@ func (handler *backgroundWorkerThread) afterScriptExecution(exitStatus int) {
 
 	// max_consecutive_failures only fails hard during startup, through
 	// startupFailChan; past it a failing worker keeps restarting with a
-	// louder log line rather than leave the server in a broken half-state.
-	// A worker Init() gave up on stops here whatever the cap says, it was
-	// drained precisely so this path could end the thread
+	// louder log line rather than leave the server in a broken half-state
 	pastCap := worker.maxConsecutiveFailures >= 0 && handler.failureCount >= worker.maxConsecutiveFailures
-	if worker.bootTimedOut.Load() {
-		reportStartupFailure(fmt.Errorf("background worker %s did not call WorkerHandle::tick() in time", worker.fileName))
-		handler.thread.state.Set(state.ShuttingDown)
-
-		return
-	}
 	if pastCap && !watcherIsEnabled {
 		var err error
 		if exitStatus == 0 {

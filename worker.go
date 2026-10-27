@@ -31,14 +31,11 @@ type worker struct {
 	threads                []*phpThread
 	threadMutex            sync.RWMutex
 	maxConsecutiveFailures int
-	bootTimeout            time.Duration
-	// Init() gave up waiting for the ready point: the run is drained and must not start again
-	bootTimedOut       atomic.Bool
-	onThreadReady      func(int)
-	onThreadShutdown   func(int)
-	queuedRequests     atomic.Int32
-	server             *Server
-	isBackgroundWorker bool
+	onThreadReady          func(int)
+	onThreadShutdown       func(int)
+	queuedRequests         atomic.Int32
+	server                 *Server
+	isBackgroundWorker     bool
 }
 
 var (
@@ -50,12 +47,6 @@ var (
 	// the only window where a boot failure reaches startupFailChan: past it, the handlers log and keep restarting
 	startupPhase atomic.Bool
 )
-
-// DefaultWorkerBootTimeout is how long a background worker may take to reach
-// its first WorkerHandle::tick() before Init() fails. It matches PHP's default
-// max_execution_time, which bounds the same bootstrap where Zend timers are
-// around. WithWorkerBootTimeout() changes it, zero waits for ever.
-const DefaultWorkerBootTimeout = 30 * time.Second
 
 func initWorkers(opts []workerOpt) error {
 	if len(opts) == 0 {
@@ -103,30 +94,8 @@ func initWorkers(opts []workerOpt) error {
 				convertToWorkerThread(thread, w)
 			}
 
-			bootTimeout := time.Duration(0)
-			if w.isBackgroundWorker {
-				bootTimeout = w.bootTimeout
-			}
 			workersReady.Go(func() {
-				if bootTimeout <= 0 {
-					thread.state.WaitFor(state.Ready, state.ShuttingDown, state.Done)
-
-					return
-				}
-
-				if thread.state.WaitForStateWithTimeout(bootTimeout, state.Ready, state.ShuttingDown, state.Done) {
-					return
-				}
-
-				// the script never ticked: drain it, so the run ends and the
-				// thread reaches a state Shutdown() can act on
-				startupFailChan <- fmt.Errorf("background worker %q did not call WorkerHandle::tick() within %s", w.name, bootTimeout)
-				w.bootTimedOut.Store(true)
-				if handler, ok := thread.handler.(*backgroundWorkerThread); ok {
-					// the run then ends on the boot failure path, which stops
-					// the thread instead of starting it again, see afterScriptExecution()
-					handler.drain()
-				}
+				thread.state.WaitFor(state.Ready, state.ShuttingDown, state.Done)
 			})
 		}
 	}
@@ -276,13 +245,6 @@ func newWorker(o workerOpt) (*worker, error) {
 		o.env["FRANKENPHP_WORKER\x00"] = "1"
 	}
 
-	// a background worker that never reaches its ready point would keep Init()
-	// waiting for ever, see initWorkers()
-	bootTimeout := DefaultWorkerBootTimeout
-	if o.bootTimeoutIsSet {
-		bootTimeout = o.bootTimeout
-	}
-
 	w := &worker{
 		name:                   o.name,
 		fileName:               absFileName,
@@ -294,7 +256,6 @@ func newWorker(o workerOpt) (*worker, error) {
 		requestChan:            make(chan *frankenPHPContext),
 		threads:                make([]*phpThread, 0, o.num),
 		maxConsecutiveFailures: o.maxConsecutiveFailures,
-		bootTimeout:            bootTimeout,
 		onThreadReady:          o.onThreadReady,
 		onThreadShutdown:       o.onThreadShutdown,
 		server:                 o.server,
