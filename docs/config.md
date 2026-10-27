@@ -112,7 +112,7 @@ You can also explicitly configure FrankenPHP using the [global option](https://c
 			name <name> # Sets the name of the worker, used in logs and metrics. Must be unique among global workers. Default: absolute path of the worker file, with a number appended when several workers share a script.
 			max_consecutive_failures <num> # Sets the maximum number of consecutive failures before the worker is considered unhealthy, -1 means the worker will always restart. Default: 6.
 			boot_timeout <duration> # EXPERIMENTAL: how long a background worker may take to reach its first tick() before the start fails, 0 waits forever. Default: 30s.
-			background # EXPERIMENTAL: marks this worker as a background (non-HTTP) worker, requiring "name" and a script ticking its FrankenPHP\WorkerHandle at least once
+			background # EXPERIMENTAL: marks this worker as a background (non-HTTP) worker, whose script ticks its FrankenPHP\WorkerHandle at least once
 		}
 	}
 }
@@ -200,7 +200,7 @@ php_server [<matcher>] {
 		watch <path> # Sets the path to watch for file changes. Can be specified more than once for multiple paths.
 		env <key> <value> # Sets an extra environment variable to the given value. Can be specified more than once for multiple environment variables. Environment variables for this worker are also inherited from the php_server parent, but can be overwritten here.
 		match <path> # match the worker to a path pattern. Overrides try_files and can only be used in the php_server directive.
-		background # EXPERIMENTAL: marks this worker as a background (non-HTTP) worker, requiring "name" and a script ticking its FrankenPHP\WorkerHandle at least once
+		background # EXPERIMENTAL: marks this worker as a background (non-HTTP) worker, whose script ticks its FrankenPHP\WorkerHandle at least once
 	}
 	worker <other_file> <num> # Can also use the short form like in the global frankenphp block.
 }

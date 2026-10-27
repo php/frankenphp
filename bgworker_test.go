@@ -126,14 +126,6 @@ func TestBackgroundWorkerOnServer(t *testing.T) {
 func TestBackgroundWorkerValidation(t *testing.T) {
 	t.Cleanup(frankenphp.Shutdown)
 
-	t.Run("name is required", func(t *testing.T) {
-		err := frankenphp.Init(
-			frankenphp.WithWorkers("", "testdata/bgworker/basic.php", 1, frankenphp.WithWorkerBackground()),
-			frankenphp.WithNumThreads(2),
-		)
-		require.ErrorContains(t, err, "must have an explicit name")
-	})
-
 	t.Run("names are unique within a server", func(t *testing.T) {
 		// a global and a server-scoped worker may share a name (see
 		// TestBackgroundWorkerOnServer), two workers of one server may not
@@ -459,6 +451,27 @@ func TestBackgroundWorkerMultiEntrypoint(t *testing.T) {
 
 	requireFileEventually(t, first, "the first worker on the shared script did not start")
 	requireFileEventually(t, second, "the second worker on the shared script did not start")
+}
+
+// a name left out is generated from the script, unique within the scope like
+// an HTTP worker's, so two workers sharing a script need none
+func TestBackgroundWorkerNameIsGenerated(t *testing.T) {
+	tmp := t.TempDir()
+	first, second := filepath.Join(tmp, "first"), filepath.Join(tmp, "second")
+	initServers(t,
+		frankenphp.WithWorkers("", "testdata/bgworker/basic.php", 1,
+			frankenphp.WithWorkerBackground(),
+			frankenphp.WithWorkerEnv(map[string]string{"BG_SENTINEL": first}),
+		),
+		frankenphp.WithWorkers("", "testdata/bgworker/basic.php", 1,
+			frankenphp.WithWorkerBackground(),
+			frankenphp.WithWorkerEnv(map[string]string{"BG_SENTINEL": second}),
+		),
+		frankenphp.WithNumThreads(1),
+	)
+
+	requireFileEventually(t, first, "the first unnamed worker did not start")
+	requireFileEventually(t, second, "the second unnamed worker did not start")
 }
 
 // background threads are reserved on top of num_threads

@@ -174,13 +174,8 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 		return wc, d.Err(`"boot_timeout" is only supported for background workers`)
 	}
 
-	if wc.Background {
-		if wc.Name == "" {
-			return wc, d.Err(`background workers must have an explicit "name"`)
-		}
-		if len(wc.MatchPath) != 0 {
-			return wc, d.Err(`"match" is not supported for background workers`)
-		}
+	if wc.Background && len(wc.MatchPath) != 0 {
+		return wc, d.Err(`"match" is not supported for background workers`)
 	}
 
 	if frankenphp.EmbeddedAppPath != "" && filepath.IsLocal(wc.FileName) {

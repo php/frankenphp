@@ -318,7 +318,8 @@ func TestWorkerBackgroundConfig(t *testing.T) {
 	require.Equal(t, "jobs", module.Workers[0].Name)
 }
 
-func TestWorkerBackgroundRequiresName(t *testing.T) {
+// the name is generated on the Go side, like for an HTTP worker
+func TestWorkerBackgroundNameIsOptional(t *testing.T) {
 	d := caddyfile.NewTestDispenser(`
 	{
 		php_server {
@@ -330,8 +331,9 @@ func TestWorkerBackgroundRequiresName(t *testing.T) {
 	}`)
 	module := &FrankenPHPModule{}
 
-	err := module.UnmarshalCaddyfile(d)
-	require.ErrorContains(t, err, `background workers must have an explicit "name"`)
+	require.NoError(t, module.UnmarshalCaddyfile(d))
+	require.True(t, module.Workers[0].Background)
+	require.Empty(t, module.Workers[0].Name)
 }
 
 func TestWorkerBackgroundWithoutNumParses(t *testing.T) {
