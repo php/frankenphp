@@ -15,9 +15,9 @@ import (
 
 // backgroundWorkerThread is the threadHandler of background worker scripts:
 // boot the script, re-run it when it exits, restart it with a quadratic
-// backoff when it crashes. The script parks on the stream returned by
-// WorkerHandle::getStream(), which reaches EOF when the thread is drained,
-// so it exits on shutdown, reboot or handler transition.
+// backoff when it crashes. The script waits on its WorkerHandle between two
+// tick() calls, and the drain makes tick() return false, so it exits on
+// shutdown, reboot or handler transition.
 type backgroundWorkerThread struct {
 	workerLifecycle
 
@@ -25,8 +25,8 @@ type backgroundWorkerThread struct {
 	context      *frankenPHPContext
 	failureCount int // number of consecutive failed runs
 
-	// consecutive short runs, crashed or not, pacing the restarts; a run
-	// that outlives maxRestartBackoff resets the count
+	// consecutive runs past the ready point that crashed or ended too
+	// fast, pacing the restarts; a clean exit after minHealthyRun resets it
 	crashCount   int
 	runStartedAt time.Time
 
@@ -43,8 +43,8 @@ type backgroundWorkerThread struct {
 }
 
 // backgroundBootWarnDelay is how long a run may go without calling
-// WorkerHandle::tick() before a warning: Init() and Shutdown() wait for
-// that point, so a script that never gets there hangs both silently
+// WorkerHandle::tick() before a warning: until then the worker is not ready,
+// and Init() waits for that point unless a boot timeout bounds the wait
 const backgroundBootWarnDelay = 10 * time.Second
 
 func convertToBackgroundWorkerThread(thread *phpThread, worker *worker) {
@@ -137,7 +137,7 @@ func (handler *backgroundWorkerThread) setupScript() error {
 	logger, ctx, name, threadIndex := fc.logger, fc.ctx, handler.worker.name, handler.thread.threadIndex
 	handler.bootTimer = time.AfterFunc(backgroundBootWarnDelay, func() {
 		if logger.Enabled(ctx, slog.LevelWarn) {
-			logger.LogAttrs(ctx, slog.LevelWarn, "background worker has not called WorkerHandle::tick() yet, Init() and Shutdown() wait for it", slog.String("worker", name), slog.Int("thread", threadIndex))
+			logger.LogAttrs(ctx, slog.LevelWarn, "background worker has not called WorkerHandle::tick() yet, it is not ready", slog.String("worker", name), slog.Int("thread", threadIndex))
 		}
 	})
 
@@ -202,11 +202,10 @@ func (handler *backgroundWorkerThread) afterScriptExecution(exitStatus int) {
 	// max_consecutive_failures only fails hard during startup, through
 	// startupFailChan; past it a failing worker keeps restarting with a
 	// louder log line rather than leave the server in a broken half-state.
-	// A worker Init() gave up on stops here whatever the cap says, it was
-	// drained precisely so this path could end the thread
+	// A worker Init() gave up on stops here whatever the cap says, its
+	// timeout already reported it
 	pastCap := worker.maxConsecutiveFailures >= 0 && handler.failureCount >= worker.maxConsecutiveFailures
 	if worker.bootTimedOut.Load() {
-		reportStartupFailure(fmt.Errorf("background worker %s did not call WorkerHandle::tick() in time", worker.fileName))
 		handler.thread.state.Set(state.ShuttingDown)
 
 		return

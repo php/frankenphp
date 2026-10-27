@@ -39,7 +39,7 @@ type workerConfig struct {
 	MatchPath []string `json:"match_path,omitempty"`
 	// MaxConsecutiveFailures sets the maximum number of consecutive failures before panicking (defaults to 6, set to -1 to never panick)
 	MaxConsecutiveFailures *int `json:"max_consecutive_failures,omitempty"`
-	// BootTimeout bounds how long a background worker may take to reach its first WorkerHandle::tick() before the start fails (defaults to 30s, set to 0 to wait forever)
+	// BootTimeout bounds how long a background worker may take to reach its first WorkerHandle::tick() before the start fails (defaults to 30s on PHP builds without Zend max execution timers, where max_execution_time is disabled, set to 0 to wait forever)
 	BootTimeout *caddy.Duration `json:"boot_timeout,omitempty"`
 	// Background marks this worker as a background (non-HTTP) worker.
 	Background bool `json:"background,omitempty"`

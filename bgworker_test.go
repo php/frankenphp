@@ -423,13 +423,16 @@ func TestBackgroundWorkerDefaultsToOneThread(t *testing.T) {
 	)
 	requireFileEventually(t, sentinel, "background worker did not start without an explicit num")
 
+	debug := frankenphp.DebugState()
 	background := 0
-	for _, thread := range frankenphp.DebugState().ThreadDebugStates {
+	for _, thread := range debug.ThreadDebugStates {
 		if strings.Contains(thread.Name, "Background Worker") {
 			background++
 		}
 	}
 	assert.Equal(t, 1, background)
+	// on top of num_threads, which keeps its regular thread
+	assert.Len(t, debug.ThreadDebugStates, 2)
 }
 
 // max_execution_time applies until the first tick, a setup that outlives it
@@ -683,15 +686,61 @@ func TestWorkerHandleBuiltBehindTheConstructor(t *testing.T) {
 // a script that parks without ever ticking fails Init() instead of hanging it,
 // the only failure mode available where Zend max execution timers are not
 func TestBackgroundWorkerBootTimeout(t *testing.T) {
-	err := frankenphp.Init(
-		frankenphp.WithWorkers("bg-mute", "testdata/bgworker/never-ticks.php", 1,
-			frankenphp.WithWorkerBackground(),
-			frankenphp.WithWorkerBootTimeout(300*time.Millisecond),
-		),
-		frankenphp.WithNumThreads(2),
-	)
-	if err == nil {
-		frankenphp.Shutdown()
+	// a hang fails the test instead of the whole run
+	initWithin := func(t *testing.T, options ...frankenphp.Option) error {
+		t.Helper()
+		done := make(chan error, 1)
+		go func() { done <- frankenphp.Init(options...) }()
+
+		select {
+		case err := <-done:
+			if err == nil {
+				frankenphp.Shutdown()
+			}
+
+			return err
+		case <-time.After(10 * time.Second):
+			t.Fatal("Init() did not return")
+
+			return nil
+		}
 	}
-	require.ErrorContains(t, err, `background worker "bg-mute" did not call WorkerHandle::tick() within 300ms`)
+	mute := func(name string, timeout time.Duration, env map[string]string) frankenphp.Option {
+		return frankenphp.WithWorkers(name, "testdata/bgworker/never-ticks.php", 1,
+			frankenphp.WithWorkerBackground(),
+			frankenphp.WithWorkerBootTimeout(timeout),
+			frankenphp.WithWorkerEnv(env),
+		)
+	}
+
+	t.Run("one worker", func(t *testing.T) {
+		err := initWithin(t, mute("bg-mute", 300*time.Millisecond, nil), frankenphp.WithNumThreads(2))
+		require.ErrorContains(t, err, `background worker "bg-mute" did not call WorkerHandle::tick() within 300ms`)
+	})
+
+	// each timeout reports once and never waits for room to do so
+	t.Run("two workers timing out one after the other", func(t *testing.T) {
+		err := initWithin(t,
+			mute("bg-mute-a", 200*time.Millisecond, nil),
+			mute("bg-mute-b", time.Second, nil),
+			frankenphp.WithNumThreads(1),
+		)
+		require.ErrorContains(t, err, `background worker "bg-mute-a" did not call WorkerHandle::tick() within 200ms`)
+	})
+
+	// a timeout landing between two failed boots stops the next one from starting
+	t.Run("timeout between two failed boots", func(t *testing.T) {
+		countFile := filepath.Join(t.TempDir(), "boots")
+		err := initWithin(t,
+			mute("bg-flaky", 300*time.Millisecond, map[string]string{"BG_COUNT_FILE": countFile, "BG_FAIL_UNTIL": "3"}),
+			frankenphp.WithNumThreads(1),
+		)
+		require.ErrorContains(t, err, `background worker "bg-flaky" did not call WorkerHandle::tick() within 300ms`)
+
+		b, err := os.ReadFile(countFile)
+		require.NoError(t, err)
+		boots, err := strconv.Atoi(string(b))
+		require.NoError(t, err)
+		assert.LessOrEqual(t, boots, 3, "a run started after the timeout")
+	})
 }

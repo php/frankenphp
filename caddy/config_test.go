@@ -390,6 +390,39 @@ func TestWorkerBackgroundWithoutNumParses(t *testing.T) {
 	require.NoError(t, module.UnmarshalCaddyfile(d))
 }
 
+func TestWorkerBootTimeout(t *testing.T) {
+	parse := func(t *testing.T, directives string) (*FrankenPHPModule, error) {
+		t.Helper()
+		module := &FrankenPHPModule{}
+		err := module.UnmarshalCaddyfile(caddyfile.NewTestDispenser(`
+	{
+		php_server {
+			worker {
+				file ../testdata/worker-with-env.php
+				` + directives + `
+			}
+		}
+	}`))
+
+		return module, err
+	}
+
+	module, err := parse(t, "background\nboot_timeout 5s")
+	require.NoError(t, err)
+	require.Equal(t, caddy.Duration(5*time.Second), *module.Workers[0].BootTimeout)
+
+	// zero waits forever
+	module, err = parse(t, "background\nboot_timeout 0")
+	require.NoError(t, err)
+	require.Equal(t, caddy.Duration(0), *module.Workers[0].BootTimeout)
+
+	_, err = parse(t, "boot_timeout 5s")
+	require.ErrorContains(t, err, `"boot_timeout" is only supported for background workers`)
+
+	_, err = parse(t, "background\nboot_timeout -1s")
+	require.ErrorContains(t, err, "boot_timeout must be >= 0")
+}
+
 func TestWorkerBackgroundRejectsMatch(t *testing.T) {
 	d := caddyfile.NewTestDispenser(`
 	{

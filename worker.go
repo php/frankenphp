@@ -52,9 +52,10 @@ var (
 )
 
 // DefaultWorkerBootTimeout is how long a background worker may take to reach
-// its first WorkerHandle::tick() before Init() fails. It matches PHP's default
-// max_execution_time, which bounds the same bootstrap where Zend timers are
-// around. WithWorkerBootTimeout() changes it, zero waits for ever.
+// its first WorkerHandle::tick() before Init() fails, on PHP builds without
+// Zend max execution timers: FrankenPHP disables max_execution_time there,
+// and this matches its default. Elsewhere max_execution_time bounds the
+// bootstrap instead. WithWorkerBootTimeout() sets it on any build.
 const DefaultWorkerBootTimeout = 30 * time.Second
 
 func initWorkers(opts []workerOpt) error {
@@ -118,13 +119,15 @@ func initWorkers(opts []workerOpt) error {
 					return
 				}
 
-				// the script never ticked: drain it, so the run ends and the
-				// thread reaches a state Shutdown() can act on
-				startupFailChan <- fmt.Errorf("background worker %q did not call WorkerHandle::tick() within %s", w.name, bootTimeout)
+				// the script never ticked: stop the thread, so no run starts
+				// after this one, which ends at once if it waits on its handle
+				// and through the force-kill of the shutdown otherwise
+				if !thread.state.CompareAndSwap(state.TransitionComplete, state.ShuttingDown) {
+					return
+				}
 				w.bootTimedOut.Store(true)
+				reportStartupFailure(fmt.Errorf("background worker %q did not call WorkerHandle::tick() within %s", w.name, bootTimeout))
 				if handler, ok := thread.handler.(*backgroundWorkerThread); ok {
-					// the run then ends on the boot failure path, which stops
-					// the thread instead of starting it again, see afterScriptExecution()
 					handler.drain()
 				}
 			})
@@ -277,8 +280,11 @@ func newWorker(o workerOpt) (*worker, error) {
 	}
 
 	// a background worker that never reaches its ready point would keep Init()
-	// waiting for ever, see initWorkers()
-	bootTimeout := DefaultWorkerBootTimeout
+	// waiting for ever where max_execution_time is disabled, see initWorkers()
+	bootTimeout := time.Duration(0)
+	if !Config().ZendMaxExecutionTimers {
+		bootTimeout = DefaultWorkerBootTimeout
+	}
 	if o.bootTimeoutIsSet {
 		bootTimeout = o.bootTimeout
 	}
