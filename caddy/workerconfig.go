@@ -23,7 +23,7 @@ import (
 type workerConfig struct {
 	mercureContext
 
-	// Name for the worker, unique within its php_server (or among global workers). Default: the absolute path of the worker file.
+	// Name for the worker. Default: the absolute path of the worker file, postfixed with a number if the name is already used.
 	Name string `json:"name,omitempty"`
 	// FileName sets the path to the worker script.
 	FileName string `json:"file_name,omitempty"`

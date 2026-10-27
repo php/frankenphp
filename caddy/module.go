@@ -315,7 +315,7 @@ func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	// Check if a worker with this filename already exists in this module
 	fileNames := make(map[string]struct{}, len(f.Workers))
 	for _, w := range f.Workers {
-		// background workers are keyed by name, several may share a script
+		// background workers are not matched by path, several may share a script
 		if w.Background {
 			continue
 		}

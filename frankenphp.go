@@ -64,7 +64,7 @@ var (
 	globalCtx    = context.Background()
 	globalLogger = slog.Default()
 
-	metrics workerMetrics = nullMetrics{}
+	metrics Metrics = nullMetrics{}
 
 	// atomic: read by in-flight requests while a reload may rewrite it
 	maxWaitTime          atomic.Int64
@@ -337,30 +337,26 @@ func Validate(options ...Option) error {
 		return err
 	}
 
-	// what each scope took so far, a nil server for the global workers
-	takenNames := make(map[*Server]map[string]bool, 1)
+	takenNames := make(map[string]bool, len(opt.workers))
 	takenPaths := make(map[*Server]map[string]bool, 1)
-	nameTaken := func(server *Server, name string) bool { return takenNames[server][name] }
+	nameTaken := func(name string) bool { return takenNames[name] }
 	pathTaken := func(server *Server, path string) bool { return takenPaths[server][path] }
-	take := func(taken map[*Server]map[string]bool, server *Server, key string) {
-		if taken[server] == nil {
-			taken[server] = make(map[string]bool)
-		}
-		taken[server][key] = true
-	}
 	for _, w := range opt.workers {
-		w, err := resolveWorkerFile(w, nameTaken)
+		w, err := resolveWorkerFile(w)
 		if err != nil {
 			return err
 		}
 
-		if err := checkWorkerDeclaration(w, opt.servers, nameTaken, pathTaken); err != nil {
+		if err := checkWorkerDeclaration(w, nameTaken, pathTaken); err != nil {
 			return err
 		}
 
-		take(takenNames, w.server, w.name)
+		takenNames[w.name] = true
 		if !w.isBackgroundWorker && w.matchRequest == nil {
-			take(takenPaths, w.server, w.fileName)
+			if takenPaths[w.server] == nil {
+				takenPaths[w.server] = make(map[string]bool)
+			}
+			takenPaths[w.server][w.fileName] = true
 		}
 	}
 
@@ -401,7 +397,7 @@ func Init(options ...Option) error {
 	}
 
 	if opt.metrics != nil {
-		metrics = adaptMetrics(opt.metrics)
+		metrics = opt.metrics
 	}
 
 	maxWaitTime.Store(int64(opt.maxWaitTime))
@@ -422,6 +418,9 @@ func Init(options ...Option) error {
 	// background workers run on threads of their own, on top of the budget
 	// num_threads and max_threads describe for HTTP traffic
 	metrics.TotalThreads(opt.numThreads + backgroundThreads)
+	for _, w := range opt.workers {
+		metrics.TotalWorkers(w.name, w.num)
+	}
 
 	config := Config()
 
@@ -605,7 +604,7 @@ func go_apache_request_headers(threadIndex C.uintptr_t) (*C.go_string, C.size_t)
 		// worker mode, not handling a request
 
 		if fc.logger.Enabled(fc.ctx, slog.LevelDebug) {
-			fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "apache_request_headers() called in non-HTTP context", slog.String("worker", fc.worker.qualifiedName))
+			fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "apache_request_headers() called in non-HTTP context", slog.String("worker", fc.worker.name))
 		}
 
 		return nil, 0
@@ -939,7 +938,9 @@ func opcacheRestartScheduled(reason int) {
 		reasonText = opcacheRestartReasons[reason]
 	}
 
-	metrics.OpcacheRestart(reasonText)
+	if m, ok := metrics.(OpcacheMetrics); ok {
+		m.OpcacheRestart(reasonText)
+	}
 
 	if !globalLogger.Enabled(globalCtx, slog.LevelWarn) {
 		return
@@ -980,7 +981,8 @@ func resetGlobals() {
 	globalCtx = context.Background()
 	globalLogger = slog.Default()
 	workers = nil
-	fallbackServer.resetWorkers()
+	workersByName = nil
+	globalWorkersByPath = nil
 	servers = nil
 	watcherIsEnabled = false
 	hotReloadEnabled = false

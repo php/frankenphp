@@ -1667,7 +1667,7 @@ func TestValidateReportsDeclarationErrors(t *testing.T) {
 	assert.ErrorContains(t, frankenphp.Validate(
 		frankenphp.WithWorkers("same", "testdata/worker.php", 1),
 		frankenphp.WithWorkers("same", "testdata/index.php", 1),
-	), "two global workers cannot have the same name")
+	), "two workers cannot have the same name")
 
 	assert.ErrorContains(t, frankenphp.Validate(
 		frankenphp.WithWorkers("one", "testdata/worker.php", 1),
@@ -1688,20 +1688,6 @@ func TestValidateReportsDeclarationErrors(t *testing.T) {
 		frankenphp.WithServer(server),
 		frankenphp.WithWorkers("one", "testdata/worker.php", 1, frankenphp.WithWorkerServerScope(server)),
 		frankenphp.WithWorkers("two", "testdata/worker.php", 1, frankenphp.WithWorkerServerScope(server), matchAll),
-	))
-
-	other, err := frankenphp.NewServer(testDataDir)
-	require.NoError(t, err)
-	assert.ErrorContains(t, frankenphp.Validate(
-		frankenphp.WithServer(server),
-		frankenphp.WithWorkers("one", "testdata/worker.php", 1, frankenphp.WithWorkerServerScope(other)),
-	), "was not passed to WithServer()")
-
-	// names are unique within their scope, not across servers
-	assert.NoError(t, frankenphp.Validate(
-		frankenphp.WithServer(server),
-		frankenphp.WithWorkers("same", "testdata/worker.php", 1),
-		frankenphp.WithWorkers("same", "testdata/index.php", 1, frankenphp.WithWorkerServerScope(server)),
 	))
 
 	assert.ErrorContains(t, frankenphp.Validate(

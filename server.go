@@ -20,7 +20,7 @@ type Server struct {
 	root                      string
 	splitPath                 []string
 	env                       PreparedEnv
-	workersByName             map[string]*worker
+	workers                   []*worker
 	workersByPath             map[string]*worker
 	workersWithRequestMatcher []*worker
 
@@ -35,15 +35,13 @@ var (
 	fallbackServer = newFallbackServer()
 )
 
-// newFallbackServer creates the server of requests and workers that are not
-// scoped to one, so a lookup is always a lookup in a server
 func newFallbackServer() *Server {
 	s := &Server{
-		idx:    -1,
-		env:    make(map[string]string),
-		logger: globalLogger,
+		idx:           -1,
+		workersByPath: make(map[string]*worker),
+		env:           make(map[string]string),
+		logger:        globalLogger,
 	}
-	s.resetWorkers()
 
 	return s
 }
@@ -56,35 +54,12 @@ func registerServers(newServers []*Server) {
 	fallbackServer.logger = globalLogger
 	fallbackServer.resetWorkers()
 
-	// the name qualifies worker names in metrics and logs, so it must be
-	// unique: the first server keeps its name, the next ones get a numeric
-	// suffix that never takes a name another server configured
-	configured := make(map[string]struct{}, len(servers))
-	for _, s := range servers {
-		if s.configuredName != "" {
-			configured[s.configuredName] = struct{}{}
-		}
-	}
-
-	taken := make(map[string]struct{}, len(servers))
 	for i, s := range servers {
 		s.idx = i
-		name := s.configuredName
-		if name == "" {
-			name = "server_" + strconv.Itoa(i)
+		s.name = s.configuredName
+		if s.name == "" {
+			s.name = "server_" + strconv.Itoa(i)
 		}
-
-		for base, n := name, 1; ; n++ {
-			_, isTaken := taken[name]
-			_, isConfigured := configured[name]
-			if !isTaken && (!isConfigured || name == s.configuredName) {
-				break
-			}
-			name = base + "_" + strconv.Itoa(n)
-		}
-		taken[name] = struct{}{}
-
-		s.name = name
 		s.resetWorkers()
 	}
 }
@@ -108,7 +83,7 @@ func unregisterServers() {
 
 // resetWorkers drops the workers of a previous run; initWorkers() adds them back
 func (s *Server) resetWorkers() {
-	s.workersByName = make(map[string]*worker)
+	s.workers = nil
 	s.workersByPath = make(map[string]*worker)
 	s.workersWithRequestMatcher = nil
 }
@@ -124,9 +99,9 @@ func NewServer(root string, options ...ServerOption) (*Server, error) {
 	}
 
 	s := &Server{
-		root: root,
+		root:          root,
+		workersByPath: make(map[string]*worker),
 	}
-	s.resetWorkers()
 
 	for _, option := range options {
 		if err := option(s); err != nil {
@@ -150,24 +125,13 @@ func NewServer(root string, options ...ServerOption) (*Server, error) {
 }
 
 // Name returns the human-readable name of the server.
-// It is empty until registration if none was passed to NewServer(), and gets
-// a numeric suffix if another registered server has the same name.
+// It is empty until registration if none was passed to NewServer().
 func (s *Server) Name() string {
 	return s.name
 }
 
-// addWorker registers a worker scoped to this server
 func (s *Server) addWorker(w *worker) error {
-	// the fallback server holds the workers declared without a scope
-	scope := "two workers in a server"
-	if s == fallbackServer {
-		scope = "two global workers"
-	}
-
-	if s.workersByName[w.name] != nil {
-		return fmt.Errorf("%s cannot have the same name: %q", scope, w.name)
-	}
-	s.workersByName[w.name] = w
+	s.workers = append(s.workers, w)
 
 	// background workers never serve requests, so they are not matched at all
 	if w.isBackgroundWorker {
@@ -179,8 +143,8 @@ func (s *Server) addWorker(w *worker) error {
 		return nil
 	}
 
-	if s.workersByPath[w.fileName] != nil {
-		return fmt.Errorf("%s cannot have the same filename: %q", scope, w.fileName)
+	if _, exists := s.workersByPath[w.fileName]; exists {
+		return fmt.Errorf("two workers in a server cannot have the same filename: %q", w.fileName)
 	}
 	s.workersByPath[w.fileName] = w
 	// a document root whose symlinks are kept yields the declared path, not the resolved one

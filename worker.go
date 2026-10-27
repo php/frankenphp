@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -21,10 +20,7 @@ import (
 type worker struct {
 	mercureContext
 
-	// name as declared, unique within its server (or among global workers)
-	name string
-	// "<server name>:<name>" for a server-scoped worker, the name otherwise, for logs and errors
-	qualifiedName          string
+	name                   string
 	fileName               string
 	declaredFileName       string
 	matchRequest           func(*http.Request) bool
@@ -46,9 +42,11 @@ type worker struct {
 }
 
 var (
-	workers          []*worker
-	watcherIsEnabled bool
-	startupFailChan  chan error
+	workers             []*worker
+	workersByName       map[string]*worker
+	globalWorkersByPath map[string]*worker
+	watcherIsEnabled    bool
+	startupFailChan     chan error
 	// the only window where a boot failure reaches startupFailChan: past it, the handlers log and keep restarting
 	startupPhase atomic.Bool
 )
@@ -70,7 +68,8 @@ func initWorkers(opts []workerOpt) error {
 	)
 
 	workers = make([]*worker, 0, len(opts))
-	qualifiedNames := make(map[string]bool, len(opts))
+	workersByName = make(map[string]*worker, len(opts))
+	globalWorkersByPath = make(map[string]*worker, len(opts))
 
 	for _, o := range opts {
 		w, err := newWorker(o)
@@ -78,22 +77,18 @@ func initWorkers(opts []workerOpt) error {
 			return err
 		}
 
-		// names and paths are unique within a server
-		if err := w.server.addWorker(w); err != nil {
-			return err
-		}
-
 		totalThreadsToStart += w.num
 		workers = append(workers, w)
-		// a global worker may still be named like the "<server>:<name>" of a
-		// scoped one, and metrics would report them as one
-		if qualifiedNames[w.qualifiedName] {
-			return fmt.Errorf("two workers cannot report under the same name: %q", w.qualifiedName)
+		workersByName[w.name] = w
+		if w.server != nil {
+			if err := w.server.addWorker(w); err != nil {
+				return err
+			}
+		} else if !w.isBackgroundWorker {
+			// background workers are never matched against requests
+			globalWorkersByPath[w.fileName] = w
+			globalWorkersByPath[w.declaredFileName] = w
 		}
-		qualifiedNames[w.qualifiedName] = true
-
-		// reported here rather than in calculateMaxThreads(), where the name is not resolved yet
-		metrics.TotalWorkers(w.name, w.server.name, w.num)
 	}
 
 	startupFailChan = make(chan error, totalThreadsToStart)
@@ -125,7 +120,7 @@ func initWorkers(opts []workerOpt) error {
 
 				// the script never ticked: drain it, so the run ends and the
 				// thread reaches a state Shutdown() can act on
-				startupFailChan <- fmt.Errorf("background worker %q did not call WorkerHandle::tick() within %s", w.qualifiedName, bootTimeout)
+				startupFailChan <- fmt.Errorf("background worker %q did not call WorkerHandle::tick() within %s", w.name, bootTimeout)
 				w.bootTimedOut.Store(true)
 				if handler, ok := thread.handler.(*backgroundWorkerThread); ok {
 					// the run then ends on the boot failure path, which stops
@@ -166,14 +161,13 @@ func reportStartupFailure(err error) bool {
 	return true
 }
 
-// resolveWorkerFile turns a declared filename into the path a worker runs, and
-// names the worker after it when the declaration left the name out, unique
-// within its scope since several workers may share a script.
+// resolveWorkerFile turns a declared filename into the path a worker runs,
+// and names the worker after it when the declaration left the name out.
 //
 // Order is important!
 // This order ensures that FrankenPHP started from inside a symlinked directory will properly resolve any paths.
 // If it is started from outside a symlinked directory, it is resolved to the same path that we use in the Caddy module.
-func resolveWorkerFile(o workerOpt, nameTaken func(*Server, string) bool) (workerOpt, error) {
+func resolveWorkerFile(o workerOpt) (workerOpt, error) {
 	declaredFileName, err := fastabs.FastAbs(filepath.FromSlash(o.fileName))
 	if err != nil {
 		return o, fmt.Errorf("worker filename is invalid %q: %w", o.fileName, err)
@@ -196,30 +190,18 @@ func resolveWorkerFile(o workerOpt, nameTaken func(*Server, string) bool) (worke
 	o.declaredFileName = declaredFileName
 	o.fileName = absFileName
 	if o.name == "" {
-		// the path as it was declared, symlinks kept, so the name does not
-		// move when the target of a release symlink does
-		o.name = declaredFileName
-		for suffix := 1; nameTaken(o.server, o.name); suffix++ {
-			o.name = fmt.Sprintf("%s_%d", declaredFileName, suffix)
-		}
+		o.name = absFileName
 	}
 
 	return o, nil
 }
 
 // checkWorkerDeclaration holds the rules a set of workers must follow, so
-// Validate() and newWorker() answer the same way. Names and paths are
-// unique within the scope a worker registers in, a nil server standing for
-// the global workers.
-func checkWorkerDeclaration(o workerOpt, servers []*Server, nameTaken, pathTaken func(*Server, string) bool) error {
-	scope := "two workers in a server"
-	if o.server == nil {
-		scope = "two global workers"
-	} else if !slices.Contains(servers, o.server) {
-		return fmt.Errorf("worker %q is scoped to a server that was not passed to WithServer()", o.name)
-	}
-
+// Validate() and newWorker() answer the same way; pathTaken is asked for the
+// global workers with a nil server.
+func checkWorkerDeclaration(o workerOpt, nameTaken func(string) bool, pathTaken func(*Server, string) bool) error {
 	if o.isBackgroundWorker {
+		// never matched against requests, so several may share a script
 		if o.matchRequest != nil {
 			return fmt.Errorf("background worker %q cannot match requests", o.name)
 		}
@@ -231,56 +213,47 @@ func checkWorkerDeclaration(o workerOpt, servers []*Server, nameTaken, pathTaken
 		if o.extensionWorkers != nil {
 			return fmt.Errorf("background worker %q cannot be an extension worker, those handle requests", o.name)
 		}
+	} else if o.server == nil {
+		if pathTaken(nil, o.fileName) {
+			return fmt.Errorf("two global workers cannot have the same filename: %q", o.fileName)
+		}
+
+		// no server means no set of requests to match against, the matcher would never run
+		if o.matchRequest != nil {
+			return fmt.Errorf("worker %q has a request matcher but no server scope, use WithWorkerServerScope()", o.name)
+		}
+	} else if o.matchRequest == nil && pathTaken(o.server, o.fileName) {
+		// a matcher tells the workers of a server sharing a file apart
+		return fmt.Errorf("two workers in a server cannot have the same filename: %q", o.fileName)
 	}
 
-	// no server means no set of requests to match against, the matcher would never run
-	if o.server == nil && o.matchRequest != nil {
-		return fmt.Errorf("worker %q has a request matcher but no server scope, use WithWorkerServerScope()", o.name)
-	}
-
-	if nameTaken(o.server, o.name) {
-		return fmt.Errorf("%s cannot have the same name: %q", scope, o.name)
-	}
-
-	// background workers are keyed by name, several may share a script, and
-	// a matcher tells the workers of a server sharing a file apart
-	if !o.isBackgroundWorker && o.matchRequest == nil && pathTaken(o.server, o.fileName) {
-		return fmt.Errorf("%s cannot have the same filename: %q", scope, o.fileName)
+	if nameTaken(o.name) {
+		return fmt.Errorf("two workers cannot have the same name: %q", o.name)
 	}
 
 	return nil
 }
 
 func newWorker(o workerOpt) (*worker, error) {
-	// the fallback server serves the requests that have no server either, so a worker always has one
-	registeredIn := func(server *Server) *Server {
-		if server == nil {
-			return fallbackServer
-		}
-
-		return server
-	}
-	nameTaken := func(server *Server, name string) bool { return registeredIn(server).workersByName[name] != nil }
-	pathTaken := func(server *Server, path string) bool { return registeredIn(server).workersByPath[path] != nil }
-
-	o, err := resolveWorkerFile(o, nameTaken)
+	o, err := resolveWorkerFile(o)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := checkWorkerDeclaration(o, servers, nameTaken, pathTaken); err != nil {
+	nameTaken := func(name string) bool { return workersByName[name] != nil }
+	pathTaken := func(server *Server, path string) bool {
+		if server == nil {
+			return globalWorkersByPath[path] != nil
+		}
+
+		return server.workersByPath[path] != nil
+	}
+
+	if err := checkWorkerDeclaration(o, nameTaken, pathTaken); err != nil {
 		return nil, err
 	}
 
-	scope := registeredIn(o.server)
-
 	absFileName := o.fileName
-
-	// the same name may be declared in several servers, metrics and logs need a unique one
-	qualifiedName := o.name
-	if o.server != nil {
-		qualifiedName = o.server.name + ":" + o.name
-	}
 
 	// env should always contain FRANKENPHP_WORKER and the parent php_server env
 	if o.env == nil {
@@ -312,7 +285,6 @@ func newWorker(o workerOpt) (*worker, error) {
 
 	w := &worker{
 		name:                   o.name,
-		qualifiedName:          qualifiedName,
 		fileName:               absFileName,
 		declaredFileName:       o.declaredFileName,
 		matchRequest:           o.matchRequest,
@@ -325,7 +297,7 @@ func newWorker(o workerOpt) (*worker, error) {
 		bootTimeout:            bootTimeout,
 		onThreadReady:          o.onThreadReady,
 		onThreadShutdown:       o.onThreadShutdown,
-		server:                 scope,
+		server:                 o.server,
 		isBackgroundWorker:     o.isBackgroundWorker,
 	}
 
@@ -395,7 +367,7 @@ func (worker *worker) isAtThreadLimit() bool {
 }
 
 func (worker *worker) handleRequest(fc *frankenPHPContext) error {
-	metrics.StartWorkerRequest(worker.name, worker.server.name)
+	metrics.StartWorkerRequest(worker.name)
 
 	runtime.Gosched()
 
@@ -407,7 +379,7 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) error {
 			case thread.requestChan <- fc:
 				worker.threadMutex.RUnlock()
 				<-fc.done
-				metrics.StopWorkerRequest(worker.name, worker.server.name, time.Since(fc.startedAt))
+				metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
 
 				return nil
 			default:
@@ -419,7 +391,7 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) error {
 
 	// if no thread was available, mark the request as queued and apply the scaling strategy
 	worker.queuedRequests.Add(1)
-	metrics.QueuedWorkerRequest(worker.name, worker.server.name)
+	metrics.QueuedWorkerRequest(worker.name)
 
 	for {
 		workerScaleChan := scaleChan
@@ -430,24 +402,24 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) error {
 		select {
 		case worker.requestChan <- fc:
 			worker.queuedRequests.Add(-1)
-			metrics.DequeuedWorkerRequest(worker.name, worker.server.name)
+			metrics.DequeuedWorkerRequest(worker.name)
 			<-fc.done
-			metrics.StopWorkerRequest(worker.name, worker.server.name, time.Since(fc.startedAt))
+			metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
 
 			return nil
 		case workerScaleChan <- fc:
 			// the request has triggered scaling, continue to wait for a thread
 		case <-fc.ctx.Done():
 			worker.queuedRequests.Add(-1)
-			metrics.DequeuedWorkerRequest(worker.name, worker.server.name)
-			metrics.StopWorkerRequest(worker.name, worker.server.name, time.Since(fc.startedAt))
+			metrics.DequeuedWorkerRequest(worker.name)
+			metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
 
 			return nil
 		case <-timeoutChan(time.Duration(maxWaitTime.Load())):
 			// the request has timed out stalling
 			worker.queuedRequests.Add(-1)
-			metrics.DequeuedWorkerRequest(worker.name, worker.server.name)
-			metrics.StopWorkerRequest(worker.name, worker.server.name, time.Since(fc.startedAt))
+			metrics.DequeuedWorkerRequest(worker.name)
+			metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
 
 			fc.reject(ErrMaxWaitTimeExceeded)
 

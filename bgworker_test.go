@@ -99,25 +99,17 @@ func TestBackgroundWorkerOnServer(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	globalSentinel := filepath.Join(tmp, "global.sentinel")
 	initServers(t,
 		frankenphp.WithServer(server),
 		frankenphp.WithWorkers("jobs", "testdata/bgworker/named.php", 1,
 			frankenphp.WithWorkerBackground(),
 			frankenphp.WithWorkerServerScope(server),
 		),
-		// a global worker may reuse the name: names are scoped to their server
-		frankenphp.WithWorkers("jobs", "testdata/bgworker/basic.php", 1,
-			frankenphp.WithWorkerBackground(),
-			frankenphp.WithWorkerEnv(map[string]string{"BG_SENTINEL": globalSentinel}),
-		),
-		frankenphp.WithNumThreads(3),
+		frankenphp.WithNumThreads(2),
 	)
 
-	// named.php touches "<BG_SENTINEL_DIR>/<FRANKENPHP_WORKER_BACKGROUND>": the script sees
-	// the declared name, not the server-qualified one used by metrics and logs
+	// named.php touches "<BG_SENTINEL_DIR>/<FRANKENPHP_WORKER_BACKGROUND>"
 	requireFileEventually(t, filepath.Join(tmp, "jobs"), "background worker did not touch its per-name sentinel")
-	requireFileEventually(t, globalSentinel, "the global worker sharing the name did not start")
 
 	body := serverGet(t, server, "http://example.com/index.php")
 	assert.Contains(t, body, "I am by birth a Genevese", "the server must still serve regular requests")
@@ -125,26 +117,6 @@ func TestBackgroundWorkerOnServer(t *testing.T) {
 
 func TestBackgroundWorkerValidation(t *testing.T) {
 	t.Cleanup(frankenphp.Shutdown)
-
-	t.Run("names are unique within a server", func(t *testing.T) {
-		// a global and a server-scoped worker may share a name (see
-		// TestBackgroundWorkerOnServer), two workers of one server may not
-		server, err := frankenphp.NewServer(testDataDir)
-		require.NoError(t, err)
-		err = frankenphp.Init(
-			frankenphp.WithServer(server),
-			frankenphp.WithWorkers("bg-shared", "testdata/bgworker/basic.php", 1,
-				frankenphp.WithWorkerBackground(),
-				frankenphp.WithWorkerServerScope(server),
-			),
-			frankenphp.WithWorkers("bg-shared", "testdata/bgworker/named.php", 1,
-				frankenphp.WithWorkerBackground(),
-				frankenphp.WithWorkerServerScope(server),
-			),
-			frankenphp.WithNumThreads(3),
-		)
-		require.ErrorContains(t, err, "two workers in a server cannot have the same name")
-	})
 
 	t.Run("early return without the handle fails startup", func(t *testing.T) {
 		err := frankenphp.Init(
@@ -177,38 +149,6 @@ func TestBackgroundWorkerValidation(t *testing.T) {
 			frankenphp.WithNumThreads(2),
 		)
 		require.ErrorContains(t, err, "cannot set max_threads")
-	})
-
-	t.Run("two workers cannot report under the same name", func(t *testing.T) {
-		// scoping keeps names apart, except for a global name shaped like
-		// the "<server>:<name>" of a scoped one
-		server, err := frankenphp.NewServer(testDataDir, frankenphp.WithServerName("api"))
-		require.NoError(t, err)
-		err = frankenphp.Init(
-			frankenphp.WithServer(server),
-			frankenphp.WithWorkers("jobs", "testdata/bgworker/basic.php", 1,
-				frankenphp.WithWorkerBackground(),
-				frankenphp.WithWorkerServerScope(server),
-			),
-			frankenphp.WithWorkers("api:jobs", "testdata/bgworker/named.php", 1,
-				frankenphp.WithWorkerBackground(),
-			),
-			frankenphp.WithNumThreads(3),
-		)
-		require.ErrorContains(t, err, `two workers cannot report under the same name: "api:jobs"`)
-	})
-
-	t.Run("an unregistered server scope is rejected", func(t *testing.T) {
-		unregistered, err := frankenphp.NewServer(testDataDir)
-		require.NoError(t, err)
-		err = frankenphp.Init(
-			frankenphp.WithWorkers("bg-orphan", "testdata/bgworker/basic.php", 1,
-				frankenphp.WithWorkerBackground(),
-				frankenphp.WithWorkerServerScope(unregistered),
-			),
-			frankenphp.WithNumThreads(2),
-		)
-		require.ErrorContains(t, err, "not passed to WithServer()")
 	})
 
 	t.Run("request matchers are rejected", func(t *testing.T) {
@@ -453,25 +393,20 @@ func TestBackgroundWorkerMultiEntrypoint(t *testing.T) {
 	requireFileEventually(t, second, "the second worker on the shared script did not start")
 }
 
-// a name left out is generated from the script, unique within the scope like
-// an HTTP worker's, so two workers sharing a script need none
+// a name left out is generated from the script, like an HTTP worker's
 func TestBackgroundWorkerNameIsGenerated(t *testing.T) {
-	tmp := t.TempDir()
-	first, second := filepath.Join(tmp, "first"), filepath.Join(tmp, "second")
+	sentinel := filepath.Join(t.TempDir(), "flag.txt")
 	initServers(t,
-		frankenphp.WithWorkers("", "testdata/bgworker/basic.php", 1,
+		frankenphp.WithWorkers("", "testdata/bgworker/flag.php", 1,
 			frankenphp.WithWorkerBackground(),
-			frankenphp.WithWorkerEnv(map[string]string{"BG_SENTINEL": first}),
-		),
-		frankenphp.WithWorkers("", "testdata/bgworker/basic.php", 1,
-			frankenphp.WithWorkerBackground(),
-			frankenphp.WithWorkerEnv(map[string]string{"BG_SENTINEL": second}),
+			frankenphp.WithWorkerEnv(map[string]string{"BG_SENTINEL": sentinel}),
 		),
 		frankenphp.WithNumThreads(1),
 	)
 
-	requireFileEventually(t, first, "the first unnamed worker did not start")
-	requireFileEventually(t, second, "the second unnamed worker did not start")
+	script, err := filepath.Abs("testdata/bgworker/flag.php")
+	require.NoError(t, err)
+	assert.Contains(t, requireFileContentEventually(t, sentinel), "'background' => '"+script+"'")
 }
 
 // background threads are reserved on top of num_threads

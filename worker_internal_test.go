@@ -29,7 +29,7 @@ func TestCancelledRequestLeavesWorkerQueue(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	req := httptest.NewRequest("GET", "/index.php", nil).WithContext(ctx)
 	cancel()
-	w := &worker{name: "test", requestChan: make(chan *frankenPHPContext), maxThreads: 1, server: fallbackServer}
+	w := &worker{name: "test", requestChan: make(chan *frankenPHPContext), maxThreads: 1}
 
 	err := w.handleRequest(&frankenPHPContext{
 		request:   req,

@@ -59,7 +59,7 @@ func (handler *workerThread) name() string {
 func (handler *workerThread) drain() {}
 
 func setupWorkerScript(handler *workerThread, worker *worker) {
-	metrics.StartWorker(worker.name, worker.server.name)
+	metrics.StartWorker(worker.name)
 
 	// Create a dummy request to set up the worker
 	fc, err := newWorkerDummyContext(worker)
@@ -72,7 +72,7 @@ func setupWorkerScript(handler *workerThread, worker *worker) {
 	handler.requestCount = 0
 
 	if fc.logger.Enabled(fc.ctx, slog.LevelDebug) {
-		fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "starting", slog.String("worker", worker.qualifiedName), slog.Int("thread", handler.thread.threadIndex))
+		fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "starting", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex))
 	}
 }
 
@@ -91,10 +91,10 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 
 	// on exit status 0 we just run the worker script again
 	if exitStatus == 0 && !handler.isBootingScript {
-		metrics.StopWorker(worker.name, worker.server.name, StopReasonRestart)
+		metrics.StopWorker(worker.name, StopReasonRestart)
 
 		if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
-			globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "restarting", slog.String("worker", worker.qualifiedName), slog.Int("thread", handler.thread.threadIndex), slog.Int("exit_status", exitStatus))
+			globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "restarting", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex), slog.Int("exit_status", exitStatus))
 		}
 
 		return
@@ -102,9 +102,9 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 
 	// worker has thrown a fatal error or has not reached frankenphp_handle_request
 	if handler.isBootingScript {
-		metrics.StopWorker(worker.name, worker.server.name, StopReasonBootFailure)
+		metrics.StopWorker(worker.name, StopReasonBootFailure)
 	} else {
-		metrics.StopWorker(worker.name, worker.server.name, StopReasonCrash)
+		metrics.StopWorker(worker.name, StopReasonCrash)
 	}
 
 	if !handler.isBootingScript {
@@ -112,7 +112,7 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 		// unlike a clean restart, this took down any in-flight request, so
 		// surface it above debug level, with the exit status needed to triage it
 		if globalLogger.Enabled(globalCtx, slog.LevelWarn) {
-			globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "unexpected termination, restarting", slog.String("worker", worker.qualifiedName), slog.Int("thread", handler.thread.threadIndex), slog.Int("exit_status", exitStatus))
+			globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "unexpected termination, restarting", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex), slog.Int("exit_status", exitStatus))
 		}
 
 		return
@@ -127,13 +127,13 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 	if watcherIsEnabled {
 		// worker script has probably failed due to script changes while watcher is enabled
 		if globalLogger.Enabled(globalCtx, slog.LevelError) {
-			globalLogger.LogAttrs(globalCtx, slog.LevelError, "(watcher enabled) worker script has not reached frankenphp_handle_request()", slog.String("worker", worker.qualifiedName), slog.Int("thread", handler.thread.threadIndex))
+			globalLogger.LogAttrs(globalCtx, slog.LevelError, "(watcher enabled) worker script has not reached frankenphp_handle_request()", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex))
 		}
 	} else {
 		// rare case where worker script has failed on a restart during normal operation
 		// this can happen if startup success depends on external resources
 		if globalLogger.Enabled(globalCtx, slog.LevelWarn) {
-			globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "worker script has failed on restart", slog.String("worker", worker.qualifiedName), slog.Int("thread", handler.thread.threadIndex), slog.Int("failures", handler.failureCount))
+			globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "worker script has failed on restart", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex), slog.Int("failures", handler.failureCount))
 		}
 	}
 
@@ -168,7 +168,7 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 	handler.thread.Unpin()
 
 	if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
-		globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "waiting for request", slog.String("worker", handler.worker.qualifiedName), slog.Int("thread", handler.thread.threadIndex))
+		globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "waiting for request", slog.String("worker", handler.worker.name), slog.Int("thread", handler.thread.threadIndex))
 	}
 
 	// Clear the first dummy request created to initialize the worker
@@ -180,14 +180,14 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 		}
 
 		// worker is truly ready only after reaching frankenphp_handle_request()
-		metrics.ReadyWorker(handler.worker.name, handler.worker.server.name)
+		metrics.ReadyWorker(handler.worker.name)
 	}
 
 	// max_requests reached: signal reboot for full ZTS cleanup
 	if maxRequestsPerThread > 0 && handler.requestCount >= maxRequestsPerThread {
 		if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
 			globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "max requests reached, restarting",
-				slog.String("worker", handler.worker.qualifiedName),
+				slog.String("worker", handler.worker.name),
 				slog.Int("thread", handler.thread.threadIndex),
 				slog.Int("max_requests", maxRequestsPerThread),
 			)
@@ -208,7 +208,7 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 	select {
 	case <-handler.thread.drainChan:
 		if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
-			globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "shutting down", slog.String("worker", handler.worker.qualifiedName), slog.Int("thread", handler.thread.threadIndex))
+			globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "shutting down", slog.String("worker", handler.worker.name), slog.Int("thread", handler.thread.threadIndex))
 		}
 
 		return false, nil
@@ -224,9 +224,9 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 
 	if fc.logger.Enabled(fc.ctx, slog.LevelDebug) {
 		if handler.workerFrankenPHPContext.request == nil {
-			fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "request handling started", slog.String("worker", handler.worker.qualifiedName), slog.Int("thread", handler.thread.threadIndex))
+			fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "request handling started", slog.String("worker", handler.worker.name), slog.Int("thread", handler.thread.threadIndex))
 		} else {
-			fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "request handling started", slog.String("worker", handler.worker.qualifiedName), slog.Int("thread", handler.thread.threadIndex), slog.String("url", handler.workerFrankenPHPContext.request.RequestURI))
+			fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "request handling started", slog.String("worker", handler.worker.name), slog.Int("thread", handler.thread.threadIndex), slog.String("url", handler.workerFrankenPHPContext.request.RequestURI))
 		}
 	}
 
@@ -283,9 +283,9 @@ func go_frankenphp_finish_worker_request(threadIndex C.uintptr_t, retval *C.zval
 
 	if fc.logger.Enabled(fc.ctx, slog.LevelDebug) {
 		if fc.request == nil {
-			fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "request handling finished", slog.String("worker", fc.worker.qualifiedName), slog.Int("thread", thread.threadIndex))
+			fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "request handling finished", slog.String("worker", fc.worker.name), slog.Int("thread", thread.threadIndex))
 		} else {
-			fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "request handling finished", slog.String("worker", fc.worker.qualifiedName), slog.Int("thread", thread.threadIndex), slog.String("url", fc.request.RequestURI))
+			fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "request handling finished", slog.String("worker", fc.worker.name), slog.Int("thread", thread.threadIndex), slog.String("url", fc.request.RequestURI))
 		}
 	}
 }

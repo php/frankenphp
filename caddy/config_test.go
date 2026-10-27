@@ -1,6 +1,7 @@
 package caddy
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -92,7 +93,7 @@ func TestModuleWorkerDuplicateFilenamesFail(t *testing.T) {
 }
 
 // two global background workers may share a script, like their php_server
-// counterparts and the Go API: they are keyed by name
+// counterparts and the Go API: they are not matched by path
 func TestGlobalBackgroundWorkersShareAFilename(t *testing.T) {
 	d := caddyfile.NewTestDispenser(`
 	{
@@ -298,6 +299,42 @@ func TestModuleWorkerWithCustomName(t *testing.T) {
 	require.Equal(t, "../testdata/worker-with-env.php", module.Workers[0].FileName, "Worker should have the correct filename")
 }
 
+func TestCreateUniqueWorkerNames(t *testing.T) {
+	usedWorkerNames := map[string]bool{}
+	filename := "../testdata/worker-with-env.php"
+	absFileName, _ := filepath.Abs(filename)
+	names := make([]string, 6)
+	for i := range 3 {
+		names[i] = createUniqueWorkerName(usedWorkerNames, workerConfig{
+			FileName: filename,
+			Name:     "custom-worker-name",
+		}, "")
+		names[i+3] = createUniqueWorkerName(usedWorkerNames, workerConfig{
+			FileName: filename,
+		}, "")
+	}
+
+	require.Equal(t, "custom-worker-name", names[0])
+	require.Equal(t, "custom-worker-name_1", names[1])
+	require.Equal(t, "custom-worker-name_2", names[2])
+	require.Equal(t, absFileName, names[3])
+	require.Equal(t, absFileName+"_1", names[4])
+	require.Equal(t, absFileName+"_2", names[5])
+}
+
+func TestCreateUniqueWorkerNamesQualifiedByServer(t *testing.T) {
+	usedWorkerNames := map[string]bool{}
+	wc := workerConfig{FileName: "../testdata/worker-with-env.php", Name: "queue"}
+
+	require.Equal(t, "queue", createUniqueWorkerName(usedWorkerNames, wc, "one.example.com"))
+	// on collision, the name is qualified with the server name
+	require.Equal(t, "two.example.com:queue", createUniqueWorkerName(usedWorkerNames, wc, "two.example.com"))
+	// when the qualified name is also taken, fall back to the numeric postfix
+	require.Equal(t, "queue_1", createUniqueWorkerName(usedWorkerNames, wc, "two.example.com"))
+	// workers without a server keep the numeric postfix behavior
+	require.Equal(t, "queue_2", createUniqueWorkerName(usedWorkerNames, wc, ""))
+}
+
 func TestWorkerBackgroundConfig(t *testing.T) {
 	d := caddyfile.NewTestDispenser(`
 	{
@@ -318,7 +355,7 @@ func TestWorkerBackgroundConfig(t *testing.T) {
 	require.Equal(t, "jobs", module.Workers[0].Name)
 }
 
-// the name is generated on the Go side, like for an HTTP worker
+// the name is generated when the workers are collected, like for an HTTP worker
 func TestWorkerBackgroundNameIsOptional(t *testing.T) {
 	d := caddyfile.NewTestDispenser(`
 	{
