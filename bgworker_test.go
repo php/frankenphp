@@ -406,7 +406,8 @@ func TestBackgroundWorkerNameIsGenerated(t *testing.T) {
 
 	script, err := filepath.Abs("testdata/bgworker/flag.php")
 	require.NoError(t, err)
-	assert.Contains(t, requireFileContentEventually(t, sentinel), "'background' => '"+script+"'")
+	// var_export() doubles the backslashes of a Windows path
+	assert.Contains(t, requireFileContentEventually(t, sentinel), "'background' => '"+strings.ReplaceAll(script, `\`, `\\`)+"'")
 }
 
 // a background worker serves no requests, so num defaults to one thread rather
