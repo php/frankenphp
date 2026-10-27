@@ -308,7 +308,7 @@ A namespace has one publisher in a `php_server`, and one among the global worker
 
 Values must be null, scalars, arrays or enums. Each call replaces the whole snapshot of its namespace and readers get a copy, so the worker can publish at any time and a request always sees a consistent one. Every declared namespace is published before the first tick of a run, which `tick()` enforces: since the server accepts requests once the background workers are ready, requests never wait for a snapshot, and while a worker restarts they keep getting its last ones.
 
-`frankenphp_get_vars()` can only block between background workers reading each other while booting; a cycle between them throws instead of hanging. It also throws when no worker publishes the namespace.
+`frankenphp_get_vars()` can only block while workers boot, a background worker or the bootstrap of an HTTP worker waiting for the publisher of a namespace. A cycle between background workers throws instead of hanging, and so does a wait once the start failed. It also throws when no worker publishes the namespace.
 
 ## Superglobals behavior
 

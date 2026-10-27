@@ -63,6 +63,10 @@ var (
 	startupFailChan     chan error
 	// the only window where a boot failure reaches startupFailChan: past it, the handlers log and keep restarting
 	startupPhase atomic.Bool
+	// closed by the first boot failure of the startup, so the threads waiting
+	// on the ready point of another worker give up, see waitVarsReady()
+	startupFailed     chan struct{}
+	startupFailedOnce *sync.Once
 )
 
 // DefaultWorkerBootTimeout is how long a background worker may take to reach
@@ -109,6 +113,7 @@ func initWorkers(opts []workerOpt) error {
 	}
 
 	startupFailChan = make(chan error, totalThreadsToStart)
+	startupFailed, startupFailedOnce = make(chan struct{}), &sync.Once{}
 	startupPhase.Store(true)
 
 	for _, w := range workers {
@@ -176,6 +181,7 @@ func reportStartupFailure(err error) bool {
 	case startupFailChan <- err:
 	default:
 	}
+	startupFailedOnce.Do(func() { close(startupFailed) })
 
 	return true
 }

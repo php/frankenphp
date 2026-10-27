@@ -1753,13 +1753,31 @@ PHP_FUNCTION(frankenphp_get_vars) {
   Z_PARAM_STR(namespace)
   ZEND_PARSE_PARAMETERS_END();
 
+  HashTable *table = NULL;
+  uintptr_t snapshot = 0;
   char *error =
       go_frankenphp_get_vars(frankenphp_thread_index(), ZSTR_VAL(namespace),
-                             ZSTR_LEN(namespace), return_value);
+                             ZSTR_LEN(namespace), &table, &snapshot);
   if (error != NULL) {
     zend_throw_exception(spl_ce_RuntimeException, error, 0);
     free(error);
     RETURN_THROWS();
+  }
+
+  /* the copy may bail out, past memory_limit or in an autoloader an enum
+   * triggers: the snapshot is let go of whatever happens, so its publisher
+   * can replace and free it */
+  bool bailed_out = false;
+  zend_try { frankenphp_vars_to_request(return_value, table); }
+  zend_catch { bailed_out = true; }
+  zend_end_try();
+
+  HashTable *unused = go_frankenphp_vars_done(snapshot);
+  if (unused != NULL) {
+    frankenphp_vars_free(unused);
+  }
+  if (bailed_out) {
+    zend_bailout();
   }
 }
 

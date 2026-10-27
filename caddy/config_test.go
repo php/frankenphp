@@ -472,3 +472,13 @@ func TestWorkerBackgroundRejectsMatch(t *testing.T) {
 	err := module.UnmarshalCaddyfile(d)
 	require.ErrorContains(t, err, `"match" is not supported for background workers`)
 }
+
+// a JSON config skips the Caddyfile check: the core refuses vars on an HTTP
+// worker instead of the option being dropped
+func TestWorkerVarsReachTheCoreWithoutBackground(t *testing.T) {
+	wc := workerConfig{FileName: "../testdata/worker-with-env.php", Vars: []string{"cfg"}}
+	opts, err := wc.toWorkerOptions()
+	require.NoError(t, err)
+
+	require.ErrorContains(t, frankenphp.Validate(frankenphp.WithWorkers("http", wc.FileName, 1, opts...)), "only background workers publish them")
+}

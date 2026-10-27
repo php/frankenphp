@@ -1,7 +1,9 @@
 package frankenphp_test
 
 import (
+	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -174,6 +176,16 @@ func TestValidateVarsNamespaces(t *testing.T) {
 		publisher("two", 1, frankenphp.WithWorkerVars("other", "cfg")),
 	), `two global workers cannot publish the same vars namespace: "cfg"`)
 
+	// one publisher per server
+	other, err := frankenphp.NewServer(testDataDir)
+	require.NoError(t, err)
+	assert.NoError(t, frankenphp.Validate(
+		frankenphp.WithServer(server),
+		frankenphp.WithServer(other),
+		publisher("one", 1, frankenphp.WithWorkerVars("cfg"), frankenphp.WithWorkerServerScope(server)),
+		publisher("two", 1, frankenphp.WithWorkerVars("cfg"), frankenphp.WithWorkerServerScope(other)),
+	))
+
 	// the same namespace in a server and globally: the server's comes first for its requests
 	assert.NoError(t, frankenphp.Validate(
 		frankenphp.WithServer(server),
@@ -204,4 +216,88 @@ func TestInitRefusesASharedVarsNamespace(t *testing.T) {
 		frankenphp.WithNumThreads(1),
 	)
 	require.ErrorContains(t, err, `two global workers cannot publish the same vars namespace: "cfg"`)
+}
+
+// a bailout while copying a snapshot, here past memory_limit, lets go of it:
+// the publisher keeps publishing and the next reader is served
+func TestVarsBailoutInTheCopy(t *testing.T) {
+	sentinel := filepath.Join(t.TempDir(), "publications")
+	server, err := frankenphp.NewServer(testDataDir)
+	require.NoError(t, err)
+	initServers(t,
+		frankenphp.WithServer(server),
+		bgWorker("big", "big-vars.php", map[string]string{"BG_SENTINEL": sentinel}, server),
+		frankenphp.WithNumThreads(3),
+		frankenphp.WithPhpIni(map[string]string{"memory_limit": "8M"}),
+	)
+
+	publications := func() int {
+		b, _ := os.ReadFile(sentinel)
+		n, _ := strconv.Atoi(string(b))
+
+		return n
+	}
+	assert.Contains(t, serverGet(t, server, "http://example.com/vars.php?ns=big"), "Allowed memory size")
+	after := publications()
+	require.Eventually(t, func() bool { return publications() > after }, 5*time.Second, 25*time.Millisecond, "the publisher is stuck")
+	assert.Contains(t, serverGet(t, server, "http://example.com/vars.php?ns=big"), "Allowed memory size")
+}
+
+// an autoloader may keep the class name it is given: a request string, not
+// the one of the snapshot, which the next publication frees
+func TestVarsEnumClassNameOutlivesTheSnapshot(t *testing.T) {
+	server, err := frankenphp.NewServer(testDataDir)
+	require.NoError(t, err)
+	initServers(t, frankenphp.WithServer(server), bgWorker("enum", "enum-vars.php", nil, server), frankenphp.WithNumThreads(2))
+
+	assert.Equal(t, "Hearts kept:EnumSuit", serverGet(t, server, "http://example.com/vars-enum.php"))
+}
+
+// an HTTP worker reading vars in its bootstrap gives up once the start
+// failed, here because the publisher never publishes, instead of keeping
+// Init() waiting
+func TestVarsWaitEndsWhenTheStartFails(t *testing.T) {
+	t.Cleanup(frankenphp.Shutdown)
+	done := make(chan error, 1)
+	go func() {
+		done <- frankenphp.Init(
+			bgWorker("silent", "basic.php", nil, nil, frankenphp.WithWorkerMaxFailures(1)),
+			frankenphp.WithWorkers("reader", "testdata/vars-at-boot.php", 1),
+			frankenphp.WithNumThreads(3),
+		)
+	}()
+
+	select {
+	case err := <-done:
+		require.ErrorContains(t, err, "keeps crashing")
+	case <-time.After(10 * time.Second):
+		t.Fatal("Init() did not return")
+	}
+}
+
+// the namespaces of a run go with it, even when the next run has no workers
+func TestVarsOwnersEndWithTheRun(t *testing.T) {
+	server, err := frankenphp.NewServer(testDataDir)
+	require.NoError(t, err)
+	initServers(t, frankenphp.WithServer(server), bgWorker("publisher", "publisher.php", nil, server), frankenphp.WithNumThreads(2))
+	require.Contains(t, serverGet(t, server, "http://example.com/vars.php?ns=publisher"), `"answer":42`)
+	frankenphp.Shutdown()
+
+	initServers(t, frankenphp.WithServer(server), frankenphp.WithNumThreads(1))
+	assert.Contains(t, serverGet(t, server, "http://example.com/vars.php?ns=publisher"), `no background worker publishes the vars namespace "publisher"`)
+}
+
+// a worker of a server falls back to the global namespace like a request does
+func TestVarsServerWorkerReadsAGlobalNamespace(t *testing.T) {
+	sentinel := filepath.Join(t.TempDir(), "consumer.json")
+	server, err := frankenphp.NewServer(testDataDir)
+	require.NoError(t, err)
+	initServers(t,
+		frankenphp.WithServer(server),
+		bgWorker("publisher", "publisher.php", map[string]string{"BG_PUBLISH_VALUE": "global"}, nil),
+		bgWorker("consumer", "consumer.php", map[string]string{"BG_CONSUME": "publisher", "BG_SENTINEL": sentinel}, server),
+		frankenphp.WithNumThreads(3),
+	)
+
+	assert.Contains(t, requireFileContentEventually(t, sentinel), `"value":"global"`)
 }

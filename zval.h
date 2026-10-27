@@ -192,7 +192,12 @@ static void persistent_zval_to_request(zval *dst, zval *src) {
     break;
   case IS_PTR: {
     persistent_zval_enum_t *e = (persistent_zval_enum_t *)Z_PTR_P(src);
-    zend_class_entry *ce = zend_lookup_class(e->class_name);
+    /* autoloaders get the name and may keep it: a request copy, since the
+     * persistent one is shared with other threads and freed with its tree */
+    zend_string *class_name =
+        zend_string_init(ZSTR_VAL(e->class_name), ZSTR_LEN(e->class_name), 0);
+    zend_class_entry *ce = zend_lookup_class(class_name);
+    zend_string_release(class_name);
     if (EG(exception)) {
       /* Autoloader threw; let that exception propagate untouched. */
       ZVAL_NULL(dst);

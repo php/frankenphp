@@ -217,10 +217,12 @@ func (wc *workerConfig) toWorkerOptions() ([]frankenphp.WorkerOption, error) {
 		if wc.BootTimeout != nil {
 			opts = append(opts, frankenphp.WithWorkerBootTimeout(time.Duration(*wc.BootTimeout)))
 		}
+	}
 
-		if len(wc.Vars) > 0 {
-			opts = append(opts, frankenphp.WithWorkerVars(wc.Vars...))
-		}
+	// whatever the kind of worker: the core refuses vars on an HTTP one, which
+	// a JSON config reaches without the Caddyfile check
+	if len(wc.Vars) > 0 {
+		opts = append(opts, frankenphp.WithWorkerVars(wc.Vars...))
 	}
 
 	// copy the caddy match logic and create a unique matcher function for this worker

@@ -4,17 +4,38 @@ package frankenphp
 import "C"
 import (
 	"errors"
+	"runtime/cgo"
 	"strconv"
 	"sync"
+	"sync/atomic"
 )
 
-// varsSlot holds the snapshot of a vars namespace, published through
-// WorkerHandle::setVars(): a persistent HashTable, copied into request memory
-// by each frankenphp_get_vars() reader. It belongs to the worker, not to a
-// thread, so it survives script restarts and serves stale data meanwhile.
-type varsSlot struct {
-	mu    sync.RWMutex
+// varsSnapshot is one publication of a vars namespace: a persistent
+// HashTable, copied into request memory by each frankenphp_get_vars()
+// reader. The copy runs in C with no lock held, a bailout may end it, so refs
+// counts the slot and the readers holding the snapshot, and the last one to
+// let go frees it.
+type varsSnapshot struct {
 	table *C.HashTable
+	refs  atomic.Int32
+}
+
+// release lets go of a reference, and hands back the table to free once
+// nobody holds it anymore
+func (s *varsSnapshot) release() *C.HashTable {
+	if s.refs.Add(-1) == 0 {
+		return s.table
+	}
+
+	return nil
+}
+
+// varsSlot holds the current snapshot of a vars namespace, published through
+// WorkerHandle::setVars(). It belongs to the worker, not to a thread, so it
+// survives script restarts and serves stale data meanwhile.
+type varsSlot struct {
+	mu      sync.RWMutex
+	current *varsSnapshot
 }
 
 var (
@@ -44,8 +65,10 @@ func varsOwner(fc *frankenPHPContext, ns string) (*worker, error) {
 
 // waitVarsReady blocks until target reached its ready point once. Requests
 // cannot get here before that (activateServers() runs after initWorkers()),
-// so a blocked caller is a background worker still booting: waits between
-// workers form a graph, and a cycle is refused instead of deadlocking Init()
+// so a blocked caller is a worker still booting, a background one or the
+// bootstrap of an HTTP one. Waits between background workers form a graph,
+// and a cycle is refused instead of deadlocking Init(), as is any wait once
+// the start failed
 func waitVarsReady(target, caller *worker) error {
 	select {
 	case <-target.readyOnce:
@@ -83,6 +106,8 @@ func waitVarsReady(target, caller *worker) error {
 		return nil
 	case <-mainThread.done:
 		return errors.New("frankenphp_get_vars(): FrankenPHP is shutting down")
+	case <-startupFailed:
+		return errors.New("frankenphp_get_vars(): FrankenPHP failed to start, " + strconv.Quote(target.name) + " is not ready")
 	}
 }
 
@@ -104,9 +129,11 @@ func freeWorkerVars() {
 	for _, w := range workers {
 		for _, slot := range w.vars {
 			slot.mu.Lock()
-			if slot.table != nil {
-				C.frankenphp_vars_free(slot.table)
-				slot.table = nil
+			if slot.current != nil {
+				if table := slot.current.release(); table != nil {
+					C.frankenphp_vars_free(table)
+				}
+				slot.current = nil
 			}
 			slot.mu.Unlock()
 		}
@@ -114,8 +141,8 @@ func freeWorkerVars() {
 }
 
 // go_frankenphp_set_vars stores a snapshot in a namespace of the calling
-// worker and hands back the one it replaces, for the C side to free; on
-// error, the C side frees the snapshot it passed
+// worker and hands back the one it replaces, for the C side to free unless a
+// reader still copies it; on error, the C side frees the snapshot it passed
 //
 //export go_frankenphp_set_vars
 func go_frankenphp_set_vars(threadIndex C.uintptr_t, namespace *C.char, namespaceLen C.size_t, table *C.HashTable, old **C.HashTable) *C.char {
@@ -131,17 +158,27 @@ func go_frankenphp_set_vars(threadIndex C.uintptr_t, namespace *C.char, namespac
 		return C.CString("FrankenPHP\\WorkerHandle::setVars(): this worker does not publish the vars namespace " + strconv.Quote(ns))
 	}
 
+	s := &varsSnapshot{table: table}
+	s.refs.Store(1)
+
 	slot.mu.Lock()
-	*old = slot.table
-	slot.table = table
+	previous := slot.current
+	slot.current = s
 	slot.mu.Unlock()
+	if previous != nil {
+		*old = previous.release()
+	}
 	handler.publishedVars[ns] = true
 
 	return nil
 }
 
+// go_frankenphp_get_vars hands the current snapshot of a namespace to the C
+// side, which copies it into request memory and then lets go of it through
+// go_frankenphp_vars_done
+//
 //export go_frankenphp_get_vars
-func go_frankenphp_get_vars(threadIndex C.uintptr_t, namespace *C.char, namespaceLen C.size_t, returnValue *C.zval) *C.char {
+func go_frankenphp_get_vars(threadIndex C.uintptr_t, namespace *C.char, namespaceLen C.size_t, table **C.HashTable, snapshot *C.uintptr_t) *C.char {
 	thread := phpThreads[threadIndex]
 	ns := C.GoStringN(namespace, C.int(namespaceLen))
 	target, err := varsOwner(thread.handler.frankenPHPContext(), ns)
@@ -160,10 +197,27 @@ func go_frankenphp_get_vars(threadIndex C.uintptr_t, namespace *C.char, namespac
 	// a worker is ready only once every namespace it declares has a snapshot
 	slot := target.vars[ns]
 	slot.mu.RLock()
-	defer slot.mu.RUnlock()
-	C.frankenphp_vars_to_request(returnValue, slot.table)
+	s := slot.current
+	s.refs.Add(1)
+	slot.mu.RUnlock()
+
+	*table = s.table
+	*snapshot = C.uintptr_t(cgo.NewHandle(s))
 
 	return nil
+}
+
+// go_frankenphp_vars_done lets go of the snapshot a frankenphp_get_vars()
+// call copied, and hands back its table for the C side to free when its slot
+// moved on meanwhile
+//
+//export go_frankenphp_vars_done
+func go_frankenphp_vars_done(snapshot C.uintptr_t) *C.HashTable {
+	h := cgo.Handle(snapshot)
+	s := h.Value().(*varsSnapshot)
+	h.Delete()
+
+	return s.release()
 }
 
 // go_frankenphp_worker_vars lists the vars namespaces of the calling worker,
