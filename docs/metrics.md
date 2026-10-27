@@ -23,7 +23,7 @@ When [Caddy metrics](https://caddyserver.com/docs/metrics) are enabled, FrankenP
 - `frankenphp_worker_crashes{worker="[worker_name]"}`: The number of times a worker has unexpectedly terminated.
 - `frankenphp_worker_restarts{worker="[worker_name]"}`: The number of times a worker has been deliberately restarted.
 - `frankenphp_worker_queue_depth{worker="[worker_name]"}`: The number of queued requests, or of tasks waiting for a thread of a background worker.
-- `frankenphp_worker_task_count{worker="[worker_name]",outcome="[outcome]"}`: The number of tasks sent to a background worker, by outcome: `completed`, `aborted` (the script ended with the task open), `abandoned` (the sender closed its stream first) or `timeout` (no thread picked the task up in time).
+- `frankenphp_worker_task_count{worker="[worker_name]",outcome="[outcome]"}`: The number of tasks sent to a background worker, by outcome: `completed`, `aborted` (the script ended with the task open), `abandoned` (the sender closed its stream first), `timeout` (no thread picked the task up in time) or `cancelled` (the wait for a thread ended on a restart or the shutdown).
 - `frankenphp_worker_task_time{worker="[worker_name]"}`: The time spent on tasks by all threads of a background worker, from pickup to the close of the task's stream.
 - `frankenphp_opcache_restarts{reason="[reason]"}`: (experimental) The number of restarts of opcache's shared memory scheduled, by reason (`oom`, `hash`, `manual`). PHP 8.4 and up.
 

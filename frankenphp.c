@@ -1958,11 +1958,11 @@ PHP_FUNCTION(frankenphp_get_vars) {
 }
 
 /* Tasks, see SentTaskHandle: the sender hands a persistent copy of the payload
- * to the Go side, which queues it for the named background worker and wakes one
- * of its threads; WorkerHandle::receive() dequeues it there. Updates flow back
- * the same way. Each side keeps the state of its end on its handle, nothing
- * travels on the descriptor: it is what a wait returns on and what the Go side
- * signals, which holds the state the methods report. */
+ * to the Go side, which queues it for the background worker receiving its
+ * namespace and wakes one of its threads; WorkerHandle::receive() dequeues it
+ * there. Updates flow back the same way. Each side keeps the state of its end
+ * on its handle, nothing travels on the descriptor: it is what a wait returns
+ * on and what the Go side signals, which holds the state the methods report. */
 typedef struct {
   uintptr_t task;
   intptr_t fd;    /* the side's descriptor, see frankenphp_task_chan_open */
@@ -2287,6 +2287,15 @@ ZEND_METHOD(FrankenPHP_SentTaskHandle, __construct) {
   Z_PARAM_OPTIONAL
   Z_PARAM_DOUBLE_OR_NULL(timeout, timeout_is_null)
   ZEND_PARSE_PARAMETERS_END();
+
+  /* a handle sends one task: a second construction would orphan the first */
+  frankenphp_task_data *current = FRANKENPHP_TASK_DATA(ZEND_THIS);
+  if (current == NULL || current->task != 0 || current->closed) {
+    zend_throw_error(
+        NULL,
+        "FrankenPHP\\SentTaskHandle::__construct() cannot be called twice");
+    RETURN_THROWS();
+  }
 
   if (!timeout_is_null && (zend_isnan(timeout) || timeout < 0)) {
     zend_argument_value_error(3, "must be greater than or equal to 0");

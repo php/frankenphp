@@ -109,7 +109,7 @@ func TestPrometheusMetrics_WorkerTask(t *testing.T) {
 			name: "Testing WorkerTaskCount",
 			c:    m.workerTaskCount,
 			metadata: `
-				# HELP frankenphp_worker_task_count Number of tasks sent to this background worker, by outcome: completed, aborted (the script ended with the task open), abandoned (the sender closed its stream first) or timeout (no thread picked the task up in time)
+				# HELP frankenphp_worker_task_count Number of tasks sent to this background worker, by outcome: completed, aborted (the script ended with the task open), abandoned (the sender closed its stream first), timeout (no thread picked the task up in time) or cancelled (the wait for a thread ended on a restart or the shutdown)
 				# TYPE frankenphp_worker_task_count counter
 			`,
 			expect: `

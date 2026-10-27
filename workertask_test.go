@@ -187,7 +187,7 @@ func TestTaskMetrics(t *testing.T) {
 	assert.Contains(t, serverGet(t, server, "http://example.com/task-busy.php"), `picked up the task sent to "echo" in time`)
 
 	expected := `
-		# HELP frankenphp_worker_task_count Number of tasks sent to this background worker, by outcome: completed, aborted (the script ended with the task open), abandoned (the sender closed its stream first) or timeout (no thread picked the task up in time)
+		# HELP frankenphp_worker_task_count Number of tasks sent to this background worker, by outcome: completed, aborted (the script ended with the task open), abandoned (the sender closed its stream first), timeout (no thread picked the task up in time) or cancelled (the wait for a thread ended on a restart or the shutdown)
 		# TYPE frankenphp_worker_task_count counter
 		frankenphp_worker_task_count{outcome="abandoned",worker="echo"} 1
 		frankenphp_worker_task_count{outcome="aborted",worker="echo"} 1
@@ -233,15 +233,22 @@ func TestTaskSenderUnblockedOnShutdown(t *testing.T) {
 // instead of stalling the restart until the timeout
 func TestTaskSenderUnblockedOnRestart(t *testing.T) {
 	mark := filepath.Join(t.TempDir(), "picked")
+	registry := prometheus.NewRegistry()
 	server, err := frankenphp.NewServer(testDataDir)
 	require.NoError(t, err)
-	initServers(t, frankenphp.WithServer(server), taskWorker("echo", "task-worker.php", nil, server), frankenphp.WithNumThreads(2))
+	initServers(t,
+		frankenphp.WithServer(server),
+		taskWorker("echo", "task-worker.php", nil, server),
+		frankenphp.WithNumThreads(2),
+		frankenphp.WithMetrics(frankenphp.NewPrometheusMetrics(registry)),
+	)
 
 	body := sendWhileWorkerBusy(t, server, mark)
 	start := time.Now()
 	frankenphp.RestartWorkers()
 	assert.WithinDuration(t, start, time.Now(), 10*time.Second, "the restart must not wait for the sender's timeout")
 	assert.Contains(t, <-body, "the calling thread is restarting or shutting down")
+	assert.Equal(t, 1.0, taskOutcomes(t, registry)["cancelled"], "the task the restart ended was not counted")
 
 	// the restarted worker serves tasks again
 	assert.Contains(t, serverGet(t, server, "http://example.com/task.php?input=after"), `"result":"processed:after"`)
@@ -363,4 +370,47 @@ func TestValidateTaskNamespaces(t *testing.T) {
 	assert.ErrorContains(t, frankenphp.Validate(
 		frankenphp.WithWorkers("http", "testdata/worker.php", 1, frankenphp.WithWorkerTasks("jobs")),
 	), "only background workers receive them")
+}
+
+// taskOutcomes sums frankenphp_worker_task_count by outcome
+func taskOutcomes(t *testing.T, registry *prometheus.Registry) map[string]float64 {
+	t.Helper()
+	families, err := registry.Gather()
+	require.NoError(t, err)
+
+	outcomes := map[string]float64{}
+	for _, family := range families {
+		if family.GetName() != "frankenphp_worker_task_count" {
+			continue
+		}
+		for _, metric := range family.GetMetric() {
+			for _, label := range metric.GetLabel() {
+				if label.GetName() == "outcome" {
+					outcomes[label.GetValue()] += metric.GetCounter().GetValue()
+				}
+			}
+		}
+	}
+
+	return outcomes
+}
+
+// a handle sends one task: constructing it again throws, the first task goes on
+func TestTaskHandleIsConstructedOnce(t *testing.T) {
+	server, err := frankenphp.NewServer(testDataDir)
+	require.NoError(t, err)
+	initServers(t, frankenphp.WithServer(server), taskWorker("echo", "task-worker.php", nil, server), frankenphp.WithNumThreads(2))
+
+	body := serverGet(t, server, "http://example.com/task-reconstruct.php")
+	assert.Contains(t, body, `Error: FrankenPHP\SentTaskHandle::__construct() cannot be called twice`)
+	assert.Contains(t, body, `"result":"processed:first"`)
+}
+
+// a server without a receiver of its own sends to the global one
+func TestTaskFallsBackToAGlobalReceiver(t *testing.T) {
+	server, err := frankenphp.NewServer(testDataDir)
+	require.NoError(t, err)
+	initServers(t, frankenphp.WithServer(server), taskWorker("echo", "task-worker.php", map[string]string{"BG_TAG": "global"}, nil), frankenphp.WithNumThreads(2))
+
+	assert.Contains(t, serverGet(t, server, "http://example.com/task.php?input=x"), `"tag":"global"`)
 }

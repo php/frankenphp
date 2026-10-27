@@ -515,3 +515,11 @@ func TestWorkerVarsReachTheCoreWithoutBackground(t *testing.T) {
 
 	require.ErrorContains(t, frankenphp.Validate(frankenphp.WithWorkers("http", wc.FileName, 1, opts...)), "only background workers publish them")
 }
+
+func TestWorkerTasksReachTheCoreWithoutBackground(t *testing.T) {
+	wc := workerConfig{FileName: "../testdata/worker-with-env.php", Tasks: []string{"jobs"}}
+	opts, err := wc.toWorkerOptions()
+	require.NoError(t, err)
+
+	require.ErrorContains(t, frankenphp.Validate(frankenphp.WithWorkers("http", wc.FileName, 1, opts...)), "only background workers receive them")
+}

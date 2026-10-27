@@ -415,9 +415,11 @@ func go_frankenphp_task_cancel(handle C.uintptr_t, timedOut C.bool) C.bool {
 	close(t.cancelled)
 
 	metrics.DequeuedWorkerRequest(t.worker.name)
+	outcome := TaskOutcomeCancelled
 	if bool(timedOut) {
-		taskMetrics().WorkerTaskOutcome(t.worker.name, TaskOutcomeTimeout)
+		outcome = TaskOutcomeTimeout
 	}
+	taskMetrics().WorkerTaskOutcome(t.worker.name, outcome)
 
 	C.frankenphp_vars_free(t.payload)
 	t.payload = nil

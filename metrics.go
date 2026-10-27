@@ -24,6 +24,7 @@ const (
 	TaskOutcomeAborted   TaskOutcome = "aborted"   // the worker's script ended with the task open
 	TaskOutcomeAbandoned TaskOutcome = "abandoned" // the sender closed its stream first
 	TaskOutcomeTimeout   TaskOutcome = "timeout"   // no thread picked the task up in time
+	TaskOutcomeCancelled TaskOutcome = "cancelled" // the wait for a thread ended on a restart or the shutdown
 )
 
 // Metrics reports what the workers and the threads of a FrankenPHP instance
@@ -302,7 +303,7 @@ func (m *PrometheusMetrics) TotalWorkers(string, int) {
 			Namespace: ns,
 			Subsystem: sub,
 			Name:      "task_count",
-			Help:      "Number of tasks sent to this background worker, by outcome: completed, aborted (the script ended with the task open), abandoned (the sender closed its stream first) or timeout (no thread picked the task up in time)",
+			Help:      "Number of tasks sent to this background worker, by outcome: completed, aborted (the script ended with the task open), abandoned (the sender closed its stream first), timeout (no thread picked the task up in time) or cancelled (the wait for a thread ended on a restart or the shutdown)",
 		}, []string{"worker", "outcome"})
 		m.mustRegister(m.workerTaskCount)
 	}
