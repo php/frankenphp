@@ -328,25 +328,24 @@ func Validate(options ...Option) error {
 	}
 
 	takenNames := make(map[string]bool, len(opt.workers))
-	takenPaths := make(map[*Server]map[string]bool, 1)
-	nameTaken := func(name string) bool { return takenNames[name] }
-	pathTaken := func(server *Server, path string) bool { return takenPaths[server][path] }
+	paths, vars := scopeSet{}, scopeSet{}
+	taken := declarationIndex{names: func(name string) bool { return takenNames[name] }, paths: paths.has, vars: vars.has}
 	for _, w := range opt.workers {
 		w, err := resolveWorkerFile(w)
 		if err != nil {
 			return err
 		}
 
-		if err := checkWorkerDeclaration(w, nameTaken, pathTaken); err != nil {
+		if err := checkWorkerDeclaration(w, taken); err != nil {
 			return err
 		}
 
 		takenNames[w.name] = true
 		if !w.isBackgroundWorker && w.matchRequest == nil {
-			if takenPaths[w.server] == nil {
-				takenPaths[w.server] = make(map[string]bool)
-			}
-			takenPaths[w.server][w.fileName] = true
+			paths.add(w.server, w.fileName)
+		}
+		for _, ns := range w.vars {
+			vars.add(w.server, ns)
 		}
 	}
 

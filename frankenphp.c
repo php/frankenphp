@@ -1629,12 +1629,19 @@ ZEND_METHOD(FrankenPHP_WorkerHandle, tick) {
   }
 
   if (!worker_ticked) {
+    /* refused while a declared vars namespace has no snapshot of this run */
+    char *error =
+        go_frankenphp_background_worker_ready(frankenphp_thread_index());
+    if (error != NULL) {
+      zend_throw_exception(spl_ce_LogicException, error, 0);
+      free(error);
+      RETURN_THROWS();
+    }
     worker_ticked = true;
     /* The bootstrap ran under max_execution_time like any request, the loop
      * that starts now has no time limit, like the CLI. Nothing re-arms the
      * timer past this point. */
     zend_unset_timeout();
-    go_frankenphp_background_worker_ready(frankenphp_thread_index());
   }
 
   /* consume the wake-ups without blocking; EOF is the drain */
@@ -1681,9 +1688,30 @@ void frankenphp_vars_free(HashTable *table) {
   persistent_zval_free(&persistent);
 }
 
+void frankenphp_array_append_string(zval *array, char *str, size_t len) {
+  add_next_index_stringl(array, str, len);
+}
+
+ZEND_METHOD(FrankenPHP_WorkerHandle, getNamespaces) {
+  ZEND_PARSE_PARAMETERS_NONE();
+
+  if (!frankenphp_worker_handle_usable()) {
+    RETURN_THROWS();
+  }
+
+  zval vars;
+  array_init(&vars);
+  go_frankenphp_worker_vars(frankenphp_thread_index(), &vars);
+
+  array_init(return_value);
+  add_assoc_zval(return_value, "vars", &vars);
+}
+
 ZEND_METHOD(FrankenPHP_WorkerHandle, setVars) {
+  zend_string *namespace;
   zval *vars;
-  ZEND_PARSE_PARAMETERS_START(1, 1)
+  ZEND_PARSE_PARAMETERS_START(2, 2)
+  Z_PARAM_STR(namespace)
   Z_PARAM_ARRAY(vars)
   ZEND_PARSE_PARAMETERS_END();
 
@@ -1704,21 +1732,30 @@ ZEND_METHOD(FrankenPHP_WorkerHandle, setVars) {
   zval persistent;
   persistent_zval_persist(&persistent, vars);
 
-  HashTable *old =
-      go_frankenphp_set_vars(frankenphp_thread_index(), Z_ARRVAL(persistent));
+  HashTable *old = NULL;
+  char *error =
+      go_frankenphp_set_vars(frankenphp_thread_index(), ZSTR_VAL(namespace),
+                             ZSTR_LEN(namespace), Z_ARRVAL(persistent), &old);
+  if (error != NULL) {
+    frankenphp_vars_free(Z_ARRVAL(persistent));
+    zend_throw_exception(spl_ce_LogicException, error, 0);
+    free(error);
+    RETURN_THROWS();
+  }
   if (old != NULL) {
     frankenphp_vars_free(old);
   }
 }
 
 PHP_FUNCTION(frankenphp_get_vars) {
-  zend_string *name;
+  zend_string *namespace;
   ZEND_PARSE_PARAMETERS_START(1, 1)
-  Z_PARAM_STR(name)
+  Z_PARAM_STR(namespace)
   ZEND_PARSE_PARAMETERS_END();
 
-  char *error = go_frankenphp_get_vars(
-      frankenphp_thread_index(), ZSTR_VAL(name), ZSTR_LEN(name), return_value);
+  char *error =
+      go_frankenphp_get_vars(frankenphp_thread_index(), ZSTR_VAL(namespace),
+                             ZSTR_LEN(namespace), return_value);
   if (error != NULL) {
     zend_throw_exception(spl_ce_RuntimeException, error, 0);
     free(error);

@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: d943b9df69e1429890f4ef9a32a403f96db3548d */
+ * Stub hash: 84678bd70739ac2069719124f6f6ab5c0e112676 */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_handle_request, 0, 1, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, callback, IS_CALLABLE, 0)
@@ -42,7 +42,7 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_log, 0, 1, IS_VOID, 0
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_get_vars, 0, 1, IS_ARRAY, 0)
-	ZEND_ARG_TYPE_INFO(0, name, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, namespace, IS_STRING, 0)
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_class_FrankenPHP_WorkerHandle___construct, 0, 0, 0)
@@ -52,7 +52,10 @@ ZEND_END_ARG_INFO()
 
 #define arginfo_class_FrankenPHP_WorkerHandle_getStream arginfo_class_FrankenPHP_WorkerHandle___construct
 
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_FrankenPHP_WorkerHandle_setVars, 0, 1, IS_VOID, 0)
+#define arginfo_class_FrankenPHP_WorkerHandle_getNamespaces arginfo_frankenphp_request_headers
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_FrankenPHP_WorkerHandle_setVars, 0, 2, IS_VOID, 0)
+	ZEND_ARG_TYPE_INFO(0, namespace, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO(0, vars, IS_ARRAY, 0)
 ZEND_END_ARG_INFO()
 
@@ -67,6 +70,7 @@ ZEND_FUNCTION(frankenphp_get_vars);
 ZEND_METHOD(FrankenPHP_WorkerHandle, __construct);
 ZEND_METHOD(FrankenPHP_WorkerHandle, tick);
 ZEND_METHOD(FrankenPHP_WorkerHandle, getStream);
+ZEND_METHOD(FrankenPHP_WorkerHandle, getNamespaces);
 ZEND_METHOD(FrankenPHP_WorkerHandle, setVars);
 
 static const zend_function_entry ext_functions[] = {
@@ -89,6 +93,7 @@ static const zend_function_entry class_FrankenPHP_WorkerHandle_methods[] = {
 	ZEND_ME(FrankenPHP_WorkerHandle, __construct, arginfo_class_FrankenPHP_WorkerHandle___construct, ZEND_ACC_PUBLIC)
 	ZEND_ME(FrankenPHP_WorkerHandle, tick, arginfo_class_FrankenPHP_WorkerHandle_tick, ZEND_ACC_PUBLIC)
 	ZEND_ME(FrankenPHP_WorkerHandle, getStream, arginfo_class_FrankenPHP_WorkerHandle_getStream, ZEND_ACC_PUBLIC)
+	ZEND_ME(FrankenPHP_WorkerHandle, getNamespaces, arginfo_class_FrankenPHP_WorkerHandle_getNamespaces, ZEND_ACC_PUBLIC)
 	ZEND_ME(FrankenPHP_WorkerHandle, setVars, arginfo_class_FrankenPHP_WorkerHandle_setVars, ZEND_ACC_PUBLIC)
 	ZEND_FE_END
 };

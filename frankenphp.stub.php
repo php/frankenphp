@@ -56,13 +56,13 @@ namespace {
      */
     function frankenphp_log(string $message, int $level = 0, array $context = []): void {}
     /**
-     * Returns a copy of the vars last published by the named background worker,
-     * resolved within the current php_server, then among global workers. Blocks
-     * until that worker reached its ready point. Throws if the worker is
-     * unknown, if it is ready but has not published any vars, or if background
-     * workers wait on each other in a cycle.
+     * Returns a copy of the snapshot last published in a vars namespace,
+     * resolved within the current php_server, then among global workers.
+     * Blocks until the publishing worker reached its ready point. Throws if no
+     * background worker publishes the namespace, or if background workers wait
+     * on each other in a cycle.
      */
-    function frankenphp_get_vars(string $name): array {}
+    function frankenphp_get_vars(string $namespace): array {}
 }
 
 namespace FrankenPHP {
@@ -110,10 +110,20 @@ namespace FrankenPHP {
         public function getStream() {}
 
         /**
-         * Publishes the vars of this background worker: the array replaces
-         * the previous snapshot, atomically for readers, which get copies.
-         * Values must be null, scalars, arrays or enums.
+         * Returns the namespaces this background worker serves, as declared in
+         * its configuration.
+         *
+         * @return array{vars: list<string>}
          */
-        public function setVars(array $vars): void {}
+        public function getNamespaces(): array {}
+
+        /**
+         * Publishes a snapshot in one of the vars namespaces of this background
+         * worker: the array replaces the previous snapshot of that namespace,
+         * atomically for readers, which get copies. Values must be null,
+         * scalars, arrays or enums. Every declared namespace is published
+         * before the first tick() of a run.
+         */
+        public function setVars(string $namespace, array $vars): void {}
     }
 }

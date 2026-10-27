@@ -43,6 +43,8 @@ type workerConfig struct {
 	BootTimeout *caddy.Duration `json:"boot_timeout,omitempty"`
 	// Background marks this worker as a background (non-HTTP) worker.
 	Background bool `json:"background,omitempty"`
+	// Vars lists the namespaces a background worker publishes with WorkerHandle::setVars(), read by frankenphp_get_vars().
+	Vars []string `json:"vars,omitempty"`
 
 	options []frankenphp.WorkerOption
 }
@@ -161,8 +163,14 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 			wc.BootTimeout = &timeout
 		case "background":
 			wc.Background = true
+		case "vars":
+			namespaces := d.RemainingArgs()
+			if len(namespaces) == 0 {
+				return wc, d.ArgErr()
+			}
+			wc.Vars = append(wc.Vars, namespaces...)
 		default:
-			return wc, wrongSubDirectiveError("worker", "name, file, num, env, watch, match, max_consecutive_failures, max_threads, background, boot_timeout", v)
+			return wc, wrongSubDirectiveError("worker", "name, file, num, env, watch, match, max_consecutive_failures, max_threads, background, boot_timeout, vars", v)
 		}
 	}
 
@@ -176,6 +184,10 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 
 	if wc.Background && len(wc.MatchPath) != 0 {
 		return wc, d.Err(`"match" is not supported for background workers`)
+	}
+
+	if !wc.Background && len(wc.Vars) != 0 {
+		return wc, d.Err(`"vars" is only supported for background workers`)
 	}
 
 	if frankenphp.EmbeddedAppPath != "" && filepath.IsLocal(wc.FileName) {
@@ -204,6 +216,10 @@ func (wc *workerConfig) toWorkerOptions() ([]frankenphp.WorkerOption, error) {
 
 		if wc.BootTimeout != nil {
 			opts = append(opts, frankenphp.WithWorkerBootTimeout(time.Duration(*wc.BootTimeout)))
+		}
+
+		if len(wc.Vars) > 0 {
+			opts = append(opts, frankenphp.WithWorkerVars(wc.Vars...))
 		}
 	}
 

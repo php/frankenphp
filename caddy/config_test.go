@@ -373,6 +373,38 @@ func TestWorkerBackgroundNameIsOptional(t *testing.T) {
 	require.Empty(t, module.Workers[0].Name)
 }
 
+func TestWorkerBackgroundVars(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`
+	{
+		php_server {
+			worker {
+				file ../testdata/worker-with-env.php
+				background
+				vars redis feature_flags
+			}
+		}
+	}`)
+	module := &FrankenPHPModule{}
+
+	require.NoError(t, module.UnmarshalCaddyfile(d))
+	require.Equal(t, []string{"redis", "feature_flags"}, module.Workers[0].Vars)
+}
+
+func TestWorkerVarsRequireBackground(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`
+	{
+		php_server {
+			worker {
+				file ../testdata/worker-with-env.php
+				vars redis
+			}
+		}
+	}`)
+	module := &FrankenPHPModule{}
+
+	require.ErrorContains(t, module.UnmarshalCaddyfile(d), `"vars" is only supported for background workers`)
+}
+
 func TestWorkerBackgroundWithoutNumParses(t *testing.T) {
 	d := caddyfile.NewTestDispenser(`
 	{

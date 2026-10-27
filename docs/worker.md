@@ -281,19 +281,34 @@ That stream is there for the libraries that take one, and waiting is all it supp
 
 ### Sharing state with background workers
 
-A background worker publishes a snapshot with `setVars()` on its handle; requests and other workers read it with `frankenphp_get_vars()`, by worker name, resolved like requests are: within the `php_server`, then among global workers. Publishing needs a handle because only a worker publishes its own vars, while reading only needs a name, since anyone reads anyone's. Values must be null, scalars, arrays or enums. Each call replaces the whole snapshot and readers get a copy, so the worker can publish at any time and a request always sees a consistent one. Publish before the first tick and the snapshot is in place before the server accepts requests; while the worker restarts, readers keep getting the last one.
+A background worker publishes snapshots in vars namespaces, declared with `vars` on the worker, and requests and other workers read them with `frankenphp_get_vars()`, by namespace:
+
+```caddyfile
+php_server {
+	worker {
+		file config.php
+		background
+		vars redis feature_flags
+	}
+}
+```
 
 ```php
 // background worker
 $handle = new FrankenPHP\WorkerHandle();
-$handle->setVars(['maintenance' => false, 'flags' => ['beta' => true]]);
+$handle->setVars('redis', ['dsn' => 'redis://cache:6379']);
+$handle->setVars('feature_flags', ['beta' => true]);
 // ...
 
 // request, HTTP worker or another background worker
-$vars = frankenphp_get_vars('config');
+$flags = frankenphp_get_vars('feature_flags');
 ```
 
-`frankenphp_get_vars()` blocks until the worker reached its ready point, which can only happen between background workers reading each other while booting; a cycle between them throws instead of hanging. It also throws when the name is unknown, or when the worker is ready but has not published anything.
+A namespace has one publisher in a `php_server`, and one among the global workers; a reader gets the one of its `php_server` first, then the global one. One worker may publish as many namespaces as the application wants, so splitting them across workers is a matter of threads, failure caps and timeouts, not of addressing. A worker publishing vars runs a single thread, so each snapshot has one writer, and `getNamespaces()` on its handle returns what the configuration declared.
+
+Values must be null, scalars, arrays or enums. Each call replaces the whole snapshot of its namespace and readers get a copy, so the worker can publish at any time and a request always sees a consistent one. Every declared namespace is published before the first tick of a run, which `tick()` enforces: since the server accepts requests once the background workers are ready, requests never wait for a snapshot, and while a worker restarts they keep getting its last ones.
+
+`frankenphp_get_vars()` can only block between background workers reading each other while booting; a cycle between them throws instead of hanging. It also throws when no worker publishes the namespace.
 
 ## Superglobals behavior
 

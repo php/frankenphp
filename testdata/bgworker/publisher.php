@@ -1,13 +1,14 @@
 <?php
 
-// Bg worker publishing a snapshot, then parking. BG_PUBLISH_DELAY_MS delays
-// the publication so readers booting concurrently have to wait for it.
+// Bg worker publishing a snapshot in its vars namespace, then parking.
+// BG_PUBLISH_DELAY_MS delays the publication so readers booting concurrently
+// have to wait for it.
 set_time_limit(0);
 if (!empty($_SERVER['BG_PUBLISH_DELAY_MS'])) {
     usleep(1000 * (int) $_SERVER['BG_PUBLISH_DELAY_MS']);
 }
 $handle = new \FrankenPHP\WorkerHandle();
-$handle->setVars([
+$handle->setVars($handle->getNamespaces()['vars'][0], [
     'answer' => 42,
     'value' => $_SERVER['BG_PUBLISH_VALUE'] ?? 'default',
     'nested' => ['a' => 1, 'list' => [true, null, 1.5, 'x']],

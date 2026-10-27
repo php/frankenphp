@@ -113,6 +113,7 @@ You can also explicitly configure FrankenPHP using the [global option](https://c
 			max_consecutive_failures <num> # Sets the maximum number of consecutive failures before the worker is considered unhealthy, -1 means the worker will always restart. Default: 6.
 			boot_timeout <duration> # EXPERIMENTAL: how long a background worker may take to reach its first tick() before the start fails, 0 waits forever. Default: 30s on PHP builds without Zend max execution timers, none elsewhere.
 			background # EXPERIMENTAL: marks this worker as a background (non-HTTP) worker, whose script ticks its FrankenPHP\WorkerHandle at least once
+			vars <namespace...> # EXPERIMENTAL: the vars namespaces a background worker publishes, read with frankenphp_get_vars()
 		}
 	}
 }
@@ -202,6 +203,7 @@ php_server [<matcher>] {
 		match <path> # match the worker to a path pattern. Overrides try_files and can only be used in the php_server directive.
 		boot_timeout <duration> # EXPERIMENTAL: how long a background worker may take to reach its first tick() before the start fails, 0 waits forever. Default: 30s on PHP builds without Zend max execution timers, none elsewhere.
 		background # EXPERIMENTAL: marks this worker as a background (non-HTTP) worker, whose script ticks its FrankenPHP\WorkerHandle at least once
+		vars <namespace...> # EXPERIMENTAL: the vars namespaces a background worker publishes, read with frankenphp_get_vars()
 	}
 	worker <other_file> <num> # Can also use the short form like in the global frankenphp block.
 }

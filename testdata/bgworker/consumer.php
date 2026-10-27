@@ -1,7 +1,7 @@
 <?php
 
-// Bg worker reading another worker's vars while booting, writing the result
-// (or the exception) to BG_SENTINEL, then parking.
+// Bg worker reading another namespace while booting, writing the result (or
+// the exception) to BG_SENTINEL, then publishing its own and parking.
 set_time_limit(0);
 try {
     $result = json_encode(frankenphp_get_vars($_SERVER['BG_CONSUME']));
@@ -10,6 +10,9 @@ try {
 }
 file_put_contents($_SERVER['BG_SENTINEL'], $result);
 $handle = new \FrankenPHP\WorkerHandle();
+foreach ($handle->getNamespaces()['vars'] as $namespace) {
+    $handle->setVars($namespace, ['consumed' => $result]);
+}
 $stream = $handle->getStream();
 while ($handle->tick()) {
     $read = [$stream];

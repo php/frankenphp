@@ -2,9 +2,11 @@ package frankenphp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"time"
 )
 
@@ -61,6 +63,7 @@ type workerOpt struct {
 	isBackgroundWorker     bool
 	bootTimeout            time.Duration
 	bootTimeoutIsSet       bool
+	vars                   []string
 }
 
 // WithContext sets the main context to use.
@@ -271,6 +274,21 @@ func WithWorkerBootTimeout(timeout time.Duration) WorkerOption {
 		}
 		w.bootTimeout = timeout
 		w.bootTimeoutIsSet = true
+
+		return nil
+	}
+}
+
+// EXPERIMENTAL: WithWorkerVars declares the vars namespaces a background
+// worker publishes with WorkerHandle::setVars(), which frankenphp_get_vars()
+// reads by namespace. A namespace has one publisher within a server, and one
+// among the global workers.
+func WithWorkerVars(namespaces ...string) WorkerOption {
+	return func(w *workerOpt) error {
+		if slices.Contains(namespaces, "") {
+			return errors.New("a vars namespace cannot be empty")
+		}
+		w.vars = append(w.vars, namespaces...)
 
 		return nil
 	}
