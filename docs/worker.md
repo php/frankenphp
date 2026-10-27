@@ -277,7 +277,7 @@ The wake-up sent at start makes the callback run as soon as the loop does, which
 
 That stream is there for the libraries that take one, and waiting is all it supports: reading it steals the bytes `tick()` would have consumed, writing to it lands in a buffer FrankenPHP never drains, so a script that fills it blocks itself, and closing it is safe since the next `getStream()` on the same handle opens a fresh one over the same socket. A script with no loop of its own can wait on it directly, with a blocking read such as `fgets()` or with `stream_select()`, keeping in mind that `stream_select()` rejects a descriptor of `1024` or higher (`FD_SETSIZE`), which a worker re-run while the server holds more than a thousand connections will have. `tick()` itself uses `poll()` and is not affected.
 
-`$_SERVER['FRANKENPHP_WORKER_BACKGROUND']` holds the name of the worker. `FRANKENPHP_WORKER`, the variable of HTTP workers, is not set, so a script serving both roles tests which of the two is set. Background threads come on top of `num_threads` and `max_threads`; they don't autoscale, so `max_threads` is not allowed on them. From Go, declare one with `WithWorkerBackground()`.
+`$_SERVER['FRANKENPHP_WORKER_BACKGROUND']` holds the name of the worker. `FRANKENPHP_WORKER`, the variable of HTTP workers, is not set, so a script serving both roles tests which of the two is set. Their threads count like the threads of HTTP workers, on top of `num_threads` and within `max_threads`; they don't autoscale, so `max_threads` is not allowed on them. From Go, declare one with `WithWorkerBackground()`.
 
 ## Superglobals behavior
 

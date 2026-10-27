@@ -409,20 +409,6 @@ func TestBackgroundWorkerNameIsGenerated(t *testing.T) {
 	assert.Contains(t, requireFileContentEventually(t, sentinel), "'background' => '"+script+"'")
 }
 
-// background threads are reserved on top of num_threads
-func TestBackgroundWorkerThreadsComeOnTop(t *testing.T) {
-	sentinel := filepath.Join(t.TempDir(), "bg-only.sentinel")
-	initServers(t,
-		frankenphp.WithWorkers("bg-only", "testdata/bgworker/basic.php", 1,
-			frankenphp.WithWorkerBackground(),
-			frankenphp.WithWorkerEnv(map[string]string{"BG_SENTINEL": sentinel}),
-		),
-		frankenphp.WithNumThreads(1),
-	)
-
-	requireFileEventually(t, sentinel, "background worker did not start with num_threads 1")
-}
-
 // a background worker serves no requests, so num defaults to one thread rather
 // than to the CPU count of an HTTP worker
 func TestBackgroundWorkerDefaultsToOneThread(t *testing.T) {
@@ -443,27 +429,6 @@ func TestBackgroundWorkerDefaultsToOneThread(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 1, background)
-}
-
-// the automatic limit is an HTTP one too: the reservation is added to what it
-// resolves, instead of eating into it
-func TestBackgroundWorkerThreadsComeOnTopOfAutoMaxThreads(t *testing.T) {
-	sentinel := filepath.Join(t.TempDir(), "bg-auto.sentinel")
-	initServers(t,
-		frankenphp.WithWorkers("bg-auto", "testdata/bgworker/basic.php", 2,
-			frankenphp.WithWorkerBackground(),
-			frankenphp.WithWorkerEnv(map[string]string{"BG_SENTINEL": sentinel}),
-		),
-		frankenphp.WithNumThreads(2),
-		frankenphp.WithMaxThreads(-1),
-		frankenphp.WithPhpIni(map[string]string{"memory_limit": "-1"}),
-	)
-	requireFileEventually(t, sentinel, "background worker did not start")
-
-	// an unlimited memory_limit falls back to twice the HTTP threads, so
-	// 2*2 HTTP plus the 2 reserved, not (2+2)*2
-	state := frankenphp.DebugState()
-	assert.Equal(t, 6, len(state.ThreadDebugStates)+state.ReservedThreadCount)
 }
 
 // max_execution_time applies until the first tick, a setup that outlives it

@@ -26,7 +26,7 @@ func setupGlobals(t *testing.T) {
 }
 
 func TestStartAndStopTheMainThreadWithOneInactiveThread(t *testing.T) {
-	_, err := initPHPThreads(1, 1, 0, nil) // boot 1 thread
+	_, err := initPHPThreads(1, 1, nil) // boot 1 thread
 	assert.NoError(t, err)
 
 	assert.Len(t, phpThreads, 1)
@@ -41,7 +41,7 @@ func TestStartAndStopTheMainThreadWithOneInactiveThread(t *testing.T) {
 func TestTransitionRegularThreadToWorkerThread(t *testing.T) {
 	setupGlobals(t)
 
-	_, err := initPHPThreads(1, 1, 0, nil)
+	_, err := initPHPThreads(1, 1, nil)
 	assert.NoError(t, err)
 
 	// transition to regular thread
@@ -66,7 +66,7 @@ func TestTransitionRegularThreadToWorkerThread(t *testing.T) {
 func TestTransitionAThreadBetween2DifferentWorkers(t *testing.T) {
 	setupGlobals(t)
 
-	_, err := initPHPThreads(1, 1, 0, nil)
+	_, err := initPHPThreads(1, 1, nil)
 	assert.NoError(t, err)
 	firstWorker := getDummyWorker(t, "transition-worker-1.php")
 	secondWorker := getDummyWorker(t, "transition-worker-2.php")
@@ -228,7 +228,7 @@ func TestQueuedRequestSurvivesReload(t *testing.T) {
 func TestFinishBootingAWorkerScript(t *testing.T) {
 	setupGlobals(t)
 
-	_, err := initPHPThreads(1, 1, 0, nil)
+	_, err := initPHPThreads(1, 1, nil)
 	assert.NoError(t, err)
 
 	// boot the worker
@@ -375,7 +375,7 @@ func TestCorrectThreadCalculation(t *testing.T) {
 func testThreadCalculation(t *testing.T, expectedNumThreads int, expectedMaxThreads int, o *opt) {
 	t.Helper()
 
-	_, _, err := calculateMaxThreads(o)
+	_, err := calculateMaxThreads(o)
 	assert.NoError(t, err, "no error should be returned")
 	assert.Equal(t, expectedNumThreads, o.numThreads, "num_threads must be correct")
 	assert.Equal(t, expectedMaxThreads, o.maxThreads, "max_threads must be correct")
@@ -384,7 +384,7 @@ func testThreadCalculation(t *testing.T, expectedNumThreads int, expectedMaxThre
 func testThreadCalculationError(t *testing.T, o *opt) {
 	t.Helper()
 
-	_, _, err := calculateMaxThreads(o)
+	_, err := calculateMaxThreads(o)
 	assert.Error(t, err, "configuration must error")
 }
 
