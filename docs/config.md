@@ -114,6 +114,7 @@ You can also explicitly configure FrankenPHP using the [global option](https://c
 			boot_timeout <duration> # EXPERIMENTAL: how long a background worker may take to reach its first tick() before the start fails, 0 waits forever. Default: 30s on PHP builds without Zend max execution timers, none elsewhere.
 			background # EXPERIMENTAL: marks this worker as a background (non-HTTP) worker, whose script ticks its FrankenPHP\WorkerHandle at least once
 			vars <namespace...> # EXPERIMENTAL: the vars namespaces a background worker publishes, read with frankenphp_get_vars()
+			tasks <namespace...> # EXPERIMENTAL: the task namespaces a background worker receives, sent with FrankenPHP\SentTaskHandle
 		}
 	}
 }
@@ -204,6 +205,7 @@ php_server [<matcher>] {
 		boot_timeout <duration> # EXPERIMENTAL: how long a background worker may take to reach its first tick() before the start fails, 0 waits forever. Default: 30s on PHP builds without Zend max execution timers, none elsewhere.
 		background # EXPERIMENTAL: marks this worker as a background (non-HTTP) worker, whose script ticks its FrankenPHP\WorkerHandle at least once
 		vars <namespace...> # EXPERIMENTAL: the vars namespaces a background worker publishes, read with frankenphp_get_vars()
+		tasks <namespace...> # EXPERIMENTAL: the task namespaces a background worker receives, sent with FrankenPHP\SentTaskHandle
 	}
 	worker <other_file> <num> # Can also use the short form like in the global frankenphp block.
 }

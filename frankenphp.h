@@ -231,6 +231,7 @@ void frankenphp_task_chan_drain(intptr_t fd);
 void frankenphp_vars_to_request(zval *return_value, HashTable *table);
 void frankenphp_vars_free(HashTable *table);
 void frankenphp_array_append_string(zval *array, char *str, size_t len);
+void frankenphp_zval_set_string(zval *dst, char *str, size_t len);
 
 /* Results of go_frankenphp_read_task. */
 enum {

@@ -63,16 +63,6 @@ func varsOwner(fc *frankenPHPContext, ns string) (*worker, error) {
 	return w, nil
 }
 
-// backgroundWorkerByName resolves the name of a background worker
-func backgroundWorkerByName(name string) *worker {
-	w := workersByName[name]
-	if w == nil || !w.isBackgroundWorker {
-		return nil
-	}
-
-	return w
-}
-
 // waitVarsReady blocks until target reached its ready point once. Requests
 // cannot get here before that (activateServers() runs after initWorkers()),
 // so a blocked caller is a worker still booting, a background one or the
@@ -237,6 +227,18 @@ func go_frankenphp_vars_done(snapshot C.uintptr_t) *C.HashTable {
 func go_frankenphp_worker_vars(threadIndex C.uintptr_t, array *C.zval) {
 	if handler, ok := phpThreads[threadIndex].handler.(*backgroundWorkerThread); ok {
 		for _, ns := range handler.worker.varsNamespaces {
+			C.frankenphp_array_append_string(array, toUnsafeChar(ns), C.size_t(len(ns)))
+		}
+	}
+}
+
+// go_frankenphp_worker_tasks lists the task namespaces of the calling worker,
+// for WorkerHandle::getNamespaces()
+//
+//export go_frankenphp_worker_tasks
+func go_frankenphp_worker_tasks(threadIndex C.uintptr_t, array *C.zval) {
+	if handler, ok := phpThreads[threadIndex].handler.(*backgroundWorkerThread); ok {
+		for _, ns := range handler.worker.taskNamespaces {
 			C.frankenphp_array_append_string(array, toUnsafeChar(ns), C.size_t(len(ns)))
 		}
 	}

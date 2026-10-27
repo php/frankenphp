@@ -48,6 +48,8 @@ type worker struct {
 	// the snapshot of each, see WorkerHandle::setVars()
 	varsNamespaces []string
 	vars           map[string]*varsSlot
+	// the task namespaces the worker receives, in declaration order
+	taskNamespaces []string
 	// tasks holds the tasks sent with SentTaskHandle until a thread
 	// picks them up
 	tasks taskQueue
@@ -80,7 +82,7 @@ var (
 const DefaultWorkerBootTimeout = 30 * time.Second
 
 func initWorkers(opts []workerOpt) error {
-	varsOwners = namespaceOwners{}
+	varsOwners, taskOwners = namespaceOwners{}, namespaceOwners{}
 	if len(opts) == 0 {
 		return nil
 	}
@@ -104,6 +106,7 @@ func initWorkers(opts []workerOpt) error {
 		workers = append(workers, w)
 		workersByName[w.name] = w
 		varsOwners.add(w, w.varsNamespaces)
+		taskOwners.add(w, w.taskNamespaces)
 		if w.server != nil {
 			if err := w.server.addWorker(w); err != nil {
 				return err
@@ -228,8 +231,8 @@ func resolveWorkerFile(o workerOpt) (workerOpt, error) {
 // global, paths and namespaces belong to a scope, a nil server standing for
 // the global workers
 type declarationIndex struct {
-	names       func(name string) bool
-	paths, vars func(server *Server, key string) bool
+	names              func(name string) bool
+	paths, vars, tasks func(server *Server, key string) bool
 }
 
 // scopeSet records keys per scope, a nil server for the global workers
@@ -325,6 +328,18 @@ func checkWorkerDeclaration(o workerOpt, taken declarationIndex) error {
 		}
 	}
 
+	if len(o.tasks) > 0 && !o.isBackgroundWorker {
+		return fmt.Errorf("worker %q declares tasks, only background workers receive them", o.name)
+	}
+	for i, ns := range o.tasks {
+		if slices.Contains(o.tasks[:i], ns) {
+			return fmt.Errorf("worker %q declares the task namespace %q twice", o.name, ns)
+		}
+		if taken.tasks(o.server, ns) {
+			return fmt.Errorf("%s cannot receive the same task namespace: %q", scope, ns)
+		}
+	}
+
 	return nil
 }
 
@@ -343,7 +358,8 @@ func newWorker(o workerOpt) (*worker, error) {
 
 			return server.workersByPath[path] != nil
 		},
-		vars: func(server *Server, ns string) bool { return varsOwners[server][ns] != nil },
+		vars:  func(server *Server, ns string) bool { return varsOwners[server][ns] != nil },
+		tasks: func(server *Server, ns string) bool { return taskOwners[server][ns] != nil },
 	}
 
 	if err := checkWorkerDeclaration(o, taken); err != nil {
@@ -401,6 +417,7 @@ func newWorker(o workerOpt) (*worker, error) {
 		isBackgroundWorker:     o.isBackgroundWorker,
 		readyOnce:              make(chan struct{}),
 		varsNamespaces:         o.vars,
+		taskNamespaces:         o.tasks,
 		vars:                   make(map[string]*varsSlot, len(o.vars)),
 	}
 	for _, ns := range o.vars {

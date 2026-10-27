@@ -45,6 +45,8 @@ type workerConfig struct {
 	Background bool `json:"background,omitempty"`
 	// Vars lists the namespaces a background worker publishes with WorkerHandle::setVars(), read by frankenphp_get_vars().
 	Vars []string `json:"vars,omitempty"`
+	// Tasks lists the namespaces a background worker receives, the ones a FrankenPHP\SentTaskHandle is sent to.
+	Tasks []string `json:"tasks,omitempty"`
 
 	options []frankenphp.WorkerOption
 }
@@ -169,8 +171,14 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 				return wc, d.ArgErr()
 			}
 			wc.Vars = append(wc.Vars, namespaces...)
+		case "tasks":
+			namespaces := d.RemainingArgs()
+			if len(namespaces) == 0 {
+				return wc, d.ArgErr()
+			}
+			wc.Tasks = append(wc.Tasks, namespaces...)
 		default:
-			return wc, wrongSubDirectiveError("worker", "name, file, num, env, watch, match, max_consecutive_failures, max_threads, background, boot_timeout, vars", v)
+			return wc, wrongSubDirectiveError("worker", "name, file, num, env, watch, match, max_consecutive_failures, max_threads, background, boot_timeout, vars, tasks", v)
 		}
 	}
 
@@ -188,6 +196,10 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 
 	if !wc.Background && len(wc.Vars) != 0 {
 		return wc, d.Err(`"vars" is only supported for background workers`)
+	}
+
+	if !wc.Background && len(wc.Tasks) != 0 {
+		return wc, d.Err(`"tasks" is only supported for background workers`)
 	}
 
 	if frankenphp.EmbeddedAppPath != "" && filepath.IsLocal(wc.FileName) {
@@ -219,10 +231,14 @@ func (wc *workerConfig) toWorkerOptions() ([]frankenphp.WorkerOption, error) {
 		}
 	}
 
-	// whatever the kind of worker: the core refuses vars on an HTTP one, which
-	// a JSON config reaches without the Caddyfile check
+	// whatever the kind of worker: the core refuses vars and tasks on an HTTP
+	// one, which a JSON config reaches without the Caddyfile check
 	if len(wc.Vars) > 0 {
 		opts = append(opts, frankenphp.WithWorkerVars(wc.Vars...))
+	}
+
+	if len(wc.Tasks) > 0 {
+		opts = append(opts, frankenphp.WithWorkerTasks(wc.Tasks...))
 	}
 
 	// copy the caddy match logic and create a unique matcher function for this worker

@@ -20,10 +20,11 @@ const taskUpdatesMax = 16
 // side waits on its descriptor of the task's channel and is signaled there by
 // the other, one signal per event.
 type workerTask struct {
-	handle   cgo.Handle
-	worker   *worker
-	payload  *C.HashTable  // owned by the task until a thread picks it up
-	pickedUp chan struct{} // closed when a thread picks the task up
+	handle    cgo.Handle
+	worker    *worker
+	namespace string
+	payload   *C.HashTable  // owned by the task until a thread picks it up
+	pickedUp  chan struct{} // closed when a thread picks the task up
 	// cancelled is closed when the sender gave up before any pickup, ending
 	// the watcher, which sets abortReason under the queue mutex when the wait
 	// must end without a pickup. drainChan and shutdown are what it waits on,
@@ -241,20 +242,34 @@ func (t *workerTask) free() {
 	t.handle.Delete()
 }
 
+// the receiver of each task namespace, per scope
+var taskOwners namespaceOwners
+
+// taskOwner resolves the receiver of a task namespace: within the sender's
+// server first, then among global workers
+func taskOwner(fc *frankenPHPContext, ns string) *worker {
+	var server *Server
+	if fc != nil {
+		server = fc.server
+	}
+
+	return taskOwners.resolve(server, ns)
+}
+
 //export go_frankenphp_send_task
-func go_frankenphp_send_task(threadIndex C.uintptr_t, name *C.char, nameLen C.size_t, payload *C.HashTable) (C.uintptr_t, C.intptr_t, *C.char) {
+func go_frankenphp_send_task(threadIndex C.uintptr_t, namespace *C.char, namespaceLen C.size_t, payload *C.HashTable) (C.uintptr_t, C.intptr_t, *C.char) {
 	thread := phpThreads[threadIndex]
-	workerName := C.GoStringN(name, C.int(nameLen))
-	w := backgroundWorkerByName(workerName)
+	ns := C.GoStringN(namespace, C.int(namespaceLen))
+	w := taskOwner(thread.handler.frankenPHPContext(), ns)
 	if w == nil {
 		C.frankenphp_vars_free(payload)
 
-		return 0, -1, C.CString("FrankenPHP\\SentTaskHandle: unknown background worker " + strconv.Quote(workerName))
+		return 0, -1, C.CString("FrankenPHP\\SentTaskHandle: no background worker receives the task namespace " + strconv.Quote(ns))
 	}
 	if handler, ok := thread.handler.(*backgroundWorkerThread); ok && handler.worker == w && w.countThreads() == 1 {
 		C.frankenphp_vars_free(payload)
 
-		return 0, -1, C.CString("FrankenPHP\\SentTaskHandle: background worker " + strconv.Quote(workerName) + " has a single thread and cannot send a task to itself")
+		return 0, -1, C.CString("FrankenPHP\\SentTaskHandle: the task namespace " + strconv.Quote(ns) + " is received by this very worker, which has a single thread")
 	}
 	fds, ok := taskChanGet()
 	if !ok {
@@ -265,6 +280,7 @@ func go_frankenphp_send_task(threadIndex C.uintptr_t, name *C.char, nameLen C.si
 
 	t := &workerTask{
 		worker:    w,
+		namespace: ns,
 		payload:   payload,
 		pickedUp:  make(chan struct{}),
 		cancelled: make(chan struct{}),
@@ -442,7 +458,7 @@ func go_frankenphp_background_worker_park(threadIndex C.uintptr_t) {
 }
 
 //export go_frankenphp_receive_task
-func go_frankenphp_receive_task(threadIndex C.uintptr_t) (C.uintptr_t, *C.HashTable, C.intptr_t) {
+func go_frankenphp_receive_task(threadIndex C.uintptr_t, namespace *C.zval) (C.uintptr_t, *C.HashTable, C.intptr_t) {
 	handler, ok := phpThreads[threadIndex].handler.(*backgroundWorkerThread)
 	if !ok {
 		// refused on the C side already
@@ -470,6 +486,7 @@ func go_frankenphp_receive_task(threadIndex C.uintptr_t) (C.uintptr_t, *C.HashTa
 
 	t.receiver = handler
 	t.pickedUpAt = time.Now()
+	C.frankenphp_zval_set_string(namespace, toUnsafeChar(t.namespace), C.size_t(len(t.namespace)))
 	taskMetrics().StartWorkerTask(handler.worker.name)
 	// busy on the threads endpoint while it holds a task
 	if handler.openTasks++; handler.openTasks == 1 {

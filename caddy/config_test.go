@@ -390,6 +390,39 @@ func TestWorkerBackgroundVars(t *testing.T) {
 	require.Equal(t, []string{"redis", "feature_flags"}, module.Workers[0].Vars)
 }
 
+func TestWorkerBackgroundTasks(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`
+	{
+		php_server {
+			worker {
+				file ../testdata/worker-with-env.php
+				background
+				num 4
+				tasks image.resize image.thumbnail
+			}
+		}
+	}`)
+	module := &FrankenPHPModule{}
+
+	require.NoError(t, module.UnmarshalCaddyfile(d))
+	require.Equal(t, []string{"image.resize", "image.thumbnail"}, module.Workers[0].Tasks)
+}
+
+func TestWorkerTasksRequireBackground(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`
+	{
+		php_server {
+			worker {
+				file ../testdata/worker-with-env.php
+				tasks jobs
+			}
+		}
+	}`)
+	module := &FrankenPHPModule{}
+
+	require.ErrorContains(t, module.UnmarshalCaddyfile(d), `"tasks" is only supported for background workers`)
+}
+
 func TestWorkerVarsRequireBackground(t *testing.T) {
 	d := caddyfile.NewTestDispenser(`
 	{

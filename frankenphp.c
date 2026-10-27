@@ -1861,6 +1861,10 @@ void frankenphp_array_append_string(zval *array, char *str, size_t len) {
   add_next_index_stringl(array, str, len);
 }
 
+void frankenphp_zval_set_string(zval *dst, char *str, size_t len) {
+  ZVAL_STRINGL(dst, str, len);
+}
+
 ZEND_METHOD(FrankenPHP_WorkerHandle, getNamespaces) {
   ZEND_PARSE_PARAMETERS_NONE();
 
@@ -1868,12 +1872,15 @@ ZEND_METHOD(FrankenPHP_WorkerHandle, getNamespaces) {
     RETURN_THROWS();
   }
 
-  zval vars;
+  zval vars, tasks;
   array_init(&vars);
   go_frankenphp_worker_vars(frankenphp_thread_index(), &vars);
+  array_init(&tasks);
+  go_frankenphp_worker_tasks(frankenphp_thread_index(), &tasks);
 
   array_init(return_value);
   add_assoc_zval(return_value, "vars", &vars);
+  add_assoc_zval(return_value, "tasks", &tasks);
 }
 
 ZEND_METHOD(FrankenPHP_WorkerHandle, setVars) {
@@ -1966,6 +1973,7 @@ typedef struct {
   unsigned refs;      /* the handle, plus the stream of getStream() */
   zend_resource *res; /* that stream, NULL until a script asks for one */
   zval payload;       /* the receiver's side only */
+  zval namespace;     /* the receiver's side only */
 } frankenphp_task_data;
 
 static zend_class_entry *frankenphp_sent_task_ce;
@@ -1996,6 +2004,7 @@ static void frankenphp_task_data_release(frankenphp_task_data *data) {
   }
 
   zval_ptr_dtor(&data->payload);
+  zval_ptr_dtor(&data->namespace);
   efree(data);
 }
 
@@ -2201,6 +2210,7 @@ static zend_object *frankenphp_task_handle_new(zend_class_entry *ce) {
   data->timeout_ms = -1;
   data->refs = 1;
   ZVAL_UNDEF(&data->payload);
+  ZVAL_UNDEF(&data->namespace);
   FRANKENPHP_HANDLE_OF(object)->handle_data = data;
 
   return object;
@@ -2267,12 +2277,12 @@ static void frankenphp_task_obj_close(zval *zthis) {
 }
 
 ZEND_METHOD(FrankenPHP_SentTaskHandle, __construct) {
-  zend_string *name;
+  zend_string *namespace;
   zval *payload;
   double timeout = 30.0;
   bool timeout_is_null = false;
   ZEND_PARSE_PARAMETERS_START(2, 3)
-  Z_PARAM_STR(name)
+  Z_PARAM_STR(namespace)
   Z_PARAM_ARRAY(payload)
   Z_PARAM_OPTIONAL
   Z_PARAM_DOUBLE_OR_NULL(timeout, timeout_is_null)
@@ -2300,8 +2310,8 @@ ZEND_METHOD(FrankenPHP_SentTaskHandle, __construct) {
 
   /* the Go side owns the payload from here on, it frees it on failure */
   struct go_frankenphp_send_task_return task =
-      go_frankenphp_send_task(frankenphp_thread_index(), ZSTR_VAL(name),
-                              ZSTR_LEN(name), Z_ARRVAL(persistent));
+      go_frankenphp_send_task(frankenphp_thread_index(), ZSTR_VAL(namespace),
+                              ZSTR_LEN(namespace), Z_ARRVAL(persistent));
   if (task.r2 != NULL) {
     zend_throw_exception(spl_ce_RuntimeException, task.r2, 0);
     free(task.r2);
@@ -2340,10 +2350,9 @@ ZEND_METHOD(FrankenPHP_SentTaskHandle, __construct) {
       if (go_frankenphp_task_cancel(task.r0, true)) {
         frankenphp_task_settle(data);
         zend_throw_exception_ex(spl_ce_RuntimeException, 0,
-                                "FrankenPHP\\SentTaskHandle: no thread of "
-                                "background worker \"%s\" picked up the "
-                                "task in time",
-                                ZSTR_VAL(name));
+                                "FrankenPHP\\SentTaskHandle: no thread "
+                                "picked up the task sent to \"%s\" in time",
+                                ZSTR_VAL(namespace));
         RETURN_THROWS();
       }
       frankenphp_task_consume(data);
@@ -2460,6 +2469,19 @@ ZEND_METHOD(FrankenPHP_ReceivedTaskHandle, getPayload) {
   RETURN_COPY(&data->payload);
 }
 
+ZEND_METHOD(FrankenPHP_ReceivedTaskHandle, getNamespace) {
+  ZEND_PARSE_PARAMETERS_NONE();
+
+  frankenphp_task_data *data = FRANKENPHP_TASK_DATA(ZEND_THIS);
+  if (Z_ISUNDEF(data->namespace)) {
+    zend_throw_error(NULL, "FrankenPHP\\ReceivedTaskHandle was not handed "
+                           "out by WorkerHandle::receive()");
+    RETURN_THROWS();
+  }
+
+  RETURN_COPY(&data->namespace);
+}
+
 /* Queues an update for the sender, which reads it with read(). */
 static void frankenphp_task_obj_update(zval *zthis, zval *data) {
   frankenphp_task_data *task = frankenphp_task_obj_open(zthis);
@@ -2524,8 +2546,10 @@ ZEND_METHOD(FrankenPHP_WorkerHandle, receive) {
     RETURN_THROWS();
   }
 
+  zval namespace;
+  ZVAL_UNDEF(&namespace);
   struct go_frankenphp_receive_task_return task =
-      go_frankenphp_receive_task(frankenphp_thread_index());
+      go_frankenphp_receive_task(frankenphp_thread_index(), &namespace);
   if (task.r0 == 0) {
     RETURN_NULL();
   }
@@ -2542,6 +2566,7 @@ ZEND_METHOD(FrankenPHP_WorkerHandle, receive) {
   }
   zend_catch {
     frankenphp_vars_free(task.r1);
+    zval_ptr_dtor(&namespace);
     go_frankenphp_task_receiver_close(task.r0, true);
     zend_bailout();
   }
@@ -2552,12 +2577,14 @@ ZEND_METHOD(FrankenPHP_WorkerHandle, receive) {
     /* an enum of the payload does not resolve here: the task cannot be
      * processed, the sender is told so */
     zval_ptr_dtor(&payload);
+    zval_ptr_dtor(&namespace);
     go_frankenphp_task_receiver_close(task.r0, true);
     RETURN_THROWS();
   }
 
   frankenphp_task_obj_take(return_value, task.r0, task.r2, false);
   ZVAL_COPY_VALUE(&FRANKENPHP_TASK_DATA(return_value)->payload, &payload);
+  ZVAL_COPY_VALUE(&FRANKENPHP_TASK_DATA(return_value)->namespace, &namespace);
 }
 
 /* {{{ thread-safe opcache reset */

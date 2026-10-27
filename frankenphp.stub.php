@@ -113,7 +113,7 @@ namespace FrankenPHP {
          * Returns the namespaces this background worker serves, as declared in
          * its configuration.
          *
-         * @return array{vars: list<string>}
+         * @return array{vars: list<string>, tasks: list<string>}
          */
         public function getNamespaces(): array {}
 
@@ -138,18 +138,18 @@ namespace FrankenPHP {
 
     /**
      * EXPERIMENTAL: the sender's side of a task, an Io\Poll\Handle on PHP
-     * 8.6. Constructing it sends the
-     * task to the named background worker, resolved within the current
-     * php_server then among global workers, and waits for one of its threads
-     * to pick it up, at most $timeout seconds, forever when null. Payload
-     * values must be null, scalars, arrays or enums.
+     * 8.6. Constructing it sends the task to the background worker receiving
+     * the task namespace, resolved within the current php_server then among
+     * global workers, and waits for one of its threads to pick it up, at most
+     * $timeout seconds, forever when null. Payload values must be null,
+     * scalars, arrays or enums.
      *
      * @strict-properties
      * @not-serializable
      */
     final class SentTaskHandle
     {
-        public function __construct(string $worker, array $payload, ?float $timeout = 30.0) {}
+        public function __construct(string $namespace, array $payload, ?float $timeout = 30.0) {}
 
         /**
          * The next update published by the worker, waiting for it, or null
@@ -193,6 +193,12 @@ namespace FrankenPHP {
          * The payload the sender passed.
          */
         public function getPayload(): array {}
+
+        /**
+         * The task namespace the sender addressed, one of those the worker
+         * declares.
+         */
+        public function getNamespace(): string {}
 
         /**
          * Publishes an update for the sender, which reads it with read().

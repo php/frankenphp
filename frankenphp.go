@@ -328,8 +328,8 @@ func Validate(options ...Option) error {
 	}
 
 	takenNames := make(map[string]bool, len(opt.workers))
-	paths, vars := scopeSet{}, scopeSet{}
-	taken := declarationIndex{names: func(name string) bool { return takenNames[name] }, paths: paths.has, vars: vars.has}
+	paths, vars, tasks := scopeSet{}, scopeSet{}, scopeSet{}
+	taken := declarationIndex{names: func(name string) bool { return takenNames[name] }, paths: paths.has, vars: vars.has, tasks: tasks.has}
 	for _, w := range opt.workers {
 		w, err := resolveWorkerFile(w)
 		if err != nil {
@@ -346,6 +346,9 @@ func Validate(options ...Option) error {
 		}
 		for _, ns := range w.vars {
 			vars.add(w.server, ns)
+		}
+		for _, ns := range w.tasks {
+			tasks.add(w.server, ns)
 		}
 	}
 

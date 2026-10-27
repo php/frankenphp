@@ -17,10 +17,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// taskWorker declares a background worker from testdata/bgworker receiving
+// the task namespace named like it, scoped to server when one is given
+func taskWorker(name, file string, env map[string]string, server *frankenphp.Server, extra ...frankenphp.WorkerOption) frankenphp.Option {
+	opts := []frankenphp.WorkerOption{frankenphp.WithWorkerBackground(), frankenphp.WithWorkerEnv(env), frankenphp.WithWorkerTasks(name)}
+	if server != nil {
+		opts = append(opts, frankenphp.WithWorkerServerScope(server))
+	}
+
+	return frankenphp.WithWorkers(name, "testdata/bgworker/"+file, 1, append(opts, extra...)...)
+}
+
 func TestTaskRoundTrip(t *testing.T) {
 	server, err := frankenphp.NewServer(testDataDir)
 	require.NoError(t, err)
-	initServers(t, frankenphp.WithServer(server), bgWorker("echo", "task-worker.php", nil, server), frankenphp.WithNumThreads(2))
+	initServers(t, frankenphp.WithServer(server), taskWorker("echo", "task-worker.php", nil, server), frankenphp.WithNumThreads(2))
 
 	body := serverGet(t, server, "http://example.com/task.php?input=hello")
 	assert.Contains(t, body, `"result":"processed:hello"`)
@@ -39,12 +50,36 @@ func TestTaskRoundTrip(t *testing.T) {
 	assert.Equal(t, "done", lines[3])
 }
 
+func TestTaskScopedToServer(t *testing.T) {
+	server1, _ := frankenphp.NewServer(testDataDir, frankenphp.WithServerName("one"))
+	server2, _ := frankenphp.NewServer(testDataDir, frankenphp.WithServerName("two"))
+	// worker names are global, the namespace is what the two share
+	jobs := func(name, tag string, server *frankenphp.Server) frankenphp.Option {
+		return frankenphp.WithWorkers(name, "testdata/bgworker/task-worker.php", 1,
+			frankenphp.WithWorkerBackground(),
+			frankenphp.WithWorkerTasks("jobs"),
+			frankenphp.WithWorkerEnv(map[string]string{"BG_TAG": tag}),
+			frankenphp.WithWorkerServerScope(server),
+		)
+	}
+	initServers(t,
+		frankenphp.WithServer(server1),
+		frankenphp.WithServer(server2),
+		jobs("jobs-one", "one", server1),
+		jobs("jobs-two", "two", server2),
+		frankenphp.WithNumThreads(3),
+	)
+
+	assert.Contains(t, serverGet(t, server1, "http://example.com/task.php?ns=jobs"), `"tag":"one"`)
+	assert.Contains(t, serverGet(t, server2, "http://example.com/task.php?ns=jobs"), `"tag":"two"`)
+}
+
 // a background worker may send tasks too, here while booting
 func TestTaskFromBackgroundWorker(t *testing.T) {
 	sentinel := filepath.Join(t.TempDir(), "relay.json")
 	initServers(t,
-		bgWorker("relay", "task-relay.php", map[string]string{"BG_TARGET": "echo", "BG_SENTINEL": sentinel}, nil),
-		bgWorker("echo", "task-worker.php", nil, nil),
+		taskWorker("relay", "task-relay.php", map[string]string{"BG_TARGET": "echo", "BG_SENTINEL": sentinel}, nil),
+		taskWorker("echo", "task-worker.php", nil, nil),
 		frankenphp.WithNumThreads(3),
 	)
 
@@ -55,10 +90,10 @@ func TestTaskFromBackgroundWorker(t *testing.T) {
 func TestTaskPickupTimeout(t *testing.T) {
 	server, err := frankenphp.NewServer(testDataDir)
 	require.NoError(t, err)
-	initServers(t, frankenphp.WithServer(server), bgWorker("echo", "task-worker.php", nil, server), frankenphp.WithNumThreads(2))
+	initServers(t, frankenphp.WithServer(server), taskWorker("echo", "task-worker.php", nil, server), frankenphp.WithNumThreads(2))
 
 	body := serverGet(t, server, "http://example.com/task-busy.php")
-	assert.Contains(t, body, `picked up the task in time`)
+	assert.Contains(t, body, `picked up the task sent to "echo" in time`)
 	assert.Contains(t, body, `"result":"processed:slow"`)
 }
 
@@ -66,7 +101,7 @@ func TestTaskPickupTimeout(t *testing.T) {
 func TestTaskCrashMidTask(t *testing.T) {
 	server, err := frankenphp.NewServer(testDataDir)
 	require.NoError(t, err)
-	initServers(t, frankenphp.WithServer(server), bgWorker("echo", "task-worker.php", nil, server), frankenphp.WithNumThreads(2))
+	initServers(t, frankenphp.WithServer(server), taskWorker("echo", "task-worker.php", nil, server), frankenphp.WithNumThreads(2))
 
 	assert.Contains(t, serverGet(t, server, "http://example.com/task.php?crash=1"), "exited without completing the task")
 	assert.Contains(t, serverGet(t, server, "http://example.com/task.php?input=after"), `"result":"processed:after"`)
@@ -77,7 +112,7 @@ func TestTaskAbandoned(t *testing.T) {
 	sentinel := filepath.Join(t.TempDir(), "abandoned.txt")
 	server, err := frankenphp.NewServer(testDataDir)
 	require.NoError(t, err)
-	initServers(t, frankenphp.WithServer(server), bgWorker("echo", "task-worker.php", map[string]string{"BG_SENTINEL": sentinel}, server), frankenphp.WithNumThreads(2))
+	initServers(t, frankenphp.WithServer(server), taskWorker("echo", "task-worker.php", map[string]string{"BG_SENTINEL": sentinel}, server), frankenphp.WithNumThreads(2))
 
 	assert.Equal(t, "closed", serverGet(t, server, "http://example.com/task.php?sleep_ms=200&close_early=1"))
 	assert.Contains(t, requireFileContentEventually(t, sentinel), "the sender closed the task before the update")
@@ -88,7 +123,7 @@ func TestTaskAbandoned(t *testing.T) {
 func TestTaskQueuedWhileBusy(t *testing.T) {
 	server, err := frankenphp.NewServer(testDataDir)
 	require.NoError(t, err)
-	initServers(t, frankenphp.WithServer(server), bgWorker("echo", "task-worker.php", map[string]string{"BG_LOOP": "if"}, server), frankenphp.WithNumThreads(3))
+	initServers(t, frankenphp.WithServer(server), taskWorker("echo", "task-worker.php", map[string]string{"BG_LOOP": "if"}, server), frankenphp.WithNumThreads(3))
 
 	bodies := make(chan string, 2)
 	for _, input := range []string{"first", "second"} {
@@ -111,7 +146,7 @@ func TestTaskPool(t *testing.T) {
 	require.NoError(t, err)
 	initServers(t,
 		frankenphp.WithServer(server),
-		frankenphp.WithWorkers("pool", "testdata/bgworker/task-worker.php", 2, frankenphp.WithWorkerBackground(), frankenphp.WithWorkerServerScope(server)),
+		frankenphp.WithWorkers("pool", "testdata/bgworker/task-worker.php", 2, frankenphp.WithWorkerBackground(), frankenphp.WithWorkerServerScope(server), frankenphp.WithWorkerTasks("pool")),
 		frankenphp.WithNumThreads(3),
 	)
 
@@ -121,10 +156,10 @@ func TestTaskPool(t *testing.T) {
 func TestTaskErrors(t *testing.T) {
 	server, err := frankenphp.NewServer(testDataDir)
 	require.NoError(t, err)
-	initServers(t, frankenphp.WithServer(server), bgWorker("echo", "task-worker.php", nil, server), frankenphp.WithNumThreads(2))
+	initServers(t, frankenphp.WithServer(server), taskWorker("echo", "task-worker.php", nil, server), frankenphp.WithNumThreads(2))
 
 	body := serverGet(t, server, "http://example.com/task-errors.php")
-	assert.Contains(t, body, `unknown: RuntimeException: FrankenPHP\SentTaskHandle: unknown background worker "nope"`)
+	assert.Contains(t, body, `unknown: RuntimeException: FrankenPHP\SentTaskHandle: no background worker receives the task namespace "nope"`)
 	assert.Contains(t, body, `payload: ValueError: FrankenPHP\SentTaskHandle::__construct(): payload values must be null, scalars, arrays or enums`)
 	assert.Contains(t, body, `timeout: ValueError: FrankenPHP\SentTaskHandle::__construct(): Argument #3 ($timeout) must be greater than or equal to 0`)
 	assert.Contains(t, body, `received: Error: Call to private FrankenPHP\ReceivedTaskHandle::__construct()`)
@@ -140,7 +175,7 @@ func TestTaskMetrics(t *testing.T) {
 	require.NoError(t, err)
 	initServers(t,
 		frankenphp.WithServer(server),
-		bgWorker("echo", "task-worker.php", map[string]string{"BG_SENTINEL": sentinel}, server),
+		taskWorker("echo", "task-worker.php", map[string]string{"BG_SENTINEL": sentinel}, server),
 		frankenphp.WithNumThreads(2),
 		frankenphp.WithMetrics(frankenphp.NewPrometheusMetrics(registry)),
 	)
@@ -149,7 +184,7 @@ func TestTaskMetrics(t *testing.T) {
 	assert.Contains(t, serverGet(t, server, "http://example.com/task.php?crash=1"), "exited without completing the task")
 	assert.Equal(t, "closed", serverGet(t, server, "http://example.com/task.php?sleep_ms=200&close_early=1"))
 	requireFileContentEventually(t, sentinel)
-	assert.Contains(t, serverGet(t, server, "http://example.com/task-busy.php"), "picked up the task in time")
+	assert.Contains(t, serverGet(t, server, "http://example.com/task-busy.php"), `picked up the task sent to "echo" in time`)
 
 	expected := `
 		# HELP frankenphp_worker_task_count Number of tasks sent to this background worker, by outcome: completed, aborted (the script ended with the task open), abandoned (the sender closed its stream first) or timeout (no thread picked the task up in time)
@@ -178,7 +213,7 @@ func TestTaskSenderUnblockedOnShutdown(t *testing.T) {
 	server, err := frankenphp.NewServer(testDataDir)
 	require.NoError(t, err)
 	t.Cleanup(frankenphp.Shutdown)
-	require.NoError(t, frankenphp.Init(frankenphp.WithServer(server), bgWorker("echo", "task-worker.php", nil, server), frankenphp.WithNumThreads(2)))
+	require.NoError(t, frankenphp.Init(frankenphp.WithServer(server), taskWorker("echo", "task-worker.php", nil, server), frankenphp.WithNumThreads(2)))
 
 	body := sendWhileWorkerBusy(t, server, mark)
 	done := make(chan struct{})
@@ -200,7 +235,7 @@ func TestTaskSenderUnblockedOnRestart(t *testing.T) {
 	mark := filepath.Join(t.TempDir(), "picked")
 	server, err := frankenphp.NewServer(testDataDir)
 	require.NoError(t, err)
-	initServers(t, frankenphp.WithServer(server), bgWorker("echo", "task-worker.php", nil, server), frankenphp.WithNumThreads(2))
+	initServers(t, frankenphp.WithServer(server), taskWorker("echo", "task-worker.php", nil, server), frankenphp.WithNumThreads(2))
 
 	body := sendWhileWorkerBusy(t, server, mark)
 	start := time.Now()
@@ -236,7 +271,7 @@ func TestTaskMethodsAfterTheEnd(t *testing.T) {
 	server, err := frankenphp.NewServer(testDataDir)
 	require.NoError(t, err)
 	initServers(t, frankenphp.WithServer(server),
-		bgWorker("echo", "task-over-worker.php", map[string]string{"BG_SENTINEL": sentinel}, server),
+		taskWorker("echo", "task-over-worker.php", map[string]string{"BG_SENTINEL": sentinel}, server),
 		frankenphp.WithNumThreads(2))
 
 	// the task being complete does not close the sender's handle, giving up
@@ -269,9 +304,63 @@ func TestTaskPoll(t *testing.T) {
 	require.NoError(t, err)
 	initServers(t,
 		frankenphp.WithServer(server),
-		frankenphp.WithWorkers("pool", "testdata/bgworker/task-worker.php", 2, frankenphp.WithWorkerBackground(), frankenphp.WithWorkerServerScope(server)),
+		frankenphp.WithWorkers("pool", "testdata/bgworker/task-worker.php", 2, frankenphp.WithWorkerBackground(), frankenphp.WithWorkerServerScope(server), frankenphp.WithWorkerTasks("pool")),
 		frankenphp.WithNumThreads(3),
 	)
 
 	assert.Equal(t, `["processed:a","processed:b"] 0`, serverGet(t, server, "http://example.com/task-poll.php"))
+}
+
+// one pool receives several task namespaces through one queue, and each task
+// tells the namespace it was sent to
+func TestTaskNamespaces(t *testing.T) {
+	server, err := frankenphp.NewServer(testDataDir)
+	require.NoError(t, err)
+	initServers(t,
+		frankenphp.WithServer(server),
+		frankenphp.WithWorkers("images", "testdata/bgworker/task-worker.php", 2,
+			frankenphp.WithWorkerBackground(),
+			frankenphp.WithWorkerServerScope(server),
+			frankenphp.WithWorkerTasks("image.resize", "image.thumbnail"),
+		),
+		frankenphp.WithNumThreads(3),
+	)
+
+	resize := serverGet(t, server, "http://example.com/task.php?ns=image.resize&input=a")
+	assert.Contains(t, resize, `"namespace":"image.resize"`)
+	assert.Contains(t, resize, `"worker":"images"`)
+	assert.Contains(t, serverGet(t, server, "http://example.com/task.php?ns=image.thumbnail&input=b"), `"namespace":"image.thumbnail"`)
+	assert.Contains(t, serverGet(t, server, "http://example.com/task.php?ns=images"), "no background worker receives")
+}
+
+func TestValidateTaskNamespaces(t *testing.T) {
+	server, err := frankenphp.NewServer(testDataDir)
+	require.NoError(t, err)
+	receiver := func(name string, extra ...frankenphp.WorkerOption) frankenphp.Option {
+		return frankenphp.WithWorkers(name, "testdata/bgworker/task-worker.php", 1, append([]frankenphp.WorkerOption{frankenphp.WithWorkerBackground()}, extra...)...)
+	}
+
+	assert.ErrorContains(t, frankenphp.Validate(
+		receiver("one", frankenphp.WithWorkerTasks("jobs")),
+		receiver("two", frankenphp.WithWorkerTasks("mail", "jobs")),
+	), `two global workers cannot receive the same task namespace: "jobs"`)
+
+	assert.NoError(t, frankenphp.Validate(
+		frankenphp.WithServer(server),
+		receiver("one", frankenphp.WithWorkerTasks("jobs")),
+		receiver("two", frankenphp.WithWorkerTasks("jobs"), frankenphp.WithWorkerServerScope(server)),
+	))
+
+	// vars and tasks are separate addresses, one worker may hold both
+	assert.NoError(t, frankenphp.Validate(
+		receiver("one", frankenphp.WithWorkerTasks("jobs"), frankenphp.WithWorkerVars("jobs")),
+	))
+
+	assert.ErrorContains(t, frankenphp.Validate(
+		receiver("one", frankenphp.WithWorkerTasks("jobs", "jobs")),
+	), `declares the task namespace "jobs" twice`)
+
+	assert.ErrorContains(t, frankenphp.Validate(
+		frankenphp.WithWorkers("http", "testdata/worker.php", 1, frankenphp.WithWorkerTasks("jobs")),
+	), "only background workers receive them")
 }

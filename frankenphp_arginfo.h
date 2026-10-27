@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 994f4112c7cd061b82f8580a079d55614f139a1e */
+ * Stub hash: 83d90a0b9c3aad12fa104cf7da8f0a0faaf2dc5f */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_handle_request, 0, 1, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, callback, IS_CALLABLE, 0)
@@ -63,7 +63,7 @@ ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_FrankenPHP_WorkerHandle_rec
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_class_FrankenPHP_SentTaskHandle___construct, 0, 0, 2)
-	ZEND_ARG_TYPE_INFO(0, worker, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, namespace, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO(0, payload, IS_ARRAY, 0)
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, timeout, IS_DOUBLE, 1, "30.0")
 ZEND_END_ARG_INFO()
@@ -79,6 +79,9 @@ ZEND_END_ARG_INFO()
 #define arginfo_class_FrankenPHP_ReceivedTaskHandle___construct arginfo_class_FrankenPHP_WorkerHandle___construct
 
 #define arginfo_class_FrankenPHP_ReceivedTaskHandle_getPayload arginfo_frankenphp_request_headers
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_FrankenPHP_ReceivedTaskHandle_getNamespace, 0, 0, IS_STRING, 0)
+ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_FrankenPHP_ReceivedTaskHandle_update, 0, 1, IS_VOID, 0)
 	ZEND_ARG_TYPE_INFO(0, data, IS_ARRAY, 0)
@@ -110,6 +113,7 @@ ZEND_METHOD(FrankenPHP_SentTaskHandle, getStream);
 ZEND_METHOD(FrankenPHP_SentTaskHandle, abandon);
 ZEND_METHOD(FrankenPHP_ReceivedTaskHandle, __construct);
 ZEND_METHOD(FrankenPHP_ReceivedTaskHandle, getPayload);
+ZEND_METHOD(FrankenPHP_ReceivedTaskHandle, getNamespace);
 ZEND_METHOD(FrankenPHP_ReceivedTaskHandle, update);
 ZEND_METHOD(FrankenPHP_ReceivedTaskHandle, complete);
 ZEND_METHOD(FrankenPHP_ReceivedTaskHandle, getStream);
@@ -151,6 +155,7 @@ static const zend_function_entry class_FrankenPHP_SentTaskHandle_methods[] = {
 static const zend_function_entry class_FrankenPHP_ReceivedTaskHandle_methods[] = {
 	ZEND_ME(FrankenPHP_ReceivedTaskHandle, __construct, arginfo_class_FrankenPHP_ReceivedTaskHandle___construct, ZEND_ACC_PRIVATE)
 	ZEND_ME(FrankenPHP_ReceivedTaskHandle, getPayload, arginfo_class_FrankenPHP_ReceivedTaskHandle_getPayload, ZEND_ACC_PUBLIC)
+	ZEND_ME(FrankenPHP_ReceivedTaskHandle, getNamespace, arginfo_class_FrankenPHP_ReceivedTaskHandle_getNamespace, ZEND_ACC_PUBLIC)
 	ZEND_ME(FrankenPHP_ReceivedTaskHandle, update, arginfo_class_FrankenPHP_ReceivedTaskHandle_update, ZEND_ACC_PUBLIC)
 	ZEND_ME(FrankenPHP_ReceivedTaskHandle, complete, arginfo_class_FrankenPHP_ReceivedTaskHandle_complete, ZEND_ACC_PUBLIC)
 	ZEND_ME(FrankenPHP_ReceivedTaskHandle, getStream, arginfo_class_FrankenPHP_ReceivedTaskHandle_getStream, ZEND_ACC_PUBLIC)

@@ -38,6 +38,7 @@ while ($handle->tick()) {
             $task->complete([
                 'result' => 'processed:' . ($payload['input'] ?? ''),
                 'worker' => $_SERVER['FRANKENPHP_WORKER_BACKGROUND'],
+                'namespace' => $task->getNamespace(),
                 'tag' => $_SERVER['BG_TAG'] ?? '',
                 'thread' => $threadId ??= bin2hex(random_bytes(4)),
             ]);
