@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -59,4 +60,23 @@ func TestWorkerRequestBodyTooLarge(t *testing.T) {
 			}
 		}
 	}, &testOptions{workerScript: "worker-read-input.php", nbWorkers: 1, nbParallelRequests: 1})
+}
+
+// The script must be stopped when the body is too large, not run on with a truncated one.
+func TestRequestBodyTooLargeStopsScript(t *testing.T) {
+	require.NoError(t, frankenphp.Init())
+	defer frankenphp.Shutdown()
+
+	cwd, _ := os.Getwd()
+	marker := filepath.Join(t.TempDir(), "marker")
+
+	r := httptest.NewRequest("POST", "http://example.com/read-input-then-touch.php?marker="+marker, strings.NewReader(strings.Repeat("x", 4096)))
+	w := httptest.NewRecorder()
+	r.Body = http.MaxBytesReader(w, r.Body, 1024)
+	req, err := frankenphp.NewRequestWithContext(r, frankenphp.WithRequestDocumentRoot(cwd+"/testdata/", false))
+	require.NoError(t, err)
+	require.NoError(t, frankenphp.ServeHTTP(w, req))
+
+	require.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
+	require.NoFileExists(t, marker)
 }

@@ -742,12 +742,12 @@ func go_sapi_flush(threadIndex C.uintptr_t) bool {
 }
 
 //export go_read_post
-func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (readBytes C.size_t) {
+func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (readBytes C.size_t, tooLarge C.bool) {
 	fc := phpThreads[threadIndex].handler.frankenPHPContext()
 
 	// net/http forbids reading the body after the handler returns; body wrappers may touch the dead stream
 	if fc.responseWriter == nil || fc.isDone {
-		return 0
+		return 0, false
 	}
 
 	var rc *http.ResponseController
@@ -776,8 +776,12 @@ func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (r
 	}
 
 	// PHP can't see read errors: fail the request rather than expose a truncated body
-	if _, ok := errors.AsType[*http.MaxBytesError](err); ok && !fc.headersWritten {
-		fc.reject(ErrRequestBodyTooLarge)
+	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+		if !fc.headersWritten {
+			fc.reject(ErrRequestBodyTooLarge)
+		}
+
+		tooLarge = true
 	}
 
 	return
