@@ -1,9 +1,7 @@
 package frankenphp_test
 
 import (
-	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
 	"time"
 
@@ -218,29 +216,21 @@ func TestInitRefusesASharedVarsNamespace(t *testing.T) {
 	require.ErrorContains(t, err, `two global workers cannot publish the same vars namespace: "cfg"`)
 }
 
-// a bailout while copying a snapshot, here past memory_limit, lets go of it:
-// the publisher keeps publishing and the next reader is served
+// a bailout while copying a snapshot, here in an autoloader its enum
+// triggers, lets go of it: the next readers are served, by a publisher that
+// keeps publishing. memory_limit would do too, but not where the Zend
+// allocator is off, as under the sanitizers.
 func TestVarsBailoutInTheCopy(t *testing.T) {
-	sentinel := filepath.Join(t.TempDir(), "publications")
 	server, err := frankenphp.NewServer(testDataDir)
 	require.NoError(t, err)
-	initServers(t,
-		frankenphp.WithServer(server),
-		bgWorker("big", "big-vars.php", map[string]string{"BG_SENTINEL": sentinel}, server),
-		frankenphp.WithNumThreads(3),
-		frankenphp.WithPhpIni(map[string]string{"memory_limit": "8M"}),
-	)
+	initServers(t, frankenphp.WithServer(server), bgWorker("enum", "enum-vars.php", nil, server), frankenphp.WithNumThreads(2))
 
-	publications := func() int {
-		b, _ := os.ReadFile(sentinel)
-		n, _ := strconv.Atoi(string(b))
+	assert.Contains(t, serverGet(t, server, "http://example.com/vars-fatal.php?fatal=1"), "Cannot redeclare")
 
-		return n
-	}
-	assert.Contains(t, serverGet(t, server, "http://example.com/vars.php?ns=big"), "Allowed memory size")
-	after := publications()
-	require.Eventually(t, func() bool { return publications() > after }, 5*time.Second, 25*time.Millisecond, "the publisher is stuck")
-	assert.Contains(t, serverGet(t, server, "http://example.com/vars.php?ns=big"), "Allowed memory size")
+	first := serverGet(t, server, "http://example.com/vars-fatal.php")
+	require.Eventually(t, func() bool {
+		return serverGet(t, server, "http://example.com/vars-fatal.php") != first
+	}, 5*time.Second, 25*time.Millisecond, "the publisher is stuck")
 }
 
 // an autoloader may keep the class name it is given: a request string, not
