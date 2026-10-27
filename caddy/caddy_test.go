@@ -2215,7 +2215,7 @@ func TestSymlinkWorkerBehavior(t *testing.T) {
 
 		// Accessing the worker script without worker configuration MUST fail
 		// The script checks $_SERVER['FRANKENPHP_WORKER'] and dies if not set
-		tester.AssertGetResponse("http://localhost:"+testPort+"/index.php", http.StatusOK, "Error: This script must be run in worker mode (FRANKENPHP_WORKER not set)\n")
+		tester.AssertGetResponse("http://localhost:"+testPort+"/index.php", http.StatusOK, "Error: This script must be run in worker mode (FRANKENPHP_WORKER not set to '1')\n")
 	})
 
 	t.Run("MultipleRequests", func(t *testing.T) {

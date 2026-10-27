@@ -1527,9 +1527,6 @@ static int frankenphp_worker_handle_close(php_stream *stream,
   return php_stream_socket_ops.close(stream, 0);
 }
 
-/* The handle of the current background worker: the stream to wait on and the
- * tick that reports the drain. Constructing it outside a background worker
- * throws, a run may create as many as it likes. */
 /* The constructor is not a gate: unserialize() and Reflection make an
  * instance without it, so every method checks the thread it runs on. */
 static bool frankenphp_worker_handle_usable(void) {
@@ -1544,6 +1541,9 @@ static bool frankenphp_worker_handle_usable(void) {
   return false;
 }
 
+/* The handle of the current background worker: the stream to wait on and the
+ * tick that reports the drain. Constructing it outside a background worker
+ * throws, a run may create as many as it likes. */
 ZEND_METHOD(FrankenPHP_WorkerHandle, __construct) {
   ZEND_PARSE_PARAMETERS_NONE();
 
