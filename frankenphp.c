@@ -2124,20 +2124,23 @@ int register_internal_extensions(void) {
     return FAILURE;
   }
 
+  /* modules is kept for the process lifetime: every php_module_startup()
+   * (main thread reboots, a new Init()) registers the modules again */
   for (int i = 0; i < modules_len; i++) {
     if (zend_register_internal_module(modules[i]) == NULL) {
       return FAILURE;
     }
   }
 
-  pefree(modules, 1);
-  modules = NULL;
-  modules_len = 0;
-
   return SUCCESS;
 }
 
 void register_extensions(zend_module_entry **m, int len) {
+  /* install the hook only once, or it would become its own predecessor */
+  if (modules != NULL || len <= 0) {
+    return;
+  }
+
   modules = pemalloc(len * sizeof(*modules), 1);
   memcpy(modules, m, len * sizeof(*modules));
   modules_len = len;
