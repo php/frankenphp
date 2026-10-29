@@ -69,6 +69,13 @@
 ZEND_TSRMLS_CACHE_DEFINE()
 #endif
 
+/* php_request_begin() and php_request_end() call the extensions' own request
+ * boundary hooks, replacing the resets below */
+#ifdef STANDARD_MODULE_PROPERTIES_REQUEST_HOOKS
+#define FRANKENPHP_REQUEST_HOOKS
+#endif
+
+#ifndef FRANKENPHP_REQUEST_HOOKS
 /**
  * The list of modules to reload on each request. If an external module
  * requires to be reloaded between requests, it is possible to hook on
@@ -91,6 +98,7 @@ static const char *MODULES_TO_RELOAD[] = {
     "session",
 #endif
     NULL};
+#endif
 
 frankenphp_version frankenphp_get_version() {
   return (frankenphp_version){
@@ -438,6 +446,7 @@ static void frankenphp_release_super_globals() {
   }
 }
 
+#ifndef FRANKENPHP_REQUEST_HOOKS
 /* reset all 'auto globals' in worker mode except of $_ENV
  * see: php_hash_environment() */
 static void frankenphp_reset_super_globals() {
@@ -585,6 +594,8 @@ static void frankenphp_reset_basic_state(void) {
   frankenphp_reset_url_scanner(&BG(url_adapt_output_ex));
 }
 
+#endif
+
 static frankenphp_thread_metrics *thread_metrics = NULL;
 
 /* Adapted from php_request_shutdown */
@@ -592,6 +603,9 @@ static void frankenphp_worker_request_shutdown() {
   __atomic_store_n(&thread_metrics[thread_index].last_memory_usage,
                    zend_memory_usage(0), __ATOMIC_RELAXED);
 
+#ifdef FRANKENPHP_REQUEST_HOOKS
+  php_request_end();
+#else
   /* Flush all output buffers */
   zend_try { php_output_end_all(); }
   zend_end_try();
@@ -632,6 +646,7 @@ static void frankenphp_worker_request_shutdown() {
   if (request_body != NULL) {
     frankenphp_release_request_body(request_body);
   }
+#endif
   frankenphp_free_request_context();
 
   if (prepared_env != NULL) {
@@ -689,6 +704,9 @@ static int frankenphp_worker_request_startup() {
 
   frankenphp_update_request_context();
 
+#ifdef FRANKENPHP_REQUEST_HOOKS
+  retval = php_request_begin();
+#else
   zend_try {
     php_output_activate();
 
@@ -748,6 +766,7 @@ static int frankenphp_worker_request_startup() {
   }
   zend_catch { retval = FAILURE; }
   zend_end_try();
+#endif
 
   /* Restore the original user error handler */
   ZVAL_COPY_VALUE(&EG(user_error_handler), &orig_user_error_handler);
