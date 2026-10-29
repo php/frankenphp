@@ -27,20 +27,6 @@ import (
 	"github.com/dunglas/frankenphp/internal/phpheaders"
 )
 
-// cStringHTTPMethods caches C string versions of common HTTP methods
-// to avoid allocations in pinCString on every request.
-var cStringHTTPMethods = map[string]*C.char{
-	"GET":     C.CString("GET"),
-	"HEAD":    C.CString("HEAD"),
-	"POST":    C.CString("POST"),
-	"PUT":     C.CString("PUT"),
-	"DELETE":  C.CString("DELETE"),
-	"CONNECT": C.CString("CONNECT"),
-	"OPTIONS": C.CString("OPTIONS"),
-	"TRACE":   C.CString("TRACE"),
-	"PATCH":   C.CString("PATCH"),
-}
-
 // computeKnownVariables returns a set of CGI environment variables for the request.
 //
 // TODO: handle this case https://github.com/caddyserver/caddy/issues/3718
