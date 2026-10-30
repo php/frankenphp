@@ -685,6 +685,11 @@ void get_full_env(zval *track_vars_array) {
 static int frankenphp_worker_request_startup() {
   int retval = SUCCESS;
 
+  /* Use the default error handler while parsing the worker request */
+  zval orig_user_error_handler;
+  ZVAL_COPY_VALUE(&orig_user_error_handler, &EG(user_error_handler));
+  ZVAL_UNDEF(&EG(user_error_handler));
+
   frankenphp_update_request_context();
 
   zend_try {
@@ -746,6 +751,9 @@ static int frankenphp_worker_request_startup() {
   }
   zend_catch { retval = FAILURE; }
   zend_end_try();
+
+  /* Restore the original user error handler */
+  ZVAL_COPY_VALUE(&EG(user_error_handler), &orig_user_error_handler);
 
   SG(sapi_started) = 1;
 
