@@ -208,8 +208,8 @@ func WithRequestBodyTimeout(timeout time.Duration) RequestOption {
 // WithWorkerName sets the worker that should handle the request
 func WithWorkerName(name string) RequestOption {
 	return func(o *frankenPHPContext) error {
-		if name != "" {
-			o.worker = workersByName[name]
+		if name != "" && mainThread != nil {
+			o.worker = mainThread.workersByName[name]
 		}
 
 		return nil

@@ -20,17 +20,36 @@ import (
 // represents the main PHP thread
 // the thread needs to keep running as long as all other threads are running
 type phpMainThread struct {
-	state       *state.ThreadState
-	done        chan struct{}
-	numThreads  int
-	maxThreads  int
-	phpIni      map[string]string
-	isRebooting atomic.Bool
+	state                *state.ThreadState
+	done                 chan struct{}
+	numThreads           int
+	maxThreads           int
+	maxRequestsPerThread int
+	hotReloadEnabled     bool
+	watcherIsEnabled     bool
+	phpIni               map[string]string
+	isRebooting          atomic.Bool
+	maxWaitTime          time.Duration
+	maxIdleTime          time.Duration
+
+	regularThreads    []*phpThread
+	autoScaledThreads []*phpThread
+
+	scaleChan          chan *frankenPHPContext
+	regularRequestChan chan *frankenPHPContext
+
+	workers       []*worker
+	workersByName map[string]*worker
+	workersByPath map[string]*worker
+
+	fallbackServer *Server
+	servers        []*Server
 }
 
 var (
 	phpThreads    []*phpThread
 	mainThread    *phpMainThread
+	oldMainThread *phpMainThread
 	commonHeaders map[string]*C.zend_string
 
 	// timeouts to wait for threads to yield before arming force-kill
@@ -41,13 +60,30 @@ var (
 // initPHPThreads starts the main PHP thread,
 // a fixed number of inactive PHP threads
 // and reserves a fixed number of possible PHP threads
-func initPHPThreads(numThreads int, numMaxThreads int, phpIni map[string]string) (*phpMainThread, error) {
+func initPHPThreads(opt *opt) (*phpMainThread, error) {
+	idleTime := defaultMaxIdleTime
+	if opt.maxIdleTime > 0 {
+		idleTime = opt.maxIdleTime
+	}
+
+	oldMainThread = mainThread
 	mainThread = &phpMainThread{
-		state:      state.NewThreadState(),
-		done:       make(chan struct{}),
-		numThreads: numThreads,
-		maxThreads: numMaxThreads,
-		phpIni:     phpIni,
+		state:                state.NewThreadState(),
+		done:                 make(chan struct{}),
+		numThreads:           opt.numThreads,
+		maxThreads:           opt.maxThreads,
+		phpIni:               opt.phpIni,
+		regularRequestChan:   make(chan *frankenPHPContext),
+		fallbackServer:       newFallbackServer(),
+		servers:              []*Server{},
+		workers:              make([]*worker, 0, opt.numThreads),
+		workersByName:        make(map[string]*worker, opt.numThreads),
+		workersByPath:        make(map[string]*worker, opt.numThreads),
+		autoScaledThreads:    make([]*phpThread, 0, opt.numThreads),
+		maxWaitTime:          opt.maxWaitTime,
+		maxIdleTime:          idleTime,
+		maxRequestsPerThread: opt.maxRequests,
+		hotReloadEnabled:     opt.hasHotReload(),
 	}
 
 	// initialize the first thread
@@ -75,7 +111,7 @@ func initPHPThreads(numThreads int, numMaxThreads int, phpIni map[string]string)
 	// start the underlying C threads
 	var ready sync.WaitGroup
 
-	for i := range numThreads {
+	for i := range mainThread.numThreads {
 		ready.Go(phpThreads[i].boot)
 	}
 
@@ -245,6 +281,66 @@ func getInactivePHPThread() *phpThread {
 	return nil
 }
 
+func (newMainThread *phpMainThread) handleStaleRequests(oldMainThread *phpMainThread, shouldRequeue bool) {
+	hardReloadTimeout := oldMainThread.maxWaitTime
+	if hardReloadTimeout == 0 {
+		hardReloadTimeout = 15 * time.Second
+	}
+
+	go func() {
+		for {
+			select {
+			case <-newMainThread.done:
+				for _, s := range oldMainThread.servers {
+					s.isRegistered.Store(false) // unregister servers from the previous generation if we have reloaded twice
+				}
+				return
+			case fc := <-oldMainThread.regularRequestChan:
+				if shouldRequeue {
+					select {
+					case newMainThread.regularRequestChan <- fc:
+						break
+					case <-time.After(hardReloadTimeout):
+						fc.reject(ErrConfigurationChangedOnReload)
+					}
+				} else {
+					fc.reject(ErrConfigurationChangedOnReload)
+				}
+			}
+		}
+	}()
+
+	for _, oldWorker := range oldMainThread.workers {
+		var newWorker *worker
+		for _, w := range newMainThread.workers {
+			if oldWorker.name == w.name {
+				newWorker = w
+				break
+			}
+		}
+
+		go func() {
+			for {
+				select {
+				case <-newMainThread.done:
+					return
+				case fc := <-oldWorker.requestChan:
+					if newWorker != nil && shouldRequeue {
+						select {
+						case newWorker.requestChan <- fc:
+							break
+						case <-time.After(hardReloadTimeout):
+							fc.reject(ErrConfigurationChangedOnReload)
+						}
+					} else {
+						fc.reject(ErrConfigurationChangedOnReload)
+					}
+				}
+			}
+		}()
+	}
+}
+
 //export go_frankenphp_main_thread_is_ready
 func go_frankenphp_main_thread_is_ready() {
 	mainThread.setAutomaticMaxThreads()
@@ -259,21 +355,21 @@ func go_frankenphp_main_thread_is_ready() {
 // max_threads = auto
 // setAutomaticMaxThreads estimates the amount of threads based on php.ini and system memory_limit
 // If unable to get the system's memory limit, simply double num_threads
-func (mainThread *phpMainThread) setAutomaticMaxThreads() {
-	if mainThread.maxThreads >= 0 {
+func (mThread *phpMainThread) setAutomaticMaxThreads() {
+	if mThread.maxThreads >= 0 {
 		return
 	}
 	perThreadMemoryLimit := int64(C.frankenphp_get_current_memory_limit())
 	totalSysMemory := memory.TotalSysMemory()
 	if perThreadMemoryLimit <= 0 || totalSysMemory == 0 {
-		mainThread.maxThreads = mainThread.numThreads * 2
+		mThread.maxThreads = mThread.numThreads * 2
 		return
 	}
 	maxAllowedThreads := totalSysMemory / uint64(perThreadMemoryLimit)
-	mainThread.maxThreads = int(maxAllowedThreads)
+	mThread.maxThreads = int(maxAllowedThreads)
 
 	if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
-		globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "Automatic thread limit", slog.Int("perThreadMemoryLimitMB", int(perThreadMemoryLimit/1024/1024)), slog.Int("maxThreads", mainThread.maxThreads))
+		globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "Automatic thread limit", slog.Int("perThreadMemoryLimitMB", int(perThreadMemoryLimit/1024/1024)), slog.Int("maxThreads", mThread.maxThreads))
 	}
 }
 
@@ -287,7 +383,7 @@ func go_frankenphp_shutdown_main_thread() {
 
 //export go_is_hot_reload_enabled
 func go_is_hot_reload_enabled() C.bool {
-	return C.bool(hotReloadEnabled)
+	return C.bool(mainThread.hotReloadEnabled)
 }
 
 //export go_get_custom_php_ini

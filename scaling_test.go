@@ -20,13 +20,13 @@ func TestScaleARegularThreadUpAndDown(t *testing.T) {
 	autoScaledThread := phpThreads[1]
 
 	// scale up
-	scaleRegularThread(mainThread.done, mainThread.state)
+	scaleRegularThread(mainThread)
 	assert.Equal(t, state.Ready, autoScaledThread.state.Get())
 	assert.IsType(t, &regularThread{}, autoScaledThread.handler)
 
 	// on down-scale, the thread will be marked as inactive
 	setLongWaitTime(t, autoScaledThread)
-	deactivateThreads()
+	deactivateThreads(mainThread)
 	assert.IsType(t, &inactiveThread{}, autoScaledThread.handler)
 }
 
@@ -49,12 +49,12 @@ func TestScaleAWorkerThreadUpAndDown(t *testing.T) {
 	autoScaledThread := phpThreads[2]
 
 	// scale up
-	scaleWorkerThread(globalWorkersByPath[workerPath], mainThread.done, mainThread.state)
+	scaleWorkerThread(mainThread.workersByPath[workerPath], mainThread)
 	assert.Equal(t, state.Ready, autoScaledThread.state.Get())
 
 	// on down-scale, the thread will be marked as inactive
 	setLongWaitTime(t, autoScaledThread)
-	deactivateThreads()
+	deactivateThreads(mainThread)
 	assert.IsType(t, &inactiveThread{}, autoScaledThread.handler)
 }
 
@@ -70,17 +70,17 @@ func TestMaxIdleTimePreventsEarlyDeactivation(t *testing.T) {
 	autoScaledThread := phpThreads[1]
 
 	// scale up
-	scaleRegularThread(mainThread.done, mainThread.state)
+	scaleRegularThread(mainThread)
 	assert.Equal(t, state.Ready, autoScaledThread.state.Get())
 
 	// set wait time to 30 minutes (less than 1 hour max idle time)
 	autoScaledThread.state.SetWaitTime(time.Now().Add(-30 * time.Minute))
-	deactivateThreads()
+	deactivateThreads(mainThread)
 	assert.IsType(t, &regularThread{}, autoScaledThread.handler, "thread should still be active after 30min with 1h max idle time")
 
 	// set wait time to over 1 hour (exceeds max idle time)
 	autoScaledThread.state.SetWaitTime(time.Now().Add(-time.Hour - time.Minute))
-	deactivateThreads()
+	deactivateThreads(mainThread)
 	assert.IsType(t, &inactiveThread{}, autoScaledThread.handler, "thread should be deactivated after exceeding max idle time")
 }
 

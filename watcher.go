@@ -25,7 +25,7 @@ func (o *hotReloadOpt) hasHotReload() bool {
 	return len(o.hotReload) != 0
 }
 
-func initWatchers(o *opt) error {
+func initWatchers(o *opt, mThread *phpMainThread) error {
 	watchPatterns := make([]*watcher.PatternGroup, 0, len(o.hotReload))
 
 	for _, o := range o.workers {
@@ -33,17 +33,17 @@ func initWatchers(o *opt) error {
 			continue
 		}
 
-		watcherIsEnabled = true
+		mThread.watcherIsEnabled = true
 		watchPatterns = append(watchPatterns, &watcher.PatternGroup{Patterns: o.watch, Callback: func(_ []*watcherGo.Event) {
 			restartWorkers.Store(true)
 		}})
 	}
 
-	if watcherIsEnabled {
+	if mThread.watcherIsEnabled {
 		watchPatterns = append(watchPatterns, &watcher.PatternGroup{
 			Callback: func(_ []*watcherGo.Event) {
 				if restartWorkers.Swap(false) {
-					RestartWorkers()
+					mainThread.rebootAllThreads()
 				}
 			},
 		})

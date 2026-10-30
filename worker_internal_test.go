@@ -18,13 +18,14 @@ import (
 )
 
 func TestCancelledRequestLeavesWorkerQueue(t *testing.T) {
-	savedMaxWaitTime := maxWaitTime.Swap(0)
-	savedScaleChan := scaleChan
-	scaleChan = nil
-	t.Cleanup(func() {
-		maxWaitTime.Store(savedMaxWaitTime)
-		scaleChan = savedScaleChan
-	})
+	mainThread = &phpMainThread{
+		maxWaitTime: 0,
+		scaleChan:   make(chan *frankenPHPContext),
+		fallbackServer: &Server{
+			mainThread: mainThread,
+		},
+	}
+	t.Cleanup(func() { mainThread = nil })
 
 	ctx, cancel := context.WithCancel(context.Background())
 	req := httptest.NewRequest("GET", "/index.php", nil).WithContext(ctx)
@@ -36,6 +37,7 @@ func TestCancelledRequestLeavesWorkerQueue(t *testing.T) {
 		ctx:       ctx,
 		done:      make(chan any),
 		startedAt: time.Now(),
+		server:    mainThread.fallbackServer,
 	})
 
 	assert.NoError(t, err)
