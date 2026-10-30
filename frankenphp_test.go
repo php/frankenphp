@@ -1260,15 +1260,8 @@ func TestLastErrorsNoLeakBetweenRequests_worker(t *testing.T) {
 		LibxmlErrors    *[]string `json:"libxml_errors"`
 		LibxmlLastError *string   `json:"libxml_last_error"`
 		InternalErrors  *bool     `json:"internal_errors"`
-		LastResponse    *[]string `json:"last_response_headers"`
-		Strtok          any       `json:"strtok"`
 		Rewriter        *bool     `json:"rewriter"`
 	}
-
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("X-Secret", r.URL.Query().Get("s"))
-	}))
-	t.Cleanup(upstream.Close)
 
 	get := func(url string, handler func(http.ResponseWriter, *http.Request)) lastErrors {
 		body, _ := testGet(url, handler, t)
@@ -1280,21 +1273,14 @@ func TestLastErrorsNoLeakBetweenRequests_worker(t *testing.T) {
 	}
 
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
-		fetch := url.QueryEscape(fmt.Sprintf("%s/?s=secret_%d", upstream.URL, i))
-		leaked := get(fmt.Sprintf("http://example.com/worker-last-errors.php?leak=%d&fetch=%s", i, fetch), handler)
+		leaked := get(fmt.Sprintf("http://example.com/worker-last-errors.php?leak=%d", i), handler)
 		require.NotNil(t, leaked.LastError)
 		assert.Equal(t, fmt.Sprintf("secret %d", i), *leaked.LastError)
 
 		e := get("http://example.com/worker-last-errors.php", handler)
 		assert.Nil(t, e.LastError)
-		assert.Equal(t, false, e.Strtok)
 		require.NotNil(t, e.Rewriter)
 		assert.True(t, *e.Rewriter, "the URL rewriter must restart in each request")
-
-		if leaked.LastResponse != nil {
-			assert.Contains(t, *leaked.LastResponse, fmt.Sprintf("X-Secret: secret_%d", i))
-			assert.Nil(t, e.LastResponse)
-		}
 
 		if leaked.LibxmlErrors == nil {
 			t.Log("libxml not available, skipping libxml assertions")

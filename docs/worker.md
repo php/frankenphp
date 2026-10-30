@@ -236,13 +236,15 @@ Avoid storing request-specific or sensitive data in `$_ENV`.
 
 ## State persistence
 
-Because worker mode keeps the PHP process alive between requests, the following state persists across requests:
+Because worker mode keeps the PHP process alive between requests, FrankenPHP only resets the state tied to the HTTP request being handled: superglobals (except `$_ENV`), the request body, response headers and output, and the session.
+Everything else is shared between the requests handled by the same thread, as in a long-running CLI script, including:
 
 - **Static variables**: Variables declared with `static` inside functions or methods retain their values between requests.
 - **Class static properties**: Static properties on classes persist between requests.
 - **Global variables**: Variables in the global scope of the worker script persist between requests.
 - **In-memory caches**: Any data stored in memory (arrays, objects) outside the request handler persists.
 - **Runtime engine settings**: Changes made with `ini_set()`, `stream_context_set_default()`, `date_default_timezone_set()`, `chdir()`, `stream_wrapper_register()`, `set_error_handler()` or `set_exception_handler()` stay in effect for later requests. Never store request- or user-specific values there, such as credentials in the default stream context: pass an explicit context to each call instead.
+- **Function state unrelated to the request**: `strtok()` continues the string it was given in a previous request, and `http_get_last_response_headers()` returns the response headers of the last HTTP call made on the thread, even by a previous request. Call `http_clear_last_response_headers()` to clear them.
 - **Process-wide settings**: `umask()` and `setlocale()` change the whole FrankenPHP process, not only the current thread. Worker mode doesn't restore them between requests, and in every mode they also affect requests running at the same time. Set them once at startup, or call `chmod()` on created files instead of changing the umask.
 
 This is by design and is what makes worker mode fast. However, it requires attention to avoid unintended side effects:

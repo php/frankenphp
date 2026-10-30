@@ -545,12 +545,6 @@ static void frankenphp_reset_last_errors(void) {
   PG(last_error_type) = 0;
   PG(last_error_lineno) = 0;
 
-#if PHP_VERSION_ID >= 80400
-  /* http_get_last_response_headers() */
-  zval_ptr_dtor(&BG(last_http_headers));
-  ZVAL_UNDEF(&BG(last_http_headers));
-#endif
-
   /* Called by name to avoid depending on libxml2 headers */
   zend_function *libxml_clear_errors = zend_hash_str_find_ptr(
       CG(function_table), ZEND_STRL("libxml_clear_errors"));
@@ -574,13 +568,8 @@ static void frankenphp_reset_url_scanner(url_adapt_state_ex_t *ctx) {
   ctx->attr_type = 0;
 }
 
-/* Request state of the standard extension, freed by its RSHUTDOWN */
+/* Response state of the standard extension, freed by its RSHUTDOWN */
 static void frankenphp_reset_basic_state(void) {
-  if (BG(strtok_string)) {
-    zend_string_release(BG(strtok_string));
-    BG(strtok_string) = NULL;
-  }
-
   /* output_add_rewrite_var() and session.use_trans_sid */
   frankenphp_reset_url_scanner(&BG(url_adapt_session_ex));
   frankenphp_reset_url_scanner(&BG(url_adapt_output_ex));

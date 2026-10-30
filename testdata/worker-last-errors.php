@@ -15,21 +15,14 @@ return function () use ($hasLibxml) {
 		if (class_exists(DOMDocument::class)) {
 			(new DOMDocument())->loadXML("<root>&secret_{$_GET['leak']};</root>");
 		}
-		strtok("secret {$_GET['leak']}", ' ');
 		output_add_rewrite_var('token', "secret_{$_GET['leak']}");
-		if (isset($_GET['fetch'])) {
-			file_get_contents($_GET['fetch']);
-		}
 	}
 
 	echo json_encode([
 		'last_error' => error_get_last()['message'] ?? null,
-		// evaluated after last_error: strtok() warns when there is nothing to continue
-		'strtok' => isset($_GET['leak']) ? null : @strtok(' '),
 		'rewriter' => isset($_GET['leak']) ? null : output_add_rewrite_var('x', 'y') && in_array('URL-Rewriter', ob_list_handlers(), true),
 		'libxml_errors' => $hasLibxml ? array_map(fn ($e) => trim($e->message), libxml_get_errors()) : null,
 		'libxml_last_error' => $hasLibxml ? (libxml_get_last_error()->message ?? null) : null,
 		'internal_errors' => $hasLibxml ? libxml_use_internal_errors() : null,
-		'last_response_headers' => function_exists('http_get_last_response_headers') ? http_get_last_response_headers() : null,
 	]);
 };
