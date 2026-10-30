@@ -12,6 +12,7 @@ package testext
 // #include "extension.h"
 import "C"
 import (
+	"fmt"
 	"io"
 	"net/http/httptest"
 	"runtime"
@@ -58,17 +59,31 @@ func testRegisterExtension(t *testing.T) {
 		_ = *p
 	})
 
+	assertExtensionsLoaded(t, 1)
+
+	// rebooting the main thread (file watcher, admin restart endpoint,
+	// opcache_reset()) starts the PHP modules again
+	frankenphp.RestartWorkers()
+	assertExtensionsLoaded(t, 2)
+
+	// so does a new Init(), which Caddy runs on every config reload
+	frankenphp.Shutdown()
+	require.NoError(t, frankenphp.Init())
+	assertExtensionsLoaded(t, 3)
+}
+
+// assertExtensionsLoaded checks that both test modules are registered and
+// that ext2's MINIT ran minitCalls times since the process started
+func assertExtensionsLoaded(t *testing.T, minitCalls int) {
+	t.Helper()
+
 	req := httptest.NewRequest("GET", "http://example.com/index.php", nil)
+	req, err := frankenphp.NewRequestWithContext(req, frankenphp.WithRequestDocumentRoot("./testdata", false))
+	require.NoError(t, err)
+
 	w := httptest.NewRecorder()
+	require.NoError(t, frankenphp.ServeHTTP(w, req))
 
-	req, err = frankenphp.NewRequestWithContext(req, frankenphp.WithRequestDocumentRoot("./testdata", false))
-	assert.NoError(t, err)
-
-	err = frankenphp.ServeHTTP(w, req)
-	assert.NoError(t, err)
-
-	resp := w.Result()
-	body, _ := io.ReadAll(resp.Body)
-	assert.Contains(t, string(body), "ext1")
-	assert.Contains(t, string(body), "ext2")
+	body, _ := io.ReadAll(w.Result().Body)
+	assert.Equal(t, fmt.Sprintf("ext1: loaded\next2: loaded\next2_answer: 42\nEXT2_MINIT_CALLS: %d\n", minitCalls), string(body))
 }
