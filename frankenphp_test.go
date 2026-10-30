@@ -171,6 +171,14 @@ func testHelloWorld(t *testing.T, opts *testOptions) {
 	}, opts)
 }
 
+func TestMissingScript(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, resp := testGet("http://example.com/missing.php", handler, t)
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+		assert.Equal(t, "No input file specified.\n", body)
+	}, nil)
+}
+
 func TestEnvVarsInPhpIni(t *testing.T) {
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
 		body, _ := testGet("http://example.com/ini.php?key=opcache.enable", handler, t)

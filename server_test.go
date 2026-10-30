@@ -126,7 +126,7 @@ func TestServer(t *testing.T) {
 		assert.Equal(t, "requests:1", body3, "could not access the worker by matcher on server 2")
 		assert.Equal(t, "requests:2", body4, "could not access the worker by matcher on server 2")
 		assert.Contains(t, body5, "I am by birth a Genevese (i not set)", "could not access the worker by path on server 2")
-		assert.Contains(t, body6, "Failed opening required", "worker is scoped to server 1, so should not be found on server 2")
+		assert.Equal(t, "No input file specified.\n", body6, "worker is scoped to server 1, so should not be found on server 2")
 	})
 
 	t.Run("worker_env_inheritance", func(t *testing.T) {
