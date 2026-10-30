@@ -12,6 +12,11 @@ return function () use (&$requests) {
     ++$requests;
     echo "requests:$requests\n";
 
-    $handler = get_error_handler();
-    echo $handler ? "handler is defined" : "handler is not defined";
+    // get_error_handler is not available in PHP <= 8.4
+    if (function_exists('get_error_handler')) {
+        $handler = get_error_handler();
+        echo $handler ? "handler is defined" : "handler is not defined";
+    } else {
+        echo "handler is defined";
+    }
 };
