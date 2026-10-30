@@ -32,6 +32,7 @@ This index points AI agents and crawlers at the canonical English documentation.
 - [Laravel with FrankenPHP](https://frankenphp.dev/docs/laravel/): Docker, local install, Laravel Octane integration, and standalone binaries.
 - [Symfony with FrankenPHP](https://frankenphp.dev/docs/symfony/): Symfony Docker, worker mode, hot reload, AssetMapper, and X-Sendfile.
 - [WordPress with FrankenPHP](https://frankenphp.dev/docs/wordpress/): minimal install, production Caddyfile, hot reload via Mercure.
+- [Yii3 with FrankenPHP](https://frankenphp.dev/docs/yii3/): Docker image, local install, and worker mode with the yii-runner-frankenphp package.
 - [Migrating from Nginx and PHP-FPM](https://frankenphp.dev/docs/migrate/): step-by-step migration of an existing PHP stack.
 
 ## Real-time and performance features
