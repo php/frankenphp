@@ -244,7 +244,7 @@ Everything else is shared between the requests handled by the same thread, as in
 - **Global variables**: Variables in the global scope of the worker script persist between requests.
 - **In-memory caches**: Any data stored in memory (arrays, objects) outside the request handler persists.
 - **Runtime engine settings**: Changes made with `ini_set()`, `stream_context_set_default()`, `date_default_timezone_set()`, `chdir()`, `stream_wrapper_register()`, `set_error_handler()` or `set_exception_handler()` stay in effect for later requests. Never store request- or user-specific values there, such as credentials in the default stream context: pass an explicit context to each call instead.
-- **Function state unrelated to the request**: `strtok()` continues the string it was given in a previous request, and `http_get_last_response_headers()` returns the response headers of the last HTTP call made on the thread, even by a previous request. Call `http_clear_last_response_headers()` to clear them.
+- **Engine and extension state**: `error_get_last()`, `libxml_get_errors()` and `libxml_get_last_error()` return the errors an earlier request left behind. `http_get_last_response_headers()` returns the response headers of the last HTTP call made on the thread, even by an earlier request. `strtok()` continues the string an earlier request gave it. After `mt_srand()` or `srand()` with a seed, `mt_rand()`, `rand()`, `shuffle()` and `array_rand()` continue that seeded sequence. The errors, headers and strings can contain another client's data, and a seeded sequence makes random values predictable: reset them as shown below.
 - **Process-wide settings**: `umask()` and `setlocale()` change the whole FrankenPHP process, not only the current thread. Worker mode doesn't restore them between requests, and in every mode they also affect requests running at the same time. Set them once at startup, or call `chmod()` on created files instead of changing the umask.
 
 This is by design and is what makes worker mode fast. However, it requires attention to avoid unintended side effects:
@@ -266,4 +266,23 @@ while (\frankenphp_handle_request($handler)) {
 ```
 
 When writing worker scripts, make sure to reset any request-specific state between requests.
+PHP provides functions to reset the engine and extension state listed above:
+
+```php
+<?php
+$handler = static function () {
+    // ...
+};
+
+while (\frankenphp_handle_request($handler)) {
+    error_clear_last();
+    libxml_clear_errors(); // requires the libxml extension
+    http_clear_last_response_headers(); // PHP 8.4+
+    mt_srand(); // reseeds randomly, needed only if the application seeds it
+}
+```
+
+Pass the string to tokenize in the first call to `strtok()` of each request, instead of relying on an earlier call.
+Prefer a `Random\Randomizer` instance with its own engine over seeding the global generator.
+
 Frameworks like [Symfony](symfony.md) and [Laravel Octane](laravel.md) take care of resetting most state for you, but you may still need to reset your own services. With Symfony, services that hold request-specific state should implement [`Symfony\Contracts\Service\ResetInterface`](https://github.com/symfony/contracts/blob/main/Service/ResetInterface.php) so they're reset by the kernel between requests.

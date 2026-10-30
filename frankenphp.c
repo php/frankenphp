@@ -530,30 +530,6 @@ static void frankenphp_reset_session_state(void) {
 }
 #endif
 
-/* php_request_shutdown() frees this state; the worker loop skips it, and a
- * full module teardown would also drop libxml_use_internal_errors() set at
- * worker boot. */
-static void frankenphp_reset_last_errors(void) {
-  if (PG(last_error_message)) {
-    zend_string_release(PG(last_error_message));
-    PG(last_error_message) = NULL;
-  }
-  if (PG(last_error_file)) {
-    zend_string_release(PG(last_error_file));
-    PG(last_error_file) = NULL;
-  }
-  PG(last_error_type) = 0;
-  PG(last_error_lineno) = 0;
-
-  /* Called by name to avoid depending on libxml2 headers */
-  zend_function *libxml_clear_errors = zend_hash_str_find_ptr(
-      CG(function_table), ZEND_STRL("libxml_clear_errors"));
-  if (libxml_clear_errors) {
-    zend_call_known_function(libxml_clear_errors, NULL, NULL, NULL, 0, NULL,
-                             NULL);
-  }
-}
-
 /* Adapted from the url_scanner RSHUTDOWN, which isn't exported */
 static void frankenphp_reset_url_scanner(url_adapt_state_ex_t *ctx) {
   smart_str_free(&ctx->result);
@@ -598,8 +574,6 @@ static void frankenphp_worker_request_shutdown() {
 #ifdef HAVE_PHP_SESSION
   frankenphp_reset_session_state();
 #endif
-
-  frankenphp_reset_last_errors();
 
   /* Shutdown output layer (send the set HTTP headers, cleanup output handlers,
    * etc.) */

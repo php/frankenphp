@@ -1254,47 +1254,13 @@ func TestFileStreamInWorkerMode(t *testing.T) {
 	}, &testOptions{workerScript: "file-stream.php", nbParallelRequests: 1, nbWorkers: 1})
 }
 
-func TestLastErrorsNoLeakBetweenRequests_worker(t *testing.T) {
-	type lastErrors struct {
-		LastError       *string   `json:"last_error"`
-		LibxmlErrors    *[]string `json:"libxml_errors"`
-		LibxmlLastError *string   `json:"libxml_last_error"`
-		InternalErrors  *bool     `json:"internal_errors"`
-		Rewriter        *bool     `json:"rewriter"`
-	}
-
-	get := func(url string, handler func(http.ResponseWriter, *http.Request)) lastErrors {
-		body, _ := testGet(url, handler, t)
-
-		var e lastErrors
-		require.NoError(t, json.Unmarshal([]byte(body), &e), body)
-
-		return e
-	}
-
+func TestURLRewriterRestartsBetweenRequests_worker(t *testing.T) {
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
-		leaked := get(fmt.Sprintf("http://example.com/worker-last-errors.php?leak=%d", i), handler)
-		require.NotNil(t, leaked.LastError)
-		assert.Equal(t, fmt.Sprintf("secret %d", i), *leaked.LastError)
+		testGet(fmt.Sprintf("http://example.com/worker-url-rewriter.php?leak=%d", i), handler, t)
 
-		e := get("http://example.com/worker-last-errors.php", handler)
-		assert.Nil(t, e.LastError)
-		require.NotNil(t, e.Rewriter)
-		assert.True(t, *e.Rewriter, "the URL rewriter must restart in each request")
-
-		if leaked.LibxmlErrors == nil {
-			t.Log("libxml not available, skipping libxml assertions")
-
-			return
-		}
-
-		require.NotEmpty(t, *leaked.LibxmlErrors)
-		assert.Contains(t, (*leaked.LibxmlErrors)[0], fmt.Sprintf("secret_%d", i))
-
-		assert.Empty(t, *e.LibxmlErrors)
-		assert.Nil(t, e.LibxmlLastError)
-		assert.True(t, *e.InternalErrors)
-	}, &testOptions{workerScript: "worker-last-errors.php", nbParallelRequests: 1, nbWorkers: 1})
+		body, _ := testGet("http://example.com/worker-url-rewriter.php", handler, t)
+		assert.Equal(t, "true", body, "the URL rewriter must restart in each request")
+	}, &testOptions{workerScript: "worker-url-rewriter.php", nbParallelRequests: 1, nbWorkers: 1})
 }
 
 // To run this fuzzing test use: go test -fuzz FuzzRequest
