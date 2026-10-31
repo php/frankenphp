@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -31,10 +32,32 @@ type worker struct {
 	threads                []*phpThread
 	threadMutex            sync.RWMutex
 	maxConsecutiveFailures int
-	onThreadReady          func(int)
-	onThreadShutdown       func(int)
-	queuedRequests         atomic.Int32
-	server                 *Server
+	bootTimeout            time.Duration
+	// Init() gave up waiting for the ready point: the run is drained and must not start again
+	bootTimedOut       atomic.Bool
+	onThreadReady      func(int)
+	onThreadShutdown   func(int)
+	queuedRequests     atomic.Int32
+	server             *Server
+	isBackgroundWorker bool
+	// readyOnce is closed the first time a thread of a background worker
+	// reaches its ready point; frankenphp_get_vars() readers wait on it
+	readyOnce  chan struct{}
+	readyClose sync.Once
+	// the vars namespaces the worker publishes, in declaration order, and
+	// the snapshot of each, see WorkerHandle::setVars()
+	varsNamespaces []string
+	vars           map[string]*varsSlot
+	// the task namespaces the worker receives, in declaration order
+	taskNamespaces []string
+	// tasks holds the tasks sent with SentTaskHandle until a thread
+	// picks them up
+	tasks taskQueue
+}
+
+// markReady records that the background worker reached its ready point once
+func (worker *worker) markReady() {
+	worker.readyClose.Do(func() { close(worker.readyOnce) })
 }
 
 var (
@@ -43,9 +66,23 @@ var (
 	globalWorkersByPath map[string]*worker
 	watcherIsEnabled    bool
 	startupFailChan     chan error
+	// the only window where a boot failure reaches startupFailChan: past it, the handlers log and keep restarting
+	startupPhase atomic.Bool
+	// closed by the first boot failure of the startup, so the threads waiting
+	// on the ready point of another worker give up, see waitVarsReady()
+	startupFailed     chan struct{}
+	startupFailedOnce *sync.Once
 )
 
+// DefaultWorkerBootTimeout is how long a background worker may take to reach
+// its first WorkerHandle::tick() before Init() fails, on PHP builds without
+// Zend max execution timers: FrankenPHP disables max_execution_time there,
+// and this matches its default. Elsewhere max_execution_time bounds the
+// bootstrap instead. WithWorkerBootTimeout() sets it on any build.
+const DefaultWorkerBootTimeout = 30 * time.Second
+
 func initWorkers(opts []workerOpt) error {
+	varsOwners, taskOwners = namespaceOwners{}, namespaceOwners{}
 	if len(opts) == 0 {
 		return nil
 	}
@@ -68,28 +105,64 @@ func initWorkers(opts []workerOpt) error {
 		totalThreadsToStart += w.num
 		workers = append(workers, w)
 		workersByName[w.name] = w
-		if w.server == nil {
+		varsOwners.add(w, w.varsNamespaces)
+		taskOwners.add(w, w.taskNamespaces)
+		if w.server != nil {
+			if err := w.server.addWorker(w); err != nil {
+				return err
+			}
+		} else if !w.isBackgroundWorker {
+			// background workers are never matched against requests
 			globalWorkersByPath[w.fileName] = w
 			globalWorkersByPath[w.declaredFileName] = w
-		} else if err := w.server.addWorker(w); err != nil {
-			return err
 		}
 	}
 
 	startupFailChan = make(chan error, totalThreadsToStart)
+	startupFailed, startupFailedOnce = make(chan struct{}), &sync.Once{}
+	startupPhase.Store(true)
 
 	for _, w := range workers {
 		for range w.num {
 			thread := getInactivePHPThread()
-			convertToWorkerThread(thread, w)
+			if w.isBackgroundWorker {
+				convertToBackgroundWorkerThread(thread, w)
+			} else {
+				convertToWorkerThread(thread, w)
+			}
 
+			bootTimeout := time.Duration(0)
+			if w.isBackgroundWorker {
+				bootTimeout = w.bootTimeout
+			}
 			workersReady.Go(func() {
-				thread.state.WaitFor(state.Ready, state.ShuttingDown, state.Done)
+				if bootTimeout <= 0 {
+					thread.state.WaitFor(state.Ready, state.ShuttingDown, state.Done)
+
+					return
+				}
+
+				if thread.state.WaitForStateWithTimeout(bootTimeout, state.Ready, state.ShuttingDown, state.Done) {
+					return
+				}
+
+				// the script never ticked: stop the thread, so no run starts
+				// after this one, which ends at once if it waits on its handle
+				// and through the force-kill of the shutdown otherwise
+				if !thread.state.CompareAndSwap(state.TransitionComplete, state.ShuttingDown) {
+					return
+				}
+				w.bootTimedOut.Store(true)
+				reportStartupFailure(fmt.Errorf("background worker %q did not call WorkerHandle::tick() within %s", w.name, bootTimeout))
+				if handler, ok := thread.handler.(*backgroundWorkerThread); ok {
+					handler.drain()
+				}
 			})
 		}
 	}
 
 	workersReady.Wait()
+	startupPhase.Store(false)
 
 	select {
 	case err := <-startupFailChan:
@@ -97,10 +170,26 @@ func initWorkers(opts []workerOpt) error {
 		return fmt.Errorf("failed to initialize workers: %w", err)
 	default:
 		// all workers started successfully
-		startupFailChan = nil
 	}
 
 	return nil
+}
+
+// reportStartupFailure hands a boot failure to initWorkers() while it waits,
+// so Init() fails, and reports whether it did: past the startup phase the
+// handler logs it and keeps restarting. It never blocks.
+func reportStartupFailure(err error) bool {
+	if !startupPhase.Load() {
+		return false
+	}
+
+	select {
+	case startupFailChan <- err:
+	default:
+	}
+	startupFailedOnce.Do(func() { close(startupFailed) })
+
+	return true
 }
 
 // resolveWorkerFile turns a declared filename into the path a worker runs,
@@ -138,12 +227,68 @@ func resolveWorkerFile(o workerOpt) (workerOpt, error) {
 	return o, nil
 }
 
+// declarationIndex tells what the workers declared before took: names are
+// global, paths and namespaces belong to a scope, a nil server standing for
+// the global workers
+type declarationIndex struct {
+	names              func(name string) bool
+	paths, vars, tasks func(server *Server, key string) bool
+}
+
+// scopeSet records keys per scope, a nil server for the global workers
+type scopeSet map[*Server]map[string]bool
+
+func (s scopeSet) has(server *Server, key string) bool { return s[server][key] }
+
+func (s scopeSet) add(server *Server, key string) {
+	if s[server] == nil {
+		s[server] = make(map[string]bool)
+	}
+	s[server][key] = true
+}
+
+// namespaceOwners maps the namespaces declared in a scope to the worker that
+// owns them, a nil server standing for the global workers
+type namespaceOwners map[*Server]map[string]*worker
+
+func (o namespaceOwners) add(w *worker, namespaces []string) {
+	for _, ns := range namespaces {
+		if o[w.server] == nil {
+			o[w.server] = make(map[string]*worker)
+		}
+		o[w.server][ns] = w
+	}
+}
+
+// resolve finds the owner of a namespace within a server first, then among
+// the global workers
+func (o namespaceOwners) resolve(server *Server, ns string) *worker {
+	if w := o[server][ns]; w != nil {
+		return w
+	}
+
+	return o[nil][ns]
+}
+
 // checkWorkerDeclaration holds the rules a set of workers must follow, so
-// Validate() and newWorker() answer the same way; pathTaken is asked for the
-// global workers with a nil server.
-func checkWorkerDeclaration(o workerOpt, nameTaken func(string) bool, pathTaken func(*Server, string) bool) error {
-	if o.server == nil {
-		if pathTaken(nil, o.fileName) {
+// Validate() and newWorker() answer the same way; the paths and namespaces of
+// the global workers are asked for with a nil server.
+func checkWorkerDeclaration(o workerOpt, taken declarationIndex) error {
+	if o.isBackgroundWorker {
+		// never matched against requests, so several may share a script
+		if o.matchRequest != nil {
+			return fmt.Errorf("background worker %q cannot match requests", o.name)
+		}
+		if o.maxThreads > 0 {
+			return fmt.Errorf("background worker %q cannot set max_threads, it does not autoscale", o.name)
+		}
+		// Workers.SendRequest() and SendMessage() dispatch on requestChan,
+		// which no background thread reads
+		if o.extensionWorkers != nil {
+			return fmt.Errorf("background worker %q cannot be an extension worker, those handle requests", o.name)
+		}
+	} else if o.server == nil {
+		if taken.paths(nil, o.fileName) {
 			return fmt.Errorf("two global workers cannot have the same filename: %q", o.fileName)
 		}
 
@@ -151,13 +296,48 @@ func checkWorkerDeclaration(o workerOpt, nameTaken func(string) bool, pathTaken 
 		if o.matchRequest != nil {
 			return fmt.Errorf("worker %q has a request matcher but no server scope, use WithWorkerServerScope()", o.name)
 		}
-	} else if o.matchRequest == nil && pathTaken(o.server, o.fileName) {
+	} else if o.matchRequest == nil && taken.paths(o.server, o.fileName) {
 		// a matcher tells the workers of a server sharing a file apart
 		return fmt.Errorf("two workers in a server cannot have the same filename: %q", o.fileName)
 	}
 
-	if nameTaken(o.name) {
+	if taken.names(o.name) {
 		return fmt.Errorf("two workers cannot have the same name: %q", o.name)
+	}
+
+	scope := "two global workers"
+	if o.server != nil {
+		scope = "two workers in a server"
+	}
+
+	if len(o.vars) > 0 {
+		if !o.isBackgroundWorker {
+			return fmt.Errorf("worker %q declares vars, only background workers publish them", o.name)
+		}
+		// one thread, so a snapshot has a single writer
+		if o.num > 1 {
+			return fmt.Errorf("background worker %q publishes vars, it runs a single thread", o.name)
+		}
+	}
+	for i, ns := range o.vars {
+		if slices.Contains(o.vars[:i], ns) {
+			return fmt.Errorf("worker %q declares the vars namespace %q twice", o.name, ns)
+		}
+		if taken.vars(o.server, ns) {
+			return fmt.Errorf("%s cannot publish the same vars namespace: %q", scope, ns)
+		}
+	}
+
+	if len(o.tasks) > 0 && !o.isBackgroundWorker {
+		return fmt.Errorf("worker %q declares tasks, only background workers receive them", o.name)
+	}
+	for i, ns := range o.tasks {
+		if slices.Contains(o.tasks[:i], ns) {
+			return fmt.Errorf("worker %q declares the task namespace %q twice", o.name, ns)
+		}
+		if taken.tasks(o.server, ns) {
+			return fmt.Errorf("%s cannot receive the same task namespace: %q", scope, ns)
+		}
 	}
 
 	return nil
@@ -169,16 +349,20 @@ func newWorker(o workerOpt) (*worker, error) {
 		return nil, err
 	}
 
-	nameTaken := func(name string) bool { return workersByName[name] != nil }
-	pathTaken := func(server *Server, path string) bool {
-		if server == nil {
-			return globalWorkersByPath[path] != nil
-		}
+	taken := declarationIndex{
+		names: func(name string) bool { return workersByName[name] != nil },
+		paths: func(server *Server, path string) bool {
+			if server == nil {
+				return globalWorkersByPath[path] != nil
+			}
 
-		return server.workersByPath[path] != nil
+			return server.workersByPath[path] != nil
+		},
+		vars:  func(server *Server, ns string) bool { return varsOwners[server][ns] != nil },
+		tasks: func(server *Server, ns string) bool { return taskOwners[server][ns] != nil },
 	}
 
-	if err := checkWorkerDeclaration(o, nameTaken, pathTaken); err != nil {
+	if err := checkWorkerDeclaration(o, taken); err != nil {
 		return nil, err
 	}
 
@@ -198,7 +382,22 @@ func newWorker(o workerOpt) (*worker, error) {
 		}
 	}
 
-	o.env["FRANKENPHP_WORKER\x00"] = "1"
+	// a script serving both roles tests which of the two is set
+	if o.isBackgroundWorker {
+		o.env["FRANKENPHP_WORKER_BACKGROUND\x00"] = o.name
+	} else {
+		o.env["FRANKENPHP_WORKER\x00"] = "1"
+	}
+
+	// a background worker that never reaches its ready point would keep Init()
+	// waiting for ever where max_execution_time is disabled, see initWorkers()
+	bootTimeout := time.Duration(0)
+	if !Config().ZendMaxExecutionTimers {
+		bootTimeout = DefaultWorkerBootTimeout
+	}
+	if o.bootTimeoutIsSet {
+		bootTimeout = o.bootTimeout
+	}
 
 	w := &worker{
 		name:                   o.name,
@@ -211,9 +410,18 @@ func newWorker(o workerOpt) (*worker, error) {
 		requestChan:            make(chan *frankenPHPContext),
 		threads:                make([]*phpThread, 0, o.num),
 		maxConsecutiveFailures: o.maxConsecutiveFailures,
+		bootTimeout:            bootTimeout,
 		onThreadReady:          o.onThreadReady,
 		onThreadShutdown:       o.onThreadShutdown,
 		server:                 o.server,
+		isBackgroundWorker:     o.isBackgroundWorker,
+		readyOnce:              make(chan struct{}),
+		varsNamespaces:         o.vars,
+		taskNamespaces:         o.tasks,
+		vars:                   make(map[string]*varsSlot, len(o.vars)),
+	}
+	for _, ns := range o.vars {
+		w.vars[ns] = &varsSlot{}
 	}
 
 	w.configureMercure(&o)

@@ -11,14 +11,26 @@ import (
 const (
 	StopReasonCrash = iota
 	StopReasonRestart
-	StopReasonBootFailure // worker crashed before reaching frankenphp_handle_request
+	StopReasonBootFailure // worker exited before reaching its ready point: frankenphp_handle_request, or WorkerHandle::tick() for background workers
 )
 
 type StopReason int
 
+// TaskOutcome is how a task sent to a background worker ended
+type TaskOutcome string
+
+const (
+	TaskOutcomeCompleted TaskOutcome = "completed" // the worker closed the task's stream
+	TaskOutcomeAborted   TaskOutcome = "aborted"   // the worker's script ended with the task open
+	TaskOutcomeAbandoned TaskOutcome = "abandoned" // the sender closed its stream first
+	TaskOutcomeTimeout   TaskOutcome = "timeout"   // no thread picked the task up in time
+	TaskOutcomeCancelled TaskOutcome = "cancelled" // the wait for a thread ended on a restart or the shutdown
+)
+
 // Metrics reports what the workers and the threads of a FrankenPHP instance
 // are doing. An implementation that also satisfies OpcacheMetrics is told
-// about opcache restarts as well.
+// about opcache restarts as well, and one that satisfies TaskMetrics about
+// the tasks of background workers.
 type Metrics interface {
 	// StartWorker collects started workers
 	StartWorker(name string)
@@ -51,6 +63,27 @@ type Metrics interface {
 // lacks it only misses the counter, the restart is logged either way.
 type OpcacheMetrics interface {
 	OpcacheRestart(reason string)
+}
+
+// TaskMetrics is the optional part of a Metrics implementation that collects
+// the tasks of background workers
+type TaskMetrics interface {
+	// StartWorkerTask collects tasks picked up by a thread of a background worker
+	StartWorkerTask(name string)
+	// StopWorkerTask collects tasks a thread of a background worker is done with
+	StopWorkerTask(name string, duration time.Duration)
+	// WorkerTaskOutcome collects how tasks sent to a background worker ended
+	WorkerTaskOutcome(name string, outcome TaskOutcome)
+}
+
+// taskMetrics is the TaskMetrics part of the metrics in use, a no-op when
+// they do not collect tasks
+func taskMetrics() TaskMetrics {
+	if m, ok := metrics.(TaskMetrics); ok {
+		return m
+	}
+
+	return nullMetrics{}
 }
 
 type nullMetrics struct{}
@@ -92,6 +125,12 @@ func (n nullMetrics) DequeuedWorkerRequest(string) {}
 func (n nullMetrics) QueuedRequest()   {}
 func (n nullMetrics) DequeuedRequest() {}
 
+func (n nullMetrics) StartWorkerTask(string) {}
+
+func (n nullMetrics) StopWorkerTask(string, time.Duration) {}
+
+func (n nullMetrics) WorkerTaskOutcome(string, TaskOutcome) {}
+
 type PrometheusMetrics struct {
 	registry           prometheus.Registerer
 	totalThreads       prometheus.Gauge
@@ -104,6 +143,8 @@ type PrometheusMetrics struct {
 	workerRequestTime  *prometheus.CounterVec
 	workerRequestCount *prometheus.CounterVec
 	workerQueueDepth   *prometheus.GaugeVec
+	workerTaskCount    *prometheus.CounterVec
+	workerTaskTime     *prometheus.CounterVec
 	queueDepth         prometheus.Gauge
 	opcacheRestarts    *prometheus.CounterVec
 	mu                 sync.RWMutex
@@ -121,6 +162,7 @@ func (m *PrometheusMetrics) mustRegister(c prometheus.Collector) {
 var (
 	_ Metrics        = (*PrometheusMetrics)(nil)
 	_ OpcacheMetrics = (*PrometheusMetrics)(nil)
+	_ TaskMetrics    = (*PrometheusMetrics)(nil)
 )
 
 func (m *PrometheusMetrics) StartWorker(name string) {
@@ -161,7 +203,7 @@ func (m *PrometheusMetrics) StopWorker(name string, reason StopReason) {
 
 	m.totalWorkers.WithLabelValues(name).Dec()
 
-	// only decrement readyWorkers if the worker actually reached frankenphp_handle_request
+	// only decrement readyWorkers if the worker actually reached its ready point
 	if reason != StopReasonBootFailure {
 		m.readyWorkers.WithLabelValues(name).Dec()
 	}
@@ -194,7 +236,7 @@ func (m *PrometheusMetrics) TotalWorkers(string, int) {
 		m.readyWorkers = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Namespace: ns,
 			Name:      "ready_workers",
-			Help:      "Running workers that have successfully called frankenphp_handle_request at least once",
+			Help:      "Running workers that have reached their ready point at least once: frankenphp_handle_request for HTTP workers, WorkerHandle::tick() for background workers",
 		}, basicLabels)
 		m.mustRegister(m.readyWorkers)
 	}
@@ -203,7 +245,7 @@ func (m *PrometheusMetrics) TotalWorkers(string, int) {
 		m.busyWorkers = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Namespace: ns,
 			Name:      "busy_workers",
-			Help:      "Number of busy PHP workers for this worker",
+			Help:      "Number of busy PHP workers for this worker: processing a request, or a task for a background worker",
 		}, basicLabels)
 		m.mustRegister(m.busyWorkers)
 	}
@@ -251,8 +293,29 @@ func (m *PrometheusMetrics) TotalWorkers(string, int) {
 			Namespace: "frankenphp",
 			Subsystem: sub,
 			Name:      "queue_depth",
+			Help:      "Number of queued requests for this worker, or of tasks waiting for a thread of a background worker",
 		}, basicLabels)
 		m.mustRegister(m.workerQueueDepth)
+	}
+
+	if m.workerTaskCount == nil {
+		m.workerTaskCount = prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: ns,
+			Subsystem: sub,
+			Name:      "task_count",
+			Help:      "Number of tasks sent to this background worker, by outcome: completed, aborted (the script ended with the task open), abandoned (the sender closed its stream first), timeout (no thread picked the task up in time) or cancelled (the wait for a thread ended on a restart or the shutdown)",
+		}, []string{"worker", "outcome"})
+		m.mustRegister(m.workerTaskCount)
+	}
+
+	if m.workerTaskTime == nil {
+		m.workerTaskTime = prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: ns,
+			Subsystem: sub,
+			Name:      "task_time",
+			Help:      "Time spent on tasks by all threads of this background worker, from pickup to the close of the task's stream",
+		}, basicLabels)
+		m.mustRegister(m.workerTaskTime)
 	}
 }
 
@@ -343,6 +406,37 @@ func (m *PrometheusMetrics) OpcacheRestart(reason string) {
 	}
 }
 
+func (m *PrometheusMetrics) StartWorkerTask(name string) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.busyWorkers == nil {
+		return
+	}
+	m.busyWorkers.WithLabelValues(name).Inc()
+}
+
+func (m *PrometheusMetrics) StopWorkerTask(name string, duration time.Duration) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.workerTaskTime == nil {
+		return
+	}
+	m.busyWorkers.WithLabelValues(name).Dec()
+	m.workerTaskTime.WithLabelValues(name).Add(duration.Seconds())
+}
+
+func (m *PrometheusMetrics) WorkerTaskOutcome(name string, outcome TaskOutcome) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.workerTaskCount == nil {
+		return
+	}
+	m.workerTaskCount.WithLabelValues(name, string(outcome)).Inc()
+}
+
 func (m *PrometheusMetrics) Shutdown() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -386,6 +480,14 @@ func (m *PrometheusMetrics) Shutdown() {
 	if m.workerQueueDepth != nil {
 		m.registry.Unregister(m.workerQueueDepth)
 	}
+
+	if m.workerTaskCount != nil {
+		m.registry.Unregister(m.workerTaskCount)
+	}
+
+	if m.workerTaskTime != nil {
+		m.registry.Unregister(m.workerTaskTime)
+	}
 }
 
 func NewPrometheusMetrics(registry prometheus.Registerer) *PrometheusMetrics {
@@ -420,6 +522,8 @@ func NewPrometheusMetrics(registry prometheus.Registerer) *PrometheusMetrics {
 		workerCrashes:      nil,
 		readyWorkers:       nil,
 		workerQueueDepth:   nil,
+		workerTaskCount:    nil,
+		workerTaskTime:     nil,
 	}
 
 	m.mustRegister(m.totalThreads)

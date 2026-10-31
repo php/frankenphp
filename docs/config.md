@@ -106,11 +106,15 @@ You can also explicitly configure FrankenPHP using the [global option](https://c
 		php_ini <key> <value> # Set a php.ini directive. Can be used several times to set multiple directives.
 		worker {
 			file <path> # Sets the path to the worker script.
-			num <num> # Sets the number of PHP threads to start, defaults to 2x the number of available CPUs.
+			num <num> # Sets the number of PHP threads to start, defaults to 2x the number of available CPUs, 1 for background workers.
 			env <key> <value> # Sets an extra environment variable to the given value. Can be specified more than once for multiple environment variables.
 			watch <path> # Sets the path to watch for file changes. Can be specified more than once for multiple paths.
 			name <name> # Sets the name of the worker, used in logs and metrics. Default: absolute path of worker file
 			max_consecutive_failures <num> # Sets the maximum number of consecutive failures before the worker is considered unhealthy, -1 means the worker will always restart. Default: 6.
+			boot_timeout <duration> # EXPERIMENTAL: how long a background worker may take to reach its first tick() before the start fails, 0 waits forever. Default: 30s on PHP builds without Zend max execution timers, none elsewhere.
+			background # EXPERIMENTAL: marks this worker as a background (non-HTTP) worker, whose script ticks its FrankenPHP\WorkerHandle at least once
+			vars <namespace...> # EXPERIMENTAL: the vars namespaces a background worker publishes, read with frankenphp_get_vars()
+			tasks <namespace...> # EXPERIMENTAL: the task namespaces a background worker receives, sent with FrankenPHP\SentTaskHandle
 		}
 	}
 }
@@ -193,11 +197,15 @@ php_server [<matcher>] {
 	request_body_timeout <duration> # Sets an idle timeout on request body reads: a stalled (slow POST) client is cut off while a steady upload of any size succeeds. Default: 60s. Set to 0 to disable.
 	worker { # Creates a worker specific to this server. Can be specified more than once for multiple workers.
 		file <path> # Sets the path to the worker script, can be relative to the php_server root
-		num <num> # Sets the number of PHP threads to start, defaults to 2x the number of available
+		num <num> # Sets the number of PHP threads to start, defaults to 2x the number of available CPUs, 1 for background workers.
 		name <name> # Sets the name for the worker, used in logs and metrics. Default: absolute path of worker file. Postfixed with a number if name is already in use.
 		watch <path> # Sets the path to watch for file changes. Can be specified more than once for multiple paths.
 		env <key> <value> # Sets an extra environment variable to the given value. Can be specified more than once for multiple environment variables. Environment variables for this worker are also inherited from the php_server parent, but can be overwritten here.
 		match <path> # match the worker to a path pattern. Overrides try_files and can only be used in the php_server directive.
+		boot_timeout <duration> # EXPERIMENTAL: how long a background worker may take to reach its first tick() before the start fails, 0 waits forever. Default: 30s on PHP builds without Zend max execution timers, none elsewhere.
+		background # EXPERIMENTAL: marks this worker as a background (non-HTTP) worker, whose script ticks its FrankenPHP\WorkerHandle at least once
+		vars <namespace...> # EXPERIMENTAL: the vars namespaces a background worker publishes, read with frankenphp_get_vars()
+		tasks <namespace...> # EXPERIMENTAL: the task namespaces a background worker receives, sent with FrankenPHP\SentTaskHandle
 	}
 	worker <other_file> <num> # Can also use the short form like in the global frankenphp block.
 }

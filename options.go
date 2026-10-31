@@ -2,9 +2,11 @@ package frankenphp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"time"
 )
 
@@ -58,6 +60,11 @@ type workerOpt struct {
 	onServerStartup        func()
 	onServerShutdown       func()
 	server                 *Server
+	isBackgroundWorker     bool
+	bootTimeout            time.Duration
+	bootTimeoutIsSet       bool
+	vars                   []string
+	tasks                  []string
 }
 
 // WithContext sets the main context to use.
@@ -237,6 +244,68 @@ func WithWorkerMatcher(matcherFunc func(*http.Request) bool) WorkerOption {
 func WithWorkerServerScope(s *Server) WorkerOption {
 	return func(w *workerOpt) error {
 		w.server = s
+
+		return nil
+	}
+}
+
+// EXPERIMENTAL: WithWorkerBackground marks this worker as a background
+// (non-HTTP) worker: it shares the PHP runtime with the HTTP threads but
+// never receives requests. Its script ticks a FrankenPHP\WorkerHandle: the
+// first tick() marks the worker ready, and tick() returns false once
+// FrankenPHP drains the worker, on shutdown or restart.
+func WithWorkerBackground() WorkerOption {
+	return func(w *workerOpt) error {
+		w.isBackgroundWorker = true
+
+		return nil
+	}
+}
+
+// EXPERIMENTAL: WithWorkerBootTimeout bounds how long a background worker may
+// take to reach its ready point, its first WorkerHandle::tick(), before Init()
+// gives up and returns an error. Zero waits for ever. Defaults to
+// DefaultWorkerBootTimeout on PHP builds without Zend max execution timers,
+// and to zero elsewhere, where max_execution_time bounds the bootstrap. It has
+// no effect on HTTP workers.
+func WithWorkerBootTimeout(timeout time.Duration) WorkerOption {
+	return func(w *workerOpt) error {
+		if timeout < 0 {
+			return fmt.Errorf("worker boot timeout must be >= 0, got %s", timeout)
+		}
+		w.bootTimeout = timeout
+		w.bootTimeoutIsSet = true
+
+		return nil
+	}
+}
+
+// EXPERIMENTAL: WithWorkerVars declares the vars namespaces a background
+// worker publishes with WorkerHandle::setVars(), which frankenphp_get_vars()
+// reads by namespace. A namespace has one publisher within a server, and one
+// among the global workers.
+func WithWorkerVars(namespaces ...string) WorkerOption {
+	return func(w *workerOpt) error {
+		if slices.Contains(namespaces, "") {
+			return errors.New("a vars namespace cannot be empty")
+		}
+		w.vars = append(w.vars, namespaces...)
+
+		return nil
+	}
+}
+
+// EXPERIMENTAL: WithWorkerTasks declares the task namespaces a background
+// worker receives, the ones a SentTaskHandle is sent to. A namespace has one
+// receiving worker within a server, and one among the global workers; its
+// pool shares one queue for all of them, and ReceivedTaskHandle::getNamespace()
+// tells them apart.
+func WithWorkerTasks(namespaces ...string) WorkerOption {
+	return func(w *workerOpt) error {
+		if slices.Contains(namespaces, "") {
+			return errors.New("a task namespace cannot be empty")
+		}
+		w.tasks = append(w.tasks, namespaces...)
 
 		return nil
 	}
