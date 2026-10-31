@@ -47,3 +47,41 @@ func TestHeaderWithSpaceIsRejectedByNetHTTP(t *testing.T) {
 	assert.Contains(t, string(resp), "400 Bad Request")
 	assert.Contains(t, string(resp), "invalid header name")
 }
+
+func TestHeaderName(t *testing.T) {
+	for _, key := range []string{
+		"", "X-Custom-Trace-Id", "X-CUSTOM-TRACE-ID", "x-custom-trace-id",
+		"X-With_Underscore.And Space", "X-Ä-ß-Trace", "X-ı-ſ", "X-\xff-Trace", "X-\x00-Trace",
+	} {
+		t.Run(key, func(t *testing.T) {
+			want := "HTTP_" + strings.NewReplacer("-", "_").Replace(strings.ToUpper(key)) + "\x00"
+			assert.Equal(t, want, headerName(key))
+		})
+	}
+}
+
+func FuzzHeaderName(f *testing.F) {
+	for _, key := range []string{"", "X-Custom-Trace-Id", "X-Ä-ß-Trace", "X-\xff-Trace", "X-\x00-Trace"} {
+		f.Add(key)
+	}
+	replacer := strings.NewReplacer("-", "_")
+	f.Fuzz(func(t *testing.T, key string) {
+		want := "HTTP_" + replacer.Replace(strings.ToUpper(key)) + "\x00"
+		if got := headerName(key); got != want {
+			t.Fatalf("headerName(%q) = %q, want %q", key, got, want)
+		}
+	})
+}
+
+var headerNameResult string
+
+func BenchmarkHeaderName(b *testing.B) {
+	for _, key := range []string{"X-Custom-Trace-Id", "X-CUSTOM-TRACE-ID", "x-custom-trace-id", "X-Ä-ß-Trace", ""} {
+		b.Run(key, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				headerNameResult = headerName(key)
+			}
+		})
+	}
+}
