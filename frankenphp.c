@@ -1703,6 +1703,34 @@ static void set_thread_name(char *thread_name) {
 #endif
 }
 
+/* Like php-fpm, answer a script that can't be opened instead of compiling it */
+static bool open_primary_script(zend_file_handle *file_handle) {
+  bool orig_display_errors = PG(display_errors);
+  PG(display_errors) = 0;
+  zend_result result = zend_stream_open(file_handle);
+  PG(display_errors) = orig_display_errors;
+  if (EXPECTED(result == SUCCESS)) {
+    return true;
+  }
+
+  int open_errno = errno;
+  zend_try {
+    if (open_errno == EACCES) {
+      SG(sapi_headers).http_response_code = 403;
+      PUTS("Access denied.\n");
+    } else {
+      SG(sapi_headers).http_response_code = 404;
+      PUTS("No input file specified.\n");
+    }
+  }
+  zend_catch {}
+  zend_end_try();
+
+  /* a worker whose script disappeared must count as failing */
+  EG(exit_status) = 255;
+  return false;
+}
+
 static inline void reset_sandboxed_environment() {
   if (sandboxed_env != NULL) {
     zend_hash_release(sandboxed_env);
@@ -1790,7 +1818,9 @@ static void *php_thread(void *arg) {
       EG(exit_status) = 0;
 
       /* Execute the PHP script, potential bailout to zend_catch */
-      php_execute_script(&file_handle);
+      if (EXPECTED(open_primary_script(&file_handle))) {
+        php_execute_script(&file_handle);
+      }
 #ifndef PHP_WIN32
       if (UNEXPECTED(is_forked_child)) {
         _exit(EG(exit_status));
