@@ -1514,7 +1514,8 @@ static zend_object *frankenphp_worker_handle_new(zend_class_entry *ce) {
 }
 
 /* Ops of the streams returned by WorkerHandle::getStream(): the socket ops,
- * except that closing a stream leaves the socket alone. It belongs to the
+ * except that closing a stream leaves the socket alone, and that a read which
+ * would block before the first tick() throws. The socket belongs to the
  * thread, every handle of a run shares it, and it is closed at the next run
  * setup or on thread exit. Initialized in MINIT. */
 static php_stream_ops frankenphp_worker_handle_ops;
@@ -1525,6 +1526,25 @@ static int frankenphp_worker_handle_close(php_stream *stream,
 
   /* free the stream data only, never the shared socket */
   return php_stream_socket_ops.close(stream, 0);
+}
+
+/* Before the first tick of a run, the wake-up sent at start is all the handle
+ * gets until the drain: once a read took it, the next one would park the run
+ * short of its ready point, and the start with it, for good. */
+static ssize_t frankenphp_worker_handle_read(php_stream *stream, char *buf,
+                                             size_t count) {
+  php_netstream_data_t *sock = (php_netstream_data_t *)stream->abstract;
+
+  if (!worker_ticked && sock->is_blocked &&
+      php_pollfd_for_ms(sock->socket, PHP_POLLREADABLE, 0) <= 0) {
+    zend_throw_exception(spl_ce_LogicException,
+                         "FrankenPHP\\WorkerHandle: reading the stream would "
+                         "block before the first tick()",
+                         0);
+    return -1;
+  }
+
+  return php_stream_socket_ops.read(stream, buf, count);
 }
 
 /* The constructor is not a gate: unserialize() and Reflection make an
@@ -1712,6 +1732,7 @@ PHP_MINIT_FUNCTION(frankenphp) {
   frankenphp_worker_handle_ops = php_stream_socket_ops;
   frankenphp_worker_handle_ops.label = "FrankenPHP worker handle";
   frankenphp_worker_handle_ops.close = frankenphp_worker_handle_close;
+  frankenphp_worker_handle_ops.read = frankenphp_worker_handle_read;
 
   frankenphp_handle_obj_handlers = std_object_handlers;
   frankenphp_handle_obj_handlers.offset = offsetof(frankenphp_handle_obj, std);

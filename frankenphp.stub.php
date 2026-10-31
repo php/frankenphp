@@ -92,7 +92,8 @@ namespace FrankenPHP {
          * its drain included. Only waiting on it is supported, through
          * stream_select() or a blocking read; what it carries is not part
          * of the contract and tick() consumes it. Reading it steals those
-         * bytes from tick(), writing to it goes nowhere. Closing it is
+         * bytes from tick(), and throws before the first tick() when the
+         * read would block. Writing to it goes nowhere. Closing it is
          * safe: a handle hands out one stream, a fresh one over the same
          * socket once the script closed it.
          *

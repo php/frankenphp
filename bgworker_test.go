@@ -140,6 +140,20 @@ func TestBackgroundWorkerValidation(t *testing.T) {
 		require.ErrorContains(t, err, "without calling WorkerHandle::tick()")
 	})
 
+	t.Run("a read that would block before the first tick fails startup", func(t *testing.T) {
+		sentinel := filepath.Join(t.TempDir(), "error.txt")
+		err := frankenphp.Init(
+			frankenphp.WithWorkers("bg-reads", "testdata/bgworker/read-before-tick.php", 1,
+				frankenphp.WithWorkerBackground(),
+				frankenphp.WithWorkerMaxFailures(1),
+				frankenphp.WithWorkerEnv(map[string]string{"BG_SENTINEL": sentinel}),
+			),
+			frankenphp.WithNumThreads(2),
+		)
+		require.ErrorContains(t, err, "keeps crashing")
+		assert.Equal(t, `FrankenPHP\WorkerHandle: reading the stream would block before the first tick()`, requireFileContentEventually(t, sentinel))
+	})
+
 	t.Run("max_threads is rejected", func(t *testing.T) {
 		err := frankenphp.Init(
 			frankenphp.WithWorkers("bg-scaled", "testdata/bgworker/basic.php", 1,
