@@ -20,6 +20,7 @@ package frankenphp
 // #include <SAPI.h>
 import "C"
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
