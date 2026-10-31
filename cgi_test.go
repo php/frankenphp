@@ -561,3 +561,59 @@ func TestAssignedWorkerScriptPath(t *testing.T) {
 		})
 	}
 }
+
+func TestSplitRawHeader(t *testing.T) {
+	for _, tc := range []struct {
+		raw, key, value string
+	}{
+		{"Content-Type: application/json", "Content-Type", "application/json"},
+		{"X-Request-Id: abc:def", "X-Request-Id", "abc:def"},
+		{"Access-Control-Allow-Credentials: true", "Access-Control-Allow-Credentials", "true"},
+		{"X-Test:   value", "X-Test", "value"},
+		{"X-Test:\tvalue", "X-Test", "\tvalue"},
+		{"X-Test:", "X-Test", ""},
+		{"X-Test:   ", "X-Test", ""},
+		{"X-Test: a\x00b", "X-Test", "a\x00b"},
+		{": value", "", "value"},
+		{"missing separator", "", ""},
+		{"", "", ""},
+	} {
+		t.Run(tc.raw, func(t *testing.T) {
+			key, value := splitRawHeader(toUnsafeChar(tc.raw), len(tc.raw))
+			assert.Equal(t, tc.key, key)
+			assert.Equal(t, tc.value, value)
+		})
+	}
+}
+
+func FuzzSplitRawHeader(f *testing.F) {
+	for _, raw := range []string{"", "X-Test: value", "X-Test:\tvalue", "X-Test: a\x00b", "missing separator", ": value"} {
+		f.Add(raw)
+	}
+	f.Fuzz(func(t *testing.T, raw string) {
+		wantKey, wantValue, found := strings.Cut(raw, ":")
+		if !found {
+			wantKey, wantValue = "", ""
+		} else {
+			wantValue = strings.TrimLeft(wantValue, " ")
+		}
+		key, value := splitRawHeader(toUnsafeChar(raw), len(raw))
+		if key != wantKey || value != wantValue {
+			t.Fatalf("splitRawHeader(%q) = (%q, %q), want (%q, %q)", raw, key, value, wantKey, wantValue)
+		}
+	})
+}
+
+var responseHeaderKeyResult, responseHeaderValueResult string
+
+func BenchmarkSplitRawHeader(b *testing.B) {
+	for _, raw := range []string{"Content-Type: application/json", "X-Request-Id: abcdef0123456789", "Access-Control-Allow-Credentials: true", strings.Repeat("X", 128) + ": value", "missing separator"} {
+		b.Run(raw, func(b *testing.B) {
+			ptr := toUnsafeChar(raw)
+			b.ReportAllocs()
+			for b.Loop() {
+				responseHeaderKeyResult, responseHeaderValueResult = splitRawHeader(ptr, len(raw))
+			}
+		})
+	}
+}
