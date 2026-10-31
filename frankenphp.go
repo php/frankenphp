@@ -783,16 +783,53 @@ func go_read_cookies(threadIndex C.uintptr_t) *C.char {
 		return nil
 	}
 
-	cookie := strings.Join(request.Header.Values("Cookie"), "; ")
-	if cookie == "" {
+	return cookieHeader(request.Header.Values("Cookie"))
+}
+
+// cookieHeader joins Cookie fields and removes NUL bytes directly in the final
+// C buffer, which is freed in frankenphp_free_request_context().
+func cookieHeader(values []string) *C.char {
+	const maxInt = int(^uint(0) >> 1)
+	rawLen, size := 0, 0
+	if len(values) > 1 {
+		if 2 >= maxInt/(len(values)-1) {
+			panic("strings: Join output length overflow")
+		}
+		rawLen = 2 * (len(values) - 1)
+		size = rawLen
+	}
+	for _, value := range values {
+		if len(value) > maxInt-rawLen {
+			panic("strings: Join output length overflow")
+		}
+		rawLen += len(value)
+		size += len(value) - strings.Count(value, "\x00")
+	}
+	// Preserve the distinction between no cookie and a nonempty field that
+	// becomes empty after removing NUL bytes.
+	if rawLen == 0 {
 		return nil
 	}
 
-	// remove potential null bytes
-	cookie = strings.ReplaceAll(cookie, "\x00", "")
-
-	// freed in frankenphp_free_request_context()
-	return C.CString(cookie)
+	ptr := C.malloc(C.size_t(size + 1))
+	buf := unsafe.Slice((*byte)(ptr), size+1)
+	pos := 0
+	for i, value := range values {
+		if i > 0 {
+			pos += copy(buf[pos:], "; ")
+		}
+		for {
+			j := strings.IndexByte(value, 0)
+			if j < 0 {
+				pos += copy(buf[pos:], value)
+				break
+			}
+			pos += copy(buf[pos:], value[:j])
+			value = value[j+1:]
+		}
+	}
+	buf[pos] = 0
+	return (*C.char)(ptr)
 }
 
 // getLogger returns the logger and context safely even if phpThreads have not been created yet
