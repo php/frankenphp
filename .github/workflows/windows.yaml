@@ -1,29 +1,13 @@
 ---
 name: Build Windows release
 
-concurrency:
-  cancel-in-progress: true
-  group: ${{ github.workflow }}-${{ github.ref }}
-
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, labeled]
-    branches:
-      - main
-  push:
-    branches:
-      - main
-    tags:
-      - v*.*.*
-  workflow_dispatch:
+  workflow_call:
     inputs:
-      #checkov:skip=CKV_GHA_7
       version:
         description: "FrankenPHP version"
         required: false
         type: string
-  schedule:
-    - cron: "0 8 * * *"
 
 permissions:
   contents: read
@@ -41,12 +25,12 @@ jobs:
   build:
     permissions:
       contents: write
-      id-token: write
-      attestations: write
-      artifact-metadata: write
+    outputs:
+      ref: ${{ steps.ref.outputs.ref }}
     runs-on: windows-latest
     steps:
       - name: Determine ref
+        id: ref
         run: |
           $ref = $env:REF
           if (-not $ref -and $env:GITHUB_EVENT_NAME -eq "schedule") {
@@ -54,6 +38,7 @@ jobs:
           }
 
           "REF=$ref" >> $env:GITHUB_ENV
+          "ref=$ref" >> $env:GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REF: ${{ (github.ref_type == 'tag' && github.ref_name) || (github.event_name == 'workflow_dispatch' && inputs.version) || '' }}
@@ -241,10 +226,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - if: ${{ env.REF }}
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+      - name: Upload Release Artifact
+        if: ${{ env.REF }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          subject-path: ${{ github.workspace }}\${{ env.DIR_NAME }}.zip
+          name: ${{ env.DIR_NAME }}.zip
+          path: ${{ env.DIR_NAME }}.zip
+          compression-level: 0
 
       - name: Run Tests
         run: |
@@ -258,3 +246,32 @@ jobs:
           gotestsum -- -race ./...
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         working-directory: ${{ github.workspace }}\frankenphp
+
+  # Signs in its own job so build steps never get an OIDC token
+  attest:
+    if: ${{ !cancelled() && needs.build.outputs.ref }}
+    needs: build
+    permissions:
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: frankenphp-windows-x86_64.zip
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: frankenphp-windows-x86_64.zip
+      - run: unzip -q frankenphp-windows-x86_64.zip -d frankenphp-windows-x86_64
+      - name: Generate SBOM
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          path: frankenphp-windows-x86_64
+          output-file: sbom.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: frankenphp-windows-x86_64.zip
+          sbom-path: sbom.spdx.json
