@@ -428,6 +428,45 @@ func TestMalformedCookie(t *testing.T) {
 	}, &testOptions{nbParallelRequests: 1})
 }
 
+func TestCookieHeaderFields(t *testing.T) {
+	for _, workerScript := range []string{"", "cookies.php"} {
+		mode := "module"
+		if workerScript != "" {
+			mode = "worker"
+		}
+		t.Run(mode, func(t *testing.T) {
+			for _, tc := range []struct {
+				name   string
+				fields []string
+				want   []string
+			}{
+				{"absent", nil, []string{"array (\n)"}},
+				{"empty", []string{""}, []string{"array (\n)"}},
+				{"empty fields", []string{"", ""}, []string{"array (\n)"}},
+				{"NUL only", []string{"\x00\x00"}, []string{"array (\n)"}},
+				{"multiple fields", []string{"foo=bar", "second=test"}, []string{"'foo' => 'bar'", "'second' => 'test'"}},
+				{"empty separators", []string{"", "foo=bar", ""}, []string{"'foo' => 'bar'"}},
+				{"NUL within values", []string{"foo=ba\x00r", "second=te\x00st"}, []string{"'foo' => 'bar'", "'second' => 'test'"}},
+				{"first duplicate wins", []string{"foo=first", "foo=second"}, []string{"'foo' => 'first'"}},
+				{"long values", []string{"foo=" + strings.Repeat("a", 256), "second=" + strings.Repeat("b", 256)}, []string{"'foo' => '" + strings.Repeat("a", 256) + "'", "'second' => '" + strings.Repeat("b", 256) + "'"}},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+						req := httptest.NewRequest("GET", "http://example.com/cookies.php", nil)
+						for _, field := range tc.fields {
+							req.Header.Add("Cookie", field)
+						}
+						body, _ := testRequest(req, handler, t)
+						for _, want := range tc.want {
+							assert.Contains(t, body, want)
+						}
+					}, &testOptions{workerScript: workerScript, nbParallelRequests: 1})
+				})
+			}
+		})
+	}
+}
+
 func TestSession_module(t *testing.T) { testSession(t, nil) }
 func TestSession_worker(t *testing.T) {
 	testSession(t, &testOptions{workerScript: "session.php"})
