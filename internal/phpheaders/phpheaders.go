@@ -4,7 +4,6 @@ import "C"
 import (
 	"context"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/maypok86/otter/v2"
 )
@@ -121,9 +120,8 @@ var CommonRequestHeaders = map[string]string{
 // Cache up to 256 uncommon headers
 // This is ~2.5x faster than converting the header each time
 var (
-	headerKeyCache     = otter.Must(&otter.Options[string, string]{MaximumSize: 256})
-	headerNameReplacer = strings.NewReplacer("-", "_")
-	loader             = otter.LoaderFunc[string, string](func(_ context.Context, key string) (string, error) {
+	headerKeyCache = otter.Must(&otter.Options[string, string]{MaximumSize: 256})
+	loader         = otter.LoaderFunc[string, string](func(_ context.Context, key string) (string, error) {
 		return headerName(key), nil
 	})
 )
@@ -138,14 +136,9 @@ func GetUnCommonHeader(key string) string {
 	return phpHeaderKey
 }
 
-// headerName converts a header name to its NUL-terminated PHP variable name.
+// headerName converts a validated ASCII header name to its NUL-terminated PHP variable name.
+// net/http rejects invalid header names before they reach the handler.
 func headerName(key string) string {
-	for i := range len(key) {
-		if key[i] >= utf8.RuneSelf {
-			return "HTTP_" + headerNameReplacer.Replace(strings.ToUpper(key)) + "\x00"
-		}
-	}
-
 	var b strings.Builder
 	b.Grow(len(key) + len("HTTP_") + 1)
 	b.WriteString("HTTP_")
