@@ -20,6 +20,7 @@ package frankenphp
 // #include <SAPI.h>
 import "C"
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -623,14 +624,8 @@ func splitRawHeader(rawHeader *C.char, length int) (string, string) {
 	buf := unsafe.Slice((*byte)(unsafe.Pointer(rawHeader)), length)
 
 	// Search for the colon in 'Header-Key: value'
-	var i int
-	for i = 0; i < length; i++ {
-		if buf[i] == ':' {
-			break
-		}
-	}
-
-	if i == length {
+	i := bytes.IndexByte(buf, ':')
+	if i < 0 {
 		return "", "" // No colon found, invalid header
 	}
 
