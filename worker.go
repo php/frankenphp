@@ -31,10 +31,14 @@ type worker struct {
 	threads                []*phpThread
 	threadMutex            sync.RWMutex
 	maxConsecutiveFailures int
-	onThreadReady          func(int)
-	onThreadShutdown       func(int)
-	queuedRequests         atomic.Int32
-	server                 *Server
+	bootTimeout            time.Duration
+	// Init() gave up waiting for the ready point: the run is drained and must not start again
+	bootTimedOut       atomic.Bool
+	onThreadReady      func(int)
+	onThreadShutdown   func(int)
+	queuedRequests     atomic.Int32
+	server             *Server
+	isBackgroundWorker bool
 }
 
 var (
@@ -43,7 +47,16 @@ var (
 	globalWorkersByPath map[string]*worker
 	watcherIsEnabled    bool
 	startupFailChan     chan error
+	// the only window where a boot failure reaches startupFailChan: past it, the handlers log and keep restarting
+	startupPhase atomic.Bool
 )
+
+// DefaultWorkerBootTimeout is how long a background worker may take to reach
+// its first WorkerHandle::tick() before Init() fails, on PHP builds without
+// Zend max execution timers: FrankenPHP disables max_execution_time there,
+// and this matches its default. Elsewhere max_execution_time bounds the
+// bootstrap instead. WithWorkerBootTimeout() sets it on any build.
+const DefaultWorkerBootTimeout = 30 * time.Second
 
 func initWorkers(opts []workerOpt) error {
 	if len(opts) == 0 {
@@ -68,28 +81,61 @@ func initWorkers(opts []workerOpt) error {
 		totalThreadsToStart += w.num
 		workers = append(workers, w)
 		workersByName[w.name] = w
-		if w.server == nil {
+		if w.server != nil {
+			if err := w.server.addWorker(w); err != nil {
+				return err
+			}
+		} else if !w.isBackgroundWorker {
+			// background workers are never matched against requests
 			globalWorkersByPath[w.fileName] = w
 			globalWorkersByPath[w.declaredFileName] = w
-		} else if err := w.server.addWorker(w); err != nil {
-			return err
 		}
 	}
 
 	startupFailChan = make(chan error, totalThreadsToStart)
+	startupPhase.Store(true)
 
 	for _, w := range workers {
 		for range w.num {
 			thread := getInactivePHPThread()
-			convertToWorkerThread(thread, w)
+			if w.isBackgroundWorker {
+				convertToBackgroundWorkerThread(thread, w)
+			} else {
+				convertToWorkerThread(thread, w)
+			}
 
+			bootTimeout := time.Duration(0)
+			if w.isBackgroundWorker {
+				bootTimeout = w.bootTimeout
+			}
 			workersReady.Go(func() {
-				thread.state.WaitFor(state.Ready, state.ShuttingDown, state.Done)
+				if bootTimeout <= 0 {
+					thread.state.WaitFor(state.Ready, state.ShuttingDown, state.Done)
+
+					return
+				}
+
+				if thread.state.WaitForStateWithTimeout(bootTimeout, state.Ready, state.ShuttingDown, state.Done) {
+					return
+				}
+
+				// the script never ticked: stop the thread, so no run starts
+				// after this one, which ends at once if it waits on its handle
+				// and through the force-kill of the shutdown otherwise
+				if !thread.state.CompareAndSwap(state.TransitionComplete, state.ShuttingDown) {
+					return
+				}
+				w.bootTimedOut.Store(true)
+				reportStartupFailure(fmt.Errorf("background worker %q did not call WorkerHandle::tick() within %s", w.name, bootTimeout))
+				if handler, ok := thread.handler.(*backgroundWorkerThread); ok {
+					handler.drain()
+				}
 			})
 		}
 	}
 
 	workersReady.Wait()
+	startupPhase.Store(false)
 
 	select {
 	case err := <-startupFailChan:
@@ -97,10 +143,25 @@ func initWorkers(opts []workerOpt) error {
 		return fmt.Errorf("failed to initialize workers: %w", err)
 	default:
 		// all workers started successfully
-		startupFailChan = nil
 	}
 
 	return nil
+}
+
+// reportStartupFailure hands a boot failure to initWorkers() while it waits,
+// so Init() fails, and reports whether it did: past the startup phase the
+// handler logs it and keeps restarting. It never blocks.
+func reportStartupFailure(err error) bool {
+	if !startupPhase.Load() {
+		return false
+	}
+
+	select {
+	case startupFailChan <- err:
+	default:
+	}
+
+	return true
 }
 
 // resolveWorkerFile turns a declared filename into the path a worker runs,
@@ -142,7 +203,20 @@ func resolveWorkerFile(o workerOpt) (workerOpt, error) {
 // Validate() and newWorker() answer the same way; pathTaken is asked for the
 // global workers with a nil server.
 func checkWorkerDeclaration(o workerOpt, nameTaken func(string) bool, pathTaken func(*Server, string) bool) error {
-	if o.server == nil {
+	if o.isBackgroundWorker {
+		// never matched against requests, so several may share a script
+		if o.matchRequest != nil {
+			return fmt.Errorf("background worker %q cannot match requests", o.name)
+		}
+		if o.maxThreads > 0 {
+			return fmt.Errorf("background worker %q cannot set max_threads, it does not autoscale", o.name)
+		}
+		// Workers.SendRequest() and SendMessage() dispatch on requestChan,
+		// which no background thread reads
+		if o.extensionWorkers != nil {
+			return fmt.Errorf("background worker %q cannot be an extension worker, those handle requests", o.name)
+		}
+	} else if o.server == nil {
 		if pathTaken(nil, o.fileName) {
 			return fmt.Errorf("two global workers cannot have the same filename: %q", o.fileName)
 		}
@@ -198,7 +272,22 @@ func newWorker(o workerOpt) (*worker, error) {
 		}
 	}
 
-	o.env["FRANKENPHP_WORKER\x00"] = "1"
+	// a script serving both roles tests which of the two is set
+	if o.isBackgroundWorker {
+		o.env["FRANKENPHP_WORKER_BACKGROUND\x00"] = o.name
+	} else {
+		o.env["FRANKENPHP_WORKER\x00"] = "1"
+	}
+
+	// a background worker that never reaches its ready point would keep Init()
+	// waiting for ever where max_execution_time is disabled, see initWorkers()
+	bootTimeout := time.Duration(0)
+	if !Config().ZendMaxExecutionTimers {
+		bootTimeout = DefaultWorkerBootTimeout
+	}
+	if o.bootTimeoutIsSet {
+		bootTimeout = o.bootTimeout
+	}
 
 	w := &worker{
 		name:                   o.name,
@@ -211,9 +300,11 @@ func newWorker(o workerOpt) (*worker, error) {
 		requestChan:            make(chan *frankenPHPContext),
 		threads:                make([]*phpThread, 0, o.num),
 		maxConsecutiveFailures: o.maxConsecutiveFailures,
+		bootTimeout:            bootTimeout,
 		onThreadReady:          o.onThreadReady,
 		onThreadShutdown:       o.onThreadShutdown,
 		server:                 o.server,
+		isBackgroundWorker:     o.isBackgroundWorker,
 	}
 
 	w.configureMercure(&o)
