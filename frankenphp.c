@@ -1448,7 +1448,16 @@ static void frankenphp_sapi_flush(void *server_context) {
 }
 
 static size_t frankenphp_read_post(char *buffer, size_t count_bytes) {
-  return go_read_post(frankenphp_thread_index(), buffer, count_bytes);
+  struct go_read_post_return result =
+      go_read_post(frankenphp_thread_index(), buffer, count_bytes);
+
+  // stop the script like exit() does: it can't be caught, so it can't keep
+  // processing the truncated body
+  if (result.r1 && EG(current_execute_data)) {
+    zend_throw_unwind_exit();
+  }
+
+  return result.r0;
 }
 
 static char *frankenphp_read_cookies(void) {
