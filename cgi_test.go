@@ -50,6 +50,9 @@ func TestSanitizedPathJoin(t *testing.T) {
 		expected string
 	}{
 		{"leading slash", "/index.php", filepath.Join(root, "index.php")},
+		{"multiple leading slashes", "///index.php", filepath.Join(root, "index.php")},
+		{"multiple root slashes", "//", filepath.Clean(root) + separator},
+		{"rooted nested traversal", "//foo/../../bar/", filepath.Join(root, "bar") + separator},
 		{"no leading slash", "index.php", filepath.Join(root, "index.php")},
 		{"nested", "/foo/bar/index.php", filepath.Join(root, "foo", "bar", "index.php")},
 		{"empty req path returns root", "", filepath.Clean(root)},
@@ -557,6 +560,28 @@ func TestAssignedWorkerScriptPath(t *testing.T) {
 				assert.Empty(t, fc.scriptName)
 				assert.Empty(t, fc.docURI)
 				assert.Empty(t, fc.pathInfo)
+			}
+		})
+	}
+}
+
+var sanitizedPathJoinResult string
+
+func BenchmarkSanitizedPathJoin(b *testing.B) {
+	for _, tc := range []struct {
+		name string
+		path string
+	}{
+		{"index", "/index.php"},
+		{"nested", "/products/catalog/index.php"},
+		{"long", "/" + strings.Repeat("products/", 16) + "index.php"},
+		{"relative", "index.php"},
+		{"traversal", "/foo/../../etc/passwd"},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				sanitizedPathJoinResult = sanitizedPathJoin("/srv/app/public", tc.path)
 			}
 		})
 	}
