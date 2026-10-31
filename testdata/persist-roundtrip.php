@@ -86,3 +86,16 @@ try {
 } catch (\LogicException) {
     echo "OK nested stdClass rejected\n";
 }
+
+// A literal array is opcache-immutable, which the persistent tree copies
+// rather than borrows: round-trip the same literal more times than the
+// refcount of 2 opcache keeps on it, so nothing shared is ever released.
+for ($i = 0; $i < 3; ++$i) {
+    $out = $rt(['immutable' => ['nested' => [1, 2, 3]], 'i' => 'literal']);
+    if ($out !== ['immutable' => ['nested' => [1, 2, 3]], 'i' => 'literal']) {
+        echo "FAIL immutable literal exposed repeatedly (round $i)\n";
+        return;
+    }
+    unset($out);
+}
+echo "OK immutable literal exposed repeatedly\n";

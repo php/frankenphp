@@ -3,6 +3,7 @@ package caddy
 import (
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
@@ -38,6 +39,12 @@ type workerConfig struct {
 	MatchPath []string `json:"match_path,omitempty"`
 	// MaxConsecutiveFailures sets the maximum number of consecutive failures before panicking (defaults to 6, set to -1 to never panick)
 	MaxConsecutiveFailures *int `json:"max_consecutive_failures,omitempty"`
+	// BootTimeout bounds how long a background worker may take to reach its first WorkerHandle::tick() before the start fails (defaults to 30s on PHP builds without Zend max execution timers, where max_execution_time is disabled, set to 0 to wait forever)
+	BootTimeout *caddy.Duration `json:"boot_timeout,omitempty"`
+	// Background marks this worker as a background (non-HTTP) worker.
+	Background bool `json:"background,omitempty"`
+	// Vars lists the namespaces a background worker publishes with WorkerHandle::setVars(), read by frankenphp_get_vars().
+	Vars []string `json:"vars,omitempty"`
 
 	options []frankenphp.WorkerOption
 }
@@ -139,13 +146,48 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 			}
 
 			wc.MaxConsecutiveFailures = new(v)
+		case "boot_timeout":
+			if !d.NextArg() {
+				return wc, d.ArgErr()
+			}
+
+			v, err := caddy.ParseDuration(d.Val())
+			if err != nil {
+				return wc, d.WrapErr(err)
+			}
+			if v < 0 {
+				return wc, d.Errf("boot_timeout must be >= 0")
+			}
+
+			timeout := caddy.Duration(v)
+			wc.BootTimeout = &timeout
+		case "background":
+			wc.Background = true
+		case "vars":
+			namespaces := d.RemainingArgs()
+			if len(namespaces) == 0 {
+				return wc, d.ArgErr()
+			}
+			wc.Vars = append(wc.Vars, namespaces...)
 		default:
-			return wc, wrongSubDirectiveError("worker", "name, file, num, env, watch, match, max_consecutive_failures, max_threads", v)
+			return wc, wrongSubDirectiveError("worker", "name, file, num, env, watch, match, max_consecutive_failures, max_threads, background, boot_timeout, vars", v)
 		}
 	}
 
 	if wc.FileName == "" {
 		return wc, d.Err(`the "file" argument must be specified`)
+	}
+
+	if !wc.Background && wc.BootTimeout != nil {
+		return wc, d.Err(`"boot_timeout" is only supported for background workers`)
+	}
+
+	if wc.Background && len(wc.MatchPath) != 0 {
+		return wc, d.Err(`"match" is not supported for background workers`)
+	}
+
+	if !wc.Background && len(wc.Vars) != 0 {
+		return wc, d.Err(`"vars" is only supported for background workers`)
 	}
 
 	if frankenphp.EmbeddedAppPath != "" && filepath.IsLocal(wc.FileName) {
@@ -168,6 +210,20 @@ func (wc *workerConfig) toWorkerOptions() ([]frankenphp.WorkerOption, error) {
 
 	// options collected while provisioning the module, e.g. the Mercure hub
 	opts = append(opts, wc.options...)
+
+	if wc.Background {
+		opts = append(opts, frankenphp.WithWorkerBackground())
+
+		if wc.BootTimeout != nil {
+			opts = append(opts, frankenphp.WithWorkerBootTimeout(time.Duration(*wc.BootTimeout)))
+		}
+	}
+
+	// whatever the kind of worker: the core refuses vars on an HTTP one, which
+	// a JSON config reaches without the Caddyfile check
+	if len(wc.Vars) > 0 {
+		opts = append(opts, frankenphp.WithWorkerVars(wc.Vars...))
+	}
 
 	// copy the caddy match logic and create a unique matcher function for this worker
 	// inject the matcher into frankenphp

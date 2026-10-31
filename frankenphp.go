@@ -28,6 +28,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -221,7 +222,11 @@ func calculateMaxThreads(opt *opt) (numWorkers int, _ error) {
 	maxThreadsFromWorkers := 0
 
 	for i, w := range opt.workers {
-		if w.num <= 0 {
+		if w.num <= 0 && w.isBackgroundWorker {
+			// a background worker serves no requests, so it does not scale
+			// with the CPUs like an HTTP one
+			opt.workers[i].num = 1
+		} else if w.num <= 0 {
 			// https://github.com/php/frankenphp/issues/126
 			opt.workers[i].num = maxProcs
 		}
@@ -323,25 +328,24 @@ func Validate(options ...Option) error {
 	}
 
 	takenNames := make(map[string]bool, len(opt.workers))
-	takenPaths := make(map[*Server]map[string]bool, 1)
-	nameTaken := func(name string) bool { return takenNames[name] }
-	pathTaken := func(server *Server, path string) bool { return takenPaths[server][path] }
+	paths, vars := scopeSet{}, scopeSet{}
+	taken := declarationIndex{names: func(name string) bool { return takenNames[name] }, paths: paths.has, vars: vars.has}
 	for _, w := range opt.workers {
 		w, err := resolveWorkerFile(w)
 		if err != nil {
 			return err
 		}
 
-		if err := checkWorkerDeclaration(w, nameTaken, pathTaken); err != nil {
+		if err := checkWorkerDeclaration(w, taken); err != nil {
 			return err
 		}
 
 		takenNames[w.name] = true
-		if w.matchRequest == nil {
-			if takenPaths[w.server] == nil {
-				takenPaths[w.server] = make(map[string]bool)
-			}
-			takenPaths[w.server][w.fileName] = true
+		if !w.isBackgroundWorker && w.matchRequest == nil {
+			paths.add(w.server, w.fileName)
+		}
+		for _, ns := range w.vars {
+			vars.add(w.server, ns)
 		}
 	}
 
@@ -421,6 +425,11 @@ func Init(options ...Option) error {
 		}
 	} else {
 		opt.numThreads = 1
+		// a background worker would take the only thread
+		if slices.ContainsFunc(opt.workers, func(w workerOpt) bool { return w.isBackgroundWorker }) {
+			shutdown()
+			return errors.New("background workers need a ZTS build of PHP, this one runs a single thread")
+		}
 
 		if globalLogger.Enabled(globalCtx, slog.LevelWarn) {
 			globalLogger.LogAttrs(globalCtx, slog.LevelWarn, `ZTS is not enabled, only 1 thread will be available, recompile PHP using the "--enable-zts" configuration option or performance will be degraded`)

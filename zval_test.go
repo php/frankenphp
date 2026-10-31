@@ -47,4 +47,5 @@ func TestPersistentZvalRoundtrip(t *testing.T) {
 	require.Contains(t, out, "OK stdClass rejected")
 	require.Contains(t, out, "OK resource rejected")
 	require.Contains(t, out, "OK nested stdClass rejected")
+	require.Contains(t, out, "OK immutable literal exposed repeatedly")
 }
