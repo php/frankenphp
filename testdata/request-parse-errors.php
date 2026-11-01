@@ -16,6 +16,8 @@ return function () use (&$requests) {
     if ($lastError && $lastError['type'] === E_WARNING) {
         http_response_code(400);
         echo $lastError['message'];
+        // The last error persists between requests like userland state
+        error_clear_last();
     }
 
     ++$requests;
