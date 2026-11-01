@@ -244,6 +244,35 @@ func testServerVariable(t *testing.T, opts *testOptions) {
 	}, opts)
 }
 
+func TestRequestEnvOverridesRequestInfo_module(t *testing.T) {
+	testRequestEnvOverridesRequestInfo(t, &testOptions{})
+}
+func TestRequestEnvOverridesRequestInfo_worker(t *testing.T) {
+	testRequestEnvOverridesRequestInfo(t, &testOptions{workerScript: "server-variable.php"})
+}
+func testRequestEnvOverridesRequestInfo(t *testing.T, opts *testOptions) {
+	opts.requestOpts = append(opts.requestOpts, frankenphp.WithRequestEnv(map[string]string{
+		"CONTENT_TYPE":    "env/content-type",
+		"PATH_TRANSLATED": "/env/path/translated",
+		"QUERY_STRING":    "env=query",
+		"REMOTE_USER":     "env-user",
+		"REQUEST_METHOD":  "ENV",
+	}))
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		req := httptest.NewRequest("POST", fmt.Sprintf("http://example.com/server-variable.php/baz/bat?i=%d", i), strings.NewReader("foo"))
+		req.SetBasicAuth("client-user", "password")
+		req.Header.Add("Content-Type", "text/plain")
+		body, _ := testRequest(req, handler, t)
+
+		assert.Contains(t, body, "[CONTENT_TYPE] => env/content-type")
+		assert.Contains(t, body, "[PATH_TRANSLATED] => /env/path/translated")
+		assert.Contains(t, body, "[QUERY_STRING] => env=query")
+		assert.Contains(t, body, "[REMOTE_USER] => env-user")
+		assert.Contains(t, body, "[REQUEST_METHOD] => ENV")
+	}, opts)
+}
+
 func TestPathInfo_module(t *testing.T) { testPathInfo(t, nil) }
 func TestPathInfo_worker(t *testing.T) {
 	testPathInfo(t, &testOptions{workerScript: "server-variable.php"})

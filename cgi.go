@@ -162,22 +162,19 @@ func registerPreparedEnv(fc *frankenPHPContext, preparedEnvLen int) {
 }
 
 //export go_register_server_variables
-func go_register_server_variables(threadIndex C.uintptr_t, trackVarsArray *C.zval) {
+func go_register_server_variables(threadIndex C.uintptr_t, trackVarsArray *C.zval) C.bool {
 	thread := phpThreads[threadIndex]
 	fc := thread.handler.frankenPHPContext()
 
 	if fc.request == nil {
 		// go_update_request_info() never ran
-		return
+		return false
 	}
 
 	addKnownVariablesToServer(fc, trackVarsArray)
 	addHeadersToServer(fc.request, trackVarsArray)
 
-	// The Prepared Environment is registered last and can overwrite any previous values
-	if len(fc.env) != 0 || len(fc.server.env) != 0 {
-		C.frankenphp_merge_with_prepared_env(trackVarsArray)
-	}
+	return C.bool(len(fc.env) != 0 || len(fc.server.env) != 0)
 }
 
 // splitCgiPath splits the request path into SCRIPT_NAME, SCRIPT_FILENAME, PATH_INFO, DOCUMENT_URI

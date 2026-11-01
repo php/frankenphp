@@ -1529,10 +1529,6 @@ void frankenphp_register_server_vars(zval *track_vars_array,
   zend_hash_update_ind(ht, frankenphp_strings.remote_ident, &zv);
 }
 
-void frankenphp_merge_with_prepared_env(zval *track_vars_array) {
-  frankenphp_copy_prepared_env(Z_ARRVAL_P(track_vars_array));
-}
-
 /** Create an immutable zend_string that lasts for the whole process **/
 zend_string *frankenphp_init_persistent_string(const char *string, size_t len) {
   /* persistent strings will be ignored by the GC at the end of a request */
@@ -1623,10 +1619,16 @@ static void frankenphp_register_variables(zval *track_vars_array) {
    * environment, not values added though putenv
    */
   /* import environment and CGI variables from the request context in go */
-  go_register_server_variables(frankenphp_thread_index(), track_vars_array);
+  bool has_prepared_env =
+      go_register_server_variables(frankenphp_thread_index(), track_vars_array);
 
   /* Some variables are already present in SG(request_info) */
   frankenphp_register_variables_from_request_info(track_vars_array);
+
+  /* The prepared environment is registered last and can overwrite any value */
+  if (has_prepared_env) {
+    frankenphp_copy_prepared_env(Z_ARRVAL_P(track_vars_array));
+  }
 }
 
 static void frankenphp_log_message(const char *message, int syslog_type_int) {
