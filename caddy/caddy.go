@@ -30,6 +30,7 @@ func init() {
 	// the HTTP server's shutdown delay and in-flight request draining.
 	caddy.OnExit(func(context.Context) {
 		frankenphp.Shutdown()
+		frankenphp.RemoveEmbeddedApp()
 	})
 
 	caddy.RegisterModule(&FrankenPHPApp{})

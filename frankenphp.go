@@ -26,7 +26,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
 	"os/signal"
 	"runtime"
 	"strings"
@@ -502,11 +501,6 @@ func shutdown() {
 	unregisterServers()
 
 	metrics.Shutdown()
-
-	// Remove the installed app
-	if EmbeddedAppPath != "" {
-		_ = os.RemoveAll(EmbeddedAppPath)
-	}
 
 	isRunning.Store(false)
 	if globalLogger.Enabled(globalCtx, slog.LevelDebug) {

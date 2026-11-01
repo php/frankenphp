@@ -81,3 +81,25 @@ func TestPrepareDefaultEmbeddedAppPathRejectsSymlink(t *testing.T) {
 
 	assert.Error(t, prepareDefaultEmbeddedAppPath(link))
 }
+
+func TestShutdownKeepsEmbeddedApp(t *testing.T) {
+	previous, previousCustom := EmbeddedAppPath, customEmbeddedAppPath
+	t.Cleanup(func() { EmbeddedAppPath, customEmbeddedAppPath = previous, previousCustom })
+
+	for _, custom := range []bool{false, true} {
+		customEmbeddedAppPath = custom
+		EmbeddedAppPath = filepath.Join(t.TempDir(), "app")
+		require.NoError(t, os.Mkdir(EmbeddedAppPath, 0o700))
+
+		require.NoError(t, Init())
+		Shutdown()
+		assert.DirExists(t, EmbeddedAppPath)
+
+		RemoveEmbeddedApp()
+		if custom {
+			assert.NoDirExists(t, EmbeddedAppPath)
+		} else {
+			assert.DirExists(t, EmbeddedAppPath)
+		}
+	}
+}

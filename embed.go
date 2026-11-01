@@ -27,6 +27,8 @@ import (
 // kept as is, so it must only be writable by the user running the binary.
 var EmbeddedAppPath string
 
+var customEmbeddedAppPath = EmbeddedAppPath != ""
+
 //go:embed app.tar
 var embeddedApp []byte
 
@@ -52,8 +54,18 @@ func init() {
 	}
 
 	if err := untar(EmbeddedAppPath); err != nil {
-		_ = os.RemoveAll(EmbeddedAppPath)
+		// the default directory may be in use by another process
+		if customEmbeddedAppPath {
+			_ = os.RemoveAll(EmbeddedAppPath)
+		}
 		panic(err)
+	}
+}
+
+// RemoveEmbeddedApp deletes an app extracted to a build-time EmbeddedAppPath; call it at process exit only, Shutdown() also runs on reloads.
+func RemoveEmbeddedApp() {
+	if customEmbeddedAppPath {
+		_ = os.RemoveAll(EmbeddedAppPath)
 	}
 }
 
