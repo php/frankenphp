@@ -256,9 +256,6 @@ func go_frankenphp_before_script_execution(threadIndex C.uintptr_t) *C.char {
 //export go_frankenphp_after_script_execution
 func go_frankenphp_after_script_execution(threadIndex C.uintptr_t, exitStatus C.int) {
 	thread := phpThreads[threadIndex]
-	if exitStatus < 0 {
-		panic(ErrScriptExecution)
-	}
 	thread.handler.afterScriptExecution(int(exitStatus))
 
 	// unpin all memory used during script execution

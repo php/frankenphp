@@ -650,6 +650,18 @@ func testException(t *testing.T, opts *testOptions) {
 	}, opts)
 }
 
+func TestNegativeExitStatus_module(t *testing.T) { testNegativeExitStatus(t, &testOptions{}) }
+func TestNegativeExitStatus_worker(t *testing.T) {
+	testNegativeExitStatus(t, &testOptions{workerScript: "exit.php"})
+}
+func testNegativeExitStatus(t *testing.T, opts *testOptions) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		body, _ := testGet("http://example.com/exit.php?status=-1", handler, t)
+
+		assert.Equal(t, "exiting", body)
+	}, opts)
+}
+
 func TestEarlyHints_module(t *testing.T) { testEarlyHints(t, &testOptions{}) }
 func TestEarlyHints_worker(t *testing.T) {
 	testEarlyHints(t, &testOptions{workerScript: "early-hints.php"})
