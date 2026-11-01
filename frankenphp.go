@@ -769,7 +769,8 @@ func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (r
 		readBytes += C.size_t(n)
 	}
 
-	if rc != nil {
+	// an expired deadline must stay: net/http drains the unread body before writing the response
+	if rc != nil && !errors.Is(err, os.ErrDeadlineExceeded) {
 		_ = rc.SetReadDeadline(time.Time{})
 	}
 

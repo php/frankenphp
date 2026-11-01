@@ -1,12 +1,14 @@
 package frankenphp_test
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -83,6 +85,74 @@ func TestRequestBodyTimeout(t *testing.T) {
 	require.Contains(t, string(resp), "200 OK")
 	// PHP saw an empty body: php://input read zero bytes.
 	require.Contains(t, string(resp), "read=0")
+}
+
+// net/http drains an unread body smaller than 256 KiB before writing the
+// response, so the expired deadline must stay in place for that drain too.
+func TestRequestBodyTimeoutSmallBody(t *testing.T) {
+	require.NoError(t, frankenphp.Init(frankenphp.WithNumThreads(1)))
+	defer frankenphp.Shutdown()
+
+	reading := make(chan struct{})
+	var once sync.Once
+
+	cwd, _ := os.Getwd()
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			r.Body = &signalingBody{ReadCloser: r.Body, onRead: func() { once.Do(func() { close(reading) }) }}
+		}
+
+		req, err := frankenphp.NewRequestWithContext(r,
+			frankenphp.WithRequestDocumentRoot(cwd+"/testdata/", false),
+			frankenphp.WithRequestBodyTimeout(300*time.Millisecond),
+		)
+		require.NoError(t, err)
+		require.NoError(t, frankenphp.ServeHTTP(w, req))
+	}
+
+	ts := newRawServer(t, handler)
+	defer ts.Close()
+
+	conn, err := net.Dial("tcp", ts.Addr())
+	require.NoError(t, err)
+	defer func() { _ = conn.Close() }()
+
+	// no "Connection: close": net/http only drains bodies of connections it may reuse,
+	// and output larger than the response buffer makes it drain on the PHP thread
+	_, err = fmt.Fprintf(conn,
+		"POST /read-input-large-output.php HTTP/1.1\r\nHost: %s\r\nContent-Type: application/octet-stream\r\nContent-Length: 100\r\n\r\nx",
+		ts.Addr(),
+	)
+	require.NoError(t, err)
+
+	select {
+	case <-reading:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the stalled request never reached the PHP thread")
+	}
+
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get("http://" + ts.Addr() + "/hello.php")
+	require.NoError(t, err, "the stalled body still holds the only PHP thread")
+	_ = resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	require.NoError(t, conn.SetReadDeadline(time.Now().Add(5*time.Second)))
+	stalled, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	require.NoError(t, err, "the stalled request must complete")
+	_ = stalled.Body.Close()
+}
+
+// signalingBody calls onRead when the PHP thread starts reading the request body
+type signalingBody struct {
+	io.ReadCloser
+	onRead func()
+}
+
+func (b *signalingBody) Read(p []byte) (int, error) {
+	b.onRead()
+
+	return b.ReadCloser.Read(p)
 }
 
 // TestRequestBodyTimeoutHTTP2 is the HTTP/2 counterpart of the test above: over
