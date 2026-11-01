@@ -488,6 +488,11 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 		}
 	}
 
+	// hide the Caddyfile and its imports, as the file_server directive does
+	if err := fsrv.FinalizeUnmarshalCaddyfile(h); err != nil {
+		return nil, err
+	}
+
 	// set up a route list that we'll append to
 	routes := caddyhttp.RouteList{}
 

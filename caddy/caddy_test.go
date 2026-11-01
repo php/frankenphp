@@ -519,6 +519,48 @@ func TestPHPServerDirectiveDisableFileServer(t *testing.T) {
 	tester.AssertGetResponse("http://localhost:"+testPort+"/not-found.txt", http.StatusOK, "I am by birth a Genevese (i not set)")
 }
 
+func TestPHPServerDirectiveHidesCaddyfiles(t *testing.T) {
+	root := t.TempDir()
+	imported := filepath.Join(root, "imported.caddyfile")
+	require.NoError(t, os.WriteFile(imported, []byte("header X-Imported yes"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "static.txt"), []byte("static"), 0644))
+	workerFile, _ := filepath.Abs("../testdata/worker-with-counter.php")
+
+	testPortNum, _ := strconv.Atoi(testPort)
+	testPortTwo := strconv.Itoa(testPortNum + 1)
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		http://localhost:`+testPort+` {
+			import `+imported+`
+			php_server {
+				root `+root+`
+			}
+		}
+
+		http://localhost:`+testPortTwo+` {
+			import `+imported+`
+			php_server {
+				root `+root+`
+				worker {
+					file `+workerFile+`
+					match /matched-path*
+					num 1
+				}
+			}
+		}
+		`, "caddyfile")
+
+	for _, port := range []string{testPort, testPortTwo} {
+		tester.AssertGetResponse("http://localhost:"+port+"/static.txt", http.StatusOK, "static")
+		tester.AssertGetResponse("http://localhost:"+port+"/imported.caddyfile", http.StatusNotFound, "")
+	}
+}
+
 func TestPHPServerGlobals(t *testing.T) {
 	documentRoot, _ := filepath.Abs("../testdata")
 	scriptFilename := filepath.Join(documentRoot, "server-globals.php")
