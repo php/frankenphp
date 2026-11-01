@@ -81,6 +81,12 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 
 	phpSelf := fc.scriptName + fc.pathInfo
 
+	// PATH_TRANSLATED is only defined if PATH_INFO is, see http://www.oreilly.com/openbook/cgi/ch02_04.html
+	var pathTranslated string
+	if fc.pathInfo != "" {
+		pathTranslated = sanitizedPathJoin(fc.documentRoot, fc.pathInfo)
+	}
+
 	C.frankenphp_register_server_vars(trackVarsArray, C.frankenphp_server_vars{
 		// approximate total length to avoid array re-hashing:
 		// 28 CGI vars + headers + environment
@@ -97,6 +103,8 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		document_root_len:   C.size_t(len(fc.documentRoot)),
 		path_info:           toUnsafeChar(fc.pathInfo),
 		path_info_len:       C.size_t(len(fc.pathInfo)),
+		path_translated:     toUnsafeChar(pathTranslated),
+		path_translated_len: C.size_t(len(pathTranslated)),
 		php_self:            toUnsafeChar(phpSelf),
 		php_self_len:        C.size_t(len(phpSelf)),
 		document_uri:        toUnsafeChar(fc.docURI),
@@ -287,6 +295,9 @@ func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) 
 	fc := thread.handler.frankenPHPContext()
 	request := fc.request
 
+	// PHP stats this as the executed script (getlastmod(), session cache limiters...), unlike the PATH_TRANSLATED CGI variable
+	info.path_translated = thread.pinCString(fc.scriptFilename)
+
 	if request == nil {
 		return nil
 	}
@@ -306,10 +317,6 @@ func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) 
 
 	if contentType := request.Header.Get("Content-Type"); contentType != "" {
 		info.content_type = thread.pinCString(contentType)
-	}
-
-	if fc.pathInfo != "" {
-		info.path_translated = thread.pinCString(sanitizedPathJoin(fc.documentRoot, fc.pathInfo)) // See: http://www.oreilly.com/openbook/cgi/ch02_04.html
 	}
 
 	info.request_uri = thread.pinCString(fc.requestURI)

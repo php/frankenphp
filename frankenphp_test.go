@@ -276,6 +276,20 @@ func testPathInfo(t *testing.T, opts *testOptions) {
 	}, opts)
 }
 
+func TestScriptStatIgnoresPathInfo_module(t *testing.T) { testScriptStatIgnoresPathInfo(t, nil) }
+func TestScriptStatIgnoresPathInfo_worker(t *testing.T) {
+	testScriptStatIgnoresPathInfo(t, &testOptions{workerScript: "script-stat.php"})
+}
+func testScriptStatIgnoresPathInfo(t *testing.T, opts *testOptions) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		body, _ := testGet("http://example.com/script-stat.php/echo.php", handler, t)
+		assert.Equal(t, "script "+filepath.Join(testDataDir, "echo.php"), body)
+
+		body, _ = testGet("http://example.com/script-stat.php", handler, t)
+		assert.Equal(t, "script unset", body)
+	}, opts)
+}
+
 func TestHeaders_module(t *testing.T) { testHeaders(t, nil) }
 func TestHeaders_worker(t *testing.T) { testHeaders(t, &testOptions{workerScript: "headers.php"}) }
 func testHeaders(t *testing.T, opts *testOptions) {

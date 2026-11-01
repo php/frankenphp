@@ -180,6 +180,7 @@ func newContextFromMessage(message any, rw http.ResponseWriter, ctx context.Cont
 		startedAt:         time.Now(),
 		server:            server,
 		worker:            w,
+		scriptFilename:    w.fileName,
 		logger:            server.logger,
 		responseWriter:    rw,
 		handlerParameters: message,

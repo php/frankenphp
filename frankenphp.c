@@ -1493,6 +1493,9 @@ void frankenphp_register_server_vars(zval *track_vars_array,
   FRANKENPHP_REGISTER_VAR(remote_port);
   FRANKENPHP_REGISTER_VAR(document_root);
   FRANKENPHP_REGISTER_VAR(path_info);
+  if (vars.path_translated_len != 0) {
+    FRANKENPHP_REGISTER_VAR(path_translated);
+  }
   FRANKENPHP_REGISTER_VAR(php_self);
   FRANKENPHP_REGISTER_VAR(document_uri);
   FRANKENPHP_REGISTER_VAR(script_filename);
@@ -1575,9 +1578,6 @@ frankenphp_register_variables_from_request_info(zval *track_vars_array) {
   frankenphp_register_variable_from_request_info(
       frankenphp_strings.content_type, (char *)SG(request_info).content_type,
       true, track_vars_array);
-  frankenphp_register_variable_from_request_info(
-      frankenphp_strings.path_translated, SG(request_info).path_translated,
-      false, track_vars_array);
   frankenphp_register_variable_from_request_info(
       frankenphp_strings.query_string, SG(request_info).query_string, true,
       track_vars_array);

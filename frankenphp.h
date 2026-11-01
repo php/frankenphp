@@ -71,6 +71,8 @@ typedef struct frankenphp_server_vars {
   size_t document_root_len;
   char *path_info;
   size_t path_info_len;
+  char *path_translated;
+  size_t path_translated_len;
   char *php_self;
   size_t php_self_len;
   char *document_uri;
