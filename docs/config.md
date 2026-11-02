@@ -365,6 +365,20 @@ CADDY_GLOBAL_OPTIONS="servers {
 
 You can find more information about this setting in the [Caddy documentation](https://caddyserver.com/docs/caddyfile/options#enable-full-duplex).
 
+### Request body size limit
+
+To limit the size of request bodies, use the [`request_body`](https://caddyserver.com/docs/caddyfile/directives/request_body) directive:
+
+```caddyfile
+request_body {
+	max_size 10MB
+}
+```
+
+Requests with a larger body get a `413 Request Entity Too Large` response.
+If PHP reads the body before the script starts (`POST` requests with a `Content-Type`, such as forms and file uploads), the script doesn't run.
+If the script reads the body itself, through `php://input` or `request_parse_body()`, the read throws a `FrankenPHP\RequestBodyTooLargeException` once the limit is reached, so a truncated body is never mistaken for a complete one.
+
 ## Enable the debug mode
 
 When using the Docker image, set the `CADDY_GLOBAL_OPTIONS` environment variable to `debug` to enable the debug mode:

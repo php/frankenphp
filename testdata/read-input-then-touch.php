@@ -1,8 +1,8 @@
 <?php
 
-file_get_contents('php://input');
 try {
+    file_get_contents('php://input');
     touch($_GET['marker']);
-} finally {
-    touch($_GET['marker']);
+} catch (FrankenPHP\RequestBodyTooLargeException) {
+    touch($_GET['marker'] . '-caught');
 }
