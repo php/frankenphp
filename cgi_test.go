@@ -620,27 +620,3 @@ func BenchmarkSplitRawHeader(b *testing.B) {
 		})
 	}
 }
-
-var sanitizedPathJoinResult string
-
-func BenchmarkSanitizedPathJoin(b *testing.B) {
-	for _, tc := range []struct {
-		name string
-		path string
-	}{
-		{"index", "/index.php"},
-		{"nested", "/products/catalog/index.php"},
-		{"long", "/" + strings.Repeat("products/", 16) + "index.php"},
-		{"relative", "index.php"},
-		{"traversal", "/foo/../../etc/passwd"},
-		{"repeated_slashes", strings.Repeat("/", 4096) + "index.php"},
-		{"dot_segments", "/" + strings.Repeat("a/../", 512) + "index.php"},
-	} {
-		b.Run(tc.name, func(b *testing.B) {
-			b.ReportAllocs()
-			for b.Loop() {
-				sanitizedPathJoinResult = sanitizedPathJoin("/srv/app/public", tc.path)
-			}
-		})
-	}
-}
