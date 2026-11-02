@@ -345,7 +345,7 @@ func sanitizedPathJoin(root, reqPath string) string {
 
 	// Clean with "path", not "filepath": on Windows filepath.Clean keeps the
 	// ".." behind a leading "//" (UNC prefix), letting reqPath escape root.
-	relPath := path.Clean("/" + reqPath)[1:]
+	relPath := path.Clean(ensureLeadingSlash(reqPath))[1:]
 	// A cleaned rooted path is always local on POSIX: only Windows needs the check
 	if runtime.GOOS == "windows" && relPath != "" && !filepath.IsLocal(relPath) {
 		// path is unsafe (see https://github.com/golang/go/issues/56336#issuecomment-1416214885)

@@ -50,6 +50,9 @@ func TestSanitizedPathJoin(t *testing.T) {
 		expected string
 	}{
 		{"leading slash", "/index.php", filepath.Join(root, "index.php")},
+		{"multiple leading slashes", "///index.php", filepath.Join(root, "index.php")},
+		{"multiple root slashes", "//", filepath.Clean(root) + separator},
+		{"rooted nested traversal", "//foo/../../bar/", filepath.Join(root, "bar") + separator},
 		{"no leading slash", "index.php", filepath.Join(root, "index.php")},
 		{"nested", "/foo/bar/index.php", filepath.Join(root, "foo", "bar", "index.php")},
 		{"empty req path returns root", "", filepath.Clean(root)},
