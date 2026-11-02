@@ -633,6 +633,10 @@ func BenchmarkSanitizedPathJoin(b *testing.B) {
 		{"long", "/" + strings.Repeat("products/", 16) + "index.php"},
 		{"relative", "index.php"},
 		{"traversal", "/foo/../../etc/passwd"},
+		{"repeated_slashes", strings.Repeat("/", 4096) + "index.php"},
+		{"dot_segments", "/" + strings.Repeat("a/../", 512) + "index.php"},
+		{"relative_dot_segments", strings.Repeat("a/../", 512) + "index.php"},
+		{"long_segment", "/" + strings.Repeat("a", 4096) + ".php"},
 	} {
 		b.Run(tc.name, func(b *testing.B) {
 			b.ReportAllocs()
