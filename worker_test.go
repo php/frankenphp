@@ -68,7 +68,7 @@ func TestWorkerSurvivesRequestParseErrors(t *testing.T) {
 		assert.Contains(t, body2, "requests:2")
 		assert.Contains(t, body2, "exceeds the limit")
 
-		// clean request: recorded errors must be reset between requests
+		// clean request: the script cleared the previous error itself
 		body3, resp3 := testGet("http://example.com/request-parse-errors.php", handler, t)
 		assert.Equal(t, http.StatusOK, resp3.StatusCode)
 		assert.Contains(t, body3, "requests:3")
