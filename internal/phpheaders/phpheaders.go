@@ -38,7 +38,6 @@ var CommonRequestHeaders = map[string]string{
 	"Expect":                            "HTTP_EXPECT",
 	"Forwarded":                         "HTTP_FORWARDED",
 	"From":                              "HTTP_FROM",
-	"Host":                              "HTTP_HOST",
 	"If-Match":                          "HTTP_IF_MATCH",
 	"If-Modified-Since":                 "HTTP_IF_MODIFIED_SINCE",
 	"If-None-Match":                     "HTTP_IF_NONE_MATCH",

@@ -137,6 +137,11 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 
 func addHeadersToServer(request *http.Request, trackVarsArray *C.zval) {
 	for field, val := range request.Header {
+		// HTTP_HOST comes from request.Host: over HTTP/2, net/http keeps a "host" field distinct from :authority
+		if field == "Host" {
+			continue
+		}
+
 		if k := commonHeaders[field]; k != nil {
 			v := strings.Join(val, ", ")
 			C.frankenphp_register_known_variable(k, toUnsafeChar(v), C.size_t(len(v)), trackVarsArray)

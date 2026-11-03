@@ -847,6 +847,21 @@ func testRequestHeaders(t *testing.T, opts *testOptions) {
 	}, opts)
 }
 
+func TestHostHeaderField_module(t *testing.T) { testHostHeaderField(t, &testOptions{}) }
+func TestHostHeaderField_worker(t *testing.T) {
+	testHostHeaderField(t, &testOptions{workerScript: "host-header-field.php"})
+}
+func testHostHeaderField(t *testing.T, opts *testOptions) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		// net/http keeps a "host" field sent next to :authority in the header map of HTTP/2 requests
+		req := httptest.NewRequest("GET", fmt.Sprintf("http://example.com/host-header-field.php?i=%d", i), nil)
+		req.Header.Add(strings.Clone("Host"), strings.Clone("admin.example.com"))
+		body, _ := testRequest(req, handler, t)
+
+		assert.Equal(t, "HTTP_HOST: example.com, SERVER_NAME: example.com, Host: example.com", body)
+	}, opts)
+}
+
 func TestFailingWorker(t *testing.T) {
 	t.Cleanup(frankenphp.Shutdown)
 

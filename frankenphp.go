@@ -586,6 +586,10 @@ func go_apache_request_headers(threadIndex C.uintptr_t) (*C.go_string, C.size_t)
 		thread.Pin(fd)
 
 		cv := strings.Join(val, ", ")
+		if field == "Host" {
+			cv = fc.request.Host
+		}
+
 		vd := unsafe.StringData(cv)
 		thread.Pin(vd)
 
