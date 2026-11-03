@@ -130,12 +130,6 @@ HashTable *main_thread_env = NULL;
 
 static THREAD_LOCAL uintptr_t thread_index;
 static THREAD_LOCAL bool is_worker_thread = false;
-/* a read hit the request body size limit, the script must not start on the
- * truncated body */
-static THREAD_LOCAL bool request_body_too_large = false;
-/* worker request startup and shutdown run in frankenphp_handle_request()'s
- * frame too */
-static THREAD_LOCAL bool in_worker_callback = false;
 /* putenv() overrides layered over the other env tables, an IS_NULL entry
  * unsets the variable */
 static THREAD_LOCAL HashTable *sandboxed_env = NULL;
@@ -381,9 +375,6 @@ static void frankenphp_update_request_context() {
   SG(server_context) = &frankenphp_local_server_ctx;
   /* status It is not reset by zend engine, set it to 200. */
   SG(sapi_headers).http_response_code = 200;
-  request_body_too_large = false;
-  /* not cleared when the callback bailed out */
-  in_worker_callback = false;
 
   char *authorization_header =
       go_update_request_info(thread_index, &SG(request_info));
@@ -989,9 +980,8 @@ PHP_FUNCTION(frankenphp_handle_request) {
   fci.params = result.r1;
   fci.param_count = result.r1 == NULL ? 0 : 1;
 
-  in_worker_callback = true;
   /* a body over the limit was rejected while parsing the request */
-  if (EXPECTED(!request_body_too_large) &&
+  if (EXPECTED(!go_is_context_done(thread_index)) &&
       zend_call_function(&fci, &fcc) == SUCCESS && Z_TYPE(retval) != IS_UNDEF) {
     callback_ret = &retval;
 
@@ -1000,7 +990,6 @@ PHP_FUNCTION(frankenphp_handle_request) {
       callback_ret = NULL;
     }
   }
-  in_worker_callback = false;
 
   /*
    * If an exception occurred, print the message to the client before
@@ -1439,15 +1428,16 @@ static size_t frankenphp_read_post(char *buffer, size_t count_bytes) {
   struct go_read_post_return result =
       go_read_post(frankenphp_thread_index(), buffer, count_bytes);
 
-  if (result.r1) {
-    request_body_too_large = true;
-
-    /* php://input can't report read errors, throw so user code doesn't take
-     * the truncated body for a complete one */
-    if (EG(current_execute_data) && (!is_worker_thread || in_worker_callback)) {
-      zend_throw_exception(frankenphp_ce_request_body_too_large_exception,
-                           "Request body too large", 0);
-    }
+  /* php://input can't report read errors, throw so user code doesn't take
+   * the truncated body for a complete one. Worker request startup and
+   * shutdown run in frankenphp_handle_request()'s frame, not in user code. */
+  zend_execute_data *ex = EG(current_execute_data);
+  if (result.r1 && ex != NULL &&
+      !(ex->func != NULL && ex->func->type == ZEND_INTERNAL_FUNCTION &&
+        ex->func->internal_function.handler ==
+            ZEND_FN(frankenphp_handle_request))) {
+    zend_throw_exception(frankenphp_ce_request_body_too_large_exception,
+                         "Request body too large", 0);
   }
 
   return result.r0;
@@ -1823,7 +1813,7 @@ static void *php_thread(void *arg) {
 
       /* Execute the PHP script, potential bailout to zend_catch. A body over
        * the limit was rejected while parsing the request. */
-      if (EXPECTED(!request_body_too_large) &&
+      if (EXPECTED(!go_is_context_done(thread_index)) &&
           EXPECTED(open_primary_script(&file_handle))) {
         php_execute_script(&file_handle);
       }
