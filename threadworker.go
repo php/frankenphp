@@ -149,13 +149,13 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 		return
 	}
 
-	if worker.maxConsecutiveFailures >= 0 && startupFailChan != nil && !watcherIsEnabled && handler.failureCount >= worker.maxConsecutiveFailures {
+	if worker.maxConsecutiveFailures >= 0 && startupFailChan != nil && !handler.thread.mainThread.watcherIsEnabled && handler.failureCount >= worker.maxConsecutiveFailures {
 		startupFailChan <- fmt.Errorf("too many consecutive failures: worker %s has not reached frankenphp_handle_request()", worker.fileName)
 		handler.thread.state.Set(state.ShuttingDown)
 		return
 	}
 
-	if watcherIsEnabled {
+	if handler.thread.mainThread.watcherIsEnabled {
 		// worker script has probably failed due to script changes while watcher is enabled
 		if globalLogger.Enabled(globalCtx, slog.LevelError) {
 			globalLogger.LogAttrs(globalCtx, slog.LevelError, "(watcher enabled) worker script has not reached frankenphp_handle_request()", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex))
@@ -199,12 +199,12 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 	}
 
 	// max_requests reached: signal reboot for full ZTS cleanup
-	if maxRequestsPerThread > 0 && handler.requestCount >= maxRequestsPerThread {
+	if mainThread.maxRequestsPerThread > 0 && handler.requestCount >= mainThread.maxRequestsPerThread {
 		if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
 			globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "max requests reached, restarting",
 				slog.String("worker", handler.worker.name),
 				slog.Int("thread", handler.thread.threadIndex),
-				slog.Int("max_requests", maxRequestsPerThread),
+				slog.Int("max_requests", mainThread.maxRequestsPerThread),
 			)
 		}
 

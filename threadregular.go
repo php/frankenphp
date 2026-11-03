@@ -7,7 +7,6 @@ import (
 	"runtime"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/dunglas/frankenphp/internal/state"
 )
@@ -20,19 +19,19 @@ type regularThread struct {
 	state        *state.ThreadState
 	thread       *phpThread
 	requestCount int
+	requestChan  chan *frankenPHPContext
 }
 
 var (
-	regularThreads       []*phpThread
 	regularThreadMu      = &sync.RWMutex{}
-	regularRequestChan   = make(chan *frankenPHPContext)
 	queuedRegularThreads = atomic.Int32{}
 )
 
-func convertToRegularThread(thread *phpThread) {
+func convertToRegularThread(thread *phpThread, mThread *phpMainThread) {
 	thread.setHandler(&regularThread{
-		thread: thread,
-		state:  thread.state,
+		thread:      thread,
+		state:       thread.state,
+		requestChan: mThread.regularRequestChan,
 	})
 	attachRegularThread(thread)
 }
@@ -84,11 +83,12 @@ func (handler *regularThread) drain() {}
 
 func (handler *regularThread) waitForRequest() string {
 	// max_requests reached: restart the thread to clean up all ZTS state
-	if maxRequestsPerThread > 0 && handler.requestCount >= maxRequestsPerThread {
+	maxRequestCount := handler.thread.mainThread.maxRequestsPerThread
+	if maxRequestCount > 0 && handler.requestCount >= maxRequestCount {
 		if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
 			globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "max requests reached, restarting thread",
 				slog.Int("thread", handler.thread.threadIndex),
-				slog.Int("max_requests", maxRequestsPerThread),
+				slog.Int("max_requests", maxRequestCount),
 			)
 		}
 
@@ -105,7 +105,7 @@ func (handler *regularThread) waitForRequest() string {
 	case <-handler.thread.drainChan:
 		// go back to beforeScriptExecution
 		return handler.beforeScriptExecution()
-	case fc = <-regularRequestChan:
+	case fc = <-handler.requestChan:
 	case fc = <-handler.thread.requestChan:
 	}
 
@@ -130,9 +130,10 @@ func handleRequestWithRegularPHPThreads(fc *frankenPHPContext) error {
 
 	runtime.Gosched()
 
+	mThread := fc.server.mainThread
 	if queuedRegularThreads.Load() == 0 {
 		regularThreadMu.RLock()
-		for _, thread := range regularThreads {
+		for _, thread := range mThread.regularThreads {
 			select {
 			case thread.requestChan <- fc:
 				regularThreadMu.RUnlock()
@@ -153,7 +154,7 @@ func handleRequestWithRegularPHPThreads(fc *frankenPHPContext) error {
 
 	for {
 		select {
-		case regularRequestChan <- fc:
+		case mThread.regularRequestChan <- fc:
 			queuedRegularThreads.Add(-1)
 			metrics.DequeuedRequest()
 
@@ -161,7 +162,7 @@ func handleRequestWithRegularPHPThreads(fc *frankenPHPContext) error {
 			metrics.StopRequest()
 
 			return nil
-		case scaleChan <- fc:
+		case mThread.scaleChan <- fc:
 			// the request has triggered scaling, continue to wait for a thread
 		case <-fc.ctx.Done():
 			queuedRegularThreads.Add(-1)
@@ -169,7 +170,7 @@ func handleRequestWithRegularPHPThreads(fc *frankenPHPContext) error {
 			metrics.StopRequest()
 
 			return nil
-		case <-timeoutChan(time.Duration(maxWaitTime.Load())):
+		case <-timeoutChan(mThread.maxWaitTime):
 			// the request has timed out stalling
 			queuedRegularThreads.Add(-1)
 			metrics.DequeuedRequest()
@@ -184,15 +185,15 @@ func handleRequestWithRegularPHPThreads(fc *frankenPHPContext) error {
 
 func attachRegularThread(thread *phpThread) {
 	regularThreadMu.Lock()
-	regularThreads = append(regularThreads, thread)
+	thread.mainThread.regularThreads = append(thread.mainThread.regularThreads, thread)
 	regularThreadMu.Unlock()
 }
 
 func detachRegularThread(thread *phpThread) {
 	regularThreadMu.Lock()
-	for i, t := range regularThreads {
+	for i, t := range thread.mainThread.regularThreads {
 		if t == thread {
-			regularThreads = append(regularThreads[:i], regularThreads[i+1:]...)
+			thread.mainThread.regularThreads = append(thread.mainThread.regularThreads[:i], thread.mainThread.regularThreads[i+1:]...)
 			break
 		}
 	}

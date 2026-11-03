@@ -25,7 +25,7 @@ func validateWatchers(o *opt) error {
 	return nil
 }
 
-func initWatchers(o *opt) error {
+func initWatchers(o *opt, mThread *phpMainThread) error {
 	return validateWatchers(o)
 }
 

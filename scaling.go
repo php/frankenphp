@@ -28,41 +28,27 @@ const (
 
 var (
 	ErrMaxThreadsReached = errors.New("max amount of overall threads reached")
-
-	maxIdleTime       = defaultMaxIdleTime
-	scaleChan         chan *frankenPHPContext
-	autoScaledThreads = []*phpThread{}
-	scalingMu         = new(sync.RWMutex)
+	scalingMu            = new(sync.RWMutex)
 )
 
-func initAutoScaling(mainThread *phpMainThread) {
-	if mainThread.maxThreads <= mainThread.numThreads {
+func initAutoScaling(mThread *phpMainThread) {
+	if mThread.maxThreads <= mThread.numThreads {
 		return
 	}
 
-	// reused across reloads so queued requests aren't orphaned on a stale channel
-	if scaleChan == nil {
-		scaleChan = make(chan *frankenPHPContext)
-	}
+	mThread.scaleChan = make(chan *frankenPHPContext)
+	maxScaledThreads := mThread.maxThreads - mThread.numThreads
 
-	done := mainThread.done
-	mstate := mainThread.state
-
-	scalingMu.Lock()
-	maxScaledThreads := mainThread.maxThreads - mainThread.numThreads
-	autoScaledThreads = make([]*phpThread, 0, maxScaledThreads)
-	scalingMu.Unlock()
-
-	go startUpscalingThreads(maxScaledThreads, scaleChan, done, mstate)
-	go startDownScalingThreads(done)
+	go startUpscalingThreads(maxScaledThreads, mThread.scaleChan, mThread)
+	go startDownScalingThreads(mThread)
 }
 
-func addRegularThread() (*phpThread, error) {
+func addRegularThread(mThread *phpMainThread) (*phpThread, error) {
 	thread := getInactivePHPThread()
 	if thread == nil {
 		return nil, ErrMaxThreadsReached
 	}
-	convertToRegularThread(thread)
+	convertToRegularThread(thread, mThread)
 	thread.state.WaitFor(state.Ready, state.Inactive, state.Reserved) // stable states
 
 	return thread, nil
@@ -80,16 +66,16 @@ func addWorkerThread(worker *worker) (*phpThread, error) {
 }
 
 // scaleWorkerThread adds a worker PHP thread automatically
-func scaleWorkerThread(worker *worker, done chan struct{}, mstate *state.ThreadState) {
+func scaleWorkerThread(worker *worker, mThread *phpMainThread) {
 	// probe CPU usage before acquiring the lock (avoids holding lock during 120ms sleep)
-	if !cpu.ProbeCPUs(cpuProbeTime, maxCpuUsageForScaling, done) {
+	if !cpu.ProbeCPUs(cpuProbeTime, maxCpuUsageForScaling, mThread.done) {
 		return
 	}
 
 	scalingMu.Lock()
 	defer scalingMu.Unlock()
 
-	if !mstate.Is(state.Ready) {
+	if !mThread.state.Is(state.Ready) {
 		return
 	}
 
@@ -102,28 +88,28 @@ func scaleWorkerThread(worker *worker, done chan struct{}, mstate *state.ThreadS
 		return
 	}
 
-	autoScaledThreads = append(autoScaledThreads, thread)
+	mThread.autoScaledThreads = append(mThread.autoScaledThreads, thread)
 
 	if globalLogger.Enabled(globalCtx, slog.LevelInfo) {
-		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "upscaling worker thread", slog.String("worker", worker.name), slog.Int("thread", thread.threadIndex), slog.Int("num_threads", len(autoScaledThreads)))
+		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "upscaling worker thread", slog.String("worker", worker.name), slog.Int("thread", thread.threadIndex), slog.Int("num_threads", len(mThread.autoScaledThreads)))
 	}
 }
 
 // scaleRegularThread adds a regular PHP thread automatically
-func scaleRegularThread(done chan struct{}, mstate *state.ThreadState) {
+func scaleRegularThread(mThread *phpMainThread) {
 	// probe CPU usage before acquiring the lock (avoids holding lock during 120ms sleep)
-	if !cpu.ProbeCPUs(cpuProbeTime, maxCpuUsageForScaling, done) {
+	if !cpu.ProbeCPUs(cpuProbeTime, maxCpuUsageForScaling, mThread.done) {
 		return
 	}
 
 	scalingMu.Lock()
 	defer scalingMu.Unlock()
 
-	if !mstate.Is(state.Ready) {
+	if !mThread.state.Is(state.Ready) {
 		return
 	}
 
-	thread, err := addRegularThread()
+	thread, err := addRegularThread(mThread)
 	if err != nil {
 		if globalLogger.Enabled(globalCtx, slog.LevelWarn) {
 			globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "could not increase max_threads, consider raising this limit", slog.Any("error", err))
@@ -132,22 +118,22 @@ func scaleRegularThread(done chan struct{}, mstate *state.ThreadState) {
 		return
 	}
 
-	autoScaledThreads = append(autoScaledThreads, thread)
+	mThread.autoScaledThreads = append(mThread.autoScaledThreads, thread)
 
 	if globalLogger.Enabled(globalCtx, slog.LevelInfo) {
-		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "upscaling regular thread", slog.Int("thread", thread.threadIndex), slog.Int("num_threads", len(autoScaledThreads)))
+		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "upscaling regular thread", slog.Int("thread", thread.threadIndex), slog.Int("num_threads", len(mThread.autoScaledThreads)))
 	}
 }
 
-func startUpscalingThreads(maxScaledThreads int, scale chan *frankenPHPContext, done chan struct{}, mstate *state.ThreadState) {
+func startUpscalingThreads(maxScaledThreads int, scale chan *frankenPHPContext, mThread *phpMainThread) {
 	for {
 		scalingMu.Lock()
-		scaledThreadCount := len(autoScaledThreads)
+		scaledThreadCount := len(mThread.autoScaledThreads)
 		scalingMu.Unlock()
 		if scaledThreadCount >= maxScaledThreads {
 			// we have reached max_threads, check again later
 			select {
-			case <-done:
+			case <-mThread.done:
 				return
 			case <-time.After(downScaleCheckTime):
 				continue
@@ -161,7 +147,7 @@ func startUpscalingThreads(maxScaledThreads int, scale chan *frankenPHPContext, 
 			// if the request has not been stalled long enough, wait and repeat
 			if timeSinceStalled < minStallTime {
 				select {
-				case <-done:
+				case <-mThread.done:
 					return
 				case <-time.After(minStallTime - timeSinceStalled):
 					continue
@@ -170,7 +156,7 @@ func startUpscalingThreads(maxScaledThreads int, scale chan *frankenPHPContext, 
 
 			// if the request has been stalled long enough, scale
 			if fc.worker == nil {
-				scaleRegularThread(done, mstate)
+				scaleRegularThread(mThread)
 				continue
 			}
 
@@ -183,33 +169,33 @@ func startUpscalingThreads(maxScaledThreads int, scale chan *frankenPHPContext, 
 				continue
 			}
 
-			scaleWorkerThread(fc.worker, done, mstate)
-		case <-done:
+			scaleWorkerThread(fc.worker, mThread)
+		case <-mThread.done:
 			return
 		}
 	}
 }
 
-func startDownScalingThreads(done chan struct{}) {
+func startDownScalingThreads(mThread *phpMainThread) {
 	for {
 		select {
-		case <-done:
+		case <-mThread.done:
 			return
 		case <-time.After(downScaleCheckTime):
-			deactivateThreads()
+			deactivateThreads(mThread)
 		}
 	}
 }
 
 // deactivateThreads checks all threads and removes those that have been inactive for too long
-func deactivateThreads() {
+func deactivateThreads(mThread *phpMainThread) {
 	stoppedThreadCount := 0
 	scalingMu.Lock()
 	defer scalingMu.Unlock()
-	for i, thread := range slices.Backward(autoScaledThreads) {
+	for i, thread := range slices.Backward(mThread.autoScaledThreads) {
 		// the thread might have been stopped otherwise, remove it
 		if thread.state.Is(state.Reserved) {
-			autoScaledThreads = slices.Delete(autoScaledThreads, i, i+1)
+			mThread.autoScaledThreads = slices.Delete(mThread.autoScaledThreads, i, i+1)
 			continue
 		}
 
@@ -219,13 +205,13 @@ func deactivateThreads() {
 		}
 
 		// convert threads to inactive if they have been idle for too long
-		if thread.state.Is(state.Ready) && waitTime > maxIdleTime.Milliseconds() {
+		if thread.state.Is(state.Ready) && waitTime > mThread.maxIdleTime.Milliseconds() {
 			convertToInactiveThread(thread)
 			stoppedThreadCount++
-			autoScaledThreads = slices.Delete(autoScaledThreads, i, i+1)
+			mThread.autoScaledThreads = slices.Delete(mThread.autoScaledThreads, i, i+1)
 
 			if globalLogger.Enabled(globalCtx, slog.LevelInfo) {
-				globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "downscaling thread", slog.Int("thread", thread.threadIndex), slog.Int64("wait_time", waitTime), slog.Int("num_threads", len(autoScaledThreads)))
+				globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "downscaling thread", slog.Int("thread", thread.threadIndex), slog.Int64("wait_time", waitTime), slog.Int("num_threads", len(mThread.autoScaledThreads)))
 			}
 
 			continue

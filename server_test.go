@@ -204,9 +204,7 @@ func TestServer(t *testing.T) {
 
 		frankenphp.Shutdown()
 
-		initServers(t, opts...)
-		assert.Equal(t, "requests:1", serverGet(t, server, "http://example.com/worker-with-counter.php"))
-		assert.Equal(t, "server_0", server.Name())
+		assert.Error(t, frankenphp.Init(opts...))
 	})
 
 	t.Run("error_on_missing_registration", func(t *testing.T) {

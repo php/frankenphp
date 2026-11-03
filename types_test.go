@@ -18,7 +18,7 @@ func testOnDummyPHPThread(t *testing.T, test func()) {
 	t.Helper()
 
 	globalLogger = slog.Default()
-	_, err := initPHPThreads(1, 1, nil) // boot 1 thread
+	_, err := initPHPThreads(&opt{numThreads: 1, maxThreads: 1, phpIni: nil}) // boot 1 thread
 	assert.NoError(t, err)
 	handler := convertToTaskThread(phpThreads[0])
 
