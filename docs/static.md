@@ -23,12 +23,14 @@ FrankenPHP also supports [embedding the PHP app in the static binary](embed.md).
 
 We provide Docker images to build static Linux binaries:
 
+The commands below select a single Linux platform matching your machine's architecture so the builder image can be loaded into Docker's local image store.
+
 ### musl-based, fully static build
 
 For a fully-static binary that runs on any Linux distribution without dependencies but doesn't support dynamic loading of extensions:
 
 ```console
-docker buildx bake --load static-builder-musl
+docker buildx bake --load --set "*.platform=linux/$(uname -m)" static-builder-musl
 docker run --rm -v "$PWD/output:/output" -e OUTPUT_DIR=/output -e SPC_LOGS_DIR=/output/log dunglas/frankenphp:static-builder-musl
 cp "output/frankenphp-linux-$(uname -m)" frankenphp
 ```
@@ -44,7 +46,7 @@ docker run --rm -v "$PWD/output:/output" -e OUTPUT_DIR=/output -e SPC_LOGS_DIR=/
 For a binary that supports loading PHP extensions dynamically while still having the selected extensions compiled statically:
 
 ```console
-docker buildx bake --load static-builder-gnu
+docker buildx bake --load --set "*.platform=linux/$(uname -m)" static-builder-gnu
 docker run --rm -v "$PWD/output:/output" -e OUTPUT_DIR=/output -e SPC_LOGS_DIR=/output/log dunglas/frankenphp:static-builder-gnu
 cp "output/frankenphp-linux-$(uname -m)" frankenphp
 ```
@@ -155,7 +157,7 @@ For this, you can run the `static-builder-gnu` Docker container, remote into it,
 Example steps for [the Xdebug extension](https://xdebug.org):
 
 ```console
-docker buildx bake --load static-builder-gnu
+docker buildx bake --load --set "*.platform=linux/$(uname -m)" static-builder-gnu
 docker run --rm -v "$PWD/dist:/go/src/app/dist" -v "$PWD/output:/output" -e OUTPUT_DIR=/output -e SPC_LOGS_DIR=/output/log dunglas/frankenphp:static-builder-gnu
 docker run --rm -it -v "$PWD/dist:/go/src/app/dist" dunglas/frankenphp:static-builder-gnu /bin/bash
 cd /go/src/app/dist/buildroot/bin
