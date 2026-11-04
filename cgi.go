@@ -78,6 +78,16 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 	}
 
 	serverPort := reqPort
+
+	// IP of the interface that accepted the connection, absent for Unix sockets
+	var serverAddr string
+	switch addr := request.Context().Value(http.LocalAddrContextKey).(type) {
+	case *net.TCPAddr:
+		serverAddr = addr.IP.String()
+	case *net.UDPAddr:
+		serverAddr = addr.IP.String()
+	}
+
 	contentLength := request.Header.Get("Content-Length")
 
 	phpSelf := fc.scriptName + fc.pathInfo
@@ -90,8 +100,8 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 
 	C.frankenphp_register_server_vars(trackVarsArray, C.frankenphp_server_vars{
 		// approximate total length to avoid array re-hashing:
-		// 28 CGI vars + headers + environment
-		total_num_vars: C.size_t(28 + len(request.Header) + len(fc.env) + lengthOfEnv),
+		// 29 CGI vars + headers + environment
+		total_num_vars: C.size_t(29 + len(request.Header) + len(fc.env) + lengthOfEnv),
 
 		// CGI vars with variable values
 		remote_addr:         toUnsafeChar(ip),
@@ -118,6 +128,8 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		server_name_len:     C.size_t(len(reqHost)),
 		server_port:         toUnsafeChar(serverPort),
 		server_port_len:     C.size_t(len(serverPort)),
+		server_addr:         toUnsafeChar(serverAddr),
+		server_addr_len:     C.size_t(len(serverAddr)),
 		content_length:      toUnsafeChar(contentLength),
 		content_length_len:  C.size_t(len(contentLength)),
 		server_protocol:     toUnsafeChar(request.Proto),

@@ -85,6 +85,8 @@ typedef struct frankenphp_server_vars {
   size_t server_name_len;
   char *server_port;
   size_t server_port_len;
+  char *server_addr;
+  size_t server_addr_len;
   char *content_length;
   size_t content_length_len;
   char *server_protocol;
@@ -121,6 +123,7 @@ typedef struct frankenphp_server_vars {
   X(request_scheme, "REQUEST_SCHEME")                                          \
   X(server_name, "SERVER_NAME")                                                \
   X(server_port, "SERVER_PORT")                                                \
+  X(server_addr, "SERVER_ADDR")                                                \
   X(content_length, "CONTENT_LENGTH")                                          \
   X(server_protocol, "SERVER_PROTOCOL")                                        \
   X(http_host, "HTTP_HOST")                                                    \

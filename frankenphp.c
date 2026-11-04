@@ -1516,6 +1516,9 @@ void frankenphp_register_server_vars(zval *track_vars_array,
   FRANKENPHP_REGISTER_VAR(ssl_cipher);
   FRANKENPHP_REGISTER_VAR(server_name);
   FRANKENPHP_REGISTER_VAR(server_port);
+  if (vars.server_addr_len != 0) {
+    FRANKENPHP_REGISTER_VAR(server_addr);
+  }
   FRANKENPHP_REGISTER_VAR(content_length);
   FRANKENPHP_REGISTER_VAR(server_protocol);
   FRANKENPHP_REGISTER_VAR(http_host);
