@@ -1926,6 +1926,60 @@ func TestWorkerMatchDirectiveWithMultipleWorkers(t *testing.T) {
 	tester.AssertGetResponse("http://localhost:"+testPort+"/not-matched", http.StatusOK, "I am by birth a Genevese (i not set)")
 }
 
+func TestWorkerMatchDirectiveDoesNotServeScriptSources(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		http://localhost:`+testPort+` {
+			rewrite /rewritten /hello.php/
+			php_server {
+				root ../testdata
+				split .php .custom
+				worker {
+					file worker-with-counter.php
+					match /counter/*
+					num 1
+				}
+			}
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/split-path.custom", http.StatusOK, "SCRIPT_NAME: /split-path.custom\nPHP_SELF: /split-path.custom\nPATH_INFO:\n")
+	// the file matcher cleans the trailing slash, the path matcher doesn't
+	tester.AssertGetResponse("http://localhost:"+testPort+"/rewritten", http.StatusOK, "Hello from PHP")
+}
+
+func TestWorkerMatchDirectiveDoesNotServePHPSourcesWithoutPHPSplit(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		http://localhost:`+testPort+` {
+			php_server {
+				root ../testdata
+				split .phtml
+				worker {
+					file worker-with-counter.php
+					match /api/*
+					num 1
+				}
+			}
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/api/worker-with-counter.php", http.StatusOK, "requests:1")
+	tester.AssertGetResponse("http://localhost:"+testPort+"/hello.php", http.StatusNotFound, "")
+	tester.AssertGetResponse("http://localhost:"+testPort+"/hello.php/", http.StatusNotFound, "")
+	tester.AssertGetResponse("http://localhost:"+testPort+"/hello.txt", http.StatusOK, "Hello\n")
+}
+
 func TestWorkerMatchDirectiveWithoutFileServer(t *testing.T) {
 	tester := caddytest.NewTester(t)
 	initServer(t, tester, `

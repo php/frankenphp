@@ -510,8 +510,13 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 	// set the list of allowed path segments on which to split
 	phpsrv.SplitPath = extensions
 
+	var pathList caddyhttp.MatchPath
+	for _, ext := range extensions {
+		pathList = append(pathList, "*"+ext, "*"+ext+"/*")
+	}
+
 	// prepend routes from the 'worker match *' directives
-	routes = prependWorkerRoutes(routes, h, phpsrv, fsrv, disableFsrv)
+	routes = prependWorkerRoutes(routes, h, phpsrv, fsrv, disableFsrv, pathList)
 
 	// if the index is turned off, we skip the redirect and try_files
 	if indexFile != "off" {
@@ -594,10 +599,6 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 
 	// route to actually pass requests to PHP files;
 	// match only requests that are for PHP files
-	var pathList []string
-	for _, ext := range extensions {
-		pathList = append(pathList, "*"+ext, "*"+ext+"/*")
-	}
 	phpMatcherSet := caddy.ModuleMap{
 		"path": h.JSON(pathList),
 	}
@@ -612,11 +613,21 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 
 	// create the file server route
 	if !disableFsrv {
+		// .php files outside the split extensions are neither executed nor served as source
+		phpSources := caddy.ModuleMap{"path": h.JSON(caddyhttp.MatchPath{"*.php", "*.php/*"})}
 		fileRoute := caddyhttp.Route{
-			MatcherSetsRaw: []caddy.ModuleMap{},
-			HandlersRaw:    []json.RawMessage{caddyconfig.JSONModuleObject(fsrv, "handler", "file_server", nil)},
+			MatcherSetsRaw: []caddy.ModuleMap{
+				{"not": h.JSON(caddyhttp.MatchNot{MatcherSetsRaw: []caddy.ModuleMap{phpSources}})},
+			},
+			HandlersRaw: []json.RawMessage{caddyconfig.JSONModuleObject(fsrv, "handler", "file_server", nil)},
 		}
-		routes = append(routes, fileRoute)
+		notFoundRoute := caddyhttp.Route{
+			MatcherSetsRaw: []caddy.ModuleMap{phpSources},
+			HandlersRaw: []json.RawMessage{caddyconfig.JSONModuleObject(caddyhttp.StaticResponse{
+				StatusCode: caddyhttp.WeakString(strconv.Itoa(http.StatusNotFound)),
+			}, "handler", "static_response", nil)},
+		}
+		routes = append(routes, fileRoute, notFoundRoute)
 	}
 
 	subroute := caddyhttp.Subroute{
@@ -651,7 +662,7 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 
 // workers can also match a path without being in the public directory
 // in this case we need to prepend the worker routes to the existing routes
-func prependWorkerRoutes(routes caddyhttp.RouteList, h httpcaddyfile.Helper, f FrankenPHPModule, fsrv caddy.Module, disableFsrv bool) caddyhttp.RouteList {
+func prependWorkerRoutes(routes caddyhttp.RouteList, h httpcaddyfile.Helper, f FrankenPHPModule, fsrv caddy.Module, disableFsrv bool, phpPaths caddyhttp.MatchPath) caddyhttp.RouteList {
 	var allWorkerMatches caddyhttp.MatchPath
 	for _, w := range f.Workers {
 		for _, path := range w.MatchPath {
@@ -674,7 +685,7 @@ func prependWorkerRoutes(routes caddyhttp.RouteList, h httpcaddyfile.Helper, f F
 					}),
 					"not": h.JSON(caddyhttp.MatchNot{
 						MatcherSetsRaw: []caddy.ModuleMap{
-							{"path": h.JSON(caddyhttp.MatchPath{"*.php"})},
+							{"path": h.JSON(append(caddyhttp.MatchPath{"*.php", "*.php/*"}, phpPaths...))},
 						},
 					}),
 				},
