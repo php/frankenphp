@@ -174,6 +174,10 @@ func startUpscalingThreads(maxScaledThreads int, scale chan *frankenPHPContext, 
 				continue
 			}
 
+			if fc.worker.stopped.Load() {
+				continue
+			}
+
 			// check for max worker threads here again in case requests overflowed while waiting
 			if fc.worker.isAtThreadLimit() {
 				if globalLogger.Enabled(globalCtx, slog.LevelInfo) {

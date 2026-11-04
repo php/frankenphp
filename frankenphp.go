@@ -499,6 +499,11 @@ func shutdown() {
 		fn()
 	}
 
+	// after the hooks, which may still send messages: draining threads would leave later ones waiting
+	for _, w := range workers {
+		w.stopped.Store(true)
+	}
+
 	drainWatchers()
 	drainPHPThreads()
 	unregisterServers()

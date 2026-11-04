@@ -35,6 +35,7 @@ type worker struct {
 	onThreadShutdown       func(int)
 	queuedRequests         atomic.Int32
 	server                 *Server
+	stopped                atomic.Bool
 }
 
 var (
@@ -225,7 +226,7 @@ func newWorker(o workerOpt) (*worker, error) {
 	)
 
 	if o.extensionWorkers != nil {
-		o.extensionWorkers.internalWorker = w
+		o.extensionWorkers.internalWorker.Store(w)
 	}
 
 	return w, nil
@@ -323,7 +324,14 @@ func (worker *worker) handleRequest(fc *frankenPHPContext) error {
 
 			return nil
 		case workerScaleChan <- fc:
-			// the request has triggered scaling, continue to wait for a thread
+			// the scaler may belong to the instance that replaced this worker
+			if worker.stopped.Load() {
+				worker.queuedRequests.Add(-1)
+				metrics.DequeuedWorkerRequest(worker.name)
+				metrics.StopWorkerRequest(worker.name, time.Since(fc.startedAt))
+
+				return ErrNotRunning
+			}
 		case <-fc.ctx.Done():
 			worker.queuedRequests.Add(-1)
 			metrics.DequeuedWorkerRequest(worker.name)

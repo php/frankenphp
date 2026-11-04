@@ -1,8 +1,10 @@
 package frankenphp
 
 import (
+	"context"
 	"io"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 	"unsafe"
@@ -182,4 +184,106 @@ func TestErrorIf2WorkersHaveSameName(t *testing.T) {
 
 	t.Cleanup(Shutdown)
 	require.Error(t, Init(o1, o2))
+}
+
+func TestWorkerExtensionSendMessageOnServerShutdown(t *testing.T) {
+	var (
+		ret any
+		err error
+	)
+
+	var externalWorker Workers
+	externalWorker, o := WithExtensionWorkers("extensionWorkers", "testdata/message-worker.php", 1, WithWorkerOnServerShutdown(func() {
+		ret, err = externalWorker.SendMessage(context.Background(), "Bye Workers", nil)
+	}))
+
+	require.NoError(t, Init(o))
+	Shutdown()
+
+	require.NoError(t, err)
+	assert.Equal(t, "received message: Bye Workers", ret)
+}
+
+func TestWorkerExtensionNotStarted(t *testing.T) {
+	externalWorkers, _ := WithExtensionWorkers("extensionWorkers", "testdata/message-worker.php", 1)
+
+	require.NoError(t, Init())
+	t.Cleanup(Shutdown)
+
+	w := httptest.NewRecorder()
+	err := externalWorkers.SendRequest(w, httptest.NewRequest("GET", "https://example.com/testdata/hello.php", nil))
+	require.ErrorIs(t, err, ErrNotRunning)
+	assert.Empty(t, w.Body.String())
+
+	_, err = externalWorkers.SendMessage(t.Context(), "Hello Workers", nil)
+	require.ErrorIs(t, err, ErrNotRunning)
+}
+
+// a reload that doesn't start the worker again, as Caddy's did from the second one on
+func TestWorkerExtensionNotStartedAfterReload(t *testing.T) {
+	externalWorkers, o := WithExtensionWorkers("extensionWorkers", "testdata/message-worker.php", 1)
+
+	require.NoError(t, Init(o))
+	Shutdown()
+	require.NoError(t, Init())
+	t.Cleanup(Shutdown)
+
+	w := httptest.NewRecorder()
+	err := externalWorkers.SendRequest(w, httptest.NewRequest("GET", "https://example.com/testdata/hello.php", nil))
+	require.ErrorIs(t, err, ErrNotRunning)
+	assert.Empty(t, w.Body.String())
+
+	_, err = externalWorkers.SendMessage(t.Context(), "Hello Workers", nil)
+	require.ErrorIs(t, err, ErrNotRunning)
+}
+
+func TestWorkerExtensionSendMessageDuringReload(t *testing.T) {
+	externalWorkers, o := WithExtensionWorkers("extensionWorkers", "testdata/message-worker.php", 1)
+
+	require.NoError(t, Init(o))
+	t.Cleanup(Shutdown)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		for ctx.Err() == nil {
+			msgCtx, msgCancel := context.WithTimeout(ctx, 10*time.Millisecond)
+			_, _ = externalWorkers.SendMessage(msgCtx, "Hello Workers", nil)
+			msgCancel()
+		}
+	})
+
+	for range 10 {
+		Shutdown()
+		require.NoError(t, Init(o))
+	}
+
+	cancel()
+	wg.Wait()
+}
+
+func TestWorkerExtensionRemovedWorkerIsNotScaled(t *testing.T) {
+	externalWorkers, o := WithExtensionWorkers("extensionWorkers", "testdata/message-worker.php", 1)
+
+	require.NoError(t, Init(o))
+	removed := externalWorkers.(*extensionWorkers).internalWorker.Load()
+	Shutdown()
+
+	require.NoError(t, Init(WithNumThreads(1), WithMaxThreads(2)))
+	t.Cleanup(Shutdown)
+
+	// a call that passed the running check before the reload
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	fc := newContextFromMessage("Hello Workers", nil, ctx, removed)
+	fc.startedAt = time.Now().Add(-time.Second)
+	numThreads := removed.countThreads()
+
+	require.ErrorIs(t, removed.handleRequest(fc), ErrNotRunning)
+	assert.Nil(t, fc.handlerReturn)
+	assert.Never(t, func() bool { return removed.countThreads() > numThreads }, 500*time.Millisecond, 10*time.Millisecond)
+}
+
+func TestWithWorkerNameUnknown(t *testing.T) {
+	require.ErrorIs(t, WithWorkerName("unknown")(&frankenPHPContext{}), ErrUnknownWorker)
 }
