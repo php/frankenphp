@@ -1,6 +1,11 @@
+---
+title: FrankenPHP'yi Caddyfile, php.ini ve ortam değişkenleri ile Yapılandırma
+description: FrankenPHP ve Caddy'yi Caddyfile, JSON veya ortam değişkenleri aracılığıyla yapılandırın; PHP çalışma zamanı ayarlamaları, işçi modu, dosya izleme ve modül seçenekleri dahil.
+---
+
 # Konfigürasyon
 
-FrankenPHP, Caddy'nin yanı sıra [Mercure](mercure.md) ve [Vulcain](https://vulcain.rocks) modülleri [Caddy tarafından desteklenen formatlar](https://caddyserver.com/docs/getting-started#your-first-config) kullanılarak yapılandırılabilir.
+FrankenPHP, Caddy'nin yanı sıra [Mercure](mercure.md) ve [Vulcain](https://vulcain.rocks) modülleri, [Caddy tarafından desteklenen formatlar](https://caddyserver.com/docs/getting-started#your-first-config) kullanılarak yapılandırılabilir.
 
 En yaygın format, basit, insan tarafından okunabilir bir metin formatı olan `Caddyfile`'dır. Varsayılan olarak, FrankenPHP mevcut dizinde bir `Caddyfile` arar. Özel bir yol belirtmek için `-c` veya `--config` seçeneğini kullanabilirsiniz.
 
@@ -38,10 +43,10 @@ PHP:
 ```dockerfile
 FROM dunglas/frankenphp
 
-# Production:
+# Üretim için:
 RUN cp $PHP_INI_DIR/php.ini-production $PHP_INI_DIR/php.ini
 
-# Veya development:
+# Veya geliştirme için:
 RUN cp $PHP_INI_DIR/php.ini-development $PHP_INI_DIR/php.ini
 ```
 
@@ -90,10 +95,11 @@ Ayrıca, FrankenPHP'yi [global seçenek](https://caddyserver.com/docs/caddyfile/
 ```caddyfile
 {
 	frankenphp {
-		num_threads <num_threads> # Başlatılacak PHP iş parçacığı sayısını ayarlar. Varsayılan: Mevcut CPU'ların 2 katı.
-		max_threads <num_threads> # Çalışma zamanında başlatılabilecek ek PHP iş parçacığı sayısını sınırlar. Varsayılan: num_threads. 'auto' olarak ayarlanabilir.
+		num_threads <num_threads> # Herhangi bir işçi tarafından hizmet verilmeyen istekler için başlatılacak PHP iş parçacığı sayısını ayarlar. İşçi iş parçacıkları bunun üzerine eklenir. Varsayılan: İşçilerin iş parçacıklarına sahip olduktan sonra mevcut CPU sayısının 2 katından kalan miktar, en az bir tane.
+		max_threads <num_threads> # İşçiler dahil olmak üzere aynı anda çalışabilecek PHP iş parçacığı sayısını sınırlar. Varsayılan: başlangıçta başlatılan iş parçacıkları. 'auto' olarak ayarlanabilir.
 		max_wait_time <duration> # Bir isteğin boş bir PHP iş parçacığı bekleme süresinin zaman aşımına uğramadan önceki maksimum süresini ayarlar. Varsayılan: devre dışı.
 		max_idle_time <duration> # Otomatik ölçeklenen bir iş parçacığının devre dışı bırakılmadan önce ne kadar süre boş kalabileceğini ayarlar. Varsayılan: 5s.
+		max_requests <num> # (deneysel) Bir PHP iş parçacığının yeniden başlatılmadan önce işleyeceği maksimum istek sayısını ayarlar, bellek sızıntılarını azaltmak için faydalıdır. Hem normal hem de işçi iş parçacıkları için geçerlidir. Varsayılan: 0 (sınırsız).
 		php_ini <key> <value> # Bir php.ini yönergesi ayarlar. Birden fazla yönerge ayarlamak için birden fazla kez kullanılabilir.
 		worker {
 			file <path> # Çalışan komut dosyasının yolunu ayarlar.
@@ -146,6 +152,7 @@ other.example.com {
 Genellikle ihtiyacınız olan şey `php_server` yönergesini kullanmaktır,
 ancak tam kontrole ihtiyacınız varsa, daha düşük seviyeli `php` yönergesini kullanabilirsiniz.
 `php` yönergesi, önce bir PHP dosyası olup olmadığını kontrol etmek yerine tüm girdiyi PHP'ye iletir. Daha fazla bilgiyi [performans sayfasında](performance.md#try_files) okuyun.
+Yolu `split_path` uzantılarından hiçbirini içermeyen bir istek, bir işçi tarafından işlenmediği sürece 404 alır.
 
 `php_server` yönergesini kullanmak bu yapılandırmayla aynıdır:
 
@@ -175,16 +182,18 @@ route {
 ```caddyfile
 php_server [<matcher>] {
 	root <directory> # Sitenin kök klasörünü ayarlar. Varsayılan: `root` yönergesi.
-	split_path <delim...> # URI'yi iki parçaya bölmek için alt dizgeleri ayarlar. İlk eşleşen alt dizge "yol bilgisini" yoldan ayırmak için kullanılır. İlk parça eşleşen alt dizeyle sonlandırılır ve gerçek kaynak (CGI betiği) adı olarak kabul edilir. İkinci parça betiğin kullanması için PATH_INFO olarak ayarlanacaktır. Varsayılan: `.php`
+	split_path <delim...> # URI'yi iki parçaya bölmek için alt dizgeleri ayarlar. İlk eşleşen alt dizge bir yol segmentini bitiren "yol bilgisini" yoldan ayırmak için kullanılır. İlk parça eşleşen alt dizeyle sonlandırılır ve gerçek kaynak (CGI betiği) adı olarak kabul edilir. İkinci parça betiğin kullanması için PATH_INFO olarak ayarlanacaktır. Varsayılan: `.php`
 	resolve_root_symlink false # Varsa, sembolik bir bağlantıyı değerlendirerek `root` dizininin gerçek değerine çözümlenmesini devre dışı bırakır (varsayılan olarak etkindir).
+	name <name> # Bu sunucu için, işçileri, metrikleri ve günlükleri ilişkilendirmek için kullanılan adı ayarlar. Varsayılan: kapsayan rotanın ilk ana bilgisayar eşleştiricisi veya ilk dinleyici adresi.
 	env <key> <value> # Ek bir ortam değişkenini verilen değere ayarlar. Birden fazla ortam değişkeni için birden fazla kez belirtilebilir.
 	file_server off # Yerleşik file_server yönergesini devre dışı bırakır.
-	worker { # Bu sunucuya özgü bir worker oluşturur. Birden fazla worker için birden fazla kez belirtilebilir.
-		file <path> # Worker betiğinin yolunu ayarlar, php_server köküne göre göreceli olabilir
+	request_body_timeout <duration> # İstek gövdesi okumalarında bir boşta kalma zaman aşımı ayarlar: takılan (yavaş POST) bir istemci kesilirken, herhangi bir boyuttaki sürekli bir yükleme başarılı olur. Varsayılan: 60s. Devre dışı bırakmak için 0 olarak ayarlayın.
+	worker { # Bu sunucuya özgü bir işçi oluşturur. Birden fazla işçi için birden fazla kez belirtilebilir.
+		file <path> # İşçi betiğinin yolunu ayarlar, php_server köküne göre göreceli olabilir
 		num <num> # Başlatılacak PHP iş parçacığı sayısını ayarlar, varsayılan değer mevcut CPU'ların 2 katıdır.
-		name <name> # Worker için günlüklerde ve metriklerde kullanılan bir ad ayarlar. Varsayılan: worker dosyasının mutlak yolu. Bir php_server bloğunda tanımlandığında her zaman m# ile başlar.
+		name <name> # İşçi için günlüklerde ve metriklerde kullanılan adı ayarlar. Varsayılan: işçi dosyasının mutlak yolu. Ad zaten kullanımda ise sonuna bir sayı eklenir.
 		watch <path> # Dosya değişikliklerini izlemek için yolu ayarlar. Birden fazla yol için birden fazla kez belirtilebilir.
-		env <key> <value> # Ek bir ortam değişkenini verilen değere ayarlar. Birden fazla ortam değişkeni için birden fazla kez belirtilebilir. Bu worker için ortam değişkenleri ayrıca php_server üst öğesinden devralınır, ancak burada geçersiz kılınabilir.
+		env <key> <value> # Ek bir ortam değişkenini verilen değere ayarlar. Birden fazla ortam değişkeni için birden fazla kez belirtilebilir. Bu işçi için ortam değişkenleri ayrıca php_server üst öğesinden devralınır, ancak burada geçersiz kılınabilir.
 		match <path> # İşçiyi bir yol desenine eşleştirir. try_files'ı geçersiz kılar ve yalnızca php_server yönergesinde kullanılabilir.
 	}
 	worker <other_file> <num> # Global frankenphp bloğundaki gibi kısa formu da kullanabilirsiniz.
@@ -252,6 +261,20 @@ Geleneksel PHP uygulamalarında, betikler her zaman public dizininde bulunur. Bu
 }
 ```
 
+## İstek sayısına göre iş parçacıklarını yeniden başlatma (deneysel)
+
+FrankenPHP, PHP iş parçacıklarını belirli bir sayıda isteği işledikten sonra otomatik olarak yeniden başlatabilir. Bir iş parçacığı sınıra ulaştığında, tüm belleği ve durumu temizleyerek tamamen yeniden başlatılır. Yeniden başlatma sırasında diğer iş parçacıkları isteklere hizmet vermeye devam eder.
+
+Zamanla bellek büyümesi fark ederseniz, ideal çözüm sızıntıyı ilgili uzantı veya kütüphane bakımcısına bildirmektir. Ancak çözüm, kontrol edemediğiniz üçüncü bir tarafa bağlı olduğunda, `max_requests` üretim için pratik ve umarız geçici bir çözüm sunar:
+
+```caddyfile
+{
+	frankenphp {
+		max_requests 500
+	}
+}
+```
+
 ## Ortam değişkenleri
 
 Aşağıdaki ortam değişkenleri `Caddyfile` içinde değişiklik yapmadan Caddy yönergelerini entegre etmek için kullanılabilir:
@@ -294,7 +317,7 @@ Varsayılan olarak, FrankenPHP tüm ana bilgisayar adları için (localhost dahi
 
 Alternatif olarak, [Caddy belgelerinde](https://caddyserver.com/docs/automatic-https#activation) açıklanan diğer tüm yöntemleri kullanabilirsiniz.
 
-Eğer `localhost` ana bilgisayar adı yerine `127.0.0.1` IP adresiyle HTTPS kullanmak isterseniz, lütfen [bilinen sorunlar](known-issues.md#using-https127001-with-docker) bölümünü okuyun.
+Eğer `localhost` ana bilgisayar adı yerine `127.0.0.1` IP adresiyle HTTPS kullanmak isterseniz, lütfen [bilinen sorunlar](bilinen-sorunlar.md#using-https127001-with-docker) bölümünü okuyun.
 
 ### Tam çift yönlü (HTTP/1)
 
@@ -336,7 +359,7 @@ docker run -v $PWD:/app/public \
 
 ## Shell completion
 
-FrankenPHP, Bash, Zsh, Fish ve PowerShell için yerleşik kabuk tamamlama desteği sağlar. Bu, tüm komutlar ( `php-server`, `php-cli` ve `extension-init` gibi özel komutlar dahil) ve bunların bayrakları için otomatik tamamlama sağlar.
+FrankenPHP, Bash, Zsh, Fish ve PowerShell için yerleşik kabuk tamamlama desteği sağlar. Bu, tüm komutlar ( `php-server`, `php-cli` ve `extension-init` gibi özelleştirilmiş komutlar dahil) ve bunların bayrakları için otomatik tamamlama sağlar.
 
 ### Bash
 
@@ -346,7 +369,7 @@ Geçerli kabuk oturumunuzda tamamlamaları yüklemek için:
 source <(frankenphp completion bash)
 ```
 
-Her yeni oturum için tamamlamaları yüklemek için şunu çalıştırın:
+Her yeni oturum için tamamlamaları yüklemek üzere:
 
 **Linux:**
 
@@ -368,7 +391,7 @@ Ortamınızda kabuk tamamlama zaten etkin değilse, bunu etkinleştirmeniz gerek
 echo "autoload -U compinit; compinit" >> ~/.zshrc
 ```
 
-Her oturum için tamamlamaları yüklemek için, bir kez çalıştırın:
+Her oturum için tamamlamaları yüklemek üzere, bir kez çalıştırın:
 
 ```console
 frankenphp completion zsh > "${fpath[1]}/_frankenphp"
@@ -384,7 +407,7 @@ Geçerli kabuk oturumunuzda tamamlamaları yüklemek için:
 frankenphp completion fish | source
 ```
 
-Her yeni oturum için tamamlamaları yüklemek için, bir kez çalıştırın:
+Her yeni oturum için tamamlamaları yüklemek üzere, bir kez çalıştırın:
 
 ```console
 frankenphp completion fish > ~/.config/fish/completions/frankenphp.fish
@@ -398,13 +421,11 @@ Geçerli kabuk oturumunuzda tamamlamaları yüklemek için:
 frankenphp completion powershell | Out-String | Invoke-Expression
 ```
 
-Her yeni oturum için tamamlamaları yüklemek için, bir kez çalıştırın:
+Her yeni oturum için tamamlamaları yüklemek üzere, bir kez çalıştırın:
 
 ```powershell
 frankenphp completion powershell | Out-File -FilePath (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")
 Add-Content -Path $PROFILE -Value '. (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")'
 ```
-
-Bu kurulumun etkili olması için yeni bir kabuk başlatmanız gerekecektir.
 
 Bu kurulumun etkili olması için yeni bir kabuk başlatmanız gerekecektir.

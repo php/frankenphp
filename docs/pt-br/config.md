@@ -1,3 +1,8 @@
+---
+title: Configurando FrankenPHP com Caddyfile, php.ini e variáveis de ambiente
+description: Configure o FrankenPHP e o Caddy via Caddyfile, JSON ou variáveis de ambiente, incluindo ajuste de tempo de execução do PHP, modo worker, monitoramento de arquivos e opções de módulo.
+---
+
 # Configuração
 
 FrankenPHP, Caddy, bem como os módulos [Mercure](mercure.md) e [Vulcain](https://vulcain.rocks), podem ser configurados usando [os formatos suportados pelo Caddy](https://caddyserver.com/docs/getting-started#your-first-config).
@@ -93,8 +98,8 @@ Você também pode configurar explicitamente o FrankenPHP usando a [opção glob
 ```caddyfile
 {
 	frankenphp {
-		num_threads <num_threads> # Define o número de threads PHP a serem iniciadas. Padrão: 2x o número de CPUs disponíveis.
-		max_threads <num_threads> # Limita o número de threads PHP adicionais que podem ser iniciadas em tempo de execução. Padrão: num_threads. Pode ser definido como 'auto'.
+		num_threads <num_threads> # Define o número de threads PHP a serem iniciadas para as requisições que nenhum worker atende, com as threads dos workers sendo adicionadas a isso. Padrão: o que resta de 2x o número de CPUs disponíveis, depois que os workers tiverem suas threads, no mínimo uma.
+		max_threads <num_threads> # Limita quantas threads PHP podem ser executadas simultaneamente, incluindo as dos workers. Padrão: as threads iniciadas na inicialização. Pode ser definido como 'auto'.
 		max_wait_time <duration> # Define o tempo máximo que uma requisição pode esperar por uma thread PHP livre antes de atingir o tempo limite. Padrão: desabilitado.
 		max_idle_time <duration> # Define o tempo máximo que uma thread autoescalada pode ficar ociosa antes de ser desativada. Padrão: 5s.
 		max_requests <num> # (experimental) Define o número máximo de requisições que uma thread PHP irá processar antes de ser reiniciada, útil para mitigar vazamentos de memória. Aplica-se a threads regulares e de worker. Padrão: 0 (ilimitado).
@@ -150,7 +155,8 @@ other.example.com {
 Usar a diretiva `php_server` é geralmente o que você precisa,
 mas se precisar de controle total, você pode usar a diretiva `php` de mais baixo nível.
 A diretiva `php` passa toda a entrada para o PHP, em vez de primeiro verificar
-se é um arquivo PHP ou não. Leia mais sobre isso na [página de desempenho](performance.md#try_files).
+se é um arquivo PHP ou não. Leia mais sobre isso na [página de desempenho](desempenho.md#try_files).
+Uma requisição cujo caminho não contém nenhuma das extensões `split_path` resulta em um 404, a menos que um worker a manipule.
 
 Usar a diretiva `php_server` é equivalente a esta configuração:
 
@@ -180,14 +186,16 @@ As diretivas `php_server` e `php` têm as seguintes opções:
 ```caddyfile
 php_server [<matcher>] {
 	root <directory> # Define a pasta raiz para o site. Padrão: diretiva `root`.
-	split_path <delim...> # Define as substrings para dividir o URI em duas partes. A primeira substring correspondente será usada para separar as "informações de caminho" do caminho. A primeira parte é sufixada com a substring correspondente e será assumida como o nome real do recurso (script CGI). A segunda parte será definida como PATH_INFO para o script usar. Padrão: `.php`
+	split_path <delim...> # Define as substrings para dividir o URI em duas partes. A primeira substring correspondente que termina um segmento de caminho será usada para separar as "informações de caminho" do caminho. A primeira parte é sufixada com a substring correspondente e será assumida como o nome real do recurso (script CGI). A segunda parte será definida como PATH_INFO para o script usar. Padrão: `.php`
 	resolve_root_symlink false # Desabilita a resolução do diretório `root` para seu valor real avaliando um link simbólico, se houver (habilitado por padrão).
+	name <name> # Define o nome para este servidor, usado para atribuir workers, métricas e logs. Padrão: o primeiro host matcher da rota circundante, ou o primeiro endereço do listener.
 	env <key> <value> # Define uma variável de ambiente extra para o valor fornecido. Pode ser especificada mais de uma vez para múltiplas variáveis de ambiente.
 	file_server off # Desabilita a diretiva integrada file_server.
+	request_body_timeout <duration> # Define um tempo limite de inatividade nas leituras do corpo da requisição: um cliente parado (POST lento) é desconectado enquanto um upload constante de qualquer tamanho é bem-sucedido. Padrão: 60s. Defina como 0 para desativar.
 	worker { # Cria um worker específico para este servidor. Pode ser especificada mais de uma vez para múltiplos workers.
 		file <path> # Define o caminho para o script do worker, pode ser relativo à raiz do php_server
-		num <num> # Define o número de threads PHP a serem iniciadas, o padrão é 2x o número de CPUs disponíveis.
-		name <name> # Define o nome para o worker, usado em logs e métricas. Padrão: caminho absoluto do arquivo do worker. Sempre começa com m# quando definido em um bloco php_server.
+		num <num> # Define o número de threads PHP a serem iniciadas, o padrão é 2x o número de CPUs disponíveis
+		name <name> # Define o nome para o worker, usado em logs e métricas. Padrão: caminho absoluto do arquivo do worker. Sufixado com um número se o nome já estiver em uso.
 		watch <path> # Define o caminho para monitorar alterações em arquivos. Pode ser especificada mais de uma vez para múltiplos caminhos.
 		env <key> <value> # Define uma variável de ambiente extra para o valor fornecido. Pode ser especificada mais de uma vez para múltiplas variáveis de ambiente. As variáveis de ambiente para este worker também são herdadas do pai do php_server, mas podem ser sobrescritas aqui.
 		match <path> # Corresponde o worker a um padrão de caminho. Sobrescreve try_files e só pode ser usada na diretiva php_server.
@@ -328,7 +336,7 @@ Se você quiser desabilitar o HTTPS (por exemplo, em um ambiente de desenvolvime
 
 Alternativamente, você pode usar todos os outros métodos descritos na [documentação do Caddy](https://caddyserver.com/docs/automatic-https#activation).
 
-Se você quiser usar HTTPS com o endereço IP `127.0.0.1` em vez do nome de host `localhost`, por favor, leia a seção de [problemas conhecidos](known-issues.md#using-https127001-with-docker).
+Se você quiser usar HTTPS com o endereço IP `127.0.0.1` em vez do nome de host `localhost`, por favor, leia a seção de [problemas conhecidos](known-issues.md#usando-https127001-com-docker).
 
 ### Full duplex (HTTP/1)
 

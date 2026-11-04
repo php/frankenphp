@@ -1,3 +1,8 @@
+---
+title: Configuration de FrankenPHP avec Caddyfile, php.ini et variables d'environnement
+description: Configurez FrankenPHP et Caddy via Caddyfile, JSON, ou des variables d'environnement, y compris le réglage du runtime PHP, le mode worker, la surveillance de fichiers et les options de module.
+---
+
 # Configuration
 
 FrankenPHP, Caddy ainsi que les modules [Mercure](mercure.md) et [Vulcain](https://vulcain.rocks) peuvent être configurés à l'aide [des formats pris en charge par Caddy](https://caddyserver.com/docs/getting-started#your-first-config).
@@ -92,8 +97,8 @@ Vous pouvez également configurer explicitement FrankenPHP en utilisant l'[optio
 ```caddyfile
 {
 	frankenphp {
-		num_threads <num_threads> # Définit le nombre de threads PHP à démarrer. Par défaut : 2x le nombre de CPUs disponibles.
-		max_threads <num_threads> # Limite le nombre de threads PHP supplémentaires qui peuvent être démarrés au moment de l'exécution. Valeur par défaut : num_threads. Peut être mis à 'auto'.
+		num_threads <num_threads> # Définit le nombre de threads PHP à démarrer pour les requêtes non servies par un worker, les threads worker s'ajoutant à cela. Par défaut : ce qu'il reste de 2x le nombre de CPUs disponibles une fois que les workers ont leurs threads, un au minimum.
+		max_threads <num_threads> # Limite le nombre de threads PHP pouvant s'exécuter simultanément, workers inclus. Par défaut : les threads démarrés au démarrage. Peut être défini à 'auto'.
 		max_wait_time <duration> # Définit le temps maximum pendant lequel une requête peut attendre un thread PHP libre avant d'être interrompue. Valeur par défaut : désactivé.
 		max_idle_time <duration> # Définit le temps maximum pendant lequel un thread auto-dimensionné peut être inactif avant d'être désactivé. Par défaut : 5s.
 		max_requests <num> # (expérimental) Définit le nombre maximum de requêtes qu'un thread PHP traitera avant d'être redémarré, utile pour atténuer les fuites de mémoire. S'applique aux threads réguliers et aux threads worker. Par défaut : 0 (illimité).
@@ -150,6 +155,7 @@ L'utilisation de la directive `php_server` est généralement ce dont vous avez 
 mais si vous avez besoin d'un contrôle total, vous pouvez utiliser la directive de niveau inférieur `php`.
 La directive `php` transmet toutes les entrées à PHP, au lieu de vérifier d'abord si
 c'est un fichier PHP ou pas. En savoir plus à ce sujet dans la [documentation liée aux performances](performance.md#try_files).
+Une requête dont le chemin ne contient aucune des extensions `split_path` renvoie une erreur 404, sauf si un worker la gère.
 
 Utiliser la directive `php_server` est équivalent à cette configuration :
 
@@ -179,14 +185,16 @@ Les directives `php_server` et `php` disposent des options suivantes :
 ```caddyfile
 php_server [<matcher>] {
 	root <directory> # Définit le dossier racine du site. Par défaut : la directive `root`.
-	split_path <delim...> # Définit les sous-chaînes pour diviser l'URI en deux parties. La première sous-chaîne correspondante sera utilisée pour séparer le "path info" du chemin. La première partie est suffixée avec la sous-chaîne correspondante et sera considérée comme le nom réel de la ressource (script CGI). La seconde partie sera définie comme PATH_INFO pour utilisation par le script. Par défaut : `.php`
+	split_path <delim...> # Définit les sous-chaînes pour diviser l'URI en deux parties. La première sous-chaîne correspondante qui termine un segment de chemin sera utilisée pour diviser le "path info" du chemin. La première partie est suffixée avec la sous-chaîne correspondante et sera considérée comme le nom réel de la ressource (script CGI). La seconde partie sera définie comme PATH_INFO pour utilisation par le script. Par défaut : `.php`
 	resolve_root_symlink false # Désactive la résolution du répertoire `root` vers sa valeur réelle en évaluant un lien symbolique, s'il existe (activé par défaut).
+	name <name> # Définit le nom de ce serveur, utilisé pour attribuer les workers, les métriques et les logs. Par défaut : le premier matcher d'hôte de la route englobante, ou la première adresse d'écoute.
 	env <key> <value> # Définit une variable d'environnement supplémentaire avec la valeur donnée. Peut être spécifié plusieurs fois pour plusieurs variables d'environnement.
 	file_server off # Désactive la directive file_server intégrée.
+	request_body_timeout <duration> # Définit un délai d'inactivité pour la lecture du corps de la requête : un client bloqué (POST lent) est coupé tandis qu'un téléversement stable de n'importe quelle taille réussit. Par défaut : 60s. Mettez à 0 pour désactiver.
 	worker { # Crée un worker spécifique à ce serveur. Peut être spécifié plusieurs fois pour plusieurs workers.
 		file <path> # Définit le chemin vers le script worker, peut être relatif à la racine du php_server
 		num <num> # Définit le nombre de threads PHP à démarrer, par défaut 2x le nombre de CPUs disponibles
-		name <name> # Définit le nom du worker, utilisé dans les journaux et les métriques. Par défaut : chemin absolu du fichier du worker. Commence toujours par m# lorsqu'il est défini dans un bloc php_server.
+		name <name> # Définit le nom du worker, utilisé dans les logs et les métriques. Par défaut : chemin absolu du fichier du worker. Suffixé par un nombre si le nom est déjà utilisé.
 		watch <path> # Définit le chemin d'accès à surveiller pour les modifications de fichiers. Peut être spécifié plusieurs fois pour plusieurs chemins.
 		env <key> <value> # Définit une variable d'environnement supplémentaire avec la valeur donnée. Peut être spécifié plusieurs fois pour plusieurs variables d'environnement. Les variables d'environnement pour ce worker sont également héritées du parent php_server, mais peuvent être écrasées ici.
 		match <path> # fait correspondre le worker à un modèle de chemin. Écrase try_files et ne peut être utilisé que dans la directive php_server.
@@ -434,7 +442,5 @@ Pour charger l'autocomplétion à chaque nouvelle session, exécutez une fois :
 frankenphp completion powershell | Out-File -FilePath (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")
 Add-Content -Path $PROFILE -Value '. (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")'
 ```
-
-Vous devrez démarrer un nouveau shell pour que cette configuration prenne effet.
 
 Vous devrez démarrer un nouveau shell pour que cette configuration prenne effet.

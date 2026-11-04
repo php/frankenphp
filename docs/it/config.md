@@ -1,9 +1,14 @@
+---
+title: Configurazione di FrankenPHP con Caddyfile, php.ini e variabili d'ambiente
+description: Configura FrankenPHP e Caddy tramite Caddyfile, JSON o variabili d'ambiente, inclusa la configurazione del runtime PHP, la modalità worker, il monitoraggio dei file e le opzioni dei moduli.
+---
+
 # Configurazione
 
 FrankenPHP, Caddy e i moduli [Mercure](mercure.md) e [Vulcain](https://vulcain.rocks) possono essere configurati utilizzando [i formati supportati da Caddy](https://caddyserver.com/docs/getting-started#your-first-config).
 
 Il formato più comune è `Caddyfile`, che è un formato di testo semplice e leggibile.
-Per impostazione predefinita, FrankenPHP cercherà un `Caddyfile` nella cartella corrente.
+Per impostazione predefinita, FrankenPHP cercherà un `Caddyfile` nella directory corrente.
 È possibile specificare un percorso personalizzato con l'opzione `-c` o `--config`.
 
 Di seguito è mostrato un `Caddyfile` minimo per servire un'applicazione PHP:
@@ -12,7 +17,7 @@ Di seguito è mostrato un `Caddyfile` minimo per servire un'applicazione PHP:
 # Il nome host a cui rispondere
 localhost
 
-# Facoltativo, il percorso da cui servire i file, altrimenti sarà usato il percorso attuale
+# Facoltativo, la directory da cui servire i file, altrimenti sarà usata la directory corrente
 #root public/
 php_server
 ```
@@ -64,18 +69,18 @@ PHP:
 
 FrankenPHP:
 
-- Nella cartella di lavoro corrente: `Caddyfile`
+- Nella directory di lavoro corrente: `Caddyfile`
 
 PHP:
 
-- `php.ini`: la cartella in cui viene eseguito `frankenphp run` o `frankenphp php-server`, quindi `/etc/frankenphp/php.ini`
+- `php.ini`: la directory in cui viene eseguito `frankenphp run` o `frankenphp php-server`, quindi `/etc/frankenphp/php.ini`
 - file di configurazione aggiuntivi: `/etc/frankenphp/php.d/*.ini`
 - Estensioni PHP: non possono essere caricate, raggruppatele nel binario stesso
 - copia uno dei `php.ini-production` o `php.ini-development` forniti [nei sorgenti PHP](https://github.com/php/php-src/).
 
 ## Configurazione Caddyfile
 
-`php_server` o `php` [direttive HTTP](https://caddyserver.com/docs/caddyfile/concepts#directives) possono essere utilizzate all'interno dei blocchi del sito per servire l'app PHP.
+Le [direttive HTTP](https://caddyserver.com/docs/caddyfile/concepts#directives) `php_server` o `php` possono essere utilizzate all'interno dei blocchi del sito per servire la tua app PHP.
 
 Esempio minimo:
 
@@ -83,7 +88,7 @@ Esempio minimo:
 localhost {
 	# Abilita la compressione (opzionale)
 	encode zstd br gzip
-	# Esegue i file PHP nella directory corrente e serve le risorse statiche
+	# Esegue i file PHP nella directory corrente e serve gli asset
 	php_server
 }
 ```
@@ -93,8 +98,8 @@ Puoi anche configurare esplicitamente FrankenPHP utilizzando l'[opzione globale]
 ```caddyfile
 {
 	frankenphp {
-		num_threads <num_threads> # Imposta il numero di thread PHP da avviare. Predefinito: 2x il numero di CPU disponibili.
-		max_threads <num_threads> # Limita il numero di thread PHP aggiuntivi avviabili a runtime. Predefinito: num_threads. Può essere impostato su 'auto'.
+		num_threads <num_threads> # Imposta il numero di thread PHP da avviare per le richieste non servite da un worker, i thread worker si aggiungono a questi. Predefinito: ciò che resta di 2x il numero di CPU disponibili una volta che i worker hanno i loro thread, almeno uno.
+		max_threads <num_threads> # Limita il numero massimo di thread PHP che possono essere eseguiti contemporaneamente, inclusi i worker. Predefinito: i thread avviati all'avvio. Può essere impostato su 'auto'.
 		max_wait_time <duration> # Imposta il tempo massimo di attesa di una richiesta per un thread PHP libero prima del timeout. Predefinito: disabilitato.
 		max_idle_time <duration> # Imposta il tempo massimo di inattività di un thread autoscalato prima della disattivazione. Predefinito: 5s.
 		max_requests <num> # (sperimentale) Imposta il numero massimo di richieste gestite da un thread PHP prima del riavvio, utile per mitigare memory leak. Si applica ai thread regolari e worker. Predefinito: 0 (illimitato).
@@ -102,8 +107,8 @@ Puoi anche configurare esplicitamente FrankenPHP utilizzando l'[opzione globale]
 		worker {
 			file <path> # Imposta il percorso dello script worker.
 			num <num> # Imposta il numero di thread PHP da avviare, predefinito: 2x il numero di CPU disponibili.
-			env <key> <value> # Imposta una variabile di ambiente aggiuntiva al valore specificato. Può essere indicata più volte.
-			watch <path> # Imposta il percorso da osservare per le modifiche ai file. Può essere indicato più volte.
+			env <key> <value> # Imposta una variabile di ambiente aggiuntiva al valore specificato. Può essere specificata più volte per più variabili d'ambiente.
+			watch <path> # Imposta il percorso da osservare per le modifiche ai file. Può essere specificato più volte per più percorsi.
 			name <name> # Imposta il nome del worker, usato nei log e nelle metriche. Predefinito: percorso assoluto del file worker.
 			max_consecutive_failures <num> # Imposta il numero massimo di errori consecutivi prima che il worker sia considerato non sano; -1 significa che il worker verrà sempre riavviato. Predefinito: 6.
 		}
@@ -131,7 +136,7 @@ Puoi anche definire più worker se servi più app sullo stesso server:
 app.example.com {
     root /path/to/app/public
 	php_server {
-		root /path/to/app/public # consente una cache migliore
+		root /path/to/app/public # per un migliore caching
 		worker index.php <num>
 	}
 }
@@ -151,12 +156,13 @@ L'uso della direttiva `php_server` è generalmente ciò che serve,
 ma se si ha bisogno del controllo completo, si può utilizzare la direttiva `php` di livello inferiore.
 La direttiva `php` passa tutti gli input a PHP, invece di verificare prima se
 sia un file PHP o meno. Per ulteriori informazioni, consulta la [pagina sulle prestazioni](performance.md#try_files).
+Una richiesta il cui percorso non contiene alcuna delle estensioni `split_path` riceve un 404, a meno che non sia gestita da un worker.
 
 L'utilizzo della direttiva `php_server` equivale a questa configurazione:
 
 ```caddyfile
 route {
-	# Aggiunge lo slash finale alle richieste verso cartelle
+	# Aggiunge lo slash finale alle richieste verso directory
 	@canonicalPath {
 		file {path}/index.php
 		not path */
@@ -179,17 +185,19 @@ Le direttive `php_server` e `php` hanno le seguenti opzioni:
 
 ```caddyfile
 php_server [<matcher>] {
-	root <directory> # Imposta la cartella root del sito. Predefinito: direttiva `root`.
-	split_path <delim...> # Imposta le sottostringhe per dividere l'URI in due parti. La prima sottostringa corrispondente viene usata per separare la "path info" dal percorso. La prima parte viene suffissata con la sottostringa corrispondente ed è considerata il nome effettivo della risorsa (script CGI). La seconda parte viene impostata in PATH_INFO per lo script. Predefinito: `.php`
+	root <directory> # Imposta la directory root del sito. Predefinito: direttiva `root`.
+	split_path <delim...> # Imposta le sottostringhe per dividere l'URI in due parti. La prima sottostringa corrispondente che termina un segmento di percorso verrà utilizzata per separare le "path info" dal percorso. La prima parte viene suffissata con la sottostringa corrispondente ed è considerata il nome effettivo della risorsa (script CGI). La seconda parte verrà impostata in PATH_INFO per l'utilizzo da parte dello script. Predefinito: `.php`
 	resolve_root_symlink false # Disabilita la risoluzione della directory `root` al suo valore reale tramite link simbolico, se presente (abilitato per impostazione predefinita).
-	env <key> <value> # Imposta una variabile di ambiente aggiuntiva al valore specificato. Può essere indicata più volte.
+	name <name> # Imposta il nome per questo server, usato per attribuire worker, metriche e log. Predefinito: il primo matcher host del percorso che lo racchiude, o il primo indirizzo del listener.
+	env <key> <value> # Imposta una variabile di ambiente aggiuntiva al valore specificato. Può essere specificata più volte per più variabili d'ambiente.
 	file_server off # Disabilita la direttiva file_server integrata.
-	worker { # Crea un worker specifico per questo server. Può essere indicato più volte per più worker.
+	request_body_timeout <duration> # Imposta un timeout di inattività sulle letture del corpo della richiesta: un client bloccato (slow POST) viene interrotto mentre un upload costante di qualsiasi dimensione ha successo. Predefinito: 60s. Impostare su 0 per disabilitare.
+	worker { # Crea un worker specifico per questo server. Può essere specificato più volte per più worker.
 		file <path> # Imposta il percorso dello script worker; può essere relativo alla root di php_server.
 		num <num> # Imposta il numero di thread PHP da avviare, predefinito: 2x il numero di CPU disponibili.
-		name <name> # Imposta il nome del worker, usato nei log e nelle metriche. Predefinito: percorso assoluto del file worker. Quando è definito in un blocco php_server inizia sempre con m#.
-		watch <path> # Imposta il percorso da osservare per le modifiche ai file. Può essere indicato più volte.
-		env <key> <value> # Imposta una variabile di ambiente aggiuntiva al valore specificato. Può essere indicata più volte. Le variabili per questo worker sono ereditate anche dal parent php_server, ma possono essere sovrascritte qui.
+		name <name> # Imposta il nome per il worker, usato nei log e nelle metriche. Predefinito: percorso assoluto del file worker. Viene aggiunto un suffisso numerico se il nome è già in uso.
+		watch <path> # Imposta il percorso da osservare per le modifiche ai file. Può essere specificato più volte per più percorsi.
+		env <key> <value> # Imposta una variabile di ambiente aggiuntiva al valore specificato. Può essere specificata più volte per più variabili d'ambiente. Le variabili d'ambiente per questo worker sono ereditate anche dal parent php_server, ma possono essere sovrascritte qui.
 		match <path> # Associa il worker a un pattern di percorso. Sovrascrive try_files e può essere usato solo nella direttiva php_server.
 	}
 	worker <other_file> <num> # È possibile usare anche la forma breve, come nel blocco globale frankenphp.
@@ -217,27 +225,27 @@ Ciò è utile per gli ambienti di sviluppo.
 
 Questa funzione viene spesso utilizzata in combinazione con [ricaricamento a caldo](hot-reload.md).
 
-Se la cartella `watch` non è specificata, tornerà a `./**/*.{env,php,twig,yaml,yml}`,
-che controlla tutti i file `.env`, `.php`, `.twig`, `.yaml` e `.yml` nella cartella e nelle sottocartelle
-dove è stato avviato il processo FrankenPHP. Puoi invece anche specificare una o più cartelle tramite a
-[modello nome file shell](https://pkg.go.dev/path/filepath#Match):
+Se la directory `watch` non è specificata, tornerà a `./**/*.{env,php,twig,yaml,yml}`,
+che controlla tutti i file `.env`, `.php`, `.twig`, `.yaml` e `.yml` nella directory e nelle sottodirectory
+dove è stato avviato il processo FrankenPHP. Puoi invece anche specificare una o più directory tramite un
+[pattern di nomi di file della shell](https://pkg.go.dev/path/filepath#Match):
 
 ```caddyfile
 {
 	frankenphp {
 		worker {
 			file  /path/to/app/public/worker.php
-			watch /path/to/app # osserva tutti i file in tutte le sottocartelle di /path/to/app
+			watch /path/to/app # osserva tutti i file in tutte le sottodirectory di /path/to/app
 			watch /path/to/app/*.php # osserva i file che terminano con .php in /path/to/app
-			watch /path/to/app/**/*.php # osserva i file PHP in /path/to/app e nelle sottocartelle
-			watch /path/to/app/**/*.{php,twig} # osserva i file PHP e Twig in /path/to/app e nelle sottocartelle
+			watch /path/to/app/**/*.php # osserva i file PHP in /path/to/app e nelle sottodirectory
+			watch /path/to/app/**/*.{php,twig} # osserva i file PHP e Twig in /path/to/app e nelle sottodirectory
 		}
 	}
 }
 ```
 
-- Il modello `**` indica la visione ricorsiva
-- Le cartelle possono anche essere relative (a dove viene avviato il processo FrankenPHP)
+- Il pattern `**` indica il monitoraggio ricorsivo
+- Le directory possono anche essere relative (a dove viene avviato il processo FrankenPHP)
 - Se sono definiti più worker, tutti verranno riavviati quando un file cambia
 - Fare attenzione a guardare i file creati in fase di esecuzione (come i log) poiché potrebbero causare riavvii indesiderati del worker.
 
@@ -245,13 +253,13 @@ Il file watcher è basato su [e-dant/watcher](https://github.com/e-dant/watcher)
 
 ## Abbinamento del worker a un percorso
 
-Nelle applicazioni PHP tradizionali, gli script vengono sempre inseriti nella cartella pubblica.
+Nelle applicazioni PHP tradizionali, gli script vengono sempre inseriti nella directory pubblica.
 Questo vale anche per i worker, che vengono trattati come qualsiasi altro script PHP.
-Se si desidera invece inserire lo script worker all'esterno della cartella pubblica, lo si può fare tramite la direttiva `match`.
+Se si desidera invece inserire lo script worker all'esterno della directory pubblica, lo si può fare tramite la direttiva `match`.
 
 La direttiva `match` è un'alternativa ottimizzata a `try_files` disponibile solo all'interno di `php_server` e `php`.
-L'esempio seguente servirà sempre un file nella cartella pubblica, se presente,
-altrimenti inoltrerà la richiesta al worker che corrisponde al modello di percorso.
+L'esempio seguente servirà sempre un file nella directory pubblica, se presente,
+altrimenti inoltrerà la richiesta al worker che corrisponde al pattern di percorso.
 
 ```caddyfile
 {
@@ -270,7 +278,7 @@ altrimenti inoltrerà la richiesta al worker che corrisponde al modello di perco
 
 FrankenPHP può riavviare automaticamente i thread PHP dopo aver gestito un determinato numero di richieste.
 Quando un thread raggiunge il limite, viene riavviato completamente,
-ripulire tutta la memoria e lo stato. Altri thread continuano a servire le richieste durante il riavvio.
+ripulendo tutta la memoria e lo stato. Altri thread continuano a servire le richieste durante il riavvio.
 
 Se noti che la memoria aumenta nel tempo, la soluzione ideale è segnalare la perdita
 all'estensione responsabile o al manutentore della libreria.
@@ -290,8 +298,8 @@ Ma quando la soluzione dipende da una terza parte che non controlli,
 Le seguenti variabili di ambiente possono essere utilizzate per inserire le direttive Caddy in `Caddyfile` senza modificarlo:
 
 - `SERVER_NAME`: modifica [gli indirizzi su cui ascoltare](https://caddyserver.com/docs/caddyfile/concepts#addresses), i nomi host forniti verranno utilizzati anche per il certificato TLS generato
-- `SERVER_ROOT`: cambia la cartella principale del sito, il valore predefinito è `public/`
-- `CADDY_GLOBAL_OPTIONS`: inserire [opzioni globali](https://caddyserver.com/docs/caddyfile/options)
+- `SERVER_ROOT`: cambia la directory principale del sito, il valore predefinito è `public/`
+- `CADDY_GLOBAL_OPTIONS`: inietta [opzioni globali](https://caddyserver.com/docs/caddyfile/options)
 - `FRANKENPHP_CONFIG`: inietta la configurazione nella direttiva `frankenphp`
 
 Per quanto riguarda le SAPI FPM e CLI, le variabili di ambiente sono esposte per impostazione predefinita nel superglobale `$_SERVER`.
@@ -302,7 +310,7 @@ Il valore `S` della [direttiva PHP `variables_order`](https://www.php.net/manual
 
 Per caricare [file di configurazione PHP aggiuntivi](https://www.php.net/manual/configuration.file.php#configuration.file.scan),
 è possibile utilizzare la variabile di ambiente `PHP_INI_SCAN_DIR`.
-Quando impostato, PHP caricherà tutti i file con estensione `.ini` presenti nelle cartelle indicate.
+Quando impostato, PHP caricherà tutti i file con estensione `.ini` presenti nelle directory indicate.
 
 Puoi anche modificare la configurazione PHP utilizzando la direttiva `php_ini` in `Caddyfile`:
 
@@ -328,12 +336,12 @@ Se si desidera disabilitare HTTPS (ad esempio in un ambiente di sviluppo), si pu
 
 In alternativa, è possibile utilizzare tutti gli altri metodi descritti nella [documentazione Caddy](https://caddyserver.com/docs/automatic-https#activation).
 
-Se si vuole utilizzare HTTPS con l'indirizzo IP `127.0.0.1` invece del nome host `localhost`, leggere la sezione [problemi noti](known-issues.md#uso-di-https127001-con-docker).
+Se si vuole utilizzare HTTPS con l'indirizzo IP `127.0.0.1` invece del nome host `localhost`, leggere la sezione [problemi noti](problemi-noti.md#utilizzo-di-https-con-127001-con-docker).
 
 ### Duplex completo (HTTP/1)
 
-Quando si utilizza HTTP/1.x, potrebbe essere opportuno abilitare la modalità full-duplex per consentire la scrittura di una risposta prima  che l'intero body
-sia stato letto. (ad esempio: [Mercure](mercure.md), WebSocket, eventi inviati dal server, ecc.)
+Quando si utilizza HTTP/1.x, potrebbe essere opportuno abilitare la modalità full-duplex per consentire la scrittura di una risposta prima che l'intero corpo
+sia stato letto (ad esempio: [Mercure](mercure.md), WebSocket, eventi inviati dal server, ecc.).
 
 Questa è una configurazione opt-in che deve essere aggiunta alle opzioni globali in `Caddyfile`:
 
