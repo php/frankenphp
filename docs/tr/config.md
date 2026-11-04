@@ -7,7 +7,9 @@ description: FrankenPHP ve Caddy'yi Caddyfile, JSON veya ortam değişkenleri ar
 
 FrankenPHP, Caddy'nin yanı sıra [Mercure](mercure.md) ve [Vulcain](https://vulcain.rocks) modülleri, [Caddy tarafından desteklenen formatlar](https://caddyserver.com/docs/getting-started#your-first-config) kullanılarak yapılandırılabilir.
 
-En yaygın format, basit, insan tarafından okunabilir bir metin formatı olan `Caddyfile`'dır. Varsayılan olarak, FrankenPHP mevcut dizinde bir `Caddyfile` arar. Özel bir yol belirtmek için `-c` veya `--config` seçeneğini kullanabilirsiniz.
+FrankenPHP, Caddy'nin yanı sıra [Mercure](mercure.md) ve [Vulcain](https://vulcain.rocks) modülleri, [Caddy tarafından desteklenen formatlar](https://caddyserver.com/docs/getting-started#your-first-config) kullanılarak yapılandırılabilir.
+
+En yaygın format, basit, insan tarafından okunabilir bir metin formatı olan `Caddyfile`'dır. Varsayılan olarak, FrankenPHP mevcut dizinde bir `Caddyfile` arayacaktır. Özel bir yol belirtmek için `-c` veya `--config` seçeneğini kullanabilirsiniz.
 
 Bir PHP uygulamasını sunmak için minimal bir `Caddyfile` aşağıda gösterilmiştir:
 
@@ -75,7 +77,7 @@ PHP:
 - PHP uzantıları: yüklenemez, bunları doğrudan ikili dosyaya dahil edin
 - [PHP kaynak kodu](https://github.com/php/php-src/) ile birlikte verilen `php.ini-production` veya `php.ini-development` dosyalarından birini kopyalayın.
 
-## Caddyfile konfigürasyonu
+## Caddyfile yapılandırması
 
 PHP uygulamanızı sunmak için site blokları içinde `php_server` veya `php` [HTTP yönergeleri](https://caddyserver.com/docs/caddyfile/concepts#directives) kullanılabilir.
 
@@ -102,11 +104,11 @@ Ayrıca, FrankenPHP'yi [global seçenek](https://caddyserver.com/docs/caddyfile/
 		max_requests <num> # (deneysel) Bir PHP iş parçacığının yeniden başlatılmadan önce işleyeceği maksimum istek sayısını ayarlar, bellek sızıntılarını azaltmak için faydalıdır. Hem normal hem de işçi iş parçacıkları için geçerlidir. Varsayılan: 0 (sınırsız).
 		php_ini <key> <value> # Bir php.ini yönergesi ayarlar. Birden fazla yönerge ayarlamak için birden fazla kez kullanılabilir.
 		worker {
-			file <path> # Çalışan komut dosyasının yolunu ayarlar.
+			file <path> # Worker komut dosyasının yolunu ayarlar.
 			num <num> # Başlatılacak PHP iş parçacığı sayısını ayarlar, varsayılan değer mevcut CPU'ların 2 katıdır.
 			env <key> <value> # Ek bir ortam değişkenini verilen değere ayarlar. Birden fazla ortam değişkeni için birden fazla kez belirtilebilir.
 			watch <path> # Dosya değişikliklerini izlemek için yolu ayarlar. Birden fazla yol için birden fazla kez belirtilebilir.
-			name <name> # İşçinin adını ayarlar, günlüklerde ve metriklerde kullanılır. Varsayılan: işçi dosyasının mutlak yolu.
+			name <name> # İşçinin adını ayarlar, günlüklerde ve metriklerde kullanılır. Varsayılan: worker dosyasının mutlak yolu
 			max_consecutive_failures <num> # İşçinin sağlıksız kabul edilmeden önceki maksimum ardışık hata sayısını ayarlar, -1 işçinin her zaman yeniden başlayacağı anlamına gelir. Varsayılan: 6.
 		}
 	}
@@ -244,9 +246,9 @@ Dosya izleyici [e-dant/watcher](https://github.com/e-dant/watcher) üzerine kuru
 
 ## İşçiyi yola eşleştirme
 
-Geleneksel PHP uygulamalarında, betikler her zaman public dizininde bulunur. Bu, diğer tüm PHP betikleri gibi ele alınan işçi betikleri için de geçerlidir. İşçi betiğini public dizininin dışına koymak isterseniz, bunu `match` yönergesi aracılığıyla yapabilirsiniz.
+Geleneksel PHP uygulamalarında, betikler her zaman public dizininde bulunur. Bu, diğer tüm PHP betikleri gibi ele alınan worker betikleri için de geçerlidir. Worker betiğini public dizininin dışına koymak isterseniz, bunu `match` yönergesi aracılığıyla yapabilirsiniz.
 
-`match` yönergesi, yalnızca `php_server` ve `php` içinde bulunan `try_files`'a optimize edilmiş bir alternatiftir. Aşağıdaki örnek, varsa her zaman public dizinindeki bir dosyayı sunacak, aksi takdirde isteği yol desenine uyan işçiye iletecektir.
+`match` yönergesi, yalnızca `php_server` ve `php` içinde bulunan `try_files`'a optimize edilmiş bir alternatiftir. Aşağıdaki örnek, varsa her zaman public dizinindeki bir dosyayı sunacak, aksi takdirde isteği yol desenine uyan worker'a iletecektir.
 
 ```caddyfile
 {
@@ -288,7 +290,7 @@ FPM ve CLI SAPI'lerinde olduğu gibi, ortam değişkenleri varsayılan olarak `$
 
 [`variables_order`'a ait PHP yönergesinin](https://www.php.net/manual/ini.core.php#ini.variables-order) `S` değeri bu yönergede `E`'nin başka bir yere yerleştirilmesinden bağımsız olarak her zaman `ES` ile eş değerdir.
 
-## PHP konfigürasyonu
+## PHP yapılandırması
 
 Ek olarak [PHP yapılandırma dosyalarını](https://www.php.net/manual/configuration.file.php#configuration.file.scan) yüklemek için,
 `PHP_INI_SCAN_DIR` ortam değişkeni kullanılabilir.
@@ -321,7 +323,7 @@ Eğer `localhost` ana bilgisayar adı yerine `127.0.0.1` IP adresiyle HTTPS kull
 
 ### Tam çift yönlü (HTTP/1)
 
-HTTP/1.x kullanırken, tüm gövde okunmadan önce bir yanıt yazmaya izin vermek için tam çift yönlü modun etkinleştirilmesi istenebilir. (örneğin: [Mercure](mercure.md), WebSocket, Sunucu Tarafından Gönderilen Olaylar vb.)
+HTTP/1.x kullanırken, tüm gövde okunmadan önce bir yanıt yazmaya izin vermek için tam çift yönlü modun etkinleştirilmesi istenebilir (örneğin: [Mercure](mercure.md), WebSocket, Sunucu Tarafından Gönderilen Olaylar vb.).
 
 Bu, `Caddyfile`'daki global seçeneklere eklenmesi gereken isteğe bağlı bir yapılandırmadır:
 
@@ -346,6 +348,18 @@ CADDY_GLOBAL_OPTIONS="servers {
 
 Bu ayar hakkında daha fazla bilgiyi [Caddy belgelerinde](https://caddyserver.com/docs/caddyfile/options#enable-full-duplex) bulabilirsiniz.
 
+### İstek gövdesi boyut sınırı
+
+İstek gövdelerinin boyutunu sınırlamak için [`request_body`](https://caddyserver.com/docs/caddyfile/directives/request_body) yönergesini kullanın:
+
+```caddyfile
+request_body {
+	max_size 10MB
+}
+```
+
+Daha büyük gövdeye sahip istekler `413 Request Entity Too Large` yanıtı alır. PHP, komut dosyası başlamadan önce gövdeyi okursa (formlar ve dosya yüklemeleri gibi `Content-Type` içeren `POST` istekleri), komut dosyası çalışmaz. Komut dosyası gövdeyi `php://input` veya `request_parse_body()` aracılığıyla kendisi okursa, sınıra ulaşıldığında okuma bir `FrankenPHP\RequestBodyTooLargeException` hatası fırlatır, böylece kesilen bir gövde asla tam olarak algılanmaz.
+
 ## Hata ayıklama modunu etkinleştirin
 
 Docker imajını kullanırken, hata ayıklama modunu etkinleştirmek için `CADDY_GLOBAL_OPTIONS` ortam değişkenini `debug` olarak ayarlayın:
@@ -357,7 +371,7 @@ docker run -v $PWD:/app/public \
     dunglas/frankenphp
 ```
 
-## Shell completion
+## Kabuk tamamlama
 
 FrankenPHP, Bash, Zsh, Fish ve PowerShell için yerleşik kabuk tamamlama desteği sağlar. Bu, tüm komutlar ( `php-server`, `php-cli` ve `extension-init` gibi özelleştirilmiş komutlar dahil) ve bunların bayrakları için otomatik tamamlama sağlar.
 

@@ -165,7 +165,7 @@ route {
 		not path */
 	}
 	redir @canonicalPath {path}/ 308
-	# 如果请求的文件不存在，则尝试 index 文件
+	# 如果请求的文件不存在，则尝试索引文件
 	@indexFiles file {
 		try_files {path} {path}/index.php index.php
 		split_path .php
@@ -183,7 +183,7 @@ route {
 ```caddyfile
 php_server [<matcher>] {
 	root <directory> # 将根文件夹设置为站点。默认值：`root` 指令。
-	split_path <delim...> # 设置用于将 URI 分割成两部分的子字符串。第一个匹配的子字符串将用来将 "路径信息" 与路径分开。第一部分后缀为匹配的子字符串，并将被视为实际资源（CGI 脚本）名称。第二部分将被设置为脚本使用的 PATH_INFO。默认值：`.php`。
+	split_path <delim...> # 设置用于将 URI 分割成两部分的子字符串。第一个匹配的子字符串将用来将 "路径信息" 与路径分开。第一部分后缀为匹配的子字符串，并将被视为实际资源（CGI 脚本）名称。第二部分将被设置为脚本使用的 PATH_INFO。默认值：`.php`
 	resolve_root_symlink false # 禁用通过评估符号链接（如果存在）将 `root` 目录解析为其实际值（默认启用）。
 	name <name> # 设置此服务器的名称，用于分配工作进程、指标和日志。默认：包含路由的第一个主机匹配器，或第一个监听地址。
 	env <key> <value> # 设置一个额外的环境变量为给定的值。可以多次指定以设置多个环境变量。
@@ -201,7 +201,7 @@ php_server [<matcher>] {
 }
 ```
 
-### 监控文件变化
+### 监视文件更改
 
 由于工作进程只会启动您的应用程序一次并将其保留在内存中，
 因此对您的 PHP 文件的任何更改不会立即反映出来。
@@ -220,10 +220,10 @@ php_server [<matcher>] {
 }
 ```
 
-此功能通常与[热重载](hot-reload.md)结合使用。
+此功能通常与[热重载](hot-reload.md#热重载)结合使用。
 
 如果没有指定 `watch` 目录，它将回退到 `./**/*.{env,php,twig,yaml,yml}`，
-这将监视启动 FrankenPHP 进程的目录及其子目录中的所有 `.env`、`.php`、`.twig`、`.yaml` 和 `.yml` 文件。
+这将监视 FrankenPHP 进程启动目录及其子目录中的所有 `.env`、`.php`、`.twig`、`.yaml` 和 `.yml` 文件。
 你也可以通过 [shell 文件名模式](https://pkg.go.dev/path/filepath#Match) 指定一个或多个目录：
 
 ```caddyfile
@@ -232,9 +232,9 @@ php_server [<matcher>] {
 		worker {
 			file  /path/to/app/public/worker.php
 			watch /path/to/app # 监视 /path/to/app 所有子目录中的所有文件
-			watch /path/to/app/*.php # 监视位于/path/to/app中的以.php结尾的文件
+			watch /path/to/app/*.php # 监视位于 /path/to/app 中以 .php 结尾的文件
 			watch /path/to/app/**/*.php # 监视 /path/to/app 及子目录中的 PHP 文件
-			watch /path/to/app/**/*.{php,twig} # 在/path/to/app及其子目录中监视PHP和Twig文件
+			watch /path/to/app/**/*.{php,twig} # 在 /path/to/app 及其子目录中监视 PHP 和 Twig 文件
 		}
 	}
 }
@@ -249,9 +249,9 @@ php_server [<matcher>] {
 
 ## 将工作进程匹配到一条路径
 
-在传统的PHP应用程序中，脚本总是放在公共目录中。
-这对于工作脚本也是如此，这些脚本被视为任何其他PHP脚本。
-如果您想将工作脚本放在公共目录外，可以通过 `match` 指令来实现。
+在传统的 PHP 应用程序中，脚本总是放在公共目录中。
+这对于 worker 脚本也是如此，这些脚本被视为任何其他 PHP 脚本。
+如果您想将 worker 脚本放在公共目录外，可以通过 `match` 指令来实现。
 
 `match` 指令是 `try_files` 的一种优化替代方案，仅在 `php_server` 和 `php` 内部可用。
 以下示例将始终在公共目录中提供文件（如果存在），否则会将请求转发给与路径模式匹配的工作进程。
@@ -290,14 +290,14 @@ FrankenPHP 可以在 PHP 线程处理完给定数量的请求后自动重启它�
 
 可以使用以下环境变量在不修改 `Caddyfile` 的情况下注入 Caddy 指令：
 
-- `SERVER_NAME`: 更改[监听的地址](https://caddyserver.com/docs/caddyfile/concepts#addresses)，提供的宿主名也将用于生成的TLS证书。
-- `SERVER_ROOT`: 更改网站的根目录，默认为 `public/`
+- `SERVER_NAME`: 更改[监听的地址](https://caddyserver.com/docs/caddyfile/concepts#addresses)，提供的宿主名也将用于生成的 TLS 证书。
+- `SERVER_ROOT`: 更改网站的根目录，默认为 `public/`。
 - `CADDY_GLOBAL_OPTIONS`: 注入[全局选项](https://caddyserver.com/docs/caddyfile/options)
 - `FRANKENPHP_CONFIG`: 在 `frankenphp` 指令下注入配置
 
 至于 FPM 和 CLI SAPIs，环境变量默认在 `$_SERVER` 超全局中暴露。
 
-`variables_order` PHP 指令中 `S` 的值始终等于 `ES`，无论 `E` 在该指令中的其他位置如何。
+[`variables_order` PHP 指令](https://www.php.net/manual/ini.core.php#ini.variables-order)中 `S` 的值始终等于 `ES`，无论 `E` 在该指令中的其他位置如何。
 
 ## PHP 配置
 
@@ -327,11 +327,11 @@ FrankenPHP 可以在 PHP 线程处理完给定数量的请求后自动重启它�
 
 或者，你可以使用 [Caddy 文档](https://caddyserver.com/docs/automatic-https#activation) 中描述的所有其他方法。
 
-如果你想将 HTTPS 与 `127.0.0.1` IP 地址而不是 `localhost` 主机名一起使用，请阅读[已知问题](known-issues.md#using-https127001-with-docker)部分。
+如果你想将 HTTPS 与 `127.0.0.1` IP 地址而不是 `localhost` 主机名一起使用，请阅读[已知问题](known-issues.md#使用-docker-和-https127001)部分。
 
 ### 全双工 (HTTP/1)
 
-在使用 HTTP/1.x 时，可能希望启用全双工模式，以便在整个请求体被读取之前允许写入响应。(例如：[Mercure](mercure.md)、WebSocket、Server-Sent Events 等)
+在使用 HTTP/1.x 时，可能希望启用全双工模式，以便在整个请求体被读取之前允许写入响应。(例如：[Mercure](mercure.md)、WebSocket、Server-Sent Events 等)。
 
 这是一个可选配置，需要添加到 `Caddyfile` 中的全局选项中：
 
@@ -356,9 +356,23 @@ CADDY_GLOBAL_OPTIONS="servers {
 
 您可以在[Caddy文档](https://caddyserver.com/docs/caddyfile/options#enable-full-duplex)中找到有关此设置的更多信息。
 
+### 请求体大小限制
+
+为了限制请求体的大小，请使用 [`request_body`](https://caddyserver.com/docs/caddyfile/directives/request_body) 指令：
+
+```caddyfile
+request_body {
+	max_size 10MB
+}
+```
+
+请求体过大将收到 `413 Request Entity Too Large` 响应。
+如果 PHP 在脚本启动前读取请求体（如带有 `Content-Type` 的 `POST` 请求，例如表单和文件上传），则脚本不会运行。
+如果脚本通过 `php://input` 或 `request_parse_body()` 自己读取请求体，一旦达到限制，读取将抛出 `FrankenPHP\RequestBodyTooLargeException` 异常，因此截断的请求体永远不会被误认为是完整的。
+
 ## 启用调试模式
 
-使用Docker镜像时，将`CADDY_GLOBAL_OPTIONS`环境变量设置为`debug`以启用调试模式:
+使用 Docker 镜像时，将 `CADDY_GLOBAL_OPTIONS` 环境变量设置为 `debug` 以启用调试模式：
 
 ```console
 docker run -v $PWD:/app/public \

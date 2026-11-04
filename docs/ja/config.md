@@ -45,10 +45,10 @@ PHP:
 ```dockerfile
 FROM dunglas/frankenphp
 
-# Production:
+# 本番環境用:
 RUN cp $PHP_INI_DIR/php.ini-production $PHP_INI_DIR/php.ini
 
-# Or development:
+# または開発環境用:
 RUN cp $PHP_INI_DIR/php.ini-development $PHP_INI_DIR/php.ini
 ```
 
@@ -72,7 +72,7 @@ FrankenPHP:
 
 PHP:
 
-- `php.ini`: `frankenphp run`または`frankenphp php-server`を実行したディレクトリ内、なければ`/etc/frankenphp/php.ini`を参照
+- `php.ini`: `frankenphp run`または`frankenphp php-server`が実行されるディレクトリ、次に`/etc/frankenphp/php.ini`
 - 追加の設定ファイル: `/etc/frankenphp/php.d/*.ini`
 - PHP拡張モジュール: ロードできません、バイナリ自体にバンドルする必要があります
 - [PHPソース](https://github.com/php/php-src/)で提供される`php.ini-production`または`php.ini-development`のいずれかをコピーしてください。
@@ -313,7 +313,7 @@ FPM や CLI SAPI と同様に、環境変数はデフォルトで`$_SERVER`ス�
     frankenphp {
         php_ini memory_limit 256M
 
-        # or
+        # または
 
         php_ini {
             memory_limit 256M
@@ -360,6 +360,20 @@ CADDY_GLOBAL_OPTIONS="servers {
 
 この設定の詳細については、[Caddyドキュメント](https://caddyserver.com/docs/caddyfile/options#enable-full-duplex)をご覧ください。
 
+### リクエストボディサイズ制限
+
+リクエストボディのサイズを制限するには、[`request_body`ディレクティブ](https://caddyserver.com/docs/caddyfile/directives/request_body)を使用します。
+
+```caddyfile
+request_body {
+	max_size 10MB
+}
+```
+
+より大きなボディを持つリクエストは、`413 Request Entity Too Large`レスポンスを受け取ります。
+スクリプトが開始する前にPHPがボディを読み取る場合（フォームやファイルアップロードなどの`Content-Type`を持つ`POST`リクエスト）、スクリプトは実行されません。
+スクリプトが`php://input`または`request_parse_body()`を通じてボディ自体を読み取る場合、制限に達すると読み取りは`FrankenPHP\RequestBodyTooLargeException`をスローするため、切り詰められたボディが完全なものと誤解されることはありません。
+
 ## デバッグモードの有効化
 
 Dockerイメージを使用する場合、`CADDY_GLOBAL_OPTIONS`環境変数に`debug`を設定するとデバッグモードが有効になります：
@@ -371,7 +385,7 @@ docker run -v $PWD:/app/public \
     dunglas/frankenphp
 ```
 
-## Shell completion
+## シェル補完
 
 FrankenPHPはBash、Zsh、Fish、およびPowerShell用のシェル補完機能を内蔵しています。これにより、すべてのコマンド（`php-server`、`php-cli`、`extension-init`などのカスタムコマンドを含む）とそのフラグのオートコンプリートが可能になります。
 

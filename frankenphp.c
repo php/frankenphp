@@ -980,7 +980,9 @@ PHP_FUNCTION(frankenphp_handle_request) {
   fci.params = result.r1;
   fci.param_count = result.r1 == NULL ? 0 : 1;
 
-  if (zend_call_function(&fci, &fcc) == SUCCESS && Z_TYPE(retval) != IS_UNDEF) {
+  /* a body over the limit was rejected while parsing the request */
+  if (EXPECTED(!go_is_context_done(thread_index)) &&
+      zend_call_function(&fci, &fcc) == SUCCESS && Z_TYPE(retval) != IS_UNDEF) {
     callback_ret = &retval;
 
     /* pass NULL instead of the NULL zval as return value */
@@ -1193,8 +1195,12 @@ static const zend_function_entry frankenphp_test_hook_functions[] = {
            arginfo_frankenphp_test_persist_roundtrip) PHP_FE_END};
 #endif
 
+static zend_class_entry *frankenphp_ce_request_body_too_large_exception;
+
 PHP_MINIT_FUNCTION(frankenphp) {
   register_frankenphp_symbols(module_number);
+  frankenphp_ce_request_body_too_large_exception =
+      register_class_FrankenPHP_RequestBodyTooLargeException(zend_ce_exception);
 #ifndef PHP_WIN32
   /* MINIT runs once per ZTS thread — guard the atfork registration */
   static pthread_once_t atfork_once = PTHREAD_ONCE_INIT;
@@ -1419,7 +1425,22 @@ static void frankenphp_sapi_flush(void *server_context) {
 }
 
 static size_t frankenphp_read_post(char *buffer, size_t count_bytes) {
-  return go_read_post(frankenphp_thread_index(), buffer, count_bytes);
+  struct go_read_post_return result =
+      go_read_post(frankenphp_thread_index(), buffer, count_bytes);
+
+  /* php://input can't report read errors, throw so user code doesn't take
+   * the truncated body for a complete one. Worker request startup and
+   * shutdown run in frankenphp_handle_request()'s frame, not in user code. */
+  zend_execute_data *ex = EG(current_execute_data);
+  if (result.r1 && ex != NULL &&
+      !(ex->func != NULL && ex->func->type == ZEND_INTERNAL_FUNCTION &&
+        ex->func->internal_function.handler ==
+            ZEND_FN(frankenphp_handle_request))) {
+    zend_throw_exception(frankenphp_ce_request_body_too_large_exception,
+                         "Request body too large", 0);
+  }
+
+  return result.r0;
 }
 
 static char *frankenphp_read_cookies(void) {
@@ -1790,8 +1811,10 @@ static void *php_thread(void *arg) {
       file_handle.primary_script = 1;
       EG(exit_status) = 0;
 
-      /* Execute the PHP script, potential bailout to zend_catch */
-      if (EXPECTED(open_primary_script(&file_handle))) {
+      /* Execute the PHP script, potential bailout to zend_catch. A body over
+       * the limit was rejected while parsing the request. */
+      if (EXPECTED(!go_is_context_done(thread_index)) &&
+          EXPECTED(open_primary_script(&file_handle))) {
         php_execute_script(&file_handle);
       }
 #ifndef PHP_WIN32

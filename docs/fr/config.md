@@ -5,7 +5,7 @@ description: Configurez FrankenPHP et Caddy via Caddyfile, JSON, ou des variable
 
 # Configuration
 
-FrankenPHP, Caddy ainsi que les modules [Mercure](mercure.md) et [Vulcain](https://vulcain.rocks) peuvent être configurés à l'aide [des formats pris en charge par Caddy](https://caddyserver.com/docs/getting-started#your-first-config).
+FrankenPHP, Caddy, ainsi que les modules [Mercure](mercure.md) et [Vulcain](https://vulcain.rocks) peuvent être configurés à l'aide [des formats pris en charge par Caddy](https://caddyserver.com/docs/getting-started#your-first-config).
 
 Le format le plus courant est le `Caddyfile`, un format texte simple et facilement lisible par les humains.
 Par défaut, FrankenPHP recherchera un `Caddyfile` dans le répertoire courant.
@@ -250,7 +250,7 @@ où le processus FrankenPHP a été lancé. Vous pouvez également spécifier un
 
 La surveillance des fichiers est basée sur [e-dant/watcher](https://github.com/e-dant/watcher).
 
-## Faire correspondre le worker à un chemin
+### Faire correspondre le worker à un chemin
 
 Dans les applications PHP traditionnelles, les scripts sont toujours placés dans le répertoire public. C'est également vrai pour les scripts worker, qui sont traités comme n'importe quel autre script PHP. Si vous souhaitez plutôt placer le script worker en dehors du répertoire public, vous pouvez le faire via la directive `match`.
 
@@ -270,7 +270,7 @@ et transmettra sinon la requête au worker correspondant au modèle de chemin.
 }
 ```
 
-## Redémarrage des threads après un certain nombre de requêtes (expérimental)
+### Redémarrage des threads après un certain nombre de requêtes (expérimental)
 
 FrankenPHP peut redémarrer automatiquement les threads PHP après qu'ils aient géré un certain nombre de requêtes.
 Lorsqu'un thread atteint la limite, il est entièrement redémarré,
@@ -336,7 +336,7 @@ Si vous souhaitez utiliser HTTPS avec l'adresse IP `127.0.0.1` au lieu du nom d'
 ### Full duplex (HTTP/1)
 
 Lors de l'utilisation de HTTP/1.x, il peut être souhaitable d'activer le mode full-duplex pour permettre l'écriture d'une réponse avant que le corps entier
-n'ait été lu. (par exemple : [Mercure](mercure.md), WebSocket, Server-Sent Events, etc.)
+n'ait été lu (par exemple : [Mercure](mercure.md), WebSocket, Server-Sent Events, etc.).
 
 Il s'agit d'une configuration facultative qui doit être ajoutée aux options globales dans le `Caddyfile` :
 
@@ -360,6 +360,18 @@ CADDY_GLOBAL_OPTIONS="servers {
 ```
 
 Vous trouverez plus d'informations sur ce paramètre dans la [documentation Caddy](https://caddyserver.com/docs/caddyfile/options#enable-full-duplex).
+
+### Limite de taille du corps de requête
+
+Pour limiter la taille des corps de requête, utilisez la directive [`request_body`](https://caddyserver.com/docs/caddyfile/directives/request_body) :
+
+```caddyfile
+request_body {
+	max_size 10MB
+}
+```
+
+Les requêtes avec un corps plus volumineux reçoivent une réponse `413 Request Entity Too Large`. Si PHP lit le corps avant le démarrage du script (requêtes `POST` avec un `Content-Type`, comme les formulaires et les téléchargements de fichiers), le script ne s'exécute pas. Si le script lit le corps lui-même, via `php://input` ou `request_parse_body()`, la lecture lève une `FrankenPHP\RequestBodyTooLargeException` une fois la limite atteinte, de sorte qu'un corps tronqué n'est jamais confondu avec un corps complet.
 
 ## Activer le mode debug
 

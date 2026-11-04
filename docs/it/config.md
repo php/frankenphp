@@ -5,7 +5,7 @@ description: Configura FrankenPHP e Caddy tramite Caddyfile, JSON o variabili d'
 
 # Configurazione
 
-FrankenPHP, Caddy e i moduli [Mercure](mercure.md) e [Vulcain](https://vulcain.rocks) possono essere configurati utilizzando [i formati supportati da Caddy](https://caddyserver.com/docs/getting-started#your-first-config).
+FrankenPHP, Caddy, così come i moduli [Mercure](mercure.md) e [Vulcain](https://vulcain.rocks), possono essere configurati utilizzando [i formati supportati da Caddy](https://caddyserver.com/docs/getting-started#your-first-config).
 
 Il formato più comune è `Caddyfile`, che è un formato di testo semplice e leggibile.
 Per impostazione predefinita, FrankenPHP cercherà un `Caddyfile` nella directory corrente.
@@ -223,7 +223,7 @@ Ciò è utile per gli ambienti di sviluppo.
 }
 ```
 
-Questa funzione viene spesso utilizzata in combinazione con [ricaricamento a caldo](hot-reload.md).
+Questa funzione viene spesso utilizzata in combinazione con il [ricaricamento a caldo](hot-reload.md).
 
 Se la directory `watch` non è specificata, tornerà a `./**/*.{env,php,twig,yaml,yml}`,
 che controlla tutti i file `.env`, `.php`, `.twig`, `.yaml` e `.yml` nella directory e nelle sottodirectory
@@ -247,7 +247,7 @@ dove è stato avviato il processo FrankenPHP. Puoi invece anche specificare una 
 - Il pattern `**` indica il monitoraggio ricorsivo
 - Le directory possono anche essere relative (a dove viene avviato il processo FrankenPHP)
 - Se sono definiti più worker, tutti verranno riavviati quando un file cambia
-- Fare attenzione a guardare i file creati in fase di esecuzione (come i log) poiché potrebbero causare riavvii indesiderati del worker.
+- Prestate attenzione a monitorare i file creati in fase di esecuzione (come i log) poiché potrebbero causare riavvii indesiderati del worker.
 
 Il file watcher è basato su [e-dant/watcher](https://github.com/e-dant/watcher).
 
@@ -366,6 +366,20 @@ CADDY_GLOBAL_OPTIONS="servers {
 
 Puoi trovare ulteriori informazioni su questa impostazione nella [documentazione Caddy](https://caddyserver.com/docs/caddyfile/options#enable-full-duplex).
 
+### Limite dimensione body richiesta
+
+Per limitare la dimensione dei body delle richieste, usa la direttiva [`request_body`](https://caddyserver.com/docs/caddyfile/directives/request_body):
+
+```caddyfile
+request_body {
+	max_size 10MB
+}
+```
+
+Le richieste con un body più grande ricevono una risposta `413 Request Entity Too Large`.
+Se PHP legge il body prima che lo script inizi (richieste `POST` con un `Content-Type`, come form e upload di file), lo script non viene eseguito.
+Se lo script legge il body direttamente, tramite `php://input` o `request_parse_body()`, la lettura genera una `FrankenPHP\RequestBodyTooLargeException` una volta raggiunto il limite, in modo che un body troncato non venga mai scambiato per uno completo.
+
 ## Abilita la modalità debug
 
 Quando si utilizza l'immagine Docker, impostare la variabile di ambiente `CADDY_GLOBAL_OPTIONS` su `debug` per abilitare la modalità debug:
@@ -405,7 +419,7 @@ frankenphp completion bash > $(brew --prefix)/share/bash-completion/completions/
 
 ### Zsh
 
-Se il completamento della shell non è già abilitato nell'ambiente, andrà abilitato. È possibile eseguire quanto segue una volta:
+Se il completamento della shell non è già abilitato nell'ambiente, sarà necessario abilitarlo. È possibile eseguire quanto segue una volta:
 
 ```console
 echo "autoload -U compinit; compinit" >> ~/.zshrc

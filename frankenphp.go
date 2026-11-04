@@ -54,6 +54,7 @@ var (
 	ErrInvalidScriptPath          = ErrRejected{"invalid script path", http.StatusNotFound}
 	ErrInvalidContentLengthHeader = ErrRejected{"invalid Content-Length header", http.StatusBadRequest}
 	ErrMaxWaitTimeExceeded        = ErrRejected{"maximum request handling time exceeded", http.StatusServiceUnavailable}
+	ErrRequestBodyTooLarge        = ErrRejected{"request body too large", http.StatusRequestEntityTooLarge}
 
 	contextKey   = contextKeyStruct{}
 	serverHeader = []string{"FrankenPHP"}
@@ -683,6 +684,7 @@ func go_write_headers(threadIndex C.uintptr_t, status C.int, headers *C.zend_lli
 	}
 
 	fc.responseWriter.WriteHeader(goStatus)
+	fc.headersWritten = goStatus >= 200
 
 	if goStatus < 200 {
 		// Clear headers, it's not automatically done by ResponseWriter.WriteHeader() for 1xx responses
@@ -735,12 +737,12 @@ func go_sapi_flush(threadIndex C.uintptr_t) bool {
 }
 
 //export go_read_post
-func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (readBytes C.size_t) {
+func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (readBytes C.size_t, tooLarge C.bool) {
 	fc := phpThreads[threadIndex].handler.frankenPHPContext()
 
 	// net/http forbids reading the body after the handler returns; body wrappers may touch the dead stream
 	if fc.responseWriter == nil || fc.isDone {
-		return 0
+		return 0, false
 	}
 
 	var rc *http.ResponseController
@@ -767,6 +769,15 @@ func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (r
 	// an expired deadline must stay: net/http drains the unread body before writing the response
 	if rc != nil && !errors.Is(err, os.ErrDeadlineExceeded) {
 		_ = rc.SetReadDeadline(time.Time{})
+	}
+
+	// PHP can't see read errors: fail the request rather than expose a truncated body
+	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+		if !fc.headersWritten {
+			fc.reject(ErrRequestBodyTooLarge)
+		}
+
+		tooLarge = true
 	}
 
 	return

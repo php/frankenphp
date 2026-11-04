@@ -359,6 +359,20 @@ CADDY_GLOBAL_OPTIONS="servers {
 
 Дополнительную информацию об этой настройке можно найти в [документации Caddy](https://caddyserver.com/docs/caddyfile/options#enable-full-duplex).
 
+### Ограничение размера тела запроса
+
+Для ограничения размера тела запросов используйте директиву [`request_body`](https://caddyserver.com/docs/caddyfile/directives/request_body):
+
+```caddyfile
+request_body {
+	max_size 10MB
+}
+```
+
+Запросы с большим телом получают ответ `413 Request Entity Too Large`.
+Если PHP считывает тело до запуска скрипта (для `POST`-запросов с `Content-Type`, таких как формы и загрузка файлов), скрипт не выполняется.
+Если скрипт считывает тело сам, через `php://input` или `request_parse_body()`, чтение вызывает `FrankenPHP\RequestBodyTooLargeException` при достижении лимита, поэтому усеченное тело никогда не будет ошибочно принято за полное.
+
 ## Включение режима отладки
 
 При использовании Docker-образа установите переменную окружения `CADDY_GLOBAL_OPTIONS` в `debug`, чтобы включить режим отладки:

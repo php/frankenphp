@@ -73,7 +73,7 @@ FrankenPHP:
 
 PHP:
 
-- `php.ini`: O diretório no qual `frankenphp run` ou `frankenphp php-server` é executado, e então `/etc/frankenphp/php.ini`
+- `php.ini`: O diretório onde `frankenphp run` ou `frankenphp php-server` é executado, e então `/etc/frankenphp/php.ini`
 - arquivos de configuração adicionais: `/etc/frankenphp/php.d/*.ini`
 - extensões PHP: não podem ser carregadas, inclua-as no próprio binário
 - copie um dos arquivos `php.ini-production` ou `php.ini-development` fornecidos [nas fontes do PHP](https://github.com/php/php-src/).
@@ -255,7 +255,7 @@ O monitor de arquivos é baseado em [e-dant/watcher](https://github.com/e-dant/w
 
 Em aplicações PHP tradicionais, scripts são sempre colocados no diretório público.
 Isso também é verdade para worker scripts, que são tratados como qualquer outro script PHP.
-Se você quiser, em vez disso, colocar o worker script fora do diretório público, pode fazê-lo via a diretiva `match`.
+Se você quiser, em vez disso, colocar o script do worker fora do diretório público, pode fazê-lo via a diretiva `match`.
 
 A diretiva `match` é uma alternativa otimizada para `try_files`, disponível apenas dentro de `php_server` e `php`.
 O exemplo a seguir sempre servirá um arquivo no diretório público, se presente,
@@ -341,7 +341,7 @@ Se você quiser usar HTTPS com o endereço IP `127.0.0.1` em vez do nome de host
 ### Full duplex (HTTP/1)
 
 Ao usar HTTP/1.x, pode ser desejável habilitar o modo full-duplex para permitir a gravação de uma resposta antes que o corpo inteiro
-tenha sido lido. (por exemplo: [Mercure](mercure.md), WebSocket, Server-Sent Events, etc.)
+tenha sido lido (por exemplo: [Mercure](mercure.md), WebSocket, Server-Sent Events, etc.).
 
 Esta é uma configuração opcional que precisa ser adicionada às opções globais no `Caddyfile`:
 
@@ -365,6 +365,20 @@ CADDY_GLOBAL_OPTIONS="servers {
 ```
 
 Você pode encontrar mais informações sobre esta configuração na [documentação do Caddy](https://caddyserver.com/docs/caddyfile/options#enable-full-duplex).
+
+## Limite de tamanho do corpo da requisição
+
+Para limitar o tamanho dos corpos de requisição, use a diretiva [`request_body`](https://caddyserver.com/docs/caddyfile/directives/request_body):
+
+```caddyfile
+request_body {
+	max_size 10MB
+}
+```
+
+Requisições com um corpo maior recebem uma resposta `413 Request Entity Too Large`.
+Se o PHP lê o corpo antes do script iniciar (requisições `POST` com um `Content-Type`, como formulários e uploads de arquivos), o script não é executado.
+Se o script lê o corpo diretamente, através de `php://input` ou `request_parse_body()`, a leitura lança uma `FrankenPHP\RequestBodyTooLargeException` assim que o limite é atingido, garantindo que um corpo truncado nunca seja confundido com um completo.
 
 ## Habilitar o modo de depuração
 

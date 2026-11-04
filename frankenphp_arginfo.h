@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 85fabd314ab885307e0032b9f7635fa13cc0c4b5 */
+ * Stub hash: 57299a756b23c7443d6b09f759106ddf0ec8df20 */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_handle_request, 0, 1, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, callback, IS_CALLABLE, 0)
@@ -41,7 +41,6 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_log, 0, 1, IS_VOID, 0
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, context, IS_ARRAY, 0, "[]")
 ZEND_END_ARG_INFO()
 
-
 ZEND_FUNCTION(frankenphp_handle_request);
 ZEND_FUNCTION(headers_send);
 ZEND_FUNCTION(frankenphp_finish_request);
@@ -50,17 +49,32 @@ ZEND_FUNCTION(frankenphp_response_headers);
 ZEND_FUNCTION(mercure_publish);
 ZEND_FUNCTION(frankenphp_log);
 
-
 static const zend_function_entry ext_functions[] = {
 	ZEND_FE(frankenphp_handle_request, arginfo_frankenphp_handle_request)
 	ZEND_FE(headers_send, arginfo_headers_send)
 	ZEND_FE(frankenphp_finish_request, arginfo_frankenphp_finish_request)
-	ZEND_FALIAS(fastcgi_finish_request, frankenphp_finish_request, arginfo_fastcgi_finish_request)
+#if (PHP_VERSION_ID >= 80400)
+	ZEND_RAW_FENTRY("fastcgi_finish_request", zif_frankenphp_finish_request, arginfo_fastcgi_finish_request, 0, NULL, NULL)
+#else
+	ZEND_RAW_FENTRY("fastcgi_finish_request", zif_frankenphp_finish_request, arginfo_fastcgi_finish_request, 0)
+#endif
 	ZEND_FE(frankenphp_request_headers, arginfo_frankenphp_request_headers)
-	ZEND_FALIAS(apache_request_headers, frankenphp_request_headers, arginfo_apache_request_headers)
-	ZEND_FALIAS(getallheaders, frankenphp_request_headers, arginfo_getallheaders)
+#if (PHP_VERSION_ID >= 80400)
+	ZEND_RAW_FENTRY("apache_request_headers", zif_frankenphp_request_headers, arginfo_apache_request_headers, 0, NULL, NULL)
+#else
+	ZEND_RAW_FENTRY("apache_request_headers", zif_frankenphp_request_headers, arginfo_apache_request_headers, 0)
+#endif
+#if (PHP_VERSION_ID >= 80400)
+	ZEND_RAW_FENTRY("getallheaders", zif_frankenphp_request_headers, arginfo_getallheaders, 0, NULL, NULL)
+#else
+	ZEND_RAW_FENTRY("getallheaders", zif_frankenphp_request_headers, arginfo_getallheaders, 0)
+#endif
 	ZEND_FE(frankenphp_response_headers, arginfo_frankenphp_response_headers)
-	ZEND_FALIAS(apache_response_headers, frankenphp_response_headers, arginfo_apache_response_headers)
+#if (PHP_VERSION_ID >= 80400)
+	ZEND_RAW_FENTRY("apache_response_headers", zif_frankenphp_response_headers, arginfo_apache_response_headers, 0, NULL, NULL)
+#else
+	ZEND_RAW_FENTRY("apache_response_headers", zif_frankenphp_response_headers, arginfo_apache_response_headers, 0)
+#endif
 	ZEND_FE(mercure_publish, arginfo_mercure_publish)
 	ZEND_FE(frankenphp_log, arginfo_frankenphp_log)
 	ZEND_FE_END
@@ -72,4 +86,18 @@ static void register_frankenphp_symbols(int module_number)
 	REGISTER_LONG_CONSTANT("FRANKENPHP_LOG_LEVEL_INFO", 0, CONST_PERSISTENT);
 	REGISTER_LONG_CONSTANT("FRANKENPHP_LOG_LEVEL_WARN", 4, CONST_PERSISTENT);
 	REGISTER_LONG_CONSTANT("FRANKENPHP_LOG_LEVEL_ERROR", 8, CONST_PERSISTENT);
+}
+
+static zend_class_entry *register_class_FrankenPHP_RequestBodyTooLargeException(zend_class_entry *class_entry_Exception)
+{
+	zend_class_entry ce, *class_entry;
+
+	INIT_NS_CLASS_ENTRY(ce, "FrankenPHP", "RequestBodyTooLargeException", NULL);
+#if (PHP_VERSION_ID >= 80400)
+	class_entry = zend_register_internal_class_with_flags(&ce, class_entry_Exception, 0);
+#else
+	class_entry = zend_register_internal_class_ex(&ce, class_entry_Exception);
+#endif
+
+	return class_entry;
 }
