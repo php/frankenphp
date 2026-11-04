@@ -5,6 +5,7 @@
 #include <Zend/zend_interfaces.h>
 #include <Zend/zend_smart_str.h>
 #include <errno.h>
+#include <ext/date/php_date.h>
 #include <ext/spl/spl_exceptions.h>
 #include <ext/standard/basic_functions.h>
 #include <ext/standard/head.h>
@@ -1365,6 +1366,27 @@ static int frankenphp_startup(sapi_module_struct *sapi_module) {
 
 static int frankenphp_deactivate(void) { return SUCCESS; }
 
+/* ext/date's post-deactivate hook frees last_errors, which its GINIT leaves
+ * uninitialized, even when a failed startup skipped its RINIT
+ * TODO: remove when only PHP versions with the fix are supported (8.4.28+,
+ * 8.5.13+), see https://github.com/php/php-src/pull/25127 */
+static void frankenphp_init_date_globals(void) {
+  zend_module_entry *date =
+      zend_hash_str_find_ptr(&module_registry, ZEND_STRL("date"));
+  zend_date_globals *globals = ts_resource(*date->globals_id_ptr);
+  globals->last_errors = NULL;
+}
+
+static void frankenphp_handle_aborted_connection(void) {
+  /* a bailout would fail php_request_startup(), let the script's first write
+   * notice the abort instead */
+  if (PG(during_request_startup)) {
+    return;
+  }
+
+  php_handle_aborted_connection();
+}
+
 static size_t frankenphp_ub_write(const char *str, size_t str_length) {
 #ifndef PHP_WIN32
   if (UNEXPECTED(is_forked_child)) {
@@ -1376,7 +1398,7 @@ static size_t frankenphp_ub_write(const char *str, size_t str_length) {
       go_ub_write(frankenphp_thread_index(), (char *)str, str_length);
 
   if (result.r1) {
-    php_handle_aborted_connection();
+    frankenphp_handle_aborted_connection();
   }
 
   return result.r0;
@@ -1419,7 +1441,7 @@ static void frankenphp_sapi_flush(void *server_context) {
 
   sapi_send_headers();
   if (go_sapi_flush(frankenphp_thread_index())) {
-    php_handle_aborted_connection();
+    frankenphp_handle_aborted_connection();
   }
 }
 
@@ -1773,6 +1795,7 @@ static void *php_thread(void *arg) {
 #ifdef PHP_WIN32
   ZEND_TSRMLS_CACHE_UPDATE();
 #endif
+  frankenphp_init_date_globals();
 #endif
 
   /* Publish this thread's force-kill slot to Go so the graceful-drain
@@ -1792,10 +1815,17 @@ static void *php_thread(void *arg) {
       frankenphp_update_request_context();
 
       if (UNEXPECTED(php_request_startup() == FAILURE)) {
-        /* Request startup failed, bail out to zend_catch */
-        frankenphp_log_message("Request startup failed, thread is unhealthy",
-                               LOG_ERR);
-        zend_bailout();
+        /* only the request failed, the thread can serve the next one */
+        has_attempted_shutdown = true;
+        if (!SG(headers_sent)) {
+          SG(sapi_headers).http_response_code = 500;
+        }
+        reset_sandboxed_environment();
+        php_request_shutdown((void *)0);
+        sandboxed_env = NULL;
+        frankenphp_free_request_context();
+        go_frankenphp_after_script_execution(thread_index, EG(exit_status));
+        continue;
       }
 
 #if PHP_VERSION_ID < 80500

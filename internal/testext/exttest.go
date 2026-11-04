@@ -14,6 +14,7 @@ import "C"
 import (
 	"fmt"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"runtime"
 	"testing"
@@ -49,7 +50,8 @@ func testRegisterExtension(t *testing.T) {
 	}()
 	defer close(stop)
 
-	err := frankenphp.Init()
+	// one thread so that the request following a failed startup runs on the same thread
+	err := frankenphp.Init(frankenphp.WithNumThreads(1))
 	require.Nil(t, err)
 	defer frankenphp.Shutdown()
 
@@ -60,6 +62,19 @@ func testRegisterExtension(t *testing.T) {
 	})
 
 	assertExtensionsLoaded(t, 1)
+
+	// ext2 fails the request startup and its output handler calls putenv() during the request shutdown
+	req, err := frankenphp.NewRequestWithContext(httptest.NewRequest("GET", "http://example.com/index.php?fail_startup", nil), frankenphp.WithRequestDocumentRoot("./testdata", false))
+	require.NoError(t, err)
+	w := httptest.NewRecorder()
+	_ = frankenphp.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+
+	req, err = frankenphp.NewRequestWithContext(httptest.NewRequest("GET", "http://example.com/getenv.php", nil), frankenphp.WithRequestDocumentRoot("./testdata", false))
+	require.NoError(t, err)
+	w = httptest.NewRecorder()
+	assert.NoError(t, frankenphp.ServeHTTP(w, req))
+	assert.Equal(t, "bool(false)\n", w.Body.String())
 
 	// rebooting the main thread (file watcher, admin restart endpoint,
 	// opcache_reset()) starts the PHP modules again

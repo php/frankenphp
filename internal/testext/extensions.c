@@ -1,4 +1,5 @@
 #include "extension.h"
+#include <SAPI.h>
 #include <php.h>
 #include <zend_exceptions.h>
 
@@ -70,6 +71,33 @@ int test_signal_handler(void) {
   return SUCCESS;
 }
 
+/* called when php_request_shutdown() flushes the output buffers */
+static zend_result putenv_output_handler(void **handler_context,
+                                         php_output_context *output_context) {
+  zval func, arg, ret;
+  ZVAL_STRING(&func, "putenv");
+  ZVAL_STRING(&arg, "FRANKENPHP_SHUTDOWN=1");
+  call_user_function(NULL, NULL, &func, &ret, 1, &arg);
+  zval_ptr_dtor(&ret);
+  zval_ptr_dtor(&arg);
+  zval_ptr_dtor(&func);
+
+  return FAILURE;
+}
+
+static PHP_RINIT_FUNCTION(fail_startup) {
+  if (SG(request_info).query_string == NULL ||
+      strcmp(SG(request_info).query_string, "fail_startup") != 0) {
+    return SUCCESS;
+  }
+
+  php_output_handler_start(php_output_handler_create_internal(
+      ZEND_STRL("putenv"), putenv_output_handler, 0,
+      PHP_OUTPUT_HANDLER_STDFLAGS));
+
+  zend_bailout();
+}
+
 zend_module_entry module1_entry = {STANDARD_MODULE_HEADER,
                                    "ext1",
                                    NULL, /* Functions */
@@ -121,12 +149,12 @@ static const zend_function_entry ext2_functions[] = {
 
 zend_module_entry module2_entry = {STANDARD_MODULE_HEADER,
                                    "ext2",
-                                   ext2_functions,  /* Functions */
-                                   PHP_MINIT(ext2), /* MINIT */
-                                   NULL,            /* MSHUTDOWN */
-                                   NULL,            /* RINIT */
-                                   NULL,            /* RSHUTDOWN */
-                                   NULL,            /* MINFO */
+                                   ext2_functions,          /* Functions */
+                                   PHP_MINIT(ext2),         /* MINIT */
+                                   NULL,                    /* MSHUTDOWN */
+                                   PHP_RINIT(fail_startup), /* RINIT */
+                                   NULL,                    /* RSHUTDOWN */
+                                   NULL,                    /* MINFO */
                                    "0.1.0",
                                    PHP_MODULE_GLOBALS(ext2),
                                    PHP_GINIT(ext2),
