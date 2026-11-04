@@ -6,8 +6,10 @@ import "C"
 import (
 	"log/slog"
 	"runtime"
+	"slices"
 	"sync"
 	"sync/atomic"
+	"time"
 	"unsafe"
 
 	"github.com/dunglas/frankenphp/internal/state"
@@ -55,8 +57,18 @@ func newPHPThread(threadIndex int) *phpThread {
 	}
 }
 
+const (
+	maxThreadCreationRetryDelay = 256 * time.Millisecond
+	maxThreadRestoreDelay       = 10 * time.Second
+)
+
+// overridden in tests to simulate the OS refusing to create a thread
+var newCThread = func(threadIndex int) bool {
+	return bool(C.frankenphp_new_php_thread(C.uintptr_t(threadIndex)))
+}
+
 // boot starts the underlying PHP thread
-func (thread *phpThread) boot() {
+func (thread *phpThread) boot() error {
 	// thread must be in reserved state to boot
 	if !thread.state.CompareAndSwap(state.Reserved, state.Booting) && !thread.state.CompareAndSwap(state.BootRequested, state.Booting) {
 		panic("thread is not in reserved state: " + thread.state.Name())
@@ -69,11 +81,16 @@ func (thread *phpThread) boot() {
 	thread.handlerMu.Unlock()
 
 	// start the actual posix thread - TODO: try this with go threads instead
-	if !C.frankenphp_new_php_thread(C.uintptr_t(thread.threadIndex)) {
-		panic("unable to create thread")
+	if !newCThread(thread.threadIndex) {
+		// e.g. RLIMIT_NPROC reached: the thread can be booted again later
+		thread.state.Set(state.Reserved)
+
+		return ErrThreadCreation
 	}
 
 	thread.state.WaitFor(state.Inactive)
+
+	return nil
 }
 
 // reboot the underlying C thread. Ignore the request if state is currently not Ready.
@@ -82,13 +99,7 @@ func (thread *phpThread) reboot() bool {
 		return false // thread is not ready to reboot
 	}
 
-	go func() {
-		thread.state.WaitFor(state.RebootReady)
-
-		if !C.frankenphp_new_php_thread(C.uintptr_t(thread.threadIndex)) {
-			panic("unable to create thread")
-		}
-	}()
+	go thread.startRebootedThread(thread.handler)
 
 	return true
 }
@@ -100,13 +111,109 @@ func (thread *phpThread) forceReboot() bool {
 		return false
 	}
 
-	go func() {
-		thread.state.WaitFor(state.RebootReady)
+	// read without handlerMu: a setHandler() waiting for this reboot holds it, and nothing writes the handler until then
+	go thread.startRebootedThread(thread.handler)
 
-		if !C.frankenphp_new_php_thread(C.uintptr_t(thread.threadIndex)) {
-			panic("unable to create thread")
+	return true
+}
+
+// retryThreadCreation retries for about half a second, as an exiting C thread may still count against the OS thread limit
+func retryThreadCreation(create func() bool) bool {
+	for delay := time.Millisecond; !create(); delay *= 2 {
+		if delay > maxThreadCreationRetryDelay {
+			return false
 		}
-	}()
+
+		time.Sleep(delay)
+	}
+
+	return true
+}
+
+func (thread *phpThread) startRebootedThread(handler threadHandler) {
+	thread.state.WaitFor(state.RebootReady)
+
+	if !retryThreadCreation(func() bool { return newCThread(thread.threadIndex) }) {
+		thread.releaseAfterFailedReboot(handler)
+	}
+}
+
+func (thread *phpThread) releaseAfterFailedReboot(handler threadHandler) {
+	globalLogger.LogAttrs(globalCtx, slog.LevelError, "unable to restart PHP thread", slog.Int("thread", thread.threadIndex), slog.String("name", handler.name()), slog.Any("error", ErrThreadCreation))
+
+	mt := mainThread
+	switch handler := handler.(type) {
+	case *regularThread:
+		detachRegularThread(thread)
+		go restoreThread(mt, numRegularThreads, regularThreadsSnapshot, addRegularThread)
+	case *workerThread:
+		w := handler.worker
+		if w.onThreadShutdown != nil {
+			w.onThreadShutdown(thread.threadIndex)
+		}
+		w.detachThread(thread)
+		go restoreThread(mt, w.num, w.threadsSnapshot, func() (*phpThread, error) { return addWorkerThread(w) })
+	}
+
+	thread.state.Set(state.Reserved)
+}
+
+// restoreThread keeps trying to bring a pool back to its configured size, so pools without autoscaling recover
+func restoreThread(mt *phpMainThread, size int, pool func() []*phpThread, add func() (*phpThread, error)) {
+	for delay := maxThreadCreationRetryDelay; ; delay = min(2*delay, maxThreadRestoreDelay) {
+		select {
+		case <-mt.done:
+			return
+		case <-time.After(delay):
+		}
+
+		scalingMu.Lock()
+		if !mt.state.Is(state.Ready) || poolRestored(size, pool()) {
+			scalingMu.Unlock()
+
+			return
+		}
+
+		thread, err := add()
+		if err != nil {
+			scalingMu.Unlock()
+
+			if err == errMaxWorkerThreadsReached {
+				return
+			}
+
+			continue
+		}
+
+		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "PHP thread restored", slog.Int("thread", thread.threadIndex), slog.String("name", thread.name()))
+		scalingMu.Unlock()
+
+		return
+	}
+}
+
+// poolRestored reports whether the pool has its configured threads, adopting an autoscaled thread that took a free slot.
+// It must be called with scalingMu held.
+func poolRestored(size int, pool []*phpThread) bool {
+	configured, scaled := 0, -1
+	for _, thread := range pool {
+		if i := slices.Index(autoScaledThreads, thread); i >= 0 {
+			scaled = i
+		} else {
+			configured++
+		}
+	}
+
+	if configured >= size {
+		// the thread that failed was autoscaled, or another restore already replaced it
+		return true
+	}
+
+	if scaled < 0 {
+		return false
+	}
+
+	autoScaledThreads = slices.Delete(autoScaledThreads, scaled, scaled+1)
 
 	return true
 }

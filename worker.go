@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -259,6 +260,13 @@ func (worker *worker) detachThread(thread *phpThread) {
 		}
 	}
 	worker.threadMutex.Unlock()
+}
+
+func (worker *worker) threadsSnapshot() []*phpThread {
+	worker.threadMutex.RLock()
+	defer worker.threadMutex.RUnlock()
+
+	return slices.Clone(worker.threads)
 }
 
 func (worker *worker) countThreads() int {

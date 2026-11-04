@@ -47,6 +47,7 @@ var (
 	ErrInvalidPHPVersion  = errors.New("FrankenPHP is only compatible with PHP 8.2+")
 	ErrZendSignals        = errors.New(`FrankenPHP is not compatible with Zend Signals, recompile PHP with the "--disable-zend-signals" configuration option`)
 	ErrMainThreadCreation = errors.New("error creating the main thread")
+	ErrThreadCreation     = errors.New("error creating a PHP thread")
 	ErrScriptExecution    = errors.New("error during PHP script execution")
 	ErrNotRunning         = errors.New("server is not registered, you must first call frankenphp.Init() with the WithServer() option")
 
@@ -438,8 +439,9 @@ func Init(options ...Option) error {
 		return err
 	}
 
-	regularThreads = make([]*phpThread, 0, opt.numThreads-workerThreadCount)
-	for range opt.numThreads - workerThreadCount {
+	numRegularThreads = opt.numThreads - workerThreadCount
+	regularThreads = make([]*phpThread, 0, numRegularThreads)
+	for range numRegularThreads {
 		convertToRegularThread(getInactivePHPThread())
 	}
 
