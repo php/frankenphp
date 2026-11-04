@@ -398,6 +398,45 @@ static void frankenphp_free_request_context() {
   SG(request_info).request_uri = NULL;
 }
 
+static bool frankenphp_release_super_globals_once() {
+  bool released = zend_hash_str_del(&EG(symbol_table), "_SESSION",
+                                    sizeof("_SESSION") - 1) == SUCCESS;
+
+  zend_auto_global *auto_global;
+  zend_string *_env = ZSTR_KNOWN(ZEND_STR_AUTOGLOBAL_ENV);
+  ZEND_HASH_MAP_FOREACH_PTR(CG(auto_globals), auto_global) {
+    zval *value;
+    if (auto_global->name == _env || !auto_global->auto_global_callback ||
+        !(value = zend_hash_find(&EG(symbol_table), auto_global->name))) {
+      continue;
+    }
+
+    zval *array = value;
+    ZVAL_DEREF(array);
+    if (Z_TYPE_P(array) == IS_ARRAY &&
+        zend_hash_num_elements(Z_ARRVAL_P(array)) == 0) {
+      continue;
+    }
+
+    /* frankenphp_reset_super_globals() only reimports an existing $_REQUEST */
+    zval garbage;
+    ZVAL_COPY_VALUE(&garbage, value);
+    ZVAL_EMPTY_ARRAY(value);
+    zval_ptr_dtor(&garbage);
+    released = true;
+  }
+  ZEND_HASH_FOREACH_END();
+
+  return released;
+}
+
+/* Destructors must run before the next client's output is active */
+static void frankenphp_release_super_globals() {
+  /* a destructor can put data back into a superglobal already released */
+  while (frankenphp_release_super_globals_once()) {
+  }
+}
+
 /* reset all 'auto globals' in worker mode except of $_ENV
  * see: php_hash_environment() */
 static void frankenphp_reset_super_globals() {
@@ -410,13 +449,6 @@ static void frankenphp_reset_super_globals() {
     zval *files = &PG(http_globals)[TRACK_VARS_FILES];
     zval_ptr_dtor_nogc(files);
     memset(files, 0, sizeof(*files));
-
-    /* $_SESSION must be explicitly deleted from the symbol table.
-     * Unlike other superglobals, $_SESSION is stored in EG(symbol_table)
-     * with a reference to PS(http_session_vars). The session RSHUTDOWN
-     * only decrements the refcount but doesn't remove it from the symbol
-     * table, causing data to leak between requests. */
-    zend_hash_str_del(&EG(symbol_table), "_SESSION", sizeof("_SESSION") - 1);
   }
   zend_end_try();
 
@@ -936,6 +968,11 @@ PHP_FUNCTION(frankenphp_handle_request) {
     zend_throw_exception(
         spl_ce_RuntimeException,
         "frankenphp_handle_request() called while not in worker mode", 0);
+    RETURN_THROWS();
+  }
+
+  frankenphp_release_super_globals();
+  if (EG(exception)) {
     RETURN_THROWS();
   }
 

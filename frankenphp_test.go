@@ -1648,6 +1648,54 @@ func TestSessionNoLeakBetweenRequests_worker(t *testing.T) {
 	})
 }
 
+func TestPreviousRequestCodeDoesNotWriteToNextClient_worker(t *testing.T) {
+	// with "E", $_ENV is filled from the environment
+	for _, variablesOrder := range []string{"GPCS", "EGPCS"} {
+		t.Run(variablesOrder, func(t *testing.T) {
+			phpIni := map[string]string{"variables_order": variablesOrder}
+
+			runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+				body, _ := testGet("http://example.com/worker-cross-request-output.php?session=alice", handler, t)
+				assert.Equal(t, "done\n", body)
+
+				body, _ = testGet("http://example.com/worker-cross-request-output.php", handler, t)
+				assert.Equal(t, "done\n", body)
+
+				body, _ = testGet("http://example.com/worker-cross-request-output.php?tenant=erin", handler, t)
+				assert.Equal(t, "done\nwrite tenant: erin\n", body)
+
+				// objects stored in superglobals are destroyed before the next request starts
+				body, _ = testGet("http://example.com/worker-cross-request-output.php?superglobals", handler, t)
+				assert.Equal(t, "done\n", body)
+
+				body, _ = testGet("http://example.com/worker-cross-request-output.php?destroyed", handler, t)
+				assert.Equal(t, "destroyed: cookie,files,get,post,request,server\nsession: unset\nenv: env\ndone\ndestroyed env\n", body)
+
+				// $_SESSION set between two requests is released before the next one
+				body, _ = testGet("http://example.com/worker-cross-request-output.php?between=dave", handler, t)
+				assert.Equal(t, "done\n", body)
+
+				body, _ = testGet("http://example.com/worker-cross-request-output.php?destroyed", handler, t)
+				assert.Equal(t, "destroyed: dave\nsession: unset\nenv: none\ndone\n", body)
+
+				// an exception thrown while releasing superglobals never reaches the next client
+				body, _ = testGet("http://example.com/worker-cross-request-output.php?throw=frank", handler, t)
+				assert.Equal(t, "done\n", body)
+
+				body, _ = testGet("http://example.com/worker-cross-request-output.php", handler, t)
+				assert.Equal(t, "done\n", body)
+
+				// a destructor can put data back into superglobals that were already released
+				body, _ = testGet("http://example.com/worker-cross-request-output.php?move=gina", handler, t)
+				assert.Equal(t, "done\n", body)
+
+				body, _ = testGet("http://example.com/worker-cross-request-output.php?destroyed", handler, t)
+				assert.Equal(t, "destroyed: moved gina\nsession: unset\nenv: none\ndone\n", body)
+			}, &testOptions{workerScript: "worker-cross-request-output.php", nbWorkers: 1, nbParallelRequests: 1, phpIni: phpIni})
+		})
+	}
+}
+
 func TestSessionNoLeakAfterExit_worker(t *testing.T) {
 	runTest(t, func(_ func(http.ResponseWriter, *http.Request), ts *httptest.Server, i int) {
 		// Client A: Set a secret value in session and call exit(1)
