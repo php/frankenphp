@@ -35,6 +35,8 @@ type frankenPHPContext struct {
 	scriptFilename string
 	requestURI     string
 
+	// Whether the final response headers were already sent
+	headersWritten bool
 	// Whether the request is already closed by us
 	isDone bool
 	// The client's connection state as of the moment isDone was set. Captured
