@@ -1,3 +1,8 @@
+---
+title: Caddyfile、php.ini、環境変数によるFrankenPHPの設定
+description: Caddyfile、JSON、または環境変数を使用してFrankenPHPとCaddyを設定します。これには、PHPランタイムチューニング、ワーカーモード、ファイル監視、モジュールオプションが含まれます。
+---
+
 # 設定
 
 FrankenPHP、Caddy、そして[Mercure](mercure.md)や[Vulcain](https://vulcain.rocks)モジュールは、[Caddyでサポートされる形式](https://caddyserver.com/docs/getting-started#your-first-config)を使用して設定できます。
@@ -40,10 +45,10 @@ PHP:
 ```dockerfile
 FROM dunglas/frankenphp
 
-# Production:
+# 本番環境用:
 RUN cp $PHP_INI_DIR/php.ini-production $PHP_INI_DIR/php.ini
 
-# Or development:
+# または開発環境用:
 RUN cp $PHP_INI_DIR/php.ini-development $PHP_INI_DIR/php.ini
 ```
 
@@ -67,7 +72,7 @@ FrankenPHP:
 
 PHP:
 
-- `php.ini`: `frankenphp run`または`frankenphp php-server`を実行したディレクトリ内、なければ`/etc/frankenphp/php.ini`を参照
+- `php.ini`: `frankenphp run`または`frankenphp php-server`が実行されるディレクトリ、次に`/etc/frankenphp/php.ini`
 - 追加の設定ファイル: `/etc/frankenphp/php.d/*.ini`
 - PHP拡張モジュール: ロードできません、バイナリ自体にバンドルする必要があります
 - [PHPソース](https://github.com/php/php-src/)で提供される`php.ini-production`または`php.ini-development`のいずれかをコピーしてください。
@@ -92,8 +97,8 @@ FrankenPHPは、`frankenphp`の[グローバルオプション](https://caddyser
 ```caddyfile
 {
 	frankenphp {
-		num_threads <num_threads> # 開始するPHPスレッド数を設定します。デフォルト: 利用可能なCPU数の2倍。
-		max_threads <num_threads> # 実行時に追加で開始できるPHPスレッドの最大数を制限します。デフォルト: num_threads。 'auto'を設定可能。
+		num_threads <num_threads> # ワーカーが処理しないリクエストに対して開始するPHPスレッド数を設定します。ワーカーのスレッドはこれに追加されます。デフォルト: ワーカーがスレッドを確保した後に残る利用可能なCPU数の2倍（最低1つ）。
+		max_threads <num_threads> # ワーカーを含む、同時に実行できるPHPスレッドの最大数を制限します。デフォルト: 起動時に開始されたスレッド数。'auto'に設定可能。
 		max_wait_time <duration> # リクエストがタイムアウトする前にPHPのスレッドが空くのを待つ最大時間を設定します。デフォルト: 無効。
 		max_idle_time <duration> # 自動スケーリングされたスレッドが非アクティブ化されるまでにアイドル状態である最大時間を設定します。デフォルト: 5秒。
 		max_requests <num> # (実験的) PHPスレッドが再起動されるまでに処理するリクエストの最大数を設定します。メモリリークの軽減に役立ちます。通常スレッドとワーカースレッドの両方に適用されます。デフォルト: 0 (無制限)。
@@ -150,6 +155,7 @@ other.example.com {
 より細かい制御が必要な場合は、より低レベルの`php`ディレクティブを使用できます。
 `php`ディレクティブは、対象がPHPファイルかどうかを確認せず、すべての入力をPHPに渡します。
 詳しくは[パフォーマンスページ](performance.md#try_files)をお読みください。
+パスに`split_path`拡張子が含まれないリクエストは、ワーカーが処理しない限り404となります。
 
 `php_server`ディレクティブの使用は、以下の設定と同等です：
 
@@ -181,12 +187,14 @@ php_server [<matcher>] {
 	root <directory> # サイトのルートフォルダを設定します。デフォルト: `root`ディレクティブ。
 	split_path <delim...> # URIを2つの部分に分割するための部分文字列を設定します。最初にマッチする部分文字列がURIから「パス情報」を分割するために使用されます。最初の部分はマッチする部分文字列で接尾辞が付けられ、実際のリソース（CGIスクリプト）名とみなされます。2番目の部分はスクリプトが使用する PATH_INFO に設定されます。デフォルト: `.php`
 	resolve_root_symlink false # シンボリックリンクが存在する場合`root`ディレクトリをシンボリックリンクの評価によって実際の値に解決することを無効にする（デフォルトで有効）。
+	name <name> # このサーバーの名前を設定します。ワーカー、メトリクス、ログの属性に使用されます。デフォルト: 囲むルートの最初のホストマッチャー、または最初のリスナーアドレス。
 	env <key> <value> # 追加の環境変数を指定された値に設定する。複数の環境変数を指定する場合は、複数回指定することができます。
 	file_server off # 組み込みのfile_serverディレクティブを無効にします。
+	request_body_timeout <duration> # リクエストボディの読み込みに対するアイドルタイムアウトを設定します。 stalled (遅い POST) クライアントは切断されますが、安定したアップロードはサイズに関わらず成功します。デフォルト: 60秒。無効にするには 0 に設定します。
 	worker { # このサーバー固有のワーカーを作成します。複数のワーカーに対して複数回指定できます。
 		file <path> # ワーカースクリプトへのパスを設定します。php_serverのルートからの相対パスとなります。
 		num <num> # 起動するPHPスレッド数を設定します。デフォルトは利用可能なCPU数の2倍です。
-		name <name> # ログとメトリクスで使用されるワーカーの名前を設定します。デフォルト: ワーカーファイルの絶対パス。php_server ブロックで定義されている場合は、常にm#で始まります。
+		name <name> # ログとメトリクスで使用されるワーカーの名前を設定します。デフォルト: ワーカーファイルの絶対パス。名前が既に使用されている場合は、番号が末尾に付加されます。
 		watch <path> # ファイルの変更を監視するパスを設定する。複数のパスに対して複数回指定することができる。
 		env <key> <value> # 追加の環境変数を指定された値に設定する。複数の環境変数を指定する場合は、複数回指定することができます。このワーカーの環境変数もphp_serverの親から継承されますが、 ここで上書きすることもできます。
 		match <path> # ワーカーをパスパターンにマッチさせます。try_filesを上書きし、php_serverディレクティブでのみ使用できます。
@@ -305,7 +313,7 @@ FPM や CLI SAPI と同様に、環境変数はデフォルトで`$_SERVER`ス�
     frankenphp {
         php_ini memory_limit 256M
 
-        # or
+        # または
 
         php_ini {
             memory_limit 256M
@@ -352,6 +360,20 @@ CADDY_GLOBAL_OPTIONS="servers {
 
 この設定の詳細については、[Caddyドキュメント](https://caddyserver.com/docs/caddyfile/options#enable-full-duplex)をご覧ください。
 
+### リクエストボディサイズ制限
+
+リクエストボディのサイズを制限するには、[`request_body`ディレクティブ](https://caddyserver.com/docs/caddyfile/directives/request_body)を使用します。
+
+```caddyfile
+request_body {
+	max_size 10MB
+}
+```
+
+より大きなボディを持つリクエストは、`413 Request Entity Too Large`レスポンスを受け取ります。
+スクリプトが開始する前にPHPがボディを読み取る場合（フォームやファイルアップロードなどの`Content-Type`を持つ`POST`リクエスト）、スクリプトは実行されません。
+スクリプトが`php://input`または`request_parse_body()`を通じてボディ自体を読み取る場合、制限に達すると読み取りは`FrankenPHP\RequestBodyTooLargeException`をスローするため、切り詰められたボディが完全なものと誤解されることはありません。
+
 ## デバッグモードの有効化
 
 Dockerイメージを使用する場合、`CADDY_GLOBAL_OPTIONS`環境変数に`debug`を設定するとデバッグモードが有効になります：
@@ -363,7 +385,7 @@ docker run -v $PWD:/app/public \
     dunglas/frankenphp
 ```
 
-## Shell completion
+## シェル補完
 
 FrankenPHPはBash、Zsh、Fish、およびPowerShell用のシェル補完機能を内蔵しています。これにより、すべてのコマンド（`php-server`、`php-cli`、`extension-init`などのカスタムコマンドを含む）とそのフラグのオートコンプリートが可能になります。
 
@@ -433,7 +455,5 @@ frankenphp completion powershell | Out-String | Invoke-Expression
 frankenphp completion powershell | Out-File -FilePath (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")
 Add-Content -Path $PROFILE -Value '. (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")'
 ```
-
-この設定を有効にするには、新しいシェルを起動する必要があります。
 
 この設定を有効にするには、新しいシェルを起動する必要があります。

@@ -1,8 +1,13 @@
-# Konfigürasyon
+---
+title: FrankenPHP'yi Caddyfile, php.ini ve ortam değişkenleriyle yapılandırma
+description: FrankenPHP ve Caddy'yi Caddyfile, JSON veya ortam değişkenleri aracılığıyla yapılandırın; buna PHP çalışma zamanı ayarları, worker modu, dosya izleme ve modül seçenekleri dahildir.
+---
 
-FrankenPHP, Caddy'nin yanı sıra [Mercure](mercure.md) ve [Vulcain](https://vulcain.rocks) modülleri [Caddy tarafından desteklenen formatlar](https://caddyserver.com/docs/getting-started#your-first-config) kullanılarak yapılandırılabilir.
+# Yapılandırma
 
-En yaygın format, basit, insan tarafından okunabilir bir metin formatı olan `Caddyfile`'dır. Varsayılan olarak, FrankenPHP mevcut dizinde bir `Caddyfile` arar. Özel bir yol belirtmek için `-c` veya `--config` seçeneğini kullanabilirsiniz.
+FrankenPHP, Caddy'nin yanı sıra [Mercure](mercure.md) ve [Vulcain](https://vulcain.rocks) modülleri, [Caddy tarafından desteklenen formatlar](https://caddyserver.com/docs/getting-started#your-first-config) kullanılarak yapılandırılabilir.
+
+En yaygın format, basit, insan tarafından okunabilir bir metin formatı olan `Caddyfile`'dır. Varsayılan olarak, FrankenPHP mevcut dizinde bir `Caddyfile` arayacaktır. Özel bir yol belirtmek için `-c` veya `--config` seçeneğini kullanabilirsiniz.
 
 Bir PHP uygulamasını sunmak için minimal bir `Caddyfile` aşağıda gösterilmiştir:
 
@@ -38,10 +43,10 @@ PHP:
 ```dockerfile
 FROM dunglas/frankenphp
 
-# Production:
+# Üretim için:
 RUN cp $PHP_INI_DIR/php.ini-production $PHP_INI_DIR/php.ini
 
-# Veya development:
+# Veya geliştirme için:
 RUN cp $PHP_INI_DIR/php.ini-development $PHP_INI_DIR/php.ini
 ```
 
@@ -70,7 +75,7 @@ PHP:
 - PHP uzantıları: yüklenemez, bunları doğrudan ikili dosyaya dahil edin
 - [PHP kaynak kodu](https://github.com/php/php-src/) ile birlikte verilen `php.ini-production` veya `php.ini-development` dosyalarından birini kopyalayın.
 
-## Caddyfile konfigürasyonu
+## Caddyfile yapılandırması
 
 PHP uygulamanızı sunmak için site blokları içinde `php_server` veya `php` [HTTP yönergeleri](https://caddyserver.com/docs/caddyfile/concepts#directives) kullanılabilir.
 
@@ -90,17 +95,18 @@ Ayrıca, FrankenPHP'yi [global seçenek](https://caddyserver.com/docs/caddyfile/
 ```caddyfile
 {
 	frankenphp {
-		num_threads <num_threads> # Başlatılacak PHP iş parçacığı sayısını ayarlar. Varsayılan: Mevcut CPU'ların 2 katı.
-		max_threads <num_threads> # Çalışma zamanında başlatılabilecek ek PHP iş parçacığı sayısını sınırlar. Varsayılan: num_threads. 'auto' olarak ayarlanabilir.
-		max_wait_time <duration> # Bir isteğin boş bir PHP iş parçacığı bekleme süresinin zaman aşımına uğramadan önceki maksimum süresini ayarlar. Varsayılan: devre dışı.
+		num_threads <num_threads> # Worker'ların kendi iş parçacıklarına sahip olduktan sonra, geriye kalan mevcut CPU sayısının 2 katından kalan kadar, en az bir tane olacak şekilde, worker'ın hizmet vermediği istekler için başlatılacak PHP iş parçacığı sayısını ayarlar. Varsayılan: mevcut CPU'ların 2 katının worker'lar tarafından kullanılan kısmı çıkarıldıktan sonra kalan, en az 1.
+		max_threads <num_threads> # Worker'lar dahil olmak üzere aynı anda kaç PHP iş parçacığının çalışabileceğini sınırlar. Varsayılan: önyüklemede başlatılan iş parçacıkları. 'auto' olarak ayarlanabilir.
+		max_wait_time <duration> # Bir isteğin, zaman aşımına uğramadan önce boş bir PHP iş parçacığı bekleme süresinin maksimum süresini ayarlar. Varsayılan: devre dışı.
 		max_idle_time <duration> # Otomatik ölçeklenen bir iş parçacığının devre dışı bırakılmadan önce ne kadar süre boş kalabileceğini ayarlar. Varsayılan: 5s.
+		max_requests <num> # (deneysel) Bir PHP iş parçacığının yeniden başlatılmadan önce işleyeceği maksimum istek sayısını ayarlar, bellek sızıntılarını azaltmak için kullanışlıdır. Hem düzenli hem de worker iş parçacıkları için geçerlidir. Varsayılan: 0 (sınırsız).
 		php_ini <key> <value> # Bir php.ini yönergesi ayarlar. Birden fazla yönerge ayarlamak için birden fazla kez kullanılabilir.
 		worker {
-			file <path> # Çalışan komut dosyasının yolunu ayarlar.
+			file <path> # Worker komut dosyasının yolunu ayarlar.
 			num <num> # Başlatılacak PHP iş parçacığı sayısını ayarlar, varsayılan değer mevcut CPU'ların 2 katıdır.
 			env <key> <value> # Ek bir ortam değişkenini verilen değere ayarlar. Birden fazla ortam değişkeni için birden fazla kez belirtilebilir.
 			watch <path> # Dosya değişikliklerini izlemek için yolu ayarlar. Birden fazla yol için birden fazla kez belirtilebilir.
-			name <name> # İşçinin adını ayarlar, günlüklerde ve metriklerde kullanılır. Varsayılan: işçi dosyasının mutlak yolu.
+			name <name> # İşçinin adını ayarlar, günlüklerde ve metriklerde kullanılır. Varsayılan: worker dosyasının mutlak yolu
 			max_consecutive_failures <num> # İşçinin sağlıksız kabul edilmeden önceki maksimum ardışık hata sayısını ayarlar, -1 işçinin her zaman yeniden başlayacağı anlamına gelir. Varsayılan: 6.
 		}
 	}
@@ -146,6 +152,7 @@ other.example.com {
 Genellikle ihtiyacınız olan şey `php_server` yönergesini kullanmaktır,
 ancak tam kontrole ihtiyacınız varsa, daha düşük seviyeli `php` yönergesini kullanabilirsiniz.
 `php` yönergesi, önce bir PHP dosyası olup olmadığını kontrol etmek yerine tüm girdiyi PHP'ye iletir. Daha fazla bilgiyi [performans sayfasında](performance.md#try_files) okuyun.
+Yolunda `split_path` uzantılarından hiçbiri bulunmayan bir istek, bir worker tarafından işlenmediği sürece 404 alır.
 
 `php_server` yönergesini kullanmak bu yapılandırmayla aynıdır:
 
@@ -175,17 +182,19 @@ route {
 ```caddyfile
 php_server [<matcher>] {
 	root <directory> # Sitenin kök klasörünü ayarlar. Varsayılan: `root` yönergesi.
-	split_path <delim...> # URI'yi iki parçaya bölmek için alt dizgeleri ayarlar. İlk eşleşen alt dizge "yol bilgisini" yoldan ayırmak için kullanılır. İlk parça eşleşen alt dizeyle sonlandırılır ve gerçek kaynak (CGI betiği) adı olarak kabul edilir. İkinci parça betiğin kullanması için PATH_INFO olarak ayarlanacaktır. Varsayılan: `.php`
+	split_path <delim...> # URI'yi iki parçaya bölmek için alt dizgeleri ayarlar. Bir yol segmentini sonlandıran ilk eşleşen alt dize, "yol bilgisini" yoldan ayırmak için kullanılır. İlk parça eşleşen alt dizeyle sonlandırılır ve gerçek kaynak (CGI betiği) adı olarak kabul edilir. İkinci parça betiğin kullanması için PATH_INFO olarak ayarlanacaktır. Varsayılan: `.php`
 	resolve_root_symlink false # Varsa, sembolik bir bağlantıyı değerlendirerek `root` dizininin gerçek değerine çözümlenmesini devre dışı bırakır (varsayılan olarak etkindir).
+	name <name> # Bu sunucu için günlüklerde ve metriklerde kullanılan bir ad ayarlar. Varsayılan: çevreleyen rotanın ilk ana bilgisayar eşleştiricisi veya ilk dinleyici adresi.
 	env <key> <value> # Ek bir ortam değişkenini verilen değere ayarlar. Birden fazla ortam değişkeni için birden fazla kez belirtilebilir.
 	file_server off # Yerleşik file_server yönergesini devre dışı bırakır.
+	request_body_timeout <duration> # İstek gövdesi okumalarında bir boşta kalma zaman aşımı ayarlar: tıkanmış (yavaş POST) bir istemci bağlantısı kesilirken, herhangi bir boyutta sürekli bir yükleme başarılı olur. Varsayılan: 60s. Devre dışı bırakmak için 0 olarak ayarlayın.
 	worker { # Bu sunucuya özgü bir worker oluşturur. Birden fazla worker için birden fazla kez belirtilebilir.
 		file <path> # Worker betiğinin yolunu ayarlar, php_server köküne göre göreceli olabilir
 		num <num> # Başlatılacak PHP iş parçacığı sayısını ayarlar, varsayılan değer mevcut CPU'ların 2 katıdır.
-		name <name> # Worker için günlüklerde ve metriklerde kullanılan bir ad ayarlar. Varsayılan: worker dosyasının mutlak yolu. Bir php_server bloğunda tanımlandığında her zaman m# ile başlar.
+		name <name> # Worker için günlüklerde ve metriklerde kullanılan bir ad ayarlar. Varsayılan: worker dosyasının mutlak yolu. Ad zaten kullanılıyorsa bir numara ile son eklenir.
 		watch <path> # Dosya değişikliklerini izlemek için yolu ayarlar. Birden fazla yol için birden fazla kez belirtilebilir.
 		env <key> <value> # Ek bir ortam değişkenini verilen değere ayarlar. Birden fazla ortam değişkeni için birden fazla kez belirtilebilir. Bu worker için ortam değişkenleri ayrıca php_server üst öğesinden devralınır, ancak burada geçersiz kılınabilir.
-		match <path> # İşçiyi bir yol desenine eşleştirir. try_files'ı geçersiz kılar ve yalnızca php_server yönergesinde kullanılabilir.
+		match <path> # Worker'ı bir yol desenine eşleştirir. try_files'ı geçersiz kılar ve yalnızca php_server yönergesinde kullanılabilir.
 	}
 	worker <other_file> <num> # Global frankenphp bloğundaki gibi kısa formu da kullanabilirsiniz.
 }
@@ -235,9 +244,9 @@ Dosya izleyici [e-dant/watcher](https://github.com/e-dant/watcher) üzerine kuru
 
 ## İşçiyi yola eşleştirme
 
-Geleneksel PHP uygulamalarında, betikler her zaman public dizininde bulunur. Bu, diğer tüm PHP betikleri gibi ele alınan işçi betikleri için de geçerlidir. İşçi betiğini public dizininin dışına koymak isterseniz, bunu `match` yönergesi aracılığıyla yapabilirsiniz.
+Geleneksel PHP uygulamalarında, betikler her zaman public dizininde bulunur. Bu, diğer tüm PHP betikleri gibi ele alınan worker betikleri için de geçerlidir. Worker betiğini public dizininin dışına koymak isterseniz, bunu `match` yönergesi aracılığıyla yapabilirsiniz.
 
-`match` yönergesi, yalnızca `php_server` ve `php` içinde bulunan `try_files`'a optimize edilmiş bir alternatiftir. Aşağıdaki örnek, varsa her zaman public dizinindeki bir dosyayı sunacak, aksi takdirde isteği yol desenine uyan işçiye iletecektir.
+`match` yönergesi, yalnızca `php_server` ve `php` içinde bulunan `try_files`'a optimize edilmiş bir alternatiftir. Aşağıdaki örnek, varsa her zaman public dizinindeki bir dosyayı sunacak, aksi takdirde isteği yol desenine uyan worker'a iletecektir.
 
 ```caddyfile
 {
@@ -248,6 +257,20 @@ Geleneksel PHP uygulamalarında, betikler her zaman public dizininde bulunur. Bu
 				match /api/* # /api/ ile başlayan tüm istekler bu worker tarafından işlenecektir
 			}
 		}
+	}
+}
+```
+
+## İstek sayısından sonra iş parçacıklarını yeniden başlatma (deneysel)
+
+FrankenPHP, PHP iş parçacıklarını belirli bir sayıda isteği işledikten sonra otomatik olarak yeniden başlatabilir. Bir iş parçacığı sınıra ulaştığında, tüm belleği ve durumu temizleyerek tamamen yeniden başlatılır. Yeniden başlatma sırasında diğer iş parçacıkları istekleri sunmaya devam eder.
+
+Zamanla belleğin arttığını fark ederseniz, ideal çözüm sızıntıyı ilgili uzantı veya kütüphane yöneticisine bildirmektir. Ancak çözüm, kontrol edemediğiniz bir üçüncü tarafa bağlıysa, `max_requests` üretim için pragmatik ve umarız geçici bir geçici çözüm sunar:
+
+```caddyfile
+{
+	frankenphp {
+		max_requests 500
 	}
 }
 ```
@@ -265,7 +288,7 @@ FPM ve CLI SAPI'lerinde olduğu gibi, ortam değişkenleri varsayılan olarak `$
 
 [`variables_order`'a ait PHP yönergesinin](https://www.php.net/manual/ini.core.php#ini.variables-order) `S` değeri bu yönergede `E`'nin başka bir yere yerleştirilmesinden bağımsız olarak her zaman `ES` ile eş değerdir.
 
-## PHP konfigürasyonu
+## PHP yapılandırması
 
 Ek olarak [PHP yapılandırma dosyalarını](https://www.php.net/manual/configuration.file.php#configuration.file.scan) yüklemek için,
 `PHP_INI_SCAN_DIR` ortam değişkeni kullanılabilir.
@@ -298,7 +321,7 @@ Eğer `localhost` ana bilgisayar adı yerine `127.0.0.1` IP adresiyle HTTPS kull
 
 ### Tam çift yönlü (HTTP/1)
 
-HTTP/1.x kullanırken, tüm gövde okunmadan önce bir yanıt yazmaya izin vermek için tam çift yönlü modun etkinleştirilmesi istenebilir. (örneğin: [Mercure](mercure.md), WebSocket, Sunucu Tarafından Gönderilen Olaylar vb.)
+HTTP/1.x kullanırken, tüm gövde okunmadan önce bir yanıt yazmaya izin vermek için tam çift yönlü modun etkinleştirilmesi istenebilir (örneğin: [Mercure](mercure.md), WebSocket, Sunucu Tarafından Gönderilen Olaylar vb.).
 
 Bu, `Caddyfile`'daki global seçeneklere eklenmesi gereken isteğe bağlı bir yapılandırmadır:
 
@@ -323,6 +346,18 @@ CADDY_GLOBAL_OPTIONS="servers {
 
 Bu ayar hakkında daha fazla bilgiyi [Caddy belgelerinde](https://caddyserver.com/docs/caddyfile/options#enable-full-duplex) bulabilirsiniz.
 
+### İstek gövdesi boyut sınırı
+
+İstek gövdelerinin boyutunu sınırlamak için [`request_body`](https://caddyserver.com/docs/caddyfile/directives/request_body) yönergesini kullanın:
+
+```caddyfile
+request_body {
+	max_size 10MB
+}
+```
+
+Daha büyük gövdeye sahip istekler `413 Request Entity Too Large` yanıtı alır. PHP, komut dosyası başlamadan önce gövdeyi okursa (formlar ve dosya yüklemeleri gibi `Content-Type` içeren `POST` istekleri), komut dosyası çalışmaz. Komut dosyası gövdeyi `php://input` veya `request_parse_body()` aracılığıyla kendisi okursa, sınıra ulaşıldığında okuma bir `FrankenPHP\RequestBodyTooLargeException` hatası fırlatır, böylece kesilen bir gövde asla tam olarak algılanmaz.
+
 ## Hata ayıklama modunu etkinleştirin
 
 Docker imajını kullanırken, hata ayıklama modunu etkinleştirmek için `CADDY_GLOBAL_OPTIONS` ortam değişkenini `debug` olarak ayarlayın:
@@ -334,9 +369,9 @@ docker run -v $PWD:/app/public \
     dunglas/frankenphp
 ```
 
-## Shell completion
+## Kabuk tamamlama
 
-FrankenPHP, Bash, Zsh, Fish ve PowerShell için yerleşik kabuk tamamlama desteği sağlar. Bu, tüm komutlar ( `php-server`, `php-cli` ve `extension-init` gibi özel komutlar dahil) ve bunların bayrakları için otomatik tamamlama sağlar.
+FrankenPHP, Bash, Zsh, Fish ve PowerShell için yerleşik kabuk tamamlama desteği sağlar. Bu, tüm komutlar (`php-server`, `php-cli` ve `extension-init` gibi özel komutlar dahil) ve bunların bayrakları için otomatik tamamlama sağlar.
 
 ### Bash
 
@@ -404,7 +439,5 @@ Her yeni oturum için tamamlamaları yüklemek için, bir kez çalıştırın:
 frankenphp completion powershell | Out-File -FilePath (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")
 Add-Content -Path $PROFILE -Value '. (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")'
 ```
-
-Bu kurulumun etkili olması için yeni bir kabuk başlatmanız gerekecektir.
 
 Bu kurulumun etkili olması için yeni bir kabuk başlatmanız gerekecektir.

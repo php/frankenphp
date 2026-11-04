@@ -1,3 +1,8 @@
+---
+title: 使用 Caddyfile、php.ini 和环境变量配置 FrankenPHP
+description: 通过 Caddyfile、JSON 或环境变量配置 FrankenPHP 和 Caddy，包括 PHP 运行时调优、工作模式、文件监视和模块选项。
+---
+
 # 配置
 
 FrankenPHP、Caddy 以及 [Mercure](mercure.md) 和 [Vulcain](https://vulcain.rocks) 模块可以使用 [Caddy 支持的格式](https://caddyserver.com/docs/getting-started#your-first-config) 进行配置。
@@ -90,19 +95,19 @@ localhost {
 ```caddyfile
 {
 	frankenphp {
-		num_threads <num_threads> # 设置要启动的 PHP 线程数量。默认：可用 CPU 数量的 2 倍。
-		max_threads <num_threads> # 限制可以在运行时启动的额外 PHP 线程的数量。默认值：num_threads。可以设置为 'auto'。
-		max_wait_time <duration> # 设置请求在超时之前可以等待的最大时间，直到找到一个空闲的 PHP 线程。 默认：禁用。
-		max_idle_time <duration> # 设置一个自动扩展的线程在被停用之前可以空闲的最长时间。默认：5s。
-		max_requests <num> # (实验性) 设置一个 PHP 线程在重启前将处理的最大请求数，这有助于缓解内存泄漏问题。适用于常规线程和 worker 线程。默认值：0 (无限制)。
-		php_ini <key> <value> # 设置一个 php.ini 指令。可以多次使用以设置多个指令。
+		num_threads <num_threads> # 设置要启动的 PHP 线程数量，用于处理没有 worker 服务时的请求，worker 线程在此基础上增加。默认值：在 worker 线程分配完毕后，剩余的可用 CPU 数量的 2 倍（至少一个）。
+		max_threads <num_threads> # 限制同时运行的 PHP 线程数量（包括 worker 线程）。默认值：启动时创建的线程数。可以设置为 'auto'。
+		max_wait_time <duration> # 设置请求在超时之前可以等待空闲 PHP 线程的最长时间。默认值：禁用。
+		max_idle_time <duration> # 设置一个自动缩放的线程在被停用之前可以空闲的最长时间。默认值：5s。
+		max_requests <num> # (实验性) 设置 PHP 线程在重启前处理的最大请求数，有助于缓解内存泄漏。适用于常规线程和 worker 线程。默认值：0 (无限制)。
+		php_ini <key> <value> # 设置 php.ini 指令。可以多次使用以设置多个指令。
 		worker {
 			file <path> # 设置工作脚本的路径。
 			num <num> # 设置要启动的 PHP 线程数量，默认为可用 CPU 数量的 2 倍。
 			env <key> <value> # 设置一个额外的环境变量为给定的值。可以多次指定以设置多个环境变量。
 			watch <path> # 设置要监视文件更改的路径。可以为多个路径多次指定。
-			name <name> # 设置worker的名称，用于日志和指标。默认值：worker文件的绝对路径。
-			max_consecutive_failures <num> # 设置在工人被视为不健康之前的最大连续失败次数，-1意味着工人将始终重新启动。默认值：6。
+			name <name> # 设置 worker 的名称，用于日志和指标。默认值：worker 文件的绝对路径。
+			max_consecutive_failures <num> # 设置 worker 在被视为不健康之前的最大连续失败次数，-1 意味着 worker 将始终重新启动。默认值：6。
 		}
 	}
 }
@@ -146,8 +151,9 @@ other.example.com {
 
 使用 `php_server` 指令通常是您需要的，
 但是如果你需要完全控制，你可以使用更低级的 `php` 指令。
-`php` 指令将所有输入传递给 PHP，而不是先检查是否
-是一个PHP文件。在[性能页面](performance.md#try_files)中了解更多关于它的信息。
+`php` 指令将所有输入传递给 PHP，而不是先检查是否是 PHP 文件。
+在[性能页面](performance.md#try_files)中了解更多关于它的信息。
+请求路径中不包含任何 `split_path` 扩展名的请求将收到 404 响应，除非有 worker 处理它。
 
 使用 `php_server` 指令等同于以下配置：
 
@@ -159,7 +165,7 @@ route {
 		not path */
 	}
 	redir @canonicalPath {path}/ 308
-	# 如果请求的文件不存在，则尝试 index 文件
+	# 如果请求的文件不存在，则尝试索引文件
 	@indexFiles file {
 		try_files {path} {path}/index.php index.php
 		split_path .php
@@ -177,29 +183,31 @@ route {
 ```caddyfile
 php_server [<matcher>] {
 	root <directory> # 将根文件夹设置为站点。默认值：`root` 指令。
-	split_path <delim...> # 设置用于将 URI 分割成两部分的子字符串。第一个匹配的子字符串将用来将 "路径信息" 与路径分开。第一部分后缀为匹配的子字符串，并将被视为实际资源（CGI 脚本）名称。第二部分将被设置为脚本使用的 PATH_INFO。默认值：`.php`。
+	split_path <delim...> # 设置用于将 URI 分割成两部分的子字符串。第一个匹配的子字符串将用来将 "路径信息" 与路径分开。第一部分后缀为匹配的子字符串，并将被视为实际资源（CGI 脚本）名称。第二部分将被设置为脚本使用的 PATH_INFO。默认值：`.php`
 	resolve_root_symlink false # 禁用通过评估符号链接（如果存在）将 `root` 目录解析为其实际值（默认启用）。
+	name <name> # 为此服务器设置名称，用于分配 worker、指标和日志。默认值：封闭路由的第一个主机匹配器，或第一个监听地址。
 	env <key> <value> # 设置一个额外的环境变量为给定的值。可以多次指定以设置多个环境变量。
 	file_server off # 禁用内置的 file_server 指令。
-	worker { # 为此服务器创建特定的worker。可以多次指定以创建多个workers。
+	request_body_timeout <duration> # 设置请求体读取的空闲超时时间：失速（慢速 POST）客户端将被切断，而任何大小的稳定上传都能成功。默认值：60s。设置为 0 以禁用。
+	worker { # 为此服务器创建特定的 worker。可以多次指定以创建多个 worker。
 		file <path> # 设置工作脚本的路径，可以相对于 php_server 根目录
 		num <num> # 设置要启动的 PHP 线程数，默认为可用 CPU 数量的 2 倍
-		name <name> # 为worker设置名称，用于日志和指标。默认值：worker文件的绝对路径。定义在 php_server 块中时，始终以 m# 开头。
+		name <name> # 为 worker 设置名称，用于日志和指标。默认值：worker 文件的绝对路径。如果名称已被使用，则附加一个数字。
 		watch <path> # 设置要监视文件更改的路径。可以为多个路径多次指定。
-		env <key> <value> # 设置一个额外的环境变量为给定值。可以多次指定以设置多个环境变量。此工作进程的环境变量也从 php_server 父进程继承，但可以在此处覆盖。
-		match <path> # 将worker匹配到路径模式。覆盖 try_files，并且只能在 php_server 指令中使用。
+		env <key> <value> # 设置一个额外的环境变量为给定值。可以多次指定以设置多个环境变量。此 worker 的环境变量也从 php_server 父进程继承，但可以在此处覆盖。
+		match <path> # 将 worker 匹配到路径模式。覆盖 try_files 且只能在 php_server 指令中使用。
 	}
 	worker <other_file> <num> # 也可以像在全局 frankenphp 块中那样使用简短形式。
 }
 ```
 
-### 监控文件变化
+### 监视文件更改
 
 由于 workers 只会启动您的应用程序一次并将其保留在内存中，
 因此对您的 PHP 文件的任何更改不会立即反映出来。
 
 Workers 可以通过 `watch` 指令在文件更改时重新启动。
-这对开发环境很有用。
+这对于开发环境很有用。
 
 ```caddyfile
 {
@@ -212,10 +220,10 @@ Workers 可以通过 `watch` 指令在文件更改时重新启动。
 }
 ```
 
-此功能通常与[热重载](hot-reload.md)结合使用。
+此功能通常与[热重载](hot-reload.md#热重载)结合使用。
 
 如果没有指定 `watch` 目录，它将回退到 `./**/*.{env,php,twig,yaml,yml}`，
-这将监视启动 FrankenPHP 进程的目录及其子目录中的所有 `.env`、`.php`、`.twig`、`.yaml` 和 `.yml` 文件。
+这将监视 FrankenPHP 进程启动目录及其子目录中的所有 `.env`、`.php`、`.twig`、`.yaml` 和 `.yml` 文件。
 你也可以通过 [shell 文件名模式](https://pkg.go.dev/path/filepath#Match) 指定一个或多个目录：
 
 ```caddyfile
@@ -224,26 +232,26 @@ Workers 可以通过 `watch` 指令在文件更改时重新启动。
 		worker {
 			file  /path/to/app/public/worker.php
 			watch /path/to/app # 监视 /path/to/app 所有子目录中的所有文件
-			watch /path/to/app/*.php # 监视位于/path/to/app中的以.php结尾的文件
+			watch /path/to/app/*.php # 监视位于 /path/to/app 中以 .php 结尾的文件
 			watch /path/to/app/**/*.php # 监视 /path/to/app 及子目录中的 PHP 文件
-			watch /path/to/app/**/*.{php,twig} # 在/path/to/app及其子目录中监视PHP和Twig文件
+			watch /path/to/app/**/*.{php,twig} # 在 /path/to/app 及其子目录中监视 PHP 和 Twig 文件
 		}
 	}
 }
 ```
 
 - `**` 模式表示递归监视
-- 目录也可以是相对的（相对于FrankenPHP进程启动的位置）
-- 如果您定义了多个workers，当文件发生更改时，将重新启动所有workers。
-- 小心查看在运行时创建的文件（如日志），因为它们可能导致不必要的工作进程重启。
+- 目录也可以是相对的（相对于 FrankenPHP 进程启动的位置）
+- 如果您定义了多个 workers，当文件发生更改时，所有 workers 都将重新启动。
+- 小心监视在运行时创建的文件（如日志），因为它们可能导致不必要的工作进程重启。
 
 文件监视器基于[e-dant/watcher](https://github.com/e-dant/watcher)。
 
 ## 将 worker 匹配到一条路径
 
-在传统的PHP应用程序中，脚本总是放在公共目录中。
-这对于工作脚本也是如此，这些脚本被视为任何其他PHP脚本。
-如果您想将工作脚本放在公共目录外，可以通过 `match` 指令来实现。
+在传统的 PHP 应用程序中，脚本总是放在公共目录中。
+这对于 worker 脚本也是如此，这些脚本被视为任何其他 PHP 脚本。
+如果您想将 worker 脚本放在公共目录外，可以通过 `match` 指令来实现。
 
 `match` 指令是 `try_files` 的一种优化替代方案，仅在 `php_server` 和 `php` 内部可用。
 以下示例将始终在公共目录中提供文件（如果存在），否则会将请求转发给与路径模式匹配的 worker。
@@ -282,14 +290,14 @@ FrankenPHP 可以在 PHP 线程处理完给定数量的请求后自动重启它�
 
 可以使用以下环境变量在不修改 `Caddyfile` 的情况下注入 Caddy 指令：
 
-- `SERVER_NAME`: 更改[监听的地址](https://caddyserver.com/docs/caddyfile/concepts#addresses)，提供的宿主名也将用于生成的TLS证书。
-- `SERVER_ROOT`: 更改网站的根目录，默认为 `public/`
+- `SERVER_NAME`: 更改[监听的地址](https://caddyserver.com/docs/caddyfile/concepts#addresses)，提供的宿主名也将用于生成的 TLS 证书。
+- `SERVER_ROOT`: 更改网站的根目录，默认为 `public/`。
 - `CADDY_GLOBAL_OPTIONS`: 注入[全局选项](https://caddyserver.com/docs/caddyfile/options)
 - `FRANKENPHP_CONFIG`: 在 `frankenphp` 指令下注入配置
 
 至于 FPM 和 CLI SAPIs，环境变量默认在 `$_SERVER` 超全局中暴露。
 
-`variables_order` PHP 指令中 `S` 的值始终等于 `ES`，无论 `E` 在该指令中的其他位置如何。
+[`variables_order` PHP 指令](https://www.php.net/manual/ini.core.php#ini.variables-order)中 `S` 的值始终等于 `ES`，无论 `E` 在该指令中的其他位置如何。
 
 ## PHP 配置
 
@@ -319,11 +327,11 @@ FrankenPHP 可以在 PHP 线程处理完给定数量的请求后自动重启它�
 
 或者，你可以使用 [Caddy 文档](https://caddyserver.com/docs/automatic-https#activation) 中描述的所有其他方法。
 
-如果你想将 HTTPS 与 `127.0.0.1` IP 地址而不是 `localhost` 主机名一起使用，请阅读[已知问题](known-issues.md#using-https127001-with-docker)部分。
+如果你想将 HTTPS 与 `127.0.0.1` IP 地址而不是 `localhost` 主机名一起使用，请阅读[已知问题](known-issues.md#使用-docker-和-https127001)部分。
 
 ### 全双工 (HTTP/1)
 
-在使用 HTTP/1.x 时，可能希望启用全双工模式，以便在整个请求体被读取之前允许写入响应。(例如：[Mercure](mercure.md)、WebSocket、Server-Sent Events 等)
+在使用 HTTP/1.x 时，可能希望启用全双工模式，以便在整个请求体被读取之前允许写入响应。(例如：[Mercure](mercure.md)、WebSocket、Server-Sent Events 等)。
 
 这是一个可选配置，需要添加到 `Caddyfile` 中的全局选项中：
 
@@ -348,9 +356,23 @@ CADDY_GLOBAL_OPTIONS="servers {
 
 您可以在[Caddy文档](https://caddyserver.com/docs/caddyfile/options#enable-full-duplex)中找到有关此设置的更多信息。
 
+### 请求体大小限制
+
+为了限制请求体的大小，请使用 [`request_body`](https://caddyserver.com/docs/caddyfile/directives/request_body) 指令：
+
+```caddyfile
+request_body {
+	max_size 10MB
+}
+```
+
+请求体过大将收到 `413 Request Entity Too Large` 响应。
+如果 PHP 在脚本启动前读取请求体（如带有 `Content-Type` 的 `POST` 请求，例如表单和文件上传），则脚本不会运行。
+如果脚本通过 `php://input` 或 `request_parse_body()` 自己读取请求体，一旦达到限制，读取将抛出 `FrankenPHP\RequestBodyTooLargeException` 异常，因此截断的请求体永远不会被误认为是完整的。
+
 ## 启用调试模式
 
-使用Docker镜像时，将`CADDY_GLOBAL_OPTIONS`环境变量设置为`debug`以启用调试模式:
+使用 Docker 镜像时，将 `CADDY_GLOBAL_OPTIONS` 环境变量设置为 `debug` 以启用调试模式：
 
 ```console
 docker run -v $PWD:/app/public \
@@ -429,7 +451,5 @@ frankenphp completion powershell | Out-String | Invoke-Expression
 frankenphp completion powershell | Out-File -FilePath (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")
 Add-Content -Path $PROFILE -Value '. (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")'
 ```
-
-您需要启动一个新的 shell 会话才能使此设置生效。
 
 您需要启动一个新的 shell 会话才能使此设置生效。
