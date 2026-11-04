@@ -17,6 +17,7 @@ import (
 	"crypto/tls"
 	"net"
 	"net/http"
+	"net/url"
 	"path"
 	"path/filepath"
 	"runtime"
@@ -137,6 +138,11 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 
 func addHeadersToServer(request *http.Request, trackVarsArray *C.zval) {
 	for field, val := range request.Header {
+		// HTTP_HOST comes from request.Host: over HTTP/2, net/http keeps a "host" field distinct from :authority
+		if field == "Host" {
+			continue
+		}
+
 		if k := commonHeaders[field]; k != nil {
 			v := strings.Join(val, ", ")
 			C.frankenphp_register_known_variable(k, toUnsafeChar(v), C.size_t(len(v)), trackVarsArray)
@@ -178,17 +184,18 @@ func go_register_server_variables(threadIndex C.uintptr_t, trackVarsArray *C.zva
 }
 
 // splitCgiPath splits the request path into SCRIPT_NAME, SCRIPT_FILENAME, PATH_INFO, DOCUMENT_URI
-func splitCgiPath(fc *frankenPHPContext) {
-	path := fc.request.URL.Path
+func splitCgiPath(fc *frankenPHPContext) error {
+	path := cleanRequestPath(fc.request.URL.Path, runtime.GOOS == "windows")
 	splitPath := fc.splitPath
 
 	if splitPath == nil {
 		splitPath = []string{".php"}
 	}
 
-	if splitPos := splitPos(path, splitPath); splitPos > -1 {
-		fc.docURI = path[:splitPos]
-		fc.pathInfo = path[splitPos:]
+	pos := splitPos(path, splitPath)
+	if pos > -1 {
+		fc.docURI = path[:pos]
+		fc.pathInfo = path[pos:]
 	}
 
 	// If a worker is already assigned explicitly, derive SCRIPT_NAME from its filename
@@ -200,7 +207,18 @@ func splitCgiPath(fc *frankenPHPContext) {
 			fc.docURI = ""
 			fc.pathInfo = ""
 		}
-		return
+
+		return nil
+	}
+
+	// a path no split matches names no script: running it would execute a file the split extensions exclude
+	if pos == -1 {
+		return ErrInvalidScriptPath
+	}
+
+	// an 8.3 alias or an alternate data stream can name a non-PHP file with a PHP-looking path
+	if runtime.GOOS == "windows" && (strings.ContainsRune(path[:pos], ':') || hasWindowsShortName(path[:pos])) {
+		return ErrInvalidScriptPath
 	}
 
 	// Strip PATH_INFO from SCRIPT_NAME
@@ -217,6 +235,117 @@ func splitCgiPath(fc *frankenPHPContext) {
 	if fc.worker = fc.server.workersByPath[fc.scriptFilename]; fc.worker == nil {
 		fc.worker = globalWorkersByPath[fc.scriptFilename]
 	}
+
+	return nil
+}
+
+const windowsShortNamePunctuation = "$%'-_@~`!(){}^#&"
+
+// possibleWindowsShortNamePart mirrors Caddy's file server: non-ASCII is accepted since Windows may allow it in 8.3 names.
+func possibleWindowsShortNamePart(s string) bool {
+	for _, c := range s {
+		if c >= utf8.RuneSelf ||
+			(c >= 'a' && c <= 'z') ||
+			(c >= 'A' && c <= 'Z') ||
+			(c >= '0' && c <= '9') ||
+			strings.ContainsRune(windowsShortNamePunctuation, c) {
+			continue
+		}
+
+		return false
+	}
+
+	return true
+}
+
+// hasWindowsShortName reports whether a component of p has the syntax of an NTFS 8.3 short name, like Caddy's file server.
+func hasWindowsShortName(p string) bool {
+	for _, component := range strings.FieldsFunc(p, func(r rune) bool {
+		return r == '/' || r == '\\'
+	}) {
+		component = strings.TrimRight(component, ". ")
+		base, extension, hasExtension := strings.Cut(component, ".")
+		if utf8.RuneCountInString(base) > 8 || !possibleWindowsShortNamePart(base) ||
+			(hasExtension && (utf8.RuneCountInString(extension) > 3 || !possibleWindowsShortNamePart(extension))) {
+			continue
+		}
+
+		tilde := strings.LastIndexByte(base, '~')
+		if tilde <= 0 || tilde == len(base)-1 {
+			continue
+		}
+
+		digits := true
+		for _, c := range base[tilde+1:] {
+			if c < '0' || c > '9' {
+				digits = false
+
+				break
+			}
+		}
+
+		if digits {
+			return true
+		}
+	}
+
+	return false
+}
+
+// cleanRequestPath resolves dot segments as Caddy's matchers do, so the script run is the one they matched.
+func cleanRequestPath(reqPath string, windows bool) string {
+	if windows {
+		reqPath = strings.ReplaceAll(reqPath, `\`, "/")
+	}
+
+	if !strings.Contains(reqPath, "/.") {
+		return reqPath
+	}
+
+	if windows {
+		// mirror Caddy's normalizeWindowsPath, which trims "..." to an empty segment before cleaning
+		segments := strings.Split(reqPath, "/")
+		for i, segment := range segments {
+			if segment != "." && segment != ".." {
+				segments[i] = strings.TrimRight(segment, ". ")
+			}
+		}
+		reqPath = strings.Join(segments, "/")
+	}
+
+	cleaned := path.Clean("/" + reqPath)
+	if cleaned != "/" && strings.HasSuffix(reqPath, "/") {
+		cleaned += "/"
+	}
+
+	return cleaned
+}
+
+// escapedPathSelectsAnotherScript reports whether cleaning the escaped path, as Caddy's path matchers do for patterns containing "%", leads to another script than cleaning the decoded one.
+func escapedPathSelectsAnotherScript(u *url.URL, splitPath []string) bool {
+	if u.RawPath == "" {
+		return false
+	}
+
+	windows := runtime.GOOS == "windows"
+	escaped, err := url.PathUnescape(cleanRequestPath(u.EscapedPath(), windows))
+	if err != nil {
+		return true
+	}
+
+	if splitPath == nil {
+		splitPath = []string{".php"}
+	}
+
+	return scriptPart(cleanRequestPath(u.Path, windows), splitPath) != scriptPart(escaped, splitPath)
+}
+
+func scriptPart(path string, splitPath []string) string {
+	if pos := splitPos(path, splitPath); pos > -1 {
+		return path[:pos]
+	}
+
+	return path
 }
 
 // splitPos returns the index where path should be split based on splitPath.
@@ -265,14 +394,11 @@ func splitPos(path string, splitPath []string) int {
 
 			if match {
 				pos := i + splitLen
-				// the split must end the path or a whole path segment: without
-				// this, ".php" embedded in a filename ("/a.php.txt/b.php")
-				// would split inside that filename and run a script the router
-				// never matched. Give up on this split string entirely rather
-				// than looking for a later occurrence of it, so the result
-				// stays identical to Caddy's file matcher (firstSplit).
+				// the split must end the path or a whole path segment, like
+				// the "*.php/*" route matcher: a split inside a filename
+				// ("/a.php.txt/b.php") would run a script the router never matched
 				if pos != pathLen && path[pos] != '/' {
-					break
+					continue
 				}
 
 				return pos

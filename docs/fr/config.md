@@ -1,6 +1,11 @@
+---
+title: Configurer FrankenPHP avec Caddyfile, php.ini et variables d'environnement
+description: Configurez FrankenPHP et Caddy via Caddyfile, JSON ou des variables d'environnement, y compris le réglage du runtime PHP, le mode worker, la surveillance des fichiers et les options des modules.
+---
+
 # Configuration
 
-FrankenPHP, Caddy ainsi que les modules [Mercure](mercure.md) et [Vulcain](https://vulcain.rocks) peuvent être configurés à l'aide [des formats pris en charge par Caddy](https://caddyserver.com/docs/getting-started#your-first-config).
+FrankenPHP, Caddy, ainsi que les modules [Mercure](mercure.md) et [Vulcain](https://vulcain.rocks) peuvent être configurés à l'aide [des formats pris en charge par Caddy](https://caddyserver.com/docs/getting-started#your-first-config).
 
 Le format le plus courant est le `Caddyfile`, un format texte simple et facilement lisible par les humains.
 Par défaut, FrankenPHP recherchera un `Caddyfile` dans le répertoire courant.
@@ -92,8 +97,8 @@ Vous pouvez également configurer explicitement FrankenPHP en utilisant l'[optio
 ```caddyfile
 {
 	frankenphp {
-		num_threads <num_threads> # Définit le nombre de threads PHP à démarrer. Par défaut : 2x le nombre de CPUs disponibles.
-		max_threads <num_threads> # Limite le nombre de threads PHP supplémentaires qui peuvent être démarrés au moment de l'exécution. Valeur par défaut : num_threads. Peut être mis à 'auto'.
+		num_threads <num_threads> # Définit le nombre de threads PHP à démarrer pour les requêtes non gérées par un worker. Les threads worker s'ajoutent à ce nombre. Par défaut : ce qu'il reste de 2x le nombre de CPUs disponibles une fois que les workers ont leurs threads, un au minimum.
+		max_threads <num_threads> # Limite le nombre de threads PHP pouvant s'exécuter simultanément, workers inclus. Par défaut : les threads démarrés au démarrage. Peut être défini sur 'auto'.
 		max_wait_time <duration> # Définit le temps maximum pendant lequel une requête peut attendre un thread PHP libre avant d'être interrompue. Valeur par défaut : désactivé.
 		max_idle_time <duration> # Définit le temps maximum pendant lequel un thread auto-dimensionné peut être inactif avant d'être désactivé. Par défaut : 5s.
 		max_requests <num> # (expérimental) Définit le nombre maximum de requêtes qu'un thread PHP traitera avant d'être redémarré, utile pour atténuer les fuites de mémoire. S'applique aux threads réguliers et aux threads worker. Par défaut : 0 (illimité).
@@ -150,6 +155,7 @@ L'utilisation de la directive `php_server` est généralement ce dont vous avez 
 mais si vous avez besoin d'un contrôle total, vous pouvez utiliser la directive de niveau inférieur `php`.
 La directive `php` transmet toutes les entrées à PHP, au lieu de vérifier d'abord si
 c'est un fichier PHP ou pas. En savoir plus à ce sujet dans la [documentation liée aux performances](performance.md#try_files).
+Une requête dont le chemin ne contient aucune des extensions `split_path` reçoit un 404, à moins qu'un worker ne la gère.
 
 Utiliser la directive `php_server` est équivalent à cette configuration :
 
@@ -179,14 +185,16 @@ Les directives `php_server` et `php` disposent des options suivantes :
 ```caddyfile
 php_server [<matcher>] {
 	root <directory> # Définit le dossier racine du site. Par défaut : la directive `root`.
-	split_path <delim...> # Définit les sous-chaînes pour diviser l'URI en deux parties. La première sous-chaîne correspondante sera utilisée pour séparer le "path info" du chemin. La première partie est suffixée avec la sous-chaîne correspondante et sera considérée comme le nom réel de la ressource (script CGI). La seconde partie sera définie comme PATH_INFO pour utilisation par le script. Par défaut : `.php`
+	split_path <delim...> # Définit les sous-chaînes pour diviser l'URI en deux parties. La première sous-chaîne correspondante qui termine un segment de chemin sera utilisée pour séparer les "informations de chemin" du chemin. La première partie est suffixée avec la sous-chaîne correspondante et sera considérée comme le nom réel de la ressource (script CGI). La seconde partie sera définie comme PATH_INFO pour utilisation par le script. Par défaut : `.php`
 	resolve_root_symlink false # Désactive la résolution du répertoire `root` vers sa valeur réelle en évaluant un lien symbolique, s'il existe (activé par défaut).
+	name <name> # Définit le nom de ce serveur, utilisé pour attribuer les workers, les métriques et les logs. Par défaut : le premier matcher d'hôte de la route englobante, ou la première adresse d'écoute.
 	env <key> <value> # Définit une variable d'environnement supplémentaire avec la valeur donnée. Peut être spécifié plusieurs fois pour plusieurs variables d'environnement.
 	file_server off # Désactive la directive file_server intégrée.
+	request_body_timeout <duration> # Définit un délai d'attente d'inactivité pour la lecture du corps de la requête : un client bloqué (POST lent) est coupé tandis qu'un téléchargement stable de toute taille réussit. Par défaut : 60s. Mettez à 0 pour désactiver.
 	worker { # Crée un worker spécifique à ce serveur. Peut être spécifié plusieurs fois pour plusieurs workers.
 		file <path> # Définit le chemin vers le script worker, peut être relatif à la racine du php_server
 		num <num> # Définit le nombre de threads PHP à démarrer, par défaut 2x le nombre de CPUs disponibles
-		name <name> # Définit le nom du worker, utilisé dans les journaux et les métriques. Par défaut : chemin absolu du fichier du worker. Commence toujours par m# lorsqu'il est défini dans un bloc php_server.
+		name <name> # Définit le nom du worker, utilisé dans les journaux et les métriques. Par défaut : chemin absolu du fichier du worker. Postfixé par un nombre si le nom est déjà utilisé.
 		watch <path> # Définit le chemin d'accès à surveiller pour les modifications de fichiers. Peut être spécifié plusieurs fois pour plusieurs chemins.
 		env <key> <value> # Définit une variable d'environnement supplémentaire avec la valeur donnée. Peut être spécifié plusieurs fois pour plusieurs variables d'environnement. Les variables d'environnement pour ce worker sont également héritées du parent php_server, mais peuvent être écrasées ici.
 		match <path> # fait correspondre le worker à un modèle de chemin. Écrase try_files et ne peut être utilisé que dans la directive php_server.
@@ -242,7 +250,7 @@ où le processus FrankenPHP a été lancé. Vous pouvez également spécifier un
 
 La surveillance des fichiers est basée sur [e-dant/watcher](https://github.com/e-dant/watcher).
 
-## Faire correspondre le worker à un chemin
+### Faire correspondre le worker à un chemin
 
 Dans les applications PHP traditionnelles, les scripts sont toujours placés dans le répertoire public. C'est également vrai pour les scripts worker, qui sont traités comme n'importe quel autre script PHP. Si vous souhaitez plutôt placer le script worker en dehors du répertoire public, vous pouvez le faire via la directive `match`.
 
@@ -262,7 +270,7 @@ et transmettra sinon la requête au worker correspondant au modèle de chemin.
 }
 ```
 
-## Redémarrage des threads après un certain nombre de requêtes (expérimental)
+### Redémarrage des threads après un certain nombre de requêtes (expérimental)
 
 FrankenPHP peut redémarrer automatiquement les threads PHP après qu'ils aient géré un certain nombre de requêtes.
 Lorsqu'un thread atteint la limite, il est entièrement redémarré,
@@ -328,7 +336,7 @@ Si vous souhaitez utiliser HTTPS avec l'adresse IP `127.0.0.1` au lieu du nom d'
 ### Full duplex (HTTP/1)
 
 Lors de l'utilisation de HTTP/1.x, il peut être souhaitable d'activer le mode full-duplex pour permettre l'écriture d'une réponse avant que le corps entier
-n'ait été lu. (par exemple : [Mercure](mercure.md), WebSocket, Server-Sent Events, etc.)
+n'ait été lu (par exemple : [Mercure](mercure.md), WebSocket, Server-Sent Events, etc.).
 
 Il s'agit d'une configuration facultative qui doit être ajoutée aux options globales dans le `Caddyfile` :
 
@@ -352,6 +360,18 @@ CADDY_GLOBAL_OPTIONS="servers {
 ```
 
 Vous trouverez plus d'informations sur ce paramètre dans la [documentation Caddy](https://caddyserver.com/docs/caddyfile/options#enable-full-duplex).
+
+### Limite de taille du corps de requête
+
+Pour limiter la taille des corps de requête, utilisez la directive [`request_body`](https://caddyserver.com/docs/caddyfile/directives/request_body) :
+
+```caddyfile
+request_body {
+	max_size 10MB
+}
+```
+
+Les requêtes avec un corps plus volumineux reçoivent une réponse `413 Request Entity Too Large`. Si PHP lit le corps avant le démarrage du script (requêtes `POST` avec un `Content-Type`, comme les formulaires et les téléchargements de fichiers), le script ne s'exécute pas. Si le script lit le corps lui-même, via `php://input` ou `request_parse_body()`, la lecture lève une `FrankenPHP\RequestBodyTooLargeException` une fois la limite atteinte, de sorte qu'un corps tronqué n'est jamais confondu avec un corps complet.
 
 ## Activer le mode debug
 
@@ -434,7 +454,5 @@ Pour charger l'autocomplétion à chaque nouvelle session, exécutez une fois :
 frankenphp completion powershell | Out-File -FilePath (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")
 Add-Content -Path $PROFILE -Value '. (Join-Path (Split-Path $PROFILE) "frankenphp.ps1")'
 ```
-
-Vous devrez démarrer un nouveau shell pour que cette configuration prenne effet.
 
 Vous devrez démarrer un nouveau shell pour que cette configuration prenne effet.

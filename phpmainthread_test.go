@@ -312,7 +312,7 @@ func allPossibleTransitions(worker1Path string, worker2Path string) []func(*phpT
 		func(thread *phpThread) { thread.shutdown() },
 		func(thread *phpThread) {
 			if thread.state.Is(state.Reserved) {
-				thread.boot()
+				_ = thread.boot()
 			}
 		},
 		func(thread *phpThread) { convertToWorkerThread(thread, globalWorkersByPath[worker1Path]) },
@@ -405,4 +405,181 @@ func TestContextAndLoggerMustNotBeNil(t *testing.T) {
 	fc, _ = newWorkerDummyContext(&worker{})
 	assert.NotNil(t, fc.logger, "logger is defined for worker dummy context")
 	assert.NotNil(t, fc.ctx, "context is defined for worker dummy context")
+}
+
+func TestThreadCreationFailureAtStartup(t *testing.T) {
+	original := newCThread
+	newCThread = func(int) bool { return false }
+	t.Cleanup(func() { newCThread = original })
+
+	assert.ErrorIs(t, Init(WithNumThreads(2)), ErrThreadCreation)
+}
+
+func TestThreadCreationFailureWhenScaling(t *testing.T) {
+	_, err := initPHPThreads(1, 2, nil)
+	assert.NoError(t, err)
+	convertToRegularThread(phpThreads[0])
+
+	original := newCThread
+	newCThread = func(int) bool { return false }
+	assert.Nil(t, getInactivePHPThread())
+	assert.True(t, phpThreads[1].state.Is(state.Reserved))
+
+	newCThread = original
+	assert.Same(t, phpThreads[1], getInactivePHPThread())
+
+	drainPHPThreads()
+}
+
+func failThreadCreation(t *testing.T, failures int64) *atomic.Int64 {
+	t.Helper()
+
+	var attempts atomic.Int64
+	original := newCThread
+	newCThread = func(threadIndex int) bool {
+		if attempts.Add(1) <= failures {
+			return false
+		}
+
+		return original(threadIndex)
+	}
+	t.Cleanup(func() { newCThread = original })
+
+	return &attempts
+}
+
+func serveTestRequest(t *testing.T, path string) string {
+	t.Helper()
+
+	req := httptest.NewRequest("GET", "http://example.com/"+path, nil)
+	fr, err := NewRequestWithContext(req, WithRequestDocumentRoot(testDataPath, false))
+	assert.NoError(t, err)
+
+	w := httptest.NewRecorder()
+	assert.NoError(t, ServeHTTP(w, fr))
+	body, _ := io.ReadAll(w.Result().Body)
+
+	return string(body)
+}
+
+func TestRebootRetriesThreadCreation(t *testing.T) {
+	assert.NoError(t, Init(WithNumThreads(1), WithMaxRequests(1)))
+	attempts := failThreadCreation(t, 3)
+	t.Cleanup(Shutdown)
+
+	for range 3 {
+		assert.Contains(t, serveTestRequest(t, "hello.php"), "Hello")
+	}
+	assert.Greater(t, attempts.Load(), int64(3))
+}
+
+func TestRebootThreadCreationFailure(t *testing.T) {
+	workerPath := filepath.Join(testDataPath, "worker-with-counter.php")
+
+	for _, tc := range []struct {
+		name   string
+		opts   []Option
+		path   string
+		thread func() *phpThread
+	}{
+		{"regular", []Option{WithNumThreads(1)}, "hello.php", func() *phpThread { return regularThreads[0] }},
+		{"worker", []Option{WithNumThreads(2), WithWorkers("worker", workerPath, 1)}, "worker-with-counter.php", func() *phpThread { return workers[0].threads[0] }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.NoError(t, Init(append(tc.opts, WithMaxRequests(1), WithMaxWaitTime(10*time.Second))...))
+
+			var failing atomic.Bool
+			failing.Store(true)
+			original := newCThread
+			newCThread = func(threadIndex int) bool { return !failing.Load() && original(threadIndex) }
+			t.Cleanup(func() { newCThread = original })
+			t.Cleanup(Shutdown)
+
+			thread := tc.thread()
+			assert.NotEmpty(t, serveTestRequest(t, tc.path))
+
+			thread.state.WaitFor(state.Reserved)
+			assert.NotContains(t, regularThreads, thread)
+			for _, w := range workers {
+				assert.NotContains(t, w.threads, thread)
+			}
+
+			failing.Store(false)
+			assert.NotEmpty(t, serveTestRequest(t, tc.path), "requests must resume once threads can be created again")
+
+			Shutdown()
+		})
+	}
+}
+
+func TestFailedRebootDoesNotBlockHandlerChange(t *testing.T) {
+	assert.NoError(t, Init(WithNumThreads(1), WithMaxRequests(1)))
+
+	entered := make(chan struct{})
+	proceed := make(chan struct{})
+	var once sync.Once
+	original := newCThread
+	newCThread = func(int) bool {
+		once.Do(func() {
+			close(entered)
+			<-proceed
+		})
+
+		return false
+	}
+	t.Cleanup(func() { newCThread = original })
+	t.Cleanup(Shutdown)
+
+	thread := regularThreads[0]
+	assert.NotEmpty(t, serveTestRequest(t, "hello.php"))
+	<-entered
+
+	changed := make(chan struct{})
+	go func() {
+		convertToInactiveThread(thread)
+		close(changed)
+	}()
+
+	// wait until setHandler() holds handlerMu while the reboot is still pending
+	for thread.handlerMu.TryRLock() {
+		thread.handlerMu.RUnlock()
+		runtime.Gosched()
+	}
+	close(proceed)
+
+	select {
+	case <-changed:
+	case <-time.After(10 * time.Second):
+		t.Fatal("setHandler() and the failed reboot deadlocked")
+	}
+}
+
+func TestPoolRestored(t *testing.T) {
+	configured, scaled := newPHPThread(0), newPHPThread(1)
+
+	scalingMu.Lock()
+	defer scalingMu.Unlock()
+	t.Cleanup(func() { autoScaledThreads = nil })
+
+	autoScaledThreads = []*phpThread{scaled}
+	assert.True(t, poolRestored(1, []*phpThread{configured, scaled}), "an autoscaled thread that failed must not be restored")
+	assert.Equal(t, []*phpThread{scaled}, autoScaledThreads)
+
+	assert.True(t, poolRestored(1, []*phpThread{scaled}), "an autoscaled thread in a free slot must be kept")
+	assert.Empty(t, autoScaledThreads, "the adopted thread must not be downscaled")
+
+	assert.False(t, poolRestored(1, nil))
+}
+
+func TestReusedAutoScaledSlotIsTrackedOnce(t *testing.T) {
+	thread := newPHPThread(0)
+
+	scalingMu.Lock()
+	defer scalingMu.Unlock()
+	t.Cleanup(func() { autoScaledThreads = nil })
+
+	// the slot of an autoscaled thread that failed to reboot, not yet removed by deactivateThreads()
+	autoScaledThreads = []*phpThread{thread}
+	trackAutoScaledThread(thread)
+	assert.Equal(t, []*phpThread{thread}, autoScaledThreads)
 }

@@ -85,6 +85,10 @@ func my_queue_push(data *C.zval) bool {
 }
 ```
 
+A `zval` belongs to the PHP thread that created it, so `SendMessage` converts it with `GoValue()` and the worker receives its own value.
+The original stays owned by the caller. Lists are reindexed and other arrays get string keys.
+Types that can't be converted, such as objects, make `SendMessage` return an error.
+
 ### HTTP emulation: `SendRequest`
 
 Use `SendRequest` if your extension needs to invoke a PHP script that expects a standard web environment (populating `$_SERVER`, `$_GET`, etc.).

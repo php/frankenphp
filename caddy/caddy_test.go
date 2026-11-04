@@ -495,6 +495,56 @@ func TestPHPServerDirective(t *testing.T) {
 	tester.AssertGetResponse("http://localhost:"+testPort+"/not-found.txt", http.StatusOK, "I am by birth a Genevese (i not set)")
 }
 
+func TestPHPServerSplitsTheSamePathAsTheMatchers(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+			http_port `+testPort+`
+			https_port 9443
+		}
+
+		localhost:`+testPort+` {
+			root ../testdata
+			@denied path /dirindex/*
+			respond @denied 403
+			php_server {
+				index off
+			}
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/dirindex/index.php", http.StatusForbidden, "")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/dirindex/index.php/../../hello.php", http.StatusOK, "Hello from PHP")
+}
+
+func TestPHPServerRejectsPathsSplitDifferentlyWhenEscaped(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+			http_port `+testPort+`
+			https_port 9443
+		}
+
+		localhost:`+testPort+` {
+			root ../testdata
+			@denied not path /dirindex/%*
+			respond @denied 403
+			php_server {
+				index off
+			}
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/hello.php", http.StatusForbidden, "")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/dirindex/index.php%2f..%2f..%2fhello.php", http.StatusBadRequest, "invalid request path")
+}
+
 func TestPHPServerDirectiveDisableFileServer(t *testing.T) {
 	tester := caddytest.NewTester(t)
 	initServer(t, tester, `
@@ -1743,6 +1793,115 @@ func TestWorkerRestart(t *testing.T) {
 		))
 }
 
+func TestNamedRouteDoesNotShareTheServerOfASite(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		&(named) {
+			php_server {
+				root ../testdata
+				env FOO named
+			}
+		}
+
+		http://localhost:`+testPort+` {
+			php_server {
+				root ../testdata
+				env FOO site
+			}
+		}
+
+		http://127.0.0.1:`+testPort+` {
+			invoke named
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/worker-env.php", http.StatusOK, "sitesite")
+	tester.AssertGetResponse("http://127.0.0.1:"+testPort+"/worker-env.php", http.StatusOK, "namednamed")
+}
+
+func TestNamedRouteDoesNotShareWorkersOfASiteWithAnotherMercureHub(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		&(named) {
+			route {
+				mercure {
+					name named
+					transport local
+					anonymous
+				}
+
+				php_server {
+					root ../testdata
+					worker worker-with-counter.php 1
+				}
+			}
+		}
+
+		http://localhost:`+testPort+` {
+			route {
+				mercure {
+					name site
+					transport local
+					anonymous
+				}
+
+				php_server {
+					root ../testdata
+					worker worker-with-counter.php 1
+				}
+			}
+		}
+
+		http://127.0.0.1:`+testPort+` {
+			invoke named
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/worker-with-counter.php", http.StatusOK, "requests:1")
+	tester.AssertGetResponse("http://127.0.0.1:"+testPort+"/worker-with-counter.php", http.StatusOK, "requests:1")
+}
+
+func TestNamedRouteDoesNotShareWorkersOfASiteWithTheSameConfig(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		&(named) {
+			php_server {
+				root ../testdata
+				worker worker-with-counter.php 1
+			}
+		}
+
+		http://localhost:`+testPort+` {
+			php_server {
+				root ../testdata
+				worker worker-with-counter.php 1
+			}
+		}
+
+		http://127.0.0.1:`+testPort+` {
+			invoke named
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/worker-with-counter.php", http.StatusOK, "requests:1")
+	tester.AssertGetResponse("http://127.0.0.1:"+testPort+"/worker-with-counter.php", http.StatusOK, "requests:1")
+}
+
 func TestWorkerMatchDirective(t *testing.T) {
 	tester := caddytest.NewTester(t)
 	initServer(t, tester, `
@@ -1815,6 +1974,60 @@ func TestWorkerMatchDirectiveWithMultipleWorkers(t *testing.T) {
 	// serve index.php file directly as fallback
 	tester.AssertGetResponse("http://localhost:"+testPort+"/index.php", http.StatusOK, "I am by birth a Genevese (i not set)")
 	tester.AssertGetResponse("http://localhost:"+testPort+"/not-matched", http.StatusOK, "I am by birth a Genevese (i not set)")
+}
+
+func TestWorkerMatchDirectiveDoesNotServeScriptSources(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		http://localhost:`+testPort+` {
+			rewrite /rewritten /hello.php/
+			php_server {
+				root ../testdata
+				split .php .custom
+				worker {
+					file worker-with-counter.php
+					match /counter/*
+					num 1
+				}
+			}
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/split-path.custom", http.StatusOK, "SCRIPT_NAME: /split-path.custom\nPHP_SELF: /split-path.custom\nPATH_INFO:\n")
+	// the file matcher cleans the trailing slash, the path matcher doesn't
+	tester.AssertGetResponse("http://localhost:"+testPort+"/rewritten", http.StatusOK, "Hello from PHP")
+}
+
+func TestWorkerMatchDirectiveDoesNotServePHPSourcesWithoutPHPSplit(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		http://localhost:`+testPort+` {
+			php_server {
+				root ../testdata
+				split .phtml
+				worker {
+					file worker-with-counter.php
+					match /api/*
+					num 1
+				}
+			}
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/api/worker-with-counter.php", http.StatusOK, "requests:1")
+	tester.AssertGetResponse("http://localhost:"+testPort+"/hello.php", http.StatusNotFound, "")
+	tester.AssertGetResponse("http://localhost:"+testPort+"/hello.php/", http.StatusNotFound, "")
+	tester.AssertGetResponse("http://localhost:"+testPort+"/hello.txt", http.StatusOK, "Hello\n")
 }
 
 func TestWorkerMatchDirectiveWithoutFileServer(t *testing.T) {

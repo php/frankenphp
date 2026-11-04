@@ -47,12 +47,15 @@ var (
 	ErrInvalidPHPVersion  = errors.New("FrankenPHP is only compatible with PHP 8.2+")
 	ErrZendSignals        = errors.New(`FrankenPHP is not compatible with Zend Signals, recompile PHP with the "--disable-zend-signals" configuration option`)
 	ErrMainThreadCreation = errors.New("error creating the main thread")
+	ErrThreadCreation     = errors.New("error creating a PHP thread")
 	ErrScriptExecution    = errors.New("error during PHP script execution")
 	ErrNotRunning         = errors.New("server is not registered, you must first call frankenphp.Init() with the WithServer() option")
 
 	ErrInvalidRequestPath         = ErrRejected{"invalid request path", http.StatusBadRequest}
+	ErrInvalidScriptPath          = ErrRejected{"invalid script path", http.StatusNotFound}
 	ErrInvalidContentLengthHeader = ErrRejected{"invalid Content-Length header", http.StatusBadRequest}
 	ErrMaxWaitTimeExceeded        = ErrRejected{"maximum request handling time exceeded", http.StatusServiceUnavailable}
+	ErrRequestBodyTooLarge        = ErrRejected{"request body too large", http.StatusRequestEntityTooLarge}
 
 	contextKey   = contextKeyStruct{}
 	serverHeader = []string{"FrankenPHP"}
@@ -436,8 +439,9 @@ func Init(options ...Option) error {
 		return err
 	}
 
-	regularThreads = make([]*phpThread, 0, opt.numThreads-workerThreadCount)
-	for range opt.numThreads - workerThreadCount {
+	numRegularThreads = opt.numThreads - workerThreadCount
+	regularThreads = make([]*phpThread, 0, numRegularThreads)
+	for range numRegularThreads {
 		convertToRegularThread(getInactivePHPThread())
 	}
 
@@ -495,6 +499,11 @@ func shutdown() {
 	// call the shutdown hooks (mainly useful for extensions)
 	for _, fn := range onServerShutdown {
 		fn()
+	}
+
+	// after the hooks, which may still send messages: draining threads would leave later ones waiting
+	for _, w := range workers {
+		w.stopped.Store(true)
 	}
 
 	drainWatchers()
@@ -586,6 +595,10 @@ func go_apache_request_headers(threadIndex C.uintptr_t) (*C.go_string, C.size_t)
 		thread.Pin(fd)
 
 		cv := strings.Join(val, ", ")
+		if field == "Host" {
+			cv = fc.request.Host
+		}
+
 		vd := unsafe.StringData(cv)
 		thread.Pin(vd)
 
@@ -678,6 +691,7 @@ func go_write_headers(threadIndex C.uintptr_t, status C.int, headers *C.zend_lli
 	}
 
 	fc.responseWriter.WriteHeader(goStatus)
+	fc.headersWritten = goStatus >= 200
 
 	if goStatus < 200 {
 		// Clear headers, it's not automatically done by ResponseWriter.WriteHeader() for 1xx responses
@@ -730,12 +744,12 @@ func go_sapi_flush(threadIndex C.uintptr_t) bool {
 }
 
 //export go_read_post
-func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (readBytes C.size_t) {
+func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (readBytes C.size_t, tooLarge C.bool) {
 	fc := phpThreads[threadIndex].handler.frankenPHPContext()
 
 	// net/http forbids reading the body after the handler returns; body wrappers may touch the dead stream
 	if fc.responseWriter == nil || fc.isDone {
-		return 0
+		return 0, false
 	}
 
 	var rc *http.ResponseController
@@ -762,6 +776,15 @@ func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (r
 	// an expired deadline must stay: net/http drains the unread body before writing the response
 	if rc != nil && !errors.Is(err, os.ErrDeadlineExceeded) {
 		_ = rc.SetReadDeadline(time.Time{})
+	}
+
+	// PHP can't see read errors: fail the request rather than expose a truncated body
+	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+		if !fc.headersWritten {
+			fc.reject(ErrRequestBodyTooLarge)
+		}
+
+		tooLarge = true
 	}
 
 	return

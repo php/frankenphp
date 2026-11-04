@@ -327,6 +327,28 @@ func testScriptStatIgnoresPathInfo(t *testing.T, opts *testOptions) {
 	}, opts)
 }
 
+func TestDotSegmentsResolvedBeforeSplit(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		body, _ := testGet(fmt.Sprintf("http://example.com/dirindex/index.php/../../hello.php?i=%d", i), handler, t)
+		assert.Equal(t, "Hello from PHP", body)
+
+		// "%" path matchers clean the escaped path, where these are not dot segments
+		for _, p := range []string{
+			"/dirindex/index.php/..%2f..%2fhello.php",
+			"/dirindex/index.php/%2e%2e/%2e%2e/hello.php",
+			"/public/tool.php%2f..%2f..%2fadmin%2ftool.php",
+		} {
+			body, resp := testGet(fmt.Sprintf("http://example.com%s?i=%d", p, i), handler, t)
+
+			assert.Equal(t, http.StatusBadRequest, resp.StatusCode, p)
+			assert.Contains(t, body, "invalid request path", p)
+		}
+
+		body, _ = testGet(fmt.Sprintf("http://example.com/hello.php/a%%2fb?i=%d", i), handler, t)
+		assert.Equal(t, "Hello from PHP", body)
+	}, nil)
+}
+
 func TestHeaders_module(t *testing.T) { testHeaders(t, nil) }
 func TestHeaders_worker(t *testing.T) { testHeaders(t, &testOptions{workerScript: "headers.php"}) }
 func testHeaders(t *testing.T, opts *testOptions) {
@@ -683,6 +705,37 @@ func testConnectionAbort(t *testing.T, opts *testOptions) {
 	testFinish("1")
 }
 
+func TestConnectionAbortDuringRequestStartup(t *testing.T) {
+	for _, implicitFlush := range []string{"0", "1"} {
+		t.Run("implicit_flush="+implicitFlush, func(t *testing.T) {
+			logger, buf := newTestLogger(t)
+
+			runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+				// exceeding max_input_vars displays a warning while $_GET is populated, before the script runs
+				req := httptest.NewRequest("GET", fmt.Sprintf("http://example.com/connection_status.php?i=%d%s", i, strings.Repeat("&v[]=", 1000)), nil)
+
+				ctx, cancel := context.WithCancel(req.Context())
+				req = req.WithContext(ctx)
+				cancel()
+				handler(httptest.NewRecorder(), req)
+
+				assert.Contains(t, buf.String(), fmt.Sprintf("request %d: 1", i))
+			}, &testOptions{
+				nbParallelRequests: 1,
+				logger:             logger,
+				phpIni: map[string]string{
+					"display_errors":         "1",
+					"display_startup_errors": "1",
+					"output_buffering":       "0",
+					"implicit_flush":         implicitFlush,
+				},
+			})
+
+			assert.NotContains(t, buf.String(), "Restarting unhealthy thread")
+		})
+	}
+}
+
 func TestException_module(t *testing.T) { testException(t, &testOptions{}) }
 func TestException_worker(t *testing.T) {
 	testException(t, &testOptions{workerScript: "exception.php"})
@@ -844,6 +897,21 @@ func testRequestHeaders(t *testing.T, opts *testOptions) {
 
 		assert.Contains(t, body, "[Content-Type] => text/plain")
 		assert.Contains(t, body, fmt.Sprintf("[Frankenphp-I] => %d", i))
+	}, opts)
+}
+
+func TestHostHeaderField_module(t *testing.T) { testHostHeaderField(t, &testOptions{}) }
+func TestHostHeaderField_worker(t *testing.T) {
+	testHostHeaderField(t, &testOptions{workerScript: "host-header-field.php"})
+}
+func testHostHeaderField(t *testing.T, opts *testOptions) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		// net/http keeps a "host" field sent next to :authority in the header map of HTTP/2 requests
+		req := httptest.NewRequest("GET", fmt.Sprintf("http://example.com/host-header-field.php?i=%d", i), nil)
+		req.Header.Add(strings.Clone("Host"), strings.Clone("admin.example.com"))
+		body, _ := testRequest(req, handler, t)
+
+		assert.Equal(t, "HTTP_HOST: example.com, SERVER_NAME: example.com, Host: example.com", body)
 	}, opts)
 }
 
@@ -1351,6 +1419,11 @@ func FuzzRequest(f *testing.F) {
 				return
 			}
 
+			// dot segments are resolved before the split, so PATH_INFO isn't the fuzzed string
+			if strings.Contains(req.URL.Path, "/.") {
+				return
+			}
+
 			// The fuzzed string must be present in the path
 			assert.Contains(t, body, fmt.Sprintf("[PATH_INFO] => /%s", fuzzedString))
 			assert.Contains(t, body, fmt.Sprintf("[PATH_TRANSLATED] => %s", filepath.Join(absPath, fuzzedString)))
@@ -1575,6 +1648,54 @@ func TestSessionNoLeakBetweenRequests_worker(t *testing.T) {
 	})
 }
 
+func TestPreviousRequestCodeDoesNotWriteToNextClient_worker(t *testing.T) {
+	// with "E", $_ENV is filled from the environment
+	for _, variablesOrder := range []string{"GPCS", "EGPCS"} {
+		t.Run(variablesOrder, func(t *testing.T) {
+			phpIni := map[string]string{"variables_order": variablesOrder}
+
+			runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+				body, _ := testGet("http://example.com/worker-cross-request-output.php?session=alice", handler, t)
+				assert.Equal(t, "done\n", body)
+
+				body, _ = testGet("http://example.com/worker-cross-request-output.php", handler, t)
+				assert.Equal(t, "done\n", body)
+
+				body, _ = testGet("http://example.com/worker-cross-request-output.php?tenant=erin", handler, t)
+				assert.Equal(t, "done\nwrite tenant: erin\n", body)
+
+				// objects stored in superglobals are destroyed before the next request starts
+				body, _ = testGet("http://example.com/worker-cross-request-output.php?superglobals", handler, t)
+				assert.Equal(t, "done\n", body)
+
+				body, _ = testGet("http://example.com/worker-cross-request-output.php?destroyed", handler, t)
+				assert.Equal(t, "destroyed: cookie,files,get,post,request,server\nsession: unset\nenv: env\ndone\ndestroyed env\n", body)
+
+				// $_SESSION set between two requests is released before the next one
+				body, _ = testGet("http://example.com/worker-cross-request-output.php?between=dave", handler, t)
+				assert.Equal(t, "done\n", body)
+
+				body, _ = testGet("http://example.com/worker-cross-request-output.php?destroyed", handler, t)
+				assert.Equal(t, "destroyed: dave\nsession: unset\nenv: none\ndone\n", body)
+
+				// an exception thrown while releasing superglobals never reaches the next client
+				body, _ = testGet("http://example.com/worker-cross-request-output.php?throw=frank", handler, t)
+				assert.Equal(t, "done\n", body)
+
+				body, _ = testGet("http://example.com/worker-cross-request-output.php", handler, t)
+				assert.Equal(t, "done\n", body)
+
+				// a destructor can put data back into superglobals that were already released
+				body, _ = testGet("http://example.com/worker-cross-request-output.php?move=gina", handler, t)
+				assert.Equal(t, "done\n", body)
+
+				body, _ = testGet("http://example.com/worker-cross-request-output.php?destroyed", handler, t)
+				assert.Equal(t, "destroyed: moved gina\nsession: unset\nenv: none\ndone\n", body)
+			}, &testOptions{workerScript: "worker-cross-request-output.php", nbWorkers: 1, nbParallelRequests: 1, phpIni: phpIni})
+		})
+	}
+}
+
 func TestSessionNoLeakAfterExit_worker(t *testing.T) {
 	runTest(t, func(_ func(http.ResponseWriter, *http.Request), ts *httptest.Server, i int) {
 		// Client A: Set a secret value in session and call exit(1)
@@ -1727,10 +1848,6 @@ func testOutOfMemory(t *testing.T, opts *testOptions) {
 	opts.logger, buf = newTestLogger(t)
 
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
-		// Also a warm-up request, so that the failing request below is not the thread's first:
-		// ext/date initializes DATEG(last_errors) only in RINIT, yet request shutdown
-		// frees it even when startup failed before RINIT ran. A new ZTS thread then
-		// frees garbage (same GINIT in PHP 8.2 to 8.5).
 		body, _ := testGet("http://example.com/out-of-memory.php?hard_limit", handler, t)
 		hardLimit := body == "true"
 
@@ -1746,9 +1863,36 @@ func testOutOfMemory(t *testing.T, opts *testOptions) {
 		}
 		body, _ = testGet("http://example.com/out-of-memory.php", handler, t)
 		assert.Equal(t, "ok", body)
-		if !hardLimit && opts.workerScript == "" {
-			// Older PHP versions fail the request startup instead
-			assert.Contains(t, buf.String(), "Restarting unhealthy thread")
-		}
+		assert.NotContains(t, buf.String(), "Restarting unhealthy thread")
 	}, opts)
+}
+
+func TestOutOfMemoryDuringRequestStartup(t *testing.T) {
+	if os.Getenv("USE_ZEND_ALLOC") == "0" {
+		t.Skip("memory_limit is not enforced without the Zend allocator")
+	}
+
+	logger, buf := newTestLogger(t)
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		// the first iteration fails the thread's first request, before any module's RINIT ran on it (MallocScribble=1 or MALLOC_PERTURB_ makes a regression crash reliably)
+		for range 5 {
+			// $_POST is populated before the script runs; it must cross memory_limit but stay under the hard limit (twice memory_limit), past which PHP exits
+			req := httptest.NewRequest(http.MethodPost, "http://example.com/out-of-memory.php", strings.NewReader("a="+strings.Repeat("a", 5<<20)))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			_, resp := testRequest(req, handler, t)
+			assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+
+			body, _ := testGet("http://example.com/out-of-memory.php", handler, t)
+			assert.Equal(t, "ok", body)
+		}
+	}, &testOptions{
+		nbParallelRequests: 1,
+		logger:             logger,
+		initOpts:           []frankenphp.Option{frankenphp.WithNumThreads(1)},
+		requestOpts:        []frankenphp.RequestOption{frankenphp.WithRequestEnv(map[string]string{"FOO": "bar"})},
+		phpIni:             map[string]string{"memory_limit": "8M", "post_max_size": "16M", "display_errors": "0"},
+	})
+
+	assert.NotContains(t, buf.String(), "Restarting unhealthy thread")
 }

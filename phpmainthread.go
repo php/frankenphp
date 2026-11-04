@@ -6,6 +6,7 @@ package frankenphp
 // #include <php_variables.h>
 import "C"
 import (
+	"errors"
 	"log/slog"
 	"strings"
 	"sync"
@@ -75,11 +76,16 @@ func initPHPThreads(numThreads int, numMaxThreads int, phpIni map[string]string)
 	// start the underlying C threads
 	var ready sync.WaitGroup
 
+	bootErrors := make([]error, numThreads)
 	for i := range numThreads {
-		ready.Go(phpThreads[i].boot)
+		ready.Go(func() { bootErrors[i] = phpThreads[i].boot() })
 	}
 
 	ready.Wait()
+
+	if err := errors.Join(bootErrors...); err != nil {
+		return nil, err
+	}
 
 	return mainThread, nil
 }
@@ -202,7 +208,7 @@ func (mainThread *phpMainThread) rebootAllThreads() bool {
 
 	mainThread.state.Set(state.Rebooting)
 	mainThread.state.WaitFor(state.YieldingForReboot)
-	if C.frankenphp_new_main_thread(C.int(mainThread.numThreads)) != 0 {
+	if !retryThreadCreation(func() bool { return C.frankenphp_new_main_thread(C.int(mainThread.numThreads)) == 0 }) {
 		panic("unable to recreate main thread after reboot")
 	}
 	mainThread.state.WaitFor(state.Ready)
@@ -229,20 +235,29 @@ func (mainThread *phpMainThread) rebootAllThreads() bool {
 }
 
 func getInactivePHPThread() *phpThread {
+	thread, _ := inactivePHPThread()
+
+	return thread
+}
+
+func inactivePHPThread() (*phpThread, error) {
 	for _, thread := range phpThreads {
 		if thread.state.Is(state.Inactive) {
-			return thread
+			return thread, nil
 		}
 	}
 
 	for _, thread := range phpThreads {
 		if thread.state.CompareAndSwap(state.Reserved, state.BootRequested) {
-			thread.boot()
-			return thread
+			if err := thread.boot(); err != nil {
+				return nil, err
+			}
+
+			return thread, nil
 		}
 	}
 
-	return nil
+	return nil, ErrMaxThreadsReached
 }
 
 //export go_frankenphp_main_thread_is_ready

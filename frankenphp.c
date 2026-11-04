@@ -5,6 +5,7 @@
 #include <Zend/zend_interfaces.h>
 #include <Zend/zend_smart_str.h>
 #include <errno.h>
+#include <ext/date/php_date.h>
 #include <ext/spl/spl_exceptions.h>
 #include <ext/standard/basic_functions.h>
 #include <ext/standard/head.h>
@@ -397,6 +398,45 @@ static void frankenphp_free_request_context() {
   SG(request_info).request_uri = NULL;
 }
 
+static bool frankenphp_release_super_globals_once() {
+  bool released = zend_hash_str_del(&EG(symbol_table), "_SESSION",
+                                    sizeof("_SESSION") - 1) == SUCCESS;
+
+  zend_auto_global *auto_global;
+  zend_string *_env = ZSTR_KNOWN(ZEND_STR_AUTOGLOBAL_ENV);
+  ZEND_HASH_MAP_FOREACH_PTR(CG(auto_globals), auto_global) {
+    zval *value;
+    if (auto_global->name == _env || !auto_global->auto_global_callback ||
+        !(value = zend_hash_find(&EG(symbol_table), auto_global->name))) {
+      continue;
+    }
+
+    zval *array = value;
+    ZVAL_DEREF(array);
+    if (Z_TYPE_P(array) == IS_ARRAY &&
+        zend_hash_num_elements(Z_ARRVAL_P(array)) == 0) {
+      continue;
+    }
+
+    /* frankenphp_reset_super_globals() only reimports an existing $_REQUEST */
+    zval garbage;
+    ZVAL_COPY_VALUE(&garbage, value);
+    ZVAL_EMPTY_ARRAY(value);
+    zval_ptr_dtor(&garbage);
+    released = true;
+  }
+  ZEND_HASH_FOREACH_END();
+
+  return released;
+}
+
+/* Destructors must run before the next client's output is active */
+static void frankenphp_release_super_globals() {
+  /* a destructor can put data back into a superglobal already released */
+  while (frankenphp_release_super_globals_once()) {
+  }
+}
+
 /* reset all 'auto globals' in worker mode except of $_ENV
  * see: php_hash_environment() */
 static void frankenphp_reset_super_globals() {
@@ -409,13 +449,6 @@ static void frankenphp_reset_super_globals() {
     zval *files = &PG(http_globals)[TRACK_VARS_FILES];
     zval_ptr_dtor_nogc(files);
     memset(files, 0, sizeof(*files));
-
-    /* $_SESSION must be explicitly deleted from the symbol table.
-     * Unlike other superglobals, $_SESSION is stored in EG(symbol_table)
-     * with a reference to PS(http_session_vars). The session RSHUTDOWN
-     * only decrements the refcount but doesn't remove it from the symbol
-     * table, causing data to leak between requests. */
-    zend_hash_str_del(&EG(symbol_table), "_SESSION", sizeof("_SESSION") - 1);
   }
   zend_end_try();
 
@@ -938,13 +971,19 @@ PHP_FUNCTION(frankenphp_handle_request) {
     RETURN_THROWS();
   }
 
+  frankenphp_release_super_globals();
+  if (EG(exception)) {
+    RETURN_THROWS();
+  }
+
 #ifdef ZEND_MAX_EXECUTION_TIMERS
   /* Disable timeouts while waiting for a request to handle */
   zend_unset_timeout();
 #endif
 
-  struct go_frankenphp_worker_handle_request_start_return result =
-      go_frankenphp_worker_handle_request_start(thread_index);
+  zval handler_parameters = {0};
+  bool has_request = go_frankenphp_worker_handle_request_start(
+      thread_index, &handler_parameters);
   /* Startup also runs when shutting down, to keep sapi_activate() and
    * sapi_deactivate() balanced for the code after the worker loop */
   if (frankenphp_worker_request_startup() == FAILURE) {
@@ -953,7 +992,7 @@ PHP_FUNCTION(frankenphp_handle_request) {
     zend_bailout();
   }
 
-  if (!result.r0) {
+  if (!has_request) {
     /* Shutting down */
     RETURN_FALSE;
   }
@@ -977,10 +1016,12 @@ PHP_FUNCTION(frankenphp_handle_request) {
 
   fci.size = sizeof fci;
   fci.retval = &retval;
-  fci.params = result.r1;
-  fci.param_count = result.r1 == NULL ? 0 : 1;
+  fci.params = Z_ISUNDEF(handler_parameters) ? NULL : &handler_parameters;
+  fci.param_count = Z_ISUNDEF(handler_parameters) ? 0 : 1;
 
-  if (zend_call_function(&fci, &fcc) == SUCCESS && Z_TYPE(retval) != IS_UNDEF) {
+  /* a body over the limit was rejected while parsing the request */
+  if (EXPECTED(!go_is_context_done(thread_index)) &&
+      zend_call_function(&fci, &fcc) == SUCCESS && Z_TYPE(retval) != IS_UNDEF) {
     callback_ret = &retval;
 
     /* pass NULL instead of the NULL zval as return value */
@@ -1011,9 +1052,7 @@ PHP_FUNCTION(frankenphp_handle_request) {
 
   frankenphp_worker_request_shutdown();
   go_frankenphp_finish_worker_request(thread_index, callback_ret);
-  if (result.r1 != NULL) {
-    zval_ptr_dtor(result.r1);
-  }
+  zval_ptr_dtor(&handler_parameters);
   if (callback_ret != NULL) {
     zval_ptr_dtor(&retval);
   }
@@ -1193,8 +1232,12 @@ static const zend_function_entry frankenphp_test_hook_functions[] = {
            arginfo_frankenphp_test_persist_roundtrip) PHP_FE_END};
 #endif
 
+static zend_class_entry *frankenphp_ce_request_body_too_large_exception;
+
 PHP_MINIT_FUNCTION(frankenphp) {
   register_frankenphp_symbols(module_number);
+  frankenphp_ce_request_body_too_large_exception =
+      register_class_FrankenPHP_RequestBodyTooLargeException(zend_ce_exception);
 #ifndef PHP_WIN32
   /* MINIT runs once per ZTS thread — guard the atfork registration */
   static pthread_once_t atfork_once = PTHREAD_ONCE_INIT;
@@ -1360,6 +1403,27 @@ static int frankenphp_startup(sapi_module_struct *sapi_module) {
 
 static int frankenphp_deactivate(void) { return SUCCESS; }
 
+/* ext/date's post-deactivate hook frees last_errors, which its GINIT leaves
+ * uninitialized, even when a failed startup skipped its RINIT
+ * TODO: remove when only PHP versions with the fix are supported (8.4.28+,
+ * 8.5.13+), see https://github.com/php/php-src/pull/25127 */
+static void frankenphp_init_date_globals(void) {
+  zend_module_entry *date =
+      zend_hash_str_find_ptr(&module_registry, ZEND_STRL("date"));
+  zend_date_globals *globals = ts_resource(*date->globals_id_ptr);
+  globals->last_errors = NULL;
+}
+
+static void frankenphp_handle_aborted_connection(void) {
+  /* a bailout would fail php_request_startup(), let the script's first write
+   * notice the abort instead */
+  if (PG(during_request_startup)) {
+    return;
+  }
+
+  php_handle_aborted_connection();
+}
+
 static size_t frankenphp_ub_write(const char *str, size_t str_length) {
 #ifndef PHP_WIN32
   if (UNEXPECTED(is_forked_child)) {
@@ -1371,7 +1435,7 @@ static size_t frankenphp_ub_write(const char *str, size_t str_length) {
       go_ub_write(frankenphp_thread_index(), (char *)str, str_length);
 
   if (result.r1) {
-    php_handle_aborted_connection();
+    frankenphp_handle_aborted_connection();
   }
 
   return result.r0;
@@ -1414,12 +1478,27 @@ static void frankenphp_sapi_flush(void *server_context) {
 
   sapi_send_headers();
   if (go_sapi_flush(frankenphp_thread_index())) {
-    php_handle_aborted_connection();
+    frankenphp_handle_aborted_connection();
   }
 }
 
 static size_t frankenphp_read_post(char *buffer, size_t count_bytes) {
-  return go_read_post(frankenphp_thread_index(), buffer, count_bytes);
+  struct go_read_post_return result =
+      go_read_post(frankenphp_thread_index(), buffer, count_bytes);
+
+  /* php://input can't report read errors, throw so user code doesn't take
+   * the truncated body for a complete one. Worker request startup and
+   * shutdown run in frankenphp_handle_request()'s frame, not in user code. */
+  zend_execute_data *ex = EG(current_execute_data);
+  if (result.r1 && ex != NULL &&
+      !(ex->func != NULL && ex->func->type == ZEND_INTERNAL_FUNCTION &&
+        ex->func->internal_function.handler ==
+            ZEND_FN(frankenphp_handle_request))) {
+    zend_throw_exception(frankenphp_ce_request_body_too_large_exception,
+                         "Request body too large", 0);
+  }
+
+  return result.r0;
 }
 
 static char *frankenphp_read_cookies(void) {
@@ -1753,6 +1832,7 @@ static void *php_thread(void *arg) {
 #ifdef PHP_WIN32
   ZEND_TSRMLS_CACHE_UPDATE();
 #endif
+  frankenphp_init_date_globals();
 #endif
 
   /* Publish this thread's force-kill slot to Go so the graceful-drain
@@ -1772,10 +1852,17 @@ static void *php_thread(void *arg) {
       frankenphp_update_request_context();
 
       if (UNEXPECTED(php_request_startup() == FAILURE)) {
-        /* Request startup failed, bail out to zend_catch */
-        frankenphp_log_message("Request startup failed, thread is unhealthy",
-                               LOG_ERR);
-        zend_bailout();
+        /* only the request failed, the thread can serve the next one */
+        has_attempted_shutdown = true;
+        if (!SG(headers_sent)) {
+          SG(sapi_headers).http_response_code = 500;
+        }
+        reset_sandboxed_environment();
+        php_request_shutdown((void *)0);
+        sandboxed_env = NULL;
+        frankenphp_free_request_context();
+        go_frankenphp_after_script_execution(thread_index, EG(exit_status));
+        continue;
       }
 
 #if PHP_VERSION_ID < 80500
@@ -1790,8 +1877,10 @@ static void *php_thread(void *arg) {
       file_handle.primary_script = 1;
       EG(exit_status) = 0;
 
-      /* Execute the PHP script, potential bailout to zend_catch */
-      if (EXPECTED(open_primary_script(&file_handle))) {
+      /* Execute the PHP script, potential bailout to zend_catch. A body over
+       * the limit was rejected while parsing the request. */
+      if (EXPECTED(!go_is_context_done(thread_index)) &&
+          EXPECTED(open_primary_script(&file_handle))) {
         php_execute_script(&file_handle);
       }
 #ifndef PHP_WIN32

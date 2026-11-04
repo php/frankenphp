@@ -1,23 +1,50 @@
 package caddy
 
 import (
+	"regexp"
+	"strconv"
 	"testing"
 
 	"github.com/caddyserver/caddy/v2"
+	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
 	"github.com/stretchr/testify/require"
 )
 
-func TestAssignServerIndexIncrements(t *testing.T) {
-	h := httpcaddyfile.Helper{State: map[string]any{}}
-	m1 := &FrankenPHPModule{}
-	m2 := &FrankenPHPModule{}
+func TestAssignServerIndexNumbersNamedRoutesApartFromSiteBlocks(t *testing.T) {
+	adapter := caddyfile.Adapter{ServerType: httpcaddyfile.ServerType{}}
+	cfg, _, err := adapter.Adapt([]byte(`
+		&(a) {
+			php_server
+		}
 
-	m1.assignServerIndex(h)
-	m2.assignServerIndex(h)
+		&(b) {
+			php_server
+		}
 
-	require.Equal(t, 1, m1.ServerIndex)
-	require.Equal(t, 2, m2.ServerIndex)
+		http://a.localhost {
+			php_server
+		}
+
+		http://b.localhost {
+			php_server
+		}
+
+		http://c.localhost {
+			invoke a
+			invoke b
+		}
+	`), nil)
+	require.NoError(t, err)
+
+	var indexes []int
+	for _, m := range regexp.MustCompile(`"server_index":(\d+)`).FindAllSubmatch(cfg, -1) {
+		i, err := strconv.Atoi(string(m[1]))
+		require.NoError(t, err)
+		indexes = append(indexes, i)
+	}
+
+	require.ElementsMatch(t, []int{1, 2, namedRouteServerIndexBase + 1, namedRouteServerIndexBase + 2}, indexes)
 }
 
 func TestRegisterModulesWithSameServerIndexShareOneServer(t *testing.T) {
@@ -49,21 +76,4 @@ func TestRegisterModulesWithoutServerIndexGetOwnServers(t *testing.T) {
 	require.NotSame(t, auto1.server, auto2.server, "modules without server_idx must each get their own server")
 	require.NotSame(t, auto1.server, indexed.server)
 	require.NotSame(t, auto2.server, indexed.server)
-}
-
-// regression test for the double-registration scenario: a module POSTed via
-// the admin API with an explicit server_idx must not steal the server of a
-// module that already registered under the same index; it joins it instead,
-// and the first registered module defines the server configuration
-func TestRegisterModulesFirstModuleWinsPerIdx(t *testing.T) {
-	app := &FrankenPHPApp{}
-	first := &FrankenPHPModule{ServerIndex: 2, resolvedDocumentRoot: "../testdata"}
-	second := &FrankenPHPModule{ServerIndex: 2, resolvedDocumentRoot: "../testdata/env"}
-	app.modules = []*FrankenPHPModule{first, second}
-
-	opts, err := app.collectModuleOptions(caddy.NewReplacer(), map[string]bool{}, true)
-	require.NoError(t, err)
-
-	require.Same(t, first.server, second.server)
-	require.Len(t, opts, 1, "only one server must be registered for a shared index")
 }

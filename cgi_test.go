@@ -163,6 +163,125 @@ func TestSplitRemoteAddr(t *testing.T) {
 	}
 }
 
+func TestHasWindowsShortName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		path     string
+		expected bool
+	}{
+		{"/index.php", false},
+		{"/UPLOAD~1.PHP", true},
+		{"/upload~1.php", true},
+		{"/UPLOA~12/index.php", true},
+		{`/uploads\UPLOAD~1.PHP`, true},
+		{"/UPLOAD~1.PHP. ", true},
+		{"/~1.php", false},
+		{"/UPLOAD~.php", false},
+		{"/UPLOAD~1A.php", false},
+		{"/LONGNAME~1/index.php", false},
+		{"/UPLOAD~1.PHPX", false},
+		{"/a+b~1.php", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.expected, hasWindowsShortName(tt.path))
+		})
+	}
+}
+
+func TestCleanRequestPath(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"/index.php", "/index.php"},
+		{"index.php", "index.php"},
+		{"/index.php/path//info/", "/index.php/path//info/"},
+		{"/.well-known/a.php", "/.well-known/a.php"},
+		{"/a.php/...", "/a.php/..."},
+		{"/admin/a.php/../../b.php", "/b.php"},
+		{"/admin/a.php//../../b.php", "/b.php"},
+		{"/admin/a.php/./../../b.php/", "/b.php/"},
+		{"/a.php/info/../", "/a.php/"},
+		{"/a.php/..", "/"},
+		{"/a.php/../", "/"},
+		{"/../../a.php", "/a.php"},
+		{`/admin/a.php/..\..\b.php`, `/admin/a.php/..\..\b.php`},
+		{"/admin/a.php/.../../../tool.php", "/admin/tool.php"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.expected, cleanRequestPath(tt.input, false))
+		})
+	}
+}
+
+func TestCleanRequestPathWindows(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"/index.php", "/index.php"},
+		{"/admin./tool.php", "/admin./tool.php"},
+		{`/admin/a.php/..\..\b.php`, "/b.php"},
+		{"/admin/a.php/.../../../tool.php", "/tool.php"},
+		{"/admin/a.php/.. ./../../tool.php", "/tool.php"},
+		{"/admin/a.php./../tool.php", "/admin/tool.php"},
+		{"/a.php/info. /", "/a.php/info. /"},
+		{"/a.php/./info. /", "/a.php/info/"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.expected, cleanRequestPath(tt.input, true))
+		})
+	}
+}
+
+func TestEscapedPathSelectsAnotherScript(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		target   string
+		expected bool
+	}{
+		{"/index.php", false},
+		{"/a%20b.php/info", false},
+		{"/index.php/a%2fb", false},
+		{"/index.php/a%2f..%2fb", false},
+		{"/admin/../index.php", false},
+		{"/public/tool.php%2f..%2f..%2fadmin%2ftool.php", true},
+		{"/public/tool.php/..%2f..%2fadmin/tool.php", true},
+		{"/public/%2e%2e/admin/tool.php", true},
+		{"/public%2f..%2fadmin/tool.php", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.target, func(t *testing.T) {
+			t.Parallel()
+
+			u, err := url.ParseRequestURI(tt.target)
+			if !assert.NoError(t, err) {
+				return
+			}
+			assert.Equal(t, tt.expected, escapedPathSelectsAnotherScript(u, nil))
+		})
+	}
+}
+
 func TestSplitPos(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -237,7 +356,7 @@ func TestSplitPos(t *testing.T) {
 			name:      "unicode in filename with multiple php occurrences",
 			path:      "/ȺȺȺȺshell.php.txt.php",
 			splitPath: []string{".php"},
-			wantPos:   -1, // the first .php doesn't end a segment, so no split
+			wantPos:   26, // the first .php doesn't end a segment, the last one does
 		},
 		{
 			name:      "unicode filename split at a segment boundary",
@@ -295,19 +414,25 @@ func TestSplitPos(t *testing.T) {
 			wantPos:   -1,
 		},
 		{
-			name:      "extension inside a segment followed by a real one must not match",
+			name:      "extension inside a segment is skipped for a later one",
 			path:      "/uploads/a.php.txt/b.php",
 			splitPath: []string{".php"},
-			wantPos:   -1,
+			wantPos:   24,
 		},
 		{
-			name:      "any byte after the extension must not match",
+			name:      "any byte after the extension skips that occurrence",
 			path:      "/a.phpx/b.php",
 			splitPath: []string{".php"},
-			wantPos:   -1,
+			wantPos:   13,
 		},
 		{
-			name:      "a non-boundary match gives up on that split, not on the next one",
+			name:      "first extension ending a segment wins",
+			path:      "/uploads/photos.php.php/avatar.jpg",
+			splitPath: []string{".php"},
+			wantPos:   23,
+		},
+		{
+			name:      "a split with no boundary match falls through to the next split",
 			path:      "/a.phpx/b.phtml",
 			splitPath: []string{".php", ".phtml"},
 			wantPos:   15,
@@ -550,7 +675,7 @@ func TestAssignedWorkerScriptPath(t *testing.T) {
 				request:      &http.Request{URL: &url.URL{Path: "/index.php/info"}},
 				worker:       &worker{fileName: tt.file},
 			}
-			splitCgiPath(&fc)
+			assert.NoError(t, splitCgiPath(&fc))
 			assert.Equal(t, tt.file, fc.scriptFilename)
 			if strings.HasPrefix(tt.file, tt.root+sep) {
 				assert.Equal(t, filepath.ToSlash(strings.TrimPrefix(tt.file, tt.root)), fc.scriptName)

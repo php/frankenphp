@@ -35,6 +35,8 @@ type frankenPHPContext struct {
 	scriptFilename string
 	requestURI     string
 
+	// Whether the final response headers were already sent
+	headersWritten bool
 	// Whether the request is already closed by us
 	isDone bool
 	// The client's connection state as of the moment isDone was set. Captured
@@ -120,7 +122,11 @@ func newContextFromRequest(request *http.Request, responseWriter http.ResponseWr
 		fc.requestURI = fc.request.URL.RequestURI()
 	}
 
-	splitCgiPath(fc)
+	if err := splitCgiPath(fc); err != nil {
+		fc.reject(err)
+
+		return nil, err
+	}
 
 	return fc, nil
 }
@@ -159,7 +165,9 @@ func newWorkerDummyContext(w *worker) (*frankenPHPContext, error) {
 		fc.requestURI = r.URL.RequestURI()
 	}
 
-	splitCgiPath(fc)
+	if err := splitCgiPath(fc); err != nil {
+		return nil, err
+	}
 
 	return fc, nil
 }
@@ -204,7 +212,7 @@ func (fc *frankenPHPContext) closeContext() {
 
 // validate checks if the request should be outright rejected
 func (fc *frankenPHPContext) validate() error {
-	if strings.Contains(fc.request.URL.Path, "\x00") {
+	if strings.Contains(fc.request.URL.Path, "\x00") || escapedPathSelectsAnotherScript(fc.request.URL, fc.splitPath) {
 		fc.reject(ErrInvalidRequestPath)
 
 		return ErrInvalidRequestPath

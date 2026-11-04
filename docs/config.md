@@ -156,6 +156,7 @@ Using the `php_server` directive is generally what you need,
 but if you need full control, you can use the lower-level `php` directive.
 The `php` directive passes all input to PHP, instead of first checking whether
 it's a PHP file or not. Read more about it in the [performance page](performance.md#try_files).
+A request whose path contains none of the `split_path` extensions gets a 404, unless a worker handles it.
 
 Using the `php_server` directive is equivalent to this configuration:
 
@@ -185,7 +186,7 @@ The `php_server` and the `php` directives have the following options:
 ```caddyfile
 php_server [<matcher>] {
 	root <directory> # Sets the root folder to the site. Default: `root` directive.
-	split_path <delim...> # Sets the substrings for splitting the URI into two parts. The first matching substring will be used to split the "path info" from the path. The first piece is suffixed with the matching substring and will be assumed as the actual resource (CGI script) name. The second piece will be set to PATH_INFO for the script to use. Default: `.php`
+	split_path <delim...> # Sets the substrings for splitting the URI into two parts. The first matching substring that ends a path segment will be used to split the "path info" from the path. The first piece is suffixed with the matching substring and will be assumed as the actual resource (CGI script) name. The second piece will be set to PATH_INFO for the script to use. Default: `.php`
 	resolve_root_symlink false # Disables resolving the `root` directory to its actual value by evaluating a symbolic link, if one exists (enabled by default).
 	name <name> # Sets the name for this server, used to attribute workers, metrics and logs. Default: the first host matcher of the enclosing route, or the first listener address.
 	env <key> <value> # Sets an extra environment variable to the given value. Can be specified more than once for multiple environment variables.
@@ -364,6 +365,20 @@ CADDY_GLOBAL_OPTIONS="servers {
 ```
 
 You can find more information about this setting in the [Caddy documentation](https://caddyserver.com/docs/caddyfile/options#enable-full-duplex).
+
+### Request body size limit
+
+To limit the size of request bodies, use the [`request_body`](https://caddyserver.com/docs/caddyfile/directives/request_body) directive:
+
+```caddyfile
+request_body {
+	max_size 10MB
+}
+```
+
+Requests with a larger body get a `413 Request Entity Too Large` response.
+If PHP reads the body before the script starts (`POST` requests with a `Content-Type`, such as forms and file uploads), the script doesn't run.
+If the script reads the body itself, through `php://input` or `request_parse_body()`, the read throws a `FrankenPHP\RequestBodyTooLargeException` once the limit is reached, so a truncated body is never mistaken for a complete one.
 
 ## Enable the debug mode
 
