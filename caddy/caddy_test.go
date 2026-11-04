@@ -1743,6 +1743,115 @@ func TestWorkerRestart(t *testing.T) {
 		))
 }
 
+func TestNamedRouteDoesNotShareTheServerOfASite(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		&(named) {
+			php_server {
+				root ../testdata
+				env FOO named
+			}
+		}
+
+		http://localhost:`+testPort+` {
+			php_server {
+				root ../testdata
+				env FOO site
+			}
+		}
+
+		http://127.0.0.1:`+testPort+` {
+			invoke named
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/worker-env.php", http.StatusOK, "sitesite")
+	tester.AssertGetResponse("http://127.0.0.1:"+testPort+"/worker-env.php", http.StatusOK, "namednamed")
+}
+
+func TestNamedRouteDoesNotShareWorkersOfASiteWithAnotherMercureHub(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		&(named) {
+			route {
+				mercure {
+					name named
+					transport local
+					anonymous
+				}
+
+				php_server {
+					root ../testdata
+					worker worker-with-counter.php 1
+				}
+			}
+		}
+
+		http://localhost:`+testPort+` {
+			route {
+				mercure {
+					name site
+					transport local
+					anonymous
+				}
+
+				php_server {
+					root ../testdata
+					worker worker-with-counter.php 1
+				}
+			}
+		}
+
+		http://127.0.0.1:`+testPort+` {
+			invoke named
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/worker-with-counter.php", http.StatusOK, "requests:1")
+	tester.AssertGetResponse("http://127.0.0.1:"+testPort+"/worker-with-counter.php", http.StatusOK, "requests:1")
+}
+
+func TestNamedRouteDoesNotShareWorkersOfASiteWithTheSameConfig(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		&(named) {
+			php_server {
+				root ../testdata
+				worker worker-with-counter.php 1
+			}
+		}
+
+		http://localhost:`+testPort+` {
+			php_server {
+				root ../testdata
+				worker worker-with-counter.php 1
+			}
+		}
+
+		http://127.0.0.1:`+testPort+` {
+			invoke named
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/worker-with-counter.php", http.StatusOK, "requests:1")
+	tester.AssertGetResponse("http://127.0.0.1:"+testPort+"/worker-with-counter.php", http.StatusOK, "requests:1")
+}
+
 func TestWorkerMatchDirective(t *testing.T) {
 	tester := caddytest.NewTester(t)
 	initServer(t, tester, `

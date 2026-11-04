@@ -327,10 +327,21 @@ func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	return nil
 }
 
+// namedRouteServerIndexBase keeps named routes, which Caddy adapts with their own Helper.State, apart from site blocks
+const namedRouteServerIndexBase = 1 << 20
+
 func (f *FrankenPHPModule) assignServerIndex(h httpcaddyfile.Helper) {
-	counter, _ := h.State["php_server_count"].(int)
+	counter, ok := h.State["php_server_count"].(int)
+	if !ok && inNamedRoute(h) {
+		counter = namedRouteServerIndexBase
+	}
 	f.ServerIndex = counter + 1
 	h.State["php_server_count"] = counter + 1
+}
+
+// inNamedRoute relies on Caddy setting the named_routes option only once all named routes are adapted
+func inNamedRoute(h httpcaddyfile.Helper) bool {
+	return h.Option("named_routes") == nil
 }
 
 // parseCaddyfile unmarshals tokens from h into a new Middleware.
