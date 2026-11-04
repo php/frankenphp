@@ -51,6 +51,7 @@ var (
 	ErrNotRunning         = errors.New("server is not registered, you must first call frankenphp.Init() with the WithServer() option")
 
 	ErrInvalidRequestPath         = ErrRejected{"invalid request path", http.StatusBadRequest}
+	ErrInvalidScriptPath          = ErrRejected{"invalid script path", http.StatusNotFound}
 	ErrInvalidContentLengthHeader = ErrRejected{"invalid Content-Length header", http.StatusBadRequest}
 	ErrMaxWaitTimeExceeded        = ErrRejected{"maximum request handling time exceeded", http.StatusServiceUnavailable}
 

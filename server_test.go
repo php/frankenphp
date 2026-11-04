@@ -97,6 +97,20 @@ func TestServer(t *testing.T) {
 		assert.Contains(t, body, "PHP_SELF: /split-path.custom/pathinfo\n")
 	})
 
+	t.Run("split_path_no_match", func(t *testing.T) {
+		server, _ := frankenphp.NewServer(testDataDir, frankenphp.WithServerSplitPath([]string{".inc"}))
+		initServers(t, frankenphp.WithServer(server))
+
+		w := httptest.NewRecorder()
+		require.ErrorIs(t, server.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "http://example.com/hello.%C4%B0nc", nil)), frankenphp.ErrInvalidScriptPath)
+		assert.Equal(t, http.StatusNotFound, w.Code)
+		assert.Equal(t, "invalid script path", w.Body.String())
+
+		w = httptest.NewRecorder()
+		require.ErrorIs(t, server.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "http://example.com/hello.txt", nil)), frankenphp.ErrInvalidScriptPath)
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+
 	t.Run("workers_by_path_and_request_matcher", func(t *testing.T) {
 		server1, _ := frankenphp.NewServer(testDataDir)
 		server2, _ := frankenphp.NewServer(testDataDir)
@@ -119,14 +133,15 @@ func TestServer(t *testing.T) {
 		body3 := serverGet(t, server2, "http://example.com/match/anything")
 		body4 := serverGet(t, server2, "http://example.com/match/anything")
 		body5 := serverGet(t, server2, "http://example.com/index.php")
-		body6 := serverGet(t, server1, "http://example.com/match/anything")
+		w := httptest.NewRecorder()
+		err6 := server1.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "http://example.com/match/anything", nil))
 
 		assert.Equal(t, "requests:1", body1, "could not access the worker by path on server 1")
 		assert.Equal(t, "requests:2", body2, "could not access the worker by path on server 1")
 		assert.Equal(t, "requests:1", body3, "could not access the worker by matcher on server 2")
 		assert.Equal(t, "requests:2", body4, "could not access the worker by matcher on server 2")
 		assert.Contains(t, body5, "I am by birth a Genevese (i not set)", "could not access the worker by path on server 2")
-		assert.Equal(t, "No input file specified.\n", body6, "worker is scoped to server 1, so should not be found on server 2")
+		assert.ErrorIs(t, err6, frankenphp.ErrInvalidScriptPath, "the matcher worker is scoped to server 2, so server 1 has no script for this path")
 	})
 
 	t.Run("worker_env_inheritance", func(t *testing.T) {

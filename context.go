@@ -120,7 +120,11 @@ func newContextFromRequest(request *http.Request, responseWriter http.ResponseWr
 		fc.requestURI = fc.request.URL.RequestURI()
 	}
 
-	splitCgiPath(fc)
+	if err := splitCgiPath(fc); err != nil {
+		fc.reject(err)
+
+		return nil, err
+	}
 
 	return fc, nil
 }
@@ -159,7 +163,9 @@ func newWorkerDummyContext(w *worker) (*frankenPHPContext, error) {
 		fc.requestURI = r.URL.RequestURI()
 	}
 
-	splitCgiPath(fc)
+	if err := splitCgiPath(fc); err != nil {
+		return nil, err
+	}
 
 	return fc, nil
 }
