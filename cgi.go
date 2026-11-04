@@ -322,15 +322,20 @@ func cleanRequestPath(reqPath string, windows bool) string {
 }
 
 // escapedPathSelectsAnotherScript reports whether cleaning the escaped path, as Caddy's path matchers do for patterns containing "%", leads to another script than cleaning the decoded one.
-func escapedPathSelectsAnotherScript(u *url.URL, splitPath []string) bool {
-	if u.RawPath == "" {
+func escapedPathSelectsAnotherScript(u *url.URL, splitPath []string, windows bool) bool {
+	// on Windows, those matchers read a backslash, escaped even without RawPath, as an escaped separator
+	backslash := windows && strings.Contains(u.Path, `\`)
+	if u.RawPath == "" && !backslash {
 		return false
 	}
 
-	windows := runtime.GOOS == "windows"
 	escaped, err := url.PathUnescape(cleanRequestPath(u.EscapedPath(), windows))
 	if err != nil {
 		return true
+	}
+
+	if backslash {
+		escaped = strings.ReplaceAll(escaped, `\`, "/")
 	}
 
 	if splitPath == nil {

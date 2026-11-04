@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -212,7 +213,7 @@ func (fc *frankenPHPContext) closeContext() {
 
 // validate checks if the request should be outright rejected
 func (fc *frankenPHPContext) validate() error {
-	if strings.Contains(fc.request.URL.Path, "\x00") || escapedPathSelectsAnotherScript(fc.request.URL, fc.splitPath) {
+	if strings.Contains(fc.request.URL.Path, "\x00") || escapedPathSelectsAnotherScript(fc.request.URL, fc.splitPath, runtime.GOOS == "windows") {
 		fc.reject(ErrInvalidRequestPath)
 
 		return ErrInvalidRequestPath
