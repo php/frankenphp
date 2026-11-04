@@ -212,7 +212,7 @@ func (fc *frankenPHPContext) closeContext() {
 
 // validate checks if the request should be outright rejected
 func (fc *frankenPHPContext) validate() error {
-	if strings.Contains(fc.request.URL.Path, "\x00") {
+	if strings.Contains(fc.request.URL.Path, "\x00") || escapedPathSelectsAnotherScript(fc.request.URL, fc.splitPath) {
 		fc.reject(ErrInvalidRequestPath)
 
 		return ErrInvalidRequestPath

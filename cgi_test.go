@@ -193,6 +193,95 @@ func TestHasWindowsShortName(t *testing.T) {
 	}
 }
 
+func TestCleanRequestPath(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"/index.php", "/index.php"},
+		{"index.php", "index.php"},
+		{"/index.php/path//info/", "/index.php/path//info/"},
+		{"/.well-known/a.php", "/.well-known/a.php"},
+		{"/a.php/...", "/a.php/..."},
+		{"/admin/a.php/../../b.php", "/b.php"},
+		{"/admin/a.php//../../b.php", "/b.php"},
+		{"/admin/a.php/./../../b.php/", "/b.php/"},
+		{"/a.php/info/../", "/a.php/"},
+		{"/a.php/..", "/"},
+		{"/a.php/../", "/"},
+		{"/../../a.php", "/a.php"},
+		{`/admin/a.php/..\..\b.php`, `/admin/a.php/..\..\b.php`},
+		{"/admin/a.php/.../../../tool.php", "/admin/tool.php"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.expected, cleanRequestPath(tt.input, false))
+		})
+	}
+}
+
+func TestCleanRequestPathWindows(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"/index.php", "/index.php"},
+		{"/admin./tool.php", "/admin./tool.php"},
+		{`/admin/a.php/..\..\b.php`, "/b.php"},
+		{"/admin/a.php/.../../../tool.php", "/tool.php"},
+		{"/admin/a.php/.. ./../../tool.php", "/tool.php"},
+		{"/admin/a.php./../tool.php", "/admin/tool.php"},
+		{"/a.php/info. /", "/a.php/info. /"},
+		{"/a.php/./info. /", "/a.php/info/"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.expected, cleanRequestPath(tt.input, true))
+		})
+	}
+}
+
+func TestEscapedPathSelectsAnotherScript(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		target   string
+		expected bool
+	}{
+		{"/index.php", false},
+		{"/a%20b.php/info", false},
+		{"/index.php/a%2fb", false},
+		{"/index.php/a%2f..%2fb", false},
+		{"/admin/../index.php", false},
+		{"/public/tool.php%2f..%2f..%2fadmin%2ftool.php", true},
+		{"/public/tool.php/..%2f..%2fadmin/tool.php", true},
+		{"/public/%2e%2e/admin/tool.php", true},
+		{"/public%2f..%2fadmin/tool.php", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.target, func(t *testing.T) {
+			t.Parallel()
+
+			u, err := url.ParseRequestURI(tt.target)
+			if !assert.NoError(t, err) {
+				return
+			}
+			assert.Equal(t, tt.expected, escapedPathSelectsAnotherScript(u, nil))
+		})
+	}
+}
+
 func TestSplitPos(t *testing.T) {
 	tests := []struct {
 		name      string

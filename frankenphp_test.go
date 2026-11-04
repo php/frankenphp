@@ -327,6 +327,28 @@ func testScriptStatIgnoresPathInfo(t *testing.T, opts *testOptions) {
 	}, opts)
 }
 
+func TestDotSegmentsResolvedBeforeSplit(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		body, _ := testGet(fmt.Sprintf("http://example.com/dirindex/index.php/../../hello.php?i=%d", i), handler, t)
+		assert.Equal(t, "Hello from PHP", body)
+
+		// "%" path matchers clean the escaped path, where these are not dot segments
+		for _, p := range []string{
+			"/dirindex/index.php/..%2f..%2fhello.php",
+			"/dirindex/index.php/%2e%2e/%2e%2e/hello.php",
+			"/public/tool.php%2f..%2f..%2fadmin%2ftool.php",
+		} {
+			body, resp := testGet(fmt.Sprintf("http://example.com%s?i=%d", p, i), handler, t)
+
+			assert.Equal(t, http.StatusBadRequest, resp.StatusCode, p)
+			assert.Contains(t, body, "invalid request path", p)
+		}
+
+		body, _ = testGet(fmt.Sprintf("http://example.com/hello.php/a%%2fb?i=%d", i), handler, t)
+		assert.Equal(t, "Hello from PHP", body)
+	}, nil)
+}
+
 func TestHeaders_module(t *testing.T) { testHeaders(t, nil) }
 func TestHeaders_worker(t *testing.T) { testHeaders(t, &testOptions{workerScript: "headers.php"}) }
 func testHeaders(t *testing.T, opts *testOptions) {
@@ -1363,6 +1385,11 @@ func FuzzRequest(f *testing.F) {
 				assert.Equal(t, 400, resp.StatusCode)
 				assert.Contains(t, body, "invalid request path")
 
+				return
+			}
+
+			// dot segments are resolved before the split, so PATH_INFO isn't the fuzzed string
+			if strings.Contains(req.URL.Path, "/.") {
 				return
 			}
 

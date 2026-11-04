@@ -495,6 +495,56 @@ func TestPHPServerDirective(t *testing.T) {
 	tester.AssertGetResponse("http://localhost:"+testPort+"/not-found.txt", http.StatusOK, "I am by birth a Genevese (i not set)")
 }
 
+func TestPHPServerSplitsTheSamePathAsTheMatchers(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+			http_port `+testPort+`
+			https_port 9443
+		}
+
+		localhost:`+testPort+` {
+			root ../testdata
+			@denied path /dirindex/*
+			respond @denied 403
+			php_server {
+				index off
+			}
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/dirindex/index.php", http.StatusForbidden, "")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/dirindex/index.php/../../hello.php", http.StatusOK, "Hello from PHP")
+}
+
+func TestPHPServerRejectsPathsSplitDifferentlyWhenEscaped(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+			http_port `+testPort+`
+			https_port 9443
+		}
+
+		localhost:`+testPort+` {
+			root ../testdata
+			@denied not path /dirindex/%*
+			respond @denied 403
+			php_server {
+				index off
+			}
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/hello.php", http.StatusForbidden, "")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/dirindex/index.php%2f..%2f..%2fhello.php", http.StatusBadRequest, "invalid request path")
+}
+
 func TestPHPServerDirectiveDisableFileServer(t *testing.T) {
 	tester := caddytest.NewTester(t)
 	initServer(t, tester, `

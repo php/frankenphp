@@ -17,6 +17,7 @@ import (
 	"crypto/tls"
 	"net"
 	"net/http"
+	"net/url"
 	"path"
 	"path/filepath"
 	"runtime"
@@ -184,7 +185,7 @@ func go_register_server_variables(threadIndex C.uintptr_t, trackVarsArray *C.zva
 
 // splitCgiPath splits the request path into SCRIPT_NAME, SCRIPT_FILENAME, PATH_INFO, DOCUMENT_URI
 func splitCgiPath(fc *frankenPHPContext) error {
-	path := fc.request.URL.Path
+	path := cleanRequestPath(fc.request.URL.Path, runtime.GOOS == "windows")
 	splitPath := fc.splitPath
 
 	if splitPath == nil {
@@ -289,6 +290,62 @@ func hasWindowsShortName(p string) bool {
 	}
 
 	return false
+}
+
+// cleanRequestPath resolves dot segments as Caddy's matchers do, so the script run is the one they matched.
+func cleanRequestPath(reqPath string, windows bool) string {
+	if windows {
+		reqPath = strings.ReplaceAll(reqPath, `\`, "/")
+	}
+
+	if !strings.Contains(reqPath, "/.") {
+		return reqPath
+	}
+
+	if windows {
+		// mirror Caddy's normalizeWindowsPath, which trims "..." to an empty segment before cleaning
+		segments := strings.Split(reqPath, "/")
+		for i, segment := range segments {
+			if segment != "." && segment != ".." {
+				segments[i] = strings.TrimRight(segment, ". ")
+			}
+		}
+		reqPath = strings.Join(segments, "/")
+	}
+
+	cleaned := path.Clean("/" + reqPath)
+	if cleaned != "/" && strings.HasSuffix(reqPath, "/") {
+		cleaned += "/"
+	}
+
+	return cleaned
+}
+
+// escapedPathSelectsAnotherScript reports whether cleaning the escaped path, as Caddy's path matchers do for patterns containing "%", leads to another script than cleaning the decoded one.
+func escapedPathSelectsAnotherScript(u *url.URL, splitPath []string) bool {
+	if u.RawPath == "" {
+		return false
+	}
+
+	windows := runtime.GOOS == "windows"
+	escaped, err := url.PathUnescape(cleanRequestPath(u.EscapedPath(), windows))
+	if err != nil {
+		return true
+	}
+
+	if splitPath == nil {
+		splitPath = []string{".php"}
+	}
+
+	return scriptPart(cleanRequestPath(u.Path, windows), splitPath) != scriptPart(escaped, splitPath)
+}
+
+func scriptPart(path string, splitPath []string) string {
+	if pos := splitPos(path, splitPath); pos > -1 {
+		return path[:pos]
+	}
+
+	return path
 }
 
 // splitPos returns the index where path should be split based on splitPath.
