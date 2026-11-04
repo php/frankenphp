@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -113,6 +114,66 @@ func TestWorkerExtensionSendMessageAfterShutdown(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("SendMessage() did not return after Shutdown()")
 	}
+}
+
+func TestWorkerExtensionSendMessageCopiesZval(t *testing.T) {
+	externalWorker, o := WithExtensionWorkers("extensionWorkers", "testdata/message-worker.php", 1)
+
+	require.NoError(t, Init(o, WithNumThreads(1), WithMaxThreads(3)))
+	t.Cleanup(Shutdown)
+
+	task := newTask(func() {
+		zval := PHPValue("Hello Workers")
+
+		ret, err := externalWorker.SendMessage(t.Context(), zval, nil)
+		assert.NoError(t, err)
+		assert.Equal(t, "received message: Hello Workers", ret)
+
+		message, err := GoValue[string](zval)
+		assert.NoError(t, err)
+		assert.Equal(t, "Hello Workers", message, "the zval should still be owned by the calling thread")
+
+		ret, err = externalWorker.SendMessage(t.Context(), PHPValue(nil), nil)
+		assert.NoError(t, err)
+		assert.Equal(t, "received message: ", ret, "a null zval should be passed to the closure")
+	})
+	convertToTaskThread(getInactivePHPThread()).execute(task)
+	task.waitForCompletion()
+}
+
+func TestWorkerExtensionSendMessageConvertsArrays(t *testing.T) {
+	externalWorker, o := WithExtensionWorkers("extensionWorkers", "testdata/message-export-worker.php", 1)
+
+	require.NoError(t, Init(o, WithNumThreads(1), WithMaxThreads(3)))
+	t.Cleanup(Shutdown)
+
+	message := AssociativeArray[any]{
+		Map:   map[string]any{"list": []any{"a", int64(1), nil}, "float": 1.5, "bool": true},
+		Order: []string{"list", "float", "bool"},
+	}
+
+	task := newTask(func() {
+		ret, err := externalWorker.SendMessage(t.Context(), PHPValue(message), nil)
+		assert.NoError(t, err)
+		assert.Equal(t, "array (\n  'list' => \n  array (\n    0 => 'a',\n    1 => 1,\n    2 => NULL,\n  ),\n  'float' => 1.5,\n  'bool' => true,\n)", ret)
+	})
+	convertToTaskThread(getInactivePHPThread()).execute(task)
+	task.waitForCompletion()
+}
+
+func TestWorkerExtensionSendMessageRejectsUnsupportedZval(t *testing.T) {
+	externalWorker, o := WithExtensionWorkers("extensionWorkers", "testdata/message-worker.php", 1)
+
+	require.NoError(t, Init(o))
+	t.Cleanup(Shutdown)
+
+	// only the type of the zval is read: IS_OBJECT (8) in u1.type_info
+	var zval [2]uint64
+	zval[1] = 8
+
+	ret, err := externalWorker.SendMessage(t.Context(), unsafe.Pointer(&zval), nil)
+	assert.EqualError(t, err, "cannot convert message: unsupported zval type 8")
+	assert.Nil(t, ret)
 }
 
 func TestErrorIf2WorkersHaveSameName(t *testing.T) {

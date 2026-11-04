@@ -943,8 +943,9 @@ PHP_FUNCTION(frankenphp_handle_request) {
   zend_unset_timeout();
 #endif
 
-  struct go_frankenphp_worker_handle_request_start_return result =
-      go_frankenphp_worker_handle_request_start(thread_index);
+  zval handler_parameters = {0};
+  bool has_request = go_frankenphp_worker_handle_request_start(
+      thread_index, &handler_parameters);
   /* Startup also runs when shutting down, to keep sapi_activate() and
    * sapi_deactivate() balanced for the code after the worker loop */
   if (frankenphp_worker_request_startup() == FAILURE) {
@@ -953,7 +954,7 @@ PHP_FUNCTION(frankenphp_handle_request) {
     zend_bailout();
   }
 
-  if (!result.r0) {
+  if (!has_request) {
     /* Shutting down */
     RETURN_FALSE;
   }
@@ -977,8 +978,8 @@ PHP_FUNCTION(frankenphp_handle_request) {
 
   fci.size = sizeof fci;
   fci.retval = &retval;
-  fci.params = result.r1;
-  fci.param_count = result.r1 == NULL ? 0 : 1;
+  fci.params = Z_ISUNDEF(handler_parameters) ? NULL : &handler_parameters;
+  fci.param_count = Z_ISUNDEF(handler_parameters) ? 0 : 1;
 
   /* a body over the limit was rejected while parsing the request */
   if (EXPECTED(!go_is_context_done(thread_index)) &&
@@ -1013,9 +1014,7 @@ PHP_FUNCTION(frankenphp_handle_request) {
 
   frankenphp_worker_request_shutdown();
   go_frankenphp_finish_worker_request(thread_index, callback_ret);
-  if (result.r1 != NULL) {
-    zval_ptr_dtor(result.r1);
-  }
+  zval_ptr_dtor(&handler_parameters);
   if (callback_ret != NULL) {
     zval_ptr_dtor(&retval);
   }

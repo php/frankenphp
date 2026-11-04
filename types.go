@@ -397,11 +397,20 @@ func PHPValue(value any) unsafe.Pointer {
 }
 
 func phpValue(value any) *C.zval {
-	zval := (*C.zval)(C.__emalloc__(C.size_t(unsafe.Sizeof(C.zval{}))))
+	var v C.zval
+	phpValueInto(value, &v)
 
+	zval := (*C.zval)(C.__emalloc__(C.size_t(unsafe.Sizeof(C.zval{}))))
+	*zval = v
+
+	return zval
+}
+
+// phpValueInto writes value into a zval container owned by the caller.
+func phpValueInto(value any, zval *C.zval) {
 	if toZvalObj, ok := value.(toZval); ok {
 		toZvalObj.toZval(zval)
-		return zval
+		return
 	}
 
 	switch v := value.(type) {
@@ -429,11 +438,8 @@ func phpValue(value any) *C.zval {
 	case []any:
 		C.__zval_arr__(zval, (*C.zend_array)(PHPPackedArray[any](v)))
 	default:
-		C.__efree__(unsafe.Pointer(zval))
 		panic(fmt.Sprintf("unsupported Go type %T", v))
 	}
-
-	return zval
 }
 
 // createNewArray creates a new zend_array with the specified size.
