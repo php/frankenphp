@@ -39,6 +39,7 @@ env:
 
 jobs:
   build:
+    name: Windows build
     permissions:
       contents: write
       id-token: write
