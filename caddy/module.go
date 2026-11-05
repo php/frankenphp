@@ -353,6 +353,9 @@ func parseCaddyfile(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error)
 	return m, err
 }
 
+// A reference relative to the last segment resolves against the requested URL, so it can't leave the origin.
+const canonicalPathLocation = "./{http.request.orig_uri.path.file_escaped}/{http.request.orig_uri.prefixed_query}"
+
 // parsePhpServer parses the php_server directive, which has a similar syntax
 // to the php_fastcgi directive. A line such as this:
 //
@@ -365,7 +368,7 @@ func parseCaddyfile(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error)
 //		    file {path}/index.php
 //		    not path */
 //		}
-//		redir @canonicalPath {path}/ 308
+//		redir @canonicalPath ./{http.request.orig_uri.path.file_escaped}/{http.request.orig_uri.prefixed_query} 308
 //
 //		# If the requested file does not exist, try index files
 //		@indexFiles file {
@@ -551,7 +554,7 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 			}
 			redirHandler := caddyhttp.StaticResponse{
 				StatusCode: caddyhttp.WeakString(strconv.Itoa(http.StatusPermanentRedirect)),
-				Headers:    http.Header{"Location": []string{"{http.request.orig_uri.path}/"}},
+				Headers:    http.Header{"Location": []string{canonicalPathLocation}},
 			}
 			redirRoute := caddyhttp.Route{
 				MatcherSetsRaw: []caddy.ModuleMap{redirMatcherSet},

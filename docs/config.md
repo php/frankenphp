@@ -167,7 +167,7 @@ route {
 		file {path}/index.php
 		not path */
 	}
-	redir @canonicalPath {path}/ 308
+	redir @canonicalPath ./{http.request.orig_uri.path.file_escaped}/{http.request.orig_uri.prefixed_query} 308
 	# If the requested file does not exist, try index files
 	@indexFiles file {
 		try_files {path} {path}/index.php index.php
