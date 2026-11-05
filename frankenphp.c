@@ -29,6 +29,7 @@
 #include <pthread.h>
 #include <sapi/embed/php_embed.h>
 #include <signal.h>
+#include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -288,7 +289,7 @@ static pthread_once_t kill_signal_handler_installed = PTHREAD_ONCE_INIT;
  * pthread_kill when this is false, so a sigaction failure (invalid
  * signal number, exhausted handler slots, etc.) can't deliver the
  * signal with its default action (process termination). */
-static zend_atomic_bool kill_signal_handler_active;
+static atomic_bool kill_signal_handler_active;
 static void install_kill_signal_handler(void) {
   /* No SA_RESTART so syscalls return EINTR rather than being restarted.
    * SA_ONSTACK guards against an accidental process-level delivery to a
@@ -299,7 +300,7 @@ static void install_kill_signal_handler(void) {
   sigemptyset(&sa.sa_mask);
   sa.sa_flags = SA_ONSTACK;
   if (sigaction(FRANKENPHP_KILL_SIGNAL, &sa, NULL) == 0) {
-    zend_atomic_bool_store(&kill_signal_handler_active, true);
+    atomic_store(&kill_signal_handler_active, true);
   }
 }
 #endif
@@ -333,14 +334,14 @@ void frankenphp_force_kill_thread(force_kill_slot slot) {
 
   /* Atomic stores first: by the time the thread wakes (signal-driven or
    * natural) the VM sees them and bails through zend_timeout(). */
-  zend_atomic_bool_store(slot.timed_out, true);
-  zend_atomic_bool_store(slot.vm_interrupt, true);
+  frankenphp_atomic_bool_store(slot.timed_out, true);
+  frankenphp_atomic_bool_store(slot.vm_interrupt, true);
 
 #ifdef FRANKENPHP_HAS_KILL_SIGNAL
   /* ESRCH (thread already exited) / EINVAL are both benign here.
    * Skip if sigaction() failed at install time: delivering an unhandled
    * SIGRTMIN+3 would terminate the process. */
-  if (zend_atomic_bool_load(&kill_signal_handler_active)) {
+  if (atomic_load(&kill_signal_handler_active)) {
     pthread_kill(slot.tid, FRANKENPHP_KILL_SIGNAL);
   }
 #elif defined(PHP_WIN32)
@@ -1736,7 +1737,9 @@ sapi_module_struct frankenphp_sapi_module = {
     frankenphp_register_variables, /* register server variables */
     frankenphp_log_message,        /* Log message */
     NULL,                          /* Get request time */
-    NULL,                          /* Child terminate */
+#if PHP_VERSION_ID < 80700
+    NULL, /* Child terminate */
+#endif
 
     STANDARD_SAPI_MODULE_PROPERTIES};
 
