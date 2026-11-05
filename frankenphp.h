@@ -32,9 +32,21 @@
 #define FRANKENPHP_KILL_SIGNAL (SIGRTMIN + 3)
 #endif
 
+#if PHP_VERSION_ID >= 80700
+typedef atomic_bool frankenphp_atomic_bool;
+#define frankenphp_atomic_bool_load(obj) atomic_load(obj)
+#define frankenphp_atomic_bool_store(obj, desired) atomic_store(obj, desired)
+#else
+#include <Zend/zend_atomic.h>
+typedef zend_atomic_bool frankenphp_atomic_bool;
+#define frankenphp_atomic_bool_load(obj) zend_atomic_bool_load(obj)
+#define frankenphp_atomic_bool_store(obj, desired)                             \
+  zend_atomic_bool_store(obj, desired)
+#endif
+
 typedef struct {
-  zend_atomic_bool *vm_interrupt;
-  zend_atomic_bool *timed_out;
+  frankenphp_atomic_bool *vm_interrupt;
+  frankenphp_atomic_bool *timed_out;
 #ifdef FRANKENPHP_HAS_KILL_SIGNAL
   pthread_t tid;
 #elif defined(PHP_WIN32)
