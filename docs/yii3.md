@@ -1,11 +1,11 @@
 ---
-title: Running Yii 3 with FrankenPHP (Docker, worker mode)
-description: How to run a Yii 3 application with FrankenPHP using the Docker image, a local install, or worker mode with the yii-runner-frankenphp package.
+title: Running Yii3 with FrankenPHP (Docker, worker mode)
+description: How to run a Yii3 application with FrankenPHP using the Docker image, a local install, or worker mode with the yii-runner-frankenphp package.
 ---
 
-# Yii 3
+# Yii3
 
-## Running Yii 3 with the FrankenPHP Docker image
+## Running Yii3 with the FrankenPHP Docker image
 
 Serving a [Yii](https://www.yiiframework.com/) web application with FrankenPHP is as easy as mounting the project in the `/app` directory of the official Docker image.
 
@@ -17,7 +17,7 @@ docker run -p 80:80 -p 443:443 -p 443:443/udp -v $PWD:/app dunglas/frankenphp
 
 And enjoy!
 
-## Installing Yii 3 with FrankenPHP locally
+## Installing Yii3 with FrankenPHP locally
 
 Alternatively, you can run your Yii projects with FrankenPHP from your local machine:
 
@@ -43,7 +43,7 @@ Alternatively, you can run your Yii projects with FrankenPHP from your local mac
 
 3. Start FrankenPHP from the root directory of your Yii project: `frankenphp run`
 
-## Yii 3 worker mode
+## Yii3 worker mode
 
 To run your Yii application in [worker mode](worker.md), install the [Yii FrankenPHP runner](https://github.com/yiisoft/yii-runner-frankenphp):
 
