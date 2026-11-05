@@ -277,7 +277,36 @@ func TestEscapedPathSelectsAnotherScript(t *testing.T) {
 			if !assert.NoError(t, err) {
 				return
 			}
-			assert.Equal(t, tt.expected, escapedPathSelectsAnotherScript(u, nil))
+			assert.Equal(t, tt.expected, escapedPathSelectsAnotherScript(u, nil, false))
+		})
+	}
+}
+
+func TestEscapedPathSelectsAnotherScriptWindows(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		target   string
+		expected bool
+	}{
+		{`/dir\index.php`, false},
+		{`/dir\index.php\info`, false},
+		{"/dir%5Cindex.php/info", false},
+		{"/index.php/a%5C..%5Cb", false},
+		{`/public/tool.php\..\..\admin\tool.php`, true},
+		{"/public/tool.php%5C..%5C..%5Cadmin%5Ctool.php", true},
+		{"/public/tool.php%2f..%2f..%2fadmin%2ftool.php", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.target, func(t *testing.T) {
+			t.Parallel()
+
+			u, err := url.ParseRequestURI(tt.target)
+			if !assert.NoError(t, err) {
+				return
+			}
+			assert.Equal(t, tt.expected, escapedPathSelectsAnotherScript(u, nil, true))
 		})
 	}
 }
