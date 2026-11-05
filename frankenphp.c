@@ -1813,6 +1813,33 @@ void frankenphp_add_to_prepared_env(char *name, size_t name_len, char *val,
   zend_hash_str_update(prepared_env, name, name_len, &zv);
 }
 
+#if defined(ZTS) && PHP_VERSION_ID < 80700
+/* Destroys the persistent resources of the thread (pfsockopen(), persistent
+ * PDO connections...) while the thread and its modules are still intact.
+ * Since PHP 8.4 (php-src 5941cdaa), ts_free_thread() no longer does it:
+ * zend_shutdown() destroys the lists of the threads still registered in TSRM,
+ * which a thread that exits earlier is not, so every thread restart (reboot,
+ * max_requests) leaked them. Up to PHP 8.3, ts_free_thread() destroys the
+ * list itself, but a reboot with a persistent stream then aborts with a
+ * corrupted heap. PHP 8.7 destroys the list in ts_free_thread() again
+ * (php-src 0a98b979), the same way as here. */
+static void frankenphp_destroy_thread_persistent_list(void) {
+  dtor_func_t destructor = EG(persistent_list).pDestructor;
+  volatile bool completed = false;
+
+  do {
+    zend_try {
+      zend_hash_graceful_reverse_destroy(&EG(persistent_list));
+      completed = true;
+    }
+    zend_end_try();
+  } while (!completed);
+
+  /* An empty list again, so that destroying it a second time is harmless */
+  zend_hash_init(&EG(persistent_list), 8, NULL, destructor, 1);
+}
+#endif
+
 static void *php_thread(void *arg) {
   thread_index = (uintptr_t)arg;
   char thread_name[16] = {0};
@@ -1960,6 +1987,9 @@ static void *php_thread(void *arg) {
 
   /* free all global PHP memory reserved for this thread */
 #ifdef ZTS
+#if PHP_VERSION_ID < 80700
+  frankenphp_destroy_thread_persistent_list();
+#endif
   ts_free_thread();
 #endif
 
