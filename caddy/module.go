@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -522,14 +521,6 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 	if indexFile != "off" {
 		dirRedir := false
 		dirIndex := "{http.request.uri.path}/" + indexFile
-		// On Windows, first_exist_fallback doesn't work correctly because
-		// glob is skipped and patterns are returned as-is without checking existence.
-		// Use first_exist instead to ensure all files are checked.
-		tryPolicy := "first_exist_fallback"
-		if runtime.GOOS == "windows" {
-			tryPolicy = "first_exist"
-		}
-
 		// if tryFiles wasn't overridden, use a reasonable default
 		if len(tryFiles) == 0 {
 			if disableFsrv {
@@ -539,15 +530,8 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 			}
 
 			dirRedir = true
-		} else {
-			if !strings.HasSuffix(tryFiles[len(tryFiles)-1], ".php") {
-				// use first_exist strategy if the last file is not a PHP file
-				tryPolicy = ""
-			}
-
-			if slices.Contains(tryFiles, dirIndex) {
-				dirRedir = true
-			}
+		} else if slices.Contains(tryFiles, dirIndex) {
+			dirRedir = true
 		}
 
 		// route to redirect to canonical path if index PHP file
@@ -581,7 +565,6 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 		rewriteMatcherSet := caddy.ModuleMap{
 			"file": h.JSON(fileserver.MatchFile{
 				TryFiles:  tryFiles,
-				TryPolicy: tryPolicy,
 				SplitPath: extensions,
 				Root:      phpsrv.Root,
 			}),
