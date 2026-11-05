@@ -1,8 +1,8 @@
 name: setup-go
-description: Setup Go using the version from go.mod, with standard cache configuration
+description: Setup the latest Go patch release, with standard cache configuration
 inputs:
   working-directory:
-    description: Path prefix for go.mod / go.sum files (used when the repo is checked out into a subdirectory)
+    description: Path prefix for go.sum files (used when the repo is checked out into a subdirectory)
     required: false
     default: "."
   cache:
@@ -14,7 +14,8 @@ runs:
   steps:
     - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
-        go-version-file: ${{ inputs.working-directory }}/go.mod
+        # The go directive of go.mod is a minimum, not the version to build with
+        go-version: "1.27"
         cache-dependency-path: |
           ${{ inputs.working-directory }}/go.sum
           ${{ inputs.working-directory }}/caddy/go.sum
