@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -354,6 +353,9 @@ func parseCaddyfile(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error)
 	return m, err
 }
 
+// A reference relative to the last segment resolves against the requested URL, so it can't leave the origin.
+const canonicalPathLocation = "./{http.request.orig_uri.path.file_escaped}/{http.request.orig_uri.prefixed_query}"
+
 // parsePhpServer parses the php_server directive, which has a similar syntax
 // to the php_fastcgi directive. A line such as this:
 //
@@ -366,7 +368,7 @@ func parseCaddyfile(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error)
 //		    file {path}/index.php
 //		    not path */
 //		}
-//		redir @canonicalPath {path}/ 308
+//		redir @canonicalPath ./{http.request.orig_uri.path.file_escaped}/{http.request.orig_uri.prefixed_query} 308
 //
 //		# If the requested file does not exist, try index files
 //		@indexFiles file {
@@ -522,14 +524,6 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 	if indexFile != "off" {
 		dirRedir := false
 		dirIndex := "{http.request.uri.path}/" + indexFile
-		// On Windows, first_exist_fallback doesn't work correctly because
-		// glob is skipped and patterns are returned as-is without checking existence.
-		// Use first_exist instead to ensure all files are checked.
-		tryPolicy := "first_exist_fallback"
-		if runtime.GOOS == "windows" {
-			tryPolicy = "first_exist"
-		}
-
 		// if tryFiles wasn't overridden, use a reasonable default
 		if len(tryFiles) == 0 {
 			if disableFsrv {
@@ -539,15 +533,8 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 			}
 
 			dirRedir = true
-		} else {
-			if !strings.HasSuffix(tryFiles[len(tryFiles)-1], ".php") {
-				// use first_exist strategy if the last file is not a PHP file
-				tryPolicy = ""
-			}
-
-			if slices.Contains(tryFiles, dirIndex) {
-				dirRedir = true
-			}
+		} else if slices.Contains(tryFiles, dirIndex) {
+			dirRedir = true
 		}
 
 		// route to redirect to canonical path if index PHP file
@@ -567,7 +554,7 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 			}
 			redirHandler := caddyhttp.StaticResponse{
 				StatusCode: caddyhttp.WeakString(strconv.Itoa(http.StatusPermanentRedirect)),
-				Headers:    http.Header{"Location": []string{"{http.request.orig_uri.path}/"}},
+				Headers:    http.Header{"Location": []string{canonicalPathLocation}},
 			}
 			redirRoute := caddyhttp.Route{
 				MatcherSetsRaw: []caddy.ModuleMap{redirMatcherSet},
@@ -581,7 +568,6 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 		rewriteMatcherSet := caddy.ModuleMap{
 			"file": h.JSON(fileserver.MatchFile{
 				TryFiles:  tryFiles,
-				TryPolicy: tryPolicy,
 				SplitPath: extensions,
 				Root:      phpsrv.Root,
 			}),

@@ -155,7 +155,7 @@ func cmdPHPServer(fs caddycmd.Flags) (int, error) {
 	}
 	redirHandler := caddyhttp.StaticResponse{
 		StatusCode: caddyhttp.WeakString(strconv.Itoa(http.StatusPermanentRedirect)),
-		Headers:    http.Header{"Location": []string{"{http.request.orig_uri.path}/"}},
+		Headers:    http.Header{"Location": []string{canonicalPathLocation}},
 	}
 	redirRoute := caddyhttp.Route{
 		MatcherSetsRaw: []caddy.ModuleMap{redirMatcherSet},

@@ -29,6 +29,7 @@
 #include <pthread.h>
 #include <sapi/embed/php_embed.h>
 #include <signal.h>
+#include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -288,7 +289,7 @@ static pthread_once_t kill_signal_handler_installed = PTHREAD_ONCE_INIT;
  * pthread_kill when this is false, so a sigaction failure (invalid
  * signal number, exhausted handler slots, etc.) can't deliver the
  * signal with its default action (process termination). */
-static zend_atomic_bool kill_signal_handler_active;
+static atomic_bool kill_signal_handler_active;
 static void install_kill_signal_handler(void) {
   /* No SA_RESTART so syscalls return EINTR rather than being restarted.
    * SA_ONSTACK guards against an accidental process-level delivery to a
@@ -299,7 +300,7 @@ static void install_kill_signal_handler(void) {
   sigemptyset(&sa.sa_mask);
   sa.sa_flags = SA_ONSTACK;
   if (sigaction(FRANKENPHP_KILL_SIGNAL, &sa, NULL) == 0) {
-    zend_atomic_bool_store(&kill_signal_handler_active, true);
+    atomic_store(&kill_signal_handler_active, true);
   }
 }
 #endif
@@ -333,14 +334,14 @@ void frankenphp_force_kill_thread(force_kill_slot slot) {
 
   /* Atomic stores first: by the time the thread wakes (signal-driven or
    * natural) the VM sees them and bails through zend_timeout(). */
-  zend_atomic_bool_store(slot.timed_out, true);
-  zend_atomic_bool_store(slot.vm_interrupt, true);
+  frankenphp_atomic_bool_store(slot.timed_out, true);
+  frankenphp_atomic_bool_store(slot.vm_interrupt, true);
 
 #ifdef FRANKENPHP_HAS_KILL_SIGNAL
   /* ESRCH (thread already exited) / EINVAL are both benign here.
    * Skip if sigaction() failed at install time: delivering an unhandled
    * SIGRTMIN+3 would terminate the process. */
-  if (zend_atomic_bool_load(&kill_signal_handler_active)) {
+  if (atomic_load(&kill_signal_handler_active)) {
     pthread_kill(slot.tid, FRANKENPHP_KILL_SIGNAL);
   }
 #elif defined(PHP_WIN32)
@@ -1553,6 +1554,9 @@ void frankenphp_register_server_vars(zval *track_vars_array,
   FRANKENPHP_REGISTER_VAR(ssl_cipher);
   FRANKENPHP_REGISTER_VAR(server_name);
   FRANKENPHP_REGISTER_VAR(server_port);
+  if (vars.server_addr_len != 0) {
+    FRANKENPHP_REGISTER_VAR(server_addr);
+  }
   FRANKENPHP_REGISTER_VAR(content_length);
   FRANKENPHP_REGISTER_VAR(server_protocol);
   FRANKENPHP_REGISTER_VAR(http_host);
@@ -1733,7 +1737,9 @@ sapi_module_struct frankenphp_sapi_module = {
     frankenphp_register_variables, /* register server variables */
     frankenphp_log_message,        /* Log message */
     NULL,                          /* Get request time */
-    NULL,                          /* Child terminate */
+#if PHP_VERSION_ID < 80700
+    NULL, /* Child terminate */
+#endif
 
     STANDARD_SAPI_MODULE_PROPERTIES};
 
@@ -1809,6 +1815,33 @@ void frankenphp_add_to_prepared_env(char *name, size_t name_len, char *val,
   ZVAL_STRINGL(&zv, val, val_len);
   zend_hash_str_update(prepared_env, name, name_len, &zv);
 }
+
+#if defined(ZTS) && PHP_VERSION_ID < 80700
+/* Destroys the persistent resources of the thread (pfsockopen(), persistent
+ * PDO connections...) while the thread and its modules are still intact.
+ * Since PHP 8.4 (php-src 5941cdaa), ts_free_thread() no longer does it:
+ * zend_shutdown() destroys the lists of the threads still registered in TSRM,
+ * which a thread that exits earlier is not, so every thread restart (reboot,
+ * max_requests) leaked them. Up to PHP 8.3, ts_free_thread() destroys the
+ * list itself, but a reboot with a persistent stream then aborts with a
+ * corrupted heap. PHP 8.7 destroys the list in ts_free_thread() again
+ * (php-src 0a98b979), the same way as here. */
+static void frankenphp_destroy_thread_persistent_list(void) {
+  dtor_func_t destructor = EG(persistent_list).pDestructor;
+  volatile bool completed = false;
+
+  do {
+    zend_try {
+      zend_hash_graceful_reverse_destroy(&EG(persistent_list));
+      completed = true;
+    }
+    zend_end_try();
+  } while (!completed);
+
+  /* An empty list again, so that destroying it a second time is harmless */
+  zend_hash_init(&EG(persistent_list), 8, NULL, destructor, 1);
+}
+#endif
 
 static void *php_thread(void *arg) {
   thread_index = (uintptr_t)arg;
@@ -1957,6 +1990,9 @@ static void *php_thread(void *arg) {
 
   /* free all global PHP memory reserved for this thread */
 #ifdef ZTS
+#if PHP_VERSION_ID < 80700
+  frankenphp_destroy_thread_persistent_list();
+#endif
   ts_free_thread();
 #endif
 

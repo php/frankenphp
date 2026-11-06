@@ -16,6 +16,7 @@ import (
 	"log"
 	"log/slog"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -222,6 +223,7 @@ func testServerVariable(t *testing.T, opts *testOptions) {
 		req := httptest.NewRequest("POST", fmt.Sprintf("http://example.com/server-variable.php/baz/bat?foo=a&bar=b&i=%d#hash", i), strings.NewReader("foo"))
 		req.SetBasicAuth(strings.Clone("kevin"), strings.Clone("password"))
 		req.Header.Add(strings.Clone("Content-Type"), strings.Clone("text/plain"))
+		req = req.WithContext(context.WithValue(req.Context(), http.LocalAddrContextKey, &net.TCPAddr{IP: net.ParseIP("192.0.2.1"), Port: 80}))
 		body, _ := testRequest(req, handler, t)
 
 		assert.Contains(t, body, "[REMOTE_HOST]")
@@ -243,6 +245,7 @@ func testServerVariable(t *testing.T, opts *testOptions) {
 		assert.Contains(t, body, "[REMOTE_IDENT]")
 		assert.Contains(t, body, "[REQUEST_METHOD] => POST")
 		assert.Contains(t, body, "[SERVER_NAME] => example.com")
+		assert.Contains(t, body, "[SERVER_ADDR] => 192.0.2.1")
 		assert.Contains(t, body, "[SERVER_PROTOCOL] => HTTP/1.1")
 		assert.Contains(t, body, "[SCRIPT_FILENAME]")
 		assert.Contains(t, body, "[SERVER_SOFTWARE] => FrankenPHP")
