@@ -1404,6 +1404,7 @@ static int frankenphp_startup(sapi_module_struct *sapi_module) {
 
 static int frankenphp_deactivate(void) { return SUCCESS; }
 
+#ifdef ZTS
 /* ext/date's post-deactivate hook frees last_errors, which its GINIT leaves
  * uninitialized, even when a failed startup skipped its RINIT
  * TODO: remove when only PHP versions with the fix are supported (8.4.28+,
@@ -1414,6 +1415,7 @@ static void frankenphp_init_date_globals(void) {
   zend_date_globals *globals = ts_resource(*date->globals_id_ptr);
   globals->last_errors = NULL;
 }
+#endif
 
 static void frankenphp_handle_aborted_connection(void) {
   /* a bailout would fail php_request_startup(), let the script's first write
