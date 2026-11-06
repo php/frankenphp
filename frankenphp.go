@@ -909,6 +909,9 @@ func go_schedule_opcache_reset(threadIndex C.uintptr_t) {
 // exposed to them
 var opcacheRestartHook = C.FRANKENPHP_OPCACHE_RESTART_HOOK != 0
 
+// requestHooks tells whether PHP resets the extensions' request state itself
+var requestHooks = C.FRANKENPHP_REQUEST_HOOKS != 0
+
 // Restart reasons opcache reports to the hook, in the order of
 // zend_accel_restart_reason (ext/opcache/ZendAccelerator.h), named like the
 // counters of opcache_get_status()

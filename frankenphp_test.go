@@ -1658,8 +1658,14 @@ func TestPreviousRequestCodeDoesNotWriteToNextClient_worker(t *testing.T) {
 			phpIni := map[string]string{"variables_order": variablesOrder}
 
 			runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+				// with request hooks, the session is released before the response ends, like in a classic request
+				expected := "done\n"
+				if frankenphp.RequestHooks {
+					expected += "destroyed alice\n"
+				}
+
 				body, _ := testGet("http://example.com/worker-cross-request-output.php?session=alice", handler, t)
-				assert.Equal(t, "done\n", body)
+				assert.Equal(t, expected, body)
 
 				body, _ = testGet("http://example.com/worker-cross-request-output.php", handler, t)
 				assert.Equal(t, "done\n", body)

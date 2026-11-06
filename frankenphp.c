@@ -69,13 +69,7 @@
 ZEND_TSRMLS_CACHE_DEFINE()
 #endif
 
-/* php_request_begin() and php_request_end() call the extensions' own request
- * boundary hooks, replacing the resets below */
-#ifdef STANDARD_MODULE_PROPERTIES_REQUEST_HOOKS
-#define FRANKENPHP_REQUEST_HOOKS
-#endif
-
-#ifndef FRANKENPHP_REQUEST_HOOKS
+#if !FRANKENPHP_REQUEST_HOOKS
 /**
  * The list of modules to reload on each request. If an external module
  * requires to be reloaded between requests, it is possible to hook on
@@ -446,7 +440,7 @@ static void frankenphp_release_super_globals() {
   }
 }
 
-#ifndef FRANKENPHP_REQUEST_HOOKS
+#if !FRANKENPHP_REQUEST_HOOKS
 /* reset all 'auto globals' in worker mode except of $_ENV
  * see: php_hash_environment() */
 static void frankenphp_reset_super_globals() {
@@ -603,7 +597,7 @@ static void frankenphp_worker_request_shutdown() {
   __atomic_store_n(&thread_metrics[thread_index].last_memory_usage,
                    zend_memory_usage(0), __ATOMIC_RELAXED);
 
-#ifdef FRANKENPHP_REQUEST_HOOKS
+#if FRANKENPHP_REQUEST_HOOKS
   php_request_end();
 #else
   /* Flush all output buffers */
@@ -704,7 +698,7 @@ static int frankenphp_worker_request_startup() {
 
   frankenphp_update_request_context();
 
-#ifdef FRANKENPHP_REQUEST_HOOKS
+#if FRANKENPHP_REQUEST_HOOKS
   retval = php_request_begin();
 #else
   zend_try {

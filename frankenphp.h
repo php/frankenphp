@@ -60,6 +60,14 @@ typedef struct {
 #define FRANKENPHP_OPCACHE_RESTART_HOOK 0
 #endif
 
+/* php_request_begin() and php_request_end() call the extensions' own request
+ * boundary hooks, replacing FrankenPHP's resets */
+#ifdef STANDARD_MODULE_PROPERTIES_REQUEST_HOOKS
+#define FRANKENPHP_REQUEST_HOOKS 1
+#else
+#define FRANKENPHP_REQUEST_HOOKS 0
+#endif
+
 #ifndef FRANKENPHP_VERSION
 #define FRANKENPHP_VERSION dev
 #endif
