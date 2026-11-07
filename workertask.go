@@ -447,15 +447,23 @@ func go_frankenphp_background_worker_park(threadIndex C.uintptr_t) {
 
 	q := &handler.worker.tasks
 	q.mu.Lock()
-	defer q.mu.Unlock()
-
 	if len(q.pending) == 0 {
 		handler.parked = true
+		q.mu.Unlock()
 
 		return
 	}
-	if handler.stopSock >= 0 {
-		C.frankenphp_worker_signal_task(C.intptr_t(handler.stopSock))
+	s := handler.stopSock
+	if s >= 0 {
+		// drain() waits for the write before closing the socket
+		handler.signaling.Add(1)
+	}
+	q.mu.Unlock()
+
+	// the syscall happens outside of the mutex, see signalThreads
+	if s >= 0 {
+		C.frankenphp_worker_signal_task(C.intptr_t(s))
+		handler.signaling.Add(-1)
 	}
 }
 
