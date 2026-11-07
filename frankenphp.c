@@ -1760,12 +1760,14 @@ PHP_FUNCTION(frankenphp_get_vars) {
   ZEND_PARSE_PARAMETERS_END();
 
   HashTable *table = NULL;
-  char *error =
+  struct go_frankenphp_get_vars_return found =
       go_frankenphp_get_vars(frankenphp_thread_index(), ZSTR_VAL(namespace),
                              ZSTR_LEN(namespace), &table);
-  if (error != NULL) {
-    zend_throw_exception(spl_ce_RuntimeException, error, 0);
-    free(error);
+  if (found.r0 != NULL) {
+    zend_throw_exception(found.r1 ? spl_ce_LogicException
+                                  : spl_ce_RuntimeException,
+                         found.r0, 0);
+    free(found.r0);
     RETURN_THROWS();
   }
 

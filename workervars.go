@@ -48,6 +48,22 @@ var (
 	varsWaitOn = map[*worker]map[*worker]int{}
 )
 
+// misuseError is an error PHP gets as a LogicException, a mistake in the
+// code or the configuration: the others are conditions of the moment, thrown
+// as RuntimeException
+type misuseError string
+
+func (e misuseError) Error() string {
+	return string(e)
+}
+
+// phpError hands an error over to the C side, with whether it is a misuse
+func phpError(err error) (*C.char, C.bool) {
+	var misuse misuseError
+
+	return C.CString(err.Error()), C.bool(errors.As(err, &misuse))
+}
+
 // varsOwner resolves the publisher of a vars namespace: within the caller's
 // server first, then among global workers
 func varsOwner(fc *frankenPHPContext, ns string) (*worker, error) {
@@ -57,7 +73,7 @@ func varsOwner(fc *frankenPHPContext, ns string) (*worker, error) {
 	}
 	w := varsOwners.resolve(server, ns)
 	if w == nil {
-		return nil, errors.New("frankenphp_get_vars(): no background worker publishes the vars namespace " + strconv.Quote(ns) + ", in this php_server or among the global workers")
+		return nil, misuseError("frankenphp_get_vars(): no background worker publishes the vars namespace " + strconv.Quote(ns) + ", in this php_server or among the global workers")
 	}
 
 	return w, nil
@@ -81,12 +97,12 @@ func waitVarsReady(target, caller *worker) error {
 		if caller == target {
 			varsWaitMu.Unlock()
 
-			return errors.New("frankenphp_get_vars(): background worker " + strconv.Quote(caller.name) + " reads its own vars before its first tick, they are not published yet")
+			return misuseError("frankenphp_get_vars(): background worker " + strconv.Quote(caller.name) + " reads its own vars before its first tick, they are not published yet")
 		}
 		if varsWaitReaches(target, caller) {
 			varsWaitMu.Unlock()
 
-			return errors.New("frankenphp_get_vars(): circular dependency between background workers " + strconv.Quote(caller.name) + " and " + strconv.Quote(target.name))
+			return misuseError("frankenphp_get_vars(): circular dependency between background workers " + strconv.Quote(caller.name) + " and " + strconv.Quote(target.name))
 		}
 		if varsWaitOn[caller] == nil {
 			varsWaitOn[caller] = map[*worker]int{}
@@ -183,13 +199,13 @@ func go_frankenphp_set_vars(threadIndex C.uintptr_t, namespace *C.char, namespac
 // go_frankenphp_vars_done
 //
 //export go_frankenphp_get_vars
-func go_frankenphp_get_vars(threadIndex C.uintptr_t, namespace *C.char, namespaceLen C.size_t, table **C.HashTable) *C.char {
+func go_frankenphp_get_vars(threadIndex C.uintptr_t, namespace *C.char, namespaceLen C.size_t, table **C.HashTable) (*C.char, C.bool) {
 	thread := phpThreads[threadIndex]
 	// looked up, never kept
 	ns := unsafe.String((*byte)(unsafe.Pointer(namespace)), int(namespaceLen))
 	target, err := varsOwner(thread.handler.frankenPHPContext(), ns)
 	if err != nil {
-		return C.CString(err.Error())
+		return phpError(err)
 	}
 
 	var caller *worker
@@ -197,7 +213,7 @@ func go_frankenphp_get_vars(threadIndex C.uintptr_t, namespace *C.char, namespac
 		caller = handler.worker
 	}
 	if err := waitVarsReady(target, caller); err != nil {
-		return C.CString(err.Error())
+		return phpError(err)
 	}
 
 	// a worker is ready only once every namespace it declares has a snapshot
@@ -210,7 +226,7 @@ func go_frankenphp_get_vars(threadIndex C.uintptr_t, namespace *C.char, namespac
 	*table = s.table
 	thread.varsReads = append(thread.varsReads, s)
 
-	return nil
+	return nil, false
 }
 
 // go_frankenphp_vars_done lets go of the snapshot a frankenphp_get_vars()

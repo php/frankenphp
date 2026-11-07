@@ -31,7 +31,7 @@ func TestVarsRoundTrip(t *testing.T) {
 
 	// a second read is a fresh copy of the same snapshot
 	assert.JSONEq(t, body, serverGet(t, server, "http://example.com/vars.php?ns=publisher"))
-	assert.Contains(t, serverGet(t, server, "http://example.com/vars.php?ns=nope"), `no background worker publishes the vars namespace "nope"`)
+	assert.Contains(t, serverGet(t, server, "http://example.com/vars.php?ns=nope"), `LogicException: frankenphp_get_vars(): no background worker publishes the vars namespace "nope"`)
 }
 
 // one worker publishes several namespaces, and readers address the
@@ -123,7 +123,7 @@ func TestVarsCycleIsRefused(t *testing.T) {
 	// one side sees the cycle and publishes the exception, the other reads it
 	results := requireFileContentEventually(t, s1) + "\n" + requireFileContentEventually(t, s2)
 	assert.Contains(t, results, "circular dependency")
-	assert.Contains(t, results, `{"consumed":"RuntimeException: frankenphp_get_vars(): circular dependency`)
+	assert.Contains(t, results, `{"consumed":"LogicException: frankenphp_get_vars(): circular dependency`)
 }
 
 // the first tick of a run waits for every declared namespace, so readers
