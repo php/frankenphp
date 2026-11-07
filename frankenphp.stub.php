@@ -147,7 +147,7 @@ namespace FrankenPHP {
      * 8.6. Constructing it sends the task to the background worker receiving
      * the task namespace, resolved within the current php_server then among
      * global workers, and waits for one of its threads to pick it up, at most
-     * $timeout seconds, forever when null. Payload values must be null,
+     * $pickupTimeout seconds, forever when null. Payload values must be null,
      * scalars, arrays or enums.
      *
      * @strict-properties
@@ -155,7 +155,7 @@ namespace FrankenPHP {
      */
     final class SentTaskHandle
     {
-        public function __construct(string $namespace, array $payload, ?float $timeout = 30.0) {}
+        public function __construct(string $namespace, array $payload, ?float $pickupTimeout = 30.0) {}
 
         /**
          * The next update published by the worker, waiting for it, or null

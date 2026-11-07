@@ -2308,13 +2308,13 @@ static bool frankenphp_task_obj_close(zval *zthis, bool completed) {
 ZEND_METHOD(FrankenPHP_SentTaskHandle, __construct) {
   zend_string *namespace;
   zval *payload;
-  double timeout = 30.0;
-  bool timeout_is_null = false;
+  double pickup_timeout = 30.0;
+  bool pickup_timeout_is_null = false;
   ZEND_PARSE_PARAMETERS_START(2, 3)
   Z_PARAM_STR(namespace)
   Z_PARAM_ARRAY(payload)
   Z_PARAM_OPTIONAL
-  Z_PARAM_DOUBLE_OR_NULL(timeout, timeout_is_null)
+  Z_PARAM_DOUBLE_OR_NULL(pickup_timeout, pickup_timeout_is_null)
   ZEND_PARSE_PARAMETERS_END();
 
   /* a handle sends one task: a second construction would orphan the first */
@@ -2326,14 +2326,15 @@ ZEND_METHOD(FrankenPHP_SentTaskHandle, __construct) {
     RETURN_THROWS();
   }
 
-  if (!timeout_is_null && (zend_isnan(timeout) || timeout < 0)) {
+  if (!pickup_timeout_is_null &&
+      (zend_isnan(pickup_timeout) || pickup_timeout < 0)) {
     zend_argument_value_error(3, "must be greater than or equal to 0");
     RETURN_THROWS();
   }
   /* past what a duration holds, infinity included, waits forever like null */
   int timeout_ms = -1;
-  if (!timeout_is_null && timeout * 1000 < (double)INT_MAX) {
-    timeout_ms = (int)(timeout * 1000);
+  if (!pickup_timeout_is_null && pickup_timeout * 1000 < (double)INT_MAX) {
+    timeout_ms = (int)(pickup_timeout * 1000);
   }
   const char *invalid = persistent_zval_invalid(payload);
   if (invalid != NULL) {

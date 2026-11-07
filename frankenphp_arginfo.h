@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 1bf9448f6ed0e1a9449014714ac380022332c456 */
+ * Stub hash: ef83616bc946e2107f9d86c254bb0b493a8ff059 */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_handle_request, 0, 1, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, callback, IS_CALLABLE, 0)
@@ -65,7 +65,7 @@ ZEND_END_ARG_INFO()
 ZEND_BEGIN_ARG_INFO_EX(arginfo_class_FrankenPHP_SentTaskHandle___construct, 0, 0, 2)
 	ZEND_ARG_TYPE_INFO(0, namespace, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO(0, payload, IS_ARRAY, 0)
-	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, timeout, IS_DOUBLE, 1, "30.0")
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, pickupTimeout, IS_DOUBLE, 1, "30.0")
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_FrankenPHP_SentTaskHandle_read, 0, 0, IS_ARRAY, 1)
