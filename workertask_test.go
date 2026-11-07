@@ -162,6 +162,7 @@ func TestTaskErrors(t *testing.T) {
 	assert.Contains(t, body, `unknown: RuntimeException: FrankenPHP\SentTaskHandle: no background worker receives the task namespace "nope"`)
 	assert.Contains(t, body, `payload: ValueError: FrankenPHP\SentTaskHandle::__construct(): payload values must be null, scalars, arrays or enums`)
 	assert.Contains(t, body, `timeout: ValueError: FrankenPHP\SentTaskHandle::__construct(): Argument #3 ($timeout) must be greater than or equal to 0`)
+	assert.Contains(t, body, `big: ValueError: FrankenPHP\SentTaskHandle::__construct(): payload values must fit in memory_limit once copied`)
 	assert.Contains(t, body, `received: Error: Call to private FrankenPHP\ReceivedTaskHandle::__construct()`)
 	assert.Contains(t, body, `worker: RuntimeException: FrankenPHP\WorkerHandle can only be created from a background worker`)
 }

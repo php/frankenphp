@@ -2313,11 +2313,10 @@ ZEND_METHOD(FrankenPHP_SentTaskHandle, __construct) {
   if (!timeout_is_null && timeout * 1000 < (double)INT_MAX) {
     timeout_ms = (int)(timeout * 1000);
   }
-  if (!persistent_zval_validate(payload)) {
-    zend_value_error("FrankenPHP\\SentTaskHandle::__construct(): payload "
-                     "values must be null, scalars, arrays or enums, nested "
-                     "no deeper than %d levels",
-                     PERSISTENT_ZVAL_MAX_DEPTH);
+  const char *invalid = persistent_zval_invalid(payload);
+  if (invalid != NULL) {
+    zend_value_error("FrankenPHP\\SentTaskHandle::__construct(): payload %s",
+                     invalid);
     RETURN_THROWS();
   }
 
@@ -2504,11 +2503,9 @@ static void frankenphp_task_obj_update(zval *zthis, zval *data) {
   if (task == NULL) {
     return;
   }
-  if (!persistent_zval_validate(data)) {
-    zend_value_error("FrankenPHP\\ReceivedTaskHandle: values must be null, "
-                     "scalars, arrays or enums, nested no deeper than %d "
-                     "levels",
-                     PERSISTENT_ZVAL_MAX_DEPTH);
+  const char *invalid = persistent_zval_invalid(data);
+  if (invalid != NULL) {
+    zend_value_error("FrankenPHP\\ReceivedTaskHandle: %s", invalid);
     return;
   }
 
