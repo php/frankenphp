@@ -191,7 +191,7 @@ func TestTaskUpdateWaitEndsOnDrain(t *testing.T) {
 	// whatever happens, the sender reads in the end, so nothing hangs
 	defer func() { _ = os.WriteFile(resume, nil, 0o644) }()
 
-	assert.Equal(t, `RuntimeException: FrankenPHP\ReceivedTaskHandle::update(): the sender stopped reading and the worker is restarting or shutting down`, requireFileContentEventually(t, sentinel))
+	assert.Equal(t, `RuntimeException: update() returned false at step 17`, requireFileContentEventually(t, sentinel))
 	require.NoError(t, os.WriteFile(resume, nil, 0o644))
 	assert.Equal(t, 16, strings.Count(<-body, `"step"`))
 	<-restarted
@@ -207,6 +207,17 @@ func TestTaskDroppedWithoutComplete(t *testing.T) {
 
 	assert.Equal(t, `RuntimeException: FrankenPHP\SentTaskHandle::read(): the background worker let go of the task without completing it`, serverGet(t, server, "http://example.com/task.php?drop=1"))
 	assert.Contains(t, serverGet(t, server, "http://example.com/task.php?input=next"), `"result":"processed:next"`)
+}
+
+// a worker learns from update() that its sender gave up, nothing throws
+func TestTaskUpdateAfterTheSenderLeft(t *testing.T) {
+	sentinel := filepath.Join(t.TempDir(), "error")
+	server, err := frankenphp.NewServer(testDataDir)
+	require.NoError(t, err)
+	initServers(t, frankenphp.WithServer(server), taskWorker("echo", "task-worker.php", map[string]string{"BG_SENTINEL": sentinel}, server), frankenphp.WithNumThreads(2))
+
+	assert.Equal(t, "closed", serverGet(t, server, "http://example.com/task.php?steps=20&close_early=1"))
+	assert.Contains(t, requireFileContentEventually(t, sentinel), "RuntimeException: update() returned false at step ")
 }
 
 func TestTaskErrors(t *testing.T) {
@@ -352,7 +363,7 @@ abandoned abandon: ok
 	// the script never took is not built past the end of the task
 	assert.Equal(t, `getPayload: {"input":"over"}
 update: LogicException: the task is over
-complete: ok
+complete: false
 complete-data: LogicException: the task is over
 getStream: LogicException: the task is over`, requireFileContentEventually(t, sentinel))
 }

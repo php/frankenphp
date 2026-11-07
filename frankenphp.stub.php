@@ -178,8 +178,8 @@ namespace FrankenPHP {
         public function getStream() {}
 
         /**
-         * Gives up on the task: the worker's next update throws. Dropping
-         * the handle does the same.
+         * Gives up on the task: the worker's next update() returns false.
+         * Dropping the handle does the same.
          */
         public function abandon(): void {}
     }
@@ -212,14 +212,17 @@ namespace FrankenPHP {
          * Publishes an update for the sender, which reads it with read().
          * Values must be null, scalars, arrays or enums. Sixteen updates are
          * buffered per task, past that this waits for the sender to read.
+         * False when the sender gave up, or stopped reading while the worker
+         * drains: the update went nowhere.
          */
-        public function update(array $data): void {}
+        public function update(array $data): bool {}
 
         /**
          * Completes the task, with a last update when one is given: the
-         * sender's read() returns it, then null.
+         * sender's read() returns it, then null. False when the sender gave
+         * up, or when the last update went nowhere, which aborts the task.
          */
-        public function complete(?array $data = null): void {}
+        public function complete(?array $data = null): bool {}
 
         /**
          * The stream to wait on: it reaches EOF when the sender abandons the

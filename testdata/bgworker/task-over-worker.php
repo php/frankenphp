@@ -21,7 +21,7 @@ while ($handle->tick()) {
         ] as $name => $case) {
             try {
                 $result = $case();
-                $lines[] = $name . ': ' . (null === $result ? 'ok' : $result);
+                $lines[] = $name . ': ' . (null === $result ? 'ok' : (is_bool($result) ? var_export($result, true) : $result));
             } catch (\Throwable $e) {
                 $lines[] = $name . ': ' . get_class($e) . ': ' . $e->getMessage();
             }

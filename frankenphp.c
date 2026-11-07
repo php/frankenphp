@@ -1991,18 +1991,21 @@ static zend_class_entry *frankenphp_received_task_ce;
  * handle, closing its stream or ending the script aborts the task instead,
  * so a sender never takes a task let go of for a completed one. The Go side
  * learns it before signaling the other side, which then finds it. */
-static void frankenphp_task_settle(frankenphp_task_data *data, bool completed) {
+static bool frankenphp_task_settle(frankenphp_task_data *data, bool completed) {
   if (data->closed || data->task == 0) {
-    return;
+    return false;
   }
   data->closed = true;
 
   if (data->sender) {
     go_frankenphp_task_sender_close(data->task);
-  } else {
-    go_frankenphp_task_receiver_close(
-        data->task, !completed || (EG(flags) & EG_FLAGS_IN_SHUTDOWN) != 0);
+
+    return true;
   }
+
+  /* whether the sender was still there to learn it */
+  return go_frankenphp_task_receiver_close(
+      data->task, !completed || (EG(flags) & EG_FLAGS_IN_SHUTDOWN) != 0);
 }
 
 /* The state outlives whichever of the handle and the stream goes first. */
@@ -2286,17 +2289,20 @@ static void frankenphp_task_obj_get_stream(zval *zthis, zval *return_value) {
 }
 
 /* Ends the task from this side, and closes the stream when the script took
- * one, so its stream_select() and feof() report the end. */
-static void frankenphp_task_obj_close(zval *zthis, bool completed) {
+ * one, so its stream_select() and feof() report the end. False when the task
+ * was over already, or the other side gone. */
+static bool frankenphp_task_obj_close(zval *zthis, bool completed) {
   frankenphp_task_data *data = FRANKENPHP_TASK_DATA(zthis);
   if (data == NULL || data->closed) {
-    return;
+    return false;
   }
 
-  frankenphp_task_settle(data, completed);
+  bool present = frankenphp_task_settle(data, completed);
   if (data->res != NULL && data->res->type == php_file_le_stream()) {
     zend_list_close(data->res);
   }
+
+  return present;
 }
 
 ZEND_METHOD(FrankenPHP_SentTaskHandle, __construct) {
@@ -2534,27 +2540,26 @@ ZEND_METHOD(FrankenPHP_ReceivedTaskHandle, getNamespace) {
   RETURN_COPY(&data->namespace);
 }
 
-/* Queues an update for the sender, which reads it with read(). */
-static void frankenphp_task_obj_update(zval *zthis, zval *data) {
+/* Queues an update for the sender, which reads it with read(): false when
+ * the sender gave up, or stopped reading while the worker drains, the update
+ * goes nowhere then. A sender leaving is no mistake of the worker, so it is
+ * no exception either. */
+static bool frankenphp_task_obj_update(zval *zthis, zval *data) {
   frankenphp_task_data *task = frankenphp_task_obj_open(zthis);
   if (task == NULL) {
-    return;
+    return false;
   }
   const char *invalid = persistent_zval_invalid(data);
   if (invalid != NULL) {
     zend_value_error("FrankenPHP\\ReceivedTaskHandle: %s", invalid);
-    return;
+    return false;
   }
 
   zval persistent;
   persistent_zval_persist(&persistent, data);
 
   /* the Go side owns the update from here on, it frees it on failure */
-  char *error = go_frankenphp_update_task(task->task, Z_ARRVAL(persistent));
-  if (error != NULL) {
-    zend_throw_exception(spl_ce_RuntimeException, error, 0);
-    free(error);
-  }
+  return go_frankenphp_update_task(task->task, Z_ARRVAL(persistent));
 }
 
 ZEND_METHOD(FrankenPHP_ReceivedTaskHandle, update) {
@@ -2563,7 +2568,12 @@ ZEND_METHOD(FrankenPHP_ReceivedTaskHandle, update) {
   Z_PARAM_ARRAY(data)
   ZEND_PARSE_PARAMETERS_END();
 
-  frankenphp_task_obj_update(ZEND_THIS, data);
+  bool queued = frankenphp_task_obj_update(ZEND_THIS, data);
+  if (EG(exception)) {
+    RETURN_THROWS();
+  }
+
+  RETURN_BOOL(queued);
 }
 
 ZEND_METHOD(FrankenPHP_ReceivedTaskHandle, complete) {
@@ -2573,14 +2583,19 @@ ZEND_METHOD(FrankenPHP_ReceivedTaskHandle, complete) {
   Z_PARAM_ARRAY_OR_NULL(data)
   ZEND_PARSE_PARAMETERS_END();
 
+  bool queued = true;
   if (data != NULL) {
-    frankenphp_task_obj_update(ZEND_THIS, data);
+    queued = frankenphp_task_obj_update(ZEND_THIS, data);
     if (EG(exception)) {
       RETURN_THROWS();
     }
   }
 
-  frankenphp_task_obj_close(ZEND_THIS, true);
+  /* a last update that went nowhere makes it an abort: the sender must not
+   * take what it got for the whole result */
+  bool present = frankenphp_task_obj_close(ZEND_THIS, queued);
+
+  RETURN_BOOL(queued && present);
 }
 
 ZEND_METHOD(FrankenPHP_ReceivedTaskHandle, getStream) {

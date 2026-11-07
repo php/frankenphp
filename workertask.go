@@ -511,20 +511,20 @@ func go_frankenphp_receive_task(threadIndex C.uintptr_t, namespace *C.zval) (C.u
 	return C.uintptr_t(t.handle), payload, C.intptr_t(t.fds[1])
 }
 
+// go_frankenphp_update_task queues an update for the sender: false when the
+// sender is gone, or stopped reading while the receiver's thread drains, the
+// update is freed then
+//
 //export go_frankenphp_update_task
-func go_frankenphp_update_task(handle C.uintptr_t, update *C.HashTable) *C.char {
+func go_frankenphp_update_task(handle C.uintptr_t, update *C.HashTable) C.bool {
 	t := cgo.Handle(handle).Value().(*workerTask)
 
 	t.mu.Lock()
-	room := t.waitForRoomLocked()
-	if t.senderGone || !room {
+	if !t.waitForRoomLocked() || t.senderGone {
 		t.mu.Unlock()
 		C.frankenphp_vars_free(update)
-		if !room {
-			return C.CString("FrankenPHP\\ReceivedTaskHandle::update(): the sender stopped reading and the worker is restarting or shutting down")
-		}
 
-		return C.CString("FrankenPHP\\ReceivedTaskHandle::update(): the sender closed the task")
+		return false
 	}
 	t.updates = append(t.updates, update)
 	signal := t.wakeSenderLocked()
@@ -534,7 +534,7 @@ func go_frankenphp_update_task(handle C.uintptr_t, update *C.HashTable) *C.char 
 		t.signalSender()
 	}
 
-	return nil
+	return true
 }
 
 // waitForRoomLocked waits, with mu held, until the sender reads an update or
@@ -665,8 +665,11 @@ func go_frankenphp_task_sender_watch(handle C.uintptr_t) {
 	}
 }
 
+// go_frankenphp_task_receiver_close ends the task on the receiver's side, and
+// tells whether the sender was still there to learn it
+//
 //export go_frankenphp_task_receiver_close
-func go_frankenphp_task_receiver_close(handle C.uintptr_t, aborted C.bool) {
+func go_frankenphp_task_receiver_close(handle C.uintptr_t, aborted C.bool) C.bool {
 	t := cgo.Handle(handle).Value().(*workerTask)
 
 	t.mu.Lock()
@@ -699,6 +702,8 @@ func go_frankenphp_task_receiver_close(handle C.uintptr_t, aborted C.bool) {
 	}
 
 	t.retire()
+
+	return C.bool(settled)
 }
 
 //export go_frankenphp_task_sender_close

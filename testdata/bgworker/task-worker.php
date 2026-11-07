@@ -38,7 +38,9 @@ while ($handle->tick()) {
                 }
             }
             for ($i = 1, $steps = $payload['steps'] ?? 0; $i <= $steps; ++$i) {
-                $task->update(['step' => $i, 'of' => $steps]);
+                if (!$task->update(['step' => $i, 'of' => $steps])) {
+                    throw new \RuntimeException("update() returned false at step $i");
+                }
             }
             $task->complete([
                 'result' => 'processed:' . ($payload['input'] ?? ''),
