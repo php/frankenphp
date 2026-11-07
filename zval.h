@@ -117,7 +117,9 @@ static const char *persistent_zval_invalid(zval *z) {
   return persistent_zval_check(z, 0, &left);
 }
 
-static bool persistent_zval_validate(zval *z) {
+/* inline: the callers that want a reason use persistent_zval_invalid(), and a
+ * build may leave this one without any */
+static inline bool persistent_zval_validate(zval *z) {
   return persistent_zval_invalid(z) == NULL;
 }
 
