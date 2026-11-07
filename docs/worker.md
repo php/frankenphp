@@ -376,7 +376,7 @@ while ($tasks) {
 }
 ```
 
-`getStream()` is there for the libraries that take a stream, and `stream_select()` or a blocking read work on it as they do on the worker's handle.
+`getStream()` is there for the libraries that take a stream, and `stream_select()` or a blocking read work on it as they do on the worker's handle, `FD_SETSIZE` limit included: `read()` and `Io\Poll` have none.
 
 Sixteen updates are buffered per task; past that, `update()` waits for the sender to read, and returns `false` once the sender gave up or when the worker drains meanwhile. The channel of a task is a pair of eventfd descriptors on Linux and of kqueue descriptors on macOS, pooled between tasks, and a socket pair elsewhere.
 
