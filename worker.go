@@ -123,7 +123,7 @@ func initWorkers(opts []workerOpt) error {
 
 				// the script never ticked: stop the thread, so no run starts
 				// after this one, which ends at once if it waits on its handle
-				// and through the force-kill of the shutdown otherwise
+				// and through the force-kill otherwise, the boot is over
 				if !thread.state.CompareAndSwap(state.TransitionComplete, state.ShuttingDown) {
 					return
 				}
@@ -131,6 +131,9 @@ func initWorkers(opts []workerOpt) error {
 				reportStartupFailure(fmt.Errorf("background worker %q did not call WorkerHandle::tick() within %s", w.name, bootTimeout))
 				if handler, ok := thread.handler.(*backgroundWorkerThread); ok {
 					handler.drain()
+				}
+				if !thread.state.WaitForStateWithTimeout(bootTimeoutKillDelay, state.Done) {
+					thread.sendKillSignal()
 				}
 			})
 		}

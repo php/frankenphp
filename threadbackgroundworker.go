@@ -47,6 +47,11 @@ type backgroundWorkerThread struct {
 // and Init() waits for that point unless a boot timeout bounds the wait
 const backgroundBootWarnDelay = 10 * time.Second
 
+// bootTimeoutKillDelay is how long a run past its boot timeout gets to end
+// on the drain before the force-kill: a script waiting on its handle ends at
+// once, one stuck in a blocking call never would
+const bootTimeoutKillDelay = time.Second
+
 func convertToBackgroundWorkerThread(thread *phpThread, worker *worker) {
 	handler := &backgroundWorkerThread{workerLifecycle: newWorkerLifecycle(thread, worker)}
 	handler.stopSock.Store(-1)

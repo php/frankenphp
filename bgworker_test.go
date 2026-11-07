@@ -732,6 +732,19 @@ func TestBackgroundWorkerBootTimeout(t *testing.T) {
 		require.ErrorContains(t, err, `background worker "bg-mute" did not call WorkerHandle::tick() within 300ms`)
 	})
 
+	// a boot stuck out of the drain's reach is force-killed, Init() does not
+	// wait for the grace period of the shutdown
+	t.Run("one worker stuck in a blocking call", func(t *testing.T) {
+		if runtime.GOOS == "darwin" {
+			t.Skip("force-kill cannot interrupt a blocking syscall on darwin")
+		}
+
+		start := time.Now()
+		err := initWithin(t, mute("bg-asleep", 300*time.Millisecond, map[string]string{"BG_SLEEP": "1"}), frankenphp.WithNumThreads(2))
+		require.ErrorContains(t, err, `background worker "bg-asleep" did not call WorkerHandle::tick() within 300ms`)
+		assert.Less(t, time.Since(start), 5*time.Second)
+	})
+
 	// each timeout reports once and never waits for room to do so
 	t.Run("two workers timing out one after the other", func(t *testing.T) {
 		err := initWithin(t,
