@@ -1987,10 +1987,11 @@ static zend_class_entry *frankenphp_sent_task_ce;
 static zend_class_entry *frankenphp_received_task_ce;
 
 /* Ends the task from this side, once: the sender abandons it, the receiver
- * completes it, unless the script ended with the task open, where the
- * sender is told so. The Go side learns it before signaling the other
- * side, which then finds it. */
-static void frankenphp_task_settle(frankenphp_task_data *data) {
+ * completes it through complete() only, before the script ends. Dropping the
+ * handle, closing its stream or ending the script aborts the task instead,
+ * so a sender never takes a task let go of for a completed one. The Go side
+ * learns it before signaling the other side, which then finds it. */
+static void frankenphp_task_settle(frankenphp_task_data *data, bool completed) {
   if (data->closed || data->task == 0) {
     return;
   }
@@ -1999,8 +2000,8 @@ static void frankenphp_task_settle(frankenphp_task_data *data) {
   if (data->sender) {
     go_frankenphp_task_sender_close(data->task);
   } else {
-    go_frankenphp_task_receiver_close(data->task,
-                                      (EG(flags) & EG_FLAGS_IN_SHUTDOWN) != 0);
+    go_frankenphp_task_receiver_close(
+        data->task, !completed || (EG(flags) & EG_FLAGS_IN_SHUTDOWN) != 0);
   }
 }
 
@@ -2048,13 +2049,14 @@ static ssize_t frankenphp_task_stream_read(php_stream *stream, char *buf,
   return -1;
 }
 
-/* Closing the stream ends the task from this side, as complete() and
- * abandon() do, and the state stays until the handle lets go of it too. */
+/* Closing the stream ends the task from this side, as abandon() does, or
+ * aborts it on the receiver's, and the state stays until the handle lets go
+ * of it too. */
 static int frankenphp_task_stream_close(php_stream *stream, int close_handle) {
   (void)close_handle;
   frankenphp_task_data *data = stream->abstract;
 
-  frankenphp_task_settle(data);
+  frankenphp_task_settle(data, false);
   frankenphp_task_data_release(data);
 
   return 0;
@@ -2203,7 +2205,7 @@ static void frankenphp_task_cleanup(frankenphp_handle_obj *handle) {
   }
   handle->handle_data = NULL;
 
-  frankenphp_task_settle(data);
+  frankenphp_task_settle(data, false);
   if (data->res != NULL) {
     zend_resource *res = data->res;
     data->res = NULL;
@@ -2285,13 +2287,13 @@ static void frankenphp_task_obj_get_stream(zval *zthis, zval *return_value) {
 
 /* Ends the task from this side, and closes the stream when the script took
  * one, so its stream_select() and feof() report the end. */
-static void frankenphp_task_obj_close(zval *zthis) {
+static void frankenphp_task_obj_close(zval *zthis, bool completed) {
   frankenphp_task_data *data = FRANKENPHP_TASK_DATA(zthis);
   if (data == NULL || data->closed) {
     return;
   }
 
-  frankenphp_task_settle(data);
+  frankenphp_task_settle(data, completed);
   if (data->res != NULL && data->res->type == php_file_le_stream()) {
     zend_list_close(data->res);
   }
@@ -2372,7 +2374,7 @@ ZEND_METHOD(FrankenPHP_SentTaskHandle, __construct) {
     int polled = frankenphp_task_poll(data, slice);
     if (polled < 0) {
       go_frankenphp_task_cancel(task.r0, false);
-      frankenphp_task_settle(data);
+      frankenphp_task_settle(data, false);
       zend_throw_exception(spl_ce_RuntimeException,
                            "FrankenPHP\\SentTaskHandle: the wait for a thread "
                            "was interrupted",
@@ -2390,7 +2392,7 @@ ZEND_METHOD(FrankenPHP_SentTaskHandle, __construct) {
       }
       /* nobody took the task in time, unless right now */
       if (go_frankenphp_task_cancel(task.r0, true)) {
-        frankenphp_task_settle(data);
+        frankenphp_task_settle(data, false);
         zend_throw_exception_ex(spl_ce_RuntimeException, 0,
                                 "FrankenPHP\\SentTaskHandle: no thread "
                                 "picked up the task sent to \"%s\" in time",
@@ -2414,7 +2416,7 @@ ZEND_METHOD(FrankenPHP_SentTaskHandle, __construct) {
       break;
     }
     go_frankenphp_task_cancel(task.r0, false);
-    frankenphp_task_settle(data);
+    frankenphp_task_settle(data, false);
     zend_throw_exception(spl_ce_RuntimeException, state.r1, 0);
     free(state.r1);
     RETURN_THROWS();
@@ -2461,7 +2463,7 @@ ZEND_METHOD(FrankenPHP_SentTaskHandle, read) {
       }
       zend_throw_exception(spl_ce_RuntimeException,
                            "FrankenPHP\\SentTaskHandle::read(): the background "
-                           "worker exited without completing the task",
+                           "worker let go of the task without completing it",
                            0);
       RETURN_THROWS();
     default:
@@ -2496,7 +2498,7 @@ ZEND_METHOD(FrankenPHP_SentTaskHandle, getStream) {
 ZEND_METHOD(FrankenPHP_SentTaskHandle, abandon) {
   ZEND_PARSE_PARAMETERS_NONE();
 
-  frankenphp_task_obj_close(ZEND_THIS);
+  frankenphp_task_obj_close(ZEND_THIS, false);
 }
 
 ZEND_METHOD(FrankenPHP_ReceivedTaskHandle, __construct) {
@@ -2578,7 +2580,7 @@ ZEND_METHOD(FrankenPHP_ReceivedTaskHandle, complete) {
     }
   }
 
-  frankenphp_task_obj_close(ZEND_THIS);
+  frankenphp_task_obj_close(ZEND_THIS, true);
 }
 
 ZEND_METHOD(FrankenPHP_ReceivedTaskHandle, getStream) {

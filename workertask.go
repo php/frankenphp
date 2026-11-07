@@ -50,7 +50,7 @@ type workerTask struct {
 	senderWatched bool
 	updates       []*C.HashTable
 	closed        bool // the receiver closed its stream
-	aborted       bool // ...during request shutdown: the script ended with the task open
+	aborted       bool // ...without complete(): the worker let go of the task
 	senderGone    bool // the sender closed its stream
 	retired       int  // sides done with the task, freed at 2
 }

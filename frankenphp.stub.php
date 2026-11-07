@@ -159,8 +159,9 @@ namespace FrankenPHP {
 
         /**
          * The next update published by the worker, waiting for it, or null
-         * once the task is complete. Throws when the worker ended without
-         * completing it, and when the wait passes the stream's read timeout.
+         * once the task is complete. Throws when the worker let go of it
+         * without completing it, and when the wait passes the stream's read
+         * timeout.
          */
         public function read(): ?array {}
 
@@ -185,8 +186,9 @@ namespace FrankenPHP {
 
     /**
      * EXPERIMENTAL: the worker's side of a task, handed out by
-     * WorkerHandle::receive(), an Io\Poll\Handle on PHP 8.6. Ending the run with a task open aborts it,
-     * which the sender is told about.
+     * WorkerHandle::receive(), an Io\Poll\Handle on PHP 8.6. Only complete()
+     * completes the task: dropping the handle, closing its stream or ending
+     * the run aborts it, which the sender is told about.
      *
      * @strict-properties
      * @not-serializable
@@ -222,7 +224,7 @@ namespace FrankenPHP {
         /**
          * The stream to wait on: it reaches EOF when the sender abandons the
          * task, for stream_select() and feof(). Only waiting on it is
-         * supported. Closing it completes the task. Past its end a stream
+         * supported. Closing it aborts the task. Past its end a stream
          * the script already took comes back closed, and asking for a
          * first one throws.
          *

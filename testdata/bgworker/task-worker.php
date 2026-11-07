@@ -6,8 +6,9 @@
 // input echoes back in the last update, steps sends that many progress
 // updates first, sleep_ms simulates that much work, cut short if the sender
 // closes its stream meanwhile, mark touches a file at pickup, crash exits
-// without completing the task. Exceptions land in BG_SENTINEL. BG_LOOP=if
-// takes one task per wake-up instead of draining the queue.
+// without completing the task, drop lets go of it without exiting.
+// Exceptions land in BG_SENTINEL. BG_LOOP=if takes one task per wake-up
+// instead of draining the queue.
 set_time_limit(0);
 $drain = 'if' !== ($_SERVER['BG_LOOP'] ?? 'while');
 $handle = new \FrankenPHP\WorkerHandle();
@@ -20,6 +21,10 @@ while ($handle->tick()) {
         $payload = $task->getPayload();
         if (!empty($payload['crash'])) {
             exit(1);
+        }
+        if (!empty($payload['drop'])) {
+            // the next receive() replaces the handle, which aborts the task
+            continue;
         }
         try {
             if (!empty($payload['mark'])) {

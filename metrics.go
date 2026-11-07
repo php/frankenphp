@@ -21,7 +21,7 @@ type TaskOutcome string
 
 const (
 	TaskOutcomeCompleted TaskOutcome = "completed" // the worker closed the task's stream
-	TaskOutcomeAborted   TaskOutcome = "aborted"   // the worker's script ended with the task open
+	TaskOutcomeAborted   TaskOutcome = "aborted"   // the worker let go of the task without completing it
 	TaskOutcomeAbandoned TaskOutcome = "abandoned" // the sender closed its stream first
 	TaskOutcomeTimeout   TaskOutcome = "timeout"   // no thread picked the task up in time
 	TaskOutcomeCancelled TaskOutcome = "cancelled" // the wait for a thread ended on a restart or the shutdown
@@ -303,7 +303,7 @@ func (m *PrometheusMetrics) TotalWorkers(string, int) {
 			Namespace: ns,
 			Subsystem: sub,
 			Name:      "task_count",
-			Help:      "Number of tasks sent to this background worker, by outcome: completed, aborted (the script ended with the task open), abandoned (the sender closed its stream first), timeout (no thread picked the task up in time) or cancelled (the wait for a thread ended on a restart or the shutdown)",
+			Help:      "Number of tasks sent to this background worker, by outcome: completed, aborted (the worker let go of the task without completing it), abandoned (the sender closed its stream first), timeout (no thread picked the task up in time) or cancelled (the wait for a thread ended on a restart or the shutdown)",
 		}, []string{"worker", "outcome"})
 		m.mustRegister(m.workerTaskCount)
 	}

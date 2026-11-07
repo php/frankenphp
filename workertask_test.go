@@ -104,7 +104,7 @@ func TestTaskCrashMidTask(t *testing.T) {
 	require.NoError(t, err)
 	initServers(t, frankenphp.WithServer(server), taskWorker("echo", "task-worker.php", nil, server), frankenphp.WithNumThreads(2))
 
-	assert.Contains(t, serverGet(t, server, "http://example.com/task.php?crash=1"), "exited without completing the task")
+	assert.Contains(t, serverGet(t, server, "http://example.com/task.php?crash=1"), "let go of the task without completing it")
 	assert.Contains(t, serverGet(t, server, "http://example.com/task.php?input=after"), `"result":"processed:after"`)
 }
 
@@ -198,6 +198,17 @@ func TestTaskUpdateWaitEndsOnDrain(t *testing.T) {
 	assert.Less(t, time.Since(start), 5*time.Second, "no thread waited for the force-kill")
 }
 
+// only complete() completes a task: a worker letting go of it otherwise
+// makes the sender's read() throw, as a crash does
+func TestTaskDroppedWithoutComplete(t *testing.T) {
+	server, err := frankenphp.NewServer(testDataDir)
+	require.NoError(t, err)
+	initServers(t, frankenphp.WithServer(server), taskWorker("echo", "task-worker.php", nil, server), frankenphp.WithNumThreads(2))
+
+	assert.Equal(t, `RuntimeException: FrankenPHP\SentTaskHandle::read(): the background worker let go of the task without completing it`, serverGet(t, server, "http://example.com/task.php?drop=1"))
+	assert.Contains(t, serverGet(t, server, "http://example.com/task.php?input=next"), `"result":"processed:next"`)
+}
+
 func TestTaskErrors(t *testing.T) {
 	server, err := frankenphp.NewServer(testDataDir)
 	require.NoError(t, err)
@@ -227,13 +238,13 @@ func TestTaskMetrics(t *testing.T) {
 	)
 
 	assert.Contains(t, serverGet(t, server, "http://example.com/task.php?input=done"), `"result":"processed:done"`)
-	assert.Contains(t, serverGet(t, server, "http://example.com/task.php?crash=1"), "exited without completing the task")
+	assert.Contains(t, serverGet(t, server, "http://example.com/task.php?crash=1"), "let go of the task without completing it")
 	assert.Equal(t, "closed", serverGet(t, server, "http://example.com/task.php?sleep_ms=200&close_early=1"))
 	requireFileContentEventually(t, sentinel)
 	assert.Contains(t, serverGet(t, server, "http://example.com/task-busy.php"), `picked up the task sent to "echo" in time`)
 
 	expected := `
-		# HELP frankenphp_worker_task_count Number of tasks sent to this background worker, by outcome: completed, aborted (the script ended with the task open), abandoned (the sender closed its stream first), timeout (no thread picked the task up in time) or cancelled (the wait for a thread ended on a restart or the shutdown)
+		# HELP frankenphp_worker_task_count Number of tasks sent to this background worker, by outcome: completed, aborted (the worker let go of the task without completing it), abandoned (the sender closed its stream first), timeout (no thread picked the task up in time) or cancelled (the wait for a thread ended on a restart or the shutdown)
 		# TYPE frankenphp_worker_task_count counter
 		frankenphp_worker_task_count{outcome="abandoned",worker="echo"} 1
 		frankenphp_worker_task_count{outcome="aborted",worker="echo"} 1
