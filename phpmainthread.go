@@ -111,6 +111,9 @@ func drainPHPThreads() {
 	}
 
 	doneWG.Wait()
+	// no PHP thread can read them anymore, and the engine is still up
+	freeWorkerVars()
+	freeTaskChans()
 	mainThread.state.Set(state.Done)
 	mainThread.state.WaitFor(state.Reserved)
 	C.frankenphp_destroy_thread_metrics()
@@ -167,7 +170,7 @@ func (mainThread *phpMainThread) rebootAllThreads() bool {
 
 	for _, thread := range rebootingThreads {
 		rebootWg.Go(func() {
-			close(thread.drainChan)
+			thread.drain()
 			if thread.state.WaitForStateWithTimeout(rebootGracePeriod, state.YieldingForReboot) {
 				return
 			}
