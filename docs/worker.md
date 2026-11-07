@@ -201,10 +201,9 @@ frankenphp {
 
 ### Number of threads
 
-When the worker mode is enabled, an additional thread is required to handle the incoming requests,
-so the default `num_threads` value is `1 + 2x(number of available CPUs)`.
+Worker threads come on top of `num_threads`, which counts the threads left for the requests no worker serves, and `max_threads` limits the whole process, workers included.
 
-Thus, in that mode if `num_threads` and `num` are explicitly set, `num_threads` must be strictly greater then `num`.
+When it is not set, `num_threads` defaults to what is left of 2x the number of available CPUs once the workers have their threads, one at the very least: a worker with the default `num` leaves one thread for the other requests.
 
 ## Superglobals behavior
 
