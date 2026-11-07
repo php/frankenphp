@@ -421,6 +421,18 @@ static void frankenphp_reset_background_worker(void) {
  * it comes from the socket we connected with. */
 #define FRANKENPHP_SOCK_PAIR_TRIES 8
 
+#ifndef WSA_FLAG_NO_HANDLE_INHERIT
+#define WSA_FLAG_NO_HANDLE_INHERIT 0x80
+#endif
+
+/* Not inheritable from the start: a process another thread spawns before
+ * SetHandleInformation() would keep a copy, and delay the EOF of the drain
+ * until it exits. Overlapped, as socket() makes them. */
+static SOCKET frankenphp_sock_win32(void) {
+  return WSASocketW(AF_INET, SOCK_STREAM, IPPROTO_TCP, NULL, 0,
+                    WSA_FLAG_OVERLAPPED | WSA_FLAG_NO_HANDLE_INHERIT);
+}
+
 static int frankenphp_sock_pair_win32(php_socket_t socks[2]) {
   SOCKET listener = INVALID_SOCKET, client = INVALID_SOCKET,
          accepted = INVALID_SOCKET;
@@ -431,7 +443,7 @@ static int frankenphp_sock_pair_win32(php_socket_t socks[2]) {
   socks[0] = SOCK_ERR;
   socks[1] = SOCK_ERR;
 
-  listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  listener = frankenphp_sock_win32();
   if (listener == INVALID_SOCKET) {
     return -1;
   }
@@ -451,7 +463,7 @@ static int frankenphp_sock_pair_win32(php_socket_t socks[2]) {
     goto error;
   }
 
-  client = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  client = frankenphp_sock_win32();
   if (client == INVALID_SOCKET ||
       connect(client, (struct sockaddr *)&addr, sizeof(addr)) != 0 ||
       getsockname(client, (struct sockaddr *)&local, &local_len) != 0) {
