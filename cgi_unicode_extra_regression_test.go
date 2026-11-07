@@ -6,17 +6,17 @@
 // this is NOT a bug report against a supported version — it is
 // permanent coverage so the whole class cannot regress:
 //
-//   1. bytes >= utf8.RuneSelf can never satisfy an ASCII-only split
-//      marker, and a bogus split must never slice mid-UTF-8-rune
-//      (residual edge case that existed in the v1.11.2–v1.12.3 fix,
-//      commit 04fdc0c, and was resolved by the v1.13.0 rewrite);
-//   2. U+023E (Ⱦ → ⱦ) is the only codepoint besides U+023A (Ⱥ → ⱥ)
-//      whose simple lowercase mapping GROWS its UTF-8 length (2B → 3B);
-//   3. the "shrink" direction: 23 codepoints (incl. U+1E9E ẞ 3B→2B and
-//      U+212A K 3B→1B) whose lowercase is SHORTER — none were covered
-//      by the original fix's tests;
-//   4. the segment-boundary rule for SCRIPT_NAME/PATH_INFO splitting,
-//      including the exact advisory PoC path.
+//  1. bytes >= utf8.RuneSelf can never satisfy an ASCII-only split
+//     marker, and a bogus split must never slice mid-UTF-8-rune
+//     (residual edge case that existed in the v1.11.2–v1.12.3 fix,
+//     commit 04fdc0c, and was resolved by the v1.13.0 rewrite);
+//  2. U+023E (Ⱦ → ⱦ) is the only codepoint besides U+023A (Ⱥ → ⱥ)
+//     whose simple lowercase mapping GROWS its UTF-8 length (2B → 3B);
+//  3. the "shrink" direction: 23 codepoints (incl. U+1E9E ẞ 3B→2B and
+//     U+212A K 3B→1B) whose lowercase is SHORTER — none were covered
+//     by the original fix's tests;
+//  4. the segment-boundary rule for SCRIPT_NAME/PATH_INFO splitting,
+//     including the exact advisory PoC path.
 //
 // Place this file beside cgi_test.go (same package). The single call
 // site lives in currentSplitPos(); adjust it if the internal helper
