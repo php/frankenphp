@@ -519,6 +519,31 @@ func TestRebootThreadCreationFailure(t *testing.T) {
 	}
 }
 
+// a background worker gets its thread back too
+func TestRebootThreadCreationFailureBackgroundWorker(t *testing.T) {
+	assert.NoError(t, Init(WithNumThreads(1), WithWorkers("basic", filepath.Join(testDataPath, "bgworker", "basic.php"), 1, WithWorkerBackground())))
+
+	var failing atomic.Bool
+	failing.Store(true)
+	original := newCThread
+	newCThread = func(threadIndex int) bool { return !failing.Load() && original(threadIndex) }
+	t.Cleanup(func() { newCThread = original })
+	t.Cleanup(Shutdown)
+
+	w := workers[0]
+	thread := w.threadsSnapshot()[0]
+	RestartWorkers()
+	thread.state.WaitFor(state.Reserved)
+	assert.NotContains(t, w.threadsSnapshot(), thread)
+
+	failing.Store(false)
+	assert.Eventually(t, func() bool {
+		threads := w.threadsSnapshot()
+
+		return len(threads) == 1 && threads[0].state.Is(state.Ready)
+	}, 10*time.Second, 10*time.Millisecond, "the pool must get its thread back once threads can be created again")
+}
+
 func TestFailedRebootDoesNotBlockHandlerChange(t *testing.T) {
 	assert.NoError(t, Init(WithNumThreads(1), WithMaxRequests(1)))
 

@@ -150,6 +150,13 @@ func (thread *phpThread) releaseAfterFailedReboot(handler threadHandler) {
 		}
 		w.detachThread(thread)
 		go restoreThread(mt, w.num, w.threadsSnapshot, func() (*phpThread, error) { return addWorkerThread(w) })
+	case *backgroundWorkerThread:
+		w := handler.worker
+		if w.onThreadShutdown != nil {
+			w.onThreadShutdown(thread.threadIndex)
+		}
+		w.detachThread(thread)
+		go restoreThread(mt, w.num, w.threadsSnapshot, func() (*phpThread, error) { return addBackgroundWorkerThread(w) })
 	}
 
 	thread.state.Set(state.Reserved)

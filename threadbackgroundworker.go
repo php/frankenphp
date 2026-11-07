@@ -54,6 +54,18 @@ func convertToBackgroundWorkerThread(thread *phpThread, worker *worker) {
 	worker.attachThread(thread)
 }
 
+// addBackgroundWorkerThread brings a pool back to size after a failed reboot,
+// without waiting for the first tick: a slow boot would hold scalingMu
+func addBackgroundWorkerThread(worker *worker) (*phpThread, error) {
+	thread, err := inactivePHPThread()
+	if err != nil {
+		return nil, err
+	}
+	convertToBackgroundWorkerThread(thread, worker)
+
+	return thread, nil
+}
+
 func (handler *backgroundWorkerThread) name() string {
 	return "Background Worker PHP Thread - " + handler.worker.fileName
 }
