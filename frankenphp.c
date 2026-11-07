@@ -1563,7 +1563,7 @@ static bool frankenphp_worker_handle_usable(void) {
   }
 
   zend_throw_exception(
-      spl_ce_RuntimeException,
+      spl_ce_LogicException,
       "FrankenPHP\\WorkerHandle can only be used from a background worker", 0);
 
   return false;
@@ -1577,7 +1577,7 @@ ZEND_METHOD(FrankenPHP_WorkerHandle, __construct) {
 
   if (!is_background_worker) {
     zend_throw_exception(
-        spl_ce_RuntimeException,
+        spl_ce_LogicException,
         "FrankenPHP\\WorkerHandle can only be created from a background worker",
         0);
     RETURN_THROWS();

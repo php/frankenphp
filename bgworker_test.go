@@ -694,7 +694,7 @@ func TestWorkerHandleBuiltBehindTheConstructor(t *testing.T) {
 	body := serverGet(t, server, "http://example.com/handle-bypass.php")
 	assert.Contains(t, body, "unserialize: Exception: Unserialization of 'FrankenPHP\\WorkerHandle' is not allowed")
 	assert.Contains(t, body, "reflection: ReflectionException:")
-	assert.Contains(t, body, "construct: RuntimeException: FrankenPHP\\WorkerHandle can only be created from a background worker")
+	assert.Contains(t, body, "construct: LogicException: FrankenPHP\\WorkerHandle can only be created from a background worker")
 }
 
 // a script that parks without ever ticking fails Init() instead of hanging it,
