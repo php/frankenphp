@@ -358,11 +358,21 @@ Both task handles are `Io\Poll\Handle` as well, so a context follows several tas
 use Io\Poll\{Context, Event};
 
 $poll = new Context();
-$task = new FrankenPHP\SentTaskHandle('image.resize', ['file' => 'photo.jpg']);
-$poll->add($task, [Event::Read], 'photo');
+$tasks = [];
+foreach (['photo.jpg', 'logo.png'] as $file) {
+    $tasks[$file] = new FrankenPHP\SentTaskHandle('image.resize', ['file' => $file]);
+    $poll->add($tasks[$file], [Event::Read], $file);
+}
 
-foreach ($poll->wait() as $watcher) {
-    $update = $task->read();
+while ($tasks) {
+    foreach ($poll->wait() as $watcher) {
+        $file = $watcher->getData();
+        if (null === $update = $tasks[$file]->read()) {
+            // complete: stop watching it
+            $watcher->remove();
+            unset($tasks[$file]);
+        }
+    }
 }
 ```
 
