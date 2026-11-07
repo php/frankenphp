@@ -1,0 +1,40 @@
+---
+name: Build Windows release
+concurrency:
+  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+    branches:
+      - main
+  push:
+    branches:
+      - main
+    tags:
+      - v*.*.*
+  workflow_dispatch:
+    inputs:
+      #checkov:skip=CKV_GHA_7
+      version:
+        description: "FrankenPHP version"
+        required: false
+        type: string
+  schedule:
+    - cron: "0 8 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  # Attestations are signed by the reusable workflow, which verifiers pin with --signer-workflow (SLSA Build L3)
+  build:
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    uses: ./.github/workflows/windows.yaml
+    with:
+      version: ${{ inputs.version }}
