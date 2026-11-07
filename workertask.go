@@ -479,12 +479,17 @@ func go_frankenphp_receive_task(threadIndex C.uintptr_t, namespace *C.zval) (C.u
 	// the payload moves to request memory on the C side
 	payload := t.payload
 	t.payload = nil
+	// an abort signaled the sender already, under this mutex: that wake-up
+	// finds the pickup, a second one would be left over for its next wait
+	signal := t.abortReason == ""
 	q.mu.Unlock()
 	metrics.DequeuedWorkerRequest(handler.worker.name)
 	close(t.pickedUp)
 	// wakes the sender's wait for the pickup, see go_frankenphp_send_task;
 	// after the channel, so the sender finds it closed once woken
-	t.signalSender()
+	if signal {
+		t.signalSender()
+	}
 
 	t.receiver = handler
 	t.pickedUpAt = time.Now()
@@ -503,12 +508,13 @@ func go_frankenphp_update_task(handle C.uintptr_t, update *C.HashTable) *C.char 
 	t := cgo.Handle(handle).Value().(*workerTask)
 
 	t.mu.Lock()
-	for len(t.updates) >= taskUpdatesMax && !t.senderGone {
-		t.cond.Wait()
-	}
-	if t.senderGone {
+	room := t.waitForRoomLocked()
+	if t.senderGone || !room {
 		t.mu.Unlock()
 		C.frankenphp_vars_free(update)
+		if !room {
+			return C.CString("FrankenPHP\\ReceivedTaskHandle::update(): the sender stopped reading and the worker is restarting or shutting down")
+		}
 
 		return C.CString("FrankenPHP\\ReceivedTaskHandle::update(): the sender closed the task")
 	}
@@ -521,6 +527,38 @@ func go_frankenphp_update_task(handle C.uintptr_t, update *C.HashTable) *C.char 
 	}
 
 	return nil
+}
+
+// waitForRoomLocked waits, with mu held, until the sender reads an update or
+// goes away when taskUpdatesMax of them are buffered. A drain of the
+// receiver's thread ends the wait too, false then: a sender that does not read
+// would hold the thread past a restart or the shutdown, beyond the reach of
+// the force-kill
+func (t *workerTask) waitForRoomLocked() bool {
+	if len(t.updates) < taskUpdatesMax || t.senderGone {
+		return true
+	}
+
+	// read on the receiver's thread, the field changes once it left
+	drainChan := t.receiver.thread.drainChan
+	drained := false
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-drainChan:
+			t.mu.Lock()
+			drained = true
+			t.cond.Broadcast()
+			t.mu.Unlock()
+		case <-done:
+		}
+	}()
+	for len(t.updates) >= taskUpdatesMax && !t.senderGone && !drained {
+		t.cond.Wait()
+	}
+	close(done)
+
+	return len(t.updates) < taskUpdatesMax || t.senderGone
 }
 
 // go_frankenphp_read_task hands the sender its next event, and whether a

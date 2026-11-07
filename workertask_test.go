@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -160,6 +161,41 @@ func TestTaskStreamKeptPastItsHandle(t *testing.T) {
 	initServers(t, frankenphp.WithServer(server), taskWorker("echo", "task-worker.php", nil, server), frankenphp.WithNumThreads(2))
 
 	assert.Equal(t, "closed\nclosed,closed\n", serverGet(t, server, "http://example.com/task-kept-stream.php"))
+}
+
+// a receiver waiting for its sender to read leaves on a drain: the sender
+// reads once the receiver let go, and RestartWorkers() needs no force-kill
+func TestTaskUpdateWaitEndsOnDrain(t *testing.T) {
+	dir := t.TempDir()
+	sentinel, picked, resume := filepath.Join(dir, "error"), filepath.Join(dir, "picked"), filepath.Join(dir, "resume")
+	server, err := frankenphp.NewServer(testDataDir)
+	require.NoError(t, err)
+	initServers(t, frankenphp.WithServer(server), taskWorker("echo", "task-worker.php", map[string]string{"BG_SENTINEL": sentinel}, server), frankenphp.WithNumThreads(2))
+
+	body := make(chan string, 1)
+	go func() {
+		body <- serverGet(t, server, "http://example.com/task.php?steps=30&mark="+url.QueryEscape(picked)+"&wait_for="+url.QueryEscape(resume))
+	}()
+	require.Eventually(t, func() bool {
+		_, err := os.Stat(picked)
+
+		return err == nil
+	}, 5*time.Second, 10*time.Millisecond)
+
+	start := time.Now()
+	restarted := make(chan struct{})
+	go func() {
+		frankenphp.RestartWorkers()
+		close(restarted)
+	}()
+	// whatever happens, the sender reads in the end, so nothing hangs
+	defer func() { _ = os.WriteFile(resume, nil, 0o644) }()
+
+	assert.Equal(t, `RuntimeException: FrankenPHP\ReceivedTaskHandle::update(): the sender stopped reading and the worker is restarting or shutting down`, requireFileContentEventually(t, sentinel))
+	require.NoError(t, os.WriteFile(resume, nil, 0o644))
+	assert.Equal(t, 16, strings.Count(<-body, `"step"`))
+	<-restarted
+	assert.Less(t, time.Since(start), 5*time.Second, "no thread waited for the force-kill")
 }
 
 func TestTaskErrors(t *testing.T) {

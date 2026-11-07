@@ -2121,13 +2121,17 @@ static const php_stream_ops frankenphp_task_receiver_ops =
     FRANKENPHP_TASK_STREAM_OPS("FrankenPHP task receiver");
 
 /* Waits for a signal on the side's descriptor without consuming it: 1 when
- * one is pending, 0 on timeout. Interrupted polls are retried, like PHP's
- * own stream code does. */
+ * one is pending, 0 on timeout, -1 when max_execution_time or a force-kill
+ * interrupted the wait, for the VM to bail out once the method returns. Other
+ * interruptions are retried, like PHP's own stream code does. */
 static int frankenphp_task_poll(frankenphp_task_data *data, int timeout_ms) {
   for (;;) {
     int n =
         php_pollfd_for_ms((php_socket_t)data->fd, PHP_POLLREADABLE, timeout_ms);
     if (n < 0 && php_socket_errno() == EINTR) {
+      if (zend_atomic_bool_load(&EG(timed_out))) {
+        return -1;
+      }
       continue;
     }
 
@@ -2140,7 +2144,9 @@ static int frankenphp_task_poll(frankenphp_task_data *data, int timeout_ms) {
  * wait is momentary. */
 static void frankenphp_task_consume(frankenphp_task_data *data) {
   while (!frankenphp_task_chan_consume(data->fd)) {
-    frankenphp_task_poll(data, -1);
+    if (frankenphp_task_poll(data, -1) < 0) {
+      return;
+    }
   }
 }
 
@@ -2360,7 +2366,17 @@ ZEND_METHOD(FrankenPHP_SentTaskHandle, __construct) {
         (remaining < 0 || remaining > FRANKENPHP_TASK_LINGER_MS)) {
       slice = FRANKENPHP_TASK_LINGER_MS;
     }
-    if (!frankenphp_task_poll(data, slice)) {
+    int polled = frankenphp_task_poll(data, slice);
+    if (polled < 0) {
+      go_frankenphp_task_cancel(task.r0, false);
+      frankenphp_task_settle(data);
+      zend_throw_exception(spl_ce_RuntimeException,
+                           "FrankenPHP\\SentTaskHandle: the wait for a thread "
+                           "was interrupted",
+                           0);
+      RETURN_THROWS();
+    }
+    if (polled == 0) {
       if (remaining > 0) {
         remaining -= slice;
       }
@@ -2448,7 +2464,15 @@ ZEND_METHOD(FrankenPHP_SentTaskHandle, read) {
     default:
       /* nothing yet: wait for the next signal, without consuming it, the
        * event it announces does */
-      if (!frankenphp_task_poll(data, data->timeout_ms)) {
+      int polled = frankenphp_task_poll(data, data->timeout_ms);
+      if (polled < 0) {
+        zend_throw_exception(spl_ce_RuntimeException,
+                             "FrankenPHP\\SentTaskHandle::read(): the wait "
+                             "was interrupted",
+                             0);
+        RETURN_THROWS();
+      }
+      if (polled == 0) {
         data->timed_out = true;
         zend_throw_exception(spl_ce_RuntimeException,
                              "FrankenPHP\\SentTaskHandle::read(): timed out "
