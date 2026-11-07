@@ -2669,7 +2669,7 @@ PHP_FUNCTION(frankenphp_test_persist_roundtrip) {
   Z_PARAM_ZVAL(input)
   ZEND_PARSE_PARAMETERS_END();
 
-  if (!persistent_zval_validate(input)) {
+  if (persistent_zval_invalid(input) != NULL) {
     zend_throw_exception(spl_ce_LogicException,
                          "persistent_zval: value not supported (only "
                          "scalars, arrays, and enums are allowed, nested "
