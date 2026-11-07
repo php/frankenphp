@@ -2041,7 +2041,7 @@ static ssize_t frankenphp_task_stream_read(php_stream *stream, char *buf,
   (void)buf;
   (void)count;
   frankenphp_task_data *data = stream->abstract;
-  if (go_frankenphp_task_side_gone(data->task, data->sender)) {
+  if (data->closed || go_frankenphp_task_side_gone(data->task, data->sender)) {
     stream->eof = 1;
   }
 
@@ -2066,6 +2066,9 @@ static int frankenphp_task_stream_cast(php_stream *stream, int castas,
     return FAILURE;
   }
   frankenphp_task_data *data = stream->abstract;
+  if (data->closed) {
+    return FAILURE;
+  }
   if (data->sender) {
     /* the sender parks for the select, unless an event is already there */
     go_frankenphp_task_sender_wait(data->task);
@@ -2091,7 +2094,8 @@ static int frankenphp_task_stream_set_option(php_stream *stream, int option,
   }
   case PHP_STREAM_OPTION_CHECK_LIVENESS:
     /* feof(): the other side closed its stream */
-    return go_frankenphp_task_side_gone(data->task, data->sender)
+    return data->closed ||
+                   go_frankenphp_task_side_gone(data->task, data->sender)
                ? PHP_STREAM_OPTION_RETURN_ERR
                : PHP_STREAM_OPTION_RETURN_OK;
   case PHP_STREAM_OPTION_META_DATA_API:
@@ -2197,7 +2201,11 @@ static void frankenphp_task_cleanup(frankenphp_handle_obj *handle) {
   if (data->res != NULL) {
     zend_resource *res = data->res;
     data->res = NULL;
-    /* the last reference frees the stream, which releases the state too */
+    /* the task went with the handle, so does a stream the script kept: its
+     * descriptor and the Go side of the task are gone */
+    if (res->type == php_file_le_stream()) {
+      zend_list_close(res);
+    }
     zend_list_delete(res);
   }
   frankenphp_task_data_release(data);

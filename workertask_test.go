@@ -153,6 +153,15 @@ func TestTaskPool(t *testing.T) {
 	assert.Equal(t, "[\"processed:a\",\"processed:b\"]\ntwo threads", serverGet(t, server, "http://example.com/task-pool.php"))
 }
 
+// a stream outlives its handle closed: the handle took the task with it
+func TestTaskStreamKeptPastItsHandle(t *testing.T) {
+	server, err := frankenphp.NewServer(testDataDir)
+	require.NoError(t, err)
+	initServers(t, frankenphp.WithServer(server), taskWorker("echo", "task-worker.php", nil, server), frankenphp.WithNumThreads(2))
+
+	assert.Equal(t, "closed\nclosed,closed\n", serverGet(t, server, "http://example.com/task-kept-stream.php"))
+}
+
 func TestTaskErrors(t *testing.T) {
 	server, err := frankenphp.NewServer(testDataDir)
 	require.NoError(t, err)
