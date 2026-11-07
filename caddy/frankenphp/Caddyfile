@@ -56,6 +56,13 @@
 	#}
 	#vulcain
 
+	# Do not serve dotfiles such as .env and .git, except .well-known
+	@dotfiles {
+		path_regexp (^|/)\.
+		not path /.well-known/*
+	}
+	respond @dotfiles 404
+
 	{$CADDY_SERVER_EXTRA_DIRECTIVES}
 
 	php_server {
