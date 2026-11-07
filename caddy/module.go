@@ -197,7 +197,8 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 	ctx := r.Context()
 	repl := ctx.Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
 
-	opts := make([]frankenphp.RequestOption, 0, len(f.requestOptions)+4)
+	// Static split/timeout options plus URI, root and env overrides fit on the stack.
+	opts := make([]frankenphp.RequestOption, 0, 5)
 	opts = append(opts, f.requestOptions...)
 	opts = append(opts, frankenphp.WithOriginalRequest(new(ctx.Value(caddyhttp.OriginalRequestCtxKey).(http.Request))))
 
