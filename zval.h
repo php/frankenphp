@@ -174,6 +174,26 @@ static void persistent_zval_free(zval *z) {
  * resolved from their class+case names on each call. If the enum class
  * or case can't be found in the current thread's class table, an
  * exception is thrown and dst is set to IS_NULL. */
+/* The case of an enum by name, NULL when the reader's class has no such case:
+ * the engine's own lookup asserts the case exists, which a snapshot written
+ * against another version of the class breaks. */
+static zend_object *persistent_zval_enum_case(zend_class_entry *ce,
+                                              zend_string *name) {
+  /* by value: hashing the persistent name would write to a string other
+   * threads read */
+  zend_class_constant *c = zend_hash_str_find_ptr(
+      CE_CONSTANTS_TABLE(ce), ZSTR_VAL(name), ZSTR_LEN(name));
+  if (c == NULL || !(ZEND_CLASS_CONST_FLAGS(c) & ZEND_CLASS_CONST_IS_CASE)) {
+    return NULL;
+  }
+  if (Z_TYPE(c->value) == IS_CONSTANT_AST &&
+      zval_update_constant_ex(&c->value, c->ce) == FAILURE) {
+    return NULL;
+  }
+
+  return Z_TYPE(c->value) == IS_OBJECT ? Z_OBJ(c->value) : NULL;
+}
+
 static void persistent_zval_to_request(zval *dst, zval *src) {
   switch (Z_TYPE_P(src)) {
   case IS_NULL:
@@ -210,7 +230,11 @@ static void persistent_zval_to_request(zval *dst, zval *src) {
       ZVAL_NULL(dst);
       break;
     }
-    zend_object *enum_obj = zend_enum_get_case_cstr(ce, ZSTR_VAL(e->case_name));
+    zend_object *enum_obj = persistent_zval_enum_case(ce, e->case_name);
+    if (EG(exception)) {
+      ZVAL_NULL(dst);
+      break;
+    }
     if (!enum_obj) {
       zend_throw_exception_ex(spl_ce_LogicException, 0,
                               "persistent_zval: enum case \"%s::%s\" not found",

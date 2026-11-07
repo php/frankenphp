@@ -291,3 +291,14 @@ func TestVarsServerWorkerReadsAGlobalNamespace(t *testing.T) {
 
 	assert.Contains(t, requireFileContentEventually(t, sentinel), `"value":"global"`)
 }
+
+// a snapshot written against another version of an enum fails the read with
+// an exception, whatever the reader's class has instead of the case
+func TestVarsEnumCaseMissingInTheReader(t *testing.T) {
+	server, err := frankenphp.NewServer(testDataDir)
+	require.NoError(t, err)
+	initServers(t, frankenphp.WithServer(server), bgWorker("enum", "enum-vars.php", nil, server), frankenphp.WithNumThreads(2))
+
+	assert.Equal(t, `LogicException: persistent_zval: enum case "EnumSuit::Hearts" not found`, serverGet(t, server, "http://example.com/vars-enum-mismatch.php"))
+	assert.Equal(t, `LogicException: persistent_zval: enum case "EnumSuit::Hearts" not found`, serverGet(t, server, "http://example.com/vars-enum-mismatch.php?constant=1"))
+}
