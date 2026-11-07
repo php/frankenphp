@@ -1729,11 +1729,9 @@ ZEND_METHOD(FrankenPHP_WorkerHandle, setVars) {
 
   /* validate the whole tree first: persist and free recurse without a
    * guard of their own */
-  if (!persistent_zval_validate(vars)) {
-    zend_value_error(
-        "FrankenPHP\\WorkerHandle::setVars(): values must be null, scalars, "
-        "arrays or enums, nested no deeper than %d levels",
-        PERSISTENT_ZVAL_MAX_DEPTH);
+  const char *invalid = persistent_zval_invalid(vars);
+  if (invalid != NULL) {
+    zend_value_error("FrankenPHP\\WorkerHandle::setVars(): %s", invalid);
     RETURN_THROWS();
   }
 
@@ -1762,10 +1760,9 @@ PHP_FUNCTION(frankenphp_get_vars) {
   ZEND_PARSE_PARAMETERS_END();
 
   HashTable *table = NULL;
-  uintptr_t snapshot = 0;
   char *error =
       go_frankenphp_get_vars(frankenphp_thread_index(), ZSTR_VAL(namespace),
-                             ZSTR_LEN(namespace), &table, &snapshot);
+                             ZSTR_LEN(namespace), &table);
   if (error != NULL) {
     zend_throw_exception(spl_ce_RuntimeException, error, 0);
     free(error);
@@ -1780,7 +1777,7 @@ PHP_FUNCTION(frankenphp_get_vars) {
   zend_catch { bailed_out = true; }
   zend_end_try();
 
-  HashTable *unused = go_frankenphp_vars_done(snapshot);
+  HashTable *unused = go_frankenphp_vars_done(frankenphp_thread_index());
   if (unused != NULL) {
     frankenphp_vars_free(unused);
   }

@@ -102,6 +102,15 @@ func TestVarsBlockUntilReady(t *testing.T) {
 	assert.Contains(t, requireFileContentEventually(t, sentinel), `"answer":42`)
 }
 
+// a worker reading its own namespace before its first tick would wait for
+// itself: refused with a message saying so
+func TestVarsOwnReadBeforeTheFirstTick(t *testing.T) {
+	sentinel := filepath.Join(t.TempDir(), "self.txt")
+	initServers(t, bgWorker("self", "consumer.php", map[string]string{"BG_CONSUME": "self", "BG_SENTINEL": sentinel}, nil), frankenphp.WithNumThreads(2))
+
+	assert.Contains(t, requireFileContentEventually(t, sentinel), `background worker "self" reads its own vars before its first tick`)
+}
+
 func TestVarsCycleIsRefused(t *testing.T) {
 	tmp := t.TempDir()
 	s1, s2 := filepath.Join(tmp, "c1.txt"), filepath.Join(tmp, "c2.txt")
@@ -132,7 +141,8 @@ func TestVarsRejectInvalidPublications(t *testing.T) {
 
 	result := requireFileContentEventually(t, sentinel)
 	assert.Contains(t, result, "ValueError")
-	assert.Contains(t, result, "must be null, scalars, arrays or enums")
+	assert.Contains(t, result, `ValueError: FrankenPHP\WorkerHandle::setVars(): values must be null, scalars, arrays or enums`)
+	assert.Contains(t, result, `ValueError: FrankenPHP\WorkerHandle::setVars(): values must fit in memory_limit once copied`)
 	assert.Contains(t, result, `LogicException: FrankenPHP\WorkerHandle::setVars(): this worker does not publish the vars namespace "undeclared"`)
 }
 
@@ -172,7 +182,7 @@ func TestValidateVarsNamespaces(t *testing.T) {
 	assert.ErrorContains(t, frankenphp.Validate(
 		publisher("one", 1, frankenphp.WithWorkerVars("cfg")),
 		publisher("two", 1, frankenphp.WithWorkerVars("other", "cfg")),
-	), `two global workers cannot publish the same vars namespace: "cfg"`)
+	), `two global workers cannot publish the same vars namespace: "cfg", declared by "one" and "two"`)
 
 	// one publisher per server
 	other, err := frankenphp.NewServer(testDataDir)
@@ -197,7 +207,7 @@ func TestValidateVarsNamespaces(t *testing.T) {
 
 	assert.ErrorContains(t, frankenphp.Validate(
 		publisher("pool", 2, frankenphp.WithWorkerVars("cfg")),
-	), "publishes vars, it runs a single thread")
+	), `background worker "pool" publishes vars, so it runs a single thread, got num 2`)
 
 	assert.ErrorContains(t, frankenphp.Validate(
 		frankenphp.WithWorkers("http", "testdata/worker.php", 1, frankenphp.WithWorkerVars("cfg")),

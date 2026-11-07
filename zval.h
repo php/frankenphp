@@ -38,14 +38,25 @@ typedef struct {
   zend_string *case_name;
 } persistent_zval_enum_t;
 
-/* Whitelist check: only scalars, arrays of allowed values, and enum
- * instances pass. Returns false for objects other than enums, resources,
- * closures, references, etc. Also enforces PERSISTENT_ZVAL_MAX_DEPTH,
- * bailing out before recursing further once hit - see the file header for
- * why this is the only place that's safe to do so. */
-static bool persistent_zval_validate_depth(zval *z, int depth) {
-  if (depth > PERSISTENT_ZVAL_MAX_DEPTH) {
+/* Takes bytes out of what the copy of a tree may still use. */
+static bool persistent_zval_spend(size_t *left, size_t bytes) {
+  if (*left < bytes) {
     return false;
+  }
+  *left -= bytes;
+
+  return true;
+}
+
+/* Whitelist check: only scalars, arrays of allowed values, and enum
+ * instances pass, objects other than enums, resources, closures, references
+ * etc. do not. Also enforces PERSISTENT_ZVAL_MAX_DEPTH, bailing out before
+ * recursing further once hit - see the file header for why this is the only
+ * place that's safe to do so - and counts the bytes the copy would take. */
+static const char *persistent_zval_check(zval *z, int depth, size_t *left) {
+  if (depth > PERSISTENT_ZVAL_MAX_DEPTH) {
+    return "values must be nested no deeper than " ZEND_TOSTR(
+        PERSISTENT_ZVAL_MAX_DEPTH) " levels";
   }
   switch (Z_TYPE_P(z)) {
   case IS_NULL:
@@ -53,26 +64,61 @@ static bool persistent_zval_validate_depth(zval *z, int depth) {
   case IS_TRUE:
   case IS_LONG:
   case IS_DOUBLE:
+    return NULL;
   case IS_STRING:
-    return true;
+    return persistent_zval_spend(left, _ZSTR_STRUCT_SIZE(Z_STRLEN_P(z)))
+               ? NULL
+               : "values must fit in memory_limit once copied";
   case IS_OBJECT:
-    return (Z_OBJCE_P(z)->ce_flags & ZEND_ACC_ENUM) != 0;
+    if (!(Z_OBJCE_P(z)->ce_flags & ZEND_ACC_ENUM)) {
+      return "values must be null, scalars, arrays or enums";
+    }
+    return persistent_zval_spend(
+               left, sizeof(persistent_zval_enum_t) +
+                         _ZSTR_STRUCT_SIZE(ZSTR_LEN(Z_OBJCE_P(z)->name)) +
+                         _ZSTR_STRUCT_SIZE(
+                             Z_STRLEN_P(zend_enum_fetch_case_name(Z_OBJ_P(z)))))
+               ? NULL
+               : "values must fit in memory_limit once copied";
   case IS_ARRAY: {
+    if (!persistent_zval_spend(left, sizeof(HashTable) +
+                                         zend_hash_num_elements(Z_ARRVAL_P(z)) *
+                                             sizeof(Bucket))) {
+      return "values must fit in memory_limit once copied";
+    }
+    zend_string *key;
     zval *val;
-    ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(z), val) {
-      if (!persistent_zval_validate_depth(val, depth + 1))
-        return false;
+    ZEND_HASH_FOREACH_STR_KEY_VAL(Z_ARRVAL_P(z), key, val) {
+      if (key != NULL &&
+          !persistent_zval_spend(left, _ZSTR_STRUCT_SIZE(ZSTR_LEN(key)))) {
+        return "values must fit in memory_limit once copied";
+      }
+      const char *invalid = persistent_zval_check(val, depth + 1, left);
+      if (invalid != NULL) {
+        return invalid;
+      }
     }
     ZEND_HASH_FOREACH_END();
-    return true;
+    return NULL;
   }
   default:
-    return false;
+    return "values must be null, scalars, arrays or enums";
   }
 }
 
+/* Why a tree cannot be persisted, NULL when it can. Its copy is malloc
+ * memory, outside the memory_limit of the request making it, and every
+ * occurrence of a value shared in the tree gets a copy of its own: a tree
+ * whose copy would not fit in that limit is refused, which also bounds the
+ * walk of a value shared many times over. */
+static const char *persistent_zval_invalid(zval *z) {
+  size_t left = PG(memory_limit) > 0 ? (size_t)PG(memory_limit) : SIZE_MAX;
+
+  return persistent_zval_check(z, 0, &left);
+}
+
 static bool persistent_zval_validate(zval *z) {
-  return persistent_zval_validate_depth(z, 0);
+  return persistent_zval_invalid(z) == NULL;
 }
 
 /* Deep-copy a zval from request memory into persistent (pemalloc) memory.

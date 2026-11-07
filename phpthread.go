@@ -33,6 +33,9 @@ type phpThread struct {
 	// ts_free_thread.
 	forceKillMu sync.RWMutex
 	forceKill   C.force_kill_slot
+	// the snapshots frankenphp_get_vars() is copying on this thread, the
+	// innermost last: an autoloader the copy triggers may read vars too
+	varsReads []*varsSnapshot
 }
 
 // threadHandler defines how the callbacks from the C thread should be handled

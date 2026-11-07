@@ -4,10 +4,10 @@ package frankenphp
 import "C"
 import (
 	"errors"
-	"runtime/cgo"
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"unsafe"
 )
 
 // varsSnapshot is one publication of a vars namespace: a persistent
@@ -57,7 +57,7 @@ func varsOwner(fc *frankenPHPContext, ns string) (*worker, error) {
 	}
 	w := varsOwners.resolve(server, ns)
 	if w == nil {
-		return nil, errors.New("frankenphp_get_vars(): no background worker publishes the vars namespace " + strconv.Quote(ns))
+		return nil, errors.New("frankenphp_get_vars(): no background worker publishes the vars namespace " + strconv.Quote(ns) + ", in this php_server or among the global workers")
 	}
 
 	return w, nil
@@ -78,7 +78,12 @@ func waitVarsReady(target, caller *worker) error {
 
 	if caller != nil {
 		varsWaitMu.Lock()
-		if caller == target || varsWaitReaches(target, caller) {
+		if caller == target {
+			varsWaitMu.Unlock()
+
+			return errors.New("frankenphp_get_vars(): background worker " + strconv.Quote(caller.name) + " reads its own vars before its first tick, they are not published yet")
+		}
+		if varsWaitReaches(target, caller) {
 			varsWaitMu.Unlock()
 
 			return errors.New("frankenphp_get_vars(): circular dependency between background workers " + strconv.Quote(caller.name) + " and " + strconv.Quote(target.name))
@@ -178,9 +183,10 @@ func go_frankenphp_set_vars(threadIndex C.uintptr_t, namespace *C.char, namespac
 // go_frankenphp_vars_done
 //
 //export go_frankenphp_get_vars
-func go_frankenphp_get_vars(threadIndex C.uintptr_t, namespace *C.char, namespaceLen C.size_t, table **C.HashTable, snapshot *C.uintptr_t) *C.char {
+func go_frankenphp_get_vars(threadIndex C.uintptr_t, namespace *C.char, namespaceLen C.size_t, table **C.HashTable) *C.char {
 	thread := phpThreads[threadIndex]
-	ns := C.GoStringN(namespace, C.int(namespaceLen))
+	// looked up, never kept
+	ns := unsafe.String((*byte)(unsafe.Pointer(namespace)), int(namespaceLen))
 	target, err := varsOwner(thread.handler.frankenPHPContext(), ns)
 	if err != nil {
 		return C.CString(err.Error())
@@ -202,7 +208,7 @@ func go_frankenphp_get_vars(threadIndex C.uintptr_t, namespace *C.char, namespac
 	slot.mu.RUnlock()
 
 	*table = s.table
-	*snapshot = C.uintptr_t(cgo.NewHandle(s))
+	thread.varsReads = append(thread.varsReads, s)
 
 	return nil
 }
@@ -212,10 +218,12 @@ func go_frankenphp_get_vars(threadIndex C.uintptr_t, namespace *C.char, namespac
 // moved on meanwhile
 //
 //export go_frankenphp_vars_done
-func go_frankenphp_vars_done(snapshot C.uintptr_t) *C.HashTable {
-	h := cgo.Handle(snapshot)
-	s := h.Value().(*varsSnapshot)
-	h.Delete()
+func go_frankenphp_vars_done(threadIndex C.uintptr_t) *C.HashTable {
+	thread := phpThreads[threadIndex]
+	last := len(thread.varsReads) - 1
+	s := thread.varsReads[last]
+	thread.varsReads[last] = nil
+	thread.varsReads = thread.varsReads[:last]
 
 	return s.release()
 }

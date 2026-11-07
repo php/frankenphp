@@ -229,20 +229,26 @@ func resolveWorkerFile(o workerOpt) (workerOpt, error) {
 // global, paths and namespaces belong to a scope, a nil server standing for
 // the global workers
 type declarationIndex struct {
-	names       func(name string) bool
-	paths, vars func(server *Server, key string) bool
+	names func(name string) bool
+	paths func(server *Server, path string) bool
+	// the name of the worker publishing a vars namespace, empty when none does
+	vars func(server *Server, ns string) string
 }
 
 // scopeSet records keys per scope, a nil server for the global workers
-type scopeSet map[*Server]map[string]bool
+// scopeSet records keys per scope, with the name of the worker that took
+// each, a nil server for the global workers
+type scopeSet map[*Server]map[string]string
 
-func (s scopeSet) has(server *Server, key string) bool { return s[server][key] }
+func (s scopeSet) has(server *Server, key string) bool { return s[server][key] != "" }
 
-func (s scopeSet) add(server *Server, key string) {
+func (s scopeSet) owner(server *Server, key string) string { return s[server][key] }
+
+func (s scopeSet) add(server *Server, key, owner string) {
 	if s[server] == nil {
-		s[server] = make(map[string]bool)
+		s[server] = make(map[string]string)
 	}
-	s[server][key] = true
+	s[server][key] = owner
 }
 
 // namespaceOwners maps the namespaces declared in a scope to the worker that
@@ -314,15 +320,15 @@ func checkWorkerDeclaration(o workerOpt, taken declarationIndex) error {
 		}
 		// one thread, so a snapshot has a single writer
 		if o.num > 1 {
-			return fmt.Errorf("background worker %q publishes vars, it runs a single thread", o.name)
+			return fmt.Errorf("background worker %q publishes vars, so it runs a single thread, got num %d", o.name, o.num)
 		}
 	}
 	for i, ns := range o.vars {
 		if slices.Contains(o.vars[:i], ns) {
 			return fmt.Errorf("worker %q declares the vars namespace %q twice", o.name, ns)
 		}
-		if taken.vars(o.server, ns) {
-			return fmt.Errorf("%s cannot publish the same vars namespace: %q", scope, ns)
+		if owner := taken.vars(o.server, ns); owner != "" {
+			return fmt.Errorf("%s cannot publish the same vars namespace: %q, declared by %q and %q", scope, ns, owner, o.name)
 		}
 	}
 
@@ -344,7 +350,13 @@ func newWorker(o workerOpt) (*worker, error) {
 
 			return server.workersByPath[path] != nil
 		},
-		vars: func(server *Server, ns string) bool { return varsOwners[server][ns] != nil },
+		vars: func(server *Server, ns string) string {
+			if w := varsOwners[server][ns]; w != nil {
+				return w.name
+			}
+
+			return ""
+		},
 	}
 
 	if err := checkWorkerDeclaration(o, taken); err != nil {

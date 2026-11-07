@@ -333,7 +333,7 @@ func Validate(options ...Option) error {
 
 	takenNames := make(map[string]bool, len(opt.workers))
 	paths, vars := scopeSet{}, scopeSet{}
-	taken := declarationIndex{names: func(name string) bool { return takenNames[name] }, paths: paths.has, vars: vars.has}
+	taken := declarationIndex{names: func(name string) bool { return takenNames[name] }, paths: paths.has, vars: vars.owner}
 	for _, w := range opt.workers {
 		w, err := resolveWorkerFile(w)
 		if err != nil {
@@ -346,10 +346,10 @@ func Validate(options ...Option) error {
 
 		takenNames[w.name] = true
 		if !w.isBackgroundWorker && w.matchRequest == nil {
-			paths.add(w.server, w.fileName)
+			paths.add(w.server, w.fileName, w.name)
 		}
 		for _, ns := range w.vars {
-			vars.add(w.server, ns)
+			vars.add(w.server, ns, w.name)
 		}
 	}
 
