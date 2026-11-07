@@ -178,6 +178,16 @@ func TestWorkerExtensionSendMessageRejectsUnsupportedZval(t *testing.T) {
 	assert.Nil(t, ret)
 }
 
+// background workers never read requestChan, so an extension cannot send
+// them requests or messages
+func TestErrorIfExtensionWorkerIsBackground(t *testing.T) {
+	t.Cleanup(Shutdown)
+
+	_, o := WithExtensionWorkers("backgroundExtension", "testdata/bgworker/basic.php", 1, WithWorkerBackground())
+
+	require.ErrorContains(t, Init(o), "cannot be an extension worker")
+}
+
 func TestErrorIf2WorkersHaveSameName(t *testing.T) {
 	_, o1 := WithExtensionWorkers("duplicateWorker", "testdata/worker.php", 1)
 	_, o2 := WithExtensionWorkers("duplicateWorker", "testdata/worker2.php", 1)
