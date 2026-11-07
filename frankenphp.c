@@ -2165,7 +2165,7 @@ static frankenphp_task_data *frankenphp_task_data_of(zend_object *object) {
 static frankenphp_task_data *frankenphp_task_obj_open(zval *zthis) {
   frankenphp_task_data *data = FRANKENPHP_TASK_DATA(zthis);
   if (data == NULL || data->task == 0 || data->closed) {
-    zend_throw_exception(spl_ce_RuntimeException, "the task is over", 0);
+    zend_throw_exception(spl_ce_LogicException, "the task is over", 0);
 
     return NULL;
   }
@@ -2275,7 +2275,7 @@ static void frankenphp_task_obj_get_stream(zval *zthis, zval *return_value) {
   }
 
   if (data == NULL || data->res == NULL) {
-    zend_throw_exception(spl_ce_RuntimeException, "the task is over", 0);
+    zend_throw_exception(spl_ce_LogicException, "the task is over", 0);
     RETURN_THROWS();
   }
 
@@ -2342,7 +2342,10 @@ ZEND_METHOD(FrankenPHP_SentTaskHandle, __construct) {
       go_frankenphp_send_task(frankenphp_thread_index(), ZSTR_VAL(namespace),
                               ZSTR_LEN(namespace), Z_ARRVAL(persistent));
   if (task.r2 != NULL) {
-    zend_throw_exception(spl_ce_RuntimeException, task.r2, 0);
+    /* a namespace nobody receives is a mistake, a failure to set the task up
+     * is not */
+    zend_throw_exception(
+        task.r3 ? spl_ce_LogicException : spl_ce_RuntimeException, task.r2, 0);
     free(task.r2);
     RETURN_THROWS();
   }

@@ -204,12 +204,12 @@ func TestTaskErrors(t *testing.T) {
 	initServers(t, frankenphp.WithServer(server), taskWorker("echo", "task-worker.php", nil, server), frankenphp.WithNumThreads(2))
 
 	body := serverGet(t, server, "http://example.com/task-errors.php")
-	assert.Contains(t, body, `unknown: RuntimeException: FrankenPHP\SentTaskHandle: no background worker receives the task namespace "nope"`)
+	assert.Contains(t, body, `unknown: LogicException: FrankenPHP\SentTaskHandle: no background worker receives the task namespace "nope"`)
 	assert.Contains(t, body, `payload: ValueError: FrankenPHP\SentTaskHandle::__construct(): payload values must be null, scalars, arrays or enums`)
 	assert.Contains(t, body, `timeout: ValueError: FrankenPHP\SentTaskHandle::__construct(): Argument #3 ($timeout) must be greater than or equal to 0`)
 	assert.Contains(t, body, `big: ValueError: FrankenPHP\SentTaskHandle::__construct(): payload values must fit in memory_limit once copied`)
 	assert.Contains(t, body, `received: Error: Call to private FrankenPHP\ReceivedTaskHandle::__construct()`)
-	assert.Contains(t, body, `worker: RuntimeException: FrankenPHP\WorkerHandle can only be created from a background worker`)
+	assert.Contains(t, body, `worker: LogicException: FrankenPHP\WorkerHandle can only be created from a background worker`)
 }
 
 // the metrics of a background worker follow its tasks: busy while a thread
@@ -332,7 +332,7 @@ func TestTaskMethodsAfterTheEnd(t *testing.T) {
 	assert.Equal(t, `completed read: ok
 completed getStream: resource (stream)
 completed abandon: ok
-abandoned read: RuntimeException: the task is over
+abandoned read: LogicException: the task is over
 abandoned getStream: resource (closed)
 abandoned abandon: ok
 `, serverGet(t, server, "http://example.com/task-over.php"))
@@ -340,10 +340,10 @@ abandoned abandon: ok
 	// the payload outlives the task, closing twice is free, and a stream
 	// the script never took is not built past the end of the task
 	assert.Equal(t, `getPayload: {"input":"over"}
-update: RuntimeException: the task is over
+update: LogicException: the task is over
 complete: ok
-complete-data: RuntimeException: the task is over
-getStream: RuntimeException: the task is over`, requireFileContentEventually(t, sentinel))
+complete-data: LogicException: the task is over
+getStream: LogicException: the task is over`, requireFileContentEventually(t, sentinel))
 }
 
 // two tasks followed through an Io\Poll\Context: the handles implement

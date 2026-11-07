@@ -257,25 +257,25 @@ func taskOwner(fc *frankenPHPContext, ns string) *worker {
 }
 
 //export go_frankenphp_send_task
-func go_frankenphp_send_task(threadIndex C.uintptr_t, namespace *C.char, namespaceLen C.size_t, payload *C.HashTable) (C.uintptr_t, C.intptr_t, *C.char) {
+func go_frankenphp_send_task(threadIndex C.uintptr_t, namespace *C.char, namespaceLen C.size_t, payload *C.HashTable) (C.uintptr_t, C.intptr_t, *C.char, C.bool) {
 	thread := phpThreads[threadIndex]
 	ns := C.GoStringN(namespace, C.int(namespaceLen))
 	w := taskOwner(thread.handler.frankenPHPContext(), ns)
 	if w == nil {
 		C.frankenphp_vars_free(payload)
 
-		return 0, -1, C.CString("FrankenPHP\\SentTaskHandle: no background worker receives the task namespace " + strconv.Quote(ns))
+		return 0, -1, C.CString("FrankenPHP\\SentTaskHandle: no background worker receives the task namespace " + strconv.Quote(ns)), true
 	}
 	if handler, ok := thread.handler.(*backgroundWorkerThread); ok && handler.worker == w && w.countThreads() == 1 {
 		C.frankenphp_vars_free(payload)
 
-		return 0, -1, C.CString("FrankenPHP\\SentTaskHandle: the task namespace " + strconv.Quote(ns) + " is received by this very worker, which has a single thread")
+		return 0, -1, C.CString("FrankenPHP\\SentTaskHandle: the task namespace " + strconv.Quote(ns) + " is received by this very worker, which has a single thread"), true
 	}
 	fds, ok := taskChanGet()
 	if !ok {
 		C.frankenphp_vars_free(payload)
 
-		return 0, -1, C.CString("FrankenPHP\\SentTaskHandle: failed to create the channel of the task")
+		return 0, -1, C.CString("FrankenPHP\\SentTaskHandle: failed to create the channel of the task"), false
 	}
 
 	t := &workerTask{
@@ -310,7 +310,7 @@ func go_frankenphp_send_task(threadIndex C.uintptr_t, namespace *C.char, namespa
 	// hand-off, a signal on a descriptor does not. A pickup that takes longer
 	// than the first wait slice brings in go_frankenphp_task_linger
 
-	return C.uintptr_t(t.handle), C.intptr_t(t.fds[0]), nil
+	return C.uintptr_t(t.handle), C.intptr_t(t.fds[0]), nil, false
 }
 
 // go_frankenphp_task_linger is called by a sender whose first wait slice passed
