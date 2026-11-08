@@ -231,6 +231,16 @@ FrankenPHP sandboxes environment variables per-thread:
 4. `frankenphp_getenv()` looks a variable up in thread-local layers, the first match wins: `sandboxed_env` (`putenv()` writes and unsets), `prepared_env` (the `env` of the current request, released after each worker request), `worker_env` (the `env` of the worker script, kept for all its requests), then `main_thread_env`. `putenv()` writes land only in `sandboxed_env` and **never** mutate the process-global OS environment, so a value set by one request is not visible to the Go/Caddy side, to child processes (`proc_open`, `exec`, ...), or to other requests. This also avoids races on the global C environment.
 5. `reset_sandboxed_environment()` releases `sandboxed_env` after each PHP script execution. In regular mode that's per request; in worker mode it only runs when the worker script itself exits, so `putenv()` writes are visible to subsequent worker requests on the same thread until the script restarts.
 
+## Per-thread locale
+
+The C library's `setlocale()` changes the locale of the whole process and isn't thread-safe: a request would use the locale of the requests running at the same time, and concurrent calls can crash the process. FrankenPHP replaces PHP's `setlocale()` with `frankenphp_setlocale()` (`threadlocale.c`), which gives each thread its own locale with the POSIX `newlocale()` and `uselocale()` functions:
+
+1. Each combination of category locales is created once with `newlocale()`, under a mutex, and kept until the process exits. Threads only switch between these locale objects with `uselocale()`, which the locale-dependent C functions (`strftime()`, `strcoll()`, `localeconv()`, `printf()`...) follow.
+2. The locale objects store the name of each category, so `setlocale($category, '0')` and composite `LC_ALL` names (to restore all categories at once) behave as with the C library.
+3. When a script ends (`RSHUTDOWN`), the thread switches back to the process locale. In worker mode, it also switches back after each request to the locale the worker script set before handling requests. PHP's own reset of the process locale to `C` never runs, because `BG(locale_changed)` stays unset.
+
+Windows builds of PHP already keep the locale per thread, so the override is only installed on other platforms. On Windows, FrankenPHP only restores the locale of the worker script after each request. C code calling the C library's `setlocale()` directly, in a PHP extension for instance, still changes the locale of the whole process.
+
 ## Request flow (regular mode)
 
 1. HTTP request arrives at Caddy

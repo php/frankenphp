@@ -58,6 +58,7 @@
 
 #include "_cgo_export.h"
 #include "frankenphp_arginfo.h"
+#include "threadlocale.h"
 #ifdef FRANKENPHP_TEST
 /* The persistent_zval helpers are only compiled in when a consumer needs
  * them. The step that lands the first real caller (background workers)
@@ -639,6 +640,8 @@ static void frankenphp_worker_request_shutdown() {
     prepared_env = NULL;
   }
 
+  frankenphp_restore_worker_locale();
+
   zend_set_memory_limit(PG(memory_limit));
 }
 
@@ -650,6 +653,7 @@ bool frankenphp_shutdown_dummy_request(void) {
 
   worker_env = prepared_env;
   prepared_env = NULL;
+  frankenphp_save_worker_locale();
   frankenphp_worker_request_shutdown();
 
   return true;
@@ -1272,6 +1276,8 @@ PHP_MINIT_FUNCTION(frankenphp) {
     php_error(E_WARNING, "Failed to find built-in getenv function");
   }
 
+  frankenphp_override_setlocale();
+
   // Override opcache_reset (may not be available yet if opcache loads as a
   // shared extension in PHP 8.4 and below)
   frankenphp_override_opcache_reset();
@@ -1341,15 +1347,21 @@ PHP_MINFO_FUNCTION(frankenphp) {
   }
 }
 
+static PHP_RSHUTDOWN_FUNCTION(frankenphp) {
+  frankenphp_reset_thread_locale();
+
+  return SUCCESS;
+}
+
 static zend_module_entry frankenphp_module = {
     STANDARD_MODULE_HEADER,
     "frankenphp",
-    ext_functions,         /* function table */
-    PHP_MINIT(frankenphp), /* initialization */
-    NULL,                  /* shutdown */
-    NULL,                  /* request initialization */
-    NULL,                  /* request shutdown */
-    PHP_MINFO(frankenphp), /* information */
+    ext_functions,             /* function table */
+    PHP_MINIT(frankenphp),     /* initialization */
+    NULL,                      /* shutdown */
+    NULL,                      /* request initialization */
+    PHP_RSHUTDOWN(frankenphp), /* request shutdown */
+    PHP_MINFO(frankenphp),     /* information */
     TOSTRING(FRANKENPHP_VERSION),
     STANDARD_MODULE_PROPERTIES};
 
