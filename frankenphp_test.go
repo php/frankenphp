@@ -182,11 +182,11 @@ func TestMissingScript(t *testing.T) {
 
 func TestEnvVarsInPhpIni(t *testing.T) {
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
-		body, _ := testGet("http://example.com/ini.php?key=opcache.enable", handler, t)
-		assert.Equal(t, "opcache.enable:0", body)
+		body, _ := testGet("http://example.com/ini.php?key=default_socket_timeout", handler, t)
+		assert.Equal(t, "default_socket_timeout:0", body)
 	}, &testOptions{
 		phpIni: map[string]string{
-			"opcache.enable": "${LITERAL_ZERO}",
+			"default_socket_timeout": "${LITERAL_ZERO}",
 		},
 	})
 }
