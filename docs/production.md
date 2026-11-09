@@ -143,6 +143,12 @@ Go to `https://your-domain-name.example.com` and enjoy!
 >
 > Docker can have a cache layer, make sure you have the right build for each deployment or rebuild your project with the `--no-cache` option to avoid cache issues.
 
+## Linux kernel security updates
+
+CVE-2026-98432 is a use-after-free in the Linux kernel's IPv4 TCP handling. The published proof of concept uses an MPTCP listener, and Go 1.24 and later enable MPTCP for listeners by default. If you cannot update the kernel immediately, set `GODEBUG=multipathtcp=0` in FrankenPHP's environment and restart it to disable Go's default MPTCP use.
+
+This is only a temporary mitigation for the published MPTCP exploit path; the kernel flaw is not specific to MPTCP, so this setting is not a substitute for a patched kernel. See the [CVE record](https://www.cve.org/CVERecord?id=CVE-2026-98432), [Go's `multipathtcp` documentation](https://go.dev/doc/godebug#go-124), and the [Go security discussion](https://github.com/golang/go/issues/82717).
+
 ## Running behind a reverse proxy
 
 If FrankenPHP is running behind a reverse proxy or a load balancer (e.g., Nginx, AWS ELB, Google Cloud LB),
