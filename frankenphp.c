@@ -407,6 +407,7 @@ static void frankenphp_free_request_context() {
   SG(request_info).request_uri = NULL;
 }
 
+#ifndef FRANKENPHP_REQUEST_HOOKS
 static bool frankenphp_release_super_globals_once() {
   bool released = zend_hash_str_del(&EG(symbol_table), "_SESSION",
                                     sizeof("_SESSION") - 1) == SUCCESS;
@@ -446,7 +447,6 @@ static void frankenphp_release_super_globals() {
   }
 }
 
-#ifndef FRANKENPHP_REQUEST_HOOKS
 /* reset all 'auto globals' in worker mode except of $_ENV
  * see: php_hash_environment() */
 static void frankenphp_reset_super_globals() {
@@ -991,7 +991,11 @@ PHP_FUNCTION(frankenphp_handle_request) {
     RETURN_THROWS();
   }
 
+#ifdef FRANKENPHP_REQUEST_HOOKS
+  php_release_request_globals();
+#else
   frankenphp_release_super_globals();
+#endif
   if (EG(exception)) {
     RETURN_THROWS();
   }
@@ -1075,6 +1079,11 @@ PHP_FUNCTION(frankenphp_handle_request) {
   zval_ptr_dtor(&handler_parameters);
   if (callback_ret != NULL) {
     zval_ptr_dtor(&retval);
+  }
+
+  /* thrown by a destructor of the finished request */
+  if (EG(exception)) {
+    RETURN_THROWS();
   }
 
   RETURN_TRUE;
