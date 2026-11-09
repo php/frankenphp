@@ -2120,6 +2120,15 @@ func TestOpcacheReset(t *testing.T) {
 		}
 		`, "caddyfile")
 
+	resp, err := tester.Client.Get("http://localhost:" + testPort + "/ini.php?key=opcache.enable")
+	require.NoError(t, err)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	if string(body) == "opcache.enable:" {
+		t.Skip("OPcache is not loaded")
+	}
+
 	wg := sync.WaitGroup{}
 	numRequests := 500
 	wg.Add(numRequests)
