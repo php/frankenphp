@@ -1787,6 +1787,10 @@ func testOpcachePreload(t *testing.T, opts *testOptions) {
 	}
 
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		if body, _ := testGet("http://example.com/ini.php?key=opcache.enable", handler, t); body == "opcache.enable:" {
+			t.Skip("OPcache is not loaded")
+		}
+
 		body, _ := testGet("http://example.com/preload-check.php", handler, t)
 		assert.Equal(t, "I am preloaded", body)
 	}, opts)
