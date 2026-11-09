@@ -195,7 +195,10 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 	}
 
 	ctx := r.Context()
-	repl := ctx.Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
+	var repl *caddy.Replacer
+	if f.resolvedDocumentRoot == "" || len(f.requestEnv) > 0 {
+		repl = ctx.Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
+	}
 
 	opts := make([]frankenphp.RequestOption, 0, len(f.requestOptions)+4)
 	opts = append(opts, f.requestOptions...)
