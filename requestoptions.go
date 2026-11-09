@@ -175,8 +175,9 @@ func ensurePreparedEnv(env PreparedEnv) PreparedEnv {
 }
 
 func WithOriginalRequest(r *http.Request) RequestOption {
+	originalURI := r.URL.RequestURI()
 	return func(o *frankenPHPContext) error {
-		o.requestURI = r.URL.RequestURI()
+		o.requestURI = originalURI
 
 		return nil
 	}
