@@ -39,6 +39,9 @@ ENV GOTOOLCHAIN=local
 # we build with OPENSSLDIR=/etc/ssl which doesn't exist in RHEL
 RUN ln -s ../pki/tls/cert.pem /etc/ssl/cert.pem
 
+# the base image links libstdc++ dynamically, but the GCC 16 runtime is newer than the target hosts' one
+RUN ln -sf libstdc++.a "$(dirname "$(g++ -print-file-name=libstdc++.so.6)")/libstdc++.so"
+
 WORKDIR /go/src/app
 COPY --link . ./
 
