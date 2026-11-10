@@ -200,7 +200,8 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 		repl = ctx.Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
 	}
 
-	opts := make([]frankenphp.RequestOption, 0, len(f.requestOptions)+4)
+	// Allow room for Mercure, split/timeout options and URI/root/env overrides, with headroom.
+	opts := make([]frankenphp.RequestOption, 0, 8)
 	opts = append(opts, f.requestOptions...)
 	opts = append(opts, frankenphp.WithOriginalRequest(new(ctx.Value(caddyhttp.OriginalRequestCtxKey).(http.Request))))
 
