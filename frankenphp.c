@@ -585,6 +585,46 @@ static void frankenphp_reset_basic_state(void) {
   frankenphp_reset_url_scanner(&BG(url_adapt_output_ex));
 }
 
+/* Code running between two requests (the worker loop, destructors) can set
+ * request state after its reset: sapi_activate() would drop it without
+ * releasing it, and the next client would inherit the rest */
+static void frankenphp_release_between_requests_state(void) {
+#if PHP_VERSION_ID >= 80600
+  if (ZEND_FCC_INITIALIZED(SG(send_header_fcc))) {
+    zend_fcall_info_cache callback = SG(send_header_fcc);
+    SG(send_header_fcc) = empty_fcall_info_cache;
+    zend_fcc_dtor(&callback);
+  }
+#else
+  zval callback;
+  ZVAL_COPY_VALUE(&callback, &SG(callback_func));
+  ZVAL_UNDEF(&SG(callback_func));
+  zval_ptr_dtor(&callback);
+#endif
+
+  zend_llist_clean(&SG(sapi_headers).headers);
+  if (SG(sapi_headers).http_status_line) {
+    efree(SG(sapi_headers).http_status_line);
+    SG(sapi_headers).http_status_line = NULL;
+  }
+  if (SG(sapi_headers).mimetype) {
+    efree(SG(sapi_headers).mimetype);
+    SG(sapi_headers).mimetype = NULL;
+  }
+
+  /* opening php://input creates an empty body */
+  php_stream *request_body = SG(request_info).request_body;
+  if (request_body != NULL) {
+    SG(request_info).request_body = NULL;
+    frankenphp_release_request_body(request_body);
+  }
+
+  frankenphp_reset_basic_state();
+#ifdef HAVE_PHP_SESSION
+  frankenphp_reset_session_state();
+#endif
+}
+
 static frankenphp_thread_metrics *thread_metrics = NULL;
 
 /* Adapted from php_request_shutdown */
@@ -973,6 +1013,10 @@ PHP_FUNCTION(frankenphp_handle_request) {
   }
 
   frankenphp_release_super_globals();
+  /* the worker script's boot request is still active on the first call */
+  if (!SG(sapi_started)) {
+    frankenphp_release_between_requests_state();
+  }
   if (EG(exception)) {
     RETURN_THROWS();
   }
