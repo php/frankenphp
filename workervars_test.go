@@ -1,6 +1,8 @@
 package frankenphp_test
 
 import (
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -400,4 +402,58 @@ func TestVarsEnumCaseMissingInTheReader(t *testing.T) {
 
 	assert.Equal(t, `LogicException: persistent_zval: enum case "EnumSuit::Hearts" not found`, serverGet(t, server, "http://example.com/vars-enum-mismatch.php"))
 	assert.Equal(t, `LogicException: persistent_zval: enum case "EnumSuit::Hearts" not found`, serverGet(t, server, "http://example.com/vars-enum-mismatch.php?constant=1"))
+}
+
+// a worker keeps the copy it made of a snapshot for its next requests, and a
+// write to the array a read returned leaves that copy alone
+func TestVarsCopyIsKeptAcrossRequests(t *testing.T) {
+	t.Run("worker of the server", func(t *testing.T) { testVarsCopyIsKeptAcrossRequests(t, true) })
+	// its first request moves it to the server, the next ones stay there
+	t.Run("global worker", func(t *testing.T) { testVarsCopyIsKeptAcrossRequests(t, false) })
+}
+
+func testVarsCopyIsKeptAcrossRequests(t *testing.T, scoped bool) {
+	server, err := frankenphp.NewServer(testDataDir)
+	require.NoError(t, err)
+	var readerOpts []frankenphp.WorkerOption
+	if scoped {
+		readerOpts = append(readerOpts, frankenphp.WithWorkerServerScope(server))
+	}
+	initServers(t,
+		frankenphp.WithServer(server),
+		bgWorker("publisher", "publisher.php", nil, server),
+		frankenphp.WithWorkers("reader", testDataDir+"vars-copy-kept.php", 1, readerOpts...),
+		frankenphp.WithNumThreads(3),
+	)
+
+	read := func() (kept bool, vars string) {
+		var r struct {
+			Kept bool            `json:"kept"`
+			Vars json.RawMessage `json:"vars"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(serverGet(t, server, "http://example.com/vars-copy-kept.php?ns=publisher")), &r))
+
+		return r.Kept, string(r.Vars)
+	}
+
+	vars := `{"answer":42,"value":"default","nested":{"a":1,"list":[true,null,1.5,"x"]},"worker":"publisher"}`
+	firstKept, firstVars := read()
+	secondKept, secondVars := read()
+	assert.JSONEq(t, vars, firstVars)
+	assert.JSONEq(t, vars, secondVars)
+
+	// memory_get_usage() measures the Zend allocator, off in the sanitizer jobs
+	if os.Getenv("USE_ZEND_ALLOC") != "0" {
+		assert.False(t, firstKept, "the first read of the run copies the snapshot")
+		assert.True(t, secondKept, "the next read hands the same copy out")
+	}
+}
+
+// a new snapshot replaces the copy a request kept of the previous one
+func TestVarsCopyFollowsTheSnapshot(t *testing.T) {
+	server, err := frankenphp.NewServer(testDataDir)
+	require.NoError(t, err)
+	initServers(t, frankenphp.WithServer(server), bgWorker("ticker", "ticker.php", nil, server), frankenphp.WithNumThreads(2))
+
+	assert.Equal(t, "changed", serverGet(t, server, "http://example.com/vars-copy-changes.php"))
 }

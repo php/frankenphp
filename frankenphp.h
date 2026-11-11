@@ -250,6 +250,7 @@ void frankenphp_task_chan_consume(intptr_t fd);
 void frankenphp_vars_to_request(zval *return_value, HashTable *table);
 void frankenphp_vars_free(HashTable *table);
 void frankenphp_vars_release(HashTable *table);
+void frankenphp_vars_forget_copies(void);
 
 /* Results of go_frankenphp_read_task. */
 enum {

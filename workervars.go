@@ -21,11 +21,21 @@ import (
 type varsSlot struct {
 	mu      sync.RWMutex
 	current *C.HashTable
+	// the generation of current, in C memory: a thread holding a copy tells
+	// from there whether it is still the one to hand out, without a call into
+	// the Go side. As wide as a pointer, so every port reads it atomically.
+	// Allocated by the first publication, freed with the snapshots
+	generation *C.uintptr_t
 }
 
 var (
 	// the publisher of each vars namespace, per scope
 	varsOwners namespaceOwners
+
+	// the generation of the last snapshot published, 0 meaning none: unique
+	// among all the snapshots of the process, so a reader holding a copy
+	// tells whether it is still current, whichever slot it came from
+	varsGeneration atomic.Uint64
 
 	// booting background workers blocked in frankenphp_get_vars() on other
 	// workers, keyed by waiter: a cycle would deadlock Init(), refuse it
@@ -136,6 +146,10 @@ func freeWorkerVars() {
 				C.frankenphp_vars_release(slot.current)
 				slot.current = nil
 			}
+			if slot.generation != nil {
+				C.free(unsafe.Pointer(slot.generation))
+				slot.generation = nil
+			}
 			slot.mu.Unlock()
 		}
 	}
@@ -163,8 +177,20 @@ func go_frankenphp_set_vars(threadIndex C.uintptr_t, namespace *C.char, namespac
 
 	// the table comes with one reference, the slot's
 	slot.mu.Lock()
+	if slot.generation == nil {
+		slot.generation = (*C.uintptr_t)(C.calloc(1, C.size_t(unsafe.Sizeof(C.uintptr_t(0)))))
+		if slot.generation == nil {
+			slot.mu.Unlock()
+
+			return C.CString("FrankenPHP\\WorkerHandle::setVars(): out of memory")
+		}
+	}
 	*old = slot.current
 	slot.current = table
+	// readers holding a copy compare theirs with this one, see
+	// frankenphp_get_vars(): one of the previous snapshot stays right for
+	// whoever reads it before the store
+	atomic.StoreUintptr((*uintptr)(unsafe.Pointer(slot.generation)), uintptr(varsGeneration.Add(1)))
 	slot.mu.Unlock()
 	handler.publishedVars[ns] = true
 
@@ -174,10 +200,13 @@ func go_frankenphp_set_vars(threadIndex C.uintptr_t, namespace *C.char, namespac
 // go_frankenphp_get_vars hands the current snapshot of a namespace to the C
 // side with a reference on it, to copy it into request memory and then let go
 // of it. Nothing of the read is kept here: a thread that borrows the index of
-// another, as the children of ext-parallel do, reads at the same time
+// another, as the children of ext-parallel do, reads at the same time. The
+// snapshot comes with its generation and with where the generation of the
+// namespace's current one is kept, so the next reads of the calling thread
+// hand its copy out again without coming here, until the two differ
 //
 //export go_frankenphp_get_vars
-func go_frankenphp_get_vars(threadIndex C.uintptr_t, namespace *C.char, namespaceLen C.size_t, table **C.HashTable) (*C.char, C.bool) {
+func go_frankenphp_get_vars(threadIndex C.uintptr_t, namespace *C.char, namespaceLen C.size_t, generation *C.uintptr_t, current **C.uintptr_t, table **C.HashTable) (*C.char, C.bool) {
 	thread := phpThreads[threadIndex]
 	// looked up, never kept
 	ns := unsafe.String((*byte)(unsafe.Pointer(namespace)), int(namespaceLen))
@@ -200,6 +229,8 @@ func go_frankenphp_get_vars(threadIndex C.uintptr_t, namespace *C.char, namespac
 	// under the lock, so the slot still holds its own reference
 	atomic.AddUint32((*uint32)(unsafe.Pointer(&slot.current.gc.refcount)), 1)
 	*table = slot.current
+	*generation = *slot.generation
+	*current = slot.generation
 	slot.mu.RUnlock()
 
 	return nil, false

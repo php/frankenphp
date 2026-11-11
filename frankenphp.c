@@ -2321,16 +2321,96 @@ ZEND_METHOD(FrankenPHP_WorkerHandle, setVars) {
   }
 }
 
+/* The copies frankenphp_get_vars() made in the current request, by namespace,
+ * with the generation of the snapshot each one comes from and where the Go
+ * side keeps the generation of the namespace's current one: while the two
+ * match, a read hands the same copy out again without leaving C. In a worker,
+ * the request is the whole run of the script, so the copies outlive the
+ * requests it handles; the Go side keeps the generations until every thread
+ * is gone. A namespace resolves within a php_server first, so the Go side
+ * has the copies forgotten when the thread moves on to the request of
+ * another one, see frankenphp_vars_forget_copies(). */
+typedef struct {
+  uintptr_t generation;
+  const uintptr_t *current;
+  zval copy;
+} frankenphp_vars_copy;
+
+static THREAD_LOCAL HashTable *vars_copies = NULL;
+/* set once the module RSHUTDOWN freed the copies: a read after it, from the
+ * save handler of the session module for instance, copies without caching,
+ * since nothing would free that copy anymore */
+static THREAD_LOCAL bool vars_copies_closed = false;
+
+static void frankenphp_vars_copy_dtor(zval *zv) {
+  frankenphp_vars_copy *copy = Z_PTR_P(zv);
+  zval_ptr_dtor(&copy->copy);
+  efree(copy);
+}
+
+static void frankenphp_vars_copy_keep(zend_string *namespace,
+                                      uintptr_t generation,
+                                      const uintptr_t *current, zval *vars) {
+  /* ecalloc() rather than emalloc() or ALLOC_HASHTABLE(): with a constant size
+   * those turn into allocator entry points the Windows dll does not export */
+  if (vars_copies == NULL) {
+    vars_copies = ecalloc(1, sizeof(HashTable));
+    zend_hash_init(vars_copies, 8, NULL, frankenphp_vars_copy_dtor, 0);
+  }
+
+  frankenphp_vars_copy *copy = ecalloc(1, sizeof(*copy));
+  copy->generation = generation;
+  copy->current = current;
+  ZVAL_COPY(&copy->copy, vars);
+  zend_hash_update_ptr(vars_copies, namespace, copy);
+}
+
+/* Called on the thread of a worker script as it takes a request of another
+ * php_server than the one before: there, the namespaces of its copies may
+ * resolve to other snapshots. */
+void frankenphp_vars_forget_copies(void) {
+  if (vars_copies != NULL) {
+    zend_hash_clean(vars_copies);
+  }
+}
+
+static PHP_RINIT_FUNCTION(frankenphp) {
+  vars_copies_closed = false;
+
+  return SUCCESS;
+}
+
+static PHP_RSHUTDOWN_FUNCTION(frankenphp) {
+  if (vars_copies != NULL) {
+    zend_hash_destroy(vars_copies);
+    efree(vars_copies);
+    vars_copies = NULL;
+  }
+  vars_copies_closed = true;
+
+  return SUCCESS;
+}
+
 PHP_FUNCTION(frankenphp_get_vars) {
   zend_string *namespace;
   ZEND_PARSE_PARAMETERS_START(1, 1)
   Z_PARAM_STR(namespace)
   ZEND_PARSE_PARAMETERS_END();
 
+  frankenphp_vars_copy *cached =
+      vars_copies == NULL ? NULL : zend_hash_find_ptr(vars_copies, namespace);
+  if (cached != NULL && __atomic_load_n(cached->current, __ATOMIC_SEQ_CST) ==
+                            cached->generation) {
+    /* the snapshot did not change since the copy of this request */
+    RETURN_COPY(&cached->copy);
+  }
+
+  uintptr_t generation = 0;
+  uintptr_t *current = NULL;
   HashTable *table = NULL;
-  struct go_frankenphp_get_vars_return found =
-      go_frankenphp_get_vars(frankenphp_thread_index(), ZSTR_VAL(namespace),
-                             ZSTR_LEN(namespace), &table);
+  struct go_frankenphp_get_vars_return found = go_frankenphp_get_vars(
+      frankenphp_thread_index(), ZSTR_VAL(namespace), ZSTR_LEN(namespace),
+      &generation, &current, &table);
   if (found.r0 != NULL) {
     zend_throw_exception(found.r1 ? spl_ce_LogicException
                                   : spl_ce_RuntimeException,
@@ -2350,6 +2430,13 @@ PHP_FUNCTION(frankenphp_get_vars) {
   frankenphp_vars_release(table);
   if (bailed_out) {
     zend_bailout();
+  }
+
+  /* a thread FrankenPHP did not start keeps none: nothing tells it when the
+   * thread it borrows its requests from moves to another php_server */
+  if (EG(exception) == NULL && !vars_copies_closed &&
+      !frankenphp_is_foreign_thread()) {
+    frankenphp_vars_copy_keep(namespace, generation, current, return_value);
   }
 }
 
@@ -3154,12 +3241,12 @@ PHP_MINFO_FUNCTION(frankenphp) {
 static zend_module_entry frankenphp_module = {
     STANDARD_MODULE_HEADER,
     "frankenphp",
-    ext_functions,         /* function table */
-    PHP_MINIT(frankenphp), /* initialization */
-    NULL,                  /* shutdown */
-    NULL,                  /* request initialization */
-    NULL,                  /* request shutdown */
-    PHP_MINFO(frankenphp), /* information */
+    ext_functions,             /* function table */
+    PHP_MINIT(frankenphp),     /* initialization */
+    NULL,                      /* shutdown */
+    PHP_RINIT(frankenphp),     /* request initialization */
+    PHP_RSHUTDOWN(frankenphp), /* request shutdown */
+    PHP_MINFO(frankenphp),     /* information */
     TOSTRING(FRANKENPHP_VERSION),
     STANDARD_MODULE_PROPERTIES};
 

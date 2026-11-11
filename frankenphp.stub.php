@@ -61,9 +61,11 @@ namespace {
     /**
      * EXPERIMENTAL: returns a copy of the snapshot last published in a vars
      * namespace, resolved within the current php_server, then among global
-     * workers. Blocks until the publishing worker reached its ready point.
-     * Throws if no background worker publishes the namespace, or if
-     * background workers wait on each other in a cycle.
+     * workers. Until the snapshot changes, the copy is handed out again for
+     * the rest of the request, or of the run of a worker script. Blocks until
+     * the publishing worker reached its ready point. Throws if no background
+     * worker publishes the namespace, or if background workers wait on each
+     * other in a cycle.
      */
     function frankenphp_get_vars(string $namespace): array {}
 }

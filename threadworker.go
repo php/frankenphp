@@ -229,7 +229,11 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 	}
 
 	handler.requestCount++
-	handler.scope = fc.server
+	if handler.scope != fc.server {
+		handler.scope = fc.server
+		// the copies the script kept of its vars belong to the other server
+		C.frankenphp_vars_forget_copies()
+	}
 	handler.thread.contextMu.Lock()
 	handler.workerFrankenPHPContext = fc
 	handler.thread.contextMu.Unlock()
