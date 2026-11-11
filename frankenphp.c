@@ -150,6 +150,8 @@ static THREAD_LOCAL HashTable *sandboxed_env = NULL;
 static THREAD_LOCAL HashTable *prepared_env = NULL;
 /* prepared_env of the worker script boot, kept for all its requests */
 static THREAD_LOCAL HashTable *worker_env = NULL;
+/* an extension couldn't release the state of the finished request */
+static THREAD_LOCAL bool request_end_failed = false;
 
 /* Published via SG(server_context) so ext-parallel children, which inherit
  * the parent's SG(server_context), can route SAPI callbacks back to the
@@ -598,13 +600,22 @@ static void frankenphp_reset_basic_state(void) {
 
 static frankenphp_thread_metrics *thread_metrics = NULL;
 
+static bool frankenphp_take_request_end_failure(void) {
+  bool failed = request_end_failed;
+  request_end_failed = false;
+
+  return failed;
+}
+
 /* Adapted from php_request_shutdown */
 static void frankenphp_worker_request_shutdown() {
   __atomic_store_n(&thread_metrics[thread_index].last_memory_usage,
                    zend_memory_usage(0), __ATOMIC_RELAXED);
 
 #ifdef FRANKENPHP_REQUEST_HOOKS
-  php_request_end();
+  if (php_request_end() == FAILURE) {
+    request_end_failed = true;
+  }
 #else
   /* Flush all output buffers */
   zend_try { php_output_end_all(); }
@@ -1010,7 +1021,8 @@ PHP_FUNCTION(frankenphp_handle_request) {
       thread_index, &handler_parameters);
   /* Startup also runs when shutting down, to keep sapi_activate() and
    * sapi_deactivate() balanced for the code after the worker loop */
-  if (frankenphp_worker_request_startup() == FAILURE) {
+  if (frankenphp_worker_request_startup() == FAILURE ||
+      frankenphp_take_request_end_failure()) {
     /* The engine can't run userland code after a caught bailout, end the
      * script so the pending request gets closed */
     zend_bailout();
@@ -1079,6 +1091,11 @@ PHP_FUNCTION(frankenphp_handle_request) {
   zval_ptr_dtor(&handler_parameters);
   if (callback_ret != NULL) {
     zval_ptr_dtor(&retval);
+  }
+
+  /* the response is sent, restart the worker to get a clean state */
+  if (frankenphp_take_request_end_failure()) {
+    zend_bailout();
   }
 
   /* thrown by a destructor of the finished request */
