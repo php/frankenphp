@@ -8,6 +8,7 @@ import "C"
 import (
 	"errors"
 	"log/slog"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -65,6 +66,9 @@ func initPHPThreads(numThreads int, numMaxThreads int, phpIni map[string]string)
 	// Must follow start(): maxThreads is only final once
 	// setAutomaticMaxThreads runs on the main PHP thread (before Ready).
 	C.frankenphp_init_thread_metrics(C.int(mainThread.maxThreads))
+	// a thread only watches its mailbox before sleeping where another core can
+	// run what it waits for
+	C.frankenphp_init_mailboxes(C.int(mainThread.maxThreads), C.bool(runtime.NumCPU() > 1))
 
 	// initialize all other threads
 	phpThreads = make([]*phpThread, mainThread.maxThreads)
@@ -116,6 +120,7 @@ func drainPHPThreads() {
 	mainThread.state.Set(state.Done)
 	mainThread.state.WaitFor(state.Reserved)
 	C.frankenphp_destroy_thread_metrics()
+	C.frankenphp_destroy_mailboxes()
 	phpThreads = nil
 }
 

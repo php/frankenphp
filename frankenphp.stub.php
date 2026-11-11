@@ -128,7 +128,7 @@ namespace FrankenPHP {
          * Returns the namespaces this background worker serves, as declared in
          * its configuration.
          *
-         * @return array{vars: list<string>}
+         * @return array{vars: list<string>, tasks: list<string>}
          */
         public function getNamespaces(): array {}
 
@@ -140,5 +140,119 @@ namespace FrankenPHP {
          * before the first tick() of a run.
          */
         public function setVars(string $namespace, array $vars): void {}
+
+        /**
+         * Dequeues a task sent to this background worker, or null when there
+         * is none. It never waits: each task sent wakes one thread of the
+         * worker, in tick() when it waits there or through its handle, so a
+         * script calls this once tick() returned; a wake-up is not a count,
+         * and null after one is expected in a pool.
+         */
+        public function receive(): ?ReceivedTaskHandle {}
+    }
+
+    /**
+     * EXPERIMENTAL: the sender's side of a task, an Io\Poll\Handle on PHP
+     * 8.6. Constructing it queues the task for the background worker
+     * receiving the task namespace, resolved within the current php_server
+     * then among global workers, and returns without waiting: the task stays
+     * queued for as long as its handle lives, and nothing else bounds the
+     * queue. A thread has $pickupTimeout seconds from there to pick the task
+     * up, forever when null: past it the task leaves the queue and read()
+     * throws. Payload values must be null, scalars, arrays or enums.
+     *
+     * @strict-properties
+     * @not-serializable
+     */
+    final class SentTaskHandle
+    {
+        public function __construct(string $namespace, array $payload, ?float $pickupTimeout = 30.0) {}
+
+        /**
+         * The next update published by the worker, waiting for it, or null
+         * once the task is complete. Throws when no thread picked the task up
+         * in time and when the worker let go of it without completing it.
+         * The wait has no timeout: one that must end goes through a poll
+         * context or stream_select() first, which take one.
+         */
+        public function read(): ?array {}
+
+        /**
+         * The stream to wait on, alone or with other tasks: it becomes
+         * readable when an update is there and reaches EOF when the task
+         * ends. Only waiting on it is supported: a read on it returns
+         * nothing, at once, the updates come through read(). Closing it is
+         * safe: the handle hands out a fresh one. Past the end of the task,
+         * the stream the script took last comes back closed, and asking for a
+         * first one throws.
+         *
+         * @return resource
+         */
+        public function getStream() {}
+
+        /**
+         * Gives up on the task: it leaves the queue if no thread picked it up
+         * yet, and the worker's next update() returns false otherwise.
+         * Dropping the handle does the same.
+         */
+        public function abandon(): void {}
+    }
+
+    /**
+     * EXPERIMENTAL: the worker's side of a task, handed out by
+     * WorkerHandle::receive(), an Io\Poll\Handle on PHP 8.6. Only complete()
+     * completes the task: abort(), dropping the handle or ending the run
+     * aborts it, which the sender is told about.
+     *
+     * @strict-properties
+     * @not-serializable
+     */
+    final class ReceivedTaskHandle
+    {
+        private function __construct() {}
+
+        /**
+         * The payload the sender passed.
+         */
+        public function getPayload(): array {}
+
+        /**
+         * The task namespace the sender addressed, one of those the worker
+         * declares.
+         */
+        public function getNamespace(): string {}
+
+        /**
+         * Publishes an update for the sender, which reads it with read().
+         * Values must be null, scalars, arrays or enums. It never waits:
+         * the updates the sender has not read yet are kept for it, without
+         * a bound. False when the sender gave up: the update went nowhere.
+         */
+        public function update(array $data): bool {}
+
+        /**
+         * Completes the task, with a last update when one is given: the
+         * sender's read() returns it, then null. It never waits. False when
+         * the sender gave up.
+         */
+        public function complete(?array $data = null): bool {}
+
+        /**
+         * Lets go of the task without completing it: the sender's read()
+         * throws. Dropping the handle does the same, once nothing holds it
+         * anymore.
+         */
+        public function abort(): void {}
+
+        /**
+         * The stream to wait on: it reaches EOF when the sender abandons the
+         * task, for stream_select() and feof(). Only waiting on it is
+         * supported. Closing it is safe: the handle hands out a fresh one.
+         * Past the end of the task, the stream the script took last comes
+         * back closed, and asking for a first one throws.
+         *
+         * @return resource
+         */
+        public function getStream() {}
     }
 }

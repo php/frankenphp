@@ -50,6 +50,11 @@ type worker struct {
 	// the snapshot of each, see WorkerHandle::setVars()
 	varsNamespaces []string
 	vars           map[string]*varsSlot
+	// the task namespaces the worker receives, in declaration order
+	taskNamespaces []string
+	// tasks holds the tasks sent with SentTaskHandle until a thread
+	// picks them up
+	tasks taskQueue
 }
 
 // markReady records that the background worker reached its ready point once
@@ -79,7 +84,7 @@ var (
 const defaultWorkerBootTimeout = 30 * time.Second
 
 func initWorkers(opts []workerOpt) error {
-	varsOwners = namespaceOwners{}
+	varsOwners, taskOwners = namespaceOwners{}, namespaceOwners{}
 	if len(opts) == 0 {
 		return nil
 	}
@@ -103,6 +108,7 @@ func initWorkers(opts []workerOpt) error {
 		workers = append(workers, w)
 		workersByName[w.name] = w
 		varsOwners.add(w, w.varsNamespaces)
+		taskOwners.add(w, w.taskNamespaces)
 		if w.server != nil {
 			if err := w.server.addWorker(w); err != nil {
 				return err
@@ -248,8 +254,9 @@ func resolveWorkerFile(o workerOpt) (workerOpt, error) {
 type declarationIndex struct {
 	names func(name string) bool
 	paths func(server *Server, path string) bool
-	// the name of the worker publishing a vars namespace, empty when none does
-	vars func(server *Server, ns string) string
+	// the name of the worker publishing a vars namespace, or receiving a task
+	// namespace, empty when none does
+	vars, tasks func(server *Server, ns string) string
 }
 
 // scopeSet records keys per scope, with the name of the worker that took
@@ -376,6 +383,18 @@ func checkWorkerDeclaration(o workerOpt, taken declarationIndex) error {
 		}
 	}
 
+	if len(o.tasks) > 0 && !o.isBackgroundWorker {
+		return fmt.Errorf("worker %q declares tasks, only background workers receive them", o.name)
+	}
+	for i, ns := range o.tasks {
+		if slices.Contains(o.tasks[:i], ns) {
+			return fmt.Errorf("worker %q declares the task namespace %q twice", o.name, ns)
+		}
+		if owner := taken.tasks(o.server, ns); owner != "" {
+			return fmt.Errorf("%s cannot receive the same task namespace: %q, declared by %q and %q", scope, ns, owner, o.name)
+		}
+	}
+
 	return nil
 }
 
@@ -396,6 +415,13 @@ func newWorker(o workerOpt) (*worker, error) {
 		},
 		vars: func(server *Server, ns string) string {
 			if w := varsOwners[server][ns]; w != nil {
+				return w.name
+			}
+
+			return ""
+		},
+		tasks: func(server *Server, ns string) string {
+			if w := taskOwners[server][ns]; w != nil {
 				return w.name
 			}
 
@@ -459,12 +485,12 @@ func newWorker(o workerOpt) (*worker, error) {
 		isBackgroundWorker:     o.isBackgroundWorker,
 		readyOnce:              make(chan struct{}),
 		varsNamespaces:         o.vars,
+		taskNamespaces:         o.tasks,
 		vars:                   make(map[string]*varsSlot, len(o.vars)),
 	}
 	for _, ns := range o.vars {
 		w.vars[ns] = &varsSlot{}
 	}
-
 	w.configureMercure(&o)
 
 	w.requestOptions = append(

@@ -333,6 +333,12 @@ func (thread *phpThread) currentContext() *frankenPHPContext {
 func (thread *phpThread) sendKillSignal() {
 	thread.forceKillMu.RLock()
 	C.frankenphp_force_kill_thread(thread.forceKill)
+	// a thread asleep on its mailbox hears of the kill there, on the platforms
+	// where no signal gets it out of its sleep too. Only while its slot is
+	// set: the thread is then still there, and the mailboxes with it
+	if thread.forceKill.vm_interrupt != nil {
+		C.frankenphp_mailbox_wake(C.uintptr_t(thread.threadIndex))
+	}
 	thread.forceKillMu.RUnlock()
 }
 

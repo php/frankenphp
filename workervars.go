@@ -213,8 +213,11 @@ func go_frankenphp_worker_namespaces(threadIndex C.uintptr_t, namespaces *C.zval
 	worker := phpThreads[threadIndex].handler.(*backgroundWorkerThread).worker
 
 	phpValueInto(AssociativeArray[any]{
-		Map:   map[string]any{"vars": namespaceList(worker.varsNamespaces)},
-		Order: []string{"vars"},
+		Map: map[string]any{
+			"vars":  namespaceList(worker.varsNamespaces),
+			"tasks": namespaceList(worker.taskNamespaces),
+		},
+		Order: []string{"vars", "tasks"},
 	}, namespaces)
 }
 

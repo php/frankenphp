@@ -2,11 +2,11 @@
  *
  * Provides a small, self-contained toolkit for moving zval trees across
  * thread boundaries. The supported shape is a whitelist: scalars, arrays,
- * and enums. Everything else is rejected by persistent_zval_validate so
+ * and enums. Everything else is rejected by persistent_zval_invalid so
  * callers can fail fast before allocating. Nesting is also capped there
  * (PERSISTENT_ZVAL_MAX_DEPTH): persist/free/to_request below recurse once
  * per nesting level with no guard of their own, so every caller MUST run
- * persistent_zval_validate first, on the full tree, before calling any of
+ * persistent_zval_invalid first, on the full tree, before calling any of
  * them - it's the only thing standing between attacker-controlled nesting
  * depth and a native stack overflow (crashes the whole process, not just
  * one request).
@@ -120,14 +120,8 @@ static const char *persistent_zval_invalid(zval *z) {
   return persistent_zval_check(z, 0, &left);
 }
 
-/* inline: the callers that want a reason use persistent_zval_invalid(), and a
- * build may leave this one without any */
-static inline bool persistent_zval_validate(zval *z) {
-  return persistent_zval_invalid(z) == NULL;
-}
-
 /* Deep-copy a zval from request memory into persistent (pemalloc) memory.
- * Callers must have already passed persistent_zval_validate on src.
+ * Callers must have already checked src with persistent_zval_invalid.
  *
  * Storage convention for enums: dst becomes IS_PTR holding a
  * persistent_zval_enum_t. This is an internal representation; the caller
@@ -153,7 +147,7 @@ static void persistent_zval_persist(zval *dst, zval *src) {
     break;
   }
   case IS_OBJECT: {
-    /* Must be an enum (validated earlier in persistent_zval_validate). */
+    /* Must be an enum (checked earlier by persistent_zval_invalid). */
     zend_class_entry *ce = Z_OBJCE_P(src);
     persistent_zval_enum_t *e = pemalloc(sizeof(*e), 1);
     e->class_name = zend_string_init(ZSTR_VAL(ce->name), ZSTR_LEN(ce->name), 1);
@@ -190,7 +184,7 @@ static void persistent_zval_persist(zval *dst, zval *src) {
     break;
   }
   default:
-    /* Unreachable: persistent_zval_validate is the gatekeeper. */
+    /* Unreachable: persistent_zval_invalid is the gatekeeper. */
     ZEND_UNREACHABLE();
   }
 }
