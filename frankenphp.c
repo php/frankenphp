@@ -62,12 +62,7 @@
 
 #include "_cgo_export.h"
 #include "frankenphp_arginfo.h"
-#ifdef FRANKENPHP_TEST
-/* The persistent_zval helpers are only compiled in when a consumer needs
- * them. The step that lands the first real caller (background workers)
- * will drop this guard. */
 #include "zval.h"
-#endif
 
 #if defined(PHP_WIN32) && defined(ZTS)
 ZEND_TSRMLS_CACHE_DEFINE()
@@ -1739,12 +1734,19 @@ ZEND_METHOD(FrankenPHP_WorkerHandle, tick) {
   }
 
   if (!worker_ticked) {
+    /* refused while a declared vars namespace has no snapshot of this run */
+    char *error =
+        go_frankenphp_background_worker_ready(frankenphp_thread_index());
+    if (error != NULL) {
+      zend_throw_exception(spl_ce_LogicException, error, 0);
+      free(error);
+      RETURN_THROWS();
+    }
     worker_ticked = true;
     /* The bootstrap ran under max_execution_time like any request, the loop
      * that starts now has no time limit, like the CLI. Nothing re-arms the
      * timer past this point. */
     zend_unset_timeout();
-    go_frankenphp_background_worker_ready(frankenphp_thread_index());
   }
 
   if (!frankenphp_worker_handle_consume()) {
@@ -1765,6 +1767,124 @@ ZEND_METHOD(FrankenPHP_WorkerHandle, tick) {
   }
 
   RETURN_TRUE;
+}
+
+/* Shared vars of background workers, see WorkerHandle::setVars() and
+ * frankenphp_get_vars(): the persistent tables live in slots owned by the
+ * Go side, which copies and frees them through these helpers. */
+void frankenphp_vars_to_request(zval *return_value, HashTable *table) {
+  zval persistent;
+  ZVAL_ARR(&persistent, table);
+
+  /* the writer checked the tree against its own memory_limit, not ours */
+  size_t size;
+  if (!persistent_zval_fits_request(&persistent, &size)) {
+    ZVAL_NULL(return_value);
+    zend_throw_exception_ex(spl_ce_RuntimeException, 0,
+                            "FrankenPHP: the values to copy take %zu bytes, "
+                            "more than what is left of memory_limit",
+                            size);
+
+    return;
+  }
+
+  persistent_zval_to_request(return_value, &persistent);
+}
+
+void frankenphp_vars_free(HashTable *table) {
+  zval persistent;
+  ZVAL_ARR(&persistent, table);
+  persistent_zval_free(&persistent);
+}
+
+/* Lets go of a reference on a snapshot. Its slot holds one and so does each
+ * reader while it copies the table, on a count only touched atomically: the
+ * last to let go frees the snapshot, with no lock and no call into the Go
+ * side. */
+void frankenphp_vars_release(HashTable *table) {
+  if (__atomic_sub_fetch(&table->gc.refcount, 1, __ATOMIC_SEQ_CST) == 0) {
+    frankenphp_vars_free(table);
+  }
+}
+
+ZEND_METHOD(FrankenPHP_WorkerHandle, getNamespaces) {
+  ZEND_PARSE_PARAMETERS_NONE();
+
+  if (!frankenphp_worker_handle_usable()) {
+    RETURN_THROWS();
+  }
+
+  go_frankenphp_worker_namespaces(frankenphp_thread_index(), return_value);
+}
+
+ZEND_METHOD(FrankenPHP_WorkerHandle, setVars) {
+  zend_string *namespace;
+  zval *vars;
+  ZEND_PARSE_PARAMETERS_START(2, 2)
+  Z_PARAM_STR(namespace)
+  Z_PARAM_ARRAY(vars)
+  ZEND_PARSE_PARAMETERS_END();
+
+  if (!frankenphp_worker_handle_usable()) {
+    RETURN_THROWS();
+  }
+
+  /* validate the whole tree first: persist and free recurse without a
+   * guard of their own */
+  const char *invalid = persistent_zval_invalid(vars);
+  if (invalid != NULL) {
+    zend_value_error("FrankenPHP\\WorkerHandle::setVars(): %s", invalid);
+    RETURN_THROWS();
+  }
+
+  zval persistent;
+  persistent_zval_persist(&persistent, vars);
+
+  HashTable *old = NULL;
+  char *error =
+      go_frankenphp_set_vars(frankenphp_thread_index(), ZSTR_VAL(namespace),
+                             ZSTR_LEN(namespace), Z_ARRVAL(persistent), &old);
+  if (error != NULL) {
+    frankenphp_vars_free(Z_ARRVAL(persistent));
+    zend_throw_exception(spl_ce_LogicException, error, 0);
+    free(error);
+    RETURN_THROWS();
+  }
+  if (old != NULL) {
+    frankenphp_vars_release(old);
+  }
+}
+
+PHP_FUNCTION(frankenphp_get_vars) {
+  zend_string *namespace;
+  ZEND_PARSE_PARAMETERS_START(1, 1)
+  Z_PARAM_STR(namespace)
+  ZEND_PARSE_PARAMETERS_END();
+
+  HashTable *table = NULL;
+  struct go_frankenphp_get_vars_return found =
+      go_frankenphp_get_vars(frankenphp_thread_index(), ZSTR_VAL(namespace),
+                             ZSTR_LEN(namespace), &table);
+  if (found.r0 != NULL) {
+    zend_throw_exception(found.r1 ? spl_ce_LogicException
+                                  : spl_ce_RuntimeException,
+                         found.r0, 0);
+    free(found.r0);
+    RETURN_THROWS();
+  }
+
+  /* the copy may bail out, past memory_limit or in an autoloader an enum
+   * triggers: the snapshot is let go of whatever happens, so its publisher
+   * can replace and free it */
+  bool bailed_out = false;
+  zend_try { frankenphp_vars_to_request(return_value, table); }
+  zend_catch { bailed_out = true; }
+  zend_end_try();
+
+  frankenphp_vars_release(table);
+  if (bailed_out) {
+    zend_bailout();
+  }
 }
 
 /* {{{ thread-safe opcache reset */

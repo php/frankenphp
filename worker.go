@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -41,6 +42,19 @@ type worker struct {
 	server             *Server
 	stopped            atomic.Bool
 	isBackgroundWorker bool
+	// readyOnce is closed the first time a thread of a background worker
+	// reaches its ready point; frankenphp_get_vars() readers wait on it
+	readyOnce  chan struct{}
+	readyClose sync.Once
+	// the vars namespaces the worker publishes, in declaration order, and
+	// the snapshot of each, see WorkerHandle::setVars()
+	varsNamespaces []string
+	vars           map[string]*varsSlot
+}
+
+// markReady records that the background worker reached its ready point once
+func (worker *worker) markReady() {
+	worker.readyClose.Do(func() { close(worker.readyOnce) })
 }
 
 var (
@@ -51,6 +65,10 @@ var (
 	startupFailChan     chan error
 	// the only window where a boot failure reaches startupFailChan: past it, the handlers log and keep restarting
 	startupPhase atomic.Bool
+	// closed by the first boot failure of the startup, so the threads waiting
+	// on the ready point of another worker give up, see waitVarsReady()
+	startupFailed     chan struct{}
+	startupFailedOnce *sync.Once
 )
 
 // defaultWorkerBootTimeout is how long a background worker may take to reach
@@ -61,6 +79,7 @@ var (
 const defaultWorkerBootTimeout = 30 * time.Second
 
 func initWorkers(opts []workerOpt) error {
+	varsOwners = namespaceOwners{}
 	if len(opts) == 0 {
 		return nil
 	}
@@ -83,6 +102,7 @@ func initWorkers(opts []workerOpt) error {
 		totalThreadsToStart += w.num
 		workers = append(workers, w)
 		workersByName[w.name] = w
+		varsOwners.add(w, w.varsNamespaces)
 		if w.server != nil {
 			if err := w.server.addWorker(w); err != nil {
 				return err
@@ -95,6 +115,7 @@ func initWorkers(opts []workerOpt) error {
 	}
 
 	startupFailChan = make(chan error, totalThreadsToStart)
+	startupFailed, startupFailedOnce = make(chan struct{}), &sync.Once{}
 	startupPhase.Store(true)
 
 	for _, w := range workers {
@@ -165,8 +186,25 @@ func reportStartupFailure(err error) bool {
 	case startupFailChan <- err:
 	default:
 	}
+	startupFailedOnce.Do(func() { close(startupFailed) })
 
 	return true
+}
+
+// startupHasFailed reports whether a boot failure already failed the start in
+// progress: Init() then only waits for the threads still booting to stop, so
+// their runs are not retried, whatever their worker's cap on failures says
+func startupHasFailed() bool {
+	if !startupPhase.Load() {
+		return false
+	}
+
+	select {
+	case <-startupFailed:
+		return true
+	default:
+		return false
+	}
 }
 
 // resolveWorkerFile turns a declared filename into the path a worker runs,
@@ -204,10 +242,86 @@ func resolveWorkerFile(o workerOpt) (workerOpt, error) {
 	return o, nil
 }
 
+// declarationIndex tells what the workers declared before took: names are
+// global, paths and namespaces belong to a scope, a nil server standing for
+// the global workers
+type declarationIndex struct {
+	names func(name string) bool
+	paths func(server *Server, path string) bool
+	// the name of the worker publishing a vars namespace, empty when none does
+	vars func(server *Server, ns string) string
+}
+
+// scopeSet records keys per scope, with the name of the worker that took
+// each, a nil server for the global workers
+type scopeSet map[*Server]map[string]string
+
+func (s scopeSet) has(server *Server, key string) bool { return s[server][key] != "" }
+
+func (s scopeSet) owner(server *Server, key string) string { return s[server][key] }
+
+func (s scopeSet) add(server *Server, key, owner string) {
+	if s[server] == nil {
+		s[server] = make(map[string]string)
+	}
+	s[server][key] = owner
+}
+
+// namespaceOwners maps the namespaces declared in a scope to the worker that
+// owns them, a nil server standing for the global workers
+type namespaceOwners map[*Server]map[string]*worker
+
+func (o namespaceOwners) add(w *worker, namespaces []string) {
+	for _, ns := range namespaces {
+		if o[w.server] == nil {
+			o[w.server] = make(map[string]*worker)
+		}
+		o[w.server][ns] = w
+	}
+}
+
+// resolve finds the owner of a namespace within a server first, then among
+// the global workers
+func (o namespaceOwners) resolve(server *Server, ns string) *worker {
+	if w := o[server][ns]; w != nil {
+		return w
+	}
+
+	return o[nil][ns]
+}
+
+// quoteNamespace quotes a namespace nobody declares for an error message, cut
+// short: the name may come from a request, and the message is copied twice on
+// its way into the memory of that request
+func quoteNamespace(ns string) string {
+	const shown = 64
+	if len(ns) > shown {
+		return strconv.Quote(ns[:shown]) + "..."
+	}
+
+	return strconv.Quote(ns)
+}
+
+// namespaceScope is the server a thread resolves its namespaces in first: the
+// one of the request it serves. In a worker script, what runs between two
+// requests still belongs to the one before, like its superglobals: the work
+// a script does once the response is sent. What runs before the first
+// request belongs to the worker.
+func namespaceScope(thread *phpThread) *Server {
+	if handler, ok := thread.handler.(*workerThread); ok {
+		return handler.scope
+	}
+	if fc := thread.handler.frankenPHPContext(); fc != nil {
+		return fc.server
+	}
+
+	return nil
+}
+
 // checkWorkerDeclaration holds the rules a set of workers must follow, so
-// Validate() and newWorker() answer the same way; pathTaken is asked for the
-// global workers with a nil server.
-func checkWorkerDeclaration(o workerOpt, nameTaken func(string) bool, pathTaken func(*Server, string) bool) error {
+// Validate() and newWorker() answer the same way; the paths and namespaces of
+// the global workers are asked for with a nil server.
+func checkWorkerDeclaration(o workerOpt, taken declarationIndex) error {
 	if o.isBackgroundWorker {
 		// never matched against requests, so several may share a script
 		if o.matchRequest != nil {
@@ -222,7 +336,7 @@ func checkWorkerDeclaration(o workerOpt, nameTaken func(string) bool, pathTaken 
 			return fmt.Errorf("background worker %q cannot be an extension worker, those handle requests", o.name)
 		}
 	} else if o.server == nil {
-		if pathTaken(nil, o.fileName) {
+		if taken.paths(nil, o.fileName) {
 			return fmt.Errorf("two global workers cannot have the same filename: %q", o.fileName)
 		}
 
@@ -230,13 +344,36 @@ func checkWorkerDeclaration(o workerOpt, nameTaken func(string) bool, pathTaken 
 		if o.matchRequest != nil {
 			return fmt.Errorf("worker %q has a request matcher but no server scope, use WithWorkerServerScope()", o.name)
 		}
-	} else if o.matchRequest == nil && pathTaken(o.server, o.fileName) {
+	} else if o.matchRequest == nil && taken.paths(o.server, o.fileName) {
 		// a matcher tells the workers of a server sharing a file apart
 		return fmt.Errorf("two workers in a server cannot have the same filename: %q", o.fileName)
 	}
 
-	if nameTaken(o.name) {
+	if taken.names(o.name) {
 		return fmt.Errorf("two workers cannot have the same name: %q", o.name)
+	}
+
+	scope := "two global workers"
+	if o.server != nil {
+		scope = "two workers in a server"
+	}
+
+	if len(o.vars) > 0 {
+		if !o.isBackgroundWorker {
+			return fmt.Errorf("worker %q declares vars, only background workers publish them", o.name)
+		}
+		// one thread, so a snapshot has a single writer
+		if o.num > 1 {
+			return fmt.Errorf("background worker %q publishes vars, so it runs a single thread, got num %d", o.name, o.num)
+		}
+	}
+	for i, ns := range o.vars {
+		if slices.Contains(o.vars[:i], ns) {
+			return fmt.Errorf("worker %q declares the vars namespace %q twice", o.name, ns)
+		}
+		if owner := taken.vars(o.server, ns); owner != "" {
+			return fmt.Errorf("%s cannot publish the same vars namespace: %q, declared by %q and %q", scope, ns, owner, o.name)
+		}
 	}
 
 	return nil
@@ -248,16 +385,25 @@ func newWorker(o workerOpt) (*worker, error) {
 		return nil, err
 	}
 
-	nameTaken := func(name string) bool { return workersByName[name] != nil }
-	pathTaken := func(server *Server, path string) bool {
-		if server == nil {
-			return globalWorkersByPath[path] != nil
-		}
+	taken := declarationIndex{
+		names: func(name string) bool { return workersByName[name] != nil },
+		paths: func(server *Server, path string) bool {
+			if server == nil {
+				return globalWorkersByPath[path] != nil
+			}
 
-		return server.workersByPath[path] != nil
+			return server.workersByPath[path] != nil
+		},
+		vars: func(server *Server, ns string) string {
+			if w := varsOwners[server][ns]; w != nil {
+				return w.name
+			}
+
+			return ""
+		},
 	}
 
-	if err := checkWorkerDeclaration(o, nameTaken, pathTaken); err != nil {
+	if err := checkWorkerDeclaration(o, taken); err != nil {
 		return nil, err
 	}
 
@@ -311,6 +457,12 @@ func newWorker(o workerOpt) (*worker, error) {
 		onThreadShutdown:       o.onThreadShutdown,
 		server:                 o.server,
 		isBackgroundWorker:     o.isBackgroundWorker,
+		readyOnce:              make(chan struct{}),
+		varsNamespaces:         o.vars,
+		vars:                   make(map[string]*varsSlot, len(o.vars)),
+	}
+	for _, ns := range o.vars {
+		w.vars[ns] = &varsSlot{}
 	}
 
 	w.configureMercure(&o)

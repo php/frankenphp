@@ -297,6 +297,37 @@ A background worker serves no request, but its script is a PHP file like any oth
 
 `$_SERVER['FRANKENPHP_WORKER_BACKGROUND']` is set to `1`, and `FRANKENPHP_WORKER`, the variable of HTTP workers, is not, so a script serving both roles tests which of the two is set. Several workers may run the same script: `getName()` on the handle tells them apart, and the [threads endpoint](metrics.md#threads-state-endpoint) of the admin API names their threads after them. Background worker threads count like the threads of HTTP workers, on top of `num_threads` and within `max_threads`; they don't autoscale, so `max_threads` is not allowed on them. From Go, declare one with `WithWorkerBackground()`.
 
+### Sharing state with background workers
+
+A background worker publishes snapshots in vars namespaces, declared with `vars` on the worker, and requests and other workers read them with `frankenphp_get_vars()`, by namespace:
+
+```caddyfile
+php_server {
+	worker {
+		file config.php
+		background
+		vars redis feature_flags
+	}
+}
+```
+
+```php
+// background worker
+$handle = new FrankenPHP\WorkerHandle();
+$handle->setVars('redis', ['dsn' => 'redis://cache:6379']);
+$handle->setVars('feature_flags', ['beta' => true]);
+// ...
+
+// request, HTTP worker or another background worker
+$flags = frankenphp_get_vars('feature_flags');
+```
+
+A namespace has one publisher in a `php_server`, and one among the global workers; a reader gets the one of its `php_server` first, then the global one. In a worker script, what runs between two requests reads as the request before it did, and what runs before the first one as the worker does. One worker may publish as many namespaces as the application wants, so splitting them across workers is a matter of threads, failure caps and timeouts, not of addressing. A worker publishing vars runs a single thread, so each snapshot has one writer, and `getNamespaces()` on its handle returns what the configuration declared.
+
+Values must be null, scalars, arrays or enums, and a snapshot can't be larger than `memory_limit`, as its copy lives outside of request memory. Each call replaces the whole snapshot of its namespace and readers get a copy, so the worker can publish at any time and a request always sees a consistent one. Every declared namespace is published before the first tick of a run, which `tick()` enforces: since the server accepts requests once the background workers are ready, requests never wait for a snapshot, and while a worker restarts they keep getting its last ones.
+
+`frankenphp_get_vars()` can only block while workers boot, a background worker or the bootstrap of an HTTP worker waiting for the publisher of a namespace. A cycle between background workers throws instead of hanging, and so does a wait once the start failed. A namespace no worker publishes throws a `RuntimeException`.
+
 ## Superglobals behavior
 
 [PHP superglobals](https://www.php.net/manual/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...)

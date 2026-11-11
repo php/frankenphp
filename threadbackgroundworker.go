@@ -7,6 +7,7 @@ import "C"
 import (
 	"fmt"
 	"log/slog"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -34,6 +35,8 @@ type backgroundWorkerThread struct {
 	// of an HTTP worker reaching frankenphp_handle_request()
 	isBootingScript bool
 	bootTimer       *time.Timer
+	// the vars namespaces this run published, all of them due by its first tick
+	publishedVars map[string]bool
 
 	// the Go side's end of this thread's stop socket pair, the script
 	// holding the other end; one per thread so pool workers drain
@@ -149,6 +152,7 @@ func (handler *backgroundWorkerThread) setupScript() error {
 	handler.thread.contextMu.Unlock()
 
 	handler.isBootingScript = true
+	handler.publishedVars = make(map[string]bool, len(handler.worker.varsNamespaces))
 	handler.runStartedAt = time.Now()
 	metrics.StartWorker(handler.worker.name)
 	// the run's logger and context, not the globals: a shutdown finishing
@@ -222,9 +226,10 @@ func (handler *backgroundWorkerThread) afterScriptExecution(exitStatus int) {
 	// startupFailChan; past it a failing worker keeps restarting with a
 	// louder log line rather than leave the server in a broken half-state.
 	// A worker Init() gave up on stops here whatever the cap says, its
-	// timeout already reported it
+	// timeout already reported it, and so does any worker once the start
+	// failed
 	pastCap := worker.maxConsecutiveFailures >= 0 && handler.failureCount >= worker.maxConsecutiveFailures
-	if worker.bootTimedOut.Load() {
+	if worker.bootTimedOut.Load() || startupHasFailed() {
 		handler.thread.state.Set(state.ShuttingDown)
 
 		return
@@ -266,7 +271,7 @@ func (handler *backgroundWorkerThread) stopBootTimer() {
 }
 
 //export go_frankenphp_background_worker_ready
-func go_frankenphp_background_worker_ready(threadIndex C.uintptr_t) {
+func go_frankenphp_background_worker_ready(threadIndex C.uintptr_t) *C.char {
 	// called on the PHP thread by the first WorkerHandle::tick() of a run;
 	// that function throws on every other thread kind
 	handler, ok := phpThreads[threadIndex].handler.(*backgroundWorkerThread)
@@ -275,10 +280,18 @@ func go_frankenphp_background_worker_ready(threadIndex C.uintptr_t) {
 	}
 
 	if handler.isBootingScript {
+		// readers never wait for a snapshot past the ready point
+		for _, ns := range handler.worker.varsNamespaces {
+			if !handler.publishedVars[ns] {
+				return C.CString("FrankenPHP\\WorkerHandle::tick(): publish the vars namespace " + strconv.Quote(ns) + " with setVars() before the first tick")
+			}
+		}
+
 		handler.isBootingScript = false
 		// the boot succeeded, only consecutive boot failures count
 		handler.failureCount = 0
 		handler.stopBootTimer()
+		handler.worker.markReady()
 		metrics.ReadyWorker(handler.worker.name)
 		// parked from now on as far as the threads state endpoint is concerned
 		handler.state.MarkAsWaiting(true)
@@ -289,6 +302,8 @@ func go_frankenphp_background_worker_ready(threadIndex C.uintptr_t) {
 			handler.state.Set(state.Ready)
 		}
 	}
+
+	return nil
 }
 
 // backoff waits before the next run of a crashed script, see restartBackoff

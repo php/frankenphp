@@ -58,6 +58,14 @@ namespace {
      * array<string, any> $context Values of the array will be converted to the corresponding Go type (if supported by FrankenPHP) and added to the context of the structured logs using https://pkg.go.dev/log/slog#Attr
      */
     function frankenphp_log(string $message, int $level = 0, array $context = []): void {}
+    /**
+     * EXPERIMENTAL: returns a copy of the snapshot last published in a vars
+     * namespace, resolved within the current php_server, then among global
+     * workers. Blocks until the publishing worker reached its ready point.
+     * Throws if no background worker publishes the namespace, or if
+     * background workers wait on each other in a cycle.
+     */
+    function frankenphp_get_vars(string $namespace): array {}
 }
 
 namespace FrankenPHP {
@@ -115,5 +123,22 @@ namespace FrankenPHP {
          * @return resource
          */
         public function getStream() {}
+
+        /**
+         * Returns the namespaces this background worker serves, as declared in
+         * its configuration.
+         *
+         * @return array{vars: list<string>}
+         */
+        public function getNamespaces(): array {}
+
+        /**
+         * Publishes a snapshot in one of the vars namespaces of this background
+         * worker: the array replaces the previous snapshot of that namespace,
+         * atomically for readers, which get copies. Values must be null,
+         * scalars, arrays or enums. Every declared namespace is published
+         * before the first tick() of a run.
+         */
+        public function setVars(string $namespace, array $vars): void {}
     }
 }

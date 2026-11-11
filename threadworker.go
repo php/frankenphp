@@ -22,6 +22,10 @@ type workerThread struct {
 	isBootingScript         bool // true if the worker has not reached frankenphp_handle_request yet
 	failureCount            int  // number of consecutive startup failures
 	requestCount            int  // number of requests handled since last restart
+
+	// the server of the request being served, or of the last one served: what
+	// runs between two requests belongs to the one before, see namespaceScope()
+	scope *Server
 }
 
 func convertToWorkerThread(thread *phpThread, worker *worker) {
@@ -68,6 +72,7 @@ func setupWorkerScript(handler *workerThread, worker *worker) {
 	}
 
 	handler.dummyFrankenPHPContext = fc
+	handler.scope = worker.server
 	handler.isBootingScript = true
 	handler.requestCount = 0
 
@@ -115,6 +120,13 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 			globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "unexpected termination, restarting", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex), slog.Int("exit_status", exitStatus))
 		}
 
+		return
+	}
+
+	// a boot that fails because the start did, a read of the vars of a worker
+	// that never got ready for instance, would fail again
+	if startupHasFailed() {
+		handler.thread.state.Set(state.ShuttingDown)
 		return
 	}
 
@@ -217,6 +229,7 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 	}
 
 	handler.requestCount++
+	handler.scope = fc.server
 	handler.thread.contextMu.Lock()
 	handler.workerFrankenPHPContext = fc
 	handler.thread.contextMu.Unlock()
