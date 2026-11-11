@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"sync"
 	"testing"
 	"time"
 	"unsafe"
@@ -105,6 +106,36 @@ func TestRestartWorkersForceKillsStuckThread(t *testing.T) {
 	}
 	assert.NotContains(t, recorder.Body.String(), "should not reach",
 		"VM interrupt was never observed; sleep returned naturally")
+}
+
+// A restart asked for while Init() or Shutdown() runs must leave their
+// threads alone: it used to reboot the threads Init() was still handing out
+func TestRestartWorkersWhileStartingAndStopping(t *testing.T) {
+	t.Cleanup(Shutdown)
+
+	done := make(chan struct{})
+	var restarts sync.WaitGroup
+	restarts.Go(func() {
+		for {
+			select {
+			case <-done:
+				return
+			default:
+				RestartWorkers()
+			}
+		}
+	})
+
+	for range 5 {
+		require.NoError(t, Init(
+			WithNumThreads(4),
+			WithWorkers("worker", testDataPath+"/worker-with-counter.php", 2),
+		))
+		Shutdown()
+	}
+
+	close(done)
+	restarts.Wait()
 }
 
 // Init() must not return, nor the runtime tear SAPI/TSRM down, while a worker

@@ -899,9 +899,7 @@ func go_is_context_done(threadIndex C.uintptr_t) C.bool {
 
 //export go_schedule_opcache_reset
 func go_schedule_opcache_reset(threadIndex C.uintptr_t) {
-	if mainThread != nil {
-		go mainThread.rebootAllThreads()
-	}
+	go RestartWorkers()
 }
 
 // opcacheRestartHook tells whether this build reports the restarts opcache
