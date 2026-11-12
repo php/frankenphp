@@ -1874,6 +1874,20 @@ static void *php_thread(void *arg) {
    * grace period can wake it from a busy PHP loop or blocking syscall. */
   frankenphp_register_thread_for_kill(thread_index);
 
+#if !defined(PHP_WIN32) && defined(SIGURG)
+  /* That was the first call of this thread into Go, which unblocks, for
+   * good, the signal its runtime preempts goroutines with. The signal is
+   * sent to a thread while it runs Go code, and may only land once the
+   * thread is back in PHP and entering a system call, which then fails with
+   * EINTR: stream_select() returns false, a poll context throws. Blocked
+   * again from here on, the Go code this thread runs is preempted at its
+   * safe points only, which the callbacks of a PHP thread reach quickly. */
+  sigset_t preemption;
+  sigemptyset(&preemption);
+  sigaddset(&preemption, SIGURG);
+  pthread_sigmask(SIG_BLOCK, &preemption, NULL);
+#endif
+
   bool thread_is_healthy = true;
   bool has_attempted_shutdown = false;
 

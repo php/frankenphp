@@ -191,6 +191,23 @@ func TestEnvVarsInPhpIni(t *testing.T) {
 	})
 }
 
+// The Go runtime preempts goroutines with SIGURG, which would interrupt the
+// system call a PHP thread sleeps in when it lands there
+func TestPreemptionSignalIsBlocked_module(t *testing.T) { testPreemptionSignalIsBlocked(t, nil) }
+func TestPreemptionSignalIsBlocked_worker(t *testing.T) {
+	testPreemptionSignalIsBlocked(t, &testOptions{workerScript: "signal-mask.php"})
+}
+func testPreemptionSignalIsBlocked(t *testing.T, opts *testOptions) {
+	if runtime.GOOS != "linux" {
+		t.Skip("the signal mask of a thread is read from /proc")
+	}
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/signal-mask.php", handler, t)
+		assert.Equal(t, "blocked", body)
+	}, opts)
+}
+
 func TestFinishRequest_module(t *testing.T) { testFinishRequest(t, &testOptions{}) }
 func TestFinishRequest_worker(t *testing.T) {
 	testFinishRequest(t, &testOptions{workerScript: "finish-request.php"})
