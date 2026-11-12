@@ -56,7 +56,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: php/target
-          key: php-sanitizers-${{ matrix.sanitizer }}-${{ runner.arch }}-${{ steps.determine-php-version.outputs.version }}
+          key: php-sanitizers-${{ matrix.sanitizer }}-${{ runner.arch }}-${{ steps.determine-php-version.outputs.version }}-${{ hashFiles('.github/workflows/sanitizers.yaml') }}
       - if: steps.cache-php.outputs.cache-hit != 'true'
         name: Compile PHP
         run: |
@@ -64,6 +64,9 @@ jobs:
           MIRROR_URL=${URL/https:\/\/www.php.net/https:\/\/phpmirror.static-php.dev}
           (curl -fsSL "${URL}" || curl -fsSL "${MIRROR_URL}") | tar -Jx -C php --strip-components=1
           cd php/
+          # MemorySanitizer in clang 21 takes the index of an AVX-512 permutation for uninitialized memory
+          # (https://github.com/llvm/llvm-project/pull/148785, fixed in clang 22):
+          # skip the AVX-512 VBMI variant of base64_decode(), the one place that has such a call
           ./configure \
             CFLAGS="$CFLAGS" \
             LDFLAGS="$LDFLAGS" \
@@ -88,7 +91,7 @@ jobs:
             --without-pear \
             --disable-mbregex \
             --enable-werror \
-            ${{ matrix.sanitizer == 'msan' && '--enable-memory-sanitizer' || '' }} \
+            ${{ matrix.sanitizer == 'msan' && '--enable-memory-sanitizer php_cv_have_avx512vbmi=no' || '' }} \
             --prefix="$(pwd)/target/"
           make -j"$(getconf _NPROCESSORS_ONLN)"
           make install

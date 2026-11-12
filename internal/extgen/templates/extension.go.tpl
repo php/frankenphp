@@ -9,6 +9,7 @@ package {{.PackageName}}
 // You may edit the file and remove this comment if you plan to manually maintain
 // this file going forward.
 
+// #cgo linux CFLAGS: -D_GNU_SOURCE
 // #include <stdlib.h>
 // #include "{{.BaseName}}.h"
 import "C"

@@ -302,6 +302,19 @@ func TestCFile_ClassMethodParamCastsByParamType(t *testing.T) {
 				"(long)name",
 			},
 		},
+		{
+			name:       "int return with nullable params points to values of the types cgo declares",
+			returnType: phpInt,
+			params: []phpParameter{
+				{Name: "name", PhpType: phpString, IsNullable: true},
+				{Name: "count", PhpType: phpInt, IsNullable: true},
+				{Name: "ratio", PhpType: phpFloat, IsNullable: true},
+				{Name: "enabled", PhpType: phpBool, IsNullable: true},
+			},
+			wantContain: []string{
+				"getVarInt_wrapper(intern->go_handle, name_is_null ? NULL : name, count_is_null ? NULL : &(GoInt64){count}, ratio_is_null ? NULL : &ratio, enabled_is_null ? NULL : &(GoUint8){enabled});",
+			},
+		},
 	}
 
 	for _, tt := range tests {

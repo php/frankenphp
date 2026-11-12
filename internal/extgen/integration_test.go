@@ -303,7 +303,7 @@ func TestBasicFunction(t *testing.T) {
 	require.NoError(t, err, "FrankenPHP compilation should succeed")
 
 	err = suite.verifyPHPSymbols(
-		[]string{"test_uppercase", "test_add_numbers", "test_multiply", "test_is_enabled"},
+		[]string{"test_uppercase", "test_add_numbers", "test_multiply", "test_is_enabled", "test_nullables"},
 		[]string{},
 		[]string{},
 	)
@@ -337,6 +337,24 @@ if ($result !== false) {
 $result = test_is_enabled(false);
 if ($result !== true) {
 	echo "FAIL: test_is_enabled(false) expected true, got " . ($result ? "true" : "false");
+	exit(1);
+}
+
+$result = test_nullables(null, null, null);
+if ($result !== "null null null") {
+	echo "FAIL: test_nullables(null, null, null) expected 'null null null', got '$result'";
+	exit(1);
+}
+
+$result = test_nullables(-42, 1.5, true);
+if ($result !== "-42 1.5 true") {
+	echo "FAIL: test_nullables(-42, 1.5, true) expected '-42 1.5 true', got '$result'";
+	exit(1);
+}
+
+$result = test_nullables(0, 0.0, false);
+if ($result !== "0 0 false") {
+	echo "FAIL: test_nullables(0, 0.0, false) expected '0 0 false', got '$result'";
 	exit(1);
 }
 
@@ -416,6 +434,25 @@ if ($counter->getValue() !== 50) {
 	exit(1);
 }
 
+$counter->resetIf(null);
+if ($counter->getValue() !== 50) {
+	echo "FAIL: Counter after resetIf(null) expected 50 (unchanged), got " . $counter->getValue();
+	exit(1);
+}
+
+$counter->resetIf(false);
+if ($counter->getValue() !== 50) {
+	echo "FAIL: Counter after resetIf(false) expected 50 (unchanged), got " . $counter->getValue();
+	exit(1);
+}
+
+$counter->resetIf(true);
+if ($counter->getValue() !== 0) {
+	echo "FAIL: Counter after resetIf(true) expected 0, got " . $counter->getValue();
+	exit(1);
+}
+
+$counter->setValue(50);
 $counter->reset();
 if ($counter->getValue() !== 0) {
 	echo "FAIL: Counter after reset expected 0, got " . $counter->getValue();

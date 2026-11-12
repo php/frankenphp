@@ -9,7 +9,7 @@
 
 {{define "methodCallArg" -}}
 {{- if .IsNullable -}}
-{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "array"}}{{.Name}}{{else if eq .PhpType "mixed"}}{{.Name}}{{else if eq .PhpType "callable"}}{{.Name}}_callback{{end}}
+{{if eq .PhpType "string"}}{{.Name}}_is_null ? NULL : {{.Name}}{{else if eq .PhpType "int"}}{{.Name}}_is_null ? NULL : &(GoInt64){ {{- .Name -}} }{{else if eq .PhpType "float"}}{{.Name}}_is_null ? NULL : &{{.Name}}{{else if eq .PhpType "bool"}}{{.Name}}_is_null ? NULL : &(GoUint8){ {{- .Name -}} }{{else if eq .PhpType "array"}}{{.Name}}{{else if eq .PhpType "mixed"}}{{.Name}}{{else if eq .PhpType "callable"}}{{.Name}}_callback{{end}}
 {{- else -}}
 {{if eq .PhpType "string"}}{{.Name}}{{else if eq .PhpType "int"}}(long){{.Name}}{{else if eq .PhpType "float"}}(double){{.Name}}{{else if eq .PhpType "bool"}}(int){{.Name}}{{else if eq .PhpType "array"}}{{.Name}}{{else if eq .PhpType "mixed"}}{{.Name}}{{else if eq .PhpType "callable"}}{{.Name}}_callback{{end}}
 {{- end -}}
