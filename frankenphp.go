@@ -752,42 +752,66 @@ func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (r
 		return 0, false
 	}
 
-	var rc *http.ResponseController
+	body := newBodyReader(fc)
+	p := unsafe.Slice((*byte)(unsafe.Pointer(cBuf)), countBytes)
+	var err error
+	for readBytes < countBytes && err == nil {
+		var n int
+		n, err = body.Read(p[readBytes:])
+		readBytes += C.size_t(n)
+	}
+
+	return readBytes, C.bool(body.close())
+}
+
+// bodyReader reads the request body for PHP, bounding stalls with request_body_timeout
+type bodyReader struct {
+	fc  *frankenPHPContext
+	rc  *http.ResponseController
+	err error
+}
+
+func newBodyReader(fc *frankenPHPContext) *bodyReader {
+	r := &bodyReader{fc: fc}
 	if fc.requestBodyTimeout > 0 {
 		if fc.responseController == nil {
 			fc.responseController = http.NewResponseController(fc.responseWriter)
 		}
-		rc = fc.responseController
+		r.rc = fc.responseController
 	}
 
-	p := unsafe.Slice((*byte)(unsafe.Pointer(cBuf)), countBytes)
-	var err error
-	for readBytes < countBytes && err == nil {
-		if rc != nil {
-			// reset before each read: bound a stall, not a steady upload
-			_ = rc.SetReadDeadline(time.Now().Add(fc.requestBodyTimeout))
-		}
+	return r
+}
 
-		var n int
-		n, err = fc.request.Body.Read(p[readBytes:])
-		readBytes += C.size_t(n)
+func (r *bodyReader) Read(p []byte) (n int, err error) {
+	if r.rc != nil {
+		// reset before each read: bound a stall, not a steady upload
+		_ = r.rc.SetReadDeadline(time.Now().Add(r.fc.requestBodyTimeout))
 	}
 
+	n, err = r.fc.request.Body.Read(p)
+	if err != nil {
+		r.err = err
+	}
+
+	return n, err
+}
+
+// close clears the read deadline and reports whether the body exceeded its size limit
+func (r *bodyReader) close() (tooLarge bool) {
 	// an expired deadline must stay: net/http drains the unread body before writing the response
-	if rc != nil && !errors.Is(err, os.ErrDeadlineExceeded) {
-		_ = rc.SetReadDeadline(time.Time{})
+	if r.rc != nil && !errors.Is(r.err, os.ErrDeadlineExceeded) {
+		_ = r.rc.SetReadDeadline(time.Time{})
 	}
 
 	// PHP can't see read errors: fail the request rather than expose a truncated body
-	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-		if !fc.headersWritten {
-			fc.reject(ErrRequestBodyTooLarge)
-		}
+	if _, ok := errors.AsType[*http.MaxBytesError](r.err); ok {
+		r.fc.rejectBodyTooLarge()
 
-		tooLarge = true
+		return true
 	}
 
-	return
+	return false
 }
 
 //export go_read_cookies
