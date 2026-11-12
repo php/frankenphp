@@ -255,14 +255,6 @@ __attribute__((constructor)) static void frankenphp_libpreinit(void) {
   /* Single-threaded at this point (constructors run before Go's runtime),
    * so sigprocmask is sufficient and portable. */
   sigprocmask(SIG_BLOCK, &set, NULL);
-
-  /* PHP unloads the shared extensions when it shuts down, and FrankenPHP
-   * starts it again in the same process: to restart the workers, after
-   * opcache_reset(), for a new configuration. Some libraries don't survive
-   * being loaded twice (libenchant aborts, GObject still knows its types),
-   * so the extensions stay loaded, as they do in a static build.
-   * Set here because setenv() isn't safe once other threads run. */
-  setenv("ZEND_DONT_UNLOAD_MODULES", "1", 0);
 }
 #endif
 
