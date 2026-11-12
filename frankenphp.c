@@ -21,12 +21,15 @@
 #else
 #include <php_config.h>
 #endif
+#include <php_content_types.h>
 #include <php_ini.h>
 #include <php_main.h>
+#include <php_open_temporary_file.h>
 #include <php_output.h>
 #include <php_variables.h>
 #include <php_version.h>
 #include <pthread.h>
+#include <rfc1867.h>
 #include <sapi/embed/php_embed.h>
 #include <signal.h>
 #include <stdatomic.h>
@@ -1485,23 +1488,279 @@ static void frankenphp_sapi_flush(void *server_context) {
   }
 }
 
-static size_t frankenphp_read_post(char *buffer, size_t count_bytes) {
-  struct go_read_post_return result =
-      go_read_post(frankenphp_thread_index(), buffer, count_bytes);
-
-  /* php://input can't report read errors, throw so user code doesn't take
-   * the truncated body for a complete one. Worker request startup and
-   * shutdown run in frankenphp_handle_request()'s frame, not in user code. */
+static void frankenphp_report_body_too_large(bool too_large) {
+  /* PHP can't report read errors, throw so user code doesn't take the
+   * truncated body for a complete one. Worker request startup and shutdown
+   * run in frankenphp_handle_request()'s frame, not in user code. */
   zend_execute_data *ex = EG(current_execute_data);
-  if (result.r1 && ex != NULL &&
+  if (too_large && ex != NULL &&
       !(ex->func != NULL && ex->func->type == ZEND_INTERNAL_FUNCTION &&
         ex->func->internal_function.handler ==
             ZEND_FN(frankenphp_handle_request))) {
     zend_throw_exception(frankenphp_ce_request_body_too_large_exception,
                          "Request body too large", 0);
   }
+}
+
+static size_t frankenphp_read_post(char *buffer, size_t count_bytes) {
+  struct go_read_post_return result =
+      go_read_post(frankenphp_thread_index(), buffer, count_bytes);
+
+  frankenphp_report_body_too_large(result.r1);
 
   return result.r0;
+}
+
+bool frankenphp_go_form_parser = false;
+
+#if PHP_VERSION_ID >= 80400
+#define FRANKENPHP_POST_OPTION(name, fallback)                                 \
+  REQUEST_PARSE_BODY_OPTION_GET(name, fallback)
+#define FRANKENPHP_POST_THROWS SG(request_parse_body_context).throw_exceptions
+#else
+#define FRANKENPHP_POST_OPTION(name, fallback) (fallback)
+#define FRANKENPHP_POST_THROWS false
+#endif
+
+static void frankenphp_post_warning(bool throw_exceptions, const char *msg) {
+#if PHP_VERSION_ID >= 80400
+  if (throw_exceptions) {
+    zend_throw_exception(zend_ce_request_parse_body_exception, msg, 0);
+    return;
+  }
+#endif
+  php_error_docref(NULL, E_WARNING, "%s", msg);
+}
+
+static void frankenphp_free_uploaded_file(zval *el) {
+  zend_string_release_ex(Z_PTR_P(el), 0);
+}
+
+static void frankenphp_register_form_entries(frankenphp_form_result *result,
+                                             zval *post,
+                                             bool throw_exceptions) {
+  zval *files = &PG(http_globals)[TRACK_VARS_FILES];
+
+  for (size_t i = 0; i < result->count; i++) {
+    frankenphp_form_entry *e = &result->entries[i];
+    switch (e->kind) {
+    case FRANKENPHP_FORM_UPLOADED_FILE: {
+      zend_string *path = zend_string_init(e->name, strlen(e->name), 0);
+      if (!zend_hash_add_ptr(SG(rfc1867_uploaded_files), path, path)) {
+        zend_string_release_ex(path, 0);
+      }
+      break;
+    }
+    case FRANKENPHP_FORM_POST_STRING: {
+      char *value = estrndup(e->value, e->value_len);
+      size_t new_len;
+      if (sapi_module.input_filter(PARSE_POST, e->name, &value, e->value_len,
+                                   &new_len)) {
+        php_register_variable_safe(e->name, value, new_len, post);
+      }
+      efree(value);
+      break;
+    }
+    case FRANKENPHP_FORM_FILES_STRING:
+      php_register_variable_safe(e->name, e->value, e->value_len, files);
+      break;
+    case FRANKENPHP_FORM_FILES_LONG: {
+      zval number;
+      ZVAL_LONG(&number, e->number);
+      php_register_variable_ex(e->name, &number, files);
+      break;
+    }
+    case FRANKENPHP_FORM_WARNING:
+      frankenphp_post_warning(throw_exceptions, e->name);
+      break;
+    case FRANKENPHP_FORM_SAPI_WARNING:
+      sapi_module.sapi_error(E_WARNING, "%s", e->name);
+      break;
+    }
+  }
+}
+
+/* Registers and frees a result from Go, even on bailout */
+static void frankenphp_consume_form_result(frankenphp_form_result *result,
+                                           zval *post, bool throw_exceptions) {
+  zend_try { frankenphp_register_form_entries(result, post, throw_exceptions); }
+  zend_catch {
+    /* uploads not registered yet wouldn't be deleted at request shutdown */
+    for (size_t i = 0; i < result->count; i++) {
+      if (result->entries[i].kind == FRANKENPHP_FORM_UPLOADED_FILE) {
+        VCWD_UNLINK(result->entries[i].name);
+      }
+    }
+    free(result->entries);
+    zend_bailout();
+  }
+  zend_end_try();
+
+  free(result->entries);
+}
+
+static SAPI_POST_HANDLER_FUNC(frankenphp_multipart_post_handler) {
+  bool throw_exceptions = FRANKENPHP_POST_THROWS;
+  const char *tmp_dir = PG(upload_tmp_dir);
+  if (tmp_dir == NULL || *tmp_dir == '\0') {
+    tmp_dir = php_get_temporary_directory();
+  }
+  /* like PHP, relative to the thread's working directory, not the process' */
+  char *resolved_tmp_dir = expand_filepath(tmp_dir, NULL);
+  if (resolved_tmp_dir != NULL) {
+    tmp_dir = resolved_tmp_dir;
+  }
+
+  frankenphp_form_limits limits = {
+      .post_max_size = FRANKENPHP_POST_OPTION(post_max_size, SG(post_max_size)),
+      .max_input_vars =
+          FRANKENPHP_POST_OPTION(max_input_vars, PG(max_input_vars)),
+      .max_file_uploads = FRANKENPHP_POST_OPTION(
+          max_file_uploads,
+          zend_ini_long("max_file_uploads", sizeof("max_file_uploads") - 1, 0)),
+#if PHP_VERSION_ID >= 80204
+      .max_multipart_body_parts = FRANKENPHP_POST_OPTION(
+          max_multipart_body_parts,
+          zend_ini_long("max_multipart_body_parts",
+                        sizeof("max_multipart_body_parts") - 1, 0)),
+#else
+      .max_multipart_body_parts = -1,
+#endif
+      .upload_max_filesize =
+          FRANKENPHP_POST_OPTION(upload_max_filesize, PG(upload_max_filesize)),
+      .file_uploads = PG(file_uploads),
+      .tmp_dir = tmp_dir,
+      .reject = !throw_exceptions,
+  };
+
+  if (SG(rfc1867_uploaded_files) == NULL) {
+    /* zend_new_array() allocates in PHP: on Windows, ALLOC_HASHTABLE's
+     * size-specialized allocator isn't exported */
+    SG(rfc1867_uploaded_files) = zend_new_array(8);
+    SG(rfc1867_uploaded_files)->pDestructor = frankenphp_free_uploaded_file;
+  }
+
+  if (Z_TYPE(PG(http_globals)[TRACK_VARS_FILES]) != IS_ARRAY) {
+    array_init(&PG(http_globals)[TRACK_VARS_FILES]);
+  }
+
+  frankenphp_form_result result =
+      go_parse_multipart(frankenphp_thread_index(), content_type_dup, &limits);
+  SG(read_post_bytes) += result.read_bytes;
+  if (resolved_tmp_dir != NULL) {
+    efree(resolved_tmp_dir);
+  }
+
+  frankenphp_consume_form_result(&result, arg, throw_exceptions);
+  frankenphp_report_body_too_large(result.too_large);
+}
+
+/* Throws from request_parse_body(), answers 413 otherwise: a warning would
+ * send the headers before the 413 */
+static void frankenphp_post_too_large(bool throw_exceptions, const char *msg) {
+  if (throw_exceptions) {
+    frankenphp_post_warning(true, msg);
+    return;
+  }
+
+  go_reject_body_too_large(frankenphp_thread_index());
+}
+
+/* sapi_read_standard_form_data(), rejecting bodies over post_max_size */
+static SAPI_POST_READER_FUNC(frankenphp_urlencoded_post_reader) {
+  bool throw_exceptions = FRANKENPHP_POST_THROWS;
+  zend_long post_max_size =
+      FRANKENPHP_POST_OPTION(post_max_size, SG(post_max_size));
+
+  if (post_max_size > 0 && SG(request_info).content_length > post_max_size) {
+    char *msg;
+    spprintf(&msg, 0,
+             "POST Content-Length of " ZEND_LONG_FMT
+             " bytes exceeds the limit of " ZEND_LONG_FMT " bytes",
+             SG(request_info).content_length, post_max_size);
+    frankenphp_post_too_large(throw_exceptions, msg);
+    efree(msg);
+    return;
+  }
+
+  /* PHP spills bodies over SAPI_POST_BLOCK_SIZE to a file, keep php://temp's
+   * default instead: post_max_size bounds the memory */
+  SG(request_info).request_body = php_stream_temp_create_ex(
+      TEMP_STREAM_DEFAULT, PHP_STREAM_MAX_MEM, PG(upload_tmp_dir));
+
+  char buffer[SAPI_POST_BLOCK_SIZE];
+  size_t read_bytes;
+  do {
+    read_bytes = sapi_read_post_block(buffer, SAPI_POST_BLOCK_SIZE);
+    if (post_max_size > 0 && SG(read_post_bytes) > post_max_size) {
+      /* never parse a partial body */
+      php_stream_truncate_set_size(SG(request_info).request_body, 0);
+
+      char *msg;
+      spprintf(&msg, 0,
+               "Actual POST length does not match Content-Length, and "
+               "exceeds " ZEND_LONG_FMT " bytes",
+               post_max_size);
+      frankenphp_post_too_large(throw_exceptions, msg);
+      efree(msg);
+      return;
+    }
+
+    if (php_stream_write(SG(request_info).request_body, buffer, read_bytes) !=
+        read_bytes) {
+      php_stream_truncate_set_size(SG(request_info).request_body, 0);
+      php_error_docref(NULL, E_WARNING,
+                       "POST data can't be buffered; all data discarded");
+      break;
+    }
+  } while (read_bytes == SAPI_POST_BLOCK_SIZE);
+
+  php_stream_rewind(SG(request_info).request_body);
+}
+
+static SAPI_POST_HANDLER_FUNC(frankenphp_urlencoded_post_handler) {
+  if (go_is_context_done(frankenphp_thread_index()) || EG(exception)) {
+    return;
+  }
+
+  php_stream *s = SG(request_info).request_body;
+  if (s == NULL || php_stream_rewind(s) != SUCCESS) {
+    return;
+  }
+
+  zend_string *body = php_stream_copy_to_mem(s, PHP_STREAM_COPY_ALL, 0);
+  if (body == NULL) {
+    return;
+  }
+
+  bool throw_exceptions = FRANKENPHP_POST_THROWS;
+  frankenphp_form_result result = go_parse_urlencoded(
+      frankenphp_thread_index(), ZSTR_VAL(body), ZSTR_LEN(body),
+      FRANKENPHP_POST_OPTION(max_input_vars, PG(max_input_vars)),
+      !throw_exceptions);
+  zend_string_release_ex(body, 0);
+
+  frankenphp_consume_form_result(&result, arg, throw_exceptions);
+}
+
+static const sapi_post_entry frankenphp_post_entries[] = {
+    {DEFAULT_POST_CONTENT_TYPE, sizeof(DEFAULT_POST_CONTENT_TYPE) - 1,
+     frankenphp_urlencoded_post_reader, frankenphp_urlencoded_post_handler},
+    {MULTIPART_CONTENT_TYPE, sizeof(MULTIPART_CONTENT_TYPE) - 1, NULL,
+     frankenphp_multipart_post_handler},
+    {NULL, 0, NULL, NULL}};
+
+/* The table is per thread: replace PHP's parsers, and mbstring's, here */
+static void frankenphp_register_post_entries(void) {
+  if (!frankenphp_go_form_parser) {
+    return;
+  }
+
+  for (const sapi_post_entry *p = frankenphp_post_entries; p->content_type;
+       p++) {
+    sapi_unregister_post_entry(p);
+  }
+  sapi_register_post_entries(frankenphp_post_entries);
 }
 
 static char *frankenphp_read_cookies(void) {
@@ -1869,6 +2128,8 @@ static void *php_thread(void *arg) {
 #endif
   frankenphp_init_date_globals();
 #endif
+
+  frankenphp_register_post_entries();
 
   /* Publish this thread's force-kill slot to Go so the graceful-drain
    * grace period can wake it from a busy PHP loop or blocking syscall. */

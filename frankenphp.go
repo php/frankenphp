@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -56,6 +57,7 @@ var (
 	ErrInvalidContentLengthHeader = ErrRejected{"invalid Content-Length header", http.StatusBadRequest}
 	ErrMaxWaitTimeExceeded        = ErrRejected{"maximum request handling time exceeded", http.StatusServiceUnavailable}
 	ErrRequestBodyTooLarge        = ErrRejected{"request body too large", http.StatusRequestEntityTooLarge}
+	ErrMalformedRequestBody       = ErrRejected{"malformed request body", http.StatusBadRequest}
 
 	contextKey   = contextKeyStruct{}
 	serverHeader = []string{"FrankenPHP"}
@@ -432,6 +434,7 @@ func Init(options ...Option) error {
 	}
 
 	hotReloadEnabled = opt.hasHotReload()
+	C.frankenphp_go_form_parser = C.bool(opt.goFormParser)
 
 	mainThread, err := initPHPThreads(opt.numThreads, opt.maxThreads, opt.phpIni)
 	if err != nil {
@@ -795,6 +798,11 @@ func (r *bodyReader) Read(p []byte) (n int, err error) {
 	}
 
 	return n, err
+}
+
+// failed reports whether reading the body stopped on an error rather than at its end
+func (r *bodyReader) failed() bool {
+	return r.err != nil && r.err != io.EOF
 }
 
 // close clears the read deadline and reports whether the body exceeded its size limit

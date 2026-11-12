@@ -235,6 +235,47 @@ typedef enum {
   FRANKENPHP_MERCURE_UNSUPPORTED = 4,
 } frankenphp_mercure_status;
 
+/* Request bodies parsed by Go: C only registers the resulting entries */
+typedef enum {
+  FRANKENPHP_FORM_UPLOADED_FILE = 0,
+  FRANKENPHP_FORM_POST_STRING = 1,
+  FRANKENPHP_FORM_FILES_STRING = 2,
+  FRANKENPHP_FORM_FILES_LONG = 3,
+  FRANKENPHP_FORM_WARNING = 4,
+  FRANKENPHP_FORM_SAPI_WARNING = 5,
+} frankenphp_form_entry_kind;
+
+typedef struct {
+  frankenphp_form_entry_kind kind;
+  /* NUL-terminated variable name, or warning message */
+  char *name;
+  char *value;
+  size_t value_len;
+  zend_long number;
+} frankenphp_form_entry;
+
+/* entries is a single malloc'ed block the caller must free */
+typedef struct {
+  frankenphp_form_entry *entries;
+  size_t count;
+  size_t read_bytes;
+  bool too_large;
+} frankenphp_form_result;
+
+typedef struct {
+  zend_long post_max_size;
+  zend_long max_input_vars;
+  zend_long max_file_uploads;
+  zend_long max_multipart_body_parts;
+  zend_long upload_max_filesize;
+  bool file_uploads;
+  const char *tmp_dir;
+  /* answer 400 or 413, instead of throwing from request_parse_body() */
+  bool reject;
+} frankenphp_form_limits;
+
+extern bool frankenphp_go_form_parser;
+
 void register_extensions(zend_module_entry **m, int len);
 
 // This function is exported for use by extensions, as proposed in PR #2305
