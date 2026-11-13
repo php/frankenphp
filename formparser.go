@@ -65,18 +65,55 @@ func warning(format string, args ...any) formEntry {
 	return formEntry{kind: C.FRANKENPHP_FORM_WARNING, name: fmt.Appendf(nil, format, args...)}
 }
 
-// parseMultipart parses an RFC 7578 multipart/form-data body and stores uploaded files in limits.tmpDir.
-// Uploaded file entries come first so PHP deletes them even if registering the rest bails out.
+// formBuffers holds the memory of a parsed body until it's copied to C, then goes back to a pool
+type formBuffers struct {
+	// registered first, so PHP deletes them even if registering the rest bails out
+	uploaded []formEntry
+	entries  []formEntry
+	// names and values share one buffer to spare the GC
+	data       []byte
+	normalized []byte
+	protected  map[string]struct{}
+}
+
+var formBuffersPool = sync.Pool{New: func() any {
+	return &formBuffers{data: make([]byte, 0, 4096), protected: make(map[string]struct{})}
+}}
+
+func (b *formBuffers) release() {
+	// don't keep the memory of large bodies around
+	if cap(b.data) > 1<<20 || cap(b.entries) > 4096 {
+		return
+	}
+
+	clear(b.uploaded)
+	clear(b.entries)
+	clear(b.protected)
+	b.uploaded, b.entries, b.data = b.uploaded[:0], b.entries[:0], b.data[:0]
+	formBuffersPool.Put(b)
+}
+
+// bytes stores the concatenation of parts in the shared buffer
+func (b *formBuffers) bytes(parts ...string) []byte {
+	start := len(b.data)
+	for _, p := range parts {
+		b.data = append(b.data, p...)
+	}
+
+	return b.data[start:len(b.data):len(b.data)]
+}
+
+// parseMultipart parses an RFC 7578 multipart/form-data body into b and stores uploaded files in limits.tmpDir.
 // On rejection, the caller must remove the uploaded files.
-func parseMultipart(body io.Reader, contentType string, contentLength int64, limits formLimits) ([]formEntry, int64, *formRejection) {
+func parseMultipart(b *formBuffers, body io.Reader, contentType string, contentLength int64, limits formLimits) (int64, *formRejection) {
 	if limits.postMaxSize > 0 && contentLength > limits.postMaxSize {
-		return nil, 0, tooLarge("POST Content-Length of %d bytes exceeds the limit of %d bytes", contentLength, limits.postMaxSize)
+		return 0, tooLarge("POST Content-Length of %d bytes exceeds the limit of %d bytes", contentLength, limits.postMaxSize)
 	}
 
 	_, params, err := mime.ParseMediaType(contentType)
 	boundary := params["boundary"]
 	if err != nil || boundary == "" {
-		return nil, 0, malformed("Missing boundary in multipart/form-data POST data")
+		return 0, malformed("Missing boundary in multipart/form-data POST data")
 	}
 
 	// like rfc1867.c, stop once more than post_max_size bytes were read
@@ -86,7 +123,7 @@ func parseMultipart(body io.Reader, contentType string, contentLength int64, lim
 	}
 	limited := &io.LimitedReader{R: body, N: readLimit}
 
-	entries, rejection := parseParts(multipart.NewReader(limited, boundary), limits)
+	rejection := parseParts(b, multipart.NewReader(limited, boundary), limits)
 
 	readBytes := readLimit - limited.N
 	if limits.postMaxSize > 0 && readBytes > limits.postMaxSize {
@@ -94,63 +131,54 @@ func parseMultipart(body io.Reader, contentType string, contentLength int64, lim
 		rejection = tooLarge("Actual POST length does not match Content-Length, and exceeds %d bytes", limits.postMaxSize)
 	}
 
-	return entries, readBytes, rejection
+	return readBytes, rejection
 }
 
-func parseParts(reader *multipart.Reader, limits formLimits) (entries []formEntry, rejection *formRejection) {
+func parseParts(b *formBuffers, reader *multipart.Reader, limits formLimits) *formRejection {
 	bodyParts := limits.maxMultipartBodyParts
 	if bodyParts < 0 {
 		bodyParts = limits.maxInputVars + limits.maxFileUploads
 	}
 
 	var (
-		uploaded    []formEntry
 		inputVars   int64
 		fileUploads int64
 		maxFileSize int64
-		protected   = make(map[string]struct{})
-		// field values share one buffer to spare the GC
-		values = make([]byte, 0, 4096)
 	)
-
-	defer func() {
-		entries = append(uploaded, entries...)
-	}()
 
 	for {
 		// NextPart would decode quoted-printable parts, RFC 7578 deprecates Content-Transfer-Encoding
 		part, err := reader.NextRawPart()
 		if err == io.EOF {
-			return entries, nil
+			return nil
 		}
 		if err != nil {
-			return entries, malformed("Invalid multipart/form-data POST data: %s", err)
+			return malformed("Invalid multipart/form-data POST data: %s", err)
 		}
 
 		if bodyParts--; bodyParts < 0 {
-			return entries, tooLarge("Multipart body parts limit exceeded %d. To increase the limit change max_multipart_body_parts in php.ini.", limits.maxMultipartBodyParts)
+			return tooLarge("Multipart body parts limit exceeded %d. To increase the limit change max_multipart_body_parts in php.ini.", limits.maxMultipartBodyParts)
 		}
 
 		dispositionType, dispositionParams, err := mime.ParseMediaType(part.Header.Get("Content-Disposition"))
 		name, hasName := dispositionParams["name"]
 		if err != nil || dispositionType != "form-data" || !hasName {
-			return entries, malformed("File Upload Mime headers garbled")
+			return malformed("File Upload Mime headers garbled")
 		}
 
 		filename, hasFilename := dispositionParams["filename"]
 		if !hasFilename {
-			start := len(values)
-			if values, err = appendRead(values, part); err != nil {
-				return entries, malformed("Invalid multipart/form-data POST data: %s", err)
+			start := len(b.data)
+			if b.data, err = appendRead(b.data, part); err != nil {
+				return malformed("Invalid multipart/form-data POST data: %s", err)
 			}
-			value := values[start:len(values):len(values)]
+			value := b.data[start:len(b.data):len(b.data)]
 
 			if inputVars++; inputVars > limits.maxInputVars {
-				return entries, tooLarge("Input variables exceeded %d. To increase the limit change max_input_vars in php.ini.", limits.maxInputVars)
+				return tooLarge("Input variables exceeded %d. To increase the limit change max_input_vars in php.ini.", limits.maxInputVars)
 			}
 
-			values = append(values, name...)
-			entries = append(entries, formEntry{kind: C.FRANKENPHP_FORM_POST_STRING, name: values[len(values)-len(name) : len(values) : len(values)], value: value})
+			b.entries = append(b.entries, formEntry{kind: C.FRANKENPHP_FORM_POST_STRING, name: b.bytes(name), value: value})
 
 			if strings.EqualFold(name, "MAX_FILE_SIZE") {
 				maxFileSize, _ = strconv.ParseInt(strings.TrimSpace(string(value)), 10, 64)
@@ -175,25 +203,25 @@ func parseParts(reader *multipart.Reader, limits formLimits) (entries []formEntr
 			errorCode = uploadErrNoFile
 		} else {
 			if fileUploads++; fileUploads > limits.maxFileUploads {
-				return entries, tooLarge("Maximum number of allowable file uploads has been exceeded")
+				return tooLarge("Maximum number of allowable file uploads has been exceeded")
 			}
 
 			tmpName, size, errorCode, err = saveUpload(part, limits, maxFileSize)
 			if err != nil {
-				return entries, malformed("Invalid multipart/form-data POST data: %s", err)
+				return malformed("Invalid multipart/form-data POST data: %s", err)
 			}
 			if errorCode == uploadErrNoTmpDir {
-				entries = append(entries, warning("File upload error - unable to create a temporary file"))
+				b.entries = append(b.entries, warning("File upload error - unable to create a temporary file"))
 			}
 		}
 
 		mimeType := ""
 		if errorCode == 0 {
-			uploaded = append(uploaded, formEntry{kind: C.FRANKENPHP_FORM_UPLOADED_FILE, name: []byte(tmpName)})
+			b.uploaded = append(b.uploaded, formEntry{kind: C.FRANKENPHP_FORM_UPLOADED_FILE, name: b.bytes(tmpName)})
 			mimeType, _, _ = strings.Cut(part.Header.Get("Content-Type"), ";")
 		}
 
-		entries = fileEntries(entries, protected, name, filename, mimeType, tmpName, errorCode, size)
+		b.fileEntries(name, filename, mimeType, tmpName, errorCode, size)
 	}
 }
 
@@ -294,20 +322,26 @@ func saveUpload(part io.Reader, limits formLimits, maxFileSize int64) (tmpName s
 
 // fileEntries appends the $_FILES variables of an upload, "a[b]" registers "a[name][b]".
 // Like rfc1867.c, the names registered for a file can't be overwritten by the next ones.
-func fileEntries(entries []formEntry, protected map[string]struct{}, name, filename, mimeType, tmpName string, errorCode, size int64) []formEntry {
+func (b *formBuffers) fileEntries(name, filename, mimeType, tmpName string, errorCode, size int64) {
 	prefix, suffix := name, ""
 	if i := strings.IndexByte(name, '['); i >= 0 && strings.HasSuffix(name, "]") {
 		prefix, suffix = name[:i], name[i:]
 	}
 
-	key := func(k string) string {
-		return prefix + "[" + k + "]" + suffix
+	key := func(k string) []byte {
+		return b.bytes(prefix, "[", k, "]", suffix)
 	}
 
 	add := func(e formEntry, override bool) {
-		if _, ok := protected[normalizeProtectedVariable(string(e.name))]; override || !ok {
-			entries = append(entries, e)
+		b.normalized = appendNormalizedVariable(b.normalized[:0], e.name)
+		if _, ok := b.protected[string(b.normalized)]; override || !ok {
+			b.entries = append(b.entries, e)
 		}
+	}
+
+	protect := func(v []byte) {
+		b.normalized = appendNormalizedVariable(b.normalized[:0], v)
+		b.protected[string(b.normalized)] = struct{}{}
 	}
 
 	// RFC 7578: don't use directory path information, full_path keeps it for folder uploads
@@ -316,53 +350,51 @@ func fileEntries(entries []formEntry, protected map[string]struct{}, name, filen
 		basename = filename[i+1:]
 	}
 
-	add(formEntry{kind: C.FRANKENPHP_FORM_FILES_STRING, name: []byte(key("name")), value: []byte(basename)}, false)
-	add(formEntry{kind: C.FRANKENPHP_FORM_FILES_STRING, name: []byte(key("full_path")), value: []byte(filename)}, false)
-	add(formEntry{kind: C.FRANKENPHP_FORM_FILES_STRING, name: []byte(key("type")), value: []byte(mimeType)}, false)
+	add(formEntry{kind: C.FRANKENPHP_FORM_FILES_STRING, name: key("name"), value: b.bytes(basename)}, false)
+	add(formEntry{kind: C.FRANKENPHP_FORM_FILES_STRING, name: key("full_path"), value: b.bytes(filename)}, false)
+	add(formEntry{kind: C.FRANKENPHP_FORM_FILES_STRING, name: key("type"), value: b.bytes(mimeType)}, false)
 
-	protected[normalizeProtectedVariable(name)] = struct{}{}
-	protected[normalizeProtectedVariable(key("tmp_name"))] = struct{}{}
+	tmpNameKey := key("tmp_name")
+	protect(b.bytes(name))
+	protect(tmpNameKey)
 
-	add(formEntry{kind: C.FRANKENPHP_FORM_FILES_STRING, name: []byte(key("tmp_name")), value: []byte(tmpName)}, true)
-	add(formEntry{kind: C.FRANKENPHP_FORM_FILES_LONG, name: []byte(key("error")), number: errorCode}, false)
-	add(formEntry{kind: C.FRANKENPHP_FORM_FILES_LONG, name: []byte(key("size")), number: size}, false)
-
-	return entries
+	add(formEntry{kind: C.FRANKENPHP_FORM_FILES_STRING, name: tmpNameKey, value: b.bytes(tmpName)}, true)
+	add(formEntry{kind: C.FRANKENPHP_FORM_FILES_LONG, name: key("error"), number: errorCode}, false)
+	add(formEntry{kind: C.FRANKENPHP_FORM_FILES_LONG, name: key("size"), number: size}, false)
 }
 
-// normalizeProtectedVariable mirrors normalize_protected_variable() of rfc1867.c
-func normalizeProtectedVariable(v string) string {
-	v = strings.TrimLeft(v, " ")
+// appendNormalizedVariable appends v normalized like normalize_protected_variable() of rfc1867.c
+func appendNormalizedVariable(dst, v []byte) []byte {
+	v = bytes.TrimLeft(v, " ")
 
-	b := make([]byte, 0, len(v))
 	i := 0
 	for ; i < len(v) && v[i] != '['; i++ {
 		if v[i] == ' ' || v[i] == '.' {
-			b = append(b, '_')
+			dst = append(dst, '_')
 		} else {
-			b = append(b, v[i])
+			dst = append(dst, v[i])
 		}
 	}
 	if i == len(v) {
-		return string(b)
+		return dst
 	}
 
 	// keep each index up to its "]", without leading whitespace, and drop what follows the last one
-	b = append(b, '[')
+	dst = append(dst, '[')
 	rest := v[i+1:]
 	for {
-		rest = strings.TrimLeft(rest, " \r\n\t")
-		end := strings.IndexByte(rest, ']') + 1
+		rest = bytes.TrimLeft(rest, " \r\n\t")
+		end := bytes.IndexByte(rest, ']') + 1
 		if end == 0 {
 			end = len(rest)
 		}
-		b = append(b, rest[:end]...)
+		dst = append(dst, rest[:end]...)
 		rest = rest[end:]
 
-		if rest == "" || rest[0] != '[' {
-			return string(b)
+		if len(rest) == 0 || rest[0] != '[' {
+			return dst
 		}
-		b = append(b, '[')
+		dst = append(dst, '[')
 		rest = rest[1:]
 	}
 }
@@ -454,52 +486,61 @@ func unhex(c byte) byte {
 	}
 }
 
-// toCFormResult copies entries into a single malloc'ed block, names are NUL-terminated
-func toCFormResult(entries []formEntry) C.frankenphp_form_result {
-	if len(entries) == 0 {
+// toCFormResult copies groups of entries, in order, into a single malloc'ed block; names are NUL-terminated
+func toCFormResult(groups ...[]formEntry) C.frankenphp_form_result {
+	count, size := 0, 0
+	for _, entries := range groups {
+		count += len(entries)
+		for _, e := range entries {
+			size += len(e.name) + 1 + len(e.value)
+		}
+	}
+	if count == 0 {
 		return C.frankenphp_form_result{}
 	}
 
-	entriesSize := len(entries) * int(unsafe.Sizeof(C.frankenphp_form_entry{}))
-	size := entriesSize
-	for _, e := range entries {
-		size += len(e.name) + 1 + len(e.value)
-	}
+	entriesSize := count * int(unsafe.Sizeof(C.frankenphp_form_entry{}))
+	size += entriesSize
 
 	block := C.malloc(C.size_t(size))
-	cEntries := unsafe.Slice((*C.frankenphp_form_entry)(block), len(entries))
+	cEntries := unsafe.Slice((*C.frankenphp_form_entry)(block), count)
 	dataPtr := unsafe.Add(block, entriesSize)
 	data := unsafe.Slice((*byte)(dataPtr), size-entriesSize)
 
-	offset := 0
-	for i, e := range entries {
-		name := unsafe.Add(dataPtr, offset)
-		offset += copy(data[offset:], e.name)
-		data[offset] = 0
-		offset++
+	offset, i := 0, 0
+	for _, entries := range groups {
+		for _, e := range entries {
+			name := unsafe.Add(dataPtr, offset)
+			offset += copy(data[offset:], e.name)
+			data[offset] = 0
+			offset++
 
-		value := unsafe.Add(dataPtr, offset)
-		offset += copy(data[offset:], e.value)
+			value := unsafe.Add(dataPtr, offset)
+			offset += copy(data[offset:], e.value)
 
-		cEntries[i] = C.frankenphp_form_entry{
-			kind:      e.kind,
-			name:      (*C.char)(name),
-			value:     (*C.char)(value),
-			value_len: C.size_t(len(e.value)),
-			number:    C.zend_long(e.number),
+			cEntries[i] = C.frankenphp_form_entry{
+				kind:      e.kind,
+				name:      (*C.char)(name),
+				value:     (*C.char)(value),
+				value_len: C.size_t(len(e.value)),
+				number:    C.zend_long(e.number),
+			}
+			i++
 		}
 	}
 
-	return C.frankenphp_form_result{entries: (*C.frankenphp_form_entry)(block), count: C.size_t(len(entries))}
+	return C.frankenphp_form_result{entries: (*C.frankenphp_form_entry)(block), count: C.size_t(count)}
 }
 
 // settleForm answers 400 or 413 for a rejected body, or throws from request_parse_body()
-func settleForm(fc *frankenPHPContext, entries []formEntry, rejection *formRejection, reject bool) C.frankenphp_form_result {
+func settleForm(fc *frankenPHPContext, rejection *formRejection, reject bool, groups ...[]formEntry) C.frankenphp_form_result {
 	if rejection == nil {
-		return toCFormResult(entries)
+		return toCFormResult(groups...)
 	}
 
-	removeUploads(entries)
+	for _, entries := range groups {
+		removeUploads(entries)
+	}
 
 	if fc.logger.Enabled(fc.ctx, slog.LevelDebug) {
 		fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "request body rejected", slog.Int("status", rejection.rejected.status), slog.String("reason", rejection.detail))
@@ -535,17 +576,20 @@ func go_parse_multipart(threadIndex C.uintptr_t, contentType *C.char, cLimits *C
 		tmpDir:                C.GoString(cLimits.tmp_dir),
 	}
 
+	b := formBuffersPool.Get().(*formBuffers)
+	defer b.release()
+
 	body := newBodyReader(fc)
-	entries, readBytes, rejection := parseMultipart(body, C.GoString(contentType), fc.request.ContentLength, limits)
+	readBytes, rejection := parseMultipart(b, body, C.GoString(contentType), fc.request.ContentLength, limits)
 	tooLarge := body.close()
 
 	// a body cut by a stalled client or by request_body limits isn't malformed
 	if rejection != nil && rejection.rejected.status == http.StatusBadRequest && body.failed() {
-		removeUploads(entries)
-		entries, rejection = nil, nil
+		removeUploads(b.uploaded)
+		b.uploaded, b.entries, rejection = b.uploaded[:0], b.entries[:0], nil
 	}
 
-	result := settleForm(fc, entries, rejection, bool(cLimits.reject))
+	result := settleForm(fc, rejection, bool(cLimits.reject), b.uploaded, b.entries)
 	result.read_bytes = C.size_t(readBytes)
 	result.too_large = C.bool(tooLarge)
 
@@ -591,7 +635,7 @@ func go_parse_urlencoded(threadIndex C.uintptr_t, cBody *C.char, length C.size_t
 	if rejection != nil || count == 0 {
 		C.free(block)
 
-		return settleForm(phpThreads[threadIndex].handler.frankenPHPContext(), nil, rejection, bool(reject))
+		return settleForm(phpThreads[threadIndex].handler.frankenPHPContext(), rejection, bool(reject))
 	}
 
 	return C.frankenphp_form_result{entries: (*C.frankenphp_form_entry)(block), count: C.size_t(count)}
