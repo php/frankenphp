@@ -1280,11 +1280,18 @@ static const zend_function_entry frankenphp_test_hook_functions[] = {
 #endif
 
 static zend_class_entry *frankenphp_ce_request_body_too_large_exception;
+static zend_class_entry *frankenphp_ce_request_body_incomplete_exception;
 
 PHP_MINIT_FUNCTION(frankenphp) {
   register_frankenphp_symbols(module_number);
+  zend_class_entry *request_body_exception =
+      register_class_FrankenPHP_RequestBodyException(zend_ce_exception);
   frankenphp_ce_request_body_too_large_exception =
-      register_class_FrankenPHP_RequestBodyTooLargeException(zend_ce_exception);
+      register_class_FrankenPHP_RequestBodyTooLargeException(
+          request_body_exception);
+  frankenphp_ce_request_body_incomplete_exception =
+      register_class_FrankenPHP_RequestBodyIncompleteException(
+          request_body_exception);
 #ifndef PHP_WIN32
   /* MINIT runs once per ZTS thread — guard the atfork registration */
   static pthread_once_t atfork_once = PTHREAD_ONCE_INIT;
@@ -1539,12 +1546,17 @@ static size_t frankenphp_read_post(char *buffer, size_t count_bytes) {
    * the truncated body for a complete one. Worker request startup and
    * shutdown run in frankenphp_handle_request()'s frame, not in user code. */
   zend_execute_data *ex = EG(current_execute_data);
-  if (result.r1 && ex != NULL &&
+  if (result.r1 != FRANKENPHP_READ_POST_OK && ex != NULL &&
       !(ex->func != NULL && ex->func->type == ZEND_INTERNAL_FUNCTION &&
         ex->func->internal_function.handler ==
             ZEND_FN(frankenphp_handle_request))) {
-    zend_throw_exception(frankenphp_ce_request_body_too_large_exception,
-                         "Request body too large", 0);
+    if (result.r1 == FRANKENPHP_READ_POST_TOO_LARGE) {
+      zend_throw_exception(frankenphp_ce_request_body_too_large_exception,
+                           "Request body too large", 0);
+    } else {
+      zend_throw_exception(frankenphp_ce_request_body_incomplete_exception,
+                           "Request body incomplete", 0);
+    }
   }
 
   return result.r0;

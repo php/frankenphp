@@ -29,6 +29,8 @@ type frankenPHPContext struct {
 
 	// idle timeout per body read; zero disables it
 	requestBodyTimeout time.Duration
+	// bytes of the request body read so far, to detect a body shorter than its Content-Length
+	requestBodyRead int64
 
 	docURI         string
 	pathInfo       string
