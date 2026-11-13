@@ -1,6 +1,7 @@
 package frankenphp_test
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -86,6 +87,49 @@ func BenchmarkFormParser(b *testing.B) {
 					}
 				})
 			}
+		})
+	}
+}
+
+// BenchmarkFormParserParallel sends 200 fields to 8 PHP threads: allocations hurt more under load
+func BenchmarkFormParserParallel(b *testing.B) {
+	parts := make([]string, 200)
+	for i := range parts {
+		parts[i] = field(fmt.Sprintf("field%d", i), strings.Repeat("v", 32))
+	}
+	body := []byte(multipartBody(parts...))
+	contentType := "multipart/form-data; boundary=" + formBoundary
+
+	cwd, _ := os.Getwd()
+	testDataDir := cwd + "/testdata/"
+
+	for _, parser := range []string{"php", "go"} {
+		b.Run("parser="+parser, func(b *testing.B) {
+			require.NoError(b, frankenphp.Init(
+				frankenphp.WithGoFormParser(parser == "go"),
+				frankenphp.WithWorkers("form-count", testDataDir+"form-count.php", 8),
+				frankenphp.WithNumThreads(9),
+				frankenphp.WithPhpIni(map[string]string{"post_max_size": "64M", "upload_max_filesize": "64M", "max_file_uploads": "100", "max_input_vars": "10000"}),
+			))
+			b.Cleanup(frankenphp.Shutdown)
+
+			b.SetBytes(int64(len(body)))
+			b.ReportAllocs()
+			b.SetParallelism(4)
+			b.RunParallel(func(pb *testing.PB) {
+				for pb.Next() {
+					r := httptest.NewRequest(http.MethodPost, "http://example.com/form-count.php", bytes.NewReader(body))
+					r.Header.Set("Content-Type", contentType)
+					req, err := frankenphp.NewRequestWithContext(r, frankenphp.WithRequestDocumentRoot(testDataDir, false))
+					if err != nil {
+						b.Fatal(err)
+					}
+					w := httptest.NewRecorder()
+					if err := frankenphp.ServeHTTP(w, req); err != nil || w.Code != http.StatusOK {
+						b.Fatalf("unexpected response %d: %s", w.Code, w.Body.String())
+					}
+				}
+			})
 		})
 	}
 }

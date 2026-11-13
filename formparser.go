@@ -10,13 +10,14 @@ import (
 	"log/slog"
 	"math"
 	"mime"
-	"mime/multipart"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"unsafe"
+
+	"github.com/dunglas/frankenphp/internal/multipart"
 )
 
 // UPLOAD_ERR_* codes, rfc1867.h only exports them since PHP 8.3
@@ -74,6 +75,8 @@ type formBuffers struct {
 	data       []byte
 	normalized []byte
 	protected  map[string]struct{}
+	limited    io.LimitedReader
+	multipart  multipart.Reader
 }
 
 var formBuffersPool = sync.Pool{New: func() any {
@@ -121,11 +124,15 @@ func parseMultipart(b *formBuffers, body io.Reader, contentType string, contentL
 	if limits.postMaxSize > 0 && limits.postMaxSize < math.MaxInt64 {
 		readLimit = limits.postMaxSize + 1
 	}
-	limited := &io.LimitedReader{R: body, N: readLimit}
+	b.limited = io.LimitedReader{R: body, N: readLimit}
+	b.multipart.Reset(&b.limited, boundary)
 
-	rejection := parseParts(b, multipart.NewReader(limited, boundary), limits)
+	rejection := parseParts(b, &b.multipart, limits)
 
-	readBytes := readLimit - limited.N
+	readBytes := readLimit - b.limited.N
+	// don't keep the body alive in the pool
+	b.multipart.Reset(nil, "")
+	b.limited.R = nil
 	if limits.postMaxSize > 0 && readBytes > limits.postMaxSize {
 		// the cut body is malformed too, the size is what matters
 		rejection = tooLarge("Actual POST length does not match Content-Length, and exceeds %d bytes", limits.postMaxSize)
@@ -147,8 +154,7 @@ func parseParts(b *formBuffers, reader *multipart.Reader, limits formLimits) *fo
 	)
 
 	for {
-		// NextPart would decode quoted-printable parts, RFC 7578 deprecates Content-Transfer-Encoding
-		part, err := reader.NextRawPart()
+		part, err := reader.NextPart()
 		if err == io.EOF {
 			return nil
 		}
@@ -160,13 +166,11 @@ func parseParts(b *formBuffers, reader *multipart.Reader, limits formLimits) *fo
 			return tooLarge("Multipart body parts limit exceeded %d. To increase the limit change max_multipart_body_parts in php.ini.", limits.maxMultipartBodyParts)
 		}
 
-		dispositionType, dispositionParams, err := mime.ParseMediaType(part.Header.Get("Content-Disposition"))
-		name, hasName := dispositionParams["name"]
-		if err != nil || dispositionType != "form-data" || !hasName {
+		name, filename, hasFilename, ok := part.FormData()
+		if !ok {
 			return malformed("File Upload Mime headers garbled")
 		}
 
-		filename, hasFilename := dispositionParams["filename"]
 		if !hasFilename {
 			start := len(b.data)
 			if b.data, err = appendRead(b.data, part); err != nil {
@@ -178,9 +182,11 @@ func parseParts(b *formBuffers, reader *multipart.Reader, limits formLimits) *fo
 				return tooLarge("Input variables exceeded %d. To increase the limit change max_input_vars in php.ini.", limits.maxInputVars)
 			}
 
-			b.entries = append(b.entries, formEntry{kind: C.FRANKENPHP_FORM_POST_STRING, name: b.bytes(name), value: value})
+			start = len(b.data)
+			b.data = append(b.data, name...)
+			b.entries = append(b.entries, formEntry{kind: C.FRANKENPHP_FORM_POST_STRING, name: b.data[start:len(b.data):len(b.data)], value: value})
 
-			if strings.EqualFold(name, "MAX_FILE_SIZE") {
+			if bytes.EqualFold(name, []byte("MAX_FILE_SIZE")) {
 				maxFileSize, _ = strconv.ParseInt(strings.TrimSpace(string(value)), 10, 64)
 			}
 
@@ -188,7 +194,7 @@ func parseParts(b *formBuffers, reader *multipart.Reader, limits formLimits) *fo
 		}
 
 		// never repair potentially malicious input
-		if !limits.fileUploads || !hasBalancedBrackets(name) {
+		if !limits.fileUploads || !hasBalancedBrackets(string(name)) {
 			continue
 		}
 
@@ -199,7 +205,7 @@ func parseParts(b *formBuffers, reader *multipart.Reader, limits formLimits) *fo
 		)
 
 		// like PHP, empty file inputs don't count as uploads
-		if filename == "" {
+		if len(filename) == 0 {
 			errorCode = uploadErrNoFile
 		} else {
 			if fileUploads++; fileUploads > limits.maxFileUploads {
@@ -218,10 +224,10 @@ func parseParts(b *formBuffers, reader *multipart.Reader, limits formLimits) *fo
 		mimeType := ""
 		if errorCode == 0 {
 			b.uploaded = append(b.uploaded, formEntry{kind: C.FRANKENPHP_FORM_UPLOADED_FILE, name: b.bytes(tmpName)})
-			mimeType, _, _ = strings.Cut(part.Header.Get("Content-Type"), ";")
+			mimeType, _, _ = strings.Cut(string(part.ContentType()), ";")
 		}
 
-		b.fileEntries(name, filename, mimeType, tmpName, errorCode, size)
+		b.fileEntries(string(name), string(filename), mimeType, tmpName, errorCode, size)
 	}
 }
 
