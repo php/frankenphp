@@ -235,6 +235,12 @@ typedef enum {
   FRANKENPHP_MERCURE_UNSUPPORTED = 4,
 } frankenphp_mercure_status;
 
+typedef enum {
+  FRANKENPHP_READ_POST_OK = 0,
+  FRANKENPHP_READ_POST_TOO_LARGE = 1,
+  FRANKENPHP_READ_POST_INCOMPLETE = 2,
+} frankenphp_read_post_error;
+
 void register_extensions(zend_module_entry **m, int len);
 
 // This function is exported for use by extensions, as proposed in PR #2305

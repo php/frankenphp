@@ -44,7 +44,8 @@ func newH2CServer(t *testing.T, handler http.HandlerFunc) (addr string, client *
 // TestRequestBodyTimeout proves that WithRequestBodyTimeout bounds a slow-POST
 // client: it announces a large Content-Length, then stalls without sending the
 // body. Without the option the PHP thread would block in Body.Read until the
-// connection closed; with it, the read is cut off and the request completes.
+// connection closed; with it, the read is cut off and the request is rejected
+// with a 408 instead of running the script on an empty body.
 func TestRequestBodyTimeout(t *testing.T) {
 	require.NoError(t, frankenphp.Init())
 	defer frankenphp.Shutdown()
@@ -82,9 +83,9 @@ func TestRequestBodyTimeout(t *testing.T) {
 	// The 300ms idle timeout (applied at most twice by PHP's read loop) must
 	// release the thread well before the client's 5s read deadline.
 	require.Less(t, elapsed, 4*time.Second, "slow body must be bounded by the timeout")
-	require.Contains(t, string(resp), "200 OK")
-	// PHP saw an empty body: php://input read zero bytes.
-	require.Contains(t, string(resp), "read=0")
+	require.Contains(t, string(resp), "408 Request Timeout")
+	// the script did not run on the partial body
+	require.NotContains(t, string(resp), "read=")
 }
 
 // net/http drains an unread body smaller than 256 KiB before writing the
@@ -158,7 +159,7 @@ func (b *signalingBody) Read(p []byte) (int, error) {
 // TestRequestBodyTimeoutHTTP2 is the HTTP/2 counterpart of the test above: over
 // HTTP/2 the deadline lands on the stream (via x/net) rather than the net.Conn,
 // so this exercises the SetReadDeadline path that HTTP/1 never touches. A slow
-// POST that trips the idle timeout must bound the read and return cleanly.
+// POST that trips the idle timeout must bound the read and be rejected with a 408.
 // The nil-dereference crash of php/frankenphp#2535 needs the writer to be used
 // after its stream is finalized; see TestSetReadDeadlineRecoversFromPanic.
 func TestRequestBodyTimeoutHTTP2(t *testing.T) {
@@ -196,8 +197,8 @@ func TestRequestBodyTimeoutHTTP2(t *testing.T) {
 	elapsed := time.Since(start)
 
 	require.Less(t, elapsed, 4*time.Second, "slow body must be bounded by the timeout")
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-	require.Contains(t, string(body), "read=0")
+	require.Equal(t, http.StatusRequestTimeout, resp.StatusCode)
+	require.NotContains(t, string(body), "read=")
 }
 
 // TestFinishRequestThenReadBodyHTTP2 reproduces php/frankenphp#2535: a script
