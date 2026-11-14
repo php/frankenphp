@@ -8,7 +8,7 @@ description: Exécutez FrankenPHP en mode worker pour maintenir votre applicatio
 Démarrez votre application une fois et gardez-la en mémoire.
 FrankenPHP traitera les requêtes entrantes en quelques millisecondes.
 
-## Démarrage des scripts workers FrankenPHP
+## Démarrer des scripts workers FrankenPHP
 
 ### Exécuter un worker FrankenPHP avec Docker
 
@@ -42,13 +42,13 @@ frankenphp php-server --worker /path/to/your/worker/script.php --watch="/path/to
 
 Cette fonctionnalité est souvent utilisée en combinaison avec le [rechargement à chaud](hot-reload.md).
 
-## Mode worker pour Symfony
+## Le mode worker pour Symfony
 
-Voir [la documentation du mode worker de Symfony avec FrankenPHP](symfony.md#symfony-worker-mode-with-frankenphp).
+Consultez [la documentation du mode worker de FrankenPHP pour Symfony](symfony.md#le-mode-worker-de-symfony-avec-frankenphp).
 
-## Mode worker pour Laravel Octane
+## Le mode worker pour Laravel Octane
 
-Voir [la documentation FrankenPHP Laravel Octane](laravel.md#laravel-octane).
+Consultez [la documentation de FrankenPHP pour Laravel Octane](laravel.md#laravel-octane).
 
 ## Écrire un script worker FrankenPHP personnalisé
 
@@ -117,7 +117,7 @@ docker run \
 
 ### Utiliser PSR-15
 
-Si votre application utilise [PSR-15](https://www.php-fig.org/psr/psr-15/) au lieu des superglobales, convertissez la requête/réponse aux limites du handler avec [`nyholm/psr7`](https://github.com/Nyholm/psr7) et [`nyholm/psr7-server`](https://github.com/Nyholm/psr7-server) :
+Si votre application utilise [PSR-15](https://www.php-fig.org/psr/psr-15/) plutôt que les superglobales, convertissez la requête et la réponse aux extrémités du handler avec [`nyholm/psr7`](https://github.com/Nyholm/psr7) et [`nyholm/psr7-server`](https://github.com/Nyholm/psr7-server) :
 
 ```console
 composer require nyholm/psr7 nyholm/psr7-server psr/http-server-handler
@@ -232,27 +232,27 @@ $handler = static function () use ($workerServer) {
 
 La plupart des superglobales (`$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, `$_SERVER`, `$_REQUEST`) sont automatiquement réinitialisées entre les requêtes.
 Cependant, **`$_ENV` n'est actuellement pas réinitialisée entre les requêtes**.
-Cela signifie que toute modification apportée à `$_ENV` pendant une requête persistera et sera visible pour les requêtes ultérieures traitées par le même thread worker.
-Évitez de stocker des données spécifiques à la requête ou sensibles dans `$_ENV`.
+Cela signifie que toute modification apportée à `$_ENV` pendant une requête persistera et sera visible par les requêtes suivantes traitées par le même thread worker.
+Évitez de stocker des données spécifiques à une requête ou sensibles dans `$_ENV`.
 
-## Persistance d'état
+## Persistance de l'état
 
-Parce que le mode worker maintient le processus PHP en vie entre les requêtes, l'état suivant persiste à travers les requêtes :
+Comme le mode worker garde le processus PHP en vie entre les requêtes, l'état suivant persiste d'une requête à l'autre :
 
-- **Variables statiques** : Les variables déclarées avec `static` à l'intérieur des fonctions ou des méthodes conservent leurs valeurs entre les requêtes.
-- **Propriétés statiques de classe** : Les propriétés statiques des classes persistent entre les requêtes.
-- **Variables globales** : Les variables dans la portée globale du script worker persistent entre les requêtes.
-- **Caches en mémoire** : Toute donnée stockée en mémoire (tableaux, objets) en dehors du gestionnaire de requêtes persiste.
-- **Paramètres du moteur d'exécution** : Les modifications effectuées avec `ini_set()`, `stream_context_set_default()`, `date_default_timezone_set()`, `chdir()`, `stream_wrapper_register()`, `set_error_handler()` ou `set_exception_handler()` restent en vigueur pour les requêtes ultérieures. Ne stockez jamais de valeurs spécifiques à la requête ou à l'utilisateur, telles que des identifiants dans le contexte de flux par défaut : passez plutôt un contexte explicite à chaque appel.
+- **Variables statiques** : les variables déclarées avec `static` dans des fonctions ou des méthodes conservent leur valeur entre les requêtes.
+- **Propriétés statiques de classe** : les propriétés statiques des classes persistent entre les requêtes.
+- **Variables globales** : les variables de la portée globale du script worker persistent entre les requêtes.
+- **Caches en mémoire** : toute donnée stockée en mémoire (tableaux, objets) en dehors du handler de requête persiste.
+- **Paramètres du moteur d'exécution** : les modifications effectuées avec `ini_set()`, `stream_context_set_default()`, `date_default_timezone_set()`, `chdir()`, `stream_wrapper_register()`, `set_error_handler()` ou `set_exception_handler()` restent en vigueur pour les requêtes suivantes. N'y stockez jamais de valeurs spécifiques à une requête ou à un utilisateur, comme des identifiants dans le contexte de flux par défaut : passez plutôt un contexte explicite à chaque appel.
 - **Paramètres à l'échelle du processus** : `umask()` et `setlocale()` modifient l'ensemble du processus FrankenPHP, pas seulement le thread actuel. Le mode worker ne les restaure pas entre les requêtes, et dans tous les modes, ils affectent également les requêtes exécutées simultanément. Définissez-les une fois au démarrage, ou appelez `chmod()` sur les fichiers créés au lieu de modifier l'umask.
 
-C'est un comportement intentionnel et c'est ce qui rend le mode worker rapide. Cependant, cela demande de l'attention pour éviter les effets secondaires involontaires :
+C'est voulu, et c'est ce qui rend le mode worker rapide. Cela demande toutefois de l'attention pour éviter des effets de bord indésirables :
 
 ```php
 <?php
 function getCounter(): int {
     static $count = 0;
-    return ++$count; // S'incrémente à travers les requêtes !
+    return ++$count; // S'incrémente d'une requête à l'autre !
 }
 
 $handler = static function () {
@@ -264,5 +264,5 @@ while (\frankenphp_handle_request($handler)) {
 }
 ```
 
-Lorsque vous écrivez des scripts worker, assurez-vous de réinitialiser tout état spécifique à la requête entre les requêtes.
-Les frameworks comme [Symfony](symfony.md) et [Laravel Octane](laravel.md) se chargent de réinitialiser la plupart des états pour vous, mais vous pourriez toujours avoir besoin de réinitialiser vos propres services. Avec Symfony, les services qui maintiennent un état spécifique à la requête doivent implémenter [`Symfony\Contracts\Service\ResetInterface`](https://github.com/symfony/contracts/blob/main/Service/ResetInterface.php) afin qu'ils soient réinitialisés par le noyau entre les requêtes.
+Lorsque vous écrivez des scripts workers, veillez à réinitialiser tout état spécifique à une requête entre les requêtes.
+Les frameworks comme [Symfony](symfony.md) et [Laravel Octane](laravel.md) se chargent de réinitialiser la plupart de l'état pour vous, mais vous devrez peut-être encore réinitialiser vos propres services. Avec Symfony, les services qui conservent un état spécifique à la requête doivent implémenter [`Symfony\Contracts\Service\ResetInterface`](https://github.com/symfony/contracts/blob/main/Service/ResetInterface.php) afin d'être réinitialisés par le kernel entre les requêtes.
