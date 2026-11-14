@@ -103,6 +103,7 @@ You can also explicitly configure FrankenPHP using the [global option](https://c
 		max_wait_time <duration> # Sets the maximum time a request may wait for a free PHP thread before timing out. Default: disabled.
 		max_idle_time <duration> # Sets the maximum time an autoscaled thread may be idle before being deactivated. Default: 5s.
 		max_requests <num> # (experimental) Sets the maximum number of requests a PHP thread will handle before being restarted, useful for mitigating memory leaks. Applies to both regular and worker threads. Default: 0 (unlimited).
+		go_form_parser # (experimental) Parses multipart and urlencoded request bodies with memory-safe Go parsers instead of PHP's C ones. See below.
 		php_ini <key> <value> # Set a php.ini directive. Can be used several times to set multiple directives.
 		worker {
 			file <path> # Sets the path to the worker script.
@@ -292,6 +293,45 @@ But when the fix depends on a third party you don't control,
 	}
 }
 ```
+
+## Parsing forms with Go (experimental)
+
+By default, PHP's C parsers populate `$_POST` and `$_FILES` from `multipart/form-data` and `application/x-www-form-urlencoded` request bodies.
+The `go_form_parser` option replaces them with memory-safe Go parsers (`mime/multipart` for multipart bodies).
+This also applies to `request_parse_body()`.
+
+```caddyfile
+{
+	frankenphp {
+		go_form_parser
+	}
+}
+```
+
+The Go parsers are faster for file uploads and large urlencoded bodies, but slower for multipart bodies with many fields.
+
+PHP still builds the nested `$_POST` and `$_FILES` arrays from the parsed names, as it does for `$_GET` and `$_COOKIE`.
+The `upload_max_filesize`, `MAX_FILE_SIZE`, `file_uploads` and `upload_tmp_dir` settings keep working,
+and so do `UPLOAD_ERR_*` codes, input filters, `is_uploaded_file()` and `move_uploaded_file()`.
+
+Where PHP emits a warning and runs the script with partial data, the Go parsers reject the whole request and the script doesn't run:
+
+- `413 Content Too Large` when the body exceeds `post_max_size`, `max_input_vars`, `max_file_uploads` or `max_multipart_body_parts`, as with Caddy's `request_body` `max_size`
+- `400 Bad Request` when a multipart body breaks [RFC 7578](https://www.rfc-editor.org/rfc/rfc7578): missing boundary, truncated body, or a part without a `form-data` `Content-Disposition` header and a `name` parameter
+
+`request_parse_body()` throws a `RequestParseBodyException` instead, with the reason.
+Set `debug` log level to log the reason of rejected requests.
+
+Other differences with PHP's parsers:
+
+- `session.upload_progress` isn't supported, by design: it blocks a PHP thread for the whole upload to report the progress.
+  Track the progress in the browser with [`XMLHttpRequest`'s `upload` progress events](https://xhr.spec.whatwg.org/#the-upload-attribute) (`fetch()` has none),
+  or use resumable uploads ([tus](https://tus.io), [IETF Resumable Uploads for HTTP](https://datatracker.ietf.org/doc/draft-ietf-httpbis-resumable-upload/)) for large files
+- `mbstring.encoding_translation` is ignored
+- RFC 2231 `filename*` parameters are decoded
+- an unusable `upload_tmp_dir` fails the upload with `UPLOAD_ERR_NO_TMP_DIR` instead of falling back to the system temporary directory
+- a `MAX_FILE_SIZE` field that isn't an integer is ignored
+- `memory_limit` doesn't bound multipart fields while they are parsed, only `post_max_size` does: keep it enabled, or limit the request body size
 
 ## Environment variables
 
