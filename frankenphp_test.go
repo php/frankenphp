@@ -647,6 +647,24 @@ func testLog_error_log(t *testing.T, opts *testOptions) {
 	}, opts)
 }
 
+func TestLog_php_error_module(t *testing.T) { testLog_php_error(t, &testOptions{}) }
+func TestLog_php_error_worker(t *testing.T) {
+	testLog_php_error(t, &testOptions{workerScript: "log-php_error.php"})
+}
+func testLog_php_error(t *testing.T, opts *testOptions) {
+	var buf fmt.Stringer
+	opts.phpIni = map[string]string{"log_errors": "1", "display_errors": "0"}
+	opts.logger, buf = newTestLogger(t)
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		req := httptest.NewRequest("GET", fmt.Sprintf("http://example.com/log-php_error.php?i=%d", i), nil)
+		w := httptest.NewRecorder()
+		handler(w, req)
+
+		assert.Contains(t, buf.String(), fmt.Sprintf(`level=WARN msg="PHP Warning:  request %d in `, i))
+	}, opts)
+}
+
 func TestLog_frankenphp_log_module(t *testing.T) { testLog_frankenphp_log(t, &testOptions{}) }
 func TestLog_frankenphp_log_worker(t *testing.T) {
 	testLog_frankenphp_log(t, &testOptions{workerScript: "log-frankenphp_log.php"})
