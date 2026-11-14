@@ -1688,6 +1688,23 @@ static void frankenphp_register_variables(zval *track_vars_array) {
 }
 
 static void frankenphp_log_message(const char *message, int syslog_type_int) {
+#ifdef PHP_WIN32
+  /* win32/syslog.h doesn't use the standard syslog priority values */
+  switch (syslog_type_int) {
+  case LOG_CRIT:
+    syslog_type_int = 2;
+    break;
+  case LOG_ERR:
+    syslog_type_int = 3;
+    break;
+  case LOG_WARNING:
+    syslog_type_int = 4;
+    break;
+  case LOG_NOTICE:
+    syslog_type_int = 5;
+    break;
+  }
+#endif
   go_log(frankenphp_thread_index(), (char *)message, syslog_type_int);
 }
 
