@@ -19,7 +19,7 @@ When [Caddy metrics](https://caddyserver.com/docs/metrics) are enabled, FrankenP
 - `frankenphp_busy_workers{worker="[worker_name]"}`: The number of workers currently processing a request.
 - `frankenphp_worker_request_time{worker="[worker_name]"}`: The time spent processing requests by all workers.
 - `frankenphp_worker_request_count{worker="[worker_name]"}`: The number of requests processed by all workers.
-- `frankenphp_ready_workers{worker="[worker_name]"}`: The number of workers that have called `frankenphp_handle_request` at least once.
+- `frankenphp_ready_workers{worker="[worker_name]"}`: The number of workers that have reached their ready point at least once: `frankenphp_handle_request()` for HTTP workers, `WorkerHandle::tick()` for background workers.
 - `frankenphp_worker_crashes{worker="[worker_name]"}`: The number of times a worker has unexpectedly terminated.
 - `frankenphp_worker_restarts{worker="[worker_name]"}`: The number of times a worker has been deliberately restarted.
 - `frankenphp_worker_queue_depth{worker="[worker_name]"}`: The number of queued requests.
@@ -74,7 +74,7 @@ Each entry in `ThreadDebugStates` contains:
 | Field | Type | Description |
 |---|---|---|
 | `Index` | integer | The index of the thread. |
-| `Name` | string | The name of the thread (e.g., the worker file path). |
+| `Name` | string | The name of the thread (e.g., the worker file path, or the worker name for a background worker). |
 | `State` | string | The internal state of the thread (e.g., `ready`, `shutting down`). |
 | `IsWaiting` | boolean | Whether the thread is waiting for a request. |
 | `IsBusy` | boolean | Whether the thread is currently processing a request. |

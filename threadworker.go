@@ -15,60 +15,33 @@ import (
 // executes the PHP worker script in a loop
 // implements the threadHandler interface
 type workerThread struct {
-	state                   *state.ThreadState
-	thread                  *phpThread
-	worker                  *worker
+	workerLifecycle
+
 	dummyFrankenPHPContext  *frankenPHPContext
 	workerFrankenPHPContext *frankenPHPContext
 	isBootingScript         bool // true if the worker has not reached frankenphp_handle_request yet
 	failureCount            int  // number of consecutive startup failures
 	requestCount            int  // number of requests handled since last restart
+
+	// the server of the request being served, or of the last one served: what
+	// runs between two requests belongs to the one before, see namespaceScope()
+	scope *Server
 }
 
 func convertToWorkerThread(thread *phpThread, worker *worker) {
-	thread.setHandler(&workerThread{
-		state:  thread.state,
-		thread: thread,
-		worker: worker,
-	})
+	thread.setHandler(&workerThread{workerLifecycle: newWorkerLifecycle(thread, worker)})
 	worker.attachThread(thread)
 }
 
-// beforeScriptExecution returns the name of the script or an empty string on shutdown
 func (handler *workerThread) beforeScriptExecution() string {
-	switch handler.state.Get() {
-	case state.TransitionRequested:
-		if handler.worker.onThreadShutdown != nil {
-			handler.worker.onThreadShutdown(handler.thread.threadIndex)
-		}
-		handler.worker.detachThread(handler.thread)
-		return handler.thread.transitionToNewHandler()
-	case state.Ready, state.TransitionComplete:
-		handler.thread.updateContext(true)
-		if handler.worker.onThreadReady != nil {
-			handler.worker.onThreadReady(handler.thread.threadIndex)
-		}
+	return handler.workerLifecycle.beforeScriptExecution(handler.startScript)
+}
 
-		setupWorkerScript(handler, handler.worker)
+// startScript runs the worker script; it always has one to run
+func (handler *workerThread) startScript() string {
+	setupWorkerScript(handler, handler.worker)
 
-		return handler.worker.fileName
-	case state.Rebooting, state.ForceRebooting:
-		return ""
-	case state.RebootReady:
-		handler.requestCount = 0
-		handler.state.Set(state.Ready)
-		return handler.beforeScriptExecution()
-	case state.ShuttingDown:
-		if handler.worker.onThreadShutdown != nil {
-			handler.worker.onThreadShutdown(handler.thread.threadIndex)
-		}
-		handler.worker.detachThread(handler.thread)
-
-		// signal to stop
-		return ""
-	default:
-		panic("unexpected state: " + handler.state.Name())
-	}
+	return handler.worker.fileName
 }
 
 func (handler *workerThread) afterScriptExecution(exitStatus int) {
@@ -99,6 +72,7 @@ func setupWorkerScript(handler *workerThread, worker *worker) {
 	}
 
 	handler.dummyFrankenPHPContext = fc
+	handler.scope = worker.server
 	handler.isBootingScript = true
 	handler.requestCount = 0
 
@@ -149,8 +123,15 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 		return
 	}
 
-	if worker.maxConsecutiveFailures >= 0 && startupFailChan != nil && !watcherIsEnabled && handler.failureCount >= worker.maxConsecutiveFailures {
-		startupFailChan <- fmt.Errorf("too many consecutive failures: worker %s has not reached frankenphp_handle_request()", worker.fileName)
+	// a boot that fails because the start did, a read of the vars of a worker
+	// that never got ready for instance, would fail again
+	if startupHasFailed() {
+		handler.thread.state.Set(state.ShuttingDown)
+		return
+	}
+
+	if worker.maxConsecutiveFailures >= 0 && !watcherIsEnabled && handler.failureCount >= worker.maxConsecutiveFailures &&
+		reportStartupFailure(fmt.Errorf("too many consecutive failures: worker %s has not reached frankenphp_handle_request()", worker.fileName)) {
 		handler.thread.state.Set(state.ShuttingDown)
 		return
 	}
@@ -168,13 +149,29 @@ func tearDownWorkerScript(handler *workerThread, exitStatus int) {
 		}
 	}
 
-	// wait a bit and try again (exponential backoff)
-	backoffDuration := time.Duration(handler.failureCount*handler.failureCount*100) * time.Millisecond
-	if backoffDuration > time.Second {
-		backoffDuration = time.Second
-	}
+	// wait a bit and try again
+	time.Sleep(restartBackoff(handler.failureCount))
 	handler.failureCount++
-	time.Sleep(backoffDuration)
+}
+
+// maxRestartBackoff is the longest wait between two runs of a failing script
+const maxRestartBackoff = time.Second
+
+// minHealthyRun is how long a run has to last to count as one that did
+// something: a shorter one paces the next, see restartBackoff
+const minHealthyRun = 100 * time.Millisecond
+
+// restartBackoff is the wait before a worker script is re-run after a
+// failure: quadratic in the number of consecutive failures, capped at one
+// second; shared by HTTP and background workers. The cap comes before the
+// multiplication, which overflows a duration past some 300k failures, a
+// count a crash loop reaches on its own in a few days
+func restartBackoff(failures int) time.Duration {
+	if failures >= 4 {
+		return maxRestartBackoff
+	}
+
+	return time.Duration(failures*failures*100) * time.Millisecond
 }
 
 // waitForWorkerRequest is called during frankenphp_handle_request in the php worker script.
@@ -232,6 +229,7 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 	}
 
 	handler.requestCount++
+	handler.scope = fc.server
 	handler.thread.contextMu.Lock()
 	handler.workerFrankenPHPContext = fc
 	handler.thread.contextMu.Unlock()

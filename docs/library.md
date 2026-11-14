@@ -60,6 +60,8 @@ err := frankenphp.Init(
 
 Workers declared without a server scope are global: they match by file path on any server. Since a global worker has no set of requests to match against, combining `WithWorkerMatcher()` with a global worker is a configuration error and `Init()` rejects it.
 
+`WithWorkerBackground()` declares a [background worker](worker.md#background-workers), which runs outside the request cycle.
+
 ## Per-request options
 
 `Server.ServeHTTP()` accepts `RequestOption`s to override the server configuration for a single request, e.g. `WithRequestDocumentRoot()`, `WithRequestSplitPath()`, `WithRequestEnv()` or `WithRequestLogger()`.
