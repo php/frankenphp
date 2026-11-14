@@ -647,9 +647,13 @@ func testLog_error_log(t *testing.T, opts *testOptions) {
 	}, opts)
 }
 
-func TestLog_php_error(t *testing.T) {
+func TestLog_php_error_module(t *testing.T) { testLog_php_error(t, &testOptions{}) }
+func TestLog_php_error_worker(t *testing.T) {
+	testLog_php_error(t, &testOptions{workerScript: "log-php_error.php"})
+}
+func testLog_php_error(t *testing.T, opts *testOptions) {
 	var buf fmt.Stringer
-	opts := &testOptions{phpIni: map[string]string{"log_errors": "1", "display_errors": "0"}}
+	opts.phpIni = map[string]string{"log_errors": "1", "display_errors": "0"}
 	opts.logger, buf = newTestLogger(t)
 
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
