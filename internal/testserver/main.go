@@ -1,8 +1,6 @@
 package main
 
 import (
-	"context"
-	"log/slog"
 	"net/http"
 	"os"
 
@@ -10,22 +8,25 @@ import (
 )
 
 func main() {
-	ctx := context.Background()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	root := os.Getenv("ROOT")
+	if root == "" {
+		root = "public"
+	}
 
-	if err := frankenphp.Init(frankenphp.WithContext(ctx), frankenphp.WithLogger(logger)); err != nil {
+	server, err := frankenphp.NewServer(root)
+
+	if err != nil {
+		panic(err)
+	}
+
+	if err := frankenphp.Init(frankenphp.WithServer(server)); err != nil {
 		panic(err)
 	}
 	defer frankenphp.Shutdown()
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		req, err := frankenphp.NewRequestWithContext(r)
-		if err != nil {
-			panic(err)
-		}
-
-		if err := frankenphp.ServeHTTP(w, req); err != nil {
-			panic(err)
+		if err := server.ServeHTTP(w, r); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	})
 
@@ -34,8 +35,8 @@ func main() {
 		port = "8080"
 	}
 
-	if logger.Enabled(ctx, slog.LevelError) {
-		logger.LogAttrs(ctx, slog.LevelError, "server error", slog.Any("error", http.ListenAndServe(":"+port, nil)))
+	if err := http.ListenAndServe(":"+port, nil); err != nil {
+		panic(err)
 	}
 
 	os.Exit(1)

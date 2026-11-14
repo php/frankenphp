@@ -30,7 +30,7 @@ func WithHotReload(topic string, hub *mercure.Hub, patterns []string) Option {
 
 					if err := hub.Publish(globalCtx, &mercure.Update{
 						Topics: []string{topic},
-						Event:  mercure.Event{Data: string(data)},
+						Data:   string(data),
 						Debug:  globalLogger.Enabled(globalCtx, slog.LevelDebug),
 					}); err != nil && globalLogger.Enabled(globalCtx, slog.LevelError) {
 						globalLogger.LogAttrs(globalCtx, slog.LevelError, "error publishing hot reloading Mercure update", slog.Any("error", err))

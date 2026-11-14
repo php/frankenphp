@@ -98,8 +98,8 @@ You can also explicitly configure FrankenPHP using the [global option](https://c
 ```caddyfile
 {
 	frankenphp {
-		num_threads <num_threads> # Sets the number of PHP threads to start. Default: 2x the number of available CPUs.
-		max_threads <num_threads> # Limits the number of additional PHP threads that can be started at runtime. Default: num_threads. Can be set to 'auto'.
+		num_threads <num_threads> # Sets the number of PHP threads to start for the requests no worker serves, worker threads coming on top of it. Default: what is left of 2x the number of available CPUs once the workers have their threads, one at the very least.
+		max_threads <num_threads> # Limits how many PHP threads may run at once, workers included. Default: the threads started at boot. Can be set to 'auto'.
 		max_wait_time <duration> # Sets the maximum time a request may wait for a free PHP thread before timing out. Default: disabled.
 		max_idle_time <duration> # Sets the maximum time an autoscaled thread may be idle before being deactivated. Default: 5s.
 		max_requests <num> # (experimental) Sets the maximum number of requests a PHP thread will handle before being restarted, useful for mitigating memory leaks. Applies to both regular and worker threads. Default: 0 (unlimited).
@@ -156,6 +156,7 @@ Using the `php_server` directive is generally what you need,
 but if you need full control, you can use the lower-level `php` directive.
 The `php` directive passes all input to PHP, instead of first checking whether
 it's a PHP file or not. Read more about it in the [performance page](performance.md#try_files).
+A request whose path contains none of the `split_path` extensions gets a 404, unless a worker handles it.
 
 Using the `php_server` directive is equivalent to this configuration:
 
@@ -166,7 +167,7 @@ route {
 		file {path}/index.php
 		not path */
 	}
-	redir @canonicalPath {path}/ 308
+	redir @canonicalPath ./{http.request.orig_uri.path.file_escaped}/{http.request.orig_uri.prefixed_query} 308
 	# If the requested file does not exist, try index files
 	@indexFiles file {
 		try_files {path} {path}/index.php index.php
@@ -185,15 +186,16 @@ The `php_server` and the `php` directives have the following options:
 ```caddyfile
 php_server [<matcher>] {
 	root <directory> # Sets the root folder to the site. Default: `root` directive.
-	split_path <delim...> # Sets the substrings for splitting the URI into two parts. The first matching substring will be used to split the "path info" from the path. The first piece is suffixed with the matching substring and will be assumed as the actual resource (CGI script) name. The second piece will be set to PATH_INFO for the script to use. Default: `.php`
+	split_path <delim...> # Sets the substrings for splitting the URI into two parts. The first matching substring that ends a path segment will be used to split the "path info" from the path. The first piece is suffixed with the matching substring and will be assumed as the actual resource (CGI script) name. The second piece will be set to PATH_INFO for the script to use. Default: `.php`
 	resolve_root_symlink false # Disables resolving the `root` directory to its actual value by evaluating a symbolic link, if one exists (enabled by default).
+	name <name> # Sets the name for this server, used to attribute workers, metrics and logs. Default: the first host matcher of the enclosing route, or the first listener address.
 	env <key> <value> # Sets an extra environment variable to the given value. Can be specified more than once for multiple environment variables.
 	file_server off # Disables the built-in file_server directive.
 	request_body_timeout <duration> # Sets an idle timeout on request body reads: a stalled (slow POST) client is cut off while a steady upload of any size succeeds. Default: 60s. Set to 0 to disable.
 	worker { # Creates a worker specific to this server. Can be specified more than once for multiple workers.
 		file <path> # Sets the path to the worker script, can be relative to the php_server root
 		num <num> # Sets the number of PHP threads to start, defaults to 2x the number of available
-		name <name> # Sets the name for the worker, used in logs and metrics. Default: absolute path of worker file. Always starts with m# when defined in a php_server block.
+		name <name> # Sets the name for the worker, used in logs and metrics. Default: absolute path of worker file. Postfixed with a number if name is already in use.
 		watch <path> # Sets the path to watch for file changes. Can be specified more than once for multiple paths.
 		env <key> <value> # Sets an extra environment variable to the given value. Can be specified more than once for multiple environment variables. Environment variables for this worker are also inherited from the php_server parent, but can be overwritten here.
 		match <path> # match the worker to a path pattern. Overrides try_files and can only be used in the php_server directive.
@@ -363,6 +365,20 @@ CADDY_GLOBAL_OPTIONS="servers {
 ```
 
 You can find more information about this setting in the [Caddy documentation](https://caddyserver.com/docs/caddyfile/options#enable-full-duplex).
+
+### Request body size limit
+
+To limit the size of request bodies, use the [`request_body`](https://caddyserver.com/docs/caddyfile/directives/request_body) directive:
+
+```caddyfile
+request_body {
+	max_size 10MB
+}
+```
+
+Requests with a larger body get a `413 Request Entity Too Large` response.
+If PHP reads the body before the script starts (`POST` requests with a `Content-Type`, such as forms and file uploads), the script doesn't run.
+If the script reads the body itself, through `php://input` or `request_parse_body()`, the read throws a `FrankenPHP\RequestBodyTooLargeException` once the limit is reached, so a truncated body is never mistaken for a complete one.
 
 ## Enable the debug mode
 

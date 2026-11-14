@@ -5,3 +5,5 @@ run:
     - nobadger
     - nomysql
     - nopgx
+    - deprecated_topic
+    - deprecated_claim

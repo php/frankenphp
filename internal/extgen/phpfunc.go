@@ -78,7 +78,7 @@ func (pfg *PHPFuncGenerator) generateReturnCode(returnType phpType) string {
         RETURN_STR(result);
     }
 
-	RETURN_EMPTY_STRING();`
+    RETURN_EMPTY_STRING();`
 	case phpInt:
 		return `    RETURN_LONG(result);`
 	case phpFloat:
@@ -90,7 +90,13 @@ func (pfg *PHPFuncGenerator) generateReturnCode(returnType phpType) string {
         RETURN_ARR(result);
     }
 
-	RETURN_EMPTY_ARRAY();`
+    RETURN_EMPTY_ARRAY();`
+	case phpMixed:
+		return `    if (result) {
+        RETURN_COPY_VALUE(result);
+    }
+
+    RETURN_NULL();`
 	default:
 		return ""
 	}

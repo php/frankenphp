@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -16,13 +18,14 @@ import (
 type frankenPHPContext struct {
 	mercureContext
 
-	documentRoot    string
-	splitPath       []string
-	env             PreparedEnv
-	logger          *slog.Logger
-	request         *http.Request
-	originalRequest *http.Request
-	worker          *worker
+	ctx          context.Context
+	documentRoot string
+	splitPath    []string
+	env          PreparedEnv
+	logger       *slog.Logger
+	request      *http.Request
+	worker       *worker
+	server       *Server
 
 	// idle timeout per body read; zero disables it
 	requestBodyTimeout time.Duration
@@ -33,6 +36,8 @@ type frankenPHPContext struct {
 	scriptFilename string
 	requestURI     string
 
+	// Whether the final response headers were already sent
+	headersWritten bool
 	// Whether the request is already closed by us
 	isDone bool
 	// The client's connection state as of the moment isDone was set. Captured
@@ -53,37 +58,36 @@ type frankenPHPContext struct {
 	startedAt time.Time
 }
 
-type contextHolder struct {
-	ctx               context.Context
-	frankenPHPContext *frankenPHPContext
-}
-
-// fromContext extracts the frankenPHPContext from a context.
-func fromContext(ctx context.Context) (fctx *frankenPHPContext, ok bool) {
-	fctx, ok = ctx.Value(contextKey).(*frankenPHPContext)
-	return
-}
-
-func newFrankenPHPContext() *frankenPHPContext {
-	return &frankenPHPContext{
-		done:      make(chan any),
-		startedAt: time.Now(),
-	}
-}
-
 // NewRequestWithContext creates a new FrankenPHP request context.
 //
-// FrankenPHP does not strip request headers whose name contains an underscore.
-// Because CGI maps dashes to underscores ("Foo-Bar" becomes the HTTP_FOO_BAR
-// variable), a client-supplied "Foo_Bar" header is indistinguishable from the
-// legitimate "Foo-Bar" in $_SERVER and can spoof it. This affects any such
-// header an application or upstream proxy trusts (forwarded-for, auth, etc.).
-// Drop headers containing an underscore before calling this function, unless
-// you explicitly need (and whitelist) them. The Caddy-based server and reverse
-// proxies such as nginx (underscores_in_headers off) already do this.
+// FrankenPHP does not strip request headers whose name contains an underscore
+// or a dot. Because CGI maps dashes to underscores ("Foo-Bar" becomes the
+// HTTP_FOO_BAR variable) and PHP maps dots to underscores when registering
+// variables ("Foo.Bar" also becomes HTTP_FOO_BAR), a client-supplied "Foo_Bar"
+// or "Foo.Bar" header is indistinguishable from the legitimate "Foo-Bar" in
+// $_SERVER and can spoof it. This affects any such header an application or
+// upstream proxy trusts (forwarded-for, auth, etc.). Drop headers containing
+// an underscore or a dot before calling this function, unless you explicitly
+// need (and whitelist) them. The Caddy-based server and reverse proxies such
+// as nginx (underscores_in_headers off) already do this.
 func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Request, error) {
-	fc := newFrankenPHPContext()
-	fc.request = r
+	c := context.WithValue(r.Context(), contextKey, opts)
+
+	return r.WithContext(c), nil
+}
+
+func newContextFromRequest(request *http.Request, responseWriter http.ResponseWriter, s *Server, opts ...RequestOption) (*frankenPHPContext, error) {
+	fc := &frankenPHPContext{
+		ctx:            request.Context(),
+		done:           make(chan any),
+		startedAt:      time.Now(),
+		server:         s,
+		splitPath:      s.splitPath,
+		logger:         s.logger,
+		request:        request,
+		documentRoot:   s.root,
+		responseWriter: responseWriter,
+	}
 
 	for _, o := range opts {
 		if err := o(fc); err != nil {
@@ -91,8 +95,14 @@ func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Reques
 		}
 	}
 
-	if fc.logger == nil {
-		fc.logger = globalLogger
+	// assign a worker directly if it has a request matcher
+	if fc.worker == nil {
+		for _, w := range s.workersWithRequestMatcher {
+			if w.matchRequest(request) {
+				fc.worker = w
+				break
+			}
+		}
 	}
 
 	if fc.documentRoot == "" {
@@ -106,30 +116,85 @@ func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Reques
 		}
 	}
 
-	splitCgiPath(fc)
-
-	fc.requestURI = r.URL.RequestURI()
-
-	c := context.WithValue(r.Context(), contextKey, fc)
-
-	return r.WithContext(c), nil
-}
-
-// newDummyContext creates a fake context from a request path
-func newDummyContext(requestPath string, opts ...RequestOption) (*frankenPHPContext, error) {
-	r, err := http.NewRequestWithContext(globalCtx, http.MethodGet, requestPath, nil)
-	if err != nil {
-		return nil, err
+	// if no originalRequest was passed, use the URI from the actual request
+	// when using Caddy's http module, the original unchanged uri will be used here
+	// request.URL is often already rewritten to match a PHP script path
+	if fc.requestURI == "" {
+		fc.requestURI = fc.request.URL.RequestURI()
 	}
 
-	fr, err := NewRequestWithContext(r, opts...)
-	if err != nil {
+	if err := splitCgiPath(fc); err != nil {
+		fc.reject(err)
+
 		return nil, err
 	}
-
-	fc, _ := fromContext(fr.Context())
 
 	return fc, nil
+}
+
+// newWorkerDummyContext creates a context for worker startup
+func newWorkerDummyContext(w *worker) (*frankenPHPContext, error) {
+	r, err := http.NewRequestWithContext(globalCtx, http.MethodGet, filepath.Base(w.fileName), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	server := w.server
+	if server == nil {
+		// global worker, not associated with a server
+		server = fallbackServer
+	}
+
+	fc := &frankenPHPContext{
+		done:      make(chan any),
+		ctx:       r.Context(),
+		server:    server,
+		request:   r,
+		startedAt: time.Now(),
+		// startup output of a scoped worker belongs to its server's logger
+		logger: server.logger,
+		worker: w,
+	}
+
+	for _, o := range w.requestOptions {
+		if err := o(fc); err != nil {
+			return nil, err
+		}
+	}
+
+	if fc.requestURI == "" {
+		fc.requestURI = r.URL.RequestURI()
+	}
+
+	if err := splitCgiPath(fc); err != nil {
+		return nil, err
+	}
+
+	return fc, nil
+}
+
+// newContextFromMessage creates a context from a message (external workers)
+func newContextFromMessage(message any, rw http.ResponseWriter, ctx context.Context, w *worker) *frankenPHPContext {
+	server := w.server
+	if server == nil {
+		server = fallbackServer
+	}
+
+	if ctx == nil {
+		ctx = globalCtx
+	}
+
+	return &frankenPHPContext{
+		done:              make(chan any),
+		startedAt:         time.Now(),
+		server:            server,
+		worker:            w,
+		scriptFilename:    w.fileName,
+		logger:            server.logger,
+		responseWriter:    rw,
+		handlerParameters: message,
+		ctx:               ctx,
+	}
 }
 
 // closeContext sends the response to the client
@@ -148,7 +213,7 @@ func (fc *frankenPHPContext) closeContext() {
 
 // validate checks if the request should be outright rejected
 func (fc *frankenPHPContext) validate() error {
-	if strings.Contains(fc.request.URL.Path, "\x00") {
+	if strings.Contains(fc.request.URL.Path, "\x00") || escapedPathSelectsAnotherScript(fc.request.URL, fc.splitPath, runtime.GOOS == "windows") {
 		fc.reject(ErrInvalidRequestPath)
 
 		return ErrInvalidRequestPath
@@ -170,11 +235,11 @@ func (fc *frankenPHPContext) validate() error {
 
 func (fc *frankenPHPContext) clientHasClosed() bool {
 	if fc.request == nil {
-		return false
+		return false // not in HTTP context
 	}
 
 	select {
-	case <-fc.request.Context().Done():
+	case <-fc.ctx.Done():
 		return true
 	default:
 		return false
@@ -187,8 +252,8 @@ func (fc *frankenPHPContext) reject(err error) {
 		return
 	}
 
-	re := &ErrRejected{}
-	if !errors.As(err, re) {
+	re, ok := errors.AsType[ErrRejected](err)
+	if !ok {
 		// Should never happen
 		panic("only instance of ErrRejected can be passed to reject")
 	}

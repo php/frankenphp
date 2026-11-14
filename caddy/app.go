@@ -6,9 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/caddyserver/caddy/v2"
@@ -45,9 +44,9 @@ func RegisterWorkers(name, fileName string, num int, wo ...frankenphp.WorkerOpti
 //		}
 //	}
 type FrankenPHPApp struct {
-	// NumThreads sets the number of PHP threads to start. Default: 2x the number of available CPUs.
+	// NumThreads sets the number of PHP threads to start for the requests no worker serves, worker threads coming on top of it. Default: what is left of 2x the number of available CPUs once the workers have their threads, one at the very least.
 	NumThreads int `json:"num_threads,omitempty"`
-	// MaxThreads limits how many threads can be started at runtime. Default 2x NumThreads
+	// MaxThreads limits how many threads may run at once, workers included. Default: the threads started at boot
 	MaxThreads int `json:"max_threads,omitempty"`
 	// Workers configures the worker scripts to start
 	Workers []workerConfig `json:"workers,omitempty"`
@@ -60,19 +59,24 @@ type FrankenPHPApp struct {
 	// EXPERIMENTAL: MaxRequests sets the maximum number of requests a PHP thread handles before restarting (0 = unlimited)
 	MaxRequests int `json:"max_requests,omitempty"`
 
-	opts    []frankenphp.Option
-	metrics frankenphp.Metrics
-	ctx     context.Context
-	logger  *slog.Logger
+	opts          []frankenphp.Option
+	provisionOpts []frankenphp.Option
+	metrics       frankenphp.Metrics
+	ctx           context.Context
+	logger        *slog.Logger
+	modules       []*FrankenPHPModule
+	httpApp       *caddyhttp.App
+	hasStarted    atomic.Bool
+	started       chan any
 }
 
 var errIni = errors.New(`"php_ini" must be in the format: php_ini "<key>" "<value>"`)
 
 // CaddyModule returns the Caddy module information.
-func (f FrankenPHPApp) CaddyModule() caddy.ModuleInfo {
+func (*FrankenPHPApp) CaddyModule() caddy.ModuleInfo {
 	return caddy.ModuleInfo{
 		ID:  "frankenphp",
-		New: func() caddy.Module { return &f },
+		New: func() caddy.Module { return &FrankenPHPApp{} },
 	}
 }
 
@@ -80,12 +84,13 @@ func (f FrankenPHPApp) CaddyModule() caddy.ModuleInfo {
 func (f *FrankenPHPApp) Provision(ctx caddy.Context) error {
 	f.ctx = ctx
 	f.logger = ctx.Slogger()
+	f.started = make(chan any)
 
 	// We have at least 7 hardcoded options
 	f.opts = make([]frankenphp.Option, 0, 7+len(options))
 
 	if httpApp, err := ctx.AppIfConfigured("http"); err == nil {
-		if httpApp.(*caddyhttp.App).Metrics != nil {
+		if f.httpApp = httpApp.(*caddyhttp.App); f.httpApp.Metrics != nil {
 			f.metrics = frankenphp.NewPrometheusMetrics(ctx.GetMetricsRegistry())
 		}
 	} else {
@@ -101,82 +106,29 @@ func (f *FrankenPHPApp) Provision(ctx caddy.Context) error {
 	return nil
 }
 
-func (f *FrankenPHPApp) generateUniqueModuleWorkerName(filepath string) string {
-	var i uint
-	filepath, _ = fastabs.FastAbs(filepath)
-	name := "m#" + filepath
-
-retry:
-	for _, wc := range f.Workers {
-		if wc.Name == name {
-			name = fmt.Sprintf("m#%s_%d", filepath, i)
-			i++
-
-			goto retry
-		}
+// Validate is called by Caddy before Start() to validate before shutting down the currently running config
+func (f *FrankenPHPApp) Validate() error {
+	opts, err := f.collectOptions(caddy.NewReplacer(), false)
+	if err != nil {
+		return err
 	}
 
-	return name
+	return frankenphp.Validate(opts...)
 }
 
-func (f *FrankenPHPApp) addModuleWorkers(workers ...workerConfig) ([]workerConfig, error) {
-	for i := range workers {
-		w := &workers[i]
-
-		if frankenphp.EmbeddedAppPath != "" && filepath.IsLocal(w.FileName) {
-			w.FileName = filepath.Join(frankenphp.EmbeddedAppPath, w.FileName)
-		}
-	}
-
-	// A php_server directive is provisioned once per route it's embedded in. Only the first embed
-	// registers its pools; later embeds reuse them by position, never touching other directives (#2477).
-	var registered []workerConfig
-	if len(workers) > 0 && workers[0].routeGroup != "" {
-		registered = f.moduleWorkersInRouteGroup(workers[0].routeGroup)
-	}
-
-	for i := range workers {
-		if i < len(registered) {
-			workers[i].Name = registered[i].Name
-			continue
-		}
-
-		f.registerModuleWorker(&workers[i])
-	}
-
-	return workers, nil
-}
-
-func (f *FrankenPHPApp) registerModuleWorker(w *workerConfig) {
-	if w.Name == "" {
-		w.Name = f.generateUniqueModuleWorkerName(w.FileName)
-	} else if !strings.HasPrefix(w.Name, "m#") {
-		w.Name = "m#" + w.Name
-	}
-
-	f.Workers = append(f.Workers, *w)
-}
-
-// moduleWorkersInRouteGroup returns the registered workers of one directive, in registration order.
-func (f *FrankenPHPApp) moduleWorkersInRouteGroup(routeGroup string) []workerConfig {
-	var group []workerConfig
-	for _, w := range f.Workers {
-		if w.routeGroup == routeGroup {
-			group = append(group, w)
-		}
-	}
-
-	return group
-}
-
-func (f *FrankenPHPApp) Start() error {
-	repl := caddy.NewReplacer()
-
+// collectOptions turns the configuration into the options Init() takes.
+// keep is for the configuration that starts, whose servers the modules
+// serve from; Validate() collects those of one that may never start.
+func (f *FrankenPHPApp) collectOptions(repl *caddy.Replacer, keep bool) ([]frankenphp.Option, error) {
 	optionsMU.RLock()
-	f.opts = append(f.opts, options...)
+	// We have at least 9 hardcoded options
+	opts := make([]frankenphp.Option, 0, 9+len(options)+len(f.provisionOpts))
+	opts = append(opts, options...)
 	optionsMU.RUnlock()
 
-	f.opts = append(f.opts,
+	opts = append(opts, f.provisionOpts...)
+
+	opts = append(opts,
 		frankenphp.WithContext(f.ctx),
 		frankenphp.WithLogger(f.logger),
 		frankenphp.WithNumThreads(f.NumThreads),
@@ -188,22 +140,53 @@ func (f *FrankenPHPApp) Start() error {
 		frankenphp.WithMaxRequests(f.MaxRequests),
 	)
 
-	for _, w := range f.Workers {
-		w.options = append(w.options,
-			frankenphp.WithWorkerEnv(w.Env),
-			frankenphp.WithWorkerWatchMode(w.Watch),
-			frankenphp.WithWorkerMaxFailures(w.MaxConsecutiveFailures),
-			frankenphp.WithWorkerMaxThreads(w.MaxThreads),
-			frankenphp.WithWorkerRequestOptions(w.requestOptions...),
-		)
+	usedWorkerNames := make(map[string]bool, len(f.Workers))
 
-		f.opts = append(f.opts, frankenphp.WithWorkers(w.Name, repl.ReplaceKnown(w.FileName, ""), w.Num, w.options...))
+	// register global workers
+	for _, w := range f.Workers {
+		w.FileName = repl.ReplaceKnown(w.FileName, "")
+		w.Name = createUniqueWorkerName(usedWorkerNames, w, "")
+		workerOptions, err := w.toWorkerOptions()
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, frankenphp.WithWorkers(w.Name, w.FileName, w.Num, workerOptions...))
 	}
 
+	moduleOpts, err := f.collectModuleOptions(repl, usedWorkerNames, keep)
+	if err != nil {
+		return nil, err
+	}
+
+	return append(opts, moduleOpts...), nil
+}
+
+func (f *FrankenPHPApp) Start() error {
+	defer func() {
+		close(f.started)
+	}()
+
+	opts, err := f.collectOptions(caddy.NewReplacer(), true)
+	if err != nil {
+		return err
+	}
+	f.opts = opts
+
+	// Validate() ran before the modules provisioned, so it saw the global
+	// block alone: what a php_server declares is checked here, in time for
+	// the configuration in place to survive a refusal
+	if err := frankenphp.Validate(f.opts...); err != nil {
+		return err
+	}
+
+	// if FrankenPHP is currently running, shut it down first
+	// this will happen in admin API reloads and caddy tests
 	frankenphp.Shutdown()
 	if err := frankenphp.Init(f.opts...); err != nil {
 		return err
 	}
+
+	f.hasStarted.Store(true)
 
 	return nil
 }
@@ -213,25 +196,104 @@ func (f *FrankenPHPApp) Stop() error {
 		f.logger.LogAttrs(f.ctx, slog.LevelInfo, "FrankenPHP stopped 🐘")
 	}
 
-	// attempt a graceful shutdown if caddy is exiting
-	// note: Exiting() is currently marked as 'experimental'
-	// https://github.com/caddyserver/caddy/blob/e76405d55058b0a3e5ba222b44b5ef00516116aa/caddy.go#L810
-	if caddy.Exiting() {
-		frankenphp.Shutdown()
-	}
-
-	// reset the configuration so it doesn't bleed into later tests
-	f.Workers = nil
-	f.NumThreads = 0
-	f.MaxWaitTime = 0
-	f.MaxIdleTime = 0
-	f.MaxRequests = 0
-
+	// reset global options
 	optionsMU.Lock()
 	options = nil
 	optionsMU.Unlock()
 
 	return nil
+}
+
+// register workers and servers for "php" and "php_server" modules
+func (f *FrankenPHPApp) collectModuleOptions(repl *caddy.Replacer, usedWorkerNames map[string]bool, keep bool) ([]frankenphp.Option, error) {
+	opts := make([]frankenphp.Option, 0, len(f.modules))
+	serversByIndex := make(map[int]*frankenphp.Server, len(f.modules))
+
+	for _, module := range f.modules {
+		// modules with the same server_idx should share the same server instance
+		// example: the worker { match * } rule adds 2 "php" subroutes to the caddy handler
+		// the 2 handlers belong to the same "php_server" and must therefore share workers
+		if module.ServerIndex != 0 {
+			if server, ok := serversByIndex[module.ServerIndex]; ok {
+				if keep {
+					module.server = server
+				}
+
+				continue
+			}
+		}
+
+		server, moduleOpts, err := f.collectModule(repl, module, usedWorkerNames)
+		if err != nil {
+			return nil, err
+		}
+
+		if keep {
+			module.server = server
+		}
+		if module.ServerIndex != 0 {
+			serversByIndex[module.ServerIndex] = server
+		}
+		opts = append(opts, moduleOpts...)
+	}
+
+	return opts, nil
+}
+
+func (f *FrankenPHPApp) collectModule(repl *caddy.Replacer, module *FrankenPHPModule, usedWorkerNames map[string]bool) (*frankenphp.Server, []frankenphp.Option, error) {
+	serverName := f.resolveServerName(module)
+	server, err := frankenphp.NewServer(
+		module.resolvedDocumentRoot,
+		frankenphp.WithServerName(serverName),
+		frankenphp.WithServerSplitPath(module.SplitPath),
+		frankenphp.WithServerEnv(module.resolvedEnv),
+		frankenphp.WithServerLogger(module.logger),
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	opts := []frankenphp.Option{frankenphp.WithServer(server)}
+
+	for _, w := range module.Workers {
+		w.FileName = repl.ReplaceKnown(w.FileName, "")
+		w.Name = createUniqueWorkerName(usedWorkerNames, w, serverName)
+		workerOptions, err := w.toWorkerOptions()
+		if err != nil {
+			return nil, nil, err
+		}
+		workerOptions = append(workerOptions, frankenphp.WithWorkerServerScope(server))
+		opts = append(opts, frankenphp.WithWorkers(w.Name, w.FileName, w.Num, workerOptions...))
+	}
+
+	return server, opts, nil
+}
+
+// avoid name collisions for workers
+// on collision, a name is first qualified with the server name
+// ("<serverName>:<name>") before falling back to a numeric postfix
+func createUniqueWorkerName(usedWorkerNames map[string]bool, wc workerConfig, serverName string) string {
+	if wc.Name == "" {
+		wc.Name, _ = fastabs.FastAbs(wc.FileName)
+	}
+
+	name := wc.Name
+	suffix := 0
+	for {
+		if _, ok := usedWorkerNames[name]; !ok {
+			usedWorkerNames[name] = true
+			break
+		}
+		if serverName != "" {
+			name = serverName + ":" + wc.Name
+			serverName = ""
+			continue
+		}
+		suffix++
+		name = fmt.Sprintf("%s_%d", wc.Name, suffix)
+	}
+
+	return name
 }
 
 // UnmarshalCaddyfile implements caddyfile.Unmarshaler.
@@ -245,12 +307,12 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					return d.ArgErr()
 				}
 
-				v, err := strconv.ParseUint(d.Val(), 10, 32)
+				v, err := parseNonNegativeInt(d)
 				if err != nil {
 					return err
 				}
 
-				f.NumThreads = int(v)
+				f.NumThreads = v
 			case "max_threads":
 				if !d.NextArg() {
 					return d.ArgErr()
@@ -261,12 +323,12 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					continue
 				}
 
-				v, err := strconv.ParseUint(d.Val(), 10, 32)
+				v, err := parseNonNegativeInt(d)
 				if err != nil {
 					return err
 				}
 
-				f.MaxThreads = int(v)
+				f.MaxThreads = v
 			case "max_wait_time":
 				if !d.NextArg() {
 					return d.ArgErr()
@@ -294,12 +356,12 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					return d.ArgErr()
 				}
 
-				v, err := strconv.ParseUint(d.Val(), 10, 32)
+				v, err := parseNonNegativeInt(d)
 				if err != nil {
-					return d.WrapErr(err)
+					return err
 				}
 
-				f.MaxRequests = int(v)
+				f.MaxRequests = v
 			case "php_ini":
 				parseIniLine := func(d *caddyfile.Dispenser) error {
 					key := d.Val()
@@ -344,8 +406,9 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				if frankenphp.EmbeddedAppPath != "" && filepath.IsLocal(wc.FileName) {
 					wc.FileName = filepath.Join(frankenphp.EmbeddedAppPath, wc.FileName)
 				}
-				if strings.HasPrefix(wc.Name, "m#") {
-					return d.Errf(`global worker names must not start with "m#": %q`, wc.Name)
+				// a global worker has no php_server, so no set of requests to match against
+				if len(wc.MatchPath) != 0 {
+					return d.Errf(`"match" can only be used in a php_server worker block, not in a global one: %q`, wc.FileName)
 				}
 				// check for duplicate workers
 				for _, existingWorker := range f.Workers {

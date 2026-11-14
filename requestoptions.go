@@ -2,6 +2,7 @@ package frankenphp
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"path/filepath"
@@ -19,6 +20,7 @@ type RequestOption func(h *frankenPHPContext) error
 
 var (
 	ErrInvalidSplitPath = errors.New("split path contains non-ASCII characters")
+	ErrUnknownWorker    = errors.New("unknown worker")
 
 	documentRootCache    sync.Map
 	documentRootCacheLen atomic.Uint32
@@ -84,15 +86,28 @@ func WithRequestResolvedDocumentRoot(documentRoot string) RequestOption {
 // which can be mitigated with use of a try_files-like behavior
 // that 404s if the FastCGI path info is not found.
 func WithRequestSplitPath(splitPath []string) (RequestOption, error) {
+	if err := normalizeSplitPath(splitPath); err != nil {
+		return nil, err
+	}
+
+	return func(o *frankenPHPContext) error {
+		o.splitPath = splitPath
+
+		return nil
+	}, nil
+}
+
+// normalize split path in-place to lowercase ASCII characters
+func normalizeSplitPath(splitPath []string) error {
 	var b strings.Builder
 
 	for i, split := range splitPath {
 		b.Grow(len(split))
 
-		for j := 0; j < len(split); j++ {
+		for j := range len(split) {
 			c := split[j]
 			if c >= utf8.RuneSelf {
-				return nil, ErrInvalidSplitPath
+				return ErrInvalidSplitPath
 			}
 
 			if 'A' <= c && c <= 'Z' {
@@ -106,11 +121,7 @@ func WithRequestSplitPath(splitPath []string) (RequestOption, error) {
 		b.Reset()
 	}
 
-	return func(o *frankenPHPContext) error {
-		o.splitPath = splitPath
-
-		return nil
-	}, nil
+	return nil
 }
 
 type PreparedEnv = map[string]string
@@ -164,8 +175,9 @@ func ensurePreparedEnv(env PreparedEnv) PreparedEnv {
 }
 
 func WithOriginalRequest(r *http.Request) RequestOption {
+	originalURI := r.URL.RequestURI()
 	return func(o *frankenPHPContext) error {
-		o.originalRequest = r
+		o.requestURI = originalURI
 
 		return nil
 	}
@@ -175,6 +187,10 @@ func WithOriginalRequest(r *http.Request) RequestOption {
 func WithRequestLogger(logger *slog.Logger) RequestOption {
 	return func(o *frankenPHPContext) error {
 		o.logger = logger
+
+		if o.logger == nil {
+			o.logger = globalLogger // fall back to global logger
+		}
 
 		return nil
 	}
@@ -192,11 +208,24 @@ func WithRequestBodyTimeout(timeout time.Duration) RequestOption {
 	}
 }
 
+// withWorker dispatches the request on a worker directly, no lookup
+func withWorker(w *worker) RequestOption {
+	return func(o *frankenPHPContext) error {
+		o.worker = w
+
+		return nil
+	}
+}
+
 // WithWorkerName sets the worker that should handle the request
 func WithWorkerName(name string) RequestOption {
 	return func(o *frankenPHPContext) error {
-		if name != "" {
-			o.worker = workersByName[name]
+		if name == "" {
+			return nil
+		}
+
+		if o.worker = workersByName[name]; o.worker == nil {
+			return fmt.Errorf("%w: %q", ErrUnknownWorker, name)
 		}
 
 		return nil

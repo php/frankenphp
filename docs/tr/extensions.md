@@ -157,15 +157,15 @@ Bu tablo, bilmeniz gerekenleri özetler:
 | `array`            | `frankenphp.AssociativeArray` | ❌                | `frankenphp.GoAssociativeArray()`       | `frankenphp.PHPAssociativeArray()`      | ✅                      |
 | `array`            | `map[string]any`              | ❌                | `frankenphp.GoMap()`                    | `frankenphp.PHPMap()`                    | ✅                      |
 | `array`            | `[]any`                       | ❌                | `frankenphp.GoPackedArray()`            | `frankenphp.PHPPackedArray()`            | ✅                      |
-| `mixed`            | `any`                         | ❌                | `GoValue()`                             | `PHPValue()`                             | ❌                      |
-| `callable`         | `*C.zval`                     | ❌                | -                                       | frankenphp.CallPHPCallable()             | ❌                      |
+| `mixed`            | `*C.zval`                     | ❌                | `frankenphp.GoValue()`                  | `frankenphp.PHPValue()`                  | ✅                      |
+| `callable`         | `*C.zval`                     | ❌                | -                                       | frankenphp.CallPHPCallable()             | ✅                      |
 | `object`           | `struct`                      | ❌                | _Henüz uygulanmadı_                      | _Henüz uygulanmadı_                       | ❌                      |
 
 > [!NOTE]
 >
 > Bu tablo henüz kapsamlı değildir ve FrankenPHP tür API'si daha eksiksiz hale geldikçe tamamlanacaktır.
 >
-> Özellikle sınıf metotları için, ilkel türler ve diziler şu anda desteklenmektedir. Nesneler henüz metot parametresi veya dönüş türü olarak kullanılamaz.
+> Özellikle sınıf metotları için, ilkel türler, diziler, `mixed` ve `callable` şu anda desteklenmektedir. Nesneler henüz metot parametresi veya dönüş türü olarak kullanılamaz.
 
 Önceki bölümdeki kod parçacığına bakarsanız, ilk parametreyi ve dönüş değerini dönüştürmek için yardımcıların kullanıldığını görebilirsiniz. `repeat_this()` işlevimizin ikinci ve üçüncü parametrelerinin dönüştürülmesi gerekmez, çünkü temel türlerin bellek gösterimi hem C hem de Go için aynıdır.
 

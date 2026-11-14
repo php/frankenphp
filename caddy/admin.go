@@ -13,10 +13,10 @@ type FrankenPHPAdmin struct {
 }
 
 // if the id starts with "admin.api" the module will register AdminRoutes via module.Routes()
-func (FrankenPHPAdmin) CaddyModule() caddy.ModuleInfo {
+func (*FrankenPHPAdmin) CaddyModule() caddy.ModuleInfo {
 	return caddy.ModuleInfo{
 		ID:  "admin.api.frankenphp",
-		New: func() caddy.Module { return new(FrankenPHPAdmin) },
+		New: func() caddy.Module { return &FrankenPHPAdmin{} },
 	}
 }
 

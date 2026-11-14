@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParameterParser_AnalyzeParameters(t *testing.T) {
@@ -182,14 +183,14 @@ func TestParameterParser_GenerateParamDeclarations(t *testing.T) {
 			params: []phpParameter{
 				{Name: "callback", PhpType: phpCallable, HasDefault: false},
 			},
-			expected: "    zval *callback_callback;",
+			expected: "    zval *callback_callback = NULL;",
 		},
 		{
 			name: "nullable callable parameter",
 			params: []phpParameter{
 				{Name: "callback", PhpType: phpCallable, HasDefault: false, IsNullable: true},
 			},
-			expected: "    zval *callback_callback;",
+			expected: "    zval *callback_callback = NULL;",
 		},
 		{
 			name: "mixed types with callable",
@@ -198,7 +199,7 @@ func TestParameterParser_GenerateParamDeclarations(t *testing.T) {
 				{Name: "callback", PhpType: phpCallable, HasDefault: false},
 				{Name: "options", PhpType: phpInt, HasDefault: true, DefaultValue: "0"},
 			},
-			expected: "    zend_array *data = NULL;\n    zval *callback_callback;\n    zend_long options = 0;",
+			expected: "    zend_array *data = NULL;\n    zval *callback_callback = NULL;\n    zend_long options = 0;",
 		},
 	}
 
@@ -625,12 +626,12 @@ func TestParameterParser_GenerateSingleParamDeclaration(t *testing.T) {
 		{
 			name:     "callable parameter",
 			param:    phpParameter{Name: "callback", PhpType: "callable", HasDefault: false},
-			expected: []string{"zval *callback_callback;"},
+			expected: []string{"zval *callback_callback = NULL;"},
 		},
 		{
 			name:     "nullable callable parameter",
 			param:    phpParameter{Name: "callback", PhpType: "callable", HasDefault: false, IsNullable: true},
-			expected: []string{"zval *callback_callback;"},
+			expected: []string{"zval *callback_callback = NULL;"},
 		},
 	}
 
@@ -671,4 +672,19 @@ func TestParameterParser_Integration(t *testing.T) {
 
 	goCallParams := pp.generateGoCallParams(params)
 	assert.Equal(t, "name, (long) count, (int) enabled", goCallParams)
+}
+
+func TestParameterParser_OptionalCallableIsInitialized(t *testing.T) {
+	pp := &ParameterParser{}
+
+	// An omitted optional argument leaves the local untouched, so it must start
+	// out NULL rather than holding whatever was on the stack.
+	decls := pp.generateSingleParamDeclaration(phpParameter{
+		Name:       "cb",
+		PhpType:    phpCallable,
+		IsNullable: true,
+		HasDefault: true,
+	})
+
+	require.Equal(t, []string{"zval *cb_callback = NULL;"}, decls)
 }

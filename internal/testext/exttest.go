@@ -12,8 +12,11 @@ package testext
 // #include "extension.h"
 import "C"
 import (
+	"fmt"
 	"io"
+	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"testing"
 	"unsafe"
 
@@ -26,21 +29,76 @@ func testRegisterExtension(t *testing.T) {
 	frankenphp.RegisterExtension(unsafe.Pointer(&C.module1_entry))
 	frankenphp.RegisterExtension(unsafe.Pointer(&C.module2_entry))
 
-	err := frankenphp.Init()
+	// race the GC against C reading the raw array
+	stop := make(chan struct{})
+	go func() {
+		var sink [][]unsafe.Pointer
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			runtime.GC()
+			for i := 0; i < 20000; i++ {
+				sink = append(sink, make([]unsafe.Pointer, 2))
+				if len(sink) > 100000 {
+					sink = nil
+				}
+			}
+		}
+	}()
+	defer close(stop)
+
+	// one thread so that the request following a failed startup runs on the same thread
+	err := frankenphp.Init(frankenphp.WithNumThreads(1))
 	require.Nil(t, err)
 	defer frankenphp.Shutdown()
 
-	req := httptest.NewRequest("GET", "http://example.com/index.php", nil)
+	require.Equal(t, int(C.SUCCESS), int(C.test_signal_handler()))
+	assert.Panics(t, func() {
+		var p *int
+		_ = *p
+	})
+
+	assertExtensionsLoaded(t, 1)
+
+	// ext2 fails the request startup and its output handler calls putenv() during the request shutdown
+	req, err := frankenphp.NewRequestWithContext(httptest.NewRequest("GET", "http://example.com/index.php?fail_startup", nil), frankenphp.WithRequestDocumentRoot("./testdata", false))
+	require.NoError(t, err)
 	w := httptest.NewRecorder()
+	_ = frankenphp.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
 
-	req, err = frankenphp.NewRequestWithContext(req, frankenphp.WithRequestDocumentRoot("./testdata", false))
-	assert.NoError(t, err)
+	req, err = frankenphp.NewRequestWithContext(httptest.NewRequest("GET", "http://example.com/getenv.php", nil), frankenphp.WithRequestDocumentRoot("./testdata", false))
+	require.NoError(t, err)
+	w = httptest.NewRecorder()
+	assert.NoError(t, frankenphp.ServeHTTP(w, req))
+	assert.Equal(t, "bool(false)\n", w.Body.String())
 
-	err = frankenphp.ServeHTTP(w, req)
-	assert.NoError(t, err)
+	// rebooting the main thread (file watcher, admin restart endpoint,
+	// opcache_reset()) starts the PHP modules again
+	frankenphp.RestartWorkers()
+	assertExtensionsLoaded(t, 2)
 
-	resp := w.Result()
-	body, _ := io.ReadAll(resp.Body)
-	assert.Contains(t, string(body), "ext1")
-	assert.Contains(t, string(body), "ext2")
+	// so does a new Init(), which Caddy runs on every config reload
+	frankenphp.Shutdown()
+	require.NoError(t, frankenphp.Init())
+	assertExtensionsLoaded(t, 3)
+}
+
+// assertExtensionsLoaded checks that both test modules are registered and
+// that ext2's MINIT ran minitCalls times since the process started
+func assertExtensionsLoaded(t *testing.T, minitCalls int) {
+	t.Helper()
+
+	req := httptest.NewRequest("GET", "http://example.com/index.php", nil)
+	req, err := frankenphp.NewRequestWithContext(req, frankenphp.WithRequestDocumentRoot("./testdata", false))
+	require.NoError(t, err)
+
+	w := httptest.NewRecorder()
+	require.NoError(t, frankenphp.ServeHTTP(w, req))
+
+	body, _ := io.ReadAll(w.Result().Body)
+	assert.Equal(t, fmt.Sprintf("ext1: loaded\next2: loaded\next2_answer: 42\nEXT2_MINIT_CALLS: %d\n", minitCalls), string(body))
 }

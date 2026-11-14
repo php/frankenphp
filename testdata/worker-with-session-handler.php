@@ -1,7 +1,7 @@
 <?php
 
 // Custom session handler defined BEFORE the worker loop
-class PreLoopSessionHandler implements SessionHandlerInterface
+class PreLoopSessionHandler implements SessionHandlerInterface, SessionIdInterface, SessionUpdateTimestampHandlerInterface
 {
     private static array $data = [];
 
@@ -35,6 +35,23 @@ class PreLoopSessionHandler implements SessionHandlerInterface
     public function gc(int $max_lifetime): int|false
     {
         return 0;
+    }
+
+    public function create_sid(): string
+    {
+        return bin2hex(random_bytes(16));
+    }
+
+    public function validateId(string $id): bool
+    {
+        // session.use_strict_mode is off in these tests: accept any id, as
+        // PHP did before 8.6 deprecated handlers without this method
+        return true;
+    }
+
+    public function updateTimestamp(string $id, string $data): bool
+    {
+        return true;
     }
 }
 

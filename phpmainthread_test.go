@@ -92,7 +92,7 @@ func TestTransitionAThreadBetween2DifferentWorkers(t *testing.T) {
 // try all possible handler transitions
 // takes around 200ms and is supposed to force race conditions
 func TestTransitionThreadsWhileDoingRequests(t *testing.T) {
-	t.Cleanup(Shutdown)
+	setupGlobals(t)
 
 	var (
 		isDone        atomic.Bool
@@ -236,8 +236,10 @@ func TestFinishBootingAWorkerScript(t *testing.T) {
 	convertToWorkerThread(phpThreads[0], worker)
 	phpThreads[0].state.WaitFor(state.Ready)
 
-	assert.NotNil(t, phpThreads[0].handler.(*workerThread).dummyContext)
-	assert.Nil(t, phpThreads[0].handler.(*workerThread).workerContext)
+	dummyFC := phpThreads[0].handler.(*workerThread).dummyFrankenPHPContext
+	assert.NotNil(t, dummyFC)
+	assert.NotNil(t, dummyFC.ctx)
+	assert.Nil(t, phpThreads[0].handler.(*workerThread).workerFrankenPHPContext)
 	assert.False(
 		t,
 		phpThreads[0].handler.(*workerThread).isBootingScript,
@@ -249,27 +251,27 @@ func TestFinishBootingAWorkerScript(t *testing.T) {
 }
 
 func TestReturnAnErrorIf2WorkersHaveTheSameFileName(t *testing.T) {
+	resetGlobals()
 	workers = []*worker{}
 	workersByName = map[string]*worker{}
-	workersByPath = map[string]*worker{}
+	globalWorkersByPath = map[string]*worker{}
 	w, err1 := newWorker(workerOpt{fileName: testDataPath + "/index.php"})
 	assert.NoError(t, err1)
 	workers = append(workers, w)
 	workersByName[w.name] = w
-	workersByPath[w.fileName] = w
+	globalWorkersByPath[w.fileName] = w
 	_, err2 := newWorker(workerOpt{fileName: testDataPath + "/index.php"})
 	assert.Error(t, err2, "two workers cannot have the same filename")
 }
 
 func TestReturnAnErrorIf2ModuleWorkersHaveTheSameName(t *testing.T) {
+	resetGlobals()
 	workers = []*worker{}
 	workersByName = map[string]*worker{}
-	workersByPath = map[string]*worker{}
 	w, err1 := newWorker(workerOpt{fileName: testDataPath + "/index.php", name: "workername"})
 	assert.NoError(t, err1)
 	workers = append(workers, w)
 	workersByName[w.name] = w
-	workersByPath[w.fileName] = w
 	_, err2 := newWorker(workerOpt{fileName: testDataPath + "/hello.php", name: "workername"})
 	assert.Error(t, err2, "two workers cannot have the same name")
 }
@@ -310,12 +312,12 @@ func allPossibleTransitions(worker1Path string, worker2Path string) []func(*phpT
 		func(thread *phpThread) { thread.shutdown() },
 		func(thread *phpThread) {
 			if thread.state.Is(state.Reserved) {
-				thread.boot()
+				_ = thread.boot()
 			}
 		},
-		func(thread *phpThread) { convertToWorkerThread(thread, workersByPath[worker1Path]) },
+		func(thread *phpThread) { convertToWorkerThread(thread, globalWorkersByPath[worker1Path]) },
 		convertToInactiveThread,
-		func(thread *phpThread) { convertToWorkerThread(thread, workersByPath[worker2Path]) },
+		func(thread *phpThread) { convertToWorkerThread(thread, globalWorkersByPath[worker2Path]) },
 		convertToInactiveThread,
 	}
 }
@@ -328,31 +330,35 @@ func TestCorrectThreadCalculation(t *testing.T) {
 	testThreadCalculation(t, maxProcs, maxProcs, &opt{})
 	testThreadCalculation(t, maxProcs, maxProcs, &opt{workers: oneWorkerThread})
 
-	// num_threads is set
+	// num_threads is set: it counts the threads for regular requests, the
+	// worker threads coming on top of it
 	testThreadCalculation(t, 1, 1, &opt{numThreads: 1})
-	testThreadCalculation(t, 2, 2, &opt{numThreads: 2, workers: oneWorkerThread})
+	testThreadCalculation(t, 3, 3, &opt{numThreads: 2, workers: oneWorkerThread})
+	testThreadCalculation(t, 2, 2, &opt{numThreads: 1, workers: oneWorkerThread})
+	testThreadCalculation(t, maxProcs+2, maxProcs+2, &opt{numThreads: 2, workers: []workerOpt{{}}})
 
 	// max_threads is set
 	testThreadCalculation(t, 1, 10, &opt{maxThreads: 10})
 	testThreadCalculation(t, 2, 10, &opt{maxThreads: 10, workers: oneWorkerThread})
-	testThreadCalculation(t, 5, 10, &opt{numThreads: 5, maxThreads: 10, workers: oneWorkerThread})
+	testThreadCalculation(t, 6, 10, &opt{numThreads: 5, maxThreads: 10, workers: oneWorkerThread})
 
 	// automatic max_threads
 	testThreadCalculation(t, 1, -1, &opt{maxThreads: -1})
 	testThreadCalculation(t, 2, -1, &opt{maxThreads: -1, workers: oneWorkerThread})
 	testThreadCalculation(t, 2, -1, &opt{numThreads: 2, maxThreads: -1})
+	testThreadCalculation(t, 3, -1, &opt{numThreads: 2, maxThreads: -1, workers: oneWorkerThread})
 
 	// max_threads should be thread minimum + sum of worker max_threads
 	testThreadCalculation(t, 2, 6, &opt{workers: []workerOpt{{num: 1, maxThreads: 5}}})
 	testThreadCalculation(t, 6, 9, &opt{workers: []workerOpt{{num: 1, maxThreads: 4}, {num: 4, maxThreads: 4}}})
-	testThreadCalculation(t, 10, 14, &opt{numThreads: 10, workers: []workerOpt{{num: 1, maxThreads: 4}, {num: 3, maxThreads: 4}}})
+	testThreadCalculation(t, 14, 18, &opt{numThreads: 10, workers: []workerOpt{{num: 1, maxThreads: 4}, {num: 3, maxThreads: 4}}})
 
 	// max_threads should remain equal to overall max_threads
 	testThreadCalculation(t, 2, 5, &opt{maxThreads: 5, workers: []workerOpt{{num: 1, maxThreads: 3}}})
 	testThreadCalculation(t, 3, 5, &opt{maxThreads: 5, workers: []workerOpt{{num: 1, maxThreads: 4}, {num: 1, maxThreads: 4}}})
 
-	// not enough num threads
-	testThreadCalculationError(t, &opt{numThreads: 1, workers: oneWorkerThread})
+	// a worker never eats into num_threads, so there is no floor to miss;
+	// max_threads still has to fit what starts
 	testThreadCalculationError(t, &opt{numThreads: 1, maxThreads: 1, workers: oneWorkerThread})
 
 	// not enough max_threads
@@ -380,4 +386,200 @@ func testThreadCalculationError(t *testing.T, o *opt) {
 
 	_, err := calculateMaxThreads(o)
 	assert.Error(t, err, "configuration must error")
+}
+
+func TestContextAndLoggerMustNotBeNil(t *testing.T) {
+	log, ctx := getLogger(0)
+	assert.NotNil(t, log, "logger is defined if all threads are inactive")
+	assert.NotNil(t, ctx, "context is defined if all threads are inactive")
+
+	fc := newContextFromMessage(nil, nil, nil, &worker{})
+	assert.NotNil(t, fc.logger, "logger is defined for message context")
+	assert.NotNil(t, fc.ctx, "context is defined for message context")
+
+	r := httptest.NewRequest("GET", "http://localhost/index.php", nil)
+	fc, _ = newContextFromRequest(r, nil, fallbackServer)
+	assert.NotNil(t, fc.logger, "logger is defined for request context")
+	assert.NotNil(t, fc.ctx, "context is defined for request context")
+
+	fc, _ = newWorkerDummyContext(&worker{})
+	assert.NotNil(t, fc.logger, "logger is defined for worker dummy context")
+	assert.NotNil(t, fc.ctx, "context is defined for worker dummy context")
+}
+
+func TestThreadCreationFailureAtStartup(t *testing.T) {
+	original := newCThread
+	newCThread = func(int) bool { return false }
+	t.Cleanup(func() { newCThread = original })
+
+	assert.ErrorIs(t, Init(WithNumThreads(2)), ErrThreadCreation)
+}
+
+func TestThreadCreationFailureWhenScaling(t *testing.T) {
+	_, err := initPHPThreads(1, 2, nil)
+	assert.NoError(t, err)
+	convertToRegularThread(phpThreads[0])
+
+	original := newCThread
+	newCThread = func(int) bool { return false }
+	assert.Nil(t, getInactivePHPThread())
+	assert.True(t, phpThreads[1].state.Is(state.Reserved))
+
+	newCThread = original
+	assert.Same(t, phpThreads[1], getInactivePHPThread())
+
+	drainPHPThreads()
+}
+
+func failThreadCreation(t *testing.T, failures int64) *atomic.Int64 {
+	t.Helper()
+
+	var attempts atomic.Int64
+	original := newCThread
+	newCThread = func(threadIndex int) bool {
+		if attempts.Add(1) <= failures {
+			return false
+		}
+
+		return original(threadIndex)
+	}
+	t.Cleanup(func() { newCThread = original })
+
+	return &attempts
+}
+
+func serveTestRequest(t *testing.T, path string) string {
+	t.Helper()
+
+	req := httptest.NewRequest("GET", "http://example.com/"+path, nil)
+	fr, err := NewRequestWithContext(req, WithRequestDocumentRoot(testDataPath, false))
+	assert.NoError(t, err)
+
+	w := httptest.NewRecorder()
+	assert.NoError(t, ServeHTTP(w, fr))
+	body, _ := io.ReadAll(w.Result().Body)
+
+	return string(body)
+}
+
+func TestRebootRetriesThreadCreation(t *testing.T) {
+	assert.NoError(t, Init(WithNumThreads(1), WithMaxRequests(1)))
+	attempts := failThreadCreation(t, 3)
+	t.Cleanup(Shutdown)
+
+	for range 3 {
+		assert.Contains(t, serveTestRequest(t, "hello.php"), "Hello")
+	}
+	assert.Greater(t, attempts.Load(), int64(3))
+}
+
+func TestRebootThreadCreationFailure(t *testing.T) {
+	workerPath := filepath.Join(testDataPath, "worker-with-counter.php")
+
+	for _, tc := range []struct {
+		name   string
+		opts   []Option
+		path   string
+		thread func() *phpThread
+	}{
+		{"regular", []Option{WithNumThreads(1)}, "hello.php", func() *phpThread { return regularThreads[0] }},
+		{"worker", []Option{WithNumThreads(2), WithWorkers("worker", workerPath, 1)}, "worker-with-counter.php", func() *phpThread { return workers[0].threads[0] }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.NoError(t, Init(append(tc.opts, WithMaxRequests(1), WithMaxWaitTime(10*time.Second))...))
+
+			var failing atomic.Bool
+			failing.Store(true)
+			original := newCThread
+			newCThread = func(threadIndex int) bool { return !failing.Load() && original(threadIndex) }
+			t.Cleanup(func() { newCThread = original })
+			t.Cleanup(Shutdown)
+
+			thread := tc.thread()
+			assert.NotEmpty(t, serveTestRequest(t, tc.path))
+
+			thread.state.WaitFor(state.Reserved)
+			assert.NotContains(t, regularThreads, thread)
+			for _, w := range workers {
+				assert.NotContains(t, w.threads, thread)
+			}
+
+			failing.Store(false)
+			assert.NotEmpty(t, serveTestRequest(t, tc.path), "requests must resume once threads can be created again")
+
+			Shutdown()
+		})
+	}
+}
+
+func TestFailedRebootDoesNotBlockHandlerChange(t *testing.T) {
+	assert.NoError(t, Init(WithNumThreads(1), WithMaxRequests(1)))
+
+	entered := make(chan struct{})
+	proceed := make(chan struct{})
+	var once sync.Once
+	original := newCThread
+	newCThread = func(int) bool {
+		once.Do(func() {
+			close(entered)
+			<-proceed
+		})
+
+		return false
+	}
+	t.Cleanup(func() { newCThread = original })
+	t.Cleanup(Shutdown)
+
+	thread := regularThreads[0]
+	assert.NotEmpty(t, serveTestRequest(t, "hello.php"))
+	<-entered
+
+	changed := make(chan struct{})
+	go func() {
+		convertToInactiveThread(thread)
+		close(changed)
+	}()
+
+	// wait until setHandler() holds handlerMu while the reboot is still pending
+	for thread.handlerMu.TryRLock() {
+		thread.handlerMu.RUnlock()
+		runtime.Gosched()
+	}
+	close(proceed)
+
+	select {
+	case <-changed:
+	case <-time.After(10 * time.Second):
+		t.Fatal("setHandler() and the failed reboot deadlocked")
+	}
+}
+
+func TestPoolRestored(t *testing.T) {
+	configured, scaled := newPHPThread(0), newPHPThread(1)
+
+	scalingMu.Lock()
+	defer scalingMu.Unlock()
+	t.Cleanup(func() { autoScaledThreads = nil })
+
+	autoScaledThreads = []*phpThread{scaled}
+	assert.True(t, poolRestored(1, []*phpThread{configured, scaled}), "an autoscaled thread that failed must not be restored")
+	assert.Equal(t, []*phpThread{scaled}, autoScaledThreads)
+
+	assert.True(t, poolRestored(1, []*phpThread{scaled}), "an autoscaled thread in a free slot must be kept")
+	assert.Empty(t, autoScaledThreads, "the adopted thread must not be downscaled")
+
+	assert.False(t, poolRestored(1, nil))
+}
+
+func TestReusedAutoScaledSlotIsTrackedOnce(t *testing.T) {
+	thread := newPHPThread(0)
+
+	scalingMu.Lock()
+	defer scalingMu.Unlock()
+	t.Cleanup(func() { autoScaledThreads = nil })
+
+	// the slot of an autoscaled thread that failed to reboot, not yet removed by deactivateThreads()
+	autoScaledThreads = []*phpThread{thread}
+	trackAutoScaledThread(thread)
+	assert.Equal(t, []*phpThread{thread}, autoScaledThreads)
 }

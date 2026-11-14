@@ -419,3 +419,22 @@ func TestPHPFunctionGenerator_AnalyzeParameters(t *testing.T) {
 		})
 	}
 }
+
+func TestPHPFunctionGenerator_MixedReturn(t *testing.T) {
+	generator := PHPFuncGenerator{paramParser: &ParameterParser{}}
+
+	t.Run("mixed return value is forwarded to PHP", func(t *testing.T) {
+		result := generator.generate(phpFunction{Name: "pick", ReturnType: phpMixed})
+
+		assert.Contains(t, result, "zval *result = go_pick();")
+		assert.Contains(t, result, "RETURN_COPY_VALUE(result);")
+		assert.Contains(t, result, "RETURN_NULL();")
+	})
+
+	t.Run("void return declares no result", func(t *testing.T) {
+		result := generator.generate(phpFunction{Name: "run", ReturnType: phpVoid})
+
+		assert.Contains(t, result, "go_run();")
+		assert.NotContains(t, result, "result")
+	})
+}

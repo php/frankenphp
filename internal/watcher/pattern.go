@@ -207,7 +207,7 @@ func expandCurlyBraces(s string) []string {
 	}
 
 	var out []string
-	for _, subPattern := range strings.Split(inside, ",") {
+	for subPattern := range strings.SplitSeq(inside, ",") {
 		out = append(out, expandCurlyBraces(before+subPattern+after)...)
 	}
 

@@ -11,7 +11,9 @@ WORKDIR /app
 RUN apk add --no-cache \
 	ca-certificates \
 	libcap \
-	mailcap
+	mailcap && \
+	# TODO: remove once the php base images ship the CVE-2026-111497 fix
+	apk upgrade --no-cache brotli-libs
 
 RUN set -eux; \
 	mkdir -p \

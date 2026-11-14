@@ -17,7 +17,13 @@ package frankenphp
 #cgo noescape __zval_arr__
 #cgo noescape __emalloc__
 #cgo noescape __efree__
-#include "types.h"
+#cgo nocallback __zend_array_is_recursive__
+#cgo nocallback __zend_array_protect_recursion__
+#cgo nocallback __zend_array_unprotect_recursion__
+#cgo noescape __zend_array_is_recursive__
+#cgo noescape __zend_array_protect_recursion__
+#cgo noescape __zend_array_unprotect_recursion__
+#include "frankenphp_types.h"
 */
 import "C"
 import (
@@ -95,6 +101,11 @@ func goArray[T any](arr unsafe.Pointer, ordered bool) (map[string]T, []string, e
 		return nil, nil, fmt.Errorf("received a *zval that wasn't a HashTable on array conversion")
 	}
 
+	if err := protectRecursion(array); err != nil {
+		return nil, nil, err
+	}
+	defer C.__zend_array_unprotect_recursion__(array)
+
 	nNumUsed := array.nNumUsed
 	entries := make(map[string]T, nNumUsed)
 	var order []string
@@ -138,26 +149,30 @@ func goArray[T any](arr unsafe.Pointer, ordered bool) (map[string]T, []string, e
 			return nil, nil, err
 		}
 
+		var key string
 		if bucket.key != nil {
-			keyStr := GoString(unsafe.Pointer(bucket.key))
-			if v == nil {
-				entries[keyStr] = zeroVal
-			} else {
-				entries[keyStr] = v.(T)
-			}
-
-			if ordered {
-				order = append(order, keyStr)
-			}
-
-			continue
+			key = GoString(unsafe.Pointer(bucket.key))
+		} else {
+			// as fallback convert the bucket index to a string key
+			key = strconv.Itoa(int(bucket.h))
 		}
 
-		// as fallback convert the bucket index to a string key
-		strIndex := strconv.Itoa(int(bucket.h))
-		entries[strIndex] = v.(T)
+		// a PHP null becomes a nil any, and a type assertion on a nil any
+		// panics for every T: this runs in a cgo callback, where a panic
+		// aborts the whole process instead of failing the request
+		if v == nil {
+			entries[key] = zeroVal
+		} else {
+			e, ok := v.(T)
+			if !ok {
+				return nil, nil, fmt.Errorf("cannot cast value of type %T to type %T", v, zeroVal)
+			}
+
+			entries[key] = e
+		}
+
 		if ordered {
-			order = append(order, strIndex)
+			order = append(order, key)
 		}
 	}
 
@@ -175,6 +190,11 @@ func GoPackedArray[T any](arr unsafe.Pointer) ([]T, error) {
 	if array == nil {
 		return nil, fmt.Errorf("GoPackedArray received *zval that wasn't a HashTable")
 	}
+
+	if err := protectRecursion(array); err != nil {
+		return nil, err
+	}
+	defer C.__zend_array_unprotect_recursion__(array)
 
 	nNumUsed := array.nNumUsed
 	result := make([]T, 0, nNumUsed)
@@ -272,6 +292,10 @@ func goValue[T any](zval *C.zval) (res T, err error) {
 		resZero T
 	)
 	t := C.zval_get_type(zval)
+	if t == C.IS_REFERENCE {
+		zval = &(*(**C.zend_reference)(unsafe.Pointer(&zval.value[0]))).val
+		t = C.zval_get_type(zval)
+	}
 
 	switch t {
 	case C.IS_NULL:
@@ -373,11 +397,20 @@ func PHPValue(value any) unsafe.Pointer {
 }
 
 func phpValue(value any) *C.zval {
-	zval := (*C.zval)(C.__emalloc__(C.size_t(unsafe.Sizeof(C.zval{}))))
+	var v C.zval
+	phpValueInto(value, &v)
 
+	zval := (*C.zval)(C.__emalloc__(C.size_t(unsafe.Sizeof(C.zval{}))))
+	*zval = v
+
+	return zval
+}
+
+// phpValueInto writes value into a zval container owned by the caller.
+func phpValueInto(value any, zval *C.zval) {
 	if toZvalObj, ok := value.(toZval); ok {
 		toZvalObj.toZval(zval)
-		return zval
+		return
 	}
 
 	switch v := value.(type) {
@@ -405,11 +438,8 @@ func phpValue(value any) *C.zval {
 	case []any:
 		C.__zval_arr__(zval, (*C.zend_array)(PHPPackedArray[any](v)))
 	default:
-		C.__efree__(unsafe.Pointer(zval))
 		panic(fmt.Sprintf("unsupported Go type %T", v))
 	}
-
-	return zval
 }
 
 // createNewArray creates a new zend_array with the specified size.
@@ -433,6 +463,18 @@ func htIsPacked(ht *C.zend_array) bool {
 	flags := *(*C.uint32_t)(unsafe.Pointer(&ht.u[0]))
 
 	return (flags & C.HASH_FLAG_PACKED) != 0
+}
+
+// protectRecursion marks ht as being converted, like json_encode() does:
+// following a cycle would overflow the Go stack and abort the whole process.
+func protectRecursion(ht *C.zend_array) error {
+	if C.__zend_array_is_recursive__(ht) {
+		return errors.New("cannot convert a recursive array")
+	}
+
+	C.__zend_array_protect_recursion__(ht)
+
+	return nil
 }
 
 // extractZvalValue returns a pointer to the zval value cast to the expected type
@@ -474,8 +516,8 @@ func zendHashDestroy(p unsafe.Pointer) {
 }
 
 // EXPERIMENTAL: CallPHPCallable executes a PHP callable with the given parameters.
-// Returns the result of the callable as a Go interface{}, or nil if the call failed.
-func CallPHPCallable(cb unsafe.Pointer, params []interface{}) interface{} {
+// Returns the result of the callable as a Go any, or nil if the call failed.
+func CallPHPCallable(cb unsafe.Pointer, params []any) any {
 	if cb == nil {
 		return nil
 	}
@@ -494,15 +536,15 @@ func CallPHPCallable(cb unsafe.Pointer, params []interface{}) interface{} {
 	if paramCount > 0 {
 		paramStorage = (*C.zval)(C.__emalloc__(C.size_t(paramCount) * C.size_t(unsafe.Sizeof(C.zval{}))))
 		defer func() {
-			for i := 0; i < paramCount; i++ {
-				targetZval := (*C.zval)(unsafe.Pointer(uintptr(unsafe.Pointer(paramStorage)) + uintptr(i)*unsafe.Sizeof(C.zval{})))
+			for i := range paramCount {
+				targetZval := (*C.zval)(unsafe.Add(unsafe.Pointer(paramStorage), uintptr(i)*unsafe.Sizeof(C.zval{})))
 				C.zval_ptr_dtor(targetZval)
 			}
 			C.__efree__(unsafe.Pointer(paramStorage))
 		}()
 
 		for i, param := range params {
-			targetZval := (*C.zval)(unsafe.Pointer(uintptr(unsafe.Pointer(paramStorage)) + uintptr(i)*unsafe.Sizeof(C.zval{})))
+			targetZval := (*C.zval)(unsafe.Add(unsafe.Pointer(paramStorage), uintptr(i)*unsafe.Sizeof(C.zval{})))
 			sourceZval := phpValue(param)
 			*targetZval = *sourceZval
 			C.__efree__(unsafe.Pointer(sourceZval))

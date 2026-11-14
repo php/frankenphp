@@ -1,0 +1,6 @@
+<?php
+
+foreach (['SCRIPT_NAME', 'PHP_SELF', 'PATH_INFO'] as $var) {
+    $value = $_SERVER[$var] ?? '(not set)';
+    echo $value !== '' ? "$var: $value\n" : "$var:\n";
+}

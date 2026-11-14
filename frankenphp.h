@@ -16,6 +16,7 @@
 
 #include <Zend/zend_modules.h>
 #include <Zend/zend_types.h>
+#include <php_version.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -31,15 +32,33 @@
 #define FRANKENPHP_KILL_SIGNAL (SIGRTMIN + 3)
 #endif
 
+#if PHP_VERSION_ID >= 80700
+typedef atomic_bool frankenphp_atomic_bool;
+#define frankenphp_atomic_bool_load(obj) atomic_load(obj)
+#define frankenphp_atomic_bool_store(obj, desired) atomic_store(obj, desired)
+#else
+#include <Zend/zend_atomic.h>
+typedef zend_atomic_bool frankenphp_atomic_bool;
+#define frankenphp_atomic_bool_load(obj) zend_atomic_bool_load(obj)
+#define frankenphp_atomic_bool_store(obj, desired)                             \
+  zend_atomic_bool_store(obj, desired)
+#endif
+
 typedef struct {
-  zend_atomic_bool *vm_interrupt;
-  zend_atomic_bool *timed_out;
+  frankenphp_atomic_bool *vm_interrupt;
+  frankenphp_atomic_bool *timed_out;
 #ifdef FRANKENPHP_HAS_KILL_SIGNAL
   pthread_t tid;
 #elif defined(PHP_WIN32)
   HANDLE thread_handle;
 #endif
 } force_kill_slot;
+
+#if defined(ZTS) && PHP_VERSION_ID >= 80400
+#define FRANKENPHP_OPCACHE_RESTART_HOOK 1
+#else
+#define FRANKENPHP_OPCACHE_RESTART_HOOK 0
+#endif
 
 #ifndef FRANKENPHP_VERSION
 #define FRANKENPHP_VERSION dev
@@ -64,6 +83,8 @@ typedef struct frankenphp_server_vars {
   size_t document_root_len;
   char *path_info;
   size_t path_info_len;
+  char *path_translated;
+  size_t path_translated_len;
   char *php_self;
   size_t php_self_len;
   char *document_uri;
@@ -76,6 +97,8 @@ typedef struct frankenphp_server_vars {
   size_t server_name_len;
   char *server_port;
   size_t server_port_len;
+  char *server_addr;
+  size_t server_addr_len;
   char *content_length;
   size_t content_length_len;
   char *server_protocol;
@@ -112,6 +135,7 @@ typedef struct frankenphp_server_vars {
   X(request_scheme, "REQUEST_SCHEME")                                          \
   X(server_name, "SERVER_NAME")                                                \
   X(server_port, "SERVER_PORT")                                                \
+  X(server_addr, "SERVER_ADDR")                                                \
   X(content_length, "CONTENT_LENGTH")                                          \
   X(server_protocol, "SERVER_PROTOCOL")                                        \
   X(http_host, "HTTP_HOST")                                                    \
@@ -177,7 +201,6 @@ void frankenphp_register_server_vars(zval *track_vars_array,
                                      frankenphp_server_vars vars);
 void frankenphp_add_to_prepared_env(char *name, size_t name_len, char *val,
                                     size_t val_len, size_t size);
-void frankenphp_merge_with_prepared_env(zval *track_vars_array);
 
 zend_string *frankenphp_init_persistent_string(const char *string, size_t len);
 int frankenphp_get_current_memory_limit();
@@ -201,6 +224,20 @@ size_t frankenphp_get_thread_memory_usage(uintptr_t thread_index);
 void frankenphp_force_kill_thread(force_kill_slot slot);
 void frankenphp_release_thread_for_kill(force_kill_slot slot);
 
+/* Outcome of go_mercure_publish(). INVALID_UPDATE and PUBLISH_FAILED carry a
+ * malloc'ed message the caller must free, INVALID_UPDATE the position of the
+ * argument at fault. */
+typedef enum {
+  FRANKENPHP_MERCURE_OK = 0,
+  FRANKENPHP_MERCURE_NO_HUB = 1,
+  FRANKENPHP_MERCURE_INVALID_UPDATE = 2,
+  FRANKENPHP_MERCURE_PUBLISH_FAILED = 3,
+  FRANKENPHP_MERCURE_UNSUPPORTED = 4,
+} frankenphp_mercure_status;
+
 void register_extensions(zend_module_entry **m, int len);
+
+// This function is exported for use by extensions, as proposed in PR #2305
+uintptr_t frankenphp_thread_index(void);
 
 #endif

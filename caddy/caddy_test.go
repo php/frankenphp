@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -22,12 +23,11 @@ import (
 )
 
 // initServer initializes a Caddy test server and waits for it to be ready.
-// After InitServer, it polls the server to handle a race condition on macOS where
-// SO_REUSEPORT can briefly route connections to the old listener being shut down,
-// resulting in "connection reset by peer".
+// It polls the HTTP endpoint after loading the configuration to wait for the
+// listener to start accepting requests.
 func initServer(t *testing.T, tester *caddytest.Tester, config string, format string) {
 	t.Helper()
-	tester.InitServer(config, format)
+	initTestServer(t, tester, config, format)
 
 	client := &http.Client{Timeout: 1 * time.Second}
 	require.Eventually(t, func() bool {
@@ -64,6 +64,9 @@ func escapeMetricLabel(s string) string {
 }
 
 func TestMain(m *testing.M) {
+	// Bound helpers using http.Get, including diagnostics and metrics requests.
+	http.DefaultClient.Timeout = caddytest.Default.TestRequestTimeout
+
 	// setup custom environment vars for TestOsEnv
 	if os.Setenv("ENV1", "value1") != nil || os.Setenv("ENV2", "value2") != nil {
 		fmt.Println("Failed to set environment variables for tests")
@@ -97,8 +100,8 @@ func TestPHP(t *testing.T) {
 		wg.Add(1)
 
 		go func(i int) {
+			defer wg.Done()
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/index.php?i=%d", i), http.StatusOK, fmt.Sprintf("I am by birth a Genevese (%d)", i))
-			wg.Done()
 		}(i)
 	}
 	wg.Wait()
@@ -160,8 +163,8 @@ func TestWorker(t *testing.T) {
 		wg.Add(1)
 
 		go func(i int) {
+			defer wg.Done()
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/index.php?i=%d", i), http.StatusOK, fmt.Sprintf("I am by birth a Genevese (%d)", i))
-			wg.Done()
 		}(i)
 	}
 	wg.Wait()
@@ -212,9 +215,9 @@ func TestGlobalAndModuleWorker(t *testing.T) {
 		wg.Add(1)
 
 		go func(i int) {
+			defer wg.Done()
 			tester.AssertGetResponse("http://localhost:"+testPort+"/worker-with-env.php", http.StatusOK, "Worker has APP_ENV=module")
 			tester.AssertGetResponse("http://localhost:"+testPortTwo+"/worker-with-env.php", http.StatusOK, "Worker has APP_ENV=global")
-			wg.Done()
 		}(i)
 	}
 	wg.Wait()
@@ -240,6 +243,35 @@ func TestModuleWorkerInheritsEnv(t *testing.T) {
 		`, "caddyfile")
 
 	tester.AssertGetResponse("http://localhost:"+testPort+"/worker-with-env.php", http.StatusOK, "Worker has APP_ENV=inherit_this")
+}
+
+func TestWorkerRetriesBootFailureByDefault(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "booted")
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+
+			frankenphp {
+				worker {
+					file ../testdata/worker-fail-first-boot.php
+					num 1
+					env BOOT_MARKER `+marker+`
+				}
+			}
+		}
+
+		http://localhost:`+testPort+` {
+			route {
+				php {
+					root ../testdata
+				}
+			}
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/worker-fail-first-boot.php", http.StatusOK, "booted after a failure")
 }
 
 func TestNamedModuleWorkers(t *testing.T) {
@@ -286,9 +318,9 @@ func TestNamedModuleWorkers(t *testing.T) {
 		wg.Add(1)
 
 		go func(i int) {
+			defer wg.Done()
 			tester.AssertGetResponse("http://localhost:"+testPort+"/worker-with-env.php", http.StatusOK, "Worker has APP_ENV=one")
 			tester.AssertGetResponse("http://localhost:"+testPortTwo+"/worker-with-env.php", http.StatusOK, "Worker has APP_ENV=two")
-			wg.Done()
 		}(i)
 	}
 	wg.Wait()
@@ -463,6 +495,56 @@ func TestPHPServerDirective(t *testing.T) {
 	tester.AssertGetResponse("http://localhost:"+testPort+"/not-found.txt", http.StatusOK, "I am by birth a Genevese (i not set)")
 }
 
+func TestPHPServerSplitsTheSamePathAsTheMatchers(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+			http_port `+testPort+`
+			https_port 9443
+		}
+
+		localhost:`+testPort+` {
+			root ../testdata
+			@denied path /dirindex/*
+			respond @denied 403
+			php_server {
+				index off
+			}
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/dirindex/index.php", http.StatusForbidden, "")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/dirindex/index.php/../../hello.php", http.StatusOK, "Hello from PHP")
+}
+
+func TestPHPServerRejectsPathsSplitDifferentlyWhenEscaped(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+			http_port `+testPort+`
+			https_port 9443
+		}
+
+		localhost:`+testPort+` {
+			root ../testdata
+			@denied not path /dirindex/%*
+			respond @denied 403
+			php_server {
+				index off
+			}
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/hello.php", http.StatusForbidden, "")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/dirindex/index.php%2f..%2f..%2fhello.php", http.StatusBadRequest, "invalid request path")
+}
+
 func TestPHPServerDirectiveDisableFileServer(t *testing.T) {
 	tester := caddytest.NewTester(t)
 	initServer(t, tester, `
@@ -485,6 +567,48 @@ func TestPHPServerDirectiveDisableFileServer(t *testing.T) {
 
 	tester.AssertGetResponse("http://localhost:"+testPort, http.StatusOK, "I am by birth a Genevese (i not set)")
 	tester.AssertGetResponse("http://localhost:"+testPort+"/not-found.txt", http.StatusOK, "I am by birth a Genevese (i not set)")
+}
+
+func TestPHPServerDirectiveHidesCaddyfiles(t *testing.T) {
+	root := t.TempDir()
+	imported := filepath.Join(root, "imported.caddyfile")
+	require.NoError(t, os.WriteFile(imported, []byte("header X-Imported yes"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "static.txt"), []byte("static"), 0644))
+	workerFile, _ := filepath.Abs("../testdata/worker-with-counter.php")
+
+	testPortNum, _ := strconv.Atoi(testPort)
+	testPortTwo := strconv.Itoa(testPortNum + 1)
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		http://localhost:`+testPort+` {
+			import `+imported+`
+			php_server {
+				root `+root+`
+			}
+		}
+
+		http://localhost:`+testPortTwo+` {
+			import `+imported+`
+			php_server {
+				root `+root+`
+				worker {
+					file `+workerFile+`
+					match /matched-path*
+					num 1
+				}
+			}
+		}
+		`, "caddyfile")
+
+	for _, port := range []string{testPort, testPortTwo} {
+		tester.AssertGetResponse("http://localhost:"+port+"/static.txt", http.StatusOK, "static")
+		tester.AssertGetResponse("http://localhost:"+port+"/imported.caddyfile", http.StatusNotFound, "")
+	}
 }
 
 func TestPHPServerGlobals(t *testing.T) {
@@ -693,7 +817,6 @@ func TestMetrics(t *testing.T) {
 			mercure {
 				transport local
 				anonymous
-				publisher_jwt !ChangeMe!
 			}
 
 			php {
@@ -705,9 +828,9 @@ func TestMetrics(t *testing.T) {
 	example.com:`+testPort+` {
 		route {
 			mercure {
+				name example
 				transport local
 				anonymous
-				publisher_jwt !ChangeMe!
 			}
 
 			php {
@@ -721,8 +844,8 @@ func TestMetrics(t *testing.T) {
 	for i := range 10 {
 		wg.Add(1)
 		go func(i int) {
+			defer wg.Done()
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/index.php?i=%d", i), http.StatusOK, fmt.Sprintf("I am by birth a Genevese (%d)", i))
-			wg.Done()
 		}(i)
 	}
 	wg.Wait()
@@ -797,8 +920,8 @@ func TestWorkerMetrics(t *testing.T) {
 	for i := range 10 {
 		wg.Add(1)
 		go func(i int) {
+			defer wg.Done()
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/index.php?i=%d", i), http.StatusOK, fmt.Sprintf("I am by birth a Genevese (%d)", i))
-			wg.Done()
 		}(i)
 	}
 	wg.Wait()
@@ -903,7 +1026,7 @@ func TestPhpServerWorkerMatchPoolCount(t *testing.T) {
 	require.NoError(t, err, "failed to read metrics")
 
 	var pools []string
-	for _, line := range strings.Split(metrics.String(), "\n") {
+	for line := range strings.SplitSeq(metrics.String(), "\n") {
 		if !strings.HasPrefix(line, "frankenphp_total_workers{worker=") {
 			continue
 		}
@@ -954,8 +1077,8 @@ func TestNamedWorkerMetrics(t *testing.T) {
 	for i := range 10 {
 		wg.Add(1)
 		go func(i int) {
+			defer wg.Done()
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/index.php?i=%d", i), http.StatusOK, fmt.Sprintf("I am by birth a Genevese (%d)", i))
-			wg.Done()
 		}(i)
 	}
 	wg.Wait()
@@ -1048,8 +1171,8 @@ func TestAutoWorkerConfig(t *testing.T) {
 	for i := range 10 {
 		wg.Add(1)
 		go func(i int) {
+			defer wg.Done()
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/index.php?i=%d", i), http.StatusOK, fmt.Sprintf("I am by birth a Genevese (%d)", i))
-			wg.Done()
 		}(i)
 	}
 	wg.Wait()
@@ -1219,12 +1342,19 @@ func testSingleIniConfiguration(tester *caddytest.Tester, key string, value stri
 }
 
 func TestOsEnv(t *testing.T) {
+	// This is not a reload test: avoid the previous config's listener, which
+	// Caddy may still be shutting down after FrankenPHP unregisters its server.
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	port := strconv.Itoa(listener.Addr().(*net.TCPAddr).Port)
+	require.NoError(t, listener.Close())
+
 	tester := caddytest.NewTester(t)
-	initServer(t, tester, `
+	initTestServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
-			http_port `+testPort+`
+			http_port `+port+`
 
 			frankenphp {
 				num_threads 2
@@ -1233,7 +1363,7 @@ func TestOsEnv(t *testing.T) {
 			}
 		}
 
-		localhost:`+testPort+` {
+		localhost:`+port+` {
 			route {
 				root ../testdata
 				php
@@ -1242,7 +1372,7 @@ func TestOsEnv(t *testing.T) {
 		`, "caddyfile")
 
 	tester.AssertGetResponse(
-		"http://localhost:"+testPort+"/env/env.php?keys[]=ENV1&keys[]=ENV2",
+		"http://localhost:"+port+"/env/env.php?keys[]=ENV1&keys[]=ENV2",
 		http.StatusOK,
 		"ENV1=value1,ENV2=value2",
 	)
@@ -1277,11 +1407,11 @@ func TestMaxWaitTime(t *testing.T) {
 	wg.Add(10)
 	for range 10 {
 		go func() {
+			defer wg.Done()
 			statusCode := getStatusCode("http://localhost:"+testPort+"/sleep.php?sleep=10", t)
 			if statusCode == http.StatusServiceUnavailable {
 				success.Store(true)
 			}
-			wg.Done()
 		}()
 	}
 	wg.Wait()
@@ -1324,11 +1454,11 @@ func TestMaxWaitTimeWorker(t *testing.T) {
 	wg.Add(10)
 	for range 10 {
 		go func() {
+			defer wg.Done()
 			statusCode := getStatusCode("http://localhost:"+testPort+"/sleep.php?sleep=10&iteration=1", t)
 			if statusCode == http.StatusServiceUnavailable {
 				success.Store(true)
 			}
-			wg.Done()
 		}()
 	}
 	wg.Wait()
@@ -1417,8 +1547,8 @@ func TestMultiWorkersMetrics(t *testing.T) {
 	for i := range 10 {
 		wg.Add(1)
 		go func(i int) {
+			defer wg.Done()
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/index.php?i=%d", i), http.StatusOK, fmt.Sprintf("I am by birth a Genevese (%d)", i))
-			wg.Done()
 		}(i)
 	}
 	wg.Wait()
@@ -1525,8 +1655,8 @@ func TestDisabledMetrics(t *testing.T) {
 	for i := range 10 {
 		wg.Add(1)
 		go func(i int) {
+			defer wg.Done()
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/index.php?i=%d", i), http.StatusOK, fmt.Sprintf("I am by birth a Genevese (%d)", i))
-			wg.Done()
 		}(i)
 	}
 	wg.Wait()
@@ -1634,8 +1764,8 @@ func TestWorkerRestart(t *testing.T) {
 	for i := range 10 {
 		wg.Add(1)
 		go func(i int) {
+			defer wg.Done()
 			tester.AssertGetResponse(fmt.Sprintf("http://localhost:"+testPort+"/worker-restart.php?i=%d", i), http.StatusOK, fmt.Sprintf("Counter (%d)", i))
-			wg.Done()
 		}(i)
 	}
 	wg.Wait()
@@ -1661,6 +1791,115 @@ func TestWorkerRestart(t *testing.T) {
 			"frankenphp_ready_workers",
 			"frankenphp_worker_restarts",
 		))
+}
+
+func TestNamedRouteDoesNotShareTheServerOfASite(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		&(named) {
+			php_server {
+				root ../testdata
+				env FOO named
+			}
+		}
+
+		http://localhost:`+testPort+` {
+			php_server {
+				root ../testdata
+				env FOO site
+			}
+		}
+
+		http://127.0.0.1:`+testPort+` {
+			invoke named
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/worker-env.php", http.StatusOK, "sitesite")
+	tester.AssertGetResponse("http://127.0.0.1:"+testPort+"/worker-env.php", http.StatusOK, "namednamed")
+}
+
+func TestNamedRouteDoesNotShareWorkersOfASiteWithAnotherMercureHub(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		&(named) {
+			route {
+				mercure {
+					name named
+					transport local
+					anonymous
+				}
+
+				php_server {
+					root ../testdata
+					worker worker-with-counter.php 1
+				}
+			}
+		}
+
+		http://localhost:`+testPort+` {
+			route {
+				mercure {
+					name site
+					transport local
+					anonymous
+				}
+
+				php_server {
+					root ../testdata
+					worker worker-with-counter.php 1
+				}
+			}
+		}
+
+		http://127.0.0.1:`+testPort+` {
+			invoke named
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/worker-with-counter.php", http.StatusOK, "requests:1")
+	tester.AssertGetResponse("http://127.0.0.1:"+testPort+"/worker-with-counter.php", http.StatusOK, "requests:1")
+}
+
+func TestNamedRouteDoesNotShareWorkersOfASiteWithTheSameConfig(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		&(named) {
+			php_server {
+				root ../testdata
+				worker worker-with-counter.php 1
+			}
+		}
+
+		http://localhost:`+testPort+` {
+			php_server {
+				root ../testdata
+				worker worker-with-counter.php 1
+			}
+		}
+
+		http://127.0.0.1:`+testPort+` {
+			invoke named
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/worker-with-counter.php", http.StatusOK, "requests:1")
+	tester.AssertGetResponse("http://127.0.0.1:"+testPort+"/worker-with-counter.php", http.StatusOK, "requests:1")
 }
 
 func TestWorkerMatchDirective(t *testing.T) {
@@ -1737,6 +1976,60 @@ func TestWorkerMatchDirectiveWithMultipleWorkers(t *testing.T) {
 	tester.AssertGetResponse("http://localhost:"+testPort+"/not-matched", http.StatusOK, "I am by birth a Genevese (i not set)")
 }
 
+func TestWorkerMatchDirectiveDoesNotServeScriptSources(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		http://localhost:`+testPort+` {
+			rewrite /rewritten /hello.php/
+			php_server {
+				root ../testdata
+				split .php .custom
+				worker {
+					file worker-with-counter.php
+					match /counter/*
+					num 1
+				}
+			}
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/split-path.custom", http.StatusOK, "SCRIPT_NAME: /split-path.custom\nPHP_SELF: /split-path.custom\nPATH_INFO:\n")
+	// the file matcher cleans the trailing slash, the path matcher doesn't
+	tester.AssertGetResponse("http://localhost:"+testPort+"/rewritten", http.StatusOK, "Hello from PHP")
+}
+
+func TestWorkerMatchDirectiveDoesNotServePHPSourcesWithoutPHPSplit(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		http://localhost:`+testPort+` {
+			php_server {
+				root ../testdata
+				split .phtml
+				worker {
+					file worker-with-counter.php
+					match /api/*
+					num 1
+				}
+			}
+		}
+		`, "caddyfile")
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/api/worker-with-counter.php", http.StatusOK, "requests:1")
+	tester.AssertGetResponse("http://localhost:"+testPort+"/hello.php", http.StatusNotFound, "")
+	tester.AssertGetResponse("http://localhost:"+testPort+"/hello.php/", http.StatusNotFound, "")
+	tester.AssertGetResponse("http://localhost:"+testPort+"/hello.txt", http.StatusOK, "Hello\n")
+}
+
 func TestWorkerMatchDirectiveWithoutFileServer(t *testing.T) {
 	tester := caddytest.NewTester(t)
 	initServer(t, tester, `
@@ -1798,7 +2091,7 @@ func TestDd(t *testing.T) {
 func TestOpcacheReset(t *testing.T) {
 	tester := caddytest.NewTester(t)
 	tester.Client.Timeout = 60 * time.Second
-	tester.InitServer(`
+	initTestServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999
@@ -1806,7 +2099,7 @@ func TestOpcacheReset(t *testing.T) {
 			metrics
 
 			frankenphp {
-				num_threads 40
+				num_threads 20
 				php_ini {
 					opcache.enable 1
 					opcache.log_verbosity_level 4
@@ -1827,10 +2120,19 @@ func TestOpcacheReset(t *testing.T) {
 		}
 		`, "caddyfile")
 
+	resp, err := tester.Client.Get("http://localhost:" + testPort + "/ini.php?key=opcache.enable")
+	require.NoError(t, err)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	if string(body) == "opcache.enable:" {
+		t.Skip("OPcache is not loaded")
+	}
+
 	wg := sync.WaitGroup{}
 	numRequests := 500
 	wg.Add(numRequests)
-	for i := 0; i < numRequests; i++ {
+	for i := range numRequests {
 
 		// introduce a delay every 10 requests
 		if i%10 == 0 {
@@ -2024,6 +2326,31 @@ func TestSymlinkWorkerPaths(t *testing.T) {
 
 		tester.AssertGetResponse("http://localhost:"+testPort+"/index.php", http.StatusOK, "Request: 0\n")
 	})
+
+	t.Run("PhpServerWorkerWithoutResolveRootSymlink", func(t *testing.T) {
+		tester := caddytest.NewTester(t)
+		initServer(t, tester, `
+			{
+				skip_install_trust
+				admin localhost:2999
+				http_port `+testPort+`
+			}
+
+			localhost:`+testPort+` {
+				root `+publicDir+`
+				php_server {
+					worker {
+						file `+publicDir+`/index.php
+						num 1
+					}
+					resolve_root_symlink false
+				}
+			}
+			`, "caddyfile")
+
+		// the readiness probe of initServer falls back to index.php and was request 0
+		tester.AssertGetResponse("http://localhost:"+testPort+"/index.php", http.StatusOK, "Request: 1\n")
+	})
 }
 
 // TestSymlinkResolveRoot tests the resolve_root_symlink directive behavior
@@ -2138,7 +2465,7 @@ func TestSymlinkWorkerBehavior(t *testing.T) {
 			`, "caddyfile")
 
 		// Make multiple requests - each should increment the counter
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			tester.AssertGetResponse("http://localhost:"+testPort+"/index.php", http.StatusOK, fmt.Sprintf("Request: %d\n", i))
 		}
 	})

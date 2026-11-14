@@ -10,3 +10,6 @@ rules:
       allow:
         # TODO: re-enable the environment when the GitHub UI supports grouping or masking environment notifications (they pollute pull requests right now)
         - DOCKERHUB_TOKEN
+  # actionlint rejects the `$/` syntax: https://github.com/rhysd/actionlint/issues/711
+  self-repository:
+    disable: true

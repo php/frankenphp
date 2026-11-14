@@ -98,13 +98,14 @@ Bien que certains types de variables aient la même représentation mémoire ent
 | `array`            | `frankenphp.AssociativeArray` | ❌                 | `frankenphp.GoAssociativeArray()` | `frankenphp.PHPAssociativeArray()` | ✅                             |
 | `array`            | `map[string]any`              | ❌                 | `frankenphp.GoMap()`              | `frankenphp.PHPMap()`              | ✅                             |
 | `array`            | `[]any`                       | ❌                 | `frankenphp.GoPackedArray()`      | `frankenphp.PHPPackedArray()`      | ✅                             |
-| `mixed`            | `any`                         | ❌                 | `GoValue()`                       | `PHPValue()`                       | ❌                             |
+| `mixed`            | `*C.zval`                     | ❌                 | `frankenphp.GoValue()`            | `frankenphp.PHPValue()`            | ✅                             |
+| `callable`         | `*C.zval`                     | ❌                 | -                                 | frankenphp.CallPHPCallable()       | ✅                             |
 | `object`           | `struct`                      | ❌                 | _Pas encore implémenté_           | _Pas encore implémenté_            | ❌                             |
 
 > [!NOTE]
 > Ce tableau n'est pas encore exhaustif et sera complété au fur et à mesure que l'API de types FrankenPHP deviendra plus complète.
 >
-> Pour les méthodes de classe spécifiquement, les types primitifs et les tableaux sont supportés. Les objets ne peuvent pas encore être utilisés comme paramètres de méthode ou types de retour.
+> Pour les méthodes de classe spécifiquement, les types primitifs, les tableaux, `mixed` et `callable` sont supportés. Les objets ne peuvent pas encore être utilisés comme paramètres de méthode ou types de retour.
 
 Si vous vous référez à l'extrait de code de la section précédente, vous pouvez voir que des assistants sont utilisés pour convertir le premier paramètre et la valeur de retour. Les deuxième et troisième paramètres de notre fonction `repeat_this()` n'ont pas besoin d'être convertis car la représentation mémoire des types sous-jacents est la même pour C et Go.
 

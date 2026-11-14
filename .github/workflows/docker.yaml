@@ -5,17 +5,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
     branches:
       - main
-    paths:
-      - "docker-bake.hcl"
-      - ".github/workflows/docker.yaml"
-      - "**cgo.go"
-      - "**Dockerfile"
-      - "**.c"
-      - "**.h"
-      - "**.sh"
-      - "**.stub.php"
   push:
     branches:
       - main
@@ -36,18 +28,15 @@ env:
   IMAGE_NAME: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.version) || startsWith(github.ref, 'refs/tags/')) && 'dunglas/frankenphp' || 'dunglas/frankenphp-dev' }}
 jobs:
   prepare:
+    if: "github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'CI: All jobs')"
     runs-on: ubuntu-24.04
     outputs:
       # Push if it's a scheduled job, a tag, or if we're committing to the main branch
       push: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.version) || startsWith(github.ref, 'refs/tags/') || (github.ref == 'refs/heads/main' && github.event_name != 'pull_request')) && true || false }}
       variants: ${{ steps.matrix.outputs.variants }}
-      platforms: ${{ steps.matrix.outputs.platforms }}
+      matrix: ${{ steps.matrix.outputs.matrix }}
       metadata: ${{ steps.matrix.outputs.metadata }}
       php_version: ${{ steps.check.outputs.php_version }}
-      php82_version: ${{ steps.check.outputs.php82_version }}
-      php83_version: ${{ steps.check.outputs.php83_version }}
-      php84_version: ${{ steps.check.outputs.php84_version }}
-      php85_version: ${{ steps.check.outputs.php85_version }}
       skip: ${{ steps.check.outputs.skip }}
       ref: ${{ steps.check.outputs.ref || (github.ref_type == 'tag' && github.ref_name) || (github.event_name == 'workflow_dispatch' && inputs.version) || '' }}
       sha: ${{ steps.check.outputs.sha }}
@@ -62,9 +51,9 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Login to DockerHub
-        uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4.5.2
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
@@ -89,13 +78,15 @@ jobs:
           {
             echo metadata="${METADATA}"
             echo variants="${variants}"
-            echo platforms="$(jq -c 'first(.target[]) | .platforms' <<< "${METADATA}")"
+            echo matrix="$(jq -cn --argjson variants "${variants}" --argjson platforms "${VARIANT_PLATFORMS}" \
+              '{include: [$variants[] as $v | $platforms[$v][] | {variant: $v, platform: .}]}')"
           } >> "${GITHUB_OUTPUT}"
         env:
           SHA: ${{ github.sha }}
           VERSION: ${{ (github.ref_type == 'tag' && github.ref_name) || steps.check.outputs.ref || 'dev' }}
           PHP_VERSION: ${{ steps.check.outputs.php_version }}
           REBUILD_VARIANTS: ${{ steps.check.outputs.rebuild_variants }}
+          VARIANT_PLATFORMS: ${{ steps.check.outputs.variant_platforms }}
   build:
     runs-on: ${{ startsWith(matrix.platform, 'linux/arm') && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     needs:
@@ -103,31 +94,7 @@ jobs:
     if: ${{ !fromJson(needs.prepare.outputs.skip) }}
     strategy:
       fail-fast: false
-      matrix:
-        variant: ${{ fromJson(needs.prepare.outputs.variants) }}
-        platform: ${{ fromJson(needs.prepare.outputs.platforms) }}
-        include:
-          - race: ""
-          - platform: linux/amd64
-            race: "-race" # The Go race detector is only supported on amd64
-        exclude:
-          # arm/v6 is only available for Alpine: https://github.com/docker-library/golang/issues/502
-          - variant: php-${{ needs.prepare.outputs.php82_version }}-trixie
-            platform: linux/arm/v6
-          - variant: php-${{ needs.prepare.outputs.php83_version }}-trixie
-            platform: linux/arm/v6
-          - variant: php-${{ needs.prepare.outputs.php84_version }}-trixie
-            platform: linux/arm/v6
-          - variant: php-${{ needs.prepare.outputs.php85_version }}-trixie
-            platform: linux/arm/v6
-          - variant: php-${{ needs.prepare.outputs.php82_version }}-bookworm
-            platform: linux/arm/v6
-          - variant: php-${{ needs.prepare.outputs.php83_version }}-bookworm
-            platform: linux/arm/v6
-          - variant: php-${{ needs.prepare.outputs.php84_version }}-bookworm
-            platform: linux/arm/v6
-          - variant: php-${{ needs.prepare.outputs.php85_version }}-bookworm
-            platform: linux/arm/v6
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     steps:
       - name: Prepare
         id: prepare
@@ -139,18 +106,18 @@ jobs:
           ref: ${{ needs.prepare.outputs.ref }}
           persist-credentials: false
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:
           platforms: ${{ matrix.platform }}
       - name: Login to DockerHub
-        uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4.5.2
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }} # zizmor: ignore[secrets-outside-env] TODO: drop once super-linter ships zizmor >=1.24.0, then the allowlist in zizmor.yaml takes over
       - name: Build
         id: build
-        uses: docker/bake-action@d3418bd7d0e9324001bca92fa8ba175ea7e6dc9b # v7.3.0
+        uses: docker/bake-action@59cb1203cd42bcefd40a1b6d73b589e48c86040e # v7.5.0
         with:
           pull: true
           load: ${{ !fromJson(needs.prepare.outputs.push) }}
@@ -164,12 +131,12 @@ jobs:
             *.tags=
             *.platform=${{ matrix.platform }}
             *.attest=type=provenance,disabled=true
-            ${{ fromJson(needs.prepare.outputs.push) && '' || format('builder-{0}.cache-from=type=gha,scope=builder-{0}-{1}-{2}', matrix.variant, needs.prepare.outputs.ref || github.ref, matrix.platform) }}
-            ${{ fromJson(needs.prepare.outputs.push) && '' || format('builder-{0}.cache-from=type=gha,scope=refs/heads/main-builder-{0}-{1}', matrix.variant, matrix.platform) }}
-            ${{ fromJson(needs.prepare.outputs.push) && '' || format('builder-{0}.cache-to=type=gha,scope=builder-{0}-{1}-{2},ignore-error=true', matrix.variant, needs.prepare.outputs.ref || github.ref, matrix.platform) }}
-            ${{ fromJson(needs.prepare.outputs.push) && '' || format('runner-{0}.cache-from=type=gha,scope=runner-{0}-{1}-{2}', matrix.variant, needs.prepare.outputs.ref || github.ref, matrix.platform) }}
-            ${{ fromJson(needs.prepare.outputs.push) && '' || format('runner-{0}.cache-from=type=gha,scope=refs/heads/main-runner-{0}-{1}', matrix.variant, matrix.platform) }}
-            ${{ fromJson(needs.prepare.outputs.push) && '' || format('runner-{0}.cache-to=type=gha,scope=runner-{0}-{1}-{2},ignore-error=true', matrix.variant, needs.prepare.outputs.ref || github.ref, matrix.platform) }}
+            ${{ !fromJson(needs.prepare.outputs.push) && format('builder-{0}.cache-from=type=gha,scope=builder-{0}-{1}-{2}', matrix.variant, needs.prepare.outputs.ref || github.ref, matrix.platform) || '' }}
+            ${{ !fromJson(needs.prepare.outputs.push) && format('builder-{0}.cache-from=type=gha,scope=refs/heads/main-builder-{0}-{1}', matrix.variant, matrix.platform) || '' }}
+            ${{ format('builder-{0}.cache-to=type=gha,scope=builder-{0}-{1}-{2},ignore-error=true', matrix.variant, needs.prepare.outputs.ref || github.ref, matrix.platform) }}
+            ${{ !fromJson(needs.prepare.outputs.push) && format('runner-{0}.cache-from=type=gha,scope=runner-{0}-{1}-{2}', matrix.variant, needs.prepare.outputs.ref || github.ref, matrix.platform) || '' }}
+            ${{ !fromJson(needs.prepare.outputs.push) && format('runner-{0}.cache-from=type=gha,scope=refs/heads/main-runner-{0}-{1}', matrix.variant, matrix.platform) || '' }}
+            ${{ format('runner-{0}.cache-to=type=gha,scope=runner-{0}-{1}-{2},ignore-error=true', matrix.variant, needs.prepare.outputs.ref || github.ref, matrix.platform) }}
             ${{ fromJson(needs.prepare.outputs.push) && format('*.output=type=image,name={0},push-by-digest=true,name-canonical=true,push=true,rewrite-timestamp=true', env.IMAGE_NAME) || '' }}
         env:
           SHA: ${{ needs.prepare.outputs.sha || github.sha }}
@@ -196,7 +163,7 @@ jobs:
           VARIANT: ${{ matrix.variant }}
       - name: Upload builder metadata
         if: fromJson(needs.prepare.outputs.push)
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: metadata-builder-${{ matrix.variant }}-${{ steps.prepare.outputs.sanitized_platform }}
           path: /tmp/metadata/builder/*
@@ -204,7 +171,7 @@ jobs:
           retention-days: 1
       - name: Upload runner metadata
         if: fromJson(needs.prepare.outputs.push)
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: metadata-runner-${{ matrix.variant }}-${{ steps.prepare.outputs.sanitized_platform }}
           path: /tmp/metadata/runner/*
@@ -217,12 +184,14 @@ jobs:
           # which replaced it with "containerimage.digest" and "containerimage.descriptor"
           docker run --platform="${PLATFORM}" --rm \
             "$(jq -r ".\"builder-${VARIANT}\" | .\"containerimage.config.digest\" // .\"containerimage.digest\"" <<< "${METADATA}")" \
-            sh -c "./go.sh test ${RACE} -v $(./go.sh list ./... | grep -v github.com/dunglas/frankenphp/internal/testext | grep -v github.com/dunglas/frankenphp/internal/extgen | tr '\n' ' ') && cd caddy && ../go.sh test ${RACE} -v ./..."
+            sh -c "./go.sh test ${RACE} -timeout 30m -v $(./go.sh list ./... | grep -v github.com/dunglas/frankenphp/internal/testext | grep -v github.com/dunglas/frankenphp/internal/extgen | tr '\n' ' ') && cd caddy && ../go.sh test ${RACE} -timeout 30m -v ./..."
         env:
           METADATA: ${{ steps.build.outputs.metadata }}
           PLATFORM: ${{ matrix.platform }}
           VARIANT: ${{ matrix.variant }}
-          RACE: ${{ matrix.race }}
+          # The Go race detector is only enabled on amd64. PHP's inherited PIE
+          # flags require external linking for runtime/cgo in pure-Go test packages.
+          RACE: ${{ matrix.platform == 'linux/amd64' && '-race -ldflags=-linkmode=external' || '' }}
 
   # Adapted from https://docs.docker.com/build/ci/github-actions/multi-platform/
   push:
@@ -243,15 +212,15 @@ jobs:
         target: ["builder", "runner"]
     steps:
       - name: Download metadata
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: metadata-${{ matrix.target }}-${{ matrix.variant }}-*
           path: /tmp/metadata
           merge-multiple: true
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Login to DockerHub
-        uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4.5.2
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
@@ -279,7 +248,7 @@ jobs:
           METADATA: ${{ needs.prepare.outputs.metadata }}
           TARGET: ${{ matrix.target }}
           VARIANT: ${{ matrix.variant }}
-      - uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           # docker.io/ prefix is required: actions/attest splits subject-name
           # on the first '/' to find the registry. We only push to Docker Hub.

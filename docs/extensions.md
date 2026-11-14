@@ -118,7 +118,7 @@ Our extension is now ready to be compiled and integrated into FrankenPHP. To do 
 
 ```console
 CGO_ENABLED=1 \
-XCADDY_GO_BUILD_FLAGS="-ldflags='-w -s' -tags=nobadger,nomysql,nopgx" \
+XCADDY_GO_BUILD_FLAGS="-ldflags='-w -s' -tags=nobadger,nomysql,nopgx,deprecated_topic,deprecated_claim" \
 CGO_CFLAGS=$(php-config --includes) \
 CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)" \
 xcaddy build \
@@ -163,15 +163,15 @@ This table summarizes what you need to know:
 | `array`            | `frankenphp.AssociativeArray` | ❌                | `frankenphp.GoAssociativeArray()` | `frankenphp.PHPAssociativeArray()` | ✅                    |
 | `array`            | `map[string]any`              | ❌                | `frankenphp.GoMap()`              | `frankenphp.PHPMap()`              | ✅                    |
 | `array`            | `[]any`                       | ❌                | `frankenphp.GoPackedArray()`      | `frankenphp.PHPPackedArray()`      | ✅                    |
-| `mixed`            | `any`                         | ❌                | `GoValue()`                       | `PHPValue()`                       | ❌                    |
-| `callable`         | `*C.zval`                     | ❌                | -                                 | frankenphp.CallPHPCallable()       | ❌                    |
+| `mixed`            | `*C.zval`                     | ❌                | `frankenphp.GoValue()`            | `frankenphp.PHPValue()`            | ✅                    |
+| `callable`         | `*C.zval`                     | ❌                | -                                 | frankenphp.CallPHPCallable()       | ✅                    |
 | `object`           | `struct`                      | ❌                | _Not yet implemented_             | _Not yet implemented_              | ❌                    |
 
 > [!NOTE]
 >
 > This table is not exhaustive yet and will be completed as the FrankenPHP types API gets more complete.
 >
-> For class methods specifically, primitive types and arrays are currently supported. Objects cannot be used as method parameters or return types yet.
+> For class methods specifically, primitive types, arrays, `mixed` and `callable` are currently supported. Objects cannot be used as method parameters or return types yet.
 
 If you refer to the code snippet of the previous section, you can see that helpers are used to convert the first parameter and the return value. The second and third parameters of our `repeat_this()` function don't need to be converted, as the memory representation of the underlying types is the same for both C and Go.
 
@@ -906,7 +906,7 @@ Our extension is now ready to be compiled and integrated into FrankenPHP. To do 
 
 ```console
 CGO_ENABLED=1 \
-XCADDY_GO_BUILD_FLAGS="-ldflags='-w -s' -tags=nobadger,nomysql,nopgx" \
+XCADDY_GO_BUILD_FLAGS="-ldflags='-w -s' -tags=nobadger,nomysql,nopgx,deprecated_topic,deprecated_claim" \
 CGO_CFLAGS=$(php-config --includes) \
 CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)" \
 xcaddy build \

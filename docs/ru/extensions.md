@@ -157,15 +157,15 @@ echo $processor->process('Hello World', StringProcessor::MODE_UPPERCASE);  // "H
 | `array`            | `frankenphp.AssociativeArray` | ❌                  | `frankenphp.GoAssociativeArray()` | `frankenphp.PHPAssociativeArray()` | ✅                       |
 | `array`            | `map[string]any`              | ❌                  | `frankenphp.GoMap()`              | `frankenphp.PHPMap()`              | ✅                       |
 | `array`            | `[]any`                       | ❌                  | `frankenphp.GoPackedArray()`      | `frankenphp.PHPPackedArray()`      | ✅                       |
-| `mixed`            | `any`                         | ❌                  | `GoValue()`                       | `PHPValue()`                       | ❌                       |
-| `callable`         | `*C.zval`                     | ❌                  | -                                 | `frankenphp.CallPHPCallable()`     | ❌                       |
+| `mixed`            | `*C.zval`                     | ❌                  | `frankenphp.GoValue()`            | `frankenphp.PHPValue()`            | ✅                       |
+| `callable`         | `*C.zval`                     | ❌                  | -                                 | `frankenphp.CallPHPCallable()`     | ✅                       |
 | `object`           | `struct`                      | ❌                  | _Пока не реализовано_             | _Пока не реализовано_              | ❌                       |
 
 > [!NOTE]
 >
 > Эта таблица еще не исчерпывающая и будет пополняться по мере доработки API типов FrankenPHP.
 >
-> Для методов классов, в частности, в настоящее время поддерживаются примитивные типы и массивы. Объекты пока не могут использоваться в качестве параметров методов или возвращаемых типов.
+> Для методов классов, в частности, в настоящее время поддерживаются примитивные типы, массивы, `mixed` и `callable`. Объекты пока не могут использоваться в качестве параметров методов или возвращаемых типов.
 
 Если вы обратитесь к фрагменту кода из предыдущего раздела, вы увидите, что для преобразования первого параметра и возвращаемого значения используются вспомогательные функции. Второй и третий параметры нашей функции `repeat_this()` не требуют преобразования, так как представление в памяти базовых типов одинаково как для C, так и для Go.
 

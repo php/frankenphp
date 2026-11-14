@@ -744,3 +744,83 @@ func TestPHPConstantCValue(t *testing.T) {
 		})
 	}
 }
+
+func TestConstantParserGoOnlyIntLiterals(t *testing.T) {
+	input := `package main
+
+//export_php:const
+const UNDERSCORED = 1_000_000
+
+//export_php:const
+const BINARY = 0b1010
+
+//export_php:const
+const HEXADECIMAL = 0xFF`
+
+	tmpFile := filepath.Join(t.TempDir(), "literals.go")
+	require.NoError(t, os.WriteFile(tmpFile, []byte(input), 0644))
+
+	parser := &ConstantParser{}
+	constants, err := parser.parse(tmpFile)
+	require.NoError(t, err)
+	require.Len(t, constants, 3)
+
+	byName := make(map[string]phpConstant, len(constants))
+	for _, c := range constants {
+		byName[c.Name] = c
+	}
+
+	// PHP understands Go's digit separators and base prefixes, C does not.
+	assert.Equal(t, "1_000_000", byName["UNDERSCORED"].Value)
+	assert.Equal(t, "1000000", byName["UNDERSCORED"].CValue())
+	assert.Equal(t, "0b1010", byName["BINARY"].Value)
+	assert.Equal(t, "10", byName["BINARY"].CValue())
+
+	// hexadecimal is valid C and is left alone
+	assert.Equal(t, "0xFF", byName["HEXADECIMAL"].CValue())
+}
+
+func TestConstantParserRawStringConstant(t *testing.T) {
+	input := "package main\n\n//export_php:const\nconst RAW = `raw \"quoted\" value`"
+
+	tmpFile := filepath.Join(t.TempDir(), "raw.go")
+	require.NoError(t, os.WriteFile(tmpFile, []byte(input), 0644))
+
+	parser := &ConstantParser{}
+	constants, err := parser.parse(tmpFile)
+	require.NoError(t, err)
+	require.Len(t, constants, 1)
+
+	// backticks delimit a string in Go only: both C and PHP need double quotes
+	assert.Equal(t, phpString, constants[0].PhpType)
+	assert.Equal(t, `"raw \"quoted\" value"`, constants[0].Value)
+	assert.Equal(t, `"raw \"quoted\" value"`, constants[0].CValue())
+}
+
+func TestConstantParserTypedConstants(t *testing.T) {
+	input := `package main
+
+//export_php:const
+const PERM os.FileMode = 0o755
+
+//export_php:const
+const (
+	SMALL int64 = 1
+	LARGE       = 2
+)`
+
+	tmpFile := filepath.Join(t.TempDir(), "typed.go")
+	require.NoError(t, os.WriteFile(tmpFile, []byte(input), 0644))
+
+	parser := &ConstantParser{}
+	constants, err := parser.parse(tmpFile)
+	require.NoError(t, err)
+	require.Len(t, constants, 3)
+
+	assert.Equal(t, "PERM", constants[0].Name)
+	assert.Equal(t, "493", constants[0].CValue())
+	assert.Equal(t, "SMALL", constants[1].Name)
+	assert.Equal(t, "1", constants[1].Value)
+	assert.Equal(t, "LARGE", constants[2].Name)
+	assert.Equal(t, "2", constants[2].Value)
+}

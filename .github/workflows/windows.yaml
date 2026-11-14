@@ -7,17 +7,14 @@ concurrency:
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
     branches:
       - main
-    paths-ignore:
-      - "docs/**"
   push:
     branches:
       - main
     tags:
       - v*.*.*
-    paths-ignore:
-      - "docs/**"
   workflow_dispatch:
     inputs:
       #checkov:skip=CKV_GHA_7
@@ -32,9 +29,10 @@ permissions:
   contents: read
 
 env:
+  BUILD_RELEASE: "${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'CI: All jobs') }}"
   GOTOOLCHAIN: local
   GOTESTSUM_FORMAT: pkgname-and-test-fails
-  GOFLAGS: "-ldflags=-extldflags=-fuse-ld=lld -tags=nobadger,nomysql,nopgx"
+  GOFLAGS: "-ldflags=-extldflags=-fuse-ld=lld -tags=nobadger,nomysql,nopgx,deprecated_topic,deprecated_claim"
   PHP_DOWNLOAD_BASE: "https://downloads.php.net/~windows/releases/"
   CC: clang
   CXX: clang++
@@ -81,6 +79,29 @@ jobs:
         uses: ./frankenphp/.github/actions/setup-go
         with:
           working-directory: frankenphp
+          cache: ${{ !env.REF }}
+
+      - name: Determine runner image
+        id: image
+        run: '"version=$env:ImageVersion" >> $env:GITHUB_OUTPUT'
+
+      # SourceForge sometimes serves runners a non-archive body for pthreads sources; release runs skip the cache
+      - name: Cache Vcpkg Packages # zizmor: ignore[cache-poisoning]
+        if: ${{ !env.REF }}
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~\AppData\Local\vcpkg\archives
+          key: vcpkg-${{ runner.os }}-${{ steps.image.outputs.version }}-${{ hashFiles('frankenphp/vcpkg.json') }}
+          restore-keys: vcpkg-${{ runner.os }}-
+
+      # The runner's preinstalled vcpkg lags behind; port scripts must match the baseline
+      - name: Sync Vcpkg With Baseline
+        working-directory: frankenphp
+        run: |
+          $baseline = (Get-Content vcpkg.json | ConvertFrom-Json).'builtin-baseline'
+          git -C $env:VCPKG_INSTALLATION_ROOT fetch --quiet origin $baseline
+          git -C $env:VCPKG_INSTALLATION_ROOT checkout --quiet $baseline
+          & "$env:VCPKG_INSTALLATION_ROOT\bootstrap-vcpkg.bat" -disableMetrics
 
       - name: Install Vcpkg Libraries
         working-directory: frankenphp
@@ -101,19 +122,20 @@ jobs:
       - name: Download PHP
         run: |
           $webContent = Invoke-WebRequest -Uri $env:PHP_DOWNLOAD_BASE
-          $links = $webContent.Links.Href | Where-Object { $_ -match "php-\d+\.\d+\.\d+-Win32-vs17-x64\.zip$" }
+          # Rebuilt binaries get a build number suffix, e.g. php-8.5.12-1-Win32-vs17-x64.zip
+          $links = $webContent.Links.Href | Where-Object { $_ -match "php-\d+\.\d+\.\d+(-\d+)?-Win32-vs17-x64\.zip$" }
 
           if (-not $links) { throw "Could not find PHP zip files at $env:PHP_DOWNLOAD_BASE" }
 
-          $latestFile = $links | Sort-Object { if ($_ -match '(\d+\.\d+\.\d+)') { [version]$matches[1] } } | Select-Object -Last 1
+          $latestFile = $links | Sort-Object { if ($_ -match '(\d+\.\d+\.\d+)(?:-(\d+))?-Win32') { [version]"$($matches[1]).$([int]$matches[2])" } } | Select-Object -Last 1
 
-          $version = if ($latestFile -match '(\d+\.\d+\.\d+)') { $matches[1] }
+          if ($latestFile -match '((\d+\.\d+\.\d+)(?:-\d+)?)-Win32') { $build = $matches[1]; $version = $matches[2] }
           Write-Host "Detected latest PHP version: $version"
 
           "PHP_VERSION=$version" >> $env:GITHUB_ENV
 
-          $phpZip = "php-$version-Win32-vs17-x64.zip"
-          $develZip = "php-devel-pack-$version-Win32-vs17-x64.zip"
+          $phpZip = "php-$build-Win32-vs17-x64.zip"
+          $develZip = "php-devel-pack-$build-Win32-vs17-x64.zip"
 
           $dirName = "frankenphp-windows-x86_64"
 
@@ -130,19 +152,21 @@ jobs:
           $vcpkgRoot = "$env:GITHUB_WORKSPACE\frankenphp\vcpkg_installed\x64-windows"
           $watcherRoot = "$env:GITHUB_WORKSPACE\watcher"
           $phpBin = "$env:GITHUB_WORKSPACE\$env:DIR_NAME"
-          $phpDevel = "$env:GITHUB_WORKSPACE\php-devel\php-$env:PHP_VERSION-devel-vs17-x64"
+          $phpDevel = (Get-ChildItem "$env:GITHUB_WORKSPACE\php-devel" -Directory | Select-Object -First 1).FullName
 
           "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\Llvm\bin" >> $env:GITHUB_PATH
           "$vcpkgRoot\bin" >> $env:GITHUB_PATH
           "$watcherRoot" >> $env:GITHUB_PATH
           "$phpBin" >> $env:GITHUB_PATH
 
+          "PKG_CONFIG_PATH=$vcpkgRoot\lib\pkgconfig" >> $env:GITHUB_ENV
           "CGO_CFLAGS=-DFRANKENPHP_VERSION=$env:FRANKENPHP_VERSION -I$vcpkgRoot\include -I$watcherRoot -I$phpDevel\include -I$phpDevel\include\main -I$phpDevel\include\TSRM -I$phpDevel\include\Zend -I$phpDevel\include\ext" >> $env:GITHUB_ENV
           "CGO_LDFLAGS=-L$vcpkgRoot\lib -lbrotlienc -L$watcherRoot -llibwatcher-c -L$phpBin -L$phpDevel\lib -lphp8ts -lphp8embed" >> $env:GITHUB_ENV
         env:
           FRANKENPHP_VERSION: ${{ steps.version.outputs.version }}
 
       - name: Embed Windows icon and metadata
+        if: env.BUILD_RELEASE == 'true'
         working-directory: frankenphp\caddy\frankenphp
         run: |
           go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
@@ -181,6 +205,7 @@ jobs:
           FRANKENPHP_VERSION: ${{ steps.version.outputs.version }}
 
       - name: Build FrankenPHP
+        if: env.BUILD_RELEASE == 'true'
         run: |
           $customVersion = "FrankenPHP $env:FRANKENPHP_VERSION PHP $env:PHP_VERSION Caddy"
           go build -ldflags="-extldflags=-fuse-ld=lld -X 'github.com/caddyserver/caddy/v2.CustomVersion=$customVersion' -X 'github.com/caddyserver/caddy/v2.CustomBinaryName=frankenphp' -X 'github.com/caddyserver/caddy/v2/modules/caddyhttp.ServerHeader=FrankenPHP Caddy'"
@@ -189,6 +214,7 @@ jobs:
           FRANKENPHP_VERSION: ${{ steps.version.outputs.version }}
 
       - name: Create Directory
+        if: env.BUILD_RELEASE == 'true'
         run: |
           Copy-Item frankenphp\caddy\frankenphp\frankenphp.exe $env:DIR_NAME
           Copy-Item watcher\libwatcher-c.dll $env:DIR_NAME
@@ -198,8 +224,8 @@ jobs:
           Copy-Item frankenphp\vcpkg_installed\x64-windows\bin\pthreadVC3.dll $env:DIR_NAME
 
       - name: Upload Artifact
-        if: ${{ !env.REF }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: env.BUILD_RELEASE == 'true' && !env.REF
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ env.DIR_NAME }}
           path: ${{ env.DIR_NAME }}
@@ -216,7 +242,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - if: ${{ env.REF }}
-        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: ${{ github.workspace }}\${{ env.DIR_NAME }}.zip
 

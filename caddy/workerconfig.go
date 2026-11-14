@@ -1,8 +1,6 @@
 package caddy
 
 import (
-	"net/http"
-	"path"
 	"path/filepath"
 	"strconv"
 
@@ -10,7 +8,6 @@ import (
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 	"github.com/dunglas/frankenphp"
-	"github.com/dunglas/frankenphp/internal/fastabs"
 )
 
 // workerConfig represents the "worker" directive in the Caddyfile
@@ -25,7 +22,7 @@ import (
 type workerConfig struct {
 	mercureContext
 
-	// Name for the worker. Default: the filename for FrankenPHPApp workers, always prefixed with "m#" for FrankenPHPModule workers.
+	// Name for the worker. Default: the absolute path of the worker file, postfixed with a number if the name is already used.
 	Name string `json:"name,omitempty"`
 	// FileName sets the path to the worker script.
 	FileName string `json:"file_name,omitempty"`
@@ -40,13 +37,9 @@ type workerConfig struct {
 	// The path to match against the worker
 	MatchPath []string `json:"match_path,omitempty"`
 	// MaxConsecutiveFailures sets the maximum number of consecutive failures before panicking (defaults to 6, set to -1 to never panick)
-	MaxConsecutiveFailures int `json:"max_consecutive_failures,omitempty"`
+	MaxConsecutiveFailures *int `json:"max_consecutive_failures,omitempty"`
 
-	options        []frankenphp.WorkerOption
-	requestOptions []frankenphp.RequestOption
-	absFileName    string
-	matchRelPath   string // pre-computed relative URL path for fast matching
-	routeGroup     string // identifies the php_server directive whose route embeds share this pool
+	options []frankenphp.WorkerOption
 }
 
 func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
@@ -59,12 +52,12 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 		if d.Val() == "watch" {
 			wc.Watch = append(wc.Watch, defaultWatchPattern)
 		} else {
-			v, err := strconv.ParseUint(d.Val(), 10, 32)
+			v, err := parseNonNegativeInt(d)
 			if err != nil {
 				return wc, err
 			}
 
-			wc.Num = int(v)
+			wc.Num = v
 		}
 	}
 
@@ -89,23 +82,23 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 				return wc, d.ArgErr()
 			}
 
-			v, err := strconv.ParseUint(d.Val(), 10, 32)
+			v, err := parseNonNegativeInt(d)
 			if err != nil {
-				return wc, d.WrapErr(err)
+				return wc, err
 			}
 
-			wc.Num = int(v)
+			wc.Num = v
 		case "max_threads":
 			if !d.NextArg() {
 				return wc, d.ArgErr()
 			}
 
-			v, err := strconv.ParseUint(d.Val(), 10, 32)
+			v, err := parseNonNegativeInt(d)
 			if err != nil {
-				return wc, d.WrapErr(err)
+				return wc, err
 			}
 
-			wc.MaxThreads = int(v)
+			wc.MaxThreads = v
 		case "env":
 			args := d.RemainingArgs()
 			if len(args) != 2 {
@@ -145,7 +138,7 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 				return wc, d.Errf("max_consecutive_failures must be >= -1")
 			}
 
-			wc.MaxConsecutiveFailures = v
+			wc.MaxConsecutiveFailures = new(v)
 		default:
 			return wc, wrongSubDirectiveError("worker", "name, file, num, env, watch, match, max_consecutive_failures, max_threads", v)
 		}
@@ -162,41 +155,28 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 	return wc, nil
 }
 
-func (wc *workerConfig) inheritEnv(env map[string]string) {
-	if wc.Env == nil {
-		wc.Env = make(map[string]string, len(env))
+func (wc *workerConfig) toWorkerOptions() ([]frankenphp.WorkerOption, error) {
+	opts := []frankenphp.WorkerOption{
+		frankenphp.WithWorkerEnv(wc.Env),
+		frankenphp.WithWorkerWatchMode(wc.Watch),
+		frankenphp.WithWorkerMaxThreads(wc.MaxThreads),
 	}
-	for k, v := range env {
-		// do not overwrite existing environment variables
-		if _, exists := wc.Env[k]; !exists {
-			wc.Env[k] = v
+
+	if wc.MaxConsecutiveFailures != nil {
+		opts = append(opts, frankenphp.WithWorkerMaxFailures(*wc.MaxConsecutiveFailures))
+	}
+
+	// options collected while provisioning the module, e.g. the Mercure hub
+	opts = append(opts, wc.options...)
+
+	// copy the caddy match logic and create a unique matcher function for this worker
+	// inject the matcher into frankenphp
+	if len(wc.MatchPath) > 0 {
+		matchFunc := caddyhttp.MatchPath(append([]string(nil), wc.MatchPath...))
+		if err := matchFunc.Provision(caddy.Context{}); err != nil {
+			return nil, err
 		}
+		opts = append(opts, frankenphp.WithWorkerMatcher(matchFunc.Match))
 	}
-}
-
-func (wc *workerConfig) matchesPath(r *http.Request, documentRoot string) bool {
-	// try to match against a pattern if one is assigned
-	if len(wc.MatchPath) != 0 {
-		return (caddyhttp.MatchPath)(wc.MatchPath).Match(r)
-	}
-
-	// fast path: compare the request URL path against the pre-computed relative path
-	if wc.matchRelPath != "" {
-		reqPath := r.URL.Path
-		if reqPath == wc.matchRelPath {
-			return true
-		}
-
-		// ensure leading slash for relative paths (see #2166)
-		if reqPath == "" || reqPath[0] != '/' {
-			reqPath = "/" + reqPath
-		}
-
-		return path.Clean(reqPath) == wc.matchRelPath
-	}
-
-	// fallback when documentRoot is dynamic (contains placeholders)
-	fullPath, _ := fastabs.FastAbs(filepath.Join(documentRoot, r.URL.Path))
-
-	return fullPath == wc.absFileName
+	return opts, nil
 }

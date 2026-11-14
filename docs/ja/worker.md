@@ -1,15 +1,20 @@
+---
+title: FrankenPHP worker mode: PHPアプリをメモリに保持する
+description: FrankenPHPをワーカーモードで実行すると、PHPアプリケーションをリクエスト間で起動状態に保ち、起動オーバーヘッドを削減し、ミリ秒単位でレスポンスを提供できます。
+---
+
 # FrankenPHPワーカーの使用
 
 アプリケーションを一度起動してメモリに保持します。
 FrankenPHPは数ミリ秒で受信リクエストを処理します。
 
-## ワーカースクリプトの開始
+## FrankenPHPワーカー スクリプトの開始
 
-### Docker
+### DockerでFrankenPHPワーカーを実行する
 
 `FRANKENPHP_CONFIG`環境変数の値を`worker /path/to/your/worker/script.php`に設定します：
 
-```console
+```bash
 docker run \
     -e FRANKENPHP_CONFIG="worker /app/path/to/your/worker/script.php" \
     -v $PWD:/app \
@@ -17,11 +22,11 @@ docker run \
     dunglas/frankenphp
 ```
 
-### スタンドアロンバイナリ
+### スタンドアロンバイナリでFrankenPHPワーカーを実行する
 
 `php-server`コマンドの`--worker`オプションを使って、現在のディレクトリのコンテンツをワーカーを通じて提供できます：
 
-```console
+```bash
 frankenphp php-server --worker /path/to/your/worker/script.php
 ```
 
@@ -31,40 +36,21 @@ PHPアプリが[バイナリに埋め込まれている](embed.md)場合は、�
 また、`--watch`オプションを使えば、[ファイルの変更に応じてワーカーを再起動](config.md#watching-for-file-changes)することも可能です。
 以下のコマンドは、`/path/to/your/app/`ディレクトリおよびそのサブディレクトリ内の`.php`で終わるファイルが変更された場合に再起動をトリガーします：
 
-```console
+```bash
 frankenphp php-server --worker /path/to/your/worker/script.php --watch="/path/to/your/app/**/*.php"
 ```
 
 この機能は、[ホットリロード](hot-reload.md)と組み合わせてよく使用されます。
 
-## Symfonyランタイム
+## Symfonyのワーカーモード
 
-> [!TIP]
-> 以下のセクションは、FrankenPHPワーカーモードのネイティブサポートが導入されたSymfony 7.4より前のバージョンでのみ必要です。
+[FrankenPHP Symfonyワーカーモードのドキュメント](symfony.md#symfony-worker-mode-with-frankenphp)を参照してください。
 
-FrankenPHPのワーカーモードは[Symfony Runtime Component](https://symfony.com/doc/current/components/runtime.html)によってサポートされています。
-ワーカーでSymfonyアプリケーションを開始するには、FrankenPHP用の[PHP Runtime](https://github.com/php-runtime/runtime)パッケージをインストールします：
+## Laravel Octaneのワーカーモード
 
-```console
-composer require runtime/frankenphp-symfony
-```
+[FrankenPHP Laravel Octaneのドキュメント](laravel.md#laravel-octane)を参照してください。
 
-アプリケーションサーバーを起動するには、FrankenPHP Symfony Runtimeを使用するように`APP_RUNTIME`環境変数を定義します：
-
-```console
-docker run \
-    -e FRANKENPHP_CONFIG="worker ./public/index.php" \
-    -e APP_RUNTIME=Runtime\\FrankenPhpSymfony\\Runtime \
-    -v $PWD:/app \
-    -p 80:80 -p 443:443 -p 443:443/udp \
-    dunglas/frankenphp
-```
-
-## Laravel Octane
-
-[専用ドキュメント](laravel.md#laravel-octane)を参照してください。
-
-## カスタムアプリ
+## カスタムFrankenPHPワーカー スクリプトの作成
 
 以下の例は、サードパーティライブラリに依存せずに独自のワーカースクリプトを作成する方法を示しています：
 
@@ -110,7 +96,7 @@ $myApp->shutdown();
 
 次に、アプリを開始し、`FRANKENPHP_CONFIG`環境変数を使用してワーカーを設定します：
 
-```console
+```bash
 docker run \
     -e FRANKENPHP_CONFIG="worker ./public/index.php" \
     -v $PWD:/app \
@@ -121,12 +107,60 @@ docker run \
 デフォルトでは、CPU当たり2つのワーカーが開始されます。
 開始するワーカー数を設定することもできます：
 
-```console
+```bash
 docker run \
     -e FRANKENPHP_CONFIG="worker ./public/index.php 42" \
     -v $PWD:/app \
     -p 80:80 -p 443:443 -p 443:443/udp \
     dunglas/frankenphp
+```
+
+### PSR-15の使用
+
+アプリケーションがスーパーグローバルではなく[PSR-15](https://www.php-fig.org/psr/psr-15/)を使用する場合、ハンドラーの境界で[`nyholm/psr7`](https://github.com/Nyholm/psr7)と[`nyholm/psr7-server`](https://github.com/Nyholm/psr7-server)を使用してリクエスト/レスポンスを変換します：
+
+```console
+composer require nyholm/psr7 nyholm/psr7-server psr/http-server-handler
+```
+
+```php
+<?php
+// public/index.php
+
+require __DIR__.'/vendor/autoload.php';
+
+use Nyholm\Psr7\Factory\Psr17Factory;
+use Nyholm\Psr7Server\ServerRequestCreator;
+
+$myApp = new \App\Kernel(); // Psr\Http\Server\RequestHandlerInterface を実装
+$myApp->boot();
+
+$psr17Factory = new Psr17Factory();
+$creator = new ServerRequestCreator(
+    $psr17Factory, // ServerRequestFactory
+    $psr17Factory, // UriFactory
+    $psr17Factory, // UploadedFileFactory
+    $psr17Factory, // StreamFactory
+);
+
+$handler = static function () use ($myApp, $creator) {
+    $response = $myApp->handle($creator->fromGlobals());
+
+    http_response_code($response->getStatusCode());
+    foreach ($response->getHeaders() as $name => $values) {
+        foreach ($values as $value) {
+            header("$name: $value", false);
+        }
+    }
+    echo $response->getBody();
+};
+
+$maxRequests = (int)($_SERVER['MAX_REQUESTS'] ?? 0);
+for ($nbRequests = 0; !$maxRequests || $nbRequests < $maxRequests; ++$nbRequests) {
+    $keepRunning = \frankenphp_handle_request($handler);
+    gc_collect_cycles();
+    if (!$keepRunning) break;
+}
 ```
 
 ### 一定数のリクエスト処理後にワーカーを再起動する
@@ -142,7 +176,7 @@ PHPはもともと長時間実行されるプロセス向けに設計されて�
 [Caddy admin API](https://caddyserver.com/docs/api)を使用してすべてのワーカーをグレースフルに（安全に）再起動することも可能です。adminが
 [Caddyfile](config.md#caddyfile-config)で有効になっている場合、次のような単純なPOSTリクエストで再起動エンドポイントにpingできます：
 
-```console
+```bash
 curl -X POST http://localhost:2019/frankenphp/workers/restart
 ```
 
@@ -164,6 +198,13 @@ frankenphp {
     }
 }
 ```
+
+### スレッド数
+
+ワーカーモードが有効な場合、受信リクエストを処理するために追加のスレッドが必要になるため、
+デフォルトの`num_threads`の値は`1 + 2x(利用可能なCPU数)`になります。
+
+したがって、このモードで`num_threads`と`num`が明示的に設定されている場合、`num_threads`は`num`よりも厳密に大きくする必要があります。
 
 ## スーパーグローバルの動作
 
@@ -187,3 +228,40 @@ $handler = static function () use ($workerServer) {
 
 // ...
 ```
+
+ほとんどのスーパーグローバル（`$_GET`、`$_POST`、`$_COOKIE`、`$_FILES`、`$_SERVER`、`$_REQUEST`）はリクエスト間で自動的にリセットされます。
+しかし、**`$_ENV`は現在、リクエスト間でリセットされません**。
+これは、リクエスト中に`$_ENV`に加えられた変更が永続し、同じワーカーのスレッドで処理される後続のリクエストに表示されることを意味します。
+リクエスト固有のデータや機密データを`$_ENV`に保存することは避けてください。
+
+## 状態の永続性
+
+ワーカーモードではPHPプロセスがリクエスト間で起動状態を保つため、以下の状態がリクエスト間で永続します：
+
+- **静的変数**: 関数やメソッド内で`static`として宣言された変数は、リクエスト間でその値を保持します。
+- **クラスの静的プロパティ**: クラスの静的プロパティはリクエスト間で永続します。
+- **グローバル変数**: ワーカー スクリプトのグローバルスコープ内の変数はリクエスト間で永続します。
+- **インメモリキャッシュ**: リクエストハンドラーの外部にメモリ（配列、オブジェクト）に保存されたデータは永続します。
+- **ランタイムエンジン設定**: `ini_set()`、`stream_context_set_default()`、`date_default_timezone_set()`、`chdir()`、`stream_wrapper_register()`、`set_error_handler()`、または`set_exception_handler()`で行われた変更は、それ以降のリクエストでも有効なままになります。デフォルトのストリームコンテキストに資格情報などのリクエスト固有またはユーザー固有の値を保存しないでください。代わりに、各呼び出しに明示的なコンテキストを渡してください。
+- **プロセス全体の設定**: `umask()`と`setlocale()`は、現在のスレッドだけでなくFrankenPHPプロセス全体を変更します。ワーカーモードではこれらの設定がリクエスト間で復元されることはなく、どのモードにおいても同時に実行されているリクエストに影響を与えます。起動時に一度設定するか、umaskを変更する代わりに作成されたファイルに対して`chmod()`を呼び出してください。
+
+これは意図された設計であり、ワーカーモードを高速にする要因です。ただし、意図しない副作用を避けるためには注意が必要です：
+
+```php
+<?php
+function getCounter(): int {
+    static $count = 0;
+    return ++$count; // リクエスト間で増加します！
+}
+
+$handler = static function () {
+    echo getCounter(); // このスレッドへの各リクエストに対して 1, 2, 3, ...
+};
+
+while (\frankenphp_handle_request($handler)) {
+    // ...
+}
+```
+
+ワーカー スクリプトを作成する際は、リクエスト固有の状態をリクエスト間でリセットするようにしてください。
+[Symfony](symfony.md)や[Laravel Octane](laravel.md)のようなフレームワークは、ほとんどの状態のリセットを処理してくれますが、独自のサービスをリセットする必要がある場合があります。Symfonyの場合、リクエスト固有の状態を保持するサービスは[`Symfony\Contracts\Service\ResetInterface`](https://github.com/symfony/contracts/blob/main/Service/ResetInterface.php)を実装する必要があります。これにより、カーネルによってリクエスト間でリセットされます。

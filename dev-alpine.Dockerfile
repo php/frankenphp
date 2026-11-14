@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 #checkov:skip=CKV_DOCKER_2
 #checkov:skip=CKV_DOCKER_3
-FROM golang:1.26-alpine
+FROM golang:1.27-alpine
 
 ENV GOTOOLCHAIN=local
 ENV CFLAGS="-ggdb3"
@@ -36,14 +36,13 @@ RUN apk add --no-cache \
 	libstdc++ \
 	linux-headers \
 	# Dev tools \
+	bash \
 	git \
 	clang \
 	cmake \
 	llvm \
 	gdb \
 	valgrind \
-	neovim \
-	zsh \
 	libtool && \
 	echo 'set auto-load safe-path /' > /root/.gdbinit
 
@@ -78,8 +77,11 @@ RUN git clone https://github.com/e-dant/watcher . && \
 WORKDIR /go/src/app
 COPY . .
 
+# Cache test dependencies too, so tests run offline
+RUN go mod download && go -C caddy mod download
+
 WORKDIR /go/src/app/caddy/frankenphp
 RUN ../../go.sh build -buildvcs=false
 
 WORKDIR /go/src/app
-CMD [ "zsh" ]
+CMD [ "bash" ]

@@ -7,6 +7,8 @@ package frankenphp_test
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -14,6 +16,7 @@ import (
 	"log"
 	"log/slog"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -36,6 +39,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+var testDataDir = ""
 
 type testOptions struct {
 	workerScript       string
@@ -85,7 +90,7 @@ func runTest(t *testing.T, test func(func(http.ResponseWriter, *http.Request), *
 		assert.NoError(t, err)
 
 		err = frankenphp.ServeHTTP(w, req)
-		if err != nil && !errors.As(err, &frankenphp.ErrRejected{}) {
+		if _, rejected := errors.AsType[frankenphp.ErrRejected](err); err != nil && !rejected {
 			assert.Fail(t, fmt.Sprintf("Received unexpected error:\n%+v", err))
 		}
 	}
@@ -100,8 +105,10 @@ func runTest(t *testing.T, test func(func(http.ResponseWriter, *http.Request), *
 	wg.Add(opts.nbParallelRequests)
 	for i := 0; i < opts.nbParallelRequests; i++ {
 		go func(i int) {
+			// Deferred so a t.Skip/t.Fatalf from a non-main goroutine (which
+			// triggers runtime.Goexit) still decrements the WaitGroup.
+			defer wg.Done()
 			test(handler, ts, i)
-			wg.Done()
 		}(i)
 	}
 
@@ -148,6 +155,9 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
+	cwd, _ := os.Getwd()
+	testDataDir = cwd + strings.Clone("/testdata/")
+
 	os.Exit(m.Run())
 }
 
@@ -162,13 +172,21 @@ func testHelloWorld(t *testing.T, opts *testOptions) {
 	}, opts)
 }
 
+func TestMissingScript(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, resp := testGet("http://example.com/missing.php", handler, t)
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+		assert.Equal(t, "No input file specified.\n", body)
+	}, nil)
+}
+
 func TestEnvVarsInPhpIni(t *testing.T) {
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
-		body, _ := testGet("http://example.com/ini.php?key=opcache.enable", handler, t)
-		assert.Equal(t, "opcache.enable:0", body)
+		body, _ := testGet("http://example.com/ini.php?key=default_socket_timeout", handler, t)
+		assert.Equal(t, "default_socket_timeout:0", body)
 	}, &testOptions{
 		phpIni: map[string]string{
-			"opcache.enable": "${LITERAL_ZERO}",
+			"default_socket_timeout": "${LITERAL_ZERO}",
 		},
 	})
 }
@@ -205,6 +223,7 @@ func testServerVariable(t *testing.T, opts *testOptions) {
 		req := httptest.NewRequest("POST", fmt.Sprintf("http://example.com/server-variable.php/baz/bat?foo=a&bar=b&i=%d#hash", i), strings.NewReader("foo"))
 		req.SetBasicAuth(strings.Clone("kevin"), strings.Clone("password"))
 		req.Header.Add(strings.Clone("Content-Type"), strings.Clone("text/plain"))
+		req = req.WithContext(context.WithValue(req.Context(), http.LocalAddrContextKey, &net.TCPAddr{IP: net.ParseIP("192.0.2.1"), Port: 80}))
 		body, _ := testRequest(req, handler, t)
 
 		assert.Contains(t, body, "[REMOTE_HOST]")
@@ -226,6 +245,7 @@ func testServerVariable(t *testing.T, opts *testOptions) {
 		assert.Contains(t, body, "[REMOTE_IDENT]")
 		assert.Contains(t, body, "[REQUEST_METHOD] => POST")
 		assert.Contains(t, body, "[SERVER_NAME] => example.com")
+		assert.Contains(t, body, "[SERVER_ADDR] => 192.0.2.1")
 		assert.Contains(t, body, "[SERVER_PROTOCOL] => HTTP/1.1")
 		assert.Contains(t, body, "[SCRIPT_FILENAME]")
 		assert.Contains(t, body, "[SERVER_SOFTWARE] => FrankenPHP")
@@ -235,13 +255,40 @@ func testServerVariable(t *testing.T, opts *testOptions) {
 	}, opts)
 }
 
+func TestRequestEnvOverridesRequestInfo_module(t *testing.T) {
+	testRequestEnvOverridesRequestInfo(t, &testOptions{})
+}
+func TestRequestEnvOverridesRequestInfo_worker(t *testing.T) {
+	testRequestEnvOverridesRequestInfo(t, &testOptions{workerScript: "server-variable.php"})
+}
+func testRequestEnvOverridesRequestInfo(t *testing.T, opts *testOptions) {
+	opts.requestOpts = append(opts.requestOpts, frankenphp.WithRequestEnv(map[string]string{
+		"CONTENT_TYPE":    "env/content-type",
+		"PATH_TRANSLATED": "/env/path/translated",
+		"QUERY_STRING":    "env=query",
+		"REMOTE_USER":     "env-user",
+		"REQUEST_METHOD":  "ENV",
+	}))
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		req := httptest.NewRequest("POST", fmt.Sprintf("http://example.com/server-variable.php/baz/bat?i=%d", i), strings.NewReader("foo"))
+		req.SetBasicAuth("client-user", "password")
+		req.Header.Add("Content-Type", "text/plain")
+		body, _ := testRequest(req, handler, t)
+
+		assert.Contains(t, body, "[CONTENT_TYPE] => env/content-type")
+		assert.Contains(t, body, "[PATH_TRANSLATED] => /env/path/translated")
+		assert.Contains(t, body, "[QUERY_STRING] => env=query")
+		assert.Contains(t, body, "[REMOTE_USER] => env-user")
+		assert.Contains(t, body, "[REQUEST_METHOD] => ENV")
+	}, opts)
+}
+
 func TestPathInfo_module(t *testing.T) { testPathInfo(t, nil) }
 func TestPathInfo_worker(t *testing.T) {
 	testPathInfo(t, &testOptions{workerScript: "server-variable.php"})
 }
 func testPathInfo(t *testing.T, opts *testOptions) {
-	cwd, _ := os.Getwd()
-	testDataDir := cwd + strings.Clone("/testdata/")
 	path := strings.Clone("/server-variable.php/pathinfo")
 
 	runTest(t, func(_ func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
@@ -267,6 +314,42 @@ func testPathInfo(t *testing.T, opts *testOptions) {
 		assert.Contains(t, body, "[SCRIPT_NAME] => /server-variable.php")
 
 	}, opts)
+}
+
+func TestScriptStatIgnoresPathInfo_module(t *testing.T) { testScriptStatIgnoresPathInfo(t, nil) }
+func TestScriptStatIgnoresPathInfo_worker(t *testing.T) {
+	testScriptStatIgnoresPathInfo(t, &testOptions{workerScript: "script-stat.php"})
+}
+func testScriptStatIgnoresPathInfo(t *testing.T, opts *testOptions) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		body, _ := testGet("http://example.com/script-stat.php/echo.php", handler, t)
+		assert.Equal(t, "script "+filepath.Join(testDataDir, "echo.php"), body)
+
+		body, _ = testGet("http://example.com/script-stat.php", handler, t)
+		assert.Equal(t, "script unset", body)
+	}, opts)
+}
+
+func TestDotSegmentsResolvedBeforeSplit(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		body, _ := testGet(fmt.Sprintf("http://example.com/dirindex/index.php/../../hello.php?i=%d", i), handler, t)
+		assert.Equal(t, "Hello from PHP", body)
+
+		// "%" path matchers clean the escaped path, where these are not dot segments
+		for _, p := range []string{
+			"/dirindex/index.php/..%2f..%2fhello.php",
+			"/dirindex/index.php/%2e%2e/%2e%2e/hello.php",
+			"/public/tool.php%2f..%2f..%2fadmin%2ftool.php",
+		} {
+			body, resp := testGet(fmt.Sprintf("http://example.com%s?i=%d", p, i), handler, t)
+
+			assert.Equal(t, http.StatusBadRequest, resp.StatusCode, p)
+			assert.Contains(t, body, "invalid request path", p)
+		}
+
+		body, _ = testGet(fmt.Sprintf("http://example.com/hello.php/a%%2fb?i=%d", i), handler, t)
+		assert.Equal(t, "Hello from PHP", body)
+	}, nil)
 }
 
 func TestHeaders_module(t *testing.T) { testHeaders(t, nil) }
@@ -451,19 +534,71 @@ func testSession(t *testing.T, opts *testOptions) {
 	}, opts)
 }
 
+const phpInfoTestComponent = "test/component<&>"
+
+func init() {
+	frankenphp.AddPHPInfoEntry(phpInfoTestComponent, "example.com/fork<&> v2.0.0")
+}
+
 func TestPhpInfo_module(t *testing.T) { testPhpInfo(t, nil) }
 func TestPhpInfo_worker(t *testing.T) { testPhpInfo(t, &testOptions{workerScript: "phpinfo.php"}) }
 func testPhpInfo(t *testing.T, opts *testOptions) {
 	var logOnce sync.Once
+	var registerOnce sync.Once
+	lateKey := fmt.Sprintf("%s/%d", t.Name(), time.Now().UnixNano())
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		registerOnce.Do(func() {
+			body, _ := testGet("http://example.com/phpinfo.php", handler, t)
+			assert.NotContains(t, body, lateKey)
+			frankenphp.AddPHPInfoEntry(lateKey, "registered after phpinfo")
+		})
 		body, _ := testGet(fmt.Sprintf("http://example.com/phpinfo.php?i=%d", i), handler, t)
 
 		logOnce.Do(func() {
 			t.Log(body)
 		})
 
-		assert.Contains(t, body, "frankenphp")
+		assert.Contains(t, body, `<tr><td class="e">FrankenPHP </td><td class="v">`)
 		assert.Contains(t, body, fmt.Sprintf("i=%d", i))
+		assert.Contains(t, body, runtime.Version())
+		assert.Contains(t, body, `<tr><td class="e">`+lateKey+` </td><td class="v">registered after phpinfo </td></tr>`)
+		assert.Contains(t, body, `<tr><td class="e">test/component&lt;&amp;&gt; </td><td class="v">example.com/fork&lt;&amp;&gt; v2.0.0 </td></tr>`)
+	}, opts)
+}
+
+func TestPhpInfoForkChild_module(t *testing.T) { testPhpInfoForkChild(t, nil) }
+func TestPhpInfoForkChild_worker(t *testing.T) {
+	testPhpInfoForkChild(t, &testOptions{workerScript: "phpinfo-fork.php"})
+}
+func testPhpInfoForkChild(t *testing.T, opts *testOptions) {
+	if opts == nil {
+		opts = &testOptions{}
+	}
+	opts.nbParallelRequests = 1
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/phpinfo-fork.php", handler, t)
+		if body == "pcntl-unavailable" {
+			t.Skip("pcntl/posix not fully loaded")
+		}
+		require.Equal(t, "child-safe", body)
+	}, opts)
+}
+
+func TestDoubleForkGrandchild_module(t *testing.T) { testDoubleForkGrandchild(t, nil) }
+func TestDoubleForkGrandchild_worker(t *testing.T) {
+	testDoubleForkGrandchild(t, &testOptions{workerScript: "double-fork.php"})
+}
+func testDoubleForkGrandchild(t *testing.T, opts *testOptions) {
+	if opts == nil {
+		opts = &testOptions{}
+	}
+	opts.nbParallelRequests = 1
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/double-fork.php", handler, t)
+		if body == "pcntl-unavailable" {
+			t.Skip("pcntl/posix not fully loaded")
+		}
+		require.Equal(t, "grandchild-alive", body)
 	}, opts)
 }
 
@@ -526,12 +661,16 @@ func testLog_frankenphp_log(t *testing.T, opts *testOptions) {
 		handler(w, req)
 
 		logs := buf.String()
+		assert.NotContains(t, logs, "some cyclic message")
 		for _, message := range []string{
 			`level=INFO msg="default level message"`,
 			fmt.Sprintf(`level=DEBUG msg="some debug message %d" "key int"=1`, i),
 			fmt.Sprintf(`level=INFO msg="some info message %d" "key string"=string`, i),
 			fmt.Sprintf(`level=WARN msg="some warn message %d"`, i),
 			fmt.Sprintf(`level=ERROR msg="some error message %d" err="[a v]"`, i),
+			fmt.Sprintf(`level=INFO msg="some null message %d" 8=<nil>`, i),
+			fmt.Sprintf(`level=INFO msg="cyclic rejected %d" err="Failed to log message: converting attrs: cannot convert a recursive array"`, i),
+			fmt.Sprintf(`level=INFO msg="some shared message %d"`, i),
 		} {
 			assert.Contains(t, logs, message)
 		}
@@ -543,6 +682,8 @@ func TestConnectionAbort_worker(t *testing.T) {
 	testConnectionAbort(t, &testOptions{workerScript: "connection_status.php"})
 }
 func testConnectionAbort(t *testing.T, opts *testOptions) {
+	opts.nbParallelRequests = 1
+
 	testFinish := func(finish string) {
 		t.Run(fmt.Sprintf("finish=%s", finish), func(t *testing.T) {
 			var buf syncBuffer
@@ -567,16 +708,64 @@ func testConnectionAbort(t *testing.T, opts *testOptions) {
 	testFinish("1")
 }
 
+func TestConnectionAbortDuringRequestStartup(t *testing.T) {
+	for _, implicitFlush := range []string{"0", "1"} {
+		t.Run("implicit_flush="+implicitFlush, func(t *testing.T) {
+			logger, buf := newTestLogger(t)
+
+			runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+				// exceeding max_input_vars displays a warning while $_GET is populated, before the script runs
+				req := httptest.NewRequest("GET", fmt.Sprintf("http://example.com/connection_status.php?i=%d%s", i, strings.Repeat("&v[]=", 1000)), nil)
+
+				ctx, cancel := context.WithCancel(req.Context())
+				req = req.WithContext(ctx)
+				cancel()
+				handler(httptest.NewRecorder(), req)
+
+				assert.Contains(t, buf.String(), fmt.Sprintf("request %d: 1", i))
+			}, &testOptions{
+				nbParallelRequests: 1,
+				logger:             logger,
+				phpIni: map[string]string{
+					"display_errors":         "1",
+					"display_startup_errors": "1",
+					"output_buffering":       "0",
+					"implicit_flush":         implicitFlush,
+				},
+			})
+
+			assert.NotContains(t, buf.String(), "Restarting unhealthy thread")
+		})
+	}
+}
+
 func TestException_module(t *testing.T) { testException(t, &testOptions{}) }
 func TestException_worker(t *testing.T) {
 	testException(t, &testOptions{workerScript: "exception.php"})
 }
 func testException(t *testing.T, opts *testOptions) {
+	if opts.phpIni == nil {
+		opts.phpIni = map[string]string{}
+	}
+	opts.phpIni["display_errors"] = "1"
+
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
 		body, _ := testGet(fmt.Sprintf("http://example.com/exception.php?i=%d", i), handler, t)
 
 		assert.Contains(t, body, "hello")
 		assert.Contains(t, body, fmt.Sprintf(`Uncaught Exception: request %d`, i))
+	}, opts)
+}
+
+func TestNegativeExitStatus_module(t *testing.T) { testNegativeExitStatus(t, &testOptions{}) }
+func TestNegativeExitStatus_worker(t *testing.T) {
+	testNegativeExitStatus(t, &testOptions{workerScript: "exit.php"})
+}
+func testNegativeExitStatus(t *testing.T, opts *testOptions) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		body, _ := testGet("http://example.com/exit.php?status=-1", handler, t)
+
+		assert.Equal(t, "exiting", body)
 	}, opts)
 }
 
@@ -714,6 +903,21 @@ func testRequestHeaders(t *testing.T, opts *testOptions) {
 	}, opts)
 }
 
+func TestHostHeaderField_module(t *testing.T) { testHostHeaderField(t, &testOptions{}) }
+func TestHostHeaderField_worker(t *testing.T) {
+	testHostHeaderField(t, &testOptions{workerScript: "host-header-field.php"})
+}
+func testHostHeaderField(t *testing.T, opts *testOptions) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		// net/http keeps a "host" field sent next to :authority in the header map of HTTP/2 requests
+		req := httptest.NewRequest("GET", fmt.Sprintf("http://example.com/host-header-field.php?i=%d", i), nil)
+		req.Header.Add(strings.Clone("Host"), strings.Clone("admin.example.com"))
+		body, _ := testRequest(req, handler, t)
+
+		assert.Equal(t, "HTTP_HOST: example.com, SERVER_NAME: example.com, Host: example.com", body)
+	}, opts)
+}
+
 func TestFailingWorker(t *testing.T) {
 	t.Cleanup(frankenphp.Shutdown)
 
@@ -761,6 +965,36 @@ func TestEnvIsResetInNonWorkerMode(t *testing.T) {
 
 		assert.Equal(t, "test=", getResult, "putenv should be reset across requests")
 	}, &testOptions{})
+}
+
+// putenv() must stay inside the thread-local sandbox and never mutate the
+// process-global OS environment, so a secret set by application code cannot leak
+// to the Go/Caddy side or to child processes (proc_open, exec, ...).
+func TestPutenvDoesNotLeakToOSEnvironment(t *testing.T) {
+	const key = "FRANKENPHP_PUTENV_LEAK"
+	const secret = "server-side-secret"
+	assert.NoError(t, os.Setenv(key, ""))
+	t.Cleanup(func() { _ = os.Unsetenv(key) })
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		putResult, _ := testGet(fmt.Sprintf("http://example.com/env/putenv.php?key=%s&put=%s", key, secret), handler, t)
+		assert.Equal(t, key+"="+secret, putResult, "putenv is visible to getenv within the sandbox")
+
+		assert.Empty(t, os.Getenv(key), "putenv must not leak into the OS environment")
+
+		childOut, _ := exec.Command("printenv", key).Output()
+		assert.Empty(t, strings.TrimSpace(string(childOut)), "child process must not inherit the putenv value")
+	}, &testOptions{nbParallelRequests: 1})
+}
+
+// putenv() in a shutdown function must not leave the next script on the thread a freed sandbox.
+func TestPutenvInShutdownFunction(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		for range 3 {
+			body, _ := testGet("http://example.com/env/putenv-in-shutdown.php?put=1", handler, t)
+			assert.Equal(t, "false", body)
+		}
+	}, &testOptions{nbParallelRequests: 1, initOpts: []frankenphp.Option{frankenphp.WithNumThreads(1)}})
 }
 
 // TODO: should it actually get reset in worker mode?
@@ -883,12 +1117,13 @@ func ExampleServeHTTP() {
 	defer frankenphp.Shutdown()
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Drop headers whose name contains an underscore: CGI maps dashes to
-		// underscores, so "Foo_Bar" would be indistinguishable from "Foo-Bar"
-		// in $_SERVER and could spoof any header an app or proxy trusts.
+		// Drop headers whose name contains an underscore or a dot: CGI maps
+		// dashes to underscores and PHP maps dots to underscores, so "Foo_Bar"
+		// and "Foo.Bar" would both be indistinguishable from "Foo-Bar" in
+		// $_SERVER and could spoof any header an app or proxy trusts.
 		// Whitelist any you genuinely need.
 		for name := range r.Header {
-			if strings.ContainsRune(name, '_') {
+			if strings.ContainsAny(name, "_.") {
 				delete(r.Header, name)
 			}
 		}
@@ -1153,6 +1388,15 @@ func TestFileStreamInWorkerMode(t *testing.T) {
 	}, &testOptions{workerScript: "file-stream.php", nbParallelRequests: 1, nbWorkers: 1})
 }
 
+func TestURLRewriterRestartsBetweenRequests_worker(t *testing.T) {
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		testGet(fmt.Sprintf("http://example.com/worker-url-rewriter.php?leak=%d", i), handler, t)
+
+		body, _ := testGet("http://example.com/worker-url-rewriter.php", handler, t)
+		assert.Equal(t, "true", body, "the URL rewriter must restart in each request")
+	}, &testOptions{workerScript: "worker-url-rewriter.php", nbParallelRequests: 1, nbWorkers: 1})
+}
+
 // To run this fuzzing test use: go test -fuzz FuzzRequest
 // TODO: Cover more potential cases
 func FuzzRequest(f *testing.F) {
@@ -1178,6 +1422,11 @@ func FuzzRequest(f *testing.F) {
 				return
 			}
 
+			// dot segments are resolved before the split, so PATH_INFO isn't the fuzzed string
+			if strings.Contains(req.URL.Path, "/.") {
+				return
+			}
+
 			// The fuzzed string must be present in the path
 			assert.Contains(t, body, fmt.Sprintf("[PATH_INFO] => /%s", fuzzedString))
 			assert.Contains(t, body, fmt.Sprintf("[PATH_TRANSLATED] => %s", filepath.Join(absPath, fuzzedString)))
@@ -1186,6 +1435,78 @@ func FuzzRequest(f *testing.F) {
 			assert.Contains(t, body, fmt.Sprintf("[CONTENT_TYPE] => %s", fuzzedString))
 			assert.Contains(t, body, fmt.Sprintf("[HTTP_FUZZED] => %s", fuzzedString))
 		}, &testOptions{workerScript: "request-headers.php"})
+	})
+}
+
+// FuzzResponseHeaders exercises add_response_header (frankenphp.c), FrankenPHP's
+// own copy of the response header list into a PHP array. The header line is
+// base64-encoded so arbitrary bytes reach it unmangled by HTTP transport.
+func FuzzResponseHeaders(f *testing.F) {
+	f.Add("X-Foo: bar")
+	f.Add("X-Foo:bar")
+	f.Add("X-Foo :  bar  ")
+	f.Add(":no-name")
+	f.Add("no-colon-at-all")
+	f.Add("X-Foo: ")
+	f.Add("")
+	f.Add(strings.Repeat("X-Foo: bar", 1000))
+
+	f.Fuzz(func(t *testing.T, headerLine string) {
+		runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+			encoded := base64.StdEncoding.EncodeToString([]byte(headerLine))
+			req := httptest.NewRequest("GET", "http://example.com/fuzz-response-header.php?h="+url.QueryEscape(encoded), nil)
+			body, resp := testRequest(req, handler, t)
+
+			assert.Equal(t, 200, resp.StatusCode)
+			assert.True(t, json.Valid([]byte(body)), "frankenphp_response_headers() must always return valid JSON, got: %s", body)
+		}, nil)
+	})
+}
+
+// FuzzPersistZvalRoundtrip exercises zval.h's persistent_zval_persist/
+// _to_request/_free recursive tree walk: FrankenPHP's own mechanism for
+// carrying values across the request/persistent memory boundary (used by
+// worker state), not php-src itself. Nesting depth and width are
+// fuzzer-controlled, since unbounded native recursion (no depth guard) is
+// the interesting bug class here, not the value shapes themselves.
+func FuzzPersistZvalRoundtrip(f *testing.F) {
+	// Check the compiled-in hook once, not in every seed's concurrent requests.
+	func() {
+		require.NoError(f, frankenphp.Init())
+		defer frankenphp.Shutdown()
+
+		root, err := fastabs.FastAbs("./testdata")
+		require.NoError(f, err)
+		req := httptest.NewRequest("GET", "http://example.com/fuzz-persist-roundtrip.php", nil)
+		req, err = frankenphp.NewRequestWithContext(req, frankenphp.WithRequestDocumentRoot(root, false))
+		require.NoError(f, err)
+		w := httptest.NewRecorder()
+		require.NoError(f, frankenphp.ServeHTTP(w, req))
+		require.Equal(f, http.StatusOK, w.Code)
+		if w.Body.String() == "SKIP" {
+			f.Skip("FRANKENPHP_TEST not set; skipping persistent_zval roundtrip fuzzing")
+		}
+	}()
+
+	f.Add(0, 1)
+	f.Add(1, 1)
+	f.Add(10, 2)
+	f.Add(100, 1)
+	f.Add(1000, 1)
+	f.Add(-1, -1)
+
+	f.Fuzz(func(t *testing.T, depth, width int) {
+		runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+			req := httptest.NewRequest("GET", fmt.Sprintf("http://example.com/fuzz-persist-roundtrip.php?depth=%d&width=%d", depth, width), nil)
+			body, resp := testRequest(req, handler, t)
+
+			if body == "SKIP" {
+				t.Skip("FRANKENPHP_TEST not set; skipping persistent_zval roundtrip fuzzing")
+			}
+
+			assert.Equal(t, 200, resp.StatusCode)
+			assert.NotContains(t, body, "MISMATCH", "roundtrip changed the value for depth=%d width=%d", depth, width)
+		}, nil)
 	})
 }
 
@@ -1330,6 +1651,54 @@ func TestSessionNoLeakBetweenRequests_worker(t *testing.T) {
 	})
 }
 
+func TestPreviousRequestCodeDoesNotWriteToNextClient_worker(t *testing.T) {
+	// with "E", $_ENV is filled from the environment
+	for _, variablesOrder := range []string{"GPCS", "EGPCS"} {
+		t.Run(variablesOrder, func(t *testing.T) {
+			phpIni := map[string]string{"variables_order": variablesOrder}
+
+			runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+				body, _ := testGet("http://example.com/worker-cross-request-output.php?session=alice", handler, t)
+				assert.Equal(t, "done\n", body)
+
+				body, _ = testGet("http://example.com/worker-cross-request-output.php", handler, t)
+				assert.Equal(t, "done\n", body)
+
+				body, _ = testGet("http://example.com/worker-cross-request-output.php?tenant=erin", handler, t)
+				assert.Equal(t, "done\nwrite tenant: erin\n", body)
+
+				// objects stored in superglobals are destroyed before the next request starts
+				body, _ = testGet("http://example.com/worker-cross-request-output.php?superglobals", handler, t)
+				assert.Equal(t, "done\n", body)
+
+				body, _ = testGet("http://example.com/worker-cross-request-output.php?destroyed", handler, t)
+				assert.Equal(t, "destroyed: cookie,files,get,post,request,server\nsession: unset\nenv: env\ndone\ndestroyed env\n", body)
+
+				// $_SESSION set between two requests is released before the next one
+				body, _ = testGet("http://example.com/worker-cross-request-output.php?between=dave", handler, t)
+				assert.Equal(t, "done\n", body)
+
+				body, _ = testGet("http://example.com/worker-cross-request-output.php?destroyed", handler, t)
+				assert.Equal(t, "destroyed: dave\nsession: unset\nenv: none\ndone\n", body)
+
+				// an exception thrown while releasing superglobals never reaches the next client
+				body, _ = testGet("http://example.com/worker-cross-request-output.php?throw=frank", handler, t)
+				assert.Equal(t, "done\n", body)
+
+				body, _ = testGet("http://example.com/worker-cross-request-output.php", handler, t)
+				assert.Equal(t, "done\n", body)
+
+				// a destructor can put data back into superglobals that were already released
+				body, _ = testGet("http://example.com/worker-cross-request-output.php?move=gina", handler, t)
+				assert.Equal(t, "done\n", body)
+
+				body, _ = testGet("http://example.com/worker-cross-request-output.php?destroyed", handler, t)
+				assert.Equal(t, "destroyed: moved gina\nsession: unset\nenv: none\ndone\n", body)
+			}, &testOptions{workerScript: "worker-cross-request-output.php", nbWorkers: 1, nbParallelRequests: 1, phpIni: phpIni})
+		})
+	}
+}
+
 func TestSessionNoLeakAfterExit_worker(t *testing.T) {
 	runTest(t, func(_ func(http.ResponseWriter, *http.Request), ts *httptest.Server, i int) {
 		// Client A: Set a secret value in session and call exit(1)
@@ -1418,7 +1787,119 @@ func testOpcachePreload(t *testing.T, opts *testOptions) {
 	}
 
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, i int) {
+		if body, _ := testGet("http://example.com/ini.php?key=opcache.enable", handler, t); body == "opcache.enable:" {
+			t.Skip("OPcache is not loaded")
+		}
+
 		body, _ := testGet("http://example.com/preload-check.php", handler, t)
 		assert.Equal(t, "I am preloaded", body)
 	}, opts)
+}
+
+// Validate reports what Init() would refuse, without starting anything
+func TestValidateReportsDeclarationErrors(t *testing.T) {
+	assert.NoError(t, frankenphp.Validate(
+		frankenphp.WithNumThreads(2),
+		frankenphp.WithWorkers("worker", "testdata/worker.php", 1),
+	))
+
+	assert.ErrorContains(t, frankenphp.Validate(
+		frankenphp.WithWorkers("worker", "testdata/not-a-worker.php", 1),
+	), "worker filename is invalid")
+
+	assert.ErrorContains(t, frankenphp.Validate(
+		frankenphp.WithWorkers("same", "testdata/worker.php", 1),
+		frankenphp.WithWorkers("same", "testdata/index.php", 1),
+	), "two workers cannot have the same name")
+
+	assert.ErrorContains(t, frankenphp.Validate(
+		frankenphp.WithWorkers("one", "testdata/worker.php", 1),
+		frankenphp.WithWorkers("two", "testdata/worker.php", 1),
+	), "two global workers cannot have the same filename")
+
+	server, err := frankenphp.NewServer(testDataDir)
+	require.NoError(t, err)
+	matchAll := frankenphp.WithWorkerMatcher(func(*http.Request) bool { return true })
+
+	assert.ErrorContains(t, frankenphp.Validate(
+		frankenphp.WithServer(server),
+		frankenphp.WithWorkers("one", "testdata/worker.php", 1, frankenphp.WithWorkerServerScope(server)),
+		frankenphp.WithWorkers("two", "testdata/worker.php", 1, frankenphp.WithWorkerServerScope(server)),
+	), "two workers in a server cannot have the same filename")
+
+	assert.NoError(t, frankenphp.Validate(
+		frankenphp.WithServer(server),
+		frankenphp.WithWorkers("one", "testdata/worker.php", 1, frankenphp.WithWorkerServerScope(server)),
+		frankenphp.WithWorkers("two", "testdata/worker.php", 1, frankenphp.WithWorkerServerScope(server), matchAll),
+	))
+
+	assert.ErrorContains(t, frankenphp.Validate(
+		frankenphp.WithNumThreads(2),
+		frankenphp.WithMaxThreads(1),
+	), "max_threads")
+}
+
+func TestOutOfMemory_module(t *testing.T) { testOutOfMemory(t, &testOptions{}) }
+func TestOutOfMemory_worker(t *testing.T) {
+	testOutOfMemory(t, &testOptions{workerScript: "out-of-memory.php", nbWorkers: 1})
+}
+func testOutOfMemory(t *testing.T, opts *testOptions) {
+	if os.Getenv("USE_ZEND_ALLOC") == "0" {
+		t.Skip("memory_limit is not enforced without the Zend allocator")
+	}
+
+	var buf fmt.Stringer
+	opts.nbParallelRequests = 1
+	opts.initOpts = []frankenphp.Option{frankenphp.WithNumThreads(2)}
+	opts.phpIni = map[string]string{"memory_limit": "8M"}
+	opts.logger, buf = newTestLogger(t)
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		body, _ := testGet("http://example.com/out-of-memory.php?hard_limit", handler, t)
+		hardLimit := body == "true"
+
+		body, _ = testGet("http://example.com/out-of-memory.php?exhaust", handler, t)
+		assert.Contains(t, body, "Allowed memory size of 8388608 bytes exhausted")
+		body, _ = testGet("http://example.com/out-of-memory.php", handler, t)
+		assert.Equal(t, "ok", body)
+
+		// $_GET is populated before the script runs; its copies (4 in worker mode) must cross memory_limit but stay under the hard limit (twice memory_limit), past which PHP exits
+		body, _ = testGet("http://example.com/out-of-memory.php?q="+strings.Repeat("a", 3<<20), handler, t)
+		if hardLimit {
+			assert.Contains(t, body, "Allowed memory size of 8388608 bytes exhausted")
+		}
+		body, _ = testGet("http://example.com/out-of-memory.php", handler, t)
+		assert.Equal(t, "ok", body)
+		assert.NotContains(t, buf.String(), "Restarting unhealthy thread")
+	}, opts)
+}
+
+func TestOutOfMemoryDuringRequestStartup(t *testing.T) {
+	if os.Getenv("USE_ZEND_ALLOC") == "0" {
+		t.Skip("memory_limit is not enforced without the Zend allocator")
+	}
+
+	logger, buf := newTestLogger(t)
+
+	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+		// the first iteration fails the thread's first request, before any module's RINIT ran on it (MallocScribble=1 or MALLOC_PERTURB_ makes a regression crash reliably)
+		for range 5 {
+			// $_POST is populated before the script runs; it must cross memory_limit but stay under the hard limit (twice memory_limit), past which PHP exits
+			req := httptest.NewRequest(http.MethodPost, "http://example.com/out-of-memory.php", strings.NewReader("a="+strings.Repeat("a", 5<<20)))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			_, resp := testRequest(req, handler, t)
+			assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+
+			body, _ := testGet("http://example.com/out-of-memory.php", handler, t)
+			assert.Equal(t, "ok", body)
+		}
+	}, &testOptions{
+		nbParallelRequests: 1,
+		logger:             logger,
+		initOpts:           []frankenphp.Option{frankenphp.WithNumThreads(1)},
+		requestOpts:        []frankenphp.RequestOption{frankenphp.WithRequestEnv(map[string]string{"FOO": "bar"})},
+		phpIni:             map[string]string{"memory_limit": "8M", "post_max_size": "16M", "display_errors": "0"},
+	})
+
+	assert.NotContains(t, buf.String(), "Restarting unhealthy thread")
 }

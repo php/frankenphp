@@ -1,0 +1,51 @@
+---
+name: Go Vulnerability Check
+concurrency:
+  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+on:
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - "docs/**"
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "docs/**"
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+env:
+  GOTOOLCHAIN: local
+jobs:
+  govulncheck:
+    name: govulncheck (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [".", "caddy"]
+    env:
+      LIBRARY_PATH: ${{ github.workspace }}/watcher/target/lib
+      GOFLAGS: "-tags=nobadger,nomysql,nopgx,deprecated_topic,deprecated_claim"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-go
+      - uses: ./.github/actions/setup-php
+      - name: Install e-dant/watcher
+        uses: ./.github/actions/watcher
+      - name: Install libbrotli-dev
+        run: sudo apt-get install -y libbrotli-dev
+      - name: Set CGO flags
+        run: echo "CGO_CFLAGS=-I${PWD}/watcher/target/include $(php-config --includes)" >> "${GITHUB_ENV}"
+      - name: Install govulncheck
+        run: CGO_ENABLED=0 go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: Scan Go module
+        working-directory: ${{ matrix.module }}
+        run: govulncheck ./...

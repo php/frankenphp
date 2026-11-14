@@ -14,31 +14,19 @@ package frankenphp
 // #include <php_variables.h>
 import "C"
 import (
-	"context"
 	"crypto/tls"
 	"net"
 	"net/http"
+	"net/url"
+	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"unicode/utf8"
 	"unsafe"
 
 	"github.com/dunglas/frankenphp/internal/phpheaders"
 )
-
-// cStringHTTPMethods caches C string versions of common HTTP methods
-// to avoid allocations in pinCString on every request.
-var cStringHTTPMethods = map[string]*C.char{
-	"GET":     C.CString("GET"),
-	"HEAD":    C.CString("HEAD"),
-	"POST":    C.CString("POST"),
-	"PUT":     C.CString("PUT"),
-	"DELETE":  C.CString("DELETE"),
-	"CONNECT": C.CString("CONNECT"),
-	"OPTIONS": C.CString("OPTIONS"),
-	"TRACE":   C.CString("TRACE"),
-	"PATCH":   C.CString("PATCH"),
-}
 
 // computeKnownVariables returns a set of CGI environment variables for the request.
 //
@@ -90,21 +78,30 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 	}
 
 	serverPort := reqPort
-	contentLength := request.Header.Get("Content-Length")
 
-	var requestURI string
-	if fc.originalRequest != nil {
-		requestURI = fc.originalRequest.URL.RequestURI()
-	} else {
-		requestURI = fc.requestURI
+	// IP of the interface that accepted the connection, absent for Unix sockets
+	var serverAddr string
+	switch addr := request.Context().Value(http.LocalAddrContextKey).(type) {
+	case *net.TCPAddr:
+		serverAddr = addr.IP.String()
+	case *net.UDPAddr:
+		serverAddr = addr.IP.String()
 	}
+
+	contentLength := request.Header.Get("Content-Length")
 
 	phpSelf := fc.scriptName + fc.pathInfo
 
+	// PATH_TRANSLATED is only defined if PATH_INFO is, see http://www.oreilly.com/openbook/cgi/ch02_04.html
+	var pathTranslated string
+	if fc.pathInfo != "" {
+		pathTranslated = sanitizedPathJoin(fc.documentRoot, fc.pathInfo)
+	}
+
 	C.frankenphp_register_server_vars(trackVarsArray, C.frankenphp_server_vars{
 		// approximate total length to avoid array re-hashing:
-		// 28 CGI vars + headers + environment
-		total_num_vars: C.size_t(28 + len(request.Header) + len(fc.env) + lengthOfEnv),
+		// 29 CGI vars + headers + environment
+		total_num_vars: C.size_t(29 + len(request.Header) + len(fc.env) + lengthOfEnv),
 
 		// CGI vars with variable values
 		remote_addr:         toUnsafeChar(ip),
@@ -117,6 +114,8 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		document_root_len:   C.size_t(len(fc.documentRoot)),
 		path_info:           toUnsafeChar(fc.pathInfo),
 		path_info_len:       C.size_t(len(fc.pathInfo)),
+		path_translated:     toUnsafeChar(pathTranslated),
+		path_translated_len: C.size_t(len(pathTranslated)),
 		php_self:            toUnsafeChar(phpSelf),
 		php_self_len:        C.size_t(len(phpSelf)),
 		document_uri:        toUnsafeChar(fc.docURI),
@@ -129,14 +128,16 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 		server_name_len:     C.size_t(len(reqHost)),
 		server_port:         toUnsafeChar(serverPort),
 		server_port_len:     C.size_t(len(serverPort)),
+		server_addr:         toUnsafeChar(serverAddr),
+		server_addr_len:     C.size_t(len(serverAddr)),
 		content_length:      toUnsafeChar(contentLength),
 		content_length_len:  C.size_t(len(contentLength)),
 		server_protocol:     toUnsafeChar(request.Proto),
 		server_protocol_len: C.size_t(len(request.Proto)),
 		http_host:           toUnsafeChar(request.Host),
 		http_host_len:       C.size_t(len(request.Host)),
-		request_uri:         toUnsafeChar(requestURI),
-		request_uri_len:     C.size_t(len(requestURI)),
+		request_uri:         toUnsafeChar(fc.requestURI),
+		request_uri_len:     C.size_t(len(fc.requestURI)),
 		ssl_cipher:          toUnsafeChar(sslCipher),
 		ssl_cipher_len:      C.size_t(len(sslCipher)),
 
@@ -147,8 +148,13 @@ func addKnownVariablesToServer(fc *frankenPHPContext, trackVarsArray *C.zval) {
 	})
 }
 
-func addHeadersToServer(ctx context.Context, request *http.Request, trackVarsArray *C.zval) {
+func addHeadersToServer(request *http.Request, trackVarsArray *C.zval) {
 	for field, val := range request.Header {
+		// HTTP_HOST comes from request.Host: over HTTP/2, net/http keeps a "host" field distinct from :authority
+		if field == "Host" {
+			continue
+		}
+
 		if k := commonHeaders[field]; k != nil {
 			v := strings.Join(val, ", ")
 			C.frankenphp_register_known_variable(k, toUnsafeChar(v), C.size_t(len(v)), trackVarsArray)
@@ -157,61 +163,74 @@ func addHeadersToServer(ctx context.Context, request *http.Request, trackVarsArr
 
 		// if the header name could not be cached, it needs to be registered safely
 		// this is more inefficient but allows additional sanitizing by PHP
-		k := phpheaders.GetUnCommonHeader(ctx, field)
+		k := phpheaders.GetUnCommonHeader(field)
 		v := strings.Join(val, ", ")
 		C.frankenphp_register_variable_safe(toUnsafeChar(k), toUnsafeChar(v), C.size_t(len(v)), trackVarsArray)
 	}
 }
 
-// registerPreparedEnv exposes fc.env to getenv() before any PHP code runs.
-func registerPreparedEnv(env PreparedEnv) {
-	size := C.size_t(len(env))
-	for k, v := range env {
-		C.frankenphp_add_to_prepared_env(toUnsafeChar(k), C.size_t(len(k)-1), toUnsafeChar(v), C.size_t(len(v)), size)
+// registerPreparedEnv exposes fc.env and fc.server.env to getenv() before any PHP code runs.
+func registerPreparedEnv(fc *frankenPHPContext, preparedEnvLen int) {
+	for k, v := range fc.server.env {
+		C.frankenphp_add_to_prepared_env(toUnsafeChar(k), C.size_t(len(k)-1), toUnsafeChar(v), C.size_t(len(v)), C.size_t(preparedEnvLen))
+	}
+	for k, v := range fc.env {
+		C.frankenphp_add_to_prepared_env(toUnsafeChar(k), C.size_t(len(k)-1), toUnsafeChar(v), C.size_t(len(v)), C.size_t(preparedEnvLen))
 	}
 }
 
 //export go_register_server_variables
-func go_register_server_variables(threadIndex C.uintptr_t, trackVarsArray *C.zval) {
+func go_register_server_variables(threadIndex C.uintptr_t, trackVarsArray *C.zval) C.bool {
 	thread := phpThreads[threadIndex]
-	fc := thread.frankenPHPContext()
+	fc := thread.handler.frankenPHPContext()
 
-	if fc.request != nil {
-		addKnownVariablesToServer(fc, trackVarsArray)
-		addHeadersToServer(thread.context(), fc.request, trackVarsArray)
+	if fc.request == nil {
+		// go_update_request_info() never ran
+		return false
 	}
 
-	// The Prepared Environment is registered last and can overwrite any previous values
-	if len(fc.env) != 0 {
-		C.frankenphp_merge_with_prepared_env(trackVarsArray)
-	}
+	addKnownVariablesToServer(fc, trackVarsArray)
+	addHeadersToServer(fc.request, trackVarsArray)
+
+	return C.bool(len(fc.env) != 0 || len(fc.server.env) != 0)
 }
 
 // splitCgiPath splits the request path into SCRIPT_NAME, SCRIPT_FILENAME, PATH_INFO, DOCUMENT_URI
-func splitCgiPath(fc *frankenPHPContext) {
-	path := fc.request.URL.Path
+func splitCgiPath(fc *frankenPHPContext) error {
+	path := cleanRequestPath(fc.request.URL.Path, runtime.GOOS == "windows")
 	splitPath := fc.splitPath
 
 	if splitPath == nil {
 		splitPath = []string{".php"}
 	}
 
-	if splitPos := splitPos(path, splitPath); splitPos > -1 {
-		fc.docURI = path[:splitPos]
-		fc.pathInfo = path[splitPos:]
+	pos := splitPos(path, splitPath)
+	if pos > -1 {
+		fc.docURI = path[:pos]
+		fc.pathInfo = path[pos:]
 	}
 
 	// If a worker is already assigned explicitly, derive SCRIPT_NAME from its filename
 	if fc.worker != nil {
 		fc.scriptFilename = fc.worker.fileName
-		docRootWithSep := fc.documentRoot + string(filepath.Separator)
-		if strings.HasPrefix(fc.worker.fileName, docRootWithSep) {
-			fc.scriptName = filepath.ToSlash(strings.TrimPrefix(fc.worker.fileName, fc.documentRoot))
+		if rest, ok := strings.CutPrefix(fc.worker.fileName, fc.documentRoot); ok && rest != "" && rest[0] == filepath.Separator {
+			fc.scriptName = filepath.ToSlash(rest)
 		} else {
 			fc.docURI = ""
 			fc.pathInfo = ""
 		}
-		return
+
+		return nil
+	}
+
+	// a path no split matches names no script: running it would execute a file the split extensions exclude
+	if pos == -1 {
+		return ErrInvalidScriptPath
+	}
+
+	// an 8.3 alias or an alternate data stream can name a non-PHP file with a PHP-looking path
+	if runtime.GOOS == "windows" && (strings.ContainsRune(path[:pos], ':') || hasWindowsShortName(path[:pos])) {
+		return ErrInvalidScriptPath
 	}
 
 	// Strip PATH_INFO from SCRIPT_NAME
@@ -222,7 +241,128 @@ func splitCgiPath(fc *frankenPHPContext) {
 	// TODO: is it possible to delay this and avoid saving everything in the context?
 	// SCRIPT_FILENAME is the absolute path of SCRIPT_NAME
 	fc.scriptFilename = sanitizedPathJoin(fc.documentRoot, fc.scriptName)
-	fc.worker = workersByPath[fc.scriptFilename]
+
+	// see if a php_server worker or global worker matches the request path
+	// aka: root + request path == worker.filename
+	if fc.worker = fc.server.workersByPath[fc.scriptFilename]; fc.worker == nil {
+		fc.worker = globalWorkersByPath[fc.scriptFilename]
+	}
+
+	return nil
+}
+
+const windowsShortNamePunctuation = "$%'-_@~`!(){}^#&"
+
+// possibleWindowsShortNamePart mirrors Caddy's file server: non-ASCII is accepted since Windows may allow it in 8.3 names.
+func possibleWindowsShortNamePart(s string) bool {
+	for _, c := range s {
+		if c >= utf8.RuneSelf ||
+			(c >= 'a' && c <= 'z') ||
+			(c >= 'A' && c <= 'Z') ||
+			(c >= '0' && c <= '9') ||
+			strings.ContainsRune(windowsShortNamePunctuation, c) {
+			continue
+		}
+
+		return false
+	}
+
+	return true
+}
+
+// hasWindowsShortName reports whether a component of p has the syntax of an NTFS 8.3 short name, like Caddy's file server.
+func hasWindowsShortName(p string) bool {
+	for _, component := range strings.FieldsFunc(p, func(r rune) bool {
+		return r == '/' || r == '\\'
+	}) {
+		component = strings.TrimRight(component, ". ")
+		base, extension, hasExtension := strings.Cut(component, ".")
+		if utf8.RuneCountInString(base) > 8 || !possibleWindowsShortNamePart(base) ||
+			(hasExtension && (utf8.RuneCountInString(extension) > 3 || !possibleWindowsShortNamePart(extension))) {
+			continue
+		}
+
+		tilde := strings.LastIndexByte(base, '~')
+		if tilde <= 0 || tilde == len(base)-1 {
+			continue
+		}
+
+		digits := true
+		for _, c := range base[tilde+1:] {
+			if c < '0' || c > '9' {
+				digits = false
+
+				break
+			}
+		}
+
+		if digits {
+			return true
+		}
+	}
+
+	return false
+}
+
+// cleanRequestPath resolves dot segments as Caddy's matchers do, so the script run is the one they matched.
+func cleanRequestPath(reqPath string, windows bool) string {
+	if windows {
+		reqPath = strings.ReplaceAll(reqPath, `\`, "/")
+	}
+
+	if !strings.Contains(reqPath, "/.") {
+		return reqPath
+	}
+
+	if windows {
+		// mirror Caddy's normalizeWindowsPath, which trims "..." to an empty segment before cleaning
+		segments := strings.Split(reqPath, "/")
+		for i, segment := range segments {
+			if segment != "." && segment != ".." {
+				segments[i] = strings.TrimRight(segment, ". ")
+			}
+		}
+		reqPath = strings.Join(segments, "/")
+	}
+
+	cleaned := path.Clean("/" + reqPath)
+	if cleaned != "/" && strings.HasSuffix(reqPath, "/") {
+		cleaned += "/"
+	}
+
+	return cleaned
+}
+
+// escapedPathSelectsAnotherScript reports whether cleaning the escaped path, as Caddy's path matchers do for patterns containing "%", leads to another script than cleaning the decoded one.
+func escapedPathSelectsAnotherScript(u *url.URL, splitPath []string, windows bool) bool {
+	// on Windows, those matchers read a backslash, escaped even without RawPath, as an escaped separator
+	backslash := windows && strings.Contains(u.Path, `\`)
+	if u.RawPath == "" && !backslash {
+		return false
+	}
+
+	escaped, err := url.PathUnescape(cleanRequestPath(u.EscapedPath(), windows))
+	if err != nil {
+		return true
+	}
+
+	if backslash {
+		escaped = strings.ReplaceAll(escaped, `\`, "/")
+	}
+
+	if splitPath == nil {
+		splitPath = []string{".php"}
+	}
+
+	return scriptPart(cleanRequestPath(u.Path, windows), splitPath) != scriptPart(escaped, splitPath)
+}
+
+func scriptPart(path string, splitPath []string) string {
+	if pos := splitPos(path, splitPath); pos > -1 {
+		return path[:pos]
+	}
+
+	return path
 }
 
 // splitPos returns the index where path should be split based on splitPath.
@@ -250,7 +390,7 @@ func splitPos(path string, splitPath []string) int {
 
 		for i := 0; i <= pathLen-splitLen; i++ {
 			match := true
-			for j := 0; j < splitLen; j++ {
+			for j := range splitLen {
 				c := path[i+j]
 				if c >= utf8.RuneSelf {
 					match = false
@@ -270,7 +410,15 @@ func splitPos(path string, splitPath []string) int {
 			}
 
 			if match {
-				return i + splitLen
+				pos := i + splitLen
+				// the split must end the path or a whole path segment, like
+				// the "*.php/*" route matcher: a split inside a filename
+				// ("/a.php.txt/b.php") would run a script the router never matched
+				if pos != pathLen && path[pos] != '/' {
+					continue
+				}
+
+				return pos
 			}
 		}
 	}
@@ -284,15 +432,19 @@ func splitPos(path string, splitPath []string) int {
 //export go_update_request_info
 func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) *C.char {
 	thread := phpThreads[threadIndex]
-	fc := thread.frankenPHPContext()
+	fc := thread.handler.frankenPHPContext()
 	request := fc.request
+
+	// PHP stats this as the executed script (getlastmod(), session cache limiters...), unlike the PATH_TRANSLATED CGI variable
+	info.path_translated = thread.pinCString(fc.scriptFilename)
 
 	if request == nil {
 		return nil
 	}
 
-	if len(fc.env) != 0 {
-		registerPreparedEnv(fc.env)
+	preparedEnvLen := len(fc.env) + len(fc.server.env)
+	if preparedEnvLen != 0 {
+		registerPreparedEnv(fc, preparedEnvLen)
 	}
 
 	if m, ok := cStringHTTPMethods[request.Method]; ok {
@@ -305,10 +457,6 @@ func go_update_request_info(threadIndex C.uintptr_t, info *C.sapi_request_info) 
 
 	if contentType := request.Header.Get("Content-Type"); contentType != "" {
 		info.content_type = thread.pinCString(contentType)
-	}
-
-	if fc.pathInfo != "" {
-		info.path_translated = thread.pinCString(sanitizedPathJoin(fc.documentRoot, fc.pathInfo)) // See: http://www.oreilly.com/openbook/cgi/ch02_04.html
 	}
 
 	info.request_uri = thread.pinCString(fc.requestURI)
@@ -338,17 +486,26 @@ func sanitizedPathJoin(root, reqPath string) string {
 		root = "."
 	}
 
-	path := filepath.Join(root, filepath.Clean("/"+reqPath))
+	// Clean with "path", not "filepath": on Windows filepath.Clean keeps the
+	// ".." behind a leading "//" (UNC prefix), letting reqPath escape root.
+	relPath := path.Clean(ensureLeadingSlash(reqPath))[1:]
+	// A cleaned rooted path is always local on POSIX: only Windows needs the check
+	if runtime.GOOS == "windows" && relPath != "" && !filepath.IsLocal(relPath) {
+		// path is unsafe (see https://github.com/golang/go/issues/56336#issuecomment-1416214885)
+		return root
+	}
+
+	joined := filepath.Join(root, filepath.FromSlash(relPath))
 
 	// filepath.Join also cleans the path, and cleaning strips
 	// the trailing slash, so we need to re-add it afterward.
 	// if the length is 1, then it's a path to the root,
 	// and that should return ".", so we don't append the separator.
 	if strings.HasSuffix(reqPath, "/") && len(reqPath) > 1 {
-		path += separator
+		joined += separator
 	}
 
-	return path
+	return joined
 }
 
 // splitRemoteAddr splits "host:port" leniently: a missing port is accepted.
@@ -359,12 +516,8 @@ func splitRemoteAddr(remoteAddr string) (ip, port string) {
 		return host, p
 	}
 
-	if idx := strings.LastIndex(remoteAddr, ":"); idx > -1 {
-		ip = remoteAddr[:idx]
-		port = remoteAddr[idx+1:]
-	} else {
-		ip = remoteAddr
-	}
+	// CutLast yields (remoteAddr, "") when there is no colon, i.e. no port.
+	ip, port, _ = strings.CutLast(remoteAddr, ":")
 
 	if len(ip) >= 2 && ip[0] == '[' && ip[len(ip)-1] == ']' {
 		ip = ip[1 : len(ip)-1]

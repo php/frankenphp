@@ -22,7 +22,7 @@ func TestModuleMaxRequests(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
-		for i := 0; i < totalRequests; i++ {
+		for range totalRequests {
 			body, resp := testGet("http://example.com/index.php", handler, t)
 			assert.Equal(t, 200, resp.StatusCode)
 			assert.Contains(t, body, "I am by birth a Genevese")
@@ -50,14 +50,12 @@ func TestModuleMaxRequestsConcurrent(t *testing.T) {
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
 		var wg sync.WaitGroup
 
-		for i := 0; i < totalRequests; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+		for range totalRequests {
+			wg.Go(func() {
 				body, resp := testGet("http://example.com/index.php", handler, t)
 				assert.Equal(t, 200, resp.StatusCode)
 				assert.Contains(t, body, "I am by birth a Genevese")
-			}()
+			})
 		}
 		wg.Wait()
 	}, &testOptions{

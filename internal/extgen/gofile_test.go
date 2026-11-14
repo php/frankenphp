@@ -242,6 +242,7 @@ func (ts *TestStruct) GetValue() string {
 						{
 							Name:       "GetValue",
 							ReturnType: phpString,
+							GoFunction: "func (ts *TestStruct) GetValue() unsafe.Pointer {\n\treturn nil\n}",
 						},
 					},
 				},
@@ -509,13 +510,13 @@ func (ts *TestStruct) ProcessData(name string, count *int64, enabled *bool) stri
 	content, err := goGen.buildContent()
 	require.NoError(t, err)
 
-	expectedWrapperSignature := "func ProcessData_wrapper(handle C.uintptr_t, name *C.zend_string, count *int64, enabled *bool)"
+	expectedWrapperSignature := "func TestClass_ProcessData_wrapper(handle C.uintptr_t, name *C.zend_string, count *int64, enabled *bool)"
 	assert.Contains(t, content, expectedWrapperSignature, "Generated content should contain wrapper with nullable pointer types: %s", expectedWrapperSignature)
 
 	expectedCall := "structObj.ProcessData(name, count, enabled)"
 	assert.Contains(t, content, expectedCall, "Generated content should contain correct method call: %s", expectedCall)
 
-	exportDirective := "//export ProcessData_wrapper"
+	exportDirective := "//export TestClass_ProcessData_wrapper"
 	assert.Contains(t, content, exportDirective, "Generated content should contain export directive: %s", exportDirective)
 }
 
@@ -604,10 +605,10 @@ func (as *ArrayStruct) FilterData(data frankenphp.AssociativeArray, filter strin
 	content, err := goGen.buildContent()
 	require.NoError(t, err)
 
-	expectedArrayWrapperSignature := "func ProcessArray_wrapper(handle C.uintptr_t, items *C.zval) unsafe.Pointer"
+	expectedArrayWrapperSignature := "func ArrayClass_ProcessArray_wrapper(handle C.uintptr_t, items *C.zend_array) unsafe.Pointer"
 	assert.Contains(t, content, expectedArrayWrapperSignature, "Generated content should contain array wrapper signature: %s", expectedArrayWrapperSignature)
 
-	expectedMixedWrapperSignature := "func FilterData_wrapper(handle C.uintptr_t, data *C.zval, filter *C.zend_string) unsafe.Pointer"
+	expectedMixedWrapperSignature := "func ArrayClass_FilterData_wrapper(handle C.uintptr_t, data *C.zend_array, filter *C.zend_string) unsafe.Pointer"
 	assert.Contains(t, content, expectedMixedWrapperSignature, "Generated content should contain mixed wrapper signature: %s", expectedMixedWrapperSignature)
 
 	expectedArrayCall := "structObj.ProcessArray(items)"
@@ -616,8 +617,8 @@ func (as *ArrayStruct) FilterData(data frankenphp.AssociativeArray, filter strin
 	expectedMixedCall := "structObj.FilterData(data, filter)"
 	assert.Contains(t, content, expectedMixedCall, "Generated content should contain mixed method call: %s", expectedMixedCall)
 
-	assert.Contains(t, content, "//export ProcessArray_wrapper", "Generated content should contain ProcessArray export directive")
-	assert.Contains(t, content, "//export FilterData_wrapper", "Generated content should contain FilterData export directive")
+	assert.Contains(t, content, "//export ArrayClass_ProcessArray_wrapper", "Generated content should contain ProcessArray export directive")
+	assert.Contains(t, content, "//export ArrayClass_FilterData_wrapper", "Generated content should contain FilterData export directive")
 }
 
 func TestGoFileGenerator_Idempotency(t *testing.T) {
@@ -740,6 +741,16 @@ func TestExtractGoFunctionName(t *testing.T) {
 			name:     "function with whitespace",
 			input:    "func  spacedName  () {}",
 			expected: "spacedName",
+		},
+		{
+			name:     "method with a pointer receiver",
+			input:    "func (s *MyStruct) getValue() string {}",
+			expected: "getValue",
+		},
+		{
+			name:     "method with a value receiver",
+			input:    "func (s MyStruct) get_value() string {}",
+			expected: "get_value",
 		},
 		{
 			name:     "no func keyword",
@@ -1100,13 +1111,13 @@ func (nas *NullableArrayStruct) ProcessOptionalArray(items frankenphp.Associativ
 	content, err := goGen.buildContent()
 	require.NoError(t, err)
 
-	expectedWrapperSignature := "func ProcessOptionalArray_wrapper(handle C.uintptr_t, items *C.zval, name *C.zend_string) unsafe.Pointer"
+	expectedWrapperSignature := "func NullableArrayClass_ProcessOptionalArray_wrapper(handle C.uintptr_t, items *C.zend_array, name *C.zend_string) unsafe.Pointer"
 	assert.Contains(t, content, expectedWrapperSignature, "Generated content should contain nullable array wrapper signature: %s", expectedWrapperSignature)
 
 	expectedCall := "structObj.ProcessOptionalArray(items, name)"
 	assert.Contains(t, content, expectedCall, "Generated content should contain method call: %s", expectedCall)
 
-	assert.Contains(t, content, "//export ProcessOptionalArray_wrapper", "Generated content should contain export directive")
+	assert.Contains(t, content, "//export NullableArrayClass_ProcessOptionalArray_wrapper", "Generated content should contain export directive")
 }
 
 func createTempSourceFile(t *testing.T, content string) string {
@@ -1189,10 +1200,10 @@ func (cs *CallableStruct) ProcessOptionalCallback(callback *C.zval) string {
 	content, err := goGen.buildContent()
 	require.NoError(t, err)
 
-	expectedCallableWrapperSignature := "func ProcessCallback_wrapper(handle C.uintptr_t, callback *C.zval) unsafe.Pointer"
+	expectedCallableWrapperSignature := "func CallableClass_ProcessCallback_wrapper(handle C.uintptr_t, callback *C.zval) unsafe.Pointer"
 	assert.Contains(t, content, expectedCallableWrapperSignature, "Generated content should contain callable wrapper signature: %s", expectedCallableWrapperSignature)
 
-	expectedOptionalCallableWrapperSignature := "func ProcessOptionalCallback_wrapper(handle C.uintptr_t, callback *C.zval) unsafe.Pointer"
+	expectedOptionalCallableWrapperSignature := "func CallableClass_ProcessOptionalCallback_wrapper(handle C.uintptr_t, callback *C.zval) unsafe.Pointer"
 	assert.Contains(t, content, expectedOptionalCallableWrapperSignature, "Generated content should contain optional callable wrapper signature: %s", expectedOptionalCallableWrapperSignature)
 
 	expectedCallableCall := "structObj.ProcessCallback(callback)"
@@ -1201,40 +1212,8 @@ func (cs *CallableStruct) ProcessOptionalCallback(callback *C.zval) string {
 	expectedOptionalCallableCall := "structObj.ProcessOptionalCallback(callback)"
 	assert.Contains(t, content, expectedOptionalCallableCall, "Generated content should contain optional callable method call: %s", expectedOptionalCallableCall)
 
-	assert.Contains(t, content, "//export ProcessCallback_wrapper", "Generated content should contain ProcessCallback export directive")
-	assert.Contains(t, content, "//export ProcessOptionalCallback_wrapper", "Generated content should contain ProcessOptionalCallback export directive")
-}
-
-func TestGoFileGenerator_phpTypeToGoType(t *testing.T) {
-	generator := &Generator{}
-	goGen := GoFileGenerator{generator}
-
-	tests := []struct {
-		phpType  phpType
-		expected string
-	}{
-		{phpString, "string"},
-		{phpInt, "int64"},
-		{phpFloat, "float64"},
-		{phpBool, "bool"},
-		{phpArray, "*frankenphp.Array"},
-		{phpMixed, "any"},
-		{phpVoid, ""},
-		{phpCallable, "*C.zval"},
-	}
-
-	for _, tt := range tests {
-		t.Run(string(tt.phpType), func(t *testing.T) {
-			result := goGen.phpTypeToGoType(tt.phpType)
-			assert.Equal(t, tt.expected, result, "phpTypeToGoType(%s) should return %s", tt.phpType, tt.expected)
-		})
-	}
-
-	t.Run("unknown_type", func(t *testing.T) {
-		unknownType := phpType("unknown")
-		result := goGen.phpTypeToGoType(unknownType)
-		assert.Equal(t, "any", result, "phpTypeToGoType should fallback to interface{} for unknown types")
-	})
+	assert.Contains(t, content, "//export CallableClass_ProcessCallback_wrapper", "Generated content should contain ProcessCallback export directive")
+	assert.Contains(t, content, "//export CallableClass_ProcessOptionalCallback_wrapper", "Generated content should contain ProcessOptionalCallback export directive")
 }
 
 func testGeneratedFileBasicStructure(t *testing.T, content, expectedPackage, baseName string) {
@@ -1287,4 +1266,73 @@ func assertContainsHeaderComment(t *testing.T, filename string) {
 	headerSection := string(content[:min(len(content), 500)])
 	assert.Contains(t, headerSection, "AUTOGENERATED FILE - DO NOT EDIT", "File should contain autogenerated header comment")
 	assert.Contains(t, headerSection, "FrankenPHP extension generator", "File should mention FrankenPHP extension generator")
+}
+
+func TestGoFileGenerator_MethodWrappersAreClassQualified(t *testing.T) {
+	tmpDir := t.TempDir()
+	sourceFile := filepath.Join(tmpDir, "source.go")
+	require.NoError(t, os.WriteFile(sourceFile, []byte("package main\n"), 0644))
+
+	// Both classes expose a method with the same PHP name: the exported cgo
+	// symbols must not collide.
+	newClass := func(phpName, goStruct string) phpClass {
+		return phpClass{
+			Name:     phpName,
+			GoStruct: goStruct,
+			Methods: []phpClassMethod{{
+				Name:       "getName",
+				PhpName:    "getName",
+				ClassName:  phpName,
+				ReturnType: phpString,
+				GoFunction: "func (s *" + goStruct + ") GetName() unsafe.Pointer {\n\treturn nil\n}",
+			}},
+		}
+	}
+
+	generator := &Generator{
+		BaseName:   "collide",
+		SourceFile: sourceFile,
+		BuildDir:   tmpDir,
+		Classes:    []phpClass{newClass("User", "UserStruct"), newClass("Group", "GroupStruct")},
+	}
+
+	goGen := GoFileGenerator{generator}
+	content, err := goGen.buildContent()
+	require.NoError(t, err)
+
+	assert.Contains(t, content, "//export User_getName_wrapper")
+	assert.Contains(t, content, "//export Group_getName_wrapper")
+	assert.NotContains(t, content, "//export getName_wrapper")
+}
+
+func TestGoFileGenerator_MethodWrapperUsesActualGoName(t *testing.T) {
+	tmpDir := t.TempDir()
+	sourceFile := filepath.Join(tmpDir, "source.go")
+	require.NoError(t, os.WriteFile(sourceFile, []byte("package main\n"), 0644))
+
+	generator := &Generator{
+		BaseName:   "snake_test",
+		SourceFile: sourceFile,
+		BuildDir:   tmpDir,
+		Classes: []phpClass{{
+			Name:     "SnakeClass",
+			GoStruct: "SnakeStruct",
+			Methods: []phpClassMethod{
+				{
+					Name:       "get_value",
+					PhpName:    "get_value",
+					ClassName:  "SnakeClass",
+					ReturnType: phpInt,
+					GoFunction: "func (s *SnakeStruct) GetValue() int64 {\n\treturn 42\n}",
+				},
+			},
+		}},
+	}
+
+	goGen := GoFileGenerator{generator}
+	content, err := goGen.buildContent()
+	require.NoError(t, err)
+
+	assert.Contains(t, content, "return structObj.GetValue()")
+	assert.NotContains(t, content, "structObj.Get_Value(")
 }

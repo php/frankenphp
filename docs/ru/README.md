@@ -127,7 +127,7 @@ sudo systemctl start frankenphp
 - [Docker-образы](https://frankenphp.dev/docs/docker/)
 - [Деплой в продакшен](https://frankenphp.dev/docs/production/)
 - [Оптимизация производительности](https://frankenphp.dev/docs/performance/)
-- [Создание автономного PHP-приложений](https://frankenphp.dev/docs/embed/)
+- [Создание автономных PHP-приложений](https://frankenphp.dev/docs/embed/)
 - [Создание статических бинарных файлов](https://frankenphp.dev/docs/static/)
 - [Компиляция из исходников](https://frankenphp.dev/docs/compile/)
 - [Интеграция с Laravel](https://frankenphp.dev/docs/laravel/)

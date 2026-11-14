@@ -13,13 +13,16 @@ However, it is possible to substantially improve performance using an appropriat
 By default, FrankenPHP starts 2 times more threads and workers (in worker mode) than the available number of CPU cores.
 
 The appropriate values depend heavily on how your application is written, what it does, and your hardware.
-We strongly recommend changing these values. For best system stability, it is recommended to have `num_threads` x `memory_limit` < `available_memory`.
+We strongly recommend changing these values. For best system stability, it is recommended to have `max_threads` x `memory_limit` < `available_memory`, since `max_threads` bounds every thread the process runs.
 
 To find the right values, it's best to run load tests simulating real traffic.
 [k6](https://k6.io) and [Gatling](https://gatling.io) are good tools for this.
 
 To configure the number of threads, use the `num_threads` option of the global `frankenphp` directive.
+
 To change the number of workers, use the `num` option of the `worker` section of the `frankenphp` directive.
+
+`num_threads` counts the threads serving the requests no worker serves, and the threads a worker starts come on top of it, so giving a worker more threads never takes capacity away from the rest of the site. `max_threads` limits the whole process, workers included, which is what the memory heuristic of `auto` bounds. The startup log reports what that adds up to, as `total_threads` and `worker_threads`.
 
 ### `max_threads`
 
@@ -27,7 +30,7 @@ While it's always better to know exactly what your traffic will look like, real-
 unpredictable. The `max_threads` [configuration](config.md#caddyfile-config) allows FrankenPHP to automatically spawn additional threads at runtime up to the specified limit.
 `max_threads` can help you figure out how many threads you need to handle your traffic and can make the server more resilient to latency spikes.
 If set to `auto`, the limit will be estimated based on the `memory_limit` in your `php.ini`. If not able to do so,
-`auto` will instead default to 2x `num_threads`. Keep in mind that `auto` might strongly underestimate the number of threads needed.
+`auto` will instead default to twice the threads started at boot. Keep in mind that `auto` might strongly underestimate the number of threads needed.
 `max_threads` is similar to PHP-FPM's [pm.max_children](https://www.php.net/manual/install.fpm.configuration.php#pm.max-children). The main difference is that FrankenPHP uses threads instead of
 processes and automatically delegates them across different worker scripts and 'classic mode' as needed.
 

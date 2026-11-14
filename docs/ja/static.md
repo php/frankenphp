@@ -1,7 +1,12 @@
+---
+title: FrankenPHP static build: single-binary PHP app server
+description: Create static or mostly static FrankenPHP binaries with embedded PHP and Caddy on Linux and macOS, customize extensions, and load dynamic modules with glibc.
+---
+
 # 静的ビルドの作成
 
 PHPライブラリのローカルインストールを使用する代わりに、
-[static-php-cli プロジェクト](https://github.com/crazywhalecc/static-php-cli)を利用して、FrankenPHPの静的またはほぼ静的なビルドを作成することが可能です（プロジェクト名に「CLI」とありますが、CLIだけでなく全てのSAPIをサポートしています）。
+素晴らしい[static-php-cli プロジェクト](https://github.com/crazywhalecc/static-php-cli)のおかげで、FrankenPHPの静的またはほぼ静的なビルドを作成することが可能です（プロジェクト名に「CLI」とありますが、CLIだけでなく全てのSAPIをサポートしています）。
 
 この方法を使えば、PHPインタープリター、Caddy Webサーバー、FrankenPHPをすべて含んだ単一でポータブルなバイナリを作成できます！
 
@@ -24,13 +29,14 @@ PHPライブラリのローカルインストールを使用する代わりに�
 
 ```console
 docker buildx bake --load static-builder-musl
-docker cp $(docker create --name static-builder-musl dunglas/frankenphp:static-builder-musl):/go/src/app/dist/frankenphp-linux-$(uname -m) frankenphp ; docker rm static-builder-musl
+docker run --rm -v "$PWD/output:/output" -e OUTPUT_DIR=/output -e SPC_LOGS_DIR=/output/log dunglas/frankenphp:static-builder-musl
+cp "output/frankenphp-linux-$(uname -m)" frankenphp
 ```
 
 高い並行性が求められるシナリオでは、より良いパフォーマンスのため、[mimalloc](https://github.com/microsoft/mimalloc)アロケーターの使用を検討してください。
 
 ```console
-docker buildx bake --load --set static-builder-musl.args.MIMALLOC=1 static-builder-musl
+docker run --rm -v "$PWD/output:/output" -e OUTPUT_DIR=/output -e SPC_LOGS_DIR=/output/log -e MIMALLOC=1 dunglas/frankenphp:static-builder-musl
 ```
 
 ### glibcベースのほぼ静的なビルド（動的拡張モジュールのサポートあり）
@@ -39,47 +45,48 @@ docker buildx bake --load --set static-builder-musl.args.MIMALLOC=1 static-build
 
 ```console
 docker buildx bake --load static-builder-gnu
-docker cp $(docker create --name static-builder-gnu dunglas/frankenphp:static-builder-gnu):/go/src/app/dist/frankenphp-linux-$(uname -m) frankenphp ; docker rm static-builder-gnu
+docker run --rm -v "$PWD/output:/output" -e OUTPUT_DIR=/output -e SPC_LOGS_DIR=/output/log dunglas/frankenphp:static-builder-gnu
+cp "output/frankenphp-linux-$(uname -m)" frankenphp
 ```
 
-このバイナリは、glibcバージョン2.17以上をすべてサポートしますが、muslベースシステム（Alpine Linuxなど）では動作しません。
+このバイナリはglibcバージョン2.28以上をすべてサポートしますが、muslベースシステム（Alpine Linuxなど）では動作しません。
 
 生成されたほぼ静的（`glibc`を除く）バイナリは`frankenphp`という名前で、カレントディレクトリに出力されます。
 
+ビルドが失敗した場合、static-php-cliのログは`output/log/`にあります。
+
 Dockerを使わずに静的バイナリをビルドしたい場合は、macOS向けの手順を参照してください。これらの手順はLinuxでも使用できます。
 
-### カスタム拡張モジュール
+### 静的ビルドでのカスタムPHP拡張モジュール
 
-デフォルトでは、よく使われるPHP拡張モジュールがコンパイルされます。
+デフォルトでは、よく使われるPHP拡張モジュールがコンパイルされます。デフォルトの設定は[`craft.yml`](https://github.com/php/frankenphp/blob/main/craft.yml)にあります。
 
-バイナリのサイズを削減したり、攻撃対象領域（アタックサーフェス）を減らすために、`PHP_EXTENSIONS`というDocker引数を使用してビルドする拡張モジュールを明示的に指定できます。
+バイナリのサイズを削減したり、攻撃対象領域（アタックサーフェス）を減らすために、`PHP_EXTENSIONS`変数を使用してビルドする拡張モジュールを指定できます。
 
 例えば、`opcache`と`pdo_sqlite`拡張モジュールのみをビルドするには、以下のように実行します：
 
 ```console
-docker buildx bake --load --set static-builder-musl.args.PHP_EXTENSIONS=opcache,pdo_sqlite static-builder-musl
+docker run --rm -v "$PWD/output:/output" -e OUTPUT_DIR=/output -e SPC_LOGS_DIR=/output/log -e PHP_EXTENSIONS=opcache,pdo_sqlite dunglas/frankenphp:static-builder-musl
 # ...
 ```
 
-有効にした拡張に必要なライブラリを追加するには、`PHP_EXTENSION_LIBS`というDocker引数を渡すことができます：
+有効にした拡張モジュールに追加機能を持たせるライブラリを追加するには、`PHP_EXTENSION_LIBS`変数を渡すことができます：
 
 ```console
-docker buildx bake \
-  --load \
-  --set static-builder-musl.args.PHP_EXTENSIONS=gd \
-  --set static-builder-musl.args.PHP_EXTENSION_LIBS=libjpeg,libwebp \
-  static-builder-musl
+docker run --rm -v "$PWD/output:/output" -e OUTPUT_DIR=/output -e SPC_LOGS_DIR=/output/log \
+  -e PHP_EXTENSIONS=gd \
+  -e PHP_EXTENSION_LIBS=libjpeg,libwebp \
+  dunglas/frankenphp:static-builder-musl
 ```
 
 ### 追加のCaddyモジュール
 
-Caddyの拡張モジュールを追加したい場合は、`XCADDY_ARGS`というDocker引数を使用して、[xcaddy](https://github.com/caddyserver/xcaddy)に渡す引数を以下のように指定できます：
+追加のCaddyモジュールを追加したり、[xcaddy](https://github.com/caddyserver/xcaddy)に他の引数を渡したりするには、`XCADDY_ARGS`変数を使用します：
 
 ```console
-docker buildx bake \
-  --load \
-  --set static-builder-musl.args.XCADDY_ARGS="--with github.com/darkweak/souin/plugins/caddy --with github.com/dunglas/caddy-cbrotli --with github.com/dunglas/mercure/caddy --with github.com/dunglas/vulcain/caddy" \
-  static-builder-musl
+docker run --rm -v "$PWD/output:/output" -e OUTPUT_DIR=/output -e SPC_LOGS_DIR=/output/log \
+  -e XCADDY_ARGS="--with github.com/darkweak/souin/plugins/caddy --with github.com/dunglas/caddy-cbrotli --with github.com/dunglas/mercure/caddy --with github.com/dunglas/vulcain/caddy" \
+  dunglas/frankenphp:static-builder-musl
 ```
 
 この例では、Caddy用の[Souin](https://souin.io)HTTPキャッシュモジュールと[cbrotli](https://github.com/dunglas/caddy-cbrotli)、[Mercure](https://mercure.rocks)、[Vulcain](https://vulcain.rocks)モジュールを追加しています。
@@ -87,16 +94,16 @@ docker buildx bake \
 > [!TIP]
 >
 > cbrotli、Mercure、Vulcainモジュールは、`XCADDY_ARGS`が空または設定されていない場合はデフォルトで含まれます。
-> `XCADDY_ARGS`の値をカスタマイズする場合、デフォルトのモジュールは含まれなくなるため、必要なものは明示的に記述してください。
+> `XCADDY_ARGS`の値をカスタマイズする場合、それらを含めたいのであれば明示的に指定する必要があります。
 
-[ビルドのカスタマイズ](#ビルドのカスタマイズ)も参照してください
+[FrankenPHP静的ビルドのカスタマイズ](#frankenphp静的ビルドのカスタマイズ)も参照してください
 
 ### GitHubトークン
 
 GitHub API レート制限に達した場合は、`GITHUB_TOKEN`という名前の環境変数にGitHub Personal Access Tokenを設定してください：
 
 ```console
-GITHUB_TOKEN="xxx" docker --load buildx bake static-builder-musl
+docker run --rm -v "$PWD/output:/output" -e OUTPUT_DIR=/output -e SPC_LOGS_DIR=/output/log -e GITHUB_TOKEN="xxx" dunglas/frankenphp:static-builder-musl
 # ...
 ```
 
@@ -112,9 +119,11 @@ cd frankenphp
 
 なお、このスクリプトはLinux（おそらく他のUnix系OS）でも動作し、私たちが提供するDockerイメージ内部でも使用されています。
 
-## ビルドのカスタマイズ
+Apple Silicon向けにのみmacOSバイナリを公開しています。Intel Macでは、このスクリプトを使用してソースからビルドしてください。
 
-以下の環境変数を`docker build`や`build-static.sh`
+## FrankenPHP静的ビルドのカスタマイズ
+
+以下の環境変数を`docker run`や`build-static.sh`
 スクリプトに渡すことで、静的ビルドをカスタマイズできます：
 
 - `FRANKENPHP_VERSION`: 使用するFrankenPHPのバージョン
@@ -128,34 +137,30 @@ cd frankenphp
 - `DEBUG_SYMBOLS`: 指定すると、デバッグシンボルが除去されず、バイナリに含まれます
 - `MIMALLOC`: （実験的、Linuxのみ）パフォーマンス向上のためにmuslのmallocngを[mimalloc](https://github.com/microsoft/mimalloc)に置き換えます。muslをターゲットとするビルドにのみこれを使用することをお勧めします。glibcの場合は、このオプションを無効にして、代わりにバイナリを実行する際に[`LD_PRELOAD`](https://microsoft.github.io/mimalloc/overrides.html)を使用することをお勧めします。
 - `RELEASE`: （メンテナー用）指定すると、生成されたバイナリがGitHubにアップロードされます
+- `LIBC`: (Linuxのみ) 完全静的バイナリの場合は`musl`（デフォルト）、システムglibcに動的にリンクする場合は`gnu`。これはstatic-php-cliの`SPC_TARGET`および`SPC_TOOLCHAIN`の短縮形であり、これらは直接設定することもできます。static-php-cliは`craft.yml`を読み込む前にツールチェーンを解決するため、これらは実際の環境変数である必要があります。`musl`のデフォルトはアーキテクチャのベースラインCPU（`x86_64-linux-musl`または`aarch64-linux-musl`）をターゲットとするため、バイナリはどのCPUでも実行できます。代わりにビルドマシン用に最適化するには`SPC_TARGET=native-native-musl`を設定してください。
 
-## 拡張モジュール
+## 静的バイナリでPHP拡張モジュールを動的にロードする
 
 glibcまたはmacOSベースのバイナリでは、PHP拡張モジュールを動的にロードできます。ただし、これらの拡張はZTSサポートでコンパイルされている必要があります。
 ほとんどのパッケージマネージャーは現在、拡張のZTSバージョンを提供していないため、自分でコンパイルする必要があります。
 
-このために、`static-builder-gnu`Dockerコンテナをビルドして実行し、リモートでアクセスし、`./configure --with-php-config=/go/src/app/dist/static-php-cli/buildroot/bin/php-config`で拡張をコンパイルできます。
+このために、`static-builder-gnu` Dockerコンテナを実行し、それにリモートで接続して、`./configure --with-php-config=/go/src/app/dist/buildroot/bin/php-config`で拡張をコンパイルできます。
 
 [Xdebug拡張モジュール](https://xdebug.org)の場合：
 
 ```console
-docker build -t gnu-ext -f static-builder-gnu.Dockerfile --build-arg FRANKENPHP_VERSION=1.0 .
-docker create --name static-builder-gnu -it gnu-ext /bin/sh
-docker start static-builder-gnu
-docker exec -it static-builder-gnu /bin/sh
-cd /go/src/app/dist/static-php-cli/buildroot/bin
+docker buildx bake --load static-builder-gnu
+docker run --rm -v "$PWD/dist:/go/src/app/dist" -v "$PWD/output:/output" -e OUTPUT_DIR=/output -e SPC_LOGS_DIR=/output/log dunglas/frankenphp:static-builder-gnu
+docker run --rm -it -v "$PWD/dist:/go/src/app/dist" dunglas/frankenphp:static-builder-gnu /bin/bash
+cd /go/src/app/dist/buildroot/bin
 git clone https://github.com/xdebug/xdebug.git && cd xdebug
-source scl_source enable devtoolset-10
 ../phpize
-./configure --with-php-config=/go/src/app/dist/static-php-cli/buildroot/bin/php-config
+./configure --with-php-config=/go/src/app/dist/buildroot/bin/php-config
 make
 exit
-docker cp static-builder-gnu:/go/src/app/dist/static-php-cli/buildroot/bin/xdebug/modules/xdebug.so xdebug-zts.so
-docker cp static-builder-gnu:/go/src/app/dist/frankenphp-linux-$(uname -m) ./frankenphp
-docker stop static-builder-gnu
-docker rm static-builder-gnu
-docker rmi gnu-ext
+cp dist/buildroot/bin/xdebug/modules/xdebug.so xdebug-zts.so
+cp "output/frankenphp-linux-$(uname -m)" frankenphp
 ```
 
 これにより、現在のディレクトリに`frankenphp`と`xdebug-zts.so`が作成されます。
-`xdebug-zts.so`を拡張ディレクトリに移動し、php.iniに`zend_extension=xdebug-zts.so`を追加してFrankenPHPを実行すると、Xdebugがロードされます。
+もし`xdebug-zts.so`を拡張ディレクトリに移動し、php.iniに`zend_extension=xdebug-zts.so`を追加してFrankenPHPを実行すると、Xdebugがロードされます。
