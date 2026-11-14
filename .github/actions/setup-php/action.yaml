@@ -14,6 +14,10 @@ runs:
         ini-file: development
         # JIT's fixed-address mappings can race Go thread creation during startup.
         ini-values: opcache.jit=disable
+        # libenchant 2.8 can't be loaded again once PHP unloaded it, which each new start of PHP does:
+        # GObject still knows the types of the first load, and aborts when they come back.
+        # To remove once https://github.com/php/php-src/issues/25412 is fixed in the PHP versions tested here
+        extensions: :enchant
         coverage: none
         tools: none
       env:

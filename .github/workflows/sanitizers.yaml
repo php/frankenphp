@@ -31,8 +31,10 @@ jobs:
     env:
       CFLAGS: -g -O0 -fsanitize=${{ matrix.sanitizer == 'asan' && 'address' || 'memory' }} -DZEND_TRACK_ARENA_ALLOC
       LDFLAGS: -fsanitize=${{ matrix.sanitizer == 'asan' && 'address' || 'memory' }}
-      CC: clang
-      CXX: clang++
+      # MemorySanitizer in clang 21, the default of Ubuntu 26.04, takes the index of an AVX-512 permutation
+      # for uninitialized memory: https://github.com/llvm/llvm-project/pull/148785
+      CC: clang-22
+      CXX: clang++-22
       USE_ZEND_ALLOC: 0
       LIBRARY_PATH: ${{ github.workspace }}/php/target/lib:${{ github.workspace }}/watcher/target/lib
       LD_LIBRARY_PATH: ${{ github.workspace }}/php/target/lib
@@ -41,6 +43,8 @@ jobs:
     steps:
       - name: Remove local PHP
         run: sudo apt-get remove --purge --autoremove 'php*' 'libmemcached*'
+      - name: Install clang
+        run: sudo apt-get update && sudo apt-get install -y "${CC}"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -56,7 +60,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: php/target
-          key: php-sanitizers-${{ matrix.sanitizer }}-${{ runner.arch }}-${{ steps.determine-php-version.outputs.version }}
+          key: php-sanitizers-${{ matrix.sanitizer }}-${{ runner.arch }}-${{ steps.determine-php-version.outputs.version }}-${{ hashFiles('.github/workflows/sanitizers.yaml') }}
       - if: steps.cache-php.outputs.cache-hit != 'true'
         name: Compile PHP
         run: |

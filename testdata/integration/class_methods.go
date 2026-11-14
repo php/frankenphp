@@ -51,6 +51,13 @@ func (c *CounterStruct) UpdateWithNullable(newValue *int64) {
 	}
 }
 
+// export_php:method Counter::resetIf(?bool $condition): void
+func (c *CounterStruct) ResetIf(condition *bool) {
+	if condition != nil && *condition {
+		c.Value = 0
+	}
+}
+
 // export_php:class StringHolder
 type StringHolderStruct struct {
 	Data string

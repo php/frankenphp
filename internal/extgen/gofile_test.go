@@ -1219,6 +1219,7 @@ func (cs *CallableStruct) ProcessOptionalCallback(callback *C.zval) string {
 func testGeneratedFileBasicStructure(t *testing.T, content, expectedPackage, baseName string) {
 	requiredElements := []string{
 		"package " + expectedPackage,
+		"// #cgo linux CFLAGS: -D_GNU_SOURCE",
 		"// #include <stdlib.h>",
 		`// #include "` + baseName + `.h"`,
 		`import "C"`,
