@@ -65,6 +65,29 @@ same(
     'array with enum',
 );
 
+// A reference stands for its value: a foreach by reference leaves one in
+// its array, and so does anything that took an element by reference.
+$counts = [1, 2];
+foreach ($counts as &$count) {
+    ++$count;
+}
+unset($count);
+same($rt($counts), [2, 3], 'array holding a reference');
+
+$shared = ['x'];
+same($rt(['a' => &$shared, 'b' => [&$shared]]), ['a' => ['x'], 'b' => [['x']]], 'shared reference');
+
+// An array that holds itself is nested past any depth.
+$self = [];
+$self['self'] = &$self;
+try {
+    $rt($self);
+    echo "FAIL recursive array should throw\n";
+} catch (\LogicException) {
+    echo "OK recursive array rejected\n";
+}
+unset($self['self']);
+
 // Invalid inputs throw LogicException.
 try {
     $rt(new stdClass());
@@ -86,3 +109,16 @@ try {
 } catch (\LogicException) {
     echo "OK nested stdClass rejected\n";
 }
+
+// A literal array is opcache-immutable, which the persistent tree copies
+// rather than borrows: round-trip the same literal more times than the
+// refcount of 2 opcache keeps on it, so nothing shared is ever released.
+for ($i = 0; $i < 3; ++$i) {
+    $out = $rt(['immutable' => ['nested' => [1, 2, 3]], 'i' => 'literal']);
+    if ($out !== ['immutable' => ['nested' => [1, 2, 3]], 'i' => 'literal']) {
+        echo "FAIL immutable literal exposed repeatedly (round $i)\n";
+        return;
+    }
+    unset($out);
+}
+echo "OK immutable literal exposed repeatedly\n";
