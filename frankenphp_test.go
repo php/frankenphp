@@ -1681,6 +1681,13 @@ func TestPreviousRequestCodeDoesNotWriteToNextClient_worker(t *testing.T) {
 				body, _ = testGet("http://example.com/worker-cross-request-output.php?destroyed", handler, t)
 				assert.Equal(t, "destroyed: dave\nsession: unset\nenv: none\ndone\n", body)
 
+				// a header callback registered between two requests is released before the next one
+				body, _ = testGet("http://example.com/worker-cross-request-output.php?header_callback=hugo", handler, t)
+				assert.Equal(t, "done\n", body)
+
+				body, _ = testGet("http://example.com/worker-cross-request-output.php?destroyed", handler, t)
+				assert.Equal(t, "destroyed: hugo\nsession: unset\nenv: none\ndone\n", body)
+
 				// an exception thrown while releasing superglobals never reaches the next client
 				body, _ = testGet("http://example.com/worker-cross-request-output.php?throw=frank", handler, t)
 				assert.Equal(t, "done\n", body)
@@ -1697,6 +1704,62 @@ func TestPreviousRequestCodeDoesNotWriteToNextClient_worker(t *testing.T) {
 			}, &testOptions{workerScript: "worker-cross-request-output.php", nbWorkers: 1, nbParallelRequests: 1, phpIni: phpIni})
 		})
 	}
+}
+
+func TestStateSetBetweenRequestsIsReleased_worker(t *testing.T) {
+	const script = "http://example.com/worker-between-requests-state.php?"
+	number := func(t *testing.T, handler func(http.ResponseWriter, *http.Request), query string) int {
+		body, _ := testGet(script+query, handler, t)
+		n, err := strconv.Atoi(body)
+		require.NoError(t, err, body)
+
+		return n
+	}
+
+	// sapi_activate() forgets these without releasing them
+	for _, between := range []string{"header", "status_line", "content_type"} {
+		t.Run(between, func(t *testing.T) {
+			runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+				before := number(t, handler, "memory")
+				testGet(script+"between="+between, handler, t)
+				assert.Less(t, number(t, handler, "memory")-before, 1<<20)
+			}, &testOptions{workerScript: "worker-between-requests-state.php", nbWorkers: 1, nbParallelRequests: 1})
+		})
+	}
+
+	// sapi_activate() forgets the body php://input created
+	t.Run("input", func(t *testing.T) {
+		runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+			before := number(t, handler, "temp_streams")
+			testGet(script+"between=input", handler, t)
+			assert.Equal(t, before, number(t, handler, "temp_streams"))
+		}, &testOptions{workerScript: "worker-between-requests-state.php", nbWorkers: 1, nbParallelRequests: 1})
+	})
+
+	// the URL rewriter and session states are reset when a request ends, not when the next one starts
+	t.Run("rewrite", func(t *testing.T) {
+		runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+			testGet(script+"between=rewrite", handler, t)
+			body, _ := testGet(script+"rewrite", handler, t)
+			assert.Equal(t, `<form action="/next"><input type="hidden" name="current" value="request" /></form>`, body)
+		}, &testOptions{workerScript: "worker-between-requests-state.php", nbWorkers: 1, nbParallelRequests: 1})
+	})
+
+	t.Run("session", func(t *testing.T) {
+		runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
+			testGet(script+"between=session", handler, t)
+			req := httptest.NewRequest(http.MethodGet, script+"session", nil)
+			req.AddCookie(&http.Cookie{Name: "PHPSESSID", Value: "client"})
+			body, _ := testRequest(req, handler, t)
+			assert.Equal(t, "client", body)
+		}, &testOptions{
+			workerScript:       "worker-between-requests-state.php",
+			nbWorkers:          1,
+			nbParallelRequests: 1,
+			// strict mode would replace the unknown ids, it defaults to on since PHP 8.6
+			phpIni: map[string]string{"session.save_path": t.TempDir(), "session.use_strict_mode": "0"},
+		})
+	})
 }
 
 func TestSessionNoLeakAfterExit_worker(t *testing.T) {

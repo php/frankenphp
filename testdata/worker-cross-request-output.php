@@ -93,8 +93,9 @@ final class TenantSessionHandler implements SessionHandlerInterface, SessionIdIn
 }
 
 $between = null;
+$headerCallback = null;
 
-while (frankenphp_handle_request(static function () use (&$between): void {
+while (frankenphp_handle_request(static function () use (&$between, &$headerCallback): void {
     if (isset($_GET['session'])) {
         session_start();
         $_SESSION['secret'] = new Secret($_GET['session']);
@@ -130,6 +131,11 @@ while (frankenphp_handle_request(static function () use (&$between): void {
         $between = $_GET['between'];
     }
 
+    if (isset($_GET['header_callback'])) {
+        Secret::$destroyed = [];
+        $headerCallback = $_GET['header_callback'];
+    }
+
     if (isset($_GET['destroyed'])) {
         $destroyed = Secret::$destroyed;
         sort($destroyed);
@@ -148,5 +154,13 @@ while (frankenphp_handle_request(static function () use (&$between): void {
     if ($between !== null) {
         $_SESSION = ['secret' => new Secret($between)];
         $between = null;
+    }
+
+    // no headers are sent between two requests, so the callback is never called
+    if ($headerCallback !== null) {
+        $secret = new Secret($headerCallback);
+        header_register_callback(static function () use ($secret): void {});
+        unset($secret);
+        $headerCallback = null;
     }
 }
