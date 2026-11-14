@@ -239,7 +239,16 @@ func newWorker(o workerOpt) (*worker, error) {
 // force-kill is armed after a grace period to wake threads parked in
 // blocking syscalls so a stuck sleep doesn't make this hang for the
 // full duration of the syscall.
+// It does nothing while Init() or Shutdown() runs: the threads are booting
+// from fresh code, or going away.
 func RestartWorkers() {
+	// never wait for the lock: Shutdown() holds it while it waits for the
+	// watcher, whose callback may be the caller
+	if !startupMu.TryLock() {
+		return
+	}
+	defer startupMu.Unlock()
+
 	if mainThread != nil {
 		mainThread.rebootAllThreads()
 	}
