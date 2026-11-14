@@ -410,10 +410,13 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				if len(wc.MatchPath) != 0 {
 					return d.Errf(`"match" can only be used in a php_server worker block, not in a global one: %q`, wc.FileName)
 				}
-				// check for duplicate workers
-				for _, existingWorker := range f.Workers {
-					if existingWorker.FileName == wc.FileName {
-						return d.Errf("global workers must not have duplicate filenames: %q", wc.FileName)
+				// check for duplicate workers; background workers are not
+				// matched by path, several may share a script
+				if !wc.Background {
+					for _, existingWorker := range f.Workers {
+						if !existingWorker.Background && existingWorker.FileName == wc.FileName {
+							return d.Errf("global workers must not have duplicate filenames: %q", wc.FileName)
+						}
 					}
 				}
 

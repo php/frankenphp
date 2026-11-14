@@ -211,6 +211,9 @@ typedef struct {
 
 void frankenphp_init_thread_metrics(int max_threads);
 void frankenphp_destroy_thread_metrics(void);
+void frankenphp_init_mailboxes(int max_threads, bool watch);
+void frankenphp_destroy_mailboxes(void);
+void frankenphp_mailbox_wake(uintptr_t index);
 size_t frankenphp_get_thread_memory_usage(uintptr_t thread_index);
 
 /* Best-effort force-kill primitives. The slot is populated by each PHP
@@ -234,6 +237,47 @@ typedef enum {
   FRANKENPHP_MERCURE_PUBLISH_FAILED = 3,
   FRANKENPHP_MERCURE_UNSUPPORTED = 4,
 } frankenphp_mercure_status;
+
+/* Background worker primitives. */
+intptr_t frankenphp_set_background_worker_and_get_stop_sock(const char *name,
+                                                            size_t name_len);
+void frankenphp_close_sock(intptr_t s);
+void frankenphp_worker_close_stop_sock(intptr_t s);
+void frankenphp_worker_signal_task(intptr_t s);
+int frankenphp_task_chan_open(intptr_t fds[2]);
+void frankenphp_task_chan_signal(intptr_t fd0, intptr_t fd1, int side);
+void frankenphp_task_chan_consume(intptr_t fd);
+void frankenphp_vars_to_request(zval *return_value, HashTable *table);
+void frankenphp_vars_free(HashTable *table);
+void frankenphp_vars_release(HashTable *table);
+void frankenphp_vars_forget_copies(void);
+
+/* Results of go_frankenphp_read_task. */
+enum {
+  FRANKENPHP_TASK_READ_UPDATE,
+  /* the task is over: completed, unless the reason it failed for comes with
+   * it */
+  FRANKENPHP_TASK_READ_OVER,
+  FRANKENPHP_TASK_READ_PENDING,
+};
+
+/* Where WorkerHandle::tick() parks its thread, see
+ * go_frankenphp_background_worker_park: on its handle, where the script is
+ * about to wait, or on its mailbox, where tick() waits itself, which
+ * FRANKENPHP_PARK_LEAVE ends. */
+enum {
+  FRANKENPHP_PARK_ON_HANDLE,
+  FRANKENPHP_PARK_ON_MAILBOX,
+  FRANKENPHP_PARK_LEAVE,
+};
+
+/* What it answers: the thread is parked, tasks are queued so it has nothing
+ * to wait for, or it is drained. */
+enum {
+  FRANKENPHP_PARK_PARKED,
+  FRANKENPHP_PARK_READY,
+  FRANKENPHP_PARK_DRAINED,
+};
 
 void register_extensions(zend_module_entry **m, int len);
 

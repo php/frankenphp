@@ -206,6 +206,194 @@ so the default `num_threads` value is `1 + 2x(number of available CPUs)`.
 
 Thus, in that mode if `num_threads` and `num` are explicitly set, `num_threads` must be strictly greater then `num`.
 
+## Background workers
+
+This feature is experimental.
+
+A background worker runs its script in a loop outside the HTTP request cycle, on its own PHP thread. It is declared like any worker, with the `background` option; `num` defaults to one thread, and a `name` left out is generated from the script path as for HTTP workers:
+
+```caddyfile
+php_server {
+	worker {
+		file jobs.php
+		num 1
+		name jobs
+		background
+	}
+}
+```
+
+The script takes a handle on the worker, `new FrankenPHP\WorkerHandle()`, and calls `tick()` on it once it is set up. The first call marks the worker ready: the server start waits for that point, and an exit before it counts as a failure. Until that call, `max_execution_time` applies as in any request, 30 seconds by default: a setup that outlives it is ended and counts as a boot failure, so raise the limit in `php_ini`, or call `set_time_limit()` in the script, when the setup legitimately takes longer. This bound only holds on PHP builds with Zend max execution timers (`--enable-zend-max-execution-timers`, see [the compilation guide](compile.md)): elsewhere FrankenPHP disables `max_execution_time`, and the `boot_timeout` of the worker ends the wait instead: 30 seconds by default, matching PHP's own `max_execution_time`, after which the start fails with the name of the worker that never ticked. Its script is then stopped, at once if it waits on its handle, or by the force-kill a second later otherwise. Set `boot_timeout` to `0` to wait forever, with a warning logged after 10 seconds; it applies on every build when set. From the first call on, the run has no time limit, like the CLI. Every call returns `false` once FrankenPHP drains the worker, on shutdown, reboot or restart, and `true` otherwise. It never hands out work: like `frankenphp_handle_request()`, it is where the runtime and the script meet.
+
+A script with nothing else to wait on waits in `tick()` itself, by giving it a timeout in seconds: the call returns once FrankenPHP needs the script, or after that long, and `null` waits without a limit. A worker doing something every minute is a loop on it, which a drain leaves at once:
+
+```php
+<?php
+
+$handle = new FrankenPHP\WorkerHandle();
+
+do {
+    refreshSomething();
+} while ($handle->tick(60.0));
+
+// drained: return, FrankenPHP re-runs or stops the script
+```
+
+Without a timeout, `tick()` never waits: a script with more to wait on waits on the handle, which is an `Io\Poll\Handle`, and ticks between two waits. An `Io\Poll\Context` takes the handle as it is, next to whatever else the script waits on.
+
+```php
+<?php
+
+use Io\Poll\{Context, Event};
+
+$handle = new FrankenPHP\WorkerHandle();
+
+$poll = new Context();
+$poll->add($handle, [Event::Read]);
+// plus the handles the script waits on
+
+while ($handle->tick()) {
+    foreach ($poll->wait() as $watcher) {
+        // the worker's handle triggered, or one of the script's
+    }
+
+    doSomeWork();
+}
+
+// drained: return, FrankenPHP re-runs or stops the script
+```
+
+The handle becomes readable when FrankenPHP needs the script's attention, its drain included, and `tick()` consumes whatever was written there. What it carries is not part of the contract. It is readable once right after the script starts, so a loop that waits on it ticks by itself and the worker is ready as soon as its loop runs.
+
+`Io\Poll` comes with PHP 8.6 and polls with `epoll` or `kqueue`. On 8.2 to 8.5 the handle implements the same interface, so the loop above runs unchanged with [symfony/polyfill-io-poll](https://github.com/symfony/polyfill/tree/1.x/src/Io/Poll), which backs the context with `stream_select()`.
+
+An event loop takes the handle through its stream, `getStream()`. With [Revolt](https://revolt.run), the loop of amphp:
+
+```php
+<?php
+
+use Revolt\EventLoop;
+
+$handle = new FrankenPHP\WorkerHandle();
+EventLoop::onReadable($handle->getStream(), function () use ($handle): void {
+    if (!$handle->tick()) {
+        // drained: stop the loop, the script returns and FrankenPHP moves on
+        EventLoop::getDriver()->stop();
+    }
+});
+
+// the script's own watchers go here
+
+EventLoop::run();
+```
+
+The wake-up sent at start makes the callback run as soon as the loop does, which is when the worker becomes ready.
+
+That stream is there for the libraries that take one, and waiting is all it supports: reading it steals the bytes `tick()` would have consumed, and throws before the first `tick()` when it would block, since the start would wait on it for good; writing to it lands in a buffer FrankenPHP never drains, so a script that fills it blocks itself, and closing it is safe since the next `getStream()` on the same handle opens a fresh one over the same socket. A script can also wait on it directly, with a blocking read such as `fgets()` or with `stream_select()`, keeping in mind that `stream_select()` rejects a descriptor of `1024` or higher (`FD_SETSIZE`), which a worker re-run while the server holds more than a thousand connections will have. `tick()` itself uses `poll()` and is not affected.
+
+Misuse, such as a handle outside of a background worker, throws a `LogicException`, and conditions of the moment throw a `RuntimeException`.
+
+A background worker serves no request, but its script is a PHP file like any other: under the document root, a request for it runs it on a regular thread, where `new FrankenPHP\WorkerHandle()` throws, so keep it outside of the root, with a path such as `../workers/jobs.php` since worker paths are resolved against it.
+
+`$_SERVER['FRANKENPHP_WORKER_BACKGROUND']` is set to `1`, and `FRANKENPHP_WORKER`, the variable of HTTP workers, is not, so a script serving both roles tests which of the two is set. Several workers may run the same script: `getName()` on the handle tells them apart, and the [threads endpoint](metrics.md#threads-state-endpoint) of the admin API names their threads after them. Background worker threads count like the threads of HTTP workers, on top of `num_threads` and within `max_threads`; they don't autoscale, so `max_threads` is not allowed on them. From Go, declare one with `WithWorkerBackground()`.
+
+### Sharing state with background workers
+
+A background worker publishes snapshots in vars namespaces, declared with `vars` on the worker, and requests and other workers read them with `frankenphp_get_vars()`, by namespace:
+
+```caddyfile
+php_server {
+	worker {
+		file config.php
+		background
+		vars redis feature_flags
+	}
+}
+```
+
+```php
+// background worker
+$handle = new FrankenPHP\WorkerHandle();
+$handle->setVars('redis', ['dsn' => 'redis://cache:6379']);
+$handle->setVars('feature_flags', ['beta' => true]);
+// ...
+
+// request, HTTP worker or another background worker
+$flags = frankenphp_get_vars('feature_flags');
+```
+
+A namespace has one publisher in a `php_server`, and one among the global workers; a reader gets the one of its `php_server` first, then the global one. In a worker script, what runs between two requests reads as the request before it did, and what runs before the first one as the worker does. One worker may publish as many namespaces as the application wants, so splitting them across workers is a matter of threads, failure caps and timeouts, not of addressing. A worker publishing vars runs a single thread, so each snapshot has one writer, and `getNamespaces()` on its handle returns what the configuration declared.
+
+Values must be null, scalars, arrays or enums, and a snapshot can't be larger than `memory_limit`, as its copy lives outside of request memory. Each call replaces the whole snapshot of its namespace and readers get a copy, so the worker can publish at any time and a request always sees a consistent one. A thread keeps the copy it made until the snapshot changes: reading it again in the same request, or in the next requests of a worker script, hands the same array out without copying it again. Every declared namespace is published before the first tick of a run, which `tick()` enforces: since the server accepts requests once the background workers are ready, requests never wait for a snapshot, and while a worker restarts they keep getting its last ones.
+
+`frankenphp_get_vars()` can only block while workers boot, a background worker or the bootstrap of an HTTP worker waiting for the publisher of a namespace. A cycle between background workers throws instead of hanging, and so does a wait once the start failed. A namespace no worker publishes throws a `RuntimeException`.
+
+### Sending tasks to background workers
+
+A background worker receives the task namespaces declared with `tasks` on it, and a request, an HTTP worker or another background worker hands work to it by constructing a `FrankenPHP\SentTaskHandle` with one of those namespaces, resolved the way `frankenphp_get_vars()` resolves vars: within the `php_server` first, then among global workers, and for what a worker script runs between two requests, as for the request before. A namespace no worker receives throws a `RuntimeException`.
+
+```caddyfile
+php_server {
+	worker {
+		file images.php
+		background
+		num 4
+		tasks image.resize image.thumbnail
+	}
+}
+```
+
+A namespace has one receiving worker per scope, and the threads of that worker share one queue for all its namespaces, so a pool is sized for the work it takes on, and `getNamespace()` on a received task tells which namespace it was sent to. The payload follows the same rules as `setVars()`: null, scalars, arrays or enums. Constructing queues the task and returns, without waiting: the task stays queued for as long as its handle lives. A thread has `$pickupTimeout` seconds to pick the task up, 30 by default, counted from the construction: past it the task leaves the queue and `read()` throws. `read()` blocks for the next update and returns `null` once the worker completed the task. It takes no timeout: a wait that must end goes through a context or `stream_select()` first, which take one. `abandon()`, like dropping the handle, gives up on the task, which leaves the queue if no thread took it yet. Waiting on a task, alone or with others, goes through a context as it does for the worker's handle, or through `getStream()` for a library that takes a stream: reading that stream returns nothing, at once, it is not writable, and closing it leaves the task alone: the handle hands out a fresh one.
+
+On the worker side, each task sent wakes one waiting thread of the worker: in `tick()` when it waits there, as in the example below, or through its handle, in the other loops of the previous section. A wake-up is not a count, and in a pool it may belong to a task a sibling thread took: `receive()` dequeues a task, a `FrankenPHP\ReceivedTaskHandle`, or returns `null` when there is none, without ever waiting, so the example drains the queue on each wake-up and treats `null` as the normal outcome. A thread that ticks while tasks are queued does not wait, whichever loop shape it uses: `tick()` returns at once, and so does a wait on the handle. Before it sleeps, a thread waiting in `tick()`, or in `read()` for an answer, first watches for what it waits for, about as long as its own wake-ups take: what comes meanwhile costs no system call, and a thread whose waits keep outlasting the watch goes straight to sleep. A busy worker shows it as CPU time, an idle one does not. `update()` sends progress back, `complete()` ends the task with a last update when one is given, and a task let go of without `complete()`, by `abort()`, by dropping its handle or ending the script, a `complete()` from a destructor or a shutdown function at that point included, makes the sender's next `read()` throw. When the sender gives up instead, the task's side of the worker becomes readable and its stream reaches EOF, so a context or a `feof()` tells a long task that nobody waits for its result, and `update()` returns `false`.
+
+```php
+// background worker
+$handle = new FrankenPHP\WorkerHandle();
+while ($handle->tick(null)) {
+    while ($task = $handle->receive()) {
+        $task->update(['progress' => 50]);
+        $task->complete(['result' => process($task->getNamespace(), $task->getPayload())]);
+    }
+}
+
+// request, HTTP worker or another background worker
+$task = new FrankenPHP\SentTaskHandle('image.resize', ['file' => 'photo.jpg']);
+while (null !== $update = $task->read()) {
+    // ['progress' => 50], then ['result' => ...]
+}
+```
+
+Both task handles are `Io\Poll\Handle` as well, so a context follows several tasks at once, and a script that never asks for a stream has none built for it:
+
+```php
+use Io\Poll\{Context, Event};
+
+$poll = new Context();
+$tasks = [];
+foreach (['photo.jpg', 'logo.png'] as $file) {
+    $tasks[$file] = new FrankenPHP\SentTaskHandle('image.resize', ['file' => $file]);
+    $poll->add($tasks[$file], [Event::Read], $file);
+}
+
+while ($tasks) {
+    foreach ($poll->wait() as $watcher) {
+        $file = $watcher->getData();
+        if (null === $update = $tasks[$file]->read()) {
+            // complete: stop watching it
+            $watcher->remove();
+            unset($tasks[$file]);
+        }
+    }
+}
+```
+
+A task stays readable while it has something to read, so watch it level-triggered, the default: with `Event::EdgeTriggered`, what comes while an update is unread is not reported.
+
+`getStream()` is there for the libraries that take a stream, and `stream_select()` works on it as it does on the worker's handle, `FD_SETSIZE` limit included: `read()` and `Io\Poll` have none. Unlike the worker's handle, a read on it never waits.
+
+Nothing in this API waits but `tick()` when it is given a timeout, `read()`, and the contexts or streams a script waits on, so both sides fit in an event loop, and neither can hold the other. `update()` and `complete()` return at once: the updates a sender has not read yet are kept for it, and `update()` returns `false` once the sender gave up. The price is that FrankenPHP does not push back: a sender that queues tasks faster than the worker takes them, or a worker that streams to a sender that does not read, grows the memory of the server, outside of `memory_limit`. The `frankenphp_worker_queue_depth` [metric](metrics.md) shows the former. The channel of a task is a pair of eventfd descriptors on Linux and a socket pair elsewhere, made when a script first waits on the task that way and closed with it.
+
 ## Superglobals behavior
 
 [PHP superglobals](https://www.php.net/manual/language.variables.superglobals.php) (`$_SERVER`, `$_ENV`, `$_GET`...)
