@@ -165,17 +165,17 @@ func parseParts(b *formBuffers, reader *multipart.Reader, limits formLimits) *fo
 			return tooLarge("Multipart body parts limit exceeded %d. To increase the limit change max_multipart_body_parts in php.ini.", limits.maxMultipartBodyParts)
 		}
 
-		// RawContent skips the Content-Transfer-Encoding, RFC 7578 deprecates it
-		part := reader.RawContent()
-
-		name, filename, hasFilename, ok := formData(reader)
-		if !ok {
+		start := len(b.data)
+		var ok bool
+		if b.data, ok = reader.AppendFormName(b.data); !ok {
 			return malformed("File Upload Mime headers garbled")
 		}
+		name := b.data[start:len(b.data):len(b.data)]
 
-		if !hasFilename {
-			start := len(b.data)
-			if b.data, err = appendRead(b.data, part); err != nil {
+		// Read skips the Content-Transfer-Encoding, RFC 7578 deprecates it
+		if _, isFile := reader.FileName(); !isFile {
+			start = len(b.data)
+			if b.data, err = appendRead(b.data, reader); err != nil {
 				return malformed("Invalid multipart/form-data POST data: %s", err)
 			}
 			value := b.data[start:len(b.data):len(b.data)]
@@ -184,9 +184,9 @@ func parseParts(b *formBuffers, reader *multipart.Reader, limits formLimits) *fo
 				return tooLarge("Input variables exceeded %d. To increase the limit change max_input_vars in php.ini.", limits.maxInputVars)
 			}
 
-			b.entries = append(b.entries, formEntry{kind: C.FRANKENPHP_FORM_POST_STRING, name: b.bytes(name), value: value})
+			b.entries = append(b.entries, formEntry{kind: C.FRANKENPHP_FORM_POST_STRING, name: name, value: value})
 
-			if strings.EqualFold(name, "MAX_FILE_SIZE") {
+			if bytes.EqualFold(name, []byte("MAX_FILE_SIZE")) {
 				maxFileSize, _ = strconv.ParseInt(strings.TrimSpace(string(value)), 10, 64)
 			}
 
@@ -194,9 +194,13 @@ func parseParts(b *formBuffers, reader *multipart.Reader, limits formLimits) *fo
 		}
 
 		// never repair potentially malicious input
-		if !limits.fileUploads || !hasBalancedBrackets(name) {
+		if !limits.fileUploads || !hasBalancedBrackets(string(name)) {
 			continue
 		}
+
+		// FileName drops the directories that full_path keeps
+		_, params, _ := mime.ParseMediaType(reader.Header("Content-Disposition"))
+		filename := params["filename"]
 
 		var (
 			errorCode int64
@@ -212,7 +216,7 @@ func parseParts(b *formBuffers, reader *multipart.Reader, limits formLimits) *fo
 				return tooLarge("Maximum number of allowable file uploads has been exceeded")
 			}
 
-			tmpName, size, errorCode, err = saveUpload(part, limits, maxFileSize)
+			tmpName, size, errorCode, err = saveUpload(reader, limits, maxFileSize)
 			if err != nil {
 				return malformed("Invalid multipart/form-data POST data: %s", err)
 			}
@@ -227,40 +231,8 @@ func parseParts(b *formBuffers, reader *multipart.Reader, limits formLimits) *fo
 			mimeType, _, _ = strings.Cut(reader.Header("Content-Type"), ";")
 		}
 
-		b.fileEntries(name, filename, mimeType, tmpName, errorCode, size)
+		b.fileEntries(string(name), filename, mimeType, tmpName, errorCode, size)
 	}
-}
-
-// formData returns the name and filename of a form-data part, with FormName in the common case
-func formData(reader *multipart.Reader) (name, filename string, hasFilename, ok bool) {
-	disposition := reader.Header("Content-Disposition")
-	if name = reader.FormName(); name != "" && !containsFold(disposition, "filename") {
-		return name, "", false, true
-	}
-
-	dispositionType, params, err := mime.ParseMediaType(disposition)
-	name, hasName := params["name"]
-	if err != nil || dispositionType != "form-data" || !hasName {
-		return "", "", false, false
-	}
-	filename, hasFilename = params["filename"]
-
-	return name, filename, hasFilename, true
-}
-
-// containsFold reports whether s contains the lowercase ASCII substr, ignoring case
-func containsFold(s, substr string) bool {
-	for i := 0; i+len(substr) <= len(s); i++ {
-		j := 0
-		for j < len(substr) && s[i+j]|0x20 == substr[j] {
-			j++
-		}
-		if j == len(substr) {
-			return true
-		}
-	}
-
-	return false
 }
 
 // appendRead appends all of r to dst
