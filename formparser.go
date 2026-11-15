@@ -74,6 +74,8 @@ type formBuffers struct {
 	data       []byte
 	normalized []byte
 	protected  map[string]struct{}
+	limited    io.LimitedReader
+	multipart  multipart.Reader
 }
 
 var formBuffersPool = sync.Pool{New: func() any {
@@ -121,11 +123,15 @@ func parseMultipart(b *formBuffers, body io.Reader, contentType string, contentL
 	if limits.postMaxSize > 0 && limits.postMaxSize < math.MaxInt64 {
 		readLimit = limits.postMaxSize + 1
 	}
-	limited := &io.LimitedReader{R: body, N: readLimit}
+	b.limited = io.LimitedReader{R: body, N: readLimit}
+	b.multipart.Reset(&b.limited, boundary)
 
-	rejection := parseParts(b, multipart.NewReader(limited, boundary), limits)
+	rejection := parseParts(b, &b.multipart, limits)
 
-	readBytes := readLimit - limited.N
+	readBytes := readLimit - b.limited.N
+	// don't keep the body alive in the pool
+	b.multipart.Reset(nil, "")
+	b.limited.R = nil
 	if limits.postMaxSize > 0 && readBytes > limits.postMaxSize {
 		// the cut body is malformed too, the size is what matters
 		rejection = tooLarge("Actual POST length does not match Content-Length, and exceeds %d bytes", limits.postMaxSize)
@@ -147,8 +153,7 @@ func parseParts(b *formBuffers, reader *multipart.Reader, limits formLimits) *fo
 	)
 
 	for {
-		// NextPart would decode quoted-printable parts, RFC 7578 deprecates Content-Transfer-Encoding
-		part, err := reader.NextRawPart()
+		err := reader.Next()
 		if err == io.EOF {
 			return nil
 		}
@@ -160,13 +165,14 @@ func parseParts(b *formBuffers, reader *multipart.Reader, limits formLimits) *fo
 			return tooLarge("Multipart body parts limit exceeded %d. To increase the limit change max_multipart_body_parts in php.ini.", limits.maxMultipartBodyParts)
 		}
 
-		dispositionType, dispositionParams, err := mime.ParseMediaType(part.Header.Get("Content-Disposition"))
-		name, hasName := dispositionParams["name"]
-		if err != nil || dispositionType != "form-data" || !hasName {
+		// RawContent skips the Content-Transfer-Encoding, RFC 7578 deprecates it
+		part := reader.RawContent()
+
+		name, filename, hasFilename, ok := formData(reader)
+		if !ok {
 			return malformed("File Upload Mime headers garbled")
 		}
 
-		filename, hasFilename := dispositionParams["filename"]
 		if !hasFilename {
 			start := len(b.data)
 			if b.data, err = appendRead(b.data, part); err != nil {
@@ -218,11 +224,43 @@ func parseParts(b *formBuffers, reader *multipart.Reader, limits formLimits) *fo
 		mimeType := ""
 		if errorCode == 0 {
 			b.uploaded = append(b.uploaded, formEntry{kind: C.FRANKENPHP_FORM_UPLOADED_FILE, name: b.bytes(tmpName)})
-			mimeType, _, _ = strings.Cut(part.Header.Get("Content-Type"), ";")
+			mimeType, _, _ = strings.Cut(reader.Header("Content-Type"), ";")
 		}
 
 		b.fileEntries(name, filename, mimeType, tmpName, errorCode, size)
 	}
+}
+
+// formData returns the name and filename of a form-data part, with FormName in the common case
+func formData(reader *multipart.Reader) (name, filename string, hasFilename, ok bool) {
+	disposition := reader.Header("Content-Disposition")
+	if name = reader.FormName(); name != "" && !containsFold(disposition, "filename") {
+		return name, "", false, true
+	}
+
+	dispositionType, params, err := mime.ParseMediaType(disposition)
+	name, hasName := params["name"]
+	if err != nil || dispositionType != "form-data" || !hasName {
+		return "", "", false, false
+	}
+	filename, hasFilename = params["filename"]
+
+	return name, filename, hasFilename, true
+}
+
+// containsFold reports whether s contains the lowercase ASCII substr, ignoring case
+func containsFold(s, substr string) bool {
+	for i := 0; i+len(substr) <= len(s); i++ {
+		j := 0
+		for j < len(substr) && s[i+j]|0x20 == substr[j] {
+			j++
+		}
+		if j == len(substr) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // appendRead appends all of r to dst
