@@ -929,16 +929,17 @@ func opcacheRestartScheduled(reason int) {
 		m.OpcacheRestart(reasonText)
 	}
 
-	if !globalLogger.Enabled(globalCtx, slog.LevelWarn) {
-		return
+	if globalLogger.Enabled(globalCtx, slog.LevelWarn) {
+		// written synchronously, under opcache's lock: a line deferred to a
+		// goroutine is lost if the restart crashes the process
+		globalLogger.LogAttrs(globalCtx, slog.LevelWarn,
+			"opcache restart scheduled, caching stops until the next request start carries it out while other threads may still reference the old memory: raise opcache.memory_consumption, opcache.max_accelerated_files or opcache.max_wasted_percentage",
+			slog.String("reason", reasonText),
+		)
 	}
 
-	// written synchronously, under opcache's lock: a line deferred to a
-	// goroutine is lost if the restart crashes the process
-	globalLogger.LogAttrs(globalCtx, slog.LevelWarn,
-		"opcache restart scheduled, caching stops until the next request start carries it out while other threads may still reference the old memory: raise opcache.memory_consumption, opcache.max_accelerated_files or opcache.max_wasted_percentage",
-		slog.String("reason", reasonText),
-	)
+	// last, as opcache marks the restart as pending only once this returns
+	restartWorkersForOpcache()
 }
 
 func convertArgs(args []string) (C.int, []*C.char) {
@@ -975,4 +976,5 @@ func resetGlobals() {
 	hotReloadEnabled = false
 	maxIdleTime = defaultMaxIdleTime
 	maxRequestsPerThread = 0
+	resetOpcacheRestarts()
 }
