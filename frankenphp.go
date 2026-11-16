@@ -919,11 +919,22 @@ func go_opcache_restart_scheduled(reason C.int) {
 	opcacheRestartScheduled(int(reason))
 }
 
-func opcacheRestartScheduled(reason int) {
-	reasonText := "unknown"
+//export go_opcache_restart_done
+func go_opcache_restart_done(reason C.int) {
+	opcacheRestartDone(int(reason))
+}
+
+func opcacheRestartReason(reason int) string {
 	if reason >= 0 && reason < len(opcacheRestartReasons) {
-		reasonText = opcacheRestartReasons[reason]
+		return opcacheRestartReasons[reason]
 	}
+
+	return "unknown"
+}
+
+func opcacheRestartScheduled(reason int) {
+	reasonText := opcacheRestartReason(reason)
+	opcacheRestarts.scheduled.Store(time.Now().UnixNano())
 
 	if m, ok := metrics.(OpcacheMetrics); ok {
 		m.OpcacheRestart(reasonText)
@@ -940,6 +951,20 @@ func opcacheRestartScheduled(reason int) {
 
 	// last, as opcache marks the restart as pending only once this returns
 	restartWorkersForOpcache()
+}
+
+func opcacheRestartDone(reason int) {
+	if globalLogger.Enabled(globalCtx, slog.LevelInfo) {
+		attrs := []slog.Attr{slog.String("reason", opcacheRestartReason(reason))}
+		if scheduled := opcacheRestarts.scheduled.Load(); scheduled != 0 {
+			attrs = append(attrs, slog.Duration("pending", time.Since(time.Unix(0, scheduled))))
+		}
+
+		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "opcache restart done, caching resumes", attrs...)
+	}
+
+	// the workers that started while the restart was pending start again
+	wakeWorkersForOpcache()
 }
 
 func convertArgs(args []string) (C.int, []*C.char) {

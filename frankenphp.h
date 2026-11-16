@@ -60,6 +60,13 @@ typedef struct {
 #define FRANKENPHP_OPCACHE_RESTART_HOOK 0
 #endif
 
+/* zend_accel_restart_hook, called once a restart is done */
+#if defined(ZTS) && PHP_VERSION_ID >= 80700
+#define FRANKENPHP_OPCACHE_RESTART_DONE_HOOK 1
+#else
+#define FRANKENPHP_OPCACHE_RESTART_DONE_HOOK 0
+#endif
+
 #ifndef FRANKENPHP_VERSION
 #define FRANKENPHP_VERSION dev
 #endif

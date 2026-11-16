@@ -1176,6 +1176,12 @@ static void frankenphp_opcache_restart_hook(int reason) {
 }
 #endif
 
+#if FRANKENPHP_OPCACHE_RESTART_DONE_HOOK
+static void frankenphp_opcache_restart_done_hook(int reason) {
+  go_opcache_restart_done(reason);
+}
+#endif
+
 /* Tells, through opcache_get_status(), whether opcache caches the scripts of
  * the current request (FRANKENPHP_OPCACHE_CACHED) and whether a restart is
  * pending or in progress (FRANKENPHP_OPCACHE_RESTART_PENDING), or -1 when
@@ -2148,6 +2154,9 @@ static void *php_main(void *arg) {
 #if FRANKENPHP_OPCACHE_RESTART_HOOK
   /* Report the opcache restarts that opcache schedules on its own */
   zend_accel_schedule_restart_hook = frankenphp_opcache_restart_hook;
+#endif
+#if FRANKENPHP_OPCACHE_RESTART_DONE_HOOK
+  zend_accel_restart_hook = frankenphp_opcache_restart_done_hook;
 #endif
 
   /* check if a default filter is set in php.ini and only filter if

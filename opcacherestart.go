@@ -26,6 +26,8 @@ var opcacheRestarts struct {
 	round atomic.Uint64
 	// wake is closed, then replaced, to wake up the idle worker threads
 	wake atomic.Pointer[chan struct{}]
+	// scheduled is the time of the last scheduled restart, in nanoseconds
+	scheduled atomic.Int64
 
 	mu        sync.Mutex
 	lastRound time.Time
@@ -98,6 +100,7 @@ func resetOpcacheRestarts() {
 		o.delayed = nil
 	}
 	o.lastRound = time.Time{}
+	o.scheduled.Store(0)
 }
 
 // opcacheStarted records how opcache treats the worker script that just started
