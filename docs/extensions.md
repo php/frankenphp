@@ -695,7 +695,6 @@ func go_print_something() {
 
 The `frankenphp.RegisterExtension()` function simplifies the extension registration process by handling the internal PHP registration logic. The `go_print_something` function uses the `//export` directive to indicate that it will be accessible in the C code we will write, thanks to CGO.
 
-The `#cgo` line is needed on Linux: CGO includes system headers before `php.h`, and without `_GNU_SOURCE` they don't declare all the functions the PHP headers call, which recent compilers refuse.
 
 In this example, our new function will trigger a goroutine that logs a message in Caddy's logs.
 
