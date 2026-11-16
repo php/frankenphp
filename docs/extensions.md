@@ -671,6 +671,7 @@ In your module, you need to define a new native function that will be called fro
 // extension.go
 package example
 
+// #cgo linux CFLAGS: -D_GNU_SOURCE
 // #include "extension.h"
 import "C"
 import (
