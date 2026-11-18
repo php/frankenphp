@@ -206,7 +206,7 @@ func TestCThreadSegfaultAsPID1(t *testing.T) {
 	if status.Signaled() && status.Signal() == syscall.SIGKILL || status.ExitStatus() == 128+int(syscall.SIGKILL) {
 		t.Fatalf("FrankenPHP did not exit after the PHP thread segfaulted: %s", output)
 	}
-	assert.Equal(t, 2, status.ExitStatus(), "output: %s", output)
+	assert.True(t, status.Signaled() && status.Signal() == syscall.SIGSEGV || status.ExitStatus() == 128+int(syscall.SIGSEGV), "expected SIGSEGV, got %v: %s", exitErr, output)
 }
 
 func runPIDNamespaceProbe(args ...string) ([]byte, error) {
