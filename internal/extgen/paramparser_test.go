@@ -503,7 +503,7 @@ func TestParameterParser_GenerateSingleGoCallParam(t *testing.T) {
 		{
 			name:     "nullable int parameter",
 			param:    phpParameter{Name: "count", PhpType: phpInt, IsNullable: true},
-			expected: "count_is_null ? NULL : &count",
+			expected: "count_is_null ? NULL : &(GoInt64){count}",
 		},
 		{
 			name:     "float parameter",
@@ -523,7 +523,7 @@ func TestParameterParser_GenerateSingleGoCallParam(t *testing.T) {
 		{
 			name:     "nullable bool parameter",
 			param:    phpParameter{Name: "enabled", PhpType: phpBool, IsNullable: true},
-			expected: "enabled_is_null ? NULL : &enabled",
+			expected: "enabled_is_null ? NULL : &(GoUint8){enabled}",
 		},
 		{
 			name:     "array parameter",

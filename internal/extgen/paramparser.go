@@ -168,12 +168,14 @@ func (pp *ParameterParser) generateSingleGoCallParam(param phpParameter) string 
 		switch param.PhpType {
 		case phpString:
 			return fmt.Sprintf("%s_is_null ? NULL : %s", param.Name, param.Name)
+		// cgo declares *int64 and *bool as GoInt64 * and GoUint8 *, which GCC 14+
+		// refuses to mix with zend_long * and zend_bool *: point to a copy of the right type
 		case phpInt:
-			return fmt.Sprintf("%s_is_null ? NULL : &%s", param.Name, param.Name)
+			return fmt.Sprintf("%s_is_null ? NULL : &(GoInt64){%s}", param.Name, param.Name)
 		case phpFloat:
 			return fmt.Sprintf("%s_is_null ? NULL : &%s", param.Name, param.Name)
 		case phpBool:
-			return fmt.Sprintf("%s_is_null ? NULL : &%s", param.Name, param.Name)
+			return fmt.Sprintf("%s_is_null ? NULL : &(GoUint8){%s}", param.Name, param.Name)
 		case phpCallable:
 			return fmt.Sprintf("%s_callback", param.Name)
 		default:
