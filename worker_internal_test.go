@@ -138,6 +138,24 @@ func TestRestartWorkersWhileStartingAndStopping(t *testing.T) {
 	restarts.Wait()
 }
 
+func TestTryRestartWorkersReportsSkippedRestarts(t *testing.T) {
+	require.NoError(t, Init(
+		WithNumThreads(2),
+		WithWorkers("worker", testDataPath+"/worker-with-counter.php", 1),
+	))
+	t.Cleanup(Shutdown)
+
+	assert.True(t, TryRestartWorkers())
+
+	// as Init(), Shutdown() or another restart would
+	startupMu.Lock()
+	assert.False(t, TryRestartWorkers())
+	startupMu.Unlock()
+
+	Shutdown()
+	assert.False(t, TryRestartWorkers())
+}
+
 // Init() must not return, nor the runtime tear SAPI/TSRM down, while a worker
 // that failed to boot is still inside its shutdown handler
 func TestInitJoinsAThreadStuckInStartupTeardown(t *testing.T) {

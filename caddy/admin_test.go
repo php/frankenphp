@@ -53,6 +53,34 @@ func TestRestartWorkerViaAdminApi(t *testing.T) {
 	tester.AssertGetResponse("http://localhost:"+testPort+"/", http.StatusOK, "requests:1")
 }
 
+func TestRestartWorkerViaAdminApiReportsSkippedRestart(t *testing.T) {
+	tester := caddytest.NewTester(t)
+	initTestServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+			http_port `+testPort+`
+
+			frankenphp {
+				worker ../testdata/worker-with-counter.php 1
+			}
+		}
+
+		localhost:`+testPort+` {
+			route {
+				root ../testdata
+				rewrite worker-with-counter.php
+				php
+			}
+		}
+		`, "caddyfile")
+
+	// stands in for a config reload, during which FrankenPHP restarts
+	frankenphp.Shutdown()
+
+	assertAdminResponse(t, tester, "POST", "workers/restart", http.StatusServiceUnavailable, "")
+}
+
 func TestShowTheCorrectThreadDebugStatus(t *testing.T) {
 	tester := caddytest.NewTester(t)
 	initTestServer(t, tester, `

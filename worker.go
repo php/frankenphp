@@ -242,16 +242,21 @@ func newWorker(o workerOpt) (*worker, error) {
 // It does nothing while Init() or Shutdown() runs: the threads are booting
 // from fresh code, or going away.
 func RestartWorkers() {
+	TryRestartWorkers()
+}
+
+// TryRestartWorkers is RestartWorkers, reporting whether the threads were
+// rebooted: it skips the restart while FrankenPHP isn't running, Init() or
+// Shutdown() runs, or another restart is in progress.
+func TryRestartWorkers() bool {
 	// never wait for the lock: Shutdown() holds it while it waits for the
 	// watcher, whose callback may be the caller
 	if !startupMu.TryLock() {
-		return
+		return false
 	}
 	defer startupMu.Unlock()
 
-	if mainThread != nil {
-		mainThread.rebootAllThreads()
-	}
+	return mainThread != nil && mainThread.rebootAllThreads()
 }
 
 func (worker *worker) attachThread(thread *phpThread) {
