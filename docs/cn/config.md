@@ -1,6 +1,6 @@
 ---
 title: 使用 Caddyfile、php.ini 和环境变量配置 FrankenPHP
-description: 通过 Caddyfile、JSON 或环境变量配置 FrankenPHP 和 Caddy，包括 PHP 运行时调优、工作模式、文件监视和模块选项。
+description: 通过 Caddyfile、JSON 或环境变量配置 FrankenPHP 和 Caddy，包括 PHP 运行时调优、工作进程模式、文件监控和模块选项。
 ---
 
 # 配置
@@ -95,19 +95,19 @@ localhost {
 ```caddyfile
 {
 	frankenphp {
-		num_threads <num_threads> # 设置要启动的 PHP 线程数量，用于处理没有 worker 服务时的请求，worker 线程在此基础上增加。默认值：在 worker 线程分配完毕后，剩余的可用 CPU 数量的 2 倍（至少一个）。
-		max_threads <num_threads> # 限制同时运行的 PHP 线程数量（包括 worker 线程）。默认值：启动时创建的线程数。可以设置为 'auto'。
-		max_wait_time <duration> # 设置请求在超时之前可以等待空闲 PHP 线程的最长时间。默认值：禁用。
-		max_idle_time <duration> # 设置一个自动缩放的线程在被停用之前可以空闲的最长时间。默认值：5s。
-		max_requests <num> # (实验性) 设置 PHP 线程在重启前处理的最大请求数，有助于缓解内存泄漏。适用于常规线程和 worker 线程。默认值：0 (无限制)。
-		php_ini <key> <value> # 设置 php.ini 指令。可以多次使用以设置多个指令。
+		num_threads <num_threads> # 设置用于处理非工作进程请求的 PHP 线程数量，工作进程线程在此基础上。默认：工作进程线程拥有其线程后，2 倍可用 CPU 数量中剩余的部分，至少一个。
+		max_threads <num_threads> # 限制可以同时运行的 PHP 线程数量，包括工作进程线程。默认：启动时启动的线程数。可以设置为 'auto'。
+		max_wait_time <duration> # 设置请求在超时之前可以等待的最大时间，直到找到一个空闲的 PHP 线程。 默认：禁用。
+		max_idle_time <duration> # 设置一个自动扩展的线程在被停用之前可以空闲的最长时间。默认：5s。
+		max_requests <num> # (实验性) 设置一个 PHP 线程在重启前将处理的最大请求数，这有助于缓解内存泄漏问题。适用于常规线程和工作进程线程。默认值：0 (无限制)。
+		php_ini <key> <value> # 设置一个 php.ini 指令。可以多次使用以设置多个指令。
 		worker {
-			file <path> # 设置工作脚本的路径。
+			file <path> # 设置工作进程脚本的路径。
 			num <num> # 设置要启动的 PHP 线程数量，默认为可用 CPU 数量的 2 倍。
 			env <key> <value> # 设置一个额外的环境变量为给定的值。可以多次指定以设置多个环境变量。
 			watch <path> # 设置要监视文件更改的路径。可以为多个路径多次指定。
-			name <name> # 设置 worker 的名称，用于日志和指标。默认值：worker 文件的绝对路径。
-			max_consecutive_failures <num> # 设置 worker 在被视为不健康之前的最大连续失败次数，-1 意味着 worker 将始终重新启动。默认值：6。
+			name <name> # 设置工作进程的名称，用于日志和指标。默认值：工作进程文件的绝对路径。
+			max_consecutive_failures <num> # 设置在工作进程被视为不健康之前的最大连续失败次数，-1意味着工作进程将始终重新启动。默认值：6。
 		}
 	}
 }
@@ -127,7 +127,7 @@ localhost {
 # ...
 ```
 
-如果您在同一服务器上服务多个应用程序，您还可以定义多个工作线程：
+如果您在同一服务器上服务多个应用程序，您还可以定义多个工作进程：
 
 ```caddyfile
 app.example.com {
@@ -151,9 +151,9 @@ other.example.com {
 
 使用 `php_server` 指令通常是您需要的，
 但是如果你需要完全控制，你可以使用更低级的 `php` 指令。
-`php` 指令将所有输入传递给 PHP，而不是先检查是否是 PHP 文件。
-在[性能页面](performance.md#try_files)中了解更多关于它的信息。
-请求路径中不包含任何 `split_path` 扩展名的请求将收到 404 响应，除非有 worker 处理它。
+`php` 指令将所有输入传递给 PHP，而不是先检查是否
+是一个PHP文件。在[性能页面](performance.md#try_files)中了解更多关于它的信息。
+如果请求路径不包含任何 `split_path` 扩展名，则会返回 404，除非工作进程处理了它。
 
 使用 `php_server` 指令等同于以下配置：
 
@@ -185,17 +185,17 @@ php_server [<matcher>] {
 	root <directory> # 将根文件夹设置为站点。默认值：`root` 指令。
 	split_path <delim...> # 设置用于将 URI 分割成两部分的子字符串。第一个匹配的子字符串将用来将 "路径信息" 与路径分开。第一部分后缀为匹配的子字符串，并将被视为实际资源（CGI 脚本）名称。第二部分将被设置为脚本使用的 PATH_INFO。默认值：`.php`
 	resolve_root_symlink false # 禁用通过评估符号链接（如果存在）将 `root` 目录解析为其实际值（默认启用）。
-	name <name> # 为此服务器设置名称，用于分配 worker、指标和日志。默认值：封闭路由的第一个主机匹配器，或第一个监听地址。
+	name <name> # 设置此服务器的名称，用于分配工作进程、指标和日志。默认：包含路由的第一个主机匹配器，或第一个监听地址。
 	env <key> <value> # 设置一个额外的环境变量为给定的值。可以多次指定以设置多个环境变量。
 	file_server off # 禁用内置的 file_server 指令。
-	request_body_timeout <duration> # 设置请求体读取的空闲超时时间：失速（慢速 POST）客户端将被切断，而任何大小的稳定上传都能成功。默认值：60s。设置为 0 以禁用。
-	worker { # 为此服务器创建特定的 worker。可以多次指定以创建多个 worker。
-		file <path> # 设置工作脚本的路径，可以相对于 php_server 根目录
+	request_body_timeout <duration> # 设置请求体读取的空闲超时：在稳定的任意大小上传成功的同时，停止（慢速 POST）客户端会被切断。默认：60s。设置为 0 可禁用。
+	worker { # 为此服务器创建特定的工作进程。可以多次指定以创建多个工作进程。
+		file <path> # 设置工作进程脚本的路径，可以相对于 php_server 根目录
 		num <num> # 设置要启动的 PHP 线程数，默认为可用 CPU 数量的 2 倍
-		name <name> # 为 worker 设置名称，用于日志和指标。默认值：worker 文件的绝对路径。如果名称已被使用，则附加一个数字。
+		name <name> # 设置工作进程的名称，用于日志和指标。默认：工作进程文件的绝对路径。如果名称已被使用，则会附加数字。
 		watch <path> # 设置要监视文件更改的路径。可以为多个路径多次指定。
-		env <key> <value> # 设置一个额外的环境变量为给定值。可以多次指定以设置多个环境变量。此 worker 的环境变量也从 php_server 父进程继承，但可以在此处覆盖。
-		match <path> # 将 worker 匹配到路径模式。覆盖 try_files 且只能在 php_server 指令中使用。
+		env <key> <value> # 设置一个额外的环境变量为给定值。可以多次指定以设置多个环境变量。此工作进程的环境变量也从 php_server 父进程继承，但可以在此处覆盖。
+		match <path> # 将工作进程匹配到路径模式。覆盖 try_files，并且只能在 php_server 指令中使用。
 	}
 	worker <other_file> <num> # 也可以像在全局 frankenphp 块中那样使用简短形式。
 }
@@ -203,11 +203,11 @@ php_server [<matcher>] {
 
 ### 监视文件更改
 
-由于 workers 只会启动您的应用程序一次并将其保留在内存中，
+由于工作进程只会启动您的应用程序一次并将其保留在内存中，
 因此对您的 PHP 文件的任何更改不会立即反映出来。
 
-Workers 可以通过 `watch` 指令在文件更改时重新启动。
-这对于开发环境很有用。
+工作进程可以通过 `watch` 指令在文件更改时重新启动。
+这对开发环境很有用。
 
 ```caddyfile
 {
@@ -241,20 +241,20 @@ Workers 可以通过 `watch` 指令在文件更改时重新启动。
 ```
 
 - `**` 模式表示递归监视
-- 目录也可以是相对的（相对于 FrankenPHP 进程启动的位置）
-- 如果您定义了多个 workers，当文件发生更改时，所有 workers 都将重新启动。
-- 小心监视在运行时创建的文件（如日志），因为它们可能导致不必要的工作进程重启。
+- 目录也可以是相对的（相对于FrankenPHP进程启动的位置）
+- 如果您定义了多个工作进程，当文件发生更改时，将重新启动所有工作进程。
+- 小心查看在运行时创建的文件（如日志），因为它们可能导致不必要的工作进程重启。
 
 文件监视器基于[e-dant/watcher](https://github.com/e-dant/watcher)。
 
-## 将 worker 匹配到一条路径
+## 将工作进程匹配到一条路径
 
 在传统的 PHP 应用程序中，脚本总是放在公共目录中。
 这对于 worker 脚本也是如此，这些脚本被视为任何其他 PHP 脚本。
 如果您想将 worker 脚本放在公共目录外，可以通过 `match` 指令来实现。
 
 `match` 指令是 `try_files` 的一种优化替代方案，仅在 `php_server` 和 `php` 内部可用。
-以下示例将始终在公共目录中提供文件（如果存在），否则会将请求转发给与路径模式匹配的 worker。
+以下示例将始终在公共目录中提供文件（如果存在），否则会将请求转发给与路径模式匹配的工作进程。
 
 ```caddyfile
 {
@@ -262,7 +262,7 @@ Workers 可以通过 `watch` 指令在文件更改时重新启动。
 		php_server {
 			worker {
 				file /path/to/worker.php # 文件可以在公共路径之外
-				match /api/* # 所有以 /api/ 开头的请求将由此 worker 处理
+				match /api/* # 所有以 /api/ 开头的请求将由此工作进程处理
 			}
 		}
 	}
