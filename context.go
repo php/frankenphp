@@ -83,7 +83,7 @@ func newContextFromRequest(request *http.Request, responseWriter http.ResponseWr
 		startedAt:      time.Now(),
 		server:         s,
 		splitPath:      s.splitPath,
-		logger:         s.logger,
+		logger:         s.logger.Load(),
 		request:        request,
 		documentRoot:   s.root,
 		responseWriter: responseWriter,
@@ -152,7 +152,7 @@ func newWorkerDummyContext(w *worker) (*frankenPHPContext, error) {
 		request:   r,
 		startedAt: time.Now(),
 		// startup output of a scoped worker belongs to its server's logger
-		logger: server.logger,
+		logger: server.logger.Load(),
 		worker: w,
 	}
 
@@ -190,7 +190,7 @@ func newContextFromMessage(message any, rw http.ResponseWriter, ctx context.Cont
 		server:            server,
 		worker:            w,
 		scriptFilename:    w.fileName,
-		logger:            server.logger,
+		logger:            server.logger.Load(),
 		responseWriter:    rw,
 		handlerParameters: message,
 		ctx:               ctx,

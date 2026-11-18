@@ -27,7 +27,8 @@ type Server struct {
 	// registered while FrankenPHP runs with this server; read by concurrent
 	// ServeHTTP calls while Init()/Shutdown() flip it, hence atomic
 	isRegistered atomic.Bool
-	logger       *slog.Logger
+	// the fallback server takes the logger of each Init() while messages to stale workers still read it
+	logger atomic.Pointer[slog.Logger]
 }
 
 var (
@@ -40,8 +41,8 @@ func newFallbackServer() *Server {
 		idx:           -1,
 		workersByPath: make(map[string]*worker),
 		env:           make(map[string]string),
-		logger:        globalLogger,
 	}
+	s.logger.Store(globalLogger)
 
 	return s
 }
@@ -51,8 +52,7 @@ func newFallbackServer() *Server {
 // servers do not accept requests yet at this point, see activateServers()
 func registerServers(newServers []*Server) {
 	servers = newServers
-	fallbackServer.logger = globalLogger
-	fallbackServer.resetWorkers()
+	fallbackServer.logger.Store(globalLogger)
 
 	for i, s := range servers {
 		s.idx = i
@@ -109,8 +109,8 @@ func NewServer(root string, options ...ServerOption) (*Server, error) {
 		}
 	}
 
-	if s.logger == nil {
-		s.logger = globalLogger
+	if s.logger.Load() == nil {
+		s.logger.Store(globalLogger)
 	}
 
 	if len(s.splitPath) == 0 {

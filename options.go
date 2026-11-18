@@ -319,7 +319,7 @@ func WithServerName(name string) ServerOption {
 // WithServerLogger sets the logger for the server.
 func WithServerLogger(l *slog.Logger) ServerOption {
 	return func(s *Server) error {
-		s.logger = l
+		s.logger.Store(l)
 
 		return nil
 	}
