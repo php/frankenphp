@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -196,7 +195,10 @@ func (f *FrankenPHPModule) ServeHTTP(w http.ResponseWriter, r *http.Request, _ c
 	}
 
 	ctx := r.Context()
-	repl := ctx.Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
+	var repl *caddy.Replacer
+	if f.resolvedDocumentRoot == "" || len(f.requestEnv) > 0 {
+		repl = ctx.Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
+	}
 
 	opts := make([]frankenphp.RequestOption, 0, len(f.requestOptions)+4)
 	opts = append(opts, f.requestOptions...)
@@ -327,8 +329,14 @@ func (f *FrankenPHPModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	return nil
 }
 
+// namedRouteServerIndexBase keeps named routes, which Caddy adapts with their own Helper.State, apart from site blocks
+const namedRouteServerIndexBase = 1 << 20
+
 func (f *FrankenPHPModule) assignServerIndex(h httpcaddyfile.Helper) {
-	counter, _ := h.State["php_server_count"].(int)
+	counter, ok := h.State["php_server_count"].(int)
+	if !ok && h.IsNamedRoute() {
+		counter = namedRouteServerIndexBase
+	}
 	f.ServerIndex = counter + 1
 	h.State["php_server_count"] = counter + 1
 }
@@ -343,6 +351,9 @@ func parseCaddyfile(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error)
 	return m, err
 }
 
+// A reference relative to the last segment resolves against the requested URL, so it can't leave the origin.
+const canonicalPathLocation = "./{http.request.orig_uri.path.file_escaped}/{http.request.orig_uri.prefixed_query}"
+
 // parsePhpServer parses the php_server directive, which has a similar syntax
 // to the php_fastcgi directive. A line such as this:
 //
@@ -355,7 +366,7 @@ func parseCaddyfile(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error)
 //		    file {path}/index.php
 //		    not path */
 //		}
-//		redir @canonicalPath {path}/ 308
+//		redir @canonicalPath ./{http.request.orig_uri.path.file_escaped}/{http.request.orig_uri.prefixed_query} 308
 //
 //		# If the requested file does not exist, try index files
 //		@indexFiles file {
@@ -488,27 +499,29 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 		}
 	}
 
+	// hide the Caddyfile and its imports, as the file_server directive does
+	if err := fsrv.FinalizeUnmarshalCaddyfile(h); err != nil {
+		return nil, err
+	}
+
 	// set up a route list that we'll append to
 	routes := caddyhttp.RouteList{}
 
 	// set the list of allowed path segments on which to split
 	phpsrv.SplitPath = extensions
 
+	var pathList caddyhttp.MatchPath
+	for _, ext := range extensions {
+		pathList = append(pathList, "*"+ext, "*"+ext+"/*")
+	}
+
 	// prepend routes from the 'worker match *' directives
-	routes = prependWorkerRoutes(routes, h, phpsrv, fsrv, disableFsrv)
+	routes = prependWorkerRoutes(routes, h, phpsrv, fsrv, disableFsrv, pathList)
 
 	// if the index is turned off, we skip the redirect and try_files
 	if indexFile != "off" {
 		dirRedir := false
 		dirIndex := "{http.request.uri.path}/" + indexFile
-		// On Windows, first_exist_fallback doesn't work correctly because
-		// glob is skipped and patterns are returned as-is without checking existence.
-		// Use first_exist instead to ensure all files are checked.
-		tryPolicy := "first_exist_fallback"
-		if runtime.GOOS == "windows" {
-			tryPolicy = "first_exist"
-		}
-
 		// if tryFiles wasn't overridden, use a reasonable default
 		if len(tryFiles) == 0 {
 			if disableFsrv {
@@ -518,15 +531,8 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 			}
 
 			dirRedir = true
-		} else {
-			if !strings.HasSuffix(tryFiles[len(tryFiles)-1], ".php") {
-				// use first_exist strategy if the last file is not a PHP file
-				tryPolicy = ""
-			}
-
-			if slices.Contains(tryFiles, dirIndex) {
-				dirRedir = true
-			}
+		} else if slices.Contains(tryFiles, dirIndex) {
+			dirRedir = true
 		}
 
 		// route to redirect to canonical path if index PHP file
@@ -546,7 +552,7 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 			}
 			redirHandler := caddyhttp.StaticResponse{
 				StatusCode: caddyhttp.WeakString(strconv.Itoa(http.StatusPermanentRedirect)),
-				Headers:    http.Header{"Location": []string{"{http.request.orig_uri.path}/"}},
+				Headers:    http.Header{"Location": []string{canonicalPathLocation}},
 			}
 			redirRoute := caddyhttp.Route{
 				MatcherSetsRaw: []caddy.ModuleMap{redirMatcherSet},
@@ -560,7 +566,6 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 		rewriteMatcherSet := caddy.ModuleMap{
 			"file": h.JSON(fileserver.MatchFile{
 				TryFiles:  tryFiles,
-				TryPolicy: tryPolicy,
 				SplitPath: extensions,
 				Root:      phpsrv.Root,
 			}),
@@ -578,10 +583,6 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 
 	// route to actually pass requests to PHP files;
 	// match only requests that are for PHP files
-	var pathList []string
-	for _, ext := range extensions {
-		pathList = append(pathList, "*"+ext, "*"+ext+"/*")
-	}
 	phpMatcherSet := caddy.ModuleMap{
 		"path": h.JSON(pathList),
 	}
@@ -596,11 +597,21 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 
 	// create the file server route
 	if !disableFsrv {
+		// .php files outside the split extensions are neither executed nor served as source
+		phpSources := caddy.ModuleMap{"path": h.JSON(caddyhttp.MatchPath{"*.php", "*.php/*"})}
 		fileRoute := caddyhttp.Route{
-			MatcherSetsRaw: []caddy.ModuleMap{},
-			HandlersRaw:    []json.RawMessage{caddyconfig.JSONModuleObject(fsrv, "handler", "file_server", nil)},
+			MatcherSetsRaw: []caddy.ModuleMap{
+				{"not": h.JSON(caddyhttp.MatchNot{MatcherSetsRaw: []caddy.ModuleMap{phpSources}})},
+			},
+			HandlersRaw: []json.RawMessage{caddyconfig.JSONModuleObject(fsrv, "handler", "file_server", nil)},
 		}
-		routes = append(routes, fileRoute)
+		notFoundRoute := caddyhttp.Route{
+			MatcherSetsRaw: []caddy.ModuleMap{phpSources},
+			HandlersRaw: []json.RawMessage{caddyconfig.JSONModuleObject(caddyhttp.StaticResponse{
+				StatusCode: caddyhttp.WeakString(strconv.Itoa(http.StatusNotFound)),
+			}, "handler", "static_response", nil)},
+		}
+		routes = append(routes, fileRoute, notFoundRoute)
 	}
 
 	subroute := caddyhttp.Subroute{
@@ -635,7 +646,7 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 
 // workers can also match a path without being in the public directory
 // in this case we need to prepend the worker routes to the existing routes
-func prependWorkerRoutes(routes caddyhttp.RouteList, h httpcaddyfile.Helper, f FrankenPHPModule, fsrv caddy.Module, disableFsrv bool) caddyhttp.RouteList {
+func prependWorkerRoutes(routes caddyhttp.RouteList, h httpcaddyfile.Helper, f FrankenPHPModule, fsrv caddy.Module, disableFsrv bool, phpPaths caddyhttp.MatchPath) caddyhttp.RouteList {
 	var allWorkerMatches caddyhttp.MatchPath
 	for _, w := range f.Workers {
 		for _, path := range w.MatchPath {
@@ -658,7 +669,7 @@ func prependWorkerRoutes(routes caddyhttp.RouteList, h httpcaddyfile.Helper, f F
 					}),
 					"not": h.JSON(caddyhttp.MatchNot{
 						MatcherSetsRaw: []caddy.ModuleMap{
-							{"path": h.JSON(caddyhttp.MatchPath{"*.php"})},
+							{"path": h.JSON(append(caddyhttp.MatchPath{"*.php", "*.php/*"}, phpPaths...))},
 						},
 					}),
 				},

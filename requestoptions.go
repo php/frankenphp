@@ -2,6 +2,7 @@ package frankenphp
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"path/filepath"
@@ -19,6 +20,7 @@ type RequestOption func(h *frankenPHPContext) error
 
 var (
 	ErrInvalidSplitPath = errors.New("split path contains non-ASCII characters")
+	ErrUnknownWorker    = errors.New("unknown worker")
 
 	documentRootCache    sync.Map
 	documentRootCacheLen atomic.Uint32
@@ -173,8 +175,9 @@ func ensurePreparedEnv(env PreparedEnv) PreparedEnv {
 }
 
 func WithOriginalRequest(r *http.Request) RequestOption {
+	originalURI := r.URL.RequestURI()
 	return func(o *frankenPHPContext) error {
-		o.requestURI = r.URL.RequestURI()
+		o.requestURI = originalURI
 
 		return nil
 	}
@@ -205,11 +208,24 @@ func WithRequestBodyTimeout(timeout time.Duration) RequestOption {
 	}
 }
 
+// withWorker dispatches the request on a worker directly, no lookup
+func withWorker(w *worker) RequestOption {
+	return func(o *frankenPHPContext) error {
+		o.worker = w
+
+		return nil
+	}
+}
+
 // WithWorkerName sets the worker that should handle the request
 func WithWorkerName(name string) RequestOption {
 	return func(o *frankenPHPContext) error {
-		if name != "" {
-			o.worker = workersByName[name]
+		if name == "" {
+			return nil
+		}
+
+		if o.worker = workersByName[name]; o.worker == nil {
+			return fmt.Errorf("%w: %q", ErrUnknownWorker, name)
 		}
 
 		return nil

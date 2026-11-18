@@ -1,13 +1,18 @@
-# Utilizzare i worker
+---
+title: Modalità worker di FrankenPHP: mantieni la tua app PHP in memoria
+description: Esegui FrankenPHP in modalità worker per mantenere la tua applicazione PHP avviata tra le richieste, ridurre l'overhead di bootstrap e servire le risposte in millisecondi.
+---
 
-Avviare l'applicazione una volta, tenendola in memoria.
+# Utilizzare i worker di FrankenPHP
+
+Avvia la tua applicazione una volta e mantienila in memoria.
 FrankenPHP gestirà le richieste in arrivo in pochi millisecondi.
 
-## Avvio dei worker
+## Avvio degli script worker di FrankenPHP
 
 ### Esecuzione di un worker FrankenPHP con Docker
 
-Impostare il valore della variabile di ambiente `FRANKENPHP_CONFIG` su `worker /path/to/your/worker/script.php`:
+Imposta il valore della variabile di ambiente `FRANKENPHP_CONFIG` su `worker /path/to/your/worker/script.php`:
 
 ```bash
 docker run \
@@ -17,37 +22,37 @@ docker run \
     dunglas/frankenphp
 ```
 
-### Esecuzione di un worker FrankenPHP con il file binario autonomo
+### Esecuzione di un worker FrankenPHP con il binario autonomo
 
-Utilizzare l'opzione `--worker` del comando `php-server` per servire il contenuto della cartella corrente utilizzando un worker:
+Usa l'opzione `--worker` del comando `php-server` per servire il contenuto della directory corrente utilizzando un worker:
 
 ```bash
 frankenphp php-server --worker /path/to/your/worker/script.php
 ```
 
-Se l'app PHP è [incorporata nel file binario](embed.md), si può aggiungere un `Caddyfile` personalizzato nella cartella principale dell'app.
+Se la tua app PHP è [incorporata nel binario](embed.md), puoi aggiungere un `Caddyfile` personalizzato nella directory radice dell'app.
 Verrà utilizzato automaticamente.
 
-È anche possibile [riavviare il worker in caso di modifiche al file](config.md#controllo-delle-modifiche-ai-file) con l'opzione `--watch`.
-Il seguente comando attiverà un riavvio se qualsiasi file che termina con `.php` nella cartella o nelle sottocartelle `/path/to/your/app/` viene modificato:
+È anche possibile [riavviare il worker in caso di modifiche ai file](config.md#monitorare-le-modifiche-ai-file) con l'opzione `--watch`.
+Il seguente comando attiverà un riavvio se qualsiasi file che termina con `.php` nella directory `/path/to/your/app/` o nelle sue sottodirectory viene modificato:
 
 ```bash
 frankenphp php-server --worker /path/to/your/worker/script.php --watch="/path/to/your/app/**/*.php"
 ```
 
-Questa funzione viene spesso utilizzata in combinazione con [ricaricamento a caldo](hot-reload.md).
+Questa funzione viene spesso utilizzata in combinazione con il [ricaricamento a caldo](hot-reload.md).
 
 ## Modalità worker per Symfony
 
-Vedi [la documentazione sulla modalità worker di FrankenPHP con Symfony](symfony.md#modalità-worker-con-symfony-e-frankenphp).
+Vedi [la documentazione sulla modalità worker di FrankenPHP con Symfony](symfony.md#symfony-worker-mode-con-frankenphp).
 
 ## Modalità worker per Laravel Octane
 
 Vedi [la documentazione di FrankenPHP Laravel Octane](laravel.md#laravel-octane).
 
-## Scrittura di un worker personalizzato
+## Scrittura di uno script worker FrankenPHP personalizzato
 
-L'esempio seguente mostra come creare il proprio worker senza fare affidamento su una libreria di terze parti:
+L'esempio seguente mostra come creare il tuo script worker senza fare affidamento su una libreria di terze parti:
 
 ```php
 <?php
@@ -59,10 +64,10 @@ require __DIR__.'/vendor/autoload.php';
 $myApp = new \App\Kernel();
 $myApp->boot();
 
-// Gestore fuori dal ciclo per migliori prestazioni (meno lavoro per richiesta)
+// Gestore fuori dal ciclo per migliori prestazioni (meno lavoro)
 $handler = static function () use ($myApp) {
     try {
-        // Chiamato quando arriva una richiesta,
+        // Chiamato quando viene ricevuta una richiesta,
         // i superglobali, php://input e simili vengono reimpostati
         echo $myApp->handle($_GET, $_POST, $_COOKIE, $_FILES, $_SERVER);
     } catch (\Throwable $exception) {
@@ -79,7 +84,7 @@ for ($nbRequests = 0; !$maxRequests || $nbRequests < $maxRequests; ++$nbRequests
     // Esegui qualcosa dopo aver inviato la risposta HTTP
     $myApp->terminate();
 
-    // Richiama il garbage collector per ridurre la probabilità che parta durante la generazione di una pagina
+    // Richiama il garbage collector per ridurre la probabilità che venga attivato durante la generazione di una pagina
     gc_collect_cycles();
 
     if (!$keepRunning) break;
@@ -89,7 +94,7 @@ for ($nbRequests = 0; !$maxRequests || $nbRequests < $maxRequests; ++$nbRequests
 $myApp->shutdown();
 ```
 
-Quindi, avviare l'app e utilizzare la variabile di ambiente `FRANKENPHP_CONFIG` per configurare il worker:
+Quindi, avvia la tua app e utilizza la variabile di ambiente `FRANKENPHP_CONFIG` per configurare il tuo worker:
 
 ```bash
 docker run \
@@ -110,18 +115,66 @@ docker run \
     dunglas/frankenphp
 ```
 
+### Utilizzo di PSR-15
+
+Se la tua app utilizza [PSR-15](https://www.php-fig.org/psr/psr-15/) invece dei superglobali, converti la richiesta/risposta ai margini del gestore con [`nyholm/psr7`](https://github.com/Nyholm/psr7) e [`nyholm/psr7-server`](https://github.com/Nyholm/psr7-server):
+
+```console
+composer require nyholm/psr7 nyholm/psr7-server psr/http-server-handler
+```
+
+```php
+<?php
+// public/index.php
+
+require __DIR__.'/vendor/autoload.php';
+
+use Nyholm\Psr7\Factory\Psr17Factory;
+use Nyholm\Psr7Server\ServerRequestCreator;
+
+$myApp = new \App\Kernel(); // implements Psr\Http\Server\RequestHandlerInterface
+$myApp->boot();
+
+$psr17Factory = new Psr17Factory();
+$creator = new ServerRequestCreator(
+    $psr17Factory, // ServerRequestFactory
+    $psr17Factory, // UriFactory
+    $psr17Factory, // UploadedFileFactory
+    $psr17Factory, // StreamFactory
+);
+
+$handler = static function () use ($myApp, $creator) {
+    $response = $myApp->handle($creator->fromGlobals());
+
+    http_response_code($response->getStatusCode());
+    foreach ($response->getHeaders() as $name => $values) {
+        foreach ($values as $value) {
+            header("$name: $value", false);
+        }
+    }
+    echo $response->getBody();
+};
+
+$maxRequests = (int)($_SERVER['MAX_REQUESTS'] ?? 0);
+for ($nbRequests = 0; !$maxRequests || $nbRequests < $maxRequests; ++$nbRequests) {
+    $keepRunning = \frankenphp_handle_request($handler);
+    gc_collect_cycles();
+    if (!$keepRunning) break;
+}
+```
+
 ### Riavvia il worker dopo un certo numero di richieste
 
-Poiché PHP non è stato originariamente progettato per processi di lunga durata, ci sono ancora molte librerie e codici legacy che perdono memoria.
+Poiché PHP non è stato originariamente progettato per processi di lunga durata, molte librerie e codice legacy perdono ancora memoria.
 Una soluzione alternativa all'utilizzo di questo tipo di codice in modalità worker consiste nel riavviare lo script worker dopo aver elaborato un certo numero di richieste:
 
-Il precedente frammento di lavoro consente di configurare un numero massimo di richieste da gestire impostando una variabile di ambiente denominata `MAX_REQUESTS`.
+Il precedente script worker consente di configurare un numero massimo di richieste da gestire impostando una variabile di ambiente denominata `MAX_REQUESTS`.
 
 ### Riavvia i worker manualmente
 
-Sebbene sia possibile riavviare i worker [in seguito alle modifiche dei file](config.md#controllo-delle-modifiche-ai-file), è anche possibile riavviare tutti i worker
-tramite l'[API di amministrazione Caddy](https://caddyserver.com/docs/api). Se l'amministratore è abilitato in
-[Caddyfile](config.md#caddyfile-config), si può eseguire il ping dell'endpoint di riavvio con una semplice richiesta POST:
+Sebbene sia possibile riavviare i worker [in seguito alle modifiche dei file](config.md#monitorare-le-modifiche-ai-file), è anche possibile riavviare tutti i worker
+in modo elegante tramite l'[API di amministrazione Caddy](https://caddyserver.com/docs/api). Se l'amministratore è abilitato nel tuo
+[Caddyfile](config.md#configurazione-caddyfile), puoi eseguire il ping dell'endpoint di riavvio con una semplice richiesta POST:
 
 ```bash
 curl -X POST http://localhost:2019/frankenphp/workers/restart
@@ -129,13 +182,13 @@ curl -X POST http://localhost:2019/frankenphp/workers/restart
 
 ### Fallimenti dei worker
 
-Se un worker si blocca con un codice di uscita diverso da zero, FrankenPHP lo riavvierà con una strategia di backoff esponenziale.
-Se lo script worker rimane attivo più a lungo dell'ultimo backoff moltiplicato per due,
+Se uno script worker si blocca con un codice di uscita diverso da zero, FrankenPHP lo riavvierà con una strategia di backoff esponenziale.
+Se lo script worker rimane attivo più a lungo dell'ultimo backoff × 2,
 non penalizzerà lo script worker e lo riavvierà di nuovo.
-Tuttavia, se il worker continua a fallire con un codice di uscita diverso da zero in un breve periodo di tempo
+Tuttavia, se lo script worker continua a fallire con un codice di uscita diverso da zero in un breve periodo di tempo
 (ad esempio, avendo un errore di battitura in uno script), FrankenPHP si bloccherà con l'errore: `too many consecutive failures`.
 
-Il numero di errori consecutivi può essere configurato nel [Caddyfile](config.md#caddyfile-config) con l'opzione `max_consecutive_failures`:
+Il numero di errori consecutivi può essere configurato nel tuo [Caddyfile](config.md#configurazione-caddyfile) con l'opzione `max_consecutive_failures`:
 
 ```caddyfile
 frankenphp {
@@ -145,6 +198,13 @@ frankenphp {
     }
 }
 ```
+
+### Numero di thread
+
+Quando la modalità worker è abilitata, è richiesto un thread aggiuntivo per gestire le richieste in arrivo,
+quindi il valore predefinito di `num_threads` è `1 + 2x(numero di CPU disponibili)`.
+
+Pertanto, in tale modalità se `num_threads` e `num` sono impostati esplicitamente, `num_threads` deve essere strettamente maggiore di `num`.
 
 ## Comportamento dei superglobali
 
@@ -180,8 +240,10 @@ Poiché la modalità worker mantiene attivo il processo PHP tra le richieste, il
 
 - **Variabili statiche**: le variabili dichiarate con `static` all'interno di funzioni o metodi mantengono i loro valori tra le richieste.
 - **Proprietà statiche della classe**: le proprietà statiche sulle classi persistono tra le richieste.
-- **Variabili globali**: le variabili nell'ambito globale del worker persistono tra le richieste.
+- **Variabili globali**: le variabili nell'ambito globale dello script worker persistono tra le richieste.
 - **Cache in memoria**: tutti i dati archiviati in memoria (array, oggetti) all'esterno del gestore delle richieste persistono.
+- **Impostazioni del motore di runtime**: le modifiche apportate con `ini_set()`, `stream_context_set_default()`, `date_default_timezone_set()`, `chdir()`, `stream_wrapper_register()`, `set_error_handler()` o `set_exception_handler()` rimangono in vigore per le richieste successive. Non archiviare mai valori specifici della richiesta o dell'utente in queste impostazioni, come le credenziali nel contesto del flusso predefinito: passa invece un contesto esplicito ad ogni chiamata.
+- **Impostazioni a livello di processo**: `umask()` e `setlocale()` modificano l'intero processo FrankenPHP, non solo il thread corrente. La modalità worker non li ripristina tra le richieste, e in ogni modalità influenzano anche le richieste in esecuzione contemporaneamente. Impostali una volta all'avvio, o chiama `chmod()` sui file creati invece di modificare la umask.
 
 Questo è previsto dalla progettazione ed è ciò che rende veloce la modalità worker. Tuttavia, richiede attenzione per evitare effetti collaterali indesiderati:
 
@@ -201,5 +263,5 @@ while (\frankenphp_handle_request($handler)) {
 }
 ```
 
-Quando si scrivono worker, assicurarsi di reimpostare qualsiasi stato specifico della richiesta tra le richieste.
+Quando si scrivono script worker, assicurarsi di reimpostare qualsiasi stato specifico della richiesta tra le richieste.
 Framework come [Symfony](symfony.md) e [Laravel Octane](laravel.md) si occupano di ripristinare automaticamente la maggior parte degli stati, ma potrebbe comunque essere necessario ripristinare alcuni servizi. Con Symfony, i servizi che mantengono uno stato specifico della richiesta dovrebbero implementare [`Symfony\Contracts\Service\ResetInterface`](https://github.com/symfony/contracts/blob/main/Service/ResetInterface.php) in modo che vengano reimpostati dal kernel tra una richiesta e l'altra.

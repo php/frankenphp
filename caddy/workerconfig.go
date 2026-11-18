@@ -37,7 +37,7 @@ type workerConfig struct {
 	// The path to match against the worker
 	MatchPath []string `json:"match_path,omitempty"`
 	// MaxConsecutiveFailures sets the maximum number of consecutive failures before panicking (defaults to 6, set to -1 to never panick)
-	MaxConsecutiveFailures int `json:"max_consecutive_failures,omitempty"`
+	MaxConsecutiveFailures *int `json:"max_consecutive_failures,omitempty"`
 
 	options []frankenphp.WorkerOption
 }
@@ -52,12 +52,12 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 		if d.Val() == "watch" {
 			wc.Watch = append(wc.Watch, defaultWatchPattern)
 		} else {
-			v, err := strconv.ParseUint(d.Val(), 10, 32)
+			v, err := parseNonNegativeInt(d)
 			if err != nil {
 				return wc, err
 			}
 
-			wc.Num = int(v)
+			wc.Num = v
 		}
 	}
 
@@ -82,23 +82,23 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 				return wc, d.ArgErr()
 			}
 
-			v, err := strconv.ParseUint(d.Val(), 10, 32)
+			v, err := parseNonNegativeInt(d)
 			if err != nil {
-				return wc, d.WrapErr(err)
+				return wc, err
 			}
 
-			wc.Num = int(v)
+			wc.Num = v
 		case "max_threads":
 			if !d.NextArg() {
 				return wc, d.ArgErr()
 			}
 
-			v, err := strconv.ParseUint(d.Val(), 10, 32)
+			v, err := parseNonNegativeInt(d)
 			if err != nil {
-				return wc, d.WrapErr(err)
+				return wc, err
 			}
 
-			wc.MaxThreads = int(v)
+			wc.MaxThreads = v
 		case "env":
 			args := d.RemainingArgs()
 			if len(args) != 2 {
@@ -138,7 +138,7 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 				return wc, d.Errf("max_consecutive_failures must be >= -1")
 			}
 
-			wc.MaxConsecutiveFailures = v
+			wc.MaxConsecutiveFailures = new(v)
 		default:
 			return wc, wrongSubDirectiveError("worker", "name, file, num, env, watch, match, max_consecutive_failures, max_threads", v)
 		}
@@ -159,8 +159,11 @@ func (wc *workerConfig) toWorkerOptions() ([]frankenphp.WorkerOption, error) {
 	opts := []frankenphp.WorkerOption{
 		frankenphp.WithWorkerEnv(wc.Env),
 		frankenphp.WithWorkerWatchMode(wc.Watch),
-		frankenphp.WithWorkerMaxFailures(wc.MaxConsecutiveFailures),
 		frankenphp.WithWorkerMaxThreads(wc.MaxThreads),
+	}
+
+	if wc.MaxConsecutiveFailures != nil {
+		opts = append(opts, frankenphp.WithWorkerMaxFailures(*wc.MaxConsecutiveFailures))
 	}
 
 	// options collected while provisioning the module, e.g. the Mercure hub

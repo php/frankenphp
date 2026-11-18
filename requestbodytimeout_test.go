@@ -1,20 +1,20 @@
 package frankenphp_test
 
 import (
-	"context"
-	"crypto/tls"
+	"bufio"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/dunglas/frankenphp"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/http2"
 )
 
 // newH2CServer starts a cleartext HTTP/2 (h2c) server for handler and returns
@@ -36,12 +36,7 @@ func newH2CServer(t *testing.T, handler http.HandlerFunc) (addr string, client *
 		_ = ln.Close()
 	})
 
-	client = &http.Client{Transport: &http2.Transport{
-		AllowHTTP: true,
-		DialTLSContext: func(_ context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
-			return net.Dial(network, addr)
-		},
-	}}
+	client = &http.Client{Transport: &http.Transport{Protocols: protocols}}
 
 	return ln.Addr().String(), client
 }
@@ -90,6 +85,74 @@ func TestRequestBodyTimeout(t *testing.T) {
 	require.Contains(t, string(resp), "200 OK")
 	// PHP saw an empty body: php://input read zero bytes.
 	require.Contains(t, string(resp), "read=0")
+}
+
+// net/http drains an unread body smaller than 256 KiB before writing the
+// response, so the expired deadline must stay in place for that drain too.
+func TestRequestBodyTimeoutSmallBody(t *testing.T) {
+	require.NoError(t, frankenphp.Init(frankenphp.WithNumThreads(1)))
+	defer frankenphp.Shutdown()
+
+	reading := make(chan struct{})
+	var once sync.Once
+
+	cwd, _ := os.Getwd()
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			r.Body = &signalingBody{ReadCloser: r.Body, onRead: func() { once.Do(func() { close(reading) }) }}
+		}
+
+		req, err := frankenphp.NewRequestWithContext(r,
+			frankenphp.WithRequestDocumentRoot(cwd+"/testdata/", false),
+			frankenphp.WithRequestBodyTimeout(300*time.Millisecond),
+		)
+		require.NoError(t, err)
+		require.NoError(t, frankenphp.ServeHTTP(w, req))
+	}
+
+	ts := newRawServer(t, handler)
+	defer ts.Close()
+
+	conn, err := net.Dial("tcp", ts.Addr())
+	require.NoError(t, err)
+	defer func() { _ = conn.Close() }()
+
+	// no "Connection: close": net/http only drains bodies of connections it may reuse,
+	// and output larger than the response buffer makes it drain on the PHP thread
+	_, err = fmt.Fprintf(conn,
+		"POST /read-input-large-output.php HTTP/1.1\r\nHost: %s\r\nContent-Type: application/octet-stream\r\nContent-Length: 100\r\n\r\nx",
+		ts.Addr(),
+	)
+	require.NoError(t, err)
+
+	select {
+	case <-reading:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the stalled request never reached the PHP thread")
+	}
+
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get("http://" + ts.Addr() + "/hello.php")
+	require.NoError(t, err, "the stalled body still holds the only PHP thread")
+	_ = resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	require.NoError(t, conn.SetReadDeadline(time.Now().Add(5*time.Second)))
+	stalled, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	require.NoError(t, err, "the stalled request must complete")
+	_ = stalled.Body.Close()
+}
+
+// signalingBody calls onRead when the PHP thread starts reading the request body
+type signalingBody struct {
+	io.ReadCloser
+	onRead func()
+}
+
+func (b *signalingBody) Read(p []byte) (int, error) {
+	b.onRead()
+
+	return b.ReadCloser.Read(p)
 }
 
 // TestRequestBodyTimeoutHTTP2 is the HTTP/2 counterpart of the test above: over
@@ -174,6 +237,72 @@ func TestFinishRequestThenReadBodyHTTP2(t *testing.T) {
 	_, err = io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+// lateReadBody mimics Caddy's IdleTimeoutReader and counts reads made after the handler returned
+type lateReadBody struct {
+	io.ReadCloser
+	rc        *http.ResponseController
+	returned  *atomic.Bool
+	lateReads *atomic.Int32
+}
+
+func (b *lateReadBody) Read(p []byte) (int, error) {
+	if b.returned.Load() {
+		b.lateReads.Add(1)
+
+		return 0, io.EOF
+	}
+
+	_ = b.rc.SetReadDeadline(time.Now().Add(time.Minute))
+
+	return b.ReadCloser.Read(p)
+}
+
+// https://github.com/php/frankenphp/issues/2694
+func TestFinishRequestThenShutdownDoesNotReadBodyHTTP2(t *testing.T) {
+	require.NoError(t, frankenphp.Init())
+	defer frankenphp.Shutdown()
+
+	var returned atomic.Bool
+	var lateReads atomic.Int32
+
+	cwd, _ := os.Getwd()
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		defer returned.Store(true)
+
+		r.Body = &lateReadBody{
+			ReadCloser: r.Body,
+			rc:         http.NewResponseController(w),
+			returned:   &returned,
+			lateReads:  &lateReads,
+		}
+
+		req, err := frankenphp.NewRequestWithContext(r, frankenphp.WithRequestDocumentRoot(cwd+"/testdata/", false))
+		require.NoError(t, err)
+		require.NoError(t, frankenphp.ServeHTTP(w, req))
+	}
+
+	addr, client := newH2CServer(t, handler)
+
+	// PUT bodies are not read at startup, so PHP drains them at shutdown.
+	req, err := http.NewRequest(http.MethodPut, "http://"+addr+"/finish-without-reading-input.php", strings.NewReader("hello world"))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/octet-stream")
+
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+
+	_, err = io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// waits for PHP's request shutdown, which drains the body
+	frankenphp.Shutdown()
+
+	require.True(t, returned.Load())
+	require.Zero(t, lateReads.Load(), "request body read after the handler returned")
 }
 
 // rawServer is a minimal HTTP server exposing its listener address so a test

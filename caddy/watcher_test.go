@@ -31,7 +31,7 @@ func waitForListener(t *testing.T, addr string) {
 
 func TestWorkerWithInactiveWatcher(t *testing.T) {
 	tester := caddytest.NewTester(t)
-	tester.InitServer(`
+	initTestServer(t, tester, `
 		{
 			skip_install_trust
 			admin localhost:2999

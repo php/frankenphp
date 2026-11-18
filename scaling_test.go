@@ -35,8 +35,9 @@ func TestScaleAWorkerThreadUpAndDown(t *testing.T) {
 
 	workerName := "worker1"
 	workerPath := filepath.Join(testDataPath, "transition-worker-1.php")
+	// one thread for regular requests, one for the worker, one to scale into
 	assert.NoError(t, Init(
-		WithNumThreads(2),
+		WithNumThreads(1),
 		WithMaxThreads(3),
 		WithWorkers(workerName, workerPath, 1,
 			WithWorkerEnv(map[string]string{}),

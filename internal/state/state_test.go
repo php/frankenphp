@@ -53,6 +53,25 @@ func TestWaitForStateWithTimeoutGivesUpAndDropsItsSubscriber(t *testing.T) {
 	})
 }
 
+func TestRequestSafeStateChangeRefusesAThreadThatEndedOnItsOwn(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		threadState := &ThreadState{currentState: TransitionComplete}
+
+		refused := make(chan bool, 1)
+		go func() {
+			refused <- threadState.RequestSafeStateChange(ShuttingDown)
+		}()
+
+		// once the request is parked, the thread ends by itself without passing
+		// through a stable state, the way a worker that fails to boot does
+		synctest.Wait()
+		threadState.Set(ShuttingDown)
+		threadState.Set(Done)
+
+		assert.False(t, <-refused, "a thread that is already done cannot be asked to shut down")
+	})
+}
+
 func assertNumberOfSubscribers(t *testing.T, threadState *ThreadState, expected int) {
 	t.Helper()
 

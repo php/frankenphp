@@ -1,21 +1,41 @@
+---
+title: Problèmes connus, extensions incompatibles et solutions de contournement de FrankenPHP
+description: Référence des limitations de FrankenPHP, y compris les extensions PHP non prises en charge, les mises en garde de musl libc, la configuration TLS de Docker avec 127.0.0.1, et les scripts Composer @php.
+---
+
 # Problèmes connus
 
 ## Extensions PHP non prises en charge
 
 Les extensions suivantes sont connues pour ne pas être compatibles avec FrankenPHP :
 
-| Nom                                                                                                         | Raison          | Alternatives                                                                                                         |
-| ----------------------------------------------------------------------------------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------- |
-| [imap](https://www.php.net/manual/imap.installation.php)                                                 | Non thread-safe | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap) |
-| [newrelic](https://docs.newrelic.com/docs/apm/agents/php-agent/getting-started/introduction-new-relic-php/) | Non thread-safe | -                                                                                                                    |
+| Nom                                                                                                         | Raison          | Alternatives                                                                                                                                                                    |
+| :---------------------------------------------------------------------------------------------------------- | :-------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [imap](https://www.php.net/manual/imap.installation.php)                                                    | Non thread-safe | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap), [ImapEngine](https://github.com/DirectoryTree/ImapEngine) |
+| [newrelic](https://docs.newrelic.com/docs/apm/agents/php-agent/getting-started/introduction-new-relic-php/) | Non thread-safe | -                                                                                                                                                                               |
+| [pcov](https://github.com/krakjoe/pcov)                                                                     | Non thread-safe ([SIGSEGV en mode classique](https://github.com/krakjoe/pcov/issues/132)) | Collecter la couverture avec le SAPI CLI (exécuter PHPUnit/Pest en dehors de FrankenPHP) |
 
 ## Extensions PHP boguées
 
-Les extensions suivantes ont des bugs connus ou des comportements inattendus lorsqu'elles sont utilisées avec FrankenPHP :
+Les extensions suivantes ont des bugs connus et des comportements inattendus lorsqu'elles sont utilisées avec FrankenPHP :
 
-| Nom                                                           | Problème                                                                                                                                                                                                                                                                                                                                      |
-| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [ext-openssl](https://www.php.net/manual/book.openssl.php) | Lors de l'utilisation d'une version statique de FrankenPHP (construite avec la libc musl), l'extension OpenSSL peut planter sous de fortes charges. Une solution consiste à utiliser une version liée dynamiquement (comme celle utilisée dans les images Docker). Ce bogue est [suivi par PHP](https://github.com/php/php-src/issues/13648). |
+| Nom                                     | Problème                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| :-------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [datadog](https://github.com/DataDog)   | Instabilité lors du profilage de FrankenPHP. Ce bug est [suivi par DataDog](https://github.com/DataDog/dd-trace-php/issues/3729).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| [blackfire](https://blackfire.io/)      | [Le support de FrankenPHP est en bêta et n'est pas encore complet](https://docs.blackfire.io/php/integrations/frankenphp).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| [imagick](https://github.com/Imagick/imagick) | Les threads OpenMP d'ImageMagick entrent en conflit avec les threads de FrankenPHP, causant instabilité et plantages. Atténuez cela en désactivant le threading d'ImageMagick via ``\Imagick::setResourceLimit(\Imagick::RESOURCETYPE_THREAD, 1)`` ou en compilant ImageMagick avec ``--disable-openmp``. OpenMP est déjà désactivé dans les binaires statiques et les paquets officiels ``apt``/``apk``/``rpm``, donc seules les images Docker et les installations Homebrew sont affectées. |
+
+## Dépasser la limite de mémoire dure de PHP arrête l'ensemble du serveur
+
+Depuis PHP 8.2.35, 8.3.36, 8.4.27 et 8.5.12, dépasser `memory_limit` n'arrête plus le script immédiatement : l'erreur fatale "Allowed memory size exhausted" est déclenchée lors du prochain appel de fonction ou itération de boucle.
+Si le script alloue au-delà de la limite de mémoire dure avant cela, PHP quitte le processus.
+La limite dure est par défaut le double de `memory_limit` (ou `memory_limit` plus 1 GiB au-dessus de 1 GiB) et peut être modifiée avec le paramètre INI `memory_hard_limit_percent`.
+
+Le code qui continue de s'exécuter au-delà de `memory_limit` peut l'atteindre, par exemple une seule allocation plus grande que `memory_limit` (comme `array_merge()` sur de grands tableaux) ou des concaténations de chaînes consécutives.
+
+PHP-FPM ne perd qu'un seul processus enfant.
+FrankenPHP sert toutes les requêtes à partir de threads d'un seul processus, de sorte que chaque requête en cours est perdue et le serveur s'arrête jusqu'à ce qu'il soit redémarré.
+Exécutez FrankenPHP sous un superviseur qui le redémarre, comme une politique de redémarrage Docker ou `Restart=` de systemd (déjà configuré dans les paquets `deb` et `rpm`).
 
 ## get_browser
 
@@ -23,7 +43,11 @@ La fonction [get_browser()](https://www.php.net/manual/function.get-browser.php)
 
 ## Binaire autonome et images Docker basées sur Alpine
 
-Le binaire autonome et les images Docker basées sur Alpine (`dunglas/frankenphp:*-alpine`) utilisent [musl libc](https://musl.libc.org/) au lieu de [glibc et ses amis](https://www.etalabs.net/compare_libcs.html), pour garder une taille de binaire plus petite. Cela peut entraîner des problèmes de compatibilité. En particulier, le drapeau glob `GLOB_BRACE` n'est [pas disponible](https://www.php.net/manual/function.glob.php).
+Le binaire entièrement statique et les images Docker basées sur Alpine (`dunglas/frankenphp:*-alpine`) utilisent [musl libc](https://musl.libc.org/) au lieu de [glibc et ses amis](https://www.etalabs.net/compare_libcs.html), pour garder une taille de binaire plus petite.
+Cela peut entraîner des problèmes de compatibilité.
+En particulier, le drapeau glob `GLOB_BRACE` n'est [pas disponible](https://www.php.net/manual/function.glob.php).
+
+Préférez utiliser la variante GNU du binaire statique et les images Docker basées sur Debian si vous rencontrez des problèmes.
 
 ## Utilisation de `https://127.0.0.1` avec Docker
 
@@ -47,7 +71,7 @@ docker run \
 
 Le pilote de réseau "hôte" n'est pas pris en charge sur Mac et Windows. Sur ces plateformes, vous devrez deviner l'adresse IP du conteneur et l'inclure dans les noms de serveur.
 
-Exécutez la commande `docker network inspect bridge` et inspectez la clef `Containers` pour identifier la dernière adresse IP attribuée sous la clef `IPv4Address`, puis incrémentez-la d'un. Si aucun conteneur n'est en cours d'exécution, la première adresse IP attribuée est généralement `172.17.0.2`.
+Exécutez la commande `docker network inspect bridge` et inspectez la clé `Containers` pour identifier la dernière adresse IP attribuée sous la clé `IPv4Address`, puis incrémentez-la d'un. Si aucun conteneur n'est en cours d'exécution, la première adresse IP attribuée est généralement `172.17.0.2`.
 
 Ensuite, incluez ceci dans la variable d'environnement `SERVER_NAME` :
 
@@ -87,6 +111,7 @@ Comme solution de contournement, nous pouvons créer un script shell dans `/usr/
 
 ```bash
 #!/usr/bin/env bash
+# /usr/local/bin/php
 args=("$@")
 index=0
 for i in "$@"
@@ -101,7 +126,7 @@ done
 /usr/local/bin/frankenphp php-cli ${args[@]}
 ```
 
-Ensuite, mettez la variable d'environnement `PHP_BINARY` au chemin de notre script `php` et lancez Composer :
+Ensuite, définissez la variable d'environnement `PHP_BINARY` au chemin de notre script `php` et lancez Composer :
 
 ```console
 export PHP_BINARY=/usr/local/bin/php

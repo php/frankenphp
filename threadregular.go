@@ -5,6 +5,7 @@ import "C"
 import (
 	"log/slog"
 	"runtime"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -24,6 +25,7 @@ type regularThread struct {
 
 var (
 	regularThreads       []*phpThread
+	numRegularThreads    int
 	regularThreadMu      = &sync.RWMutex{}
 	regularRequestChan   = make(chan *frankenPHPContext)
 	queuedRegularThreads = atomic.Int32{}
@@ -163,6 +165,12 @@ func handleRequestWithRegularPHPThreads(fc *frankenPHPContext) error {
 			return nil
 		case scaleChan <- fc:
 			// the request has triggered scaling, continue to wait for a thread
+		case <-fc.ctx.Done():
+			queuedRegularThreads.Add(-1)
+			metrics.DequeuedRequest()
+			metrics.StopRequest()
+
+			return nil
 		case <-timeoutChan(time.Duration(maxWaitTime.Load())):
 			// the request has timed out stalling
 			queuedRegularThreads.Add(-1)
@@ -180,6 +188,13 @@ func attachRegularThread(thread *phpThread) {
 	regularThreadMu.Lock()
 	regularThreads = append(regularThreads, thread)
 	regularThreadMu.Unlock()
+}
+
+func regularThreadsSnapshot() []*phpThread {
+	regularThreadMu.RLock()
+	defer regularThreadMu.RUnlock()
+
+	return slices.Clone(regularThreads)
 }
 
 func detachRegularThread(thread *phpThread) {

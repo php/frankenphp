@@ -91,12 +91,12 @@ func cmdPHPServer(fs caddycmd.Flags) (int, error) {
 		for _, worker := range workers {
 			parts := strings.SplitN(worker, ",", 2)
 
-			var num uint64
+			var num int
 			if len(parts) > 1 {
-				num, _ = strconv.ParseUint(parts[1], 10, 32)
+				num, _ = strconv.Atoi(parts[1])
 			}
 
-			workersOption = append(workersOption, workerConfig{FileName: parts[0], Num: int(num)})
+			workersOption = append(workersOption, workerConfig{FileName: parts[0], Num: num})
 		}
 		workersOption[0].Watch = watch
 	}
@@ -155,7 +155,7 @@ func cmdPHPServer(fs caddycmd.Flags) (int, error) {
 	}
 	redirHandler := caddyhttp.StaticResponse{
 		StatusCode: caddyhttp.WeakString(strconv.Itoa(http.StatusPermanentRedirect)),
-		Headers:    http.Header{"Location": []string{"{http.request.orig_uri.path}/"}},
+		Headers:    http.Header{"Location": []string{canonicalPathLocation}},
 	}
 	redirRoute := caddyhttp.Route{
 		MatcherSetsRaw: []caddy.ModuleMap{redirMatcherSet},

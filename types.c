@@ -1,4 +1,4 @@
-#include "types.h"
+#include "frankenphp_types.h"
 
 zval *get_ht_packed_data(HashTable *ht, uint32_t index) {
   if (ht->u.flags & HASH_FLAG_PACKED) {
@@ -12,6 +12,18 @@ Bucket *get_ht_bucket_data(HashTable *ht, uint32_t index) {
     return &ht->arData[index];
   }
   return NULL;
+}
+
+bool __zend_array_is_recursive__(zend_array *arr) {
+  return GC_IS_RECURSIVE(arr);
+}
+
+void __zend_array_protect_recursion__(zend_array *arr) {
+  GC_TRY_PROTECT_RECURSION(arr);
+}
+
+void __zend_array_unprotect_recursion__(zend_array *arr) {
+  GC_TRY_UNPROTECT_RECURSION(arr);
 }
 
 void *__emalloc__(size_t size) { return malloc(size); }

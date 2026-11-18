@@ -25,8 +25,16 @@ updates:
           - "*"
     cooldown:
       default-days: 7
-  - package-ecosystem: github-actions
+  - package-ecosystem: vcpkg
     directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore(windows)
+  - package-ecosystem: github-actions
+    directories:
+      - /
+      - /.github/actions/*
     schedule:
       interval: weekly
     commit-message:

@@ -1,7 +1,7 @@
 package frankenphp
 
 // #include "frankenphp.h"
-// #include "types.h"
+// #include "frankenphp_types.h"
 import "C"
 import (
 	"os"
@@ -21,17 +21,4 @@ func go_init_os_env(mainThreadEnv *C.zend_array) {
 		zStr := newPersistentZendString(val)
 		C.__hash_update_string__(mainThreadEnv, zkey, zStr)
 	}
-}
-
-//export go_putenv
-func go_putenv(name *C.char, nameLen C.int, val *C.char, valLen C.int) C.bool {
-	goName := C.GoStringN(name, nameLen)
-
-	if val == nil {
-		// If no "=" is present, unset the environment variable
-		return C.bool(os.Unsetenv(goName) == nil)
-	}
-
-	goVal := C.GoStringN(val, valLen)
-	return C.bool(os.Setenv(goName, goVal) == nil)
 }

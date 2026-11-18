@@ -27,7 +27,8 @@ const (
 )
 
 var (
-	ErrMaxThreadsReached = errors.New("max amount of overall threads reached")
+	ErrMaxThreadsReached       = errors.New("max amount of overall threads reached")
+	errMaxWorkerThreadsReached = errors.New("max amount of worker threads reached")
 
 	maxIdleTime       = defaultMaxIdleTime
 	scaleChan         chan *frankenPHPContext
@@ -58,9 +59,9 @@ func initAutoScaling(mainThread *phpMainThread) {
 }
 
 func addRegularThread() (*phpThread, error) {
-	thread := getInactivePHPThread()
-	if thread == nil {
-		return nil, ErrMaxThreadsReached
+	thread, err := inactivePHPThread()
+	if err != nil {
+		return nil, err
 	}
 	convertToRegularThread(thread)
 	thread.state.WaitFor(state.Ready, state.Inactive, state.Reserved) // stable states
@@ -69,14 +70,34 @@ func addRegularThread() (*phpThread, error) {
 }
 
 func addWorkerThread(worker *worker) (*phpThread, error) {
-	thread := getInactivePHPThread()
-	if thread == nil {
-		return nil, ErrMaxThreadsReached
+	if worker.isAtThreadLimit() {
+		return nil, errMaxWorkerThreadsReached
+	}
+
+	thread, err := inactivePHPThread()
+	if err != nil {
+		return nil, err
 	}
 	convertToWorkerThread(thread, worker)
 	thread.state.WaitFor(state.Ready, state.Inactive, state.Reserved) // stable states
 
 	return thread, nil
+}
+
+// a thread whose reboot failed stays listed until the next downscale check, and its slot can be reused before that
+func trackAutoScaledThread(thread *phpThread) {
+	if !slices.Contains(autoScaledThreads, thread) {
+		autoScaledThreads = append(autoScaledThreads, thread)
+	}
+}
+
+// raising max_threads doesn't help when the OS refuses to create threads
+func scalingFailureMessage(err error) string {
+	if errors.Is(err, ErrThreadCreation) {
+		return "could not start a new PHP thread"
+	}
+
+	return "could not increase max_threads, consider raising this limit"
 }
 
 // scaleWorkerThread adds a worker PHP thread automatically
@@ -96,13 +117,13 @@ func scaleWorkerThread(worker *worker, done chan struct{}, mstate *state.ThreadS
 	thread, err := addWorkerThread(worker)
 	if err != nil {
 		if globalLogger.Enabled(globalCtx, slog.LevelWarn) {
-			globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "could not increase max_threads, consider raising this limit", slog.String("worker", worker.name), slog.Any("error", err))
+			globalLogger.LogAttrs(globalCtx, slog.LevelWarn, scalingFailureMessage(err), slog.String("worker", worker.name), slog.Any("error", err))
 		}
 
 		return
 	}
 
-	autoScaledThreads = append(autoScaledThreads, thread)
+	trackAutoScaledThread(thread)
 
 	if globalLogger.Enabled(globalCtx, slog.LevelInfo) {
 		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "upscaling worker thread", slog.String("worker", worker.name), slog.Int("thread", thread.threadIndex), slog.Int("num_threads", len(autoScaledThreads)))
@@ -126,13 +147,13 @@ func scaleRegularThread(done chan struct{}, mstate *state.ThreadState) {
 	thread, err := addRegularThread()
 	if err != nil {
 		if globalLogger.Enabled(globalCtx, slog.LevelWarn) {
-			globalLogger.LogAttrs(globalCtx, slog.LevelWarn, "could not increase max_threads, consider raising this limit", slog.Any("error", err))
+			globalLogger.LogAttrs(globalCtx, slog.LevelWarn, scalingFailureMessage(err), slog.Any("error", err))
 		}
 
 		return
 	}
 
-	autoScaledThreads = append(autoScaledThreads, thread)
+	trackAutoScaledThread(thread)
 
 	if globalLogger.Enabled(globalCtx, slog.LevelInfo) {
 		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "upscaling regular thread", slog.Int("thread", thread.threadIndex), slog.Int("num_threads", len(autoScaledThreads)))
@@ -171,6 +192,10 @@ func startUpscalingThreads(maxScaledThreads int, scale chan *frankenPHPContext, 
 			// if the request has been stalled long enough, scale
 			if fc.worker == nil {
 				scaleRegularThread(done, mstate)
+				continue
+			}
+
+			if fc.worker.stopped.Load() {
 				continue
 			}
 

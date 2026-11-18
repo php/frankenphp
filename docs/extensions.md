@@ -118,7 +118,7 @@ Our extension is now ready to be compiled and integrated into FrankenPHP. To do 
 
 ```console
 CGO_ENABLED=1 \
-XCADDY_GO_BUILD_FLAGS="-ldflags='-w -s' -tags=nobadger,nomysql,nopgx" \
+XCADDY_GO_BUILD_FLAGS="-ldflags='-w -s' -tags=nobadger,nomysql,nopgx,deprecated_topic,deprecated_claim" \
 CGO_CFLAGS=$(php-config --includes) \
 CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)" \
 xcaddy build \
@@ -671,6 +671,7 @@ In your module, you need to define a new native function that will be called fro
 // extension.go
 package example
 
+// #cgo linux CFLAGS: -D_GNU_SOURCE
 // #include "extension.h"
 import "C"
 import (
@@ -906,7 +907,7 @@ Our extension is now ready to be compiled and integrated into FrankenPHP. To do 
 
 ```console
 CGO_ENABLED=1 \
-XCADDY_GO_BUILD_FLAGS="-ldflags='-w -s' -tags=nobadger,nomysql,nopgx" \
+XCADDY_GO_BUILD_FLAGS="-ldflags='-w -s' -tags=nobadger,nomysql,nopgx,deprecated_topic,deprecated_claim" \
 CGO_CFLAGS=$(php-config --includes) \
 CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)" \
 xcaddy build \

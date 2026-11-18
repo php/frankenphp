@@ -47,6 +47,9 @@ php_server {
 
 By default, FrankenPHP will watch all files in the current working directory matching this glob pattern: `./**/*.{css,env,gif,htm,html,jpg,jpeg,js,mjs,php,png,svg,twig,webp,xml,yaml,yml}`
 
+When hot reload is enabled, `opcache.revalidate_freq` defaults to `0`, so OPcache checks on every request whether a script changed.
+Setting it in a `php.ini` file or through the `php_ini` directive takes precedence.
+
 It's possible to set the files to watch using the glob syntax explicitly:
 
 ```caddyfile

@@ -23,7 +23,7 @@ Selon votre configuration, le navigateur va soit :
 Pour activer le hot reload, activez Mercure, puis ajoutez la sous-directive `hot_reload` à la directive `php_server` dans votre `Caddyfile`.
 
 > [!WARNING]
-
+>
 > Cette fonctionnalité est destinée **uniquement aux environnements de développement**.
 > N'activez pas `hot_reload` en production, car cette fonctionnalité n'est pas sécurisée (expose des détails internes sensibles) et ralentit l'application.
 

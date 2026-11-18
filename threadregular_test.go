@@ -1,6 +1,8 @@
 package frankenphp
 
 import (
+	"context"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -13,6 +15,36 @@ func TestRegularRequestChanIsCreatedBeforeInitRuns(t *testing.T) {
 		"a request dispatched between the start of Init and the first thread being attached "+
 			"must queue on a real channel: sending on a nil channel blocks forever, "+
 			"even after the channel variable is later assigned")
+}
+
+func TestCancelledRequestLeavesRegularQueue(t *testing.T) {
+	regularThreadMu.Lock()
+	savedThreads := regularThreads
+	regularThreads = nil
+	regularThreadMu.Unlock()
+	savedMaxWaitTime := maxWaitTime.Swap(0)
+	savedScaleChan := scaleChan
+	scaleChan = nil
+	t.Cleanup(func() {
+		regularThreadMu.Lock()
+		regularThreads = savedThreads
+		regularThreadMu.Unlock()
+		maxWaitTime.Store(savedMaxWaitTime)
+		scaleChan = savedScaleChan
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequest("GET", "/index.php", nil).WithContext(ctx)
+	cancel()
+
+	err := handleRequestWithRegularPHPThreads(&frankenPHPContext{
+		request: req,
+		ctx:     ctx,
+		done:    make(chan any),
+	})
+
+	assert.NoError(t, err)
+	assert.Zero(t, queuedRegularThreads.Load())
 }
 
 func TestRequestsQueuedBeforeThreadsAreReadyAreHandedOver(t *testing.T) {
@@ -34,7 +66,7 @@ func TestRequestsQueuedBeforeThreadsAreReadyAreHandedOver(t *testing.T) {
 	const requests = 5
 	errChans := make([]chan error, requests)
 	for i := range errChans {
-		fc := &frankenPHPContext{done: make(chan any)}
+		fc := &frankenPHPContext{ctx: context.Background(), done: make(chan any)}
 		errChan := make(chan error, 1)
 		go func() {
 			errChan <- handleRequestWithRegularPHPThreads(fc)

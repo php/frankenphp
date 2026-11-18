@@ -1,21 +1,41 @@
+---
+title: FrankenPHPの既知の問題、非互換の拡張モジュール、および回避策
+description: サポートされていないPHP拡張モジュール、musl libcの注意点、127.0.0.1を使用したDocker TLSセットアップ、Composer @phpスクリプトなど、FrankenPHPの制限事項の参照。
+---
+
 # 既知の問題
 
 ## 未対応のPHP拡張モジュール
 
 以下の拡張モジュールはFrankenPHPと互換性がないことが確認されています：
 
-| 名前                                                                                                        | 理由                 | 代替手段                                                                                                             |
-| ----------------------------------------------------------------------------------------------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| [imap](https://www.php.net/manual/imap.installation.php)                                                 | スレッドセーフでない | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap) |
-| [newrelic](https://docs.newrelic.com/docs/apm/agents/php-agent/getting-started/introduction-new-relic-php/) | スレッドセーフでない | -                                                                                                                    |
+| 名前                                                                                                        | 理由                 | 代替手段                                                                                                                                                                    |
+| :---------------------------------------------------------------------------------------------------------- | :------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [imap](https://www.php.net/manual/imap.installation.php)                                                    | スレッドセーフでない | [javanile/php-imap2](https://github.com/javanile/php-imap2), [webklex/php-imap](https://github.com/Webklex/php-imap), [ImapEngine](https://github.com/DirectoryTree/ImapEngine) |
+| [newrelic](https://docs.newrelic.com/docs/apm/agents/php-agent/getting-started/introduction-new-relic-php/) | スレッドセーフでない | -                                                                                                                                                                               |
+| [pcov](https://github.com/krakjoe/pcov)                                                                     | スレッドセーフでない ([クラシックモードでのSIGSEGV](https://github.com/krakjoe/pcov/issues/132)) | CLI SAPIでカバレッジを収集する（FrankenPHPの外部でPHPUnit/Pestを実行する）                                                                                         |
 
 ## バグのあるPHP拡張モジュール
 
 以下の拡張モジュールはFrankenPHPとの組み合わせで既知のバグや予期しない動作が確認されています：
 
-| 名前                                                          | 問題                                                                                                                                                                                                                                                                                 |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [ext-openssl](https://www.php.net/manual/book.openssl.php) | FrankenPHPの静的ビルド（musl libcでビルド）を使用した場合、高負荷時にOpenSSL拡張がクラッシュすることがあります。回避策として動的リンクのビルド（Dockerイメージで使用されているもの）を使用してください。このバグは[PHP側で追跡中](https://github.com/php/php-src/issues/13648)です。 |
+| 名前                                  | 問題                                                                                                                                         |
+| :------------------------------------ | :----------------------------------------------------------------------------------------------------------------------------------------------- |
+| [datadog](https://github.com/DataDog) | FrankenPHPのプロファイリング時に不安定な動作が確認されています。このバグは[DataDogによって追跡中](https://github.com/DataDog/dd-trace-php/issues/3729)です。 |
+| [blackfire](https://blackfire.io/)    | [FrankenPHPのサポートはベータ版であり、まだ機能が完全ではありません](https://docs.blackfire.io/php/integrations/frankenphp)。                            |
+| [imagick](https://github.com/Imagick/imagick) | ImageMagickのOpenMPスレッドがFrankenPHPのスレッドと競合し、不安定性やクラッシュを引き起こします。\Imagick::setResourceLimit(\Imagick::RESOURCETYPE_THREAD, 1)でImageMagickのスレッドを無効にするか、`--disable-openmp`でImageMagickをコンパイルすることで軽減できます。静的バイナリおよび公式の`apt`/`apk`/`rpm`パッケージではOpenMPはすでに無効になっているため、DockerイメージとHomebrewインストールのみが影響を受けます。 |
+
+## PHPのハードメモリ制限を超過するとサーバー全体が停止する
+
+PHP 8.2.35、8.3.36、8.4.27、および8.5.12以降、`memory_limit`を超過してもスクリプトがすぐに停止しなくなりました。「Allowed memory size exhausted」の致命的なエラーは、次の関数呼び出しまたはループイテレーションで発生します。
+それ以前にスクリプトがハードメモリ制限を超えて割り当てを行うと、PHPはプロセスを終了します。
+ハード制限はデフォルトで`memory_limit`の2倍（または1 GiBを超える場合は`memory_limit`プラス1 GiB）であり、`memory_hard_limit_percent` INI設定で変更できます。
+
+`memory_limit`を超えて実行され続けるコードは、例えば`memory_limit`より大きい単一の割り当て（大規模な配列に対する`array_merge()`など）や、連続する文字列連結によって、この制限に達する可能性があります。
+
+PHP-FPMは1つの子プロセスしか失いません。
+FrankenPHPはすべてのリクエストを単一プロセスのスレッドから処理するため、処理中のすべてのリクエストが失われ、サーバーは再起動されるまで停止します。
+Dockerの再起動ポリシーやsystemdの`Restart=`（`deb`および`rpm`パッケージではすでに設定済み）など、FrankenPHPを再起動する監視プログラムの下で実行してください。
 
 ## get_browser
 
@@ -24,6 +44,8 @@
 ## スタンドアロンバイナリおよびAlpineベースのDockerイメージ
 
 スタンドアロンバイナリおよびAlpineベースのDockerイメージ（`dunglas/frankenphp:*-alpine`）は、バイナリサイズを小さく保つために[glibc and friends](https://www.etalabs.net/compare_libcs.html)ではなく[musl libc](https://musl.libc.org/)を使用しています。これによりいくつかの互換性問題が発生する可能性があります。特に、globフラグ`GLOB_BRACE`は [サポートされていません](https://www.php.net/manual/function.glob.php) 。
+
+問題が発生した場合は、静的バイナリのGNU版およびDebianベースのDockerイメージを使用することをお勧めします。
 
 ## Dockerで`https://127.0.0.1`を使用する
 
@@ -78,7 +100,7 @@ docker run \
 
 ## `@php` を参照するComposerスクリプト
 
-[Composerスクリプト](https://getcomposer.org/doc/articles/scripts.md)では、いくつかのタスクでPHPバイナリを実行したい場合があります。例えば、[Laravelプロジェクト](laravel.md)で`@php artisan package:discover --ansi`を実行する場合です。しかし現在これは以下の2つの理由で[失敗します](https://github.com/dunglas/frankenphp/issues/483#issuecomment-1899890915)：
+[Composerスクリプト](https://getcomposer.org/doc/articles/scripts.md)では、いくつかのタスクでPHPバイナリを実行したい場合があります。例えば、[Laravelプロジェクト](laravel.md)で`@php artisan package:discover --ansi`を実行する場合です。しかし現在これは以下の2つの理由で[失敗します](https://github.com/php/frankenphp/issues/483#issuecomment-1899890915)：
 
 - ComposerはFrankenPHPバイナリを呼び出す方法を知りません
 - Composerはコマンドで`-d`フラグを使用してPHP設定を追加する場合があり、FrankenPHPはまだサポートしていません
@@ -87,6 +109,7 @@ docker run \
 
 ```bash
 #!/usr/bin/env bash
+# /usr/local/bin/php
 args=("$@")
 index=0
 for i in "$@"

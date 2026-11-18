@@ -251,26 +251,16 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 // go_frankenphp_worker_handle_request_start is called at the start of every php request served.
 //
 //export go_frankenphp_worker_handle_request_start
-func go_frankenphp_worker_handle_request_start(threadIndex C.uintptr_t) (C.bool, unsafe.Pointer) {
+func go_frankenphp_worker_handle_request_start(threadIndex C.uintptr_t, parameters *C.zval) C.bool {
 	handler := phpThreads[threadIndex].handler.(*workerThread)
-	hasRequest, parameters := handler.waitForWorkerRequest()
+	hasRequest, p := handler.waitForWorkerRequest()
 
-	if parameters != nil {
-		var ptr unsafe.Pointer
-
-		switch p := parameters.(type) {
-		case unsafe.Pointer:
-			ptr = p
-
-		default:
-			ptr = PHPValue(p)
-		}
-		handler.thread.Pin(ptr)
-
-		return C.bool(hasRequest), ptr
+	if p != nil {
+		// built on the worker thread and released by frankenphp_handle_request()
+		phpValueInto(p, parameters)
 	}
 
-	return C.bool(hasRequest), nil
+	return C.bool(hasRequest)
 }
 
 // go_frankenphp_finish_worker_request is called at the end of every php request served.
