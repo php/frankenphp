@@ -233,6 +233,9 @@ func newWorker(o workerOpt) (*worker, error) {
 	return w, nil
 }
 
+// restartWorkers is set when a watched file changed since the threads booted.
+var restartWorkers atomic.Bool
+
 // RestartWorkers attempts to restart all workers gracefully.
 // All workers must be restarted at the same time to prevent issues with
 // opcache resetting. Blocks until every worker thread has yielded;
@@ -254,9 +257,30 @@ func TryRestartWorkers() bool {
 	if !startupMu.TryLock() {
 		return false
 	}
-	defer startupMu.Unlock()
+
+	restarted := rebootThreads()
+	unlockStartup()
+
+	return restarted
+}
+
+// rebootThreads must be called with startupMu held.
+func rebootThreads() bool {
+	// the reboot loads every file changed so far
+	restartWorkers.Store(false)
 
 	return mainThread != nil && mainThread.rebootAllThreads()
+}
+
+// unlockStartup releases startupMu, then runs the file watcher restart
+// skipped while it was held.
+func unlockStartup() {
+	startupMu.Unlock()
+
+	for restartWorkers.Load() && startupMu.TryLock() {
+		rebootThreads()
+		startupMu.Unlock()
+	}
 }
 
 func (worker *worker) attachThread(thread *phpThread) {
