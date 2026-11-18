@@ -4,6 +4,7 @@ package frankenphp
 import "C"
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -36,18 +37,19 @@ type worker struct {
 	onThreadShutdown       func(int)
 	queuedRequests         atomic.Int32
 	server                 *Server
-	stopped                atomic.Bool
+	// the logger of its server in the run that started it
+	logger  *slog.Logger
+	stopped atomic.Bool
 }
 
 var (
-	workers             []*worker
-	workersByName       map[string]*worker
-	globalWorkersByPath map[string]*worker
-	watcherIsEnabled    bool
-	startupFailChan     chan error
+	workers          []*worker
+	workersByName    map[string]*worker
+	watcherIsEnabled bool
+	startupFailChan  chan error
 )
 
-func initWorkers(opts []workerOpt) error {
+func initWorkers(run *runState, opts []workerOpt) error {
 	if len(opts) == 0 {
 		return nil
 	}
@@ -59,10 +61,9 @@ func initWorkers(opts []workerOpt) error {
 
 	workers = make([]*worker, 0, len(opts))
 	workersByName = make(map[string]*worker, len(opts))
-	globalWorkersByPath = make(map[string]*worker, len(opts))
 
 	for _, o := range opts {
-		w, err := newWorker(o)
+		w, err := newWorker(run, o)
 		if err != nil {
 			return err
 		}
@@ -70,10 +71,7 @@ func initWorkers(opts []workerOpt) error {
 		totalThreadsToStart += w.num
 		workers = append(workers, w)
 		workersByName[w.name] = w
-		if w.server == nil {
-			globalWorkersByPath[w.fileName] = w
-			globalWorkersByPath[w.declaredFileName] = w
-		} else if err := w.server.addWorker(w); err != nil {
+		if err := run.addWorker(w); err != nil {
 			return err
 		}
 	}
@@ -165,7 +163,7 @@ func checkWorkerDeclaration(o workerOpt, nameTaken func(string) bool, pathTaken 
 	return nil
 }
 
-func newWorker(o workerOpt) (*worker, error) {
+func newWorker(run *runState, o workerOpt) (*worker, error) {
 	o, err := resolveWorkerFile(o)
 	if err != nil {
 		return nil, err
@@ -174,10 +172,12 @@ func newWorker(o workerOpt) (*worker, error) {
 	nameTaken := func(name string) bool { return workersByName[name] != nil }
 	pathTaken := func(server *Server, path string) bool {
 		if server == nil {
-			return globalWorkersByPath[path] != nil
+			return run.globalWorkersByPath[path] != nil
 		}
 
-		return server.workersByPath[path] != nil
+		state := run.servers[server]
+
+		return state != nil && state.workersByPath[path] != nil
 	}
 
 	if err := checkWorkerDeclaration(o, nameTaken, pathTaken); err != nil {
@@ -216,6 +216,11 @@ func newWorker(o workerOpt) (*worker, error) {
 		onThreadReady:          o.onThreadReady,
 		onThreadShutdown:       o.onThreadShutdown,
 		server:                 o.server,
+		logger:                 globalLogger,
+	}
+
+	if o.server != nil {
+		w.logger = o.server.logger
 	}
 
 	w.configureMercure(&o)

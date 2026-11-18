@@ -3,6 +3,7 @@ package frankenphp
 import (
 	"context"
 	"io"
+	"log/slog"
 	"net/http/httptest"
 	"sync"
 	"testing"
@@ -260,6 +261,32 @@ func TestWorkerExtensionSendMessageDuringReload(t *testing.T) {
 
 	cancel()
 	wg.Wait()
+}
+
+func TestWorkerExtensionStaleMessageDuringReload(t *testing.T) {
+	externalWorkers, o := WithExtensionWorkers("extensionWorkers", "testdata/message-worker.php", 1)
+
+	require.NoError(t, Init(o))
+	t.Cleanup(Shutdown)
+	stale := externalWorkers.(*extensionWorkers).internalWorker.Load()
+
+	// a SendMessage() call that passed the running check before the reloads
+	ctx, cancel := context.WithCancel(t.Context())
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		for ctx.Err() == nil {
+			_ = newContextFromMessage("Hello Workers", nil, ctx, stale)
+		}
+	})
+	t.Cleanup(func() {
+		cancel()
+		wg.Wait()
+	})
+
+	for range 3 {
+		Shutdown()
+		require.NoError(t, Init(o, WithLogger(slog.New(slog.DiscardHandler))))
+	}
 }
 
 func TestWorkerExtensionRemovedWorkerIsNotScaled(t *testing.T) {

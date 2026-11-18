@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/dunglas/frankenphp"
@@ -240,4 +241,46 @@ func TestServer(t *testing.T) {
 
 		assert.Contains(t, buf.String(), "some error message")
 	})
+}
+
+func TestServeHTTPDuringReload(t *testing.T) {
+	server, err := frankenphp.NewServer(testDataDir)
+	require.NoError(t, err)
+
+	opts := []frankenphp.Option{
+		frankenphp.WithServer(server),
+		frankenphp.WithWorkers("global", testDataDir+"worker-with-counter.php", 1),
+		frankenphp.WithWorkers("scoped", testDataDir+"worker-with-counter.php", 1, frankenphp.WithWorkerServerScope(server)),
+		frankenphp.WithWorkers("matcher", testDataDir+"worker-with-counter.php", 1,
+			frankenphp.WithWorkerServerScope(server),
+			frankenphp.WithWorkerMatcher(func(*http.Request) bool { return false }),
+		),
+	}
+	initServers(t, opts...)
+
+	done := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		for {
+			select {
+			case <-done:
+				return
+			default:
+			}
+
+			// an invalid Content-Length rejects the request after the worker lookup, before PHP runs
+			req := httptest.NewRequest(http.MethodGet, "http://example.com/index.php", nil)
+			req.Header.Set("Content-Length", "-1")
+			_ = server.ServeHTTP(httptest.NewRecorder(), req)
+		}
+	})
+	t.Cleanup(func() {
+		close(done)
+		wg.Wait()
+	})
+
+	for range 3 {
+		frankenphp.Shutdown()
+		require.NoError(t, frankenphp.Init(opts...))
+	}
 }

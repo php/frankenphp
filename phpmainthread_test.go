@@ -13,6 +13,7 @@ import (
 
 	"github.com/dunglas/frankenphp/internal/state"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var testDataPath, _ = filepath.Abs("./testdata")
@@ -254,13 +255,13 @@ func TestReturnAnErrorIf2WorkersHaveTheSameFileName(t *testing.T) {
 	resetGlobals()
 	workers = []*worker{}
 	workersByName = map[string]*worker{}
-	globalWorkersByPath = map[string]*worker{}
-	w, err1 := newWorker(workerOpt{fileName: testDataPath + "/index.php"})
+	run := newRunState(nil)
+	w, err1 := newWorker(run, workerOpt{fileName: testDataPath + "/index.php"})
 	assert.NoError(t, err1)
 	workers = append(workers, w)
 	workersByName[w.name] = w
-	globalWorkersByPath[w.fileName] = w
-	_, err2 := newWorker(workerOpt{fileName: testDataPath + "/index.php"})
+	assert.NoError(t, run.addWorker(w))
+	_, err2 := newWorker(run, workerOpt{fileName: testDataPath + "/index.php"})
 	assert.Error(t, err2, "two workers cannot have the same filename")
 }
 
@@ -268,11 +269,12 @@ func TestReturnAnErrorIf2ModuleWorkersHaveTheSameName(t *testing.T) {
 	resetGlobals()
 	workers = []*worker{}
 	workersByName = map[string]*worker{}
-	w, err1 := newWorker(workerOpt{fileName: testDataPath + "/index.php", name: "workername"})
+	run := newRunState(nil)
+	w, err1 := newWorker(run, workerOpt{fileName: testDataPath + "/index.php", name: "workername"})
 	assert.NoError(t, err1)
 	workers = append(workers, w)
 	workersByName[w.name] = w
-	_, err2 := newWorker(workerOpt{fileName: testDataPath + "/hello.php", name: "workername"})
+	_, err2 := newWorker(run, workerOpt{fileName: testDataPath + "/hello.php", name: "workername"})
 	assert.Error(t, err2, "two workers cannot have the same name")
 }
 
@@ -283,7 +285,7 @@ func getDummyWorker(t *testing.T, fileName string) *worker {
 		workers = []*worker{}
 	}
 
-	worker, _ := newWorker(workerOpt{
+	worker, _ := newWorker(newRunState(nil), workerOpt{
 		fileName: testDataPath + "/" + fileName,
 		num:      1,
 	})
@@ -307,6 +309,8 @@ func assertRequestBody(t *testing.T, url string, expected string) {
 
 // create a mix of possible transitions of workers and regular threads
 func allPossibleTransitions(worker1Path string, worker2Path string) []func(*phpThread) {
+	globalWorkersByPath := currentRun.globalWorkersByPath
+
 	return []func(*phpThread){
 		convertToRegularThread,
 		func(thread *phpThread) { thread.shutdown() },
@@ -393,16 +397,18 @@ func TestContextAndLoggerMustNotBeNil(t *testing.T) {
 	assert.NotNil(t, log, "logger is defined if all threads are inactive")
 	assert.NotNil(t, ctx, "context is defined if all threads are inactive")
 
-	fc := newContextFromMessage(nil, nil, nil, &worker{})
+	w, err := newWorker(newRunState(nil), workerOpt{fileName: testDataPath + "/index.php"})
+	require.NoError(t, err)
+	fc := newContextFromMessage(nil, nil, nil, w)
 	assert.NotNil(t, fc.logger, "logger is defined for message context")
 	assert.NotNil(t, fc.ctx, "context is defined for message context")
 
 	r := httptest.NewRequest("GET", "http://localhost/index.php", nil)
-	fc, _ = newContextFromRequest(r, nil, fallbackServer)
+	fc, _ = newContextFromRequest(r, nil, fallbackServer, newRunState(nil).servers[fallbackServer])
 	assert.NotNil(t, fc.logger, "logger is defined for request context")
 	assert.NotNil(t, fc.ctx, "context is defined for request context")
 
-	fc, _ = newWorkerDummyContext(&worker{})
+	fc, _ = newWorkerDummyContext(w)
 	assert.NotNil(t, fc.logger, "logger is defined for worker dummy context")
 	assert.NotNil(t, fc.ctx, "context is defined for worker dummy context")
 }

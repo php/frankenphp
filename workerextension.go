@@ -76,7 +76,7 @@ func (nullMessage) toZval(zval *C.zval) {
 func (w *extensionWorkers) SendMessage(ctx context.Context, message any, rw http.ResponseWriter) (any, error) {
 	// no thread is left to take the message once the instance stopped
 	worker, server := w.running()
-	if worker == nil || !server.isRegistered.Load() {
+	if worker == nil || server.state.Load() == nil {
 		return nil, ErrNotRunning
 	}
 

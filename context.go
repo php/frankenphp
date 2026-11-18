@@ -76,14 +76,14 @@ func NewRequestWithContext(r *http.Request, opts ...RequestOption) (*http.Reques
 	return r.WithContext(c), nil
 }
 
-func newContextFromRequest(request *http.Request, responseWriter http.ResponseWriter, s *Server, opts ...RequestOption) (*frankenPHPContext, error) {
+func newContextFromRequest(request *http.Request, responseWriter http.ResponseWriter, s *Server, state *serverState, opts ...RequestOption) (*frankenPHPContext, error) {
 	fc := &frankenPHPContext{
 		ctx:            request.Context(),
 		done:           make(chan any),
 		startedAt:      time.Now(),
 		server:         s,
 		splitPath:      s.splitPath,
-		logger:         s.logger,
+		logger:         state.logger,
 		request:        request,
 		documentRoot:   s.root,
 		responseWriter: responseWriter,
@@ -97,7 +97,7 @@ func newContextFromRequest(request *http.Request, responseWriter http.ResponseWr
 
 	// assign a worker directly if it has a request matcher
 	if fc.worker == nil {
-		for _, w := range s.workersWithRequestMatcher {
+		for _, w := range state.workersWithRequestMatcher {
 			if w.matchRequest(request) {
 				fc.worker = w
 				break
@@ -129,6 +129,12 @@ func newContextFromRequest(request *http.Request, responseWriter http.ResponseWr
 		return nil, err
 	}
 
+	// see if a php_server worker or global worker matches the request path
+	// aka: root + request path == worker.filename
+	if fc.worker == nil {
+		fc.worker = state.workerByPath(fc.scriptFilename)
+	}
+
 	return fc, nil
 }
 
@@ -152,7 +158,7 @@ func newWorkerDummyContext(w *worker) (*frankenPHPContext, error) {
 		request:   r,
 		startedAt: time.Now(),
 		// startup output of a scoped worker belongs to its server's logger
-		logger: server.logger,
+		logger: w.logger,
 		worker: w,
 	}
 
@@ -190,7 +196,7 @@ func newContextFromMessage(message any, rw http.ResponseWriter, ctx context.Cont
 		server:            server,
 		worker:            w,
 		scriptFilename:    w.fileName,
-		logger:            server.logger,
+		logger:            w.logger,
 		responseWriter:    rw,
 		handlerParameters: message,
 		ctx:               ctx,
