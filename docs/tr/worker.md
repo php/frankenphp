@@ -33,7 +33,7 @@ frankenphp php-server --worker /path/to/your/worker/script.php
 PHP uygulamanız [ikili dosyaya gömülü](embed.md) ise, uygulamanın kök dizinine özel bir `Caddyfile` ekleyebilirsiniz.
 Otomatik olarak kullanılacaktır.
 
-Dosya değişikliklerinde worker'ı yeniden başlatmak ([dosya değişikliklerini izleme](config.md#dosya-değişikliklerini-izleme)) `--watch` seçeneğiyle de mümkündür.
+Worker'ı [dosya değişikliklerinde yeniden başlatmak](config.md#dosya-değişikliklerini-izleme) `--watch` seçeneğiyle de mümkündür.
 Aşağıdaki komut, `/path/to/your/app/` dizininde veya alt dizinlerde `.php` ile biten herhangi bir dosya değiştirilirse yeniden başlatmayı tetikleyecektir:
 
 ```bash
@@ -117,7 +117,7 @@ docker run \
 
 ### PSR-15 Kullanma
 
-Uygulamanız süper küresel değişkenler yerine [PSR-15](https://www.php-fig.org/psr/psr-15/) ile iletişim kuruyorsa, işleyicinin kenarlarındaki istek/yanıtı [nyholm/psr7](https://github.com/Nyholm/psr7) ve [nyholm/psr7-server](https://github.com/Nyholm/psr7-server) ile dönüştürün:
+Uygulamanız süper küresel değişkenler yerine [PSR-15](https://www.php-fig.org/psr/psr-15/) ile iletişim kuruyorsa, işleyicinin kenarlarındaki istek/yanıtı [`nyholm/psr7`](https://github.com/Nyholm/psr7) ve [`nyholm/psr7-server`](https://github.com/Nyholm/psr7-server) ile dönüştürün:
 
 ```console
 composer require nyholm/psr7 nyholm/psr7-server psr/http-server-handler
@@ -235,13 +235,17 @@ Bu, bir istek sırasında `$_ENV` üzerinde yapılan herhangi bir değişikliği
 
 ## Durum Kalıcılığı
 
-Worker modu, PHP sürecini istekler arasında canlı tuttuğu için, aşağıdaki durum istekler arasında kalıcı olur:
+Worker modu, PHP sürecini istekler arasında canlı tuttuğu için, FrankenPHP yalnızca işlenen HTTP isteğine bağlı durumu sıfırlar: süper küresel değişkenler (`$_ENV` hariç), istek gövdesi, yanıt başlıkları ve çıktısı ile oturum.
+Diğer her şey, uzun süreli bir CLI betiğinde olduğu gibi, aynı iş parçacığı tarafından işlenen istekler arasında paylaşılır ve şunları içerir:
 
 - **Statik değişkenler**: Fonksiyonlar veya metotlar içinde `static` ile bildirilen değişkenler, istekler arasında değerlerini korur.
 - **Sınıf statik özellikleri**: Sınıflardaki statik özellikler, istekler arasında kalıcı olur.
 - **Küresel değişkenler**: Worker betiğinin küresel kapsamındaki değişkenler, istekler arasında kalıcı olur.
 - **Bellek içi önbellekler**: İstek işleyicisi dışında bellekte depolanan herhangi bir veri (diziler, nesneler) kalıcı olur.
 - **Çalışma zamanı motoru ayarları**: `ini_set()`, `stream_context_set_default()`, `date_default_timezone_set()`, `chdir()`, `stream_wrapper_register()`, `set_error_handler()` veya `set_exception_handler()` ile yapılan değişiklikler sonraki istekler için geçerliliğini korur. Varsayılan akış bağlamında kimlik bilgileri gibi isteğe veya kullanıcıya özgü değerleri asla orada saklamayın: bunun yerine her çağrıya açık bir bağlam geçirin.
+- **Motor ve uzantı durumu**: `error_get_last()`, `libxml_get_errors()` ve `libxml_get_last_error()` daha önceki bir isteğin bıraktığı hataları döndürür. `http_get_last_response_headers()` ise, aynı iş parçacığında daha önceki bir istek tarafından bile yapılmış olsa da, son HTTP çağrısının yanıt başlıklarını döndürür. `strtok()` daha önceki bir isteğin verdiği dizgiyi devam ettirir. Bir tohum ile `mt_srand()` veya `srand()` çağrıldıktan sonra, `mt_rand()`, `rand()`, `shuffle()`, `str_shuffle()` ve `array_rand()` bu tohumlu diziyi devam ettirir. Hatalar, başlıklar ve dizgiler başka bir istemcinin verilerini içerebilir ve tohumlu bir dizi rastgele değerleri tahmin edilebilir hale getirir: bunları aşağıda gösterildiği gibi sıfırlayın.
+- **Referans döngülerindeki nesneler**: Çöp toplayıcı, PHP tarafından tetiklendiğinde bunları yok eder, bu durum muhtemelen daha sonraki bir istek işlenirken gerçekleşebilir, bu nedenle yıkıcıları o istekte çalışır ve çıktıları istemcisine gider. Yukarıdaki örnekte olduğu gibi, `frankenphp_handle_request()` döndükten sonra `gc_collect_cycles()` çağrısı yapın.
+- **Kapanış fonksiyonları**: `register_shutdown_function()` ile kaydedilen geri çağrılar, worker betiği durduğunda çalışır, bunları kaydeden isteğin sonunda değil ve o zamana kadar bellekte kalır. Bir istek betiği durdurursa (`exit()`, kritik bir hata, bir zaman aşımı), o istek içinde çalışırlar ve çıktıları ile başlıkları istemcisine gider. Bunları işleyicinin dışında, bir kez kaydedin ve istek başına yapılan işi işleyicinin sonunda veya `frankenphp_handle_request()` döndükten sonra çalıştırın.
 - **Süreç genelindeki ayarlar**: `umask()` ve `setlocale()` tüm FrankenPHP sürecini değiştirir, yalnızca mevcut iş parçacığını değil. Worker modu bunları istekler arasında geri yüklemez ve her modda aynı anda çalışan istekleri de etkiler. Bunları başlangıçta bir kez ayarlayın veya umask'ı değiştirmek yerine oluşturulan dosyalarda `chmod()` çağırın.
 
 Bu, tasarım gereğidir ve worker modunu hızlı yapan şey budur. Ancak, istenmeyen yan etkilerden kaçınmak için dikkat gerektirir:
@@ -263,4 +267,22 @@ while (\frankenphp_handle_request($handler)) {
 ```
 
 Worker betikleri yazarken, istekler arasında isteğe özgü herhangi bir durumu sıfırladığınızdan emin olun.
-[Symfony](symfony.md) ve [Laravel Octane](laravel.md) gibi framework'ler çoğu durumu sizin için sıfırlarken, kendi servislerinizi yine de sıfırlamanız gerekebilir. Symfony ile, isteğe özgü durum tutan servisler, kernel tarafından istekler arasında sıfırlanmaları için [`Symfony\Contracts\Service\ResetInterface`](https://github.com/symfony/contracts/blob/main/Service/ResetInterface.php) uygulamasını implemente etmelidir.
+PHP, yukarıda listelenen motor ve uzantı durumunu sıfırlamak için fonksiyonlar sağlar:
+
+```php
+<?php
+$handler = static function () {
+    // ...
+};
+
+while (\frankenphp_handle_request($handler)) {
+    error_clear_last();
+    libxml_clear_errors(); // libxml uzantısını gerektirir
+    http_clear_last_response_headers(); // PHP 8.4+
+    mt_srand(); // rastgele yeniden tohumlar, yalnızca uygulama tohumlarsa gereklidir
+}
+```
+
+Her isteğin `strtok()` ilk çağrısında belirteçlenecek dizgiyi geçirin, daha önceki bir çağrıya güvenmeyin. Küresel üreteci tohumlamaktansa kendi motoruna sahip bir `Random\Randomizer` örneğini tercih edin.
+
+[Symfony](symfony.md) ve [Laravel Octane](laravel.md) gibi framework'ler çoğu durumu sizin için sıfırlarken, kendi servislerinizi yine de sıfırlamanız gerekebilir. Symfony ile, isteğe özgü durum tutan servisler, kernel tarafından istekler arasında sıfırlanmaları için [`Symfony\Contracts\Service\ResetInterface`](https://github.com/symfony/contracts/blob/main/Service/ResetInterface.php) arayüzünü implemente etmelidir.

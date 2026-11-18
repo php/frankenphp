@@ -44,7 +44,7 @@ Questa funzione viene spesso utilizzata in combinazione con il [ricaricamento a 
 
 ## Modalità worker per Symfony
 
-Vedi [la documentazione sulla modalità worker di FrankenPHP con Symfony](symfony.md#symfony-worker-mode-con-frankenphp).
+Vedi [la documentazione sulla modalità worker di FrankenPHP con Symfony](symfony.md#modalità-worker-di-symfony-con-frankenphp).
 
 ## Modalità worker per Laravel Octane
 
@@ -58,7 +58,7 @@ L'esempio seguente mostra come creare il tuo script worker senza fare affidament
 <?php
 // public/index.php
 
-// Avvio dell'applicazione
+// Avvia la tua applicazione
 require __DIR__.'/vendor/autoload.php';
 
 $myApp = new \App\Kernel();
@@ -72,7 +72,7 @@ $handler = static function () use ($myApp) {
         echo $myApp->handle($_GET, $_POST, $_COOKIE, $_FILES, $_SERVER);
     } catch (\Throwable $exception) {
         // `set_exception_handler` viene chiamato solo quando termina lo script worker,
-        // il che potrebbe non essere il comportamento atteso, quindi intercettare e gestire qui le eccezioni
+        // il che potrebbe non essere il comportamento atteso, quindi intercetta e gestisci qui le eccezioni
         (new \MyCustomExceptionHandler)->handleException($exception);
     }
 };
@@ -132,7 +132,7 @@ require __DIR__.'/vendor/autoload.php';
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Nyholm\Psr7Server\ServerRequestCreator;
 
-$myApp = new \App\Kernel(); // implements Psr\Http\Server\RequestHandlerInterface
+$myApp = new \App\Kernel(); // implementa Psr\Http\Server\RequestHandlerInterface
 $myApp->boot();
 
 $psr17Factory = new Psr17Factory();
@@ -236,13 +236,16 @@ Evitare di archiviare dati sensibili o specifici della richiesta in `$_ENV`.
 
 ## Persistenza dello stato
 
-Poiché la modalità worker mantiene attivo il processo PHP tra le richieste, il seguente stato persiste tra le richieste:
+Poiché la modalità worker mantiene attivo il processo PHP tra le richieste, FrankenPHP reimposta solo lo stato legato alla richiesta HTTP che viene gestita: superglobali (eccetto `$_ENV`), il corpo della richiesta, le intestazioni e l'output della risposta e la sessione. Tutto il resto è condiviso tra le richieste gestite dallo stesso thread, come in uno script CLI di lunga durata, inclusi:
 
 - **Variabili statiche**: le variabili dichiarate con `static` all'interno di funzioni o metodi mantengono i loro valori tra le richieste.
-- **Proprietà statiche della classe**: le proprietà statiche sulle classi persistono tra le richieste.
+- **Proprietà statiche delle classi**: le proprietà statiche sulle classi persistono tra le richieste.
 - **Variabili globali**: le variabili nell'ambito globale dello script worker persistono tra le richieste.
 - **Cache in memoria**: tutti i dati archiviati in memoria (array, oggetti) all'esterno del gestore delle richieste persistono.
 - **Impostazioni del motore di runtime**: le modifiche apportate con `ini_set()`, `stream_context_set_default()`, `date_default_timezone_set()`, `chdir()`, `stream_wrapper_register()`, `set_error_handler()` o `set_exception_handler()` rimangono in vigore per le richieste successive. Non archiviare mai valori specifici della richiesta o dell'utente in queste impostazioni, come le credenziali nel contesto del flusso predefinito: passa invece un contesto esplicito ad ogni chiamata.
+- **Stato del motore e delle estensioni**: `error_get_last()`, `libxml_get_errors()` e `libxml_get_last_error()` restituiscono gli errori lasciati da una richiesta precedente. `http_get_last_response_headers()` restituisce le intestazioni di risposta dell'ultima chiamata HTTP effettuata sul thread, anche da una richiesta precedente. `strtok()` continua la stringa che gli è stata data da una richiesta precedente. Dopo `mt_srand()` o `srand()` con un seed, `mt_rand()`, `rand()`, `shuffle()`, `str_shuffle()` e `array_rand()` continuano quella sequenza con seed. Gli errori, le intestazioni e le stringhe possono contenere dati di un altro client, e una sequenza con seed rende i valori casuali prevedibili: reimpostali come mostrato di seguito.
+- **Oggetti in cicli di riferimento**: il garbage collector li distrugge quando PHP lo attiva, possibilmente mentre viene gestita una richiesta successiva, quindi i loro distruttori vengono eseguiti in quella richiesta e il loro output va al suo client. Chiama `gc_collect_cycles()` dopo che `frankenphp_handle_request()` ritorna, come nell'esempio precedente.
+- **Funzioni di shutdown**: i callback registrati con `register_shutdown_function()` vengono eseguiti quando lo script worker si ferma, non alla fine della richiesta che li ha registrati, e rimangono in memoria fino ad allora. Se una richiesta ferma lo script (`exit()`, un errore fatale, un timeout), vengono eseguiti all'interno di quella richiesta e il loro output e le intestazioni vanno al suo client. Registrali una volta, al di fuori del gestore, ed esegui il lavoro per ogni richiesta alla fine del gestore o dopo che `frankenphp_handle_request()` ritorna.
 - **Impostazioni a livello di processo**: `umask()` e `setlocale()` modificano l'intero processo FrankenPHP, non solo il thread corrente. La modalità worker non li ripristina tra le richieste, e in ogni modalità influenzano anche le richieste in esecuzione contemporaneamente. Impostali una volta all'avvio, o chiama `chmod()` sui file creati invece di modificare la umask.
 
 Questo è previsto dalla progettazione ed è ciò che rende veloce la modalità worker. Tuttavia, richiede attenzione per evitare effetti collaterali indesiderati:
@@ -264,4 +267,23 @@ while (\frankenphp_handle_request($handler)) {
 ```
 
 Quando si scrivono script worker, assicurarsi di reimpostare qualsiasi stato specifico della richiesta tra le richieste.
-Framework come [Symfony](symfony.md) e [Laravel Octane](laravel.md) si occupano di ripristinare automaticamente la maggior parte degli stati, ma potrebbe comunque essere necessario ripristinare alcuni servizi. Con Symfony, i servizi che mantengono uno stato specifico della richiesta dovrebbero implementare [`Symfony\Contracts\Service\ResetInterface`](https://github.com/symfony/contracts/blob/main/Service/ResetInterface.php) in modo che vengano reimpostati dal kernel tra una richiesta e l'altra.
+PHP fornisce funzioni per reimpostare lo stato del motore e delle estensioni elencato sopra:
+
+```php
+<?php
+$handler = static function () {
+    // ...
+};
+
+while (\frankenphp_handle_request($handler)) {
+    error_clear_last();
+    libxml_clear_errors(); // richiede l'estensione libxml
+    http_clear_last_response_headers(); // PHP 8.4+
+    mt_srand(); // rigenera i semi casualmente, necessario solo se l'applicazione li imposta
+}
+```
+
+Passa la stringa da tokenizzare nella prima chiamata a `strtok()` di ogni richiesta, invece di fare affidamento su una chiamata precedente.
+Preferisci un'istanza di `Random\Randomizer` con il suo motore rispetto a settare il seed del generatore globale.
+
+Framework come [Symfony](symfony.md) e [Laravel Octane](laravel.md) si occupano di ripristinare automaticamente la maggior parte degli stati, ma potrebbe comunque essere necessario ripristinare i propri servizi. Con Symfony, i servizi che mantengono uno stato specifico della richiesta dovrebbero implementare [`Symfony\Contracts\Service\ResetInterface`](https://github.com/symfony/contracts/blob/main/Service/ResetInterface.php) in modo che vengano reimpostati dal kernel tra una richiesta e l'altra.

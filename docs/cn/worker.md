@@ -234,13 +234,16 @@ $handler = static function () use ($workerServer) {
 
 ## 状态持久性
 
-由于 worker 模式使 PHP 进程在请求之间保持活动状态，以下状态会在请求之间持久化：
+由于 worker 模式使 PHP 进程在请求之间保持活动状态，FrankenPHP 只会重置与正在处理的 HTTP 请求相关的状态：超全局变量（`$_ENV` 除外）、请求体、响应头和输出以及会话。其他所有内容都在由同一线程处理的请求之间共享，就像在长时间运行的 CLI 脚本中一样，包括：
 
 - **静态变量**：函数或方法中用 `static` 声明的变量在请求之间保持其值。
 - **类静态属性**：类的静态属性在请求之间持久化。
 - **全局变量**：worker 脚本全局范围内的变量在请求之间持久化。
 - **内存缓存**：在请求处理器之外存储在内存中的任何数据（数组、对象）都将持久化。
 - **运行时引擎设置**：使用 `ini_set()`、`stream_context_set_default()`、`date_default_timezone_set()`、`chdir()`、`stream_wrapper_register()`、`set_error_handler()` 或 `set_exception_handler()` 进行的更改对后续请求仍然有效。切勿在此处存储与请求或用户相关的特定值，例如默认流上下文中的凭据：请为每个调用传递一个显式上下文。
+- **引擎和扩展状态**：`error_get_last()`、`libxml_get_errors()` 和 `libxml_get_last_error()` 返回较早请求留下的错误。`http_get_last_response_headers()` 返回同一线程上（即使是较早请求发出的）最后一次 HTTP 调用的响应头。`strtok()` 继续使用较早请求提供的字符串。在通过种子调用 `mt_srand()` 或 `srand()` 后，`mt_rand()`、`rand()`、`shuffle()`、`str_shuffle()` 和 `array_rand()` 会继续该种子序列。错误、头部和字符串可能包含其他客户端的数据，并且种子序列使随机值可预测：将它们重置，如下所示。
+- **引用循环中的对象**：当 PHP 触发垃圾收集器时，它会销毁引用循环中的对象，可能在处理后续请求时发生，因此它们的析构函数在该请求中运行，其输出发送给该客户端。在 `frankenphp_handle_request()` 返回后调用 `gc_collect_cycles()`，如上例所示。
+- **关闭函数**：使用 `register_shutdown_function()` 注册的回调函数在 worker 脚本停止时运行，而不是在注册它们的请求结束时运行，并且在此之前一直保留在内存中。如果一个请求停止了脚本（`exit()`、致命错误、超时），它们会在该请求内部运行，其输出和头部将发送给该客户端。在处理器外部注册它们一次，并在处理器结束时或 `frankenphp_handle_request()` 返回后运行每个请求的工作。
 - **进程范围设置**：`umask()` 和 `setlocale()` 会更改整个 FrankenPHP 进程，而不仅仅是当前线程。Worker 模式不会在请求之间恢复它们，并且在任何模式下它们也会影响同时运行的请求。请在启动时设置一次，或者对创建的文件调用 `chmod()` 而不是更改 umask。
 
 这是设计使然，也是 worker 模式快速的原因。然而，它需要注意避免意外的副作用：
@@ -262,4 +265,23 @@ while (\frankenphp_handle_request($handler)) {
 ```
 
 在编写 worker 脚本时，请确保在请求之间重置任何与请求相关的状态。
+PHP 提供了重置上述引擎和扩展状态的函数：
+
+```php
+<?php
+$handler = static function () {
+    // ...
+};
+
+while (\frankenphp_handle_request($handler)) {
+    error_clear_last();
+    libxml_clear_errors(); // 需要 libxml 扩展
+    http_clear_last_response_headers(); // PHP 8.4+
+    mt_srand(); // 随机重新播种，仅当应用程序已播种时才需要
+}
+```
+
+在每个请求的第一次调用 `strtok()` 时传入要分词的字符串，而不是依赖于先前的调用。
+优先使用带有自己引擎的 `Random\Randomizer` 实例，而不是播种全局生成器。
+
 像 [Symfony](symfony.md) 和 [Laravel Octane](laravel.md) 这样的框架会为你处理大部分状态重置，但你可能仍然需要重置自己的服务。对于 Symfony，持有与请求相关状态的服务应实现 [`Symfony\Contracts\Service\ResetInterface`](https://github.com/symfony/contracts/blob/main/Service/ResetInterface.php)，以便它们在请求之间由内核重置。

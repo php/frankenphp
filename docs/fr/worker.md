@@ -237,13 +237,16 @@ Cela signifie que toute modification apportée à `$_ENV` pendant une requête p
 
 ## Persistance d'état
 
-Parce que le mode worker maintient le processus PHP en vie entre les requêtes, l'état suivant persiste à travers les requêtes :
+Parce que le mode worker maintient le processus PHP en vie entre les requêtes, FrankenPHP ne réinitialise que l'état lié à la requête HTTP traitée : les superglobales (sauf `$_ENV`), le corps de la requête, les en-têtes et la sortie de la réponse, et la session. Tout le reste est partagé entre les requêtes gérées par le même thread, comme dans un script CLI de longue durée, incluant :
 
 - **Variables statiques** : Les variables déclarées avec `static` à l'intérieur des fonctions ou des méthodes conservent leurs valeurs entre les requêtes.
 - **Propriétés statiques de classe** : Les propriétés statiques des classes persistent entre les requêtes.
 - **Variables globales** : Les variables dans la portée globale du script worker persistent entre les requêtes.
 - **Caches en mémoire** : Toute donnée stockée en mémoire (tableaux, objets) en dehors du gestionnaire de requêtes persiste.
 - **Paramètres du moteur d'exécution** : Les modifications effectuées avec `ini_set()`, `stream_context_set_default()`, `date_default_timezone_set()`, `chdir()`, `stream_wrapper_register()`, `set_error_handler()` ou `set_exception_handler()` restent en vigueur pour les requêtes ultérieures. Ne stockez jamais de valeurs spécifiques à la requête ou à l'utilisateur, telles que des identifiants dans le contexte de flux par défaut : passez plutôt un contexte explicite à chaque appel.
+- **État du moteur et des extensions** : `error_get_last()`, `libxml_get_errors()` et `libxml_get_last_error()` renvoient les erreurs laissées par une requête précédente. `http_get_last_response_headers()` renvoie les en-têtes de réponse du dernier appel HTTP effectué sur le thread, même par une requête précédente. `strtok()` continue la chaîne qu'une requête précédente lui a donnée. Après `mt_srand()` ou `srand()` avec une graine, `mt_rand()`, `rand()`, `shuffle()`, `str_shuffle()` et `array_rand()` continuent cette séquence ensemencée. Les erreurs, en-têtes et chaînes peuvent contenir des données d'un autre client, et une séquence ensemencée rend les valeurs aléatoires prévisibles : réinitialisez-les comme indiqué ci-dessous.
+- **Objets dans les cycles de référence** : Le ramasse-miettes les détruit lorsque PHP le déclenche, éventuellement pendant le traitement d'une requête ultérieure, de sorte que leurs destructeurs s'exécutent dans cette requête et que leur sortie va au client. Appelez `gc_collect_cycles()` après le retour de `frankenphp_handle_request()`, comme dans l'exemple ci-dessus.
+- **Fonctions d'arrêt** : Les fonctions de rappel enregistrées avec `register_shutdown_function()` s'exécutent lorsque le script worker s'arrête, pas à la fin de la requête qui les a enregistrées, et restent en mémoire jusqu'alors. Si une requête arrête le script (`exit()`, une erreur fatale, un timeout), elles s'exécutent à l'intérieur de cette requête et leur sortie et leurs en-têtes vont à son client. Enregistrez-les une seule fois, en dehors du handler, et exécutez le travail par requête à la fin du handler ou après le retour de `frankenphp_handle_request()`.
 - **Paramètres à l'échelle du processus** : `umask()` et `setlocale()` modifient l'ensemble du processus FrankenPHP, pas seulement le thread actuel. Le mode worker ne les restaure pas entre les requêtes, et dans tous les modes, ils affectent également les requêtes exécutées simultanément. Définissez-les une fois au démarrage, ou appelez `chmod()` sur les fichiers créés au lieu de modifier l'umask.
 
 C'est un comportement intentionnel et c'est ce qui rend le mode worker rapide. Cependant, cela demande de l'attention pour éviter les effets secondaires involontaires :
@@ -265,4 +268,22 @@ while (\frankenphp_handle_request($handler)) {
 ```
 
 Lorsque vous écrivez des scripts worker, assurez-vous de réinitialiser tout état spécifique à la requête entre les requêtes.
+PHP fournit des fonctions pour réinitialiser l'état du moteur et des extensions listé ci-dessus :
+
+```php
+<?php
+$handler = static function () {
+    // ...
+};
+
+while (\frankenphp_handle_request($handler)) {
+    error_clear_last();
+    libxml_clear_errors(); // nécessite l'extension libxml
+    http_clear_last_response_headers(); // PHP 8.4+
+    mt_srand(); // réinitialise aléatoirement, nécessaire seulement si l'application l'a initialisé
+}
+```
+
+Passez la chaîne à tokenizer lors du premier appel à `strtok()` de chaque requête, au lieu de vous fier à un appel précédent. Préférez une instance de `Random\Randomizer` avec son propre moteur plutôt que d'initialiser le générateur global.
+
 Les frameworks comme [Symfony](symfony.md) et [Laravel Octane](laravel.md) se chargent de réinitialiser la plupart des états pour vous, mais vous pourriez toujours avoir besoin de réinitialiser vos propres services. Avec Symfony, les services qui maintiennent un état spécifique à la requête doivent implémenter [`Symfony\Contracts\Service\ResetInterface`](https://github.com/symfony/contracts/blob/main/Service/ResetInterface.php) afin qu'ils soient réinitialisés par le noyau entre les requêtes.

@@ -44,7 +44,7 @@ Este recurso é frequentemente usado em combinação com [hot reloading](hot-rel
 
 ## Modo worker para Symfony
 
-Consulte [a documentação do modo worker do Symfony com FrankenPHP](symfony.md#symfony-worker-mode-with-frankenphp).
+Consulte [a documentação do modo worker do Symfony com FrankenPHP](symfony.md#symfony-worker-mode-com-frankenphp).
 
 ## Modo worker para Laravel Octane
 
@@ -236,16 +236,20 @@ Evite armazenar dados específicos da requisição ou sensíveis em `$_ENV`.
 
 ## Persistência de estado
 
-Como o modo worker mantém o processo PHP ativo entre as requisições, o seguinte estado persiste entre as requisições:
+Como o modo worker mantém o processo PHP ativo entre as requisições, o FrankenPHP apenas redefine o estado vinculado à requisição HTTP sendo processada: superglobais (exceto `$_ENV`), o corpo da requisição, cabeçalhos e saída da resposta, e a sessão.
+Todo o resto é compartilhado entre as requisições manipuladas pelo mesmo thread, como em um script CLI de longa duração, incluindo:
 
 - **Variáveis estáticas**: Variáveis declaradas com `static` dentro de funções ou métodos retêm seus valores entre as requisições.
 - **Propriedades estáticas de classe**: Propriedades estáticas em classes persistem entre as requisições.
 - **Variáveis globais**: Variáveis no escopo global do script de worker persistem entre as requisições.
 - **Caches em memória**: Quaisquer dados armazenados em memória (arrays, objetos) fora do manipulador de requisições persistem.
 - **Configurações do motor de tempo de execução**: Alterações feitas com `ini_set()`, `stream_context_set_default()`, `date_default_timezone_set()`, `chdir()`, `stream_wrapper_register()`, `set_error_handler()` ou `set_exception_handler()` permanecem em vigor para requisições posteriores. Nunca armazene valores específicos da requisição ou do usuário ali, como credenciais no contexto de fluxo padrão: passe um contexto explícito para cada chamada.
-- **Configurações de processo**: `umask()` e `setlocale()` mudam todo o processo FrankenPHP, não apenas o thread atual. O modo worker não os restaura entre as requisições, e em qualquer modo eles também afetam requisições em execução ao mesmo tempo. Defina-os uma vez na inicialização, ou chame `chmod()` em arquivos criados em vez de mudar o umask.
+- **Estado do motor e das extensões**: `error_get_last()`, `libxml_get_errors()` e `libxml_get_last_error()` retornam os erros deixados por uma requisição anterior. `http_get_last_response_headers()` retorna os cabeçalhos da última chamada HTTP feita no thread, mesmo por uma requisição anterior. `strtok()` continua a string que uma requisição anterior forneceu. Após `mt_srand()` ou `srand()` com uma semente, `mt_rand()`, `rand()`, `shuffle()`, `str_shuffle()` e `array_rand()` continuam essa sequência semeada. Os erros, cabeçalhos e strings podem conter dados de outro cliente, e uma sequência semeada torna os valores aleatórios previsíveis: redefina-os conforme mostrado abaixo.
+- **Objetos em ciclos de referência**: O coletor de lixo os destrói quando o PHP o aciona, possivelmente enquanto uma requisição posterior é manipulada, então seus destrutores são executados nessa requisição e sua saída vai para o cliente dela. Chame `gc_collect_cycles()` após `frankenphp_handle_request()` retornar, como no exemplo acima.
+- **Funções de desligamento**: Callbacks registrados com `register_shutdown_function()` são executados quando o script do worker para, não no final da requisição que os registrou, e permanecem na memória até então. Se uma requisição parar o script (`exit()`, um erro fatal, um timeout), eles são executados dentro dessa requisição e sua saída e cabeçalhos vão para o cliente dela. Registre-os uma vez, fora do manipulador, e execute o trabalho por requisição no final do manipulador ou após `frankenphp_handle_request()` retornar.
+- **Configurações de todo o processo**: `umask()` e `setlocale()` alteram todo o processo FrankenPHP, não apenas o thread atual. O modo worker não os restaura entre as requisições, e em qualquer modo eles também afetam as requisições em execução ao mesmo tempo. Defina-os uma vez na inicialização, ou chame `chmod()` em arquivos criados em vez de alterar o umask.
 
-Isso é intencional e é o que torna o modo worker rápido. No entanto, exige atenção para evitar efeitos colaterais indesejados:
+Isso é por design e é o que torna o modo worker rápido. No entanto, exige atenção para evitar efeitos colaterais indesejados:
 
 ```php
 <?php
@@ -264,4 +268,23 @@ while (\frankenphp_handle_request($handler)) {
 ```
 
 Ao escrever scripts de worker, certifique-se de redefinir qualquer estado específico da requisição entre as requisições.
+O PHP fornece funções para redefinir o estado do motor e das extensões listado acima:
+
+```php
+<?php
+$handler = static function () {
+    // ...
+};
+
+while (\frankenphp_handle_request($handler)) {
+    error_clear_last();
+    libxml_clear_errors(); // requer a extensão libxml
+    http_clear_last_response_headers(); // PHP 8.4+
+    mt_srand(); // resemeia aleatoriamente, necessário apenas se a aplicação o semear
+}
+```
+
+Passe a string para tokenizar na primeira chamada a `strtok()` de cada requisição, em vez de depender de uma chamada anterior.
+Prefira uma instância de `Random\Randomizer` com seu próprio motor em vez de semear o gerador global.
+
 Frameworks como [Symfony](symfony.md) e [Laravel Octane](laravel.md) cuidam de redefinir a maior parte do estado para você, mas você ainda pode precisar redefinir seus próprios serviços. Com o Symfony, os serviços que mantêm o estado específico da requisição devem implementar [`Symfony\Contracts\Service\ResetInterface`](https://github.com/symfony/contracts/blob/main/Service/ResetInterface.php) para que sejam redefinidos pelo kernel entre as requisições.
