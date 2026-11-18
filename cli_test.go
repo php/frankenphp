@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
+	"syscall"
 	"testing"
 	"time"
 
@@ -144,9 +146,7 @@ func TestExecuteScriptCLISignals(t *testing.T) {
 	assert.Contains(t, string(stdoutStderr), "ok")
 }
 
-// Regression test for https://github.com/php/frankenphp/issues/2558. When a
-// C-created thread segfaults while FrankenPHP is PID 1, the process must
-// exit instead of looping forever in Go's runtime.raisebadsignal.
+// Regression test for https://github.com/php/frankenphp/issues/2558.
 func TestCThreadSegfaultAsPID1(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("PID namespaces are only available on Linux")
@@ -169,82 +169,50 @@ func TestCThreadSegfaultAsPID1(t *testing.T) {
 		}
 		t.Skip("unshare is not available")
 	}
+	timeoutPath, err := exec.LookPath("timeout")
+	if err != nil {
+		t.Fatal("timeout is required for the PID namespace test")
+	}
 	truePath, err := exec.LookPath("true")
 	if err != nil {
 		t.Fatal("true is required for the PID namespace test probe")
 	}
 
-	command := unsharePath
-	args := []string{
-		"--user",
-		"--map-root-user",
-		"--pid",
-		"--fork",
-		"--kill-child=KILL",
-		testCLIPath,
-		"--segfault",
-	}
-	rootlessOutput, rootlessErr := runPIDNamespaceProbe(
-		unsharePath,
-		"--user",
-		"--map-root-user",
-		"--pid",
-		"--fork",
-		"--kill-child=KILL",
-		truePath,
-	)
-	if rootlessErr != nil {
+	var sudo []string
+	unshare := []string{unsharePath, "--user", "--map-root-user", "--pid", "--fork", "--kill-child=KILL"}
+	if output, err := runPIDNamespaceProbe(append(unshare, truePath)...); err != nil {
 		if !useSudo {
-			t.Skipf("unprivileged PID namespaces are not available: %v: %s", rootlessErr, rootlessOutput)
+			t.Skipf("unprivileged PID namespaces are not available: %v: %s", err, output)
 		}
 
-		sudoPath, sudoErr := exec.LookPath("sudo")
-		if sudoErr != nil {
+		sudoPath, err := exec.LookPath("sudo")
+		if err != nil {
 			t.Fatal("sudo was requested for the PID namespace test but was not found")
 		}
-		sudoOutput, sudoErr := runPIDNamespaceProbe(
-			sudoPath,
-			"-n",
-			unsharePath,
-			"--pid",
-			"--fork",
-			"--kill-child=KILL",
-			truePath,
-		)
-		if sudoErr != nil {
-			t.Fatalf("failed to create a PID namespace with sudo: %v: %s", sudoErr, sudoOutput)
-		}
-		command = sudoPath
-		args = []string{
-			"-n",
-			unsharePath,
-			"--pid",
-			"--fork",
-			"--kill-child=KILL",
-			testCLIPath,
-			"--segfault",
+		sudo = []string{sudoPath, "-n"}
+		unshare = []string{unsharePath, "--pid", "--fork", "--kill-child=KILL"}
+		if output, err := runPIDNamespaceProbe(slices.Concat(sudo, unshare, []string{truePath})...); err != nil {
+			t.Fatalf("failed to create a PID namespace with sudo: %v: %s", err, output)
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, command, args...)
-	output, err := cmd.CombinedOutput()
-	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+	// timeout runs inside sudo so its SIGKILL reaches the root-owned process group.
+	args := slices.Concat(sudo, []string{timeoutPath, "--signal=KILL", "10"}, unshare, []string{testCLIPath, "--segfault"})
+	output, err := exec.Command(args[0], args[1:]...).CombinedOutput()
+
+	var exitErr *exec.ExitError
+	require.ErrorAs(t, err, &exitErr, "output: %s", output)
+	status := exitErr.Sys().(syscall.WaitStatus)
+	if status.Signaled() && status.Signal() == syscall.SIGKILL || status.ExitStatus() == 128+int(syscall.SIGKILL) {
 		t.Fatalf("FrankenPHP did not exit after the PHP thread segfaulted: %s", output)
 	}
-
-	var exitError *exec.ExitError
-	if !errors.As(err, &exitError) {
-		t.Fatalf("expected FrankenPHP to exit with an error, got %v: %s", err, output)
-	}
-	assert.Equal(t, 2, exitError.ExitCode(), "output: %s", output)
+	assert.Equal(t, 2, status.ExitStatus(), "output: %s", output)
 }
 
-func runPIDNamespaceProbe(command string, args ...string) ([]byte, error) {
+func runPIDNamespaceProbe(args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	output, err := exec.CommandContext(ctx, command, args...).CombinedOutput()
+	output, err := exec.CommandContext(ctx, args[0], args[1:]...).CombinedOutput()
 	if ctx.Err() != nil {
 		return output, ctx.Err()
 	}
