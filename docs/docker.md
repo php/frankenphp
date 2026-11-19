@@ -210,6 +210,9 @@ The Docker images are built:
 - when a new release is tagged
 - daily at 4 am UTC, if new versions of the official PHP images are available
 
+Tags such as `latest` or `1-php8.5` are moved to the new images, while digests never change.
+To pin an exact image, reference it by digest. The standalone binaries follow [a similar update policy](production.md#standalone-binary-updates).
+
 ## Hardening images
 
 To further reduce the attack surface and size of your FrankenPHP Docker images, it's also possible to build them on top of a
