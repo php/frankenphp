@@ -80,6 +80,9 @@ That's it. The `php_server` directive handles PHP routing, `try_files`-like beha
 
 Your existing `php.ini` works as-is. See [Configuration](config.md) for where to place it depending on your installation method.
 
+One setting changes meaning: `max_execution_time` counts wall time in FrankenPHP, where non-ZTS builds of PHP-FPM on Linux counts CPU time.
+Waiting for a database query, an HTTP call, `sleep()` or the lock of a session file now counts toward the limit, so a value tuned for PHP-FPM can be too low.
+
 You can also set directives directly in the `Caddyfile`:
 
 ```caddyfile
