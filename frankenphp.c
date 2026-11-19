@@ -1929,6 +1929,15 @@ static void *php_thread(void *arg) {
    * grace period can wake it from a busy PHP loop or blocking syscall. */
   frankenphp_register_thread_for_kill(thread_index);
 
+#if !defined(PHP_WIN32) && defined(SIGURG)
+  /* Must follow this thread's first call into Go, which unblocks SIGURG:
+   * a preemption signal landing in PHP makes system calls fail with EINTR */
+  sigset_t preemption;
+  sigemptyset(&preemption);
+  sigaddset(&preemption, SIGURG);
+  pthread_sigmask(SIG_BLOCK, &preemption, NULL);
+#endif
+
   bool thread_is_healthy = true;
   bool has_attempted_shutdown = false;
 
