@@ -177,6 +177,7 @@ Go to `https://localhost`, and enjoy!
 - [Laravel integration](https://frankenphp.dev/docs/laravel/)
 - [Yii3 integration](https://frankenphp.dev/docs/yii3/)
 - [Known issues](https://frankenphp.dev/docs/known-issues/)
+- [Release and support policy](https://frankenphp.dev/docs/releases/)
 - [Demo app (Symfony) and benchmarks](https://github.com/dunglas/frankenphp-demo)
 - [Use as a Go library](https://frankenphp.dev/docs/library/)
 - [Go library documentation](https://pkg.go.dev/github.com/dunglas/frankenphp)
