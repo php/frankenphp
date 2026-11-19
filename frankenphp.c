@@ -249,7 +249,45 @@ static void frankenphp_fill_cli_signal_set(sigset_t *s) {
 #endif
 }
 
+#if defined(__linux__)
+/* As PID 1, Go's re-raise of a C-thread fault is dropped and loops forever
+ * (golang/go#59569). Go forwards C faults to handlers installed before it
+ * starts; restoring SIG_DFL lets the re-executed fault kill the process. */
+static void frankenphp_pid1_fatal_signal_handler(int sig, siginfo_t *info,
+                                                 void *context) {
+  (void)info;
+  (void)context;
+  signal(sig, SIG_DFL);
+}
+
+static void frankenphp_install_pid1_fatal_signal_handlers(void) {
+  if (getpid() != 1) {
+    return;
+  }
+
+  static const int signals[] = {SIGSEGV, SIGBUS, SIGFPE};
+  for (size_t i = 0; i < sizeof(signals) / sizeof(signals[0]); i++) {
+    struct sigaction previous;
+    if (sigaction(signals[i], NULL, &previous) != 0 ||
+        previous.sa_handler != SIG_DFL) {
+      continue;
+    }
+
+    struct sigaction action;
+    memset(&action, 0, sizeof(action));
+    action.sa_sigaction = frankenphp_pid1_fatal_signal_handler;
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = SA_SIGINFO | SA_ONSTACK;
+    sigaction(signals[i], &action, NULL);
+  }
+}
+#endif
+
 __attribute__((constructor)) static void frankenphp_libpreinit(void) {
+#if defined(__linux__)
+  frankenphp_install_pid1_fatal_signal_handlers();
+#endif
+
   sigset_t set;
   frankenphp_fill_cli_signal_set(&set);
   /* Single-threaded at this point (constructors run before Go's runtime),

@@ -8,6 +8,11 @@ import (
 )
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "--segfault" {
+		triggerSIGSEGVOnCThread()
+		os.Exit(3)
+	}
+
 	if len(os.Args) <= 1 {
 		log.Println("Usage: testcli script.php")
 		os.Exit(1)
