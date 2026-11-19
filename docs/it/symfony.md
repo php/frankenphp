@@ -108,12 +108,14 @@ Il componente [AssetMapper](https://symfony.com/doc/current/frontend/asset_mappe
    # Caddyfile
    localhost
 
-   @assets path /assets/*
-   file_server @assets {
-   	precompressed zstd br gzip
+   root public/
+
+   handle /assets/* {
+   	file_server {
+   		precompressed zstd br gzip
+   	}
    }
 
-   root public/
    php_server {
    	worker ./public/index.php
    }
