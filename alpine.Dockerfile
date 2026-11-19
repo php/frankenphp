@@ -124,7 +124,7 @@ COPY --link . ./
 # See https://github.com/docker-library/php/blob/master/8.3/alpine3.20/zts/Dockerfile#L53-L55
 ENV CGO_CFLAGS="-DFRANKENPHP_VERSION=$FRANKENPHP_VERSION $PHP_CFLAGS"
 ENV CGO_CPPFLAGS=$PHP_CPPFLAGS
-ENV CGO_LDFLAGS="-lssl -lcrypto -lreadline -largon2 -lcurl -lonig -lz $PHP_LDFLAGS"
+ENV CGO_LDFLAGS="-lssl -lcrypto -lreadline -largon2 -lcurl -lz $PHP_LDFLAGS"
 
 WORKDIR /go/src/app/caddy/frankenphp
 RUN GOBIN=/usr/local/bin \
