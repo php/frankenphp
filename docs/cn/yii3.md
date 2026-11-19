@@ -21,8 +21,8 @@ docker run -p 80:80 -p 443:443 -p 443:443/udp -v $PWD:/app dunglas/frankenphp
 
 或者，您可以在本地机器上使用 FrankenPHP 运行 Yii 项目：
 
-1.  [下载与您的系统对应的二进制文件](../#standalone-binary)
-2.  将以下配置添加到您的 Yii 项目根目录中名为 `Caddyfile` 的文件中：
+1. [下载与您的系统对应的二进制文件](../#standalone-binary)
+2. 将以下配置添加到您的 Yii 项目根目录中名为 `Caddyfile` 的文件中：
 
     ```caddyfile
     {
@@ -41,7 +41,7 @@ docker run -p 80:80 -p 443:443 -p 443:443/udp -v $PWD:/app dunglas/frankenphp
     }
     ```
 
-3.  从您的 Yii 项目的根目录启动 FrankenPHP：`frankenphp run`
+3. 从您的 Yii 项目的根目录启动 FrankenPHP：`frankenphp run`
 
 ## Yii3 worker 模式
 

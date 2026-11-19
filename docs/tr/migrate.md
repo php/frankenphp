@@ -1,4 +1,9 @@
-# Nginx/PHP-FPM'den geçiş
+---
+title: Nginx ve PHP-FPM'den FrankenPHP'ye Geçiş
+description: Bir PHP uygulamasını Nginx ve PHP-FPM yığınından FrankenPHP'ye geçirmek için Caddyfile, php.ini, iş parçacıkları ve Docker'ı kapsayan adım adım kılavuz.
+---
+
+# Nginx/PHP-FPM'den Geçiş
 
 FrankenPHP hem web sunucunuzu (Nginx, Apache) hem PHP-FPM'i tek bir ikili dosyayla değiştirir.
 Bu kılavuz tipik bir PHP uygulaması için temel geçişi kapsar.
@@ -71,9 +76,11 @@ example.com {
 
 Bu kadar. `php_server` yönergesi PHP yönlendirmesini, `try_files` benzeri davranışı ve statik dosya sunumunu halleder.
 
-## 2. adım: PHP yapılandırmasını taşıyın
+## 2. adım: PHP yapılandırmasını geçirin
 
 Mevcut `php.ini` dosyanız olduğu gibi çalışır. Kurulum yöntemine göre nereye koyacağınız için [Konfigürasyon](config.md) belgesine bakın.
+
+Bir ayarın anlamı değişir: `max_execution_time`, FrankenPHP'de geçen toplam süreyi (wall time) sayarken, Linux'ta PHP-FPM'in ZTS olmayan yapıları CPU süresini sayar. Bir veritabanı sorgusunu, bir HTTP çağrısını, `sleep()` fonksiyonunu veya bir oturum dosyasının kilitlenmesini beklemek artık limite dahil edilir, bu nedenle PHP-FPM için ayarlanmış bir değer çok düşük olabilir.
 
 Yönergeleri doğrudan `Caddyfile` içinde de ayarlayabilirsiniz:
 
@@ -93,8 +100,8 @@ example.com {
 
 ## 3. adım: havuz boyutunu ayarlayın
 
-PHP-FPM'de worker süreç sayısını denetlemek için `pm.max_children` ayarlanır.
-FrankenPHP'de karşılığı `num_threads`'tir:
+PHP-FPM'de, işçi süreç sayısını kontrol etmek için `pm.max_children` değerini ayarlarsınız.
+FrankenPHP'de bunun karşılığı `num_threads`'tir:
 
 ```caddyfile
 {
@@ -167,11 +174,11 @@ Ek PHP eklentilerine ihtiyacınız varsa [özel Docker imajı oluşturma](docker
 
 Çerçeveye özel Docker kurulumları için [Symfony Docker](https://github.com/dunglas/symfony-docker) ve [Laravel'i FrankenPHP Docker imajıyla çalıştırma](laravel.md#running-laravel-with-the-frankenphp-docker-image) belgelerine bakın.
 
-## 5. adım: worker modunu değerlendirin (isteğe bağlı)
+## 5. adım: işçi modunu değerlendirin (isteğe bağlı)
 
 [Klasik modda](classic.md) FrankenPHP PHP-FPM gibi çalışır: her istek uygulamayı sıfırdan başlatır. Geçiş için güvenli bir başlangıç noktasıdır.
 
-Daha iyi performans için [worker moduna](worker.md) geçebilirsiniz; bu mod uygulamayı bir kez başlatır ve bellekte tutar:
+Daha iyi performans için [işçi moduna](worker.md) geçebilirsiniz; bu mod uygulamayı bir kez başlatır ve bellekte tutar:
 
 ```caddyfile
 example.com {
@@ -185,7 +192,7 @@ example.com {
 
 > [!CAUTION]
 >
-> Worker modu uygulamanızı istekler arasında bellekte tutar. Kodunuzun istekler arasında global durumun sıfırlanmasına dayanmadığından emin olun. [Symfony](worker.md#worker-mode-for-symfony), [Laravel](laravel.md#laravel-octane) ve [API Platform](https://api-platform.com) gibi çerçeveler bu modu yerel olarak destekler.
+> İşçi modu uygulamanızı istekler arasında bellekte tutar. Kodunuzun istekler arasında global durumun sıfırlanmasına dayanmadığından emin olun. [Symfony](worker.md#worker-mode-for-symfony), [Laravel](laravel.md#laravel-octane) ve [API Platform](https://api-platform.com) gibi çerçeveler bu modu yerel olarak destekler.
 
 ## Neleri kaldırabilirsiniz
 
