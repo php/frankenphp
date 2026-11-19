@@ -147,6 +147,20 @@ jobs:
           Invoke-WebRequest -Uri "$env:PHP_DOWNLOAD_BASE/$develZip" -OutFile "$env:TEMP\php-devel.zip"
           Expand-Archive -Path "$env:TEMP\php-devel.zip" -DestinationPath "$env:GITHUB_WORKSPACE\php-devel"
 
+          # VS18 packs ship the CLI objects embedded in php8embed.lib as LTCG
+          # (/GL) bitcode. lld-link cannot consume those members, and their
+          # archive index also advertises CRT symbols (printf, fprintf, ...)
+          # that would otherwise be resolved from them before the CRT is
+          # scanned. The SAPI objects we embed only need php_embed.obj.
+          $embedLib = "$env:GITHUB_WORKSPACE\$dirName\php8embed.lib"
+          if (Test-Path "C:\Program Files\LLVM\bin\llvm-ar.exe") {
+            $llvmAr = "C:\Program Files\LLVM\bin\llvm-ar.exe"
+          } else {
+            $llvmAr = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\Llvm\bin\llvm-ar.exe"
+          }
+          $ltcgMembers = & $llvmAr t $embedLib | Where-Object { $_ -match '\\sapi\\cli\\.*\.obj$' }
+          if ($ltcgMembers) { & $llvmAr d $embedLib @ltcgMembers }
+
       - name: Prepare env
         run: |
           $vcpkgRoot = "$env:GITHUB_WORKSPACE\frankenphp\vcpkg_installed\x64-windows"

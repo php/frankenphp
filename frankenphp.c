@@ -51,7 +51,10 @@
 #include <sys/types.h>
 #endif
 
-#if PHP_VERSION_ID >= 80600
+/* do_php_cli() only ships in the prebuilt Windows pack's php8embed.lib as an
+ * LTCG (/GL) object, which lld-link cannot consume; Windows keeps using the
+ * emulated CLI (see execute_script_cli). */
+#if PHP_VERSION_ID >= 80600 && !defined(PHP_WIN32)
 #include <sapi/cli/cli.h>
 #endif
 #include "emulate_php_cli.h"
@@ -2227,7 +2230,10 @@ static void *execute_script_cli(void *arg) {
   pthread_sigmask(SIG_UNBLOCK, &cli_signals, NULL);
 #endif
 
-#if PHP_VERSION_ID >= 80600
+/* On Windows the prebuilt php8embed.lib CLI objects are compiled with /GL
+ * (LTCG), unusable by lld-link; the workflow strips them, so the emulated CLI
+ * below is the only implementation available there. */
+#if PHP_VERSION_ID >= 80600 && !defined(PHP_WIN32)
   return (void *)(intptr_t)do_php_cli(args->argc, args->argv);
 #else
   return (void *)(intptr_t)emulate_script_cli(args);
