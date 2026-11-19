@@ -242,16 +242,10 @@ var restartWorkers atomic.Bool
 // force-kill is armed after a grace period to wake threads parked in
 // blocking syscalls so a stuck sleep doesn't make this hang for the
 // full duration of the syscall.
-// It does nothing while Init() or Shutdown() runs: the threads are booting
-// from fresh code, or going away.
-func RestartWorkers() {
-	TryRestartWorkers()
-}
-
-// TryRestartWorkers is RestartWorkers, reporting whether the threads were
-// rebooted: it skips the restart while FrankenPHP isn't running, Init() or
-// Shutdown() runs, or another restart is in progress.
-func TryRestartWorkers() bool {
+// It reports whether the threads were rebooted: it skips the restart while
+// FrankenPHP isn't running, Init() or Shutdown() runs, or another restart is
+// in progress.
+func RestartWorkers() bool {
 	// never wait for the lock: Shutdown() holds it while it waits for the
 	// watcher, whose callback may be the caller
 	if !startupMu.TryLock() {

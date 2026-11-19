@@ -138,22 +138,22 @@ func TestRestartWorkersWhileStartingAndStopping(t *testing.T) {
 	restarts.Wait()
 }
 
-func TestTryRestartWorkersReportsSkippedRestarts(t *testing.T) {
+func TestRestartWorkersReportsSkippedRestarts(t *testing.T) {
 	require.NoError(t, Init(
 		WithNumThreads(2),
 		WithWorkers("worker", testDataPath+"/worker-with-counter.php", 1),
 	))
 	t.Cleanup(Shutdown)
 
-	assert.True(t, TryRestartWorkers())
+	assert.True(t, RestartWorkers())
 
 	// as Init(), Shutdown() or another restart would
 	startupMu.Lock()
-	assert.False(t, TryRestartWorkers())
+	assert.False(t, RestartWorkers())
 	startupMu.Unlock()
 
 	Shutdown()
-	assert.False(t, TryRestartWorkers())
+	assert.False(t, RestartWorkers())
 }
 
 // Init() must not return, nor the runtime tear SAPI/TSRM down, while a worker

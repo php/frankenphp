@@ -50,7 +50,7 @@ func initWatchers(o *opt) error {
 // holds startupMu to run once released.
 func restartChangedWorkers() {
 	if restartWorkers.Load() {
-		TryRestartWorkers()
+		RestartWorkers()
 	}
 }
 
