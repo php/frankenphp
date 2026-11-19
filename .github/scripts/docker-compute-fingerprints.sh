@@ -68,13 +68,14 @@ get_existing_version() {
 # another Git reference (and thus replaces itself on disk) while running, and bash
 # reads script files lazily.
 main() {
-	local PHP_82_LATEST PHP_83_LATEST PHP_84_LATEST PHP_85_LATEST PHP_VERSION
+	local PHP_82_LATEST PHP_83_LATEST PHP_84_LATEST PHP_85_LATEST PHP_86_LATEST PHP_VERSION
 	PHP_82_LATEST="$(get_php_version 8.2)"
 	PHP_83_LATEST="$(get_php_version 8.3)"
 	PHP_84_LATEST="$(get_php_version 8.4)"
 	PHP_85_LATEST="$(get_php_version 8.5)"
+	PHP_86_LATEST="$(get_php_version 8.6)"
 
-	PHP_VERSION="${PHP_82_LATEST},${PHP_83_LATEST},${PHP_84_LATEST},${PHP_85_LATEST}"
+	PHP_VERSION="${PHP_82_LATEST},${PHP_83_LATEST},${PHP_84_LATEST},${PHP_85_LATEST},${PHP_86_LATEST}"
 	write_output "php_version=${PHP_VERSION}"
 
 	local FRANKENPHP_LATEST_TAG=""

@@ -12,7 +12,7 @@ fi
 
 if [[ -z "${PHP_VERSION}" ]]; then
 	PHP_VERSION="$(awk -F'"' '/variable "PHP_VERSION"/ {f=1} f && /default/ {print $2; exit}' docker-bake.hcl)"
-	PHP_VERSION="${PHP_VERSION:-8.2,8.3,8.4,8.5}"
+	PHP_VERSION="${PHP_VERSION:-8.2,8.3,8.4,8.5,8.6}"
 fi
 
 if [[ "${USE_LATEST_PHP}" == "1" ]]; then
@@ -20,7 +20,8 @@ if [[ "${USE_LATEST_PHP}" == "1" ]]; then
 	PHP_83_LATEST=$(skopeo inspect docker://docker.io/library/php:8.3 --override-os linux --override-arch amd64 | jq -r '.Env[] | select(test("^PHP_VERSION=")) | sub("^PHP_VERSION="; "")')
 	PHP_84_LATEST=$(skopeo inspect docker://docker.io/library/php:8.4 --override-os linux --override-arch amd64 | jq -r '.Env[] | select(test("^PHP_VERSION=")) | sub("^PHP_VERSION="; "")')
 	PHP_85_LATEST=$(skopeo inspect docker://docker.io/library/php:8.5 --override-os linux --override-arch amd64 | jq -r '.Env[] | select(test("^PHP_VERSION=")) | sub("^PHP_VERSION="; "")')
-	PHP_VERSION="${PHP_82_LATEST},${PHP_83_LATEST},${PHP_84_LATEST},${PHP_85_LATEST}"
+	PHP_86_LATEST=$(skopeo inspect docker://docker.io/library/php:8.6 --override-os linux --override-arch amd64 | jq -r '.Env[] | select(test("^PHP_VERSION=")) | sub("^PHP_VERSION="; "")')
+	PHP_VERSION="${PHP_82_LATEST},${PHP_83_LATEST},${PHP_84_LATEST},${PHP_85_LATEST},${PHP_86_LATEST}"
 fi
 
 OS_LIST=()
