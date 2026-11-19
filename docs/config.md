@@ -191,6 +191,9 @@ php_server [<matcher>] {
 	name <name> # Sets the name for this server, used to attribute workers, metrics and logs. Default: the first host matcher of the enclosing route, or the first listener address.
 	env <key> <value> # Sets an extra environment variable to the given value. Can be specified more than once for multiple environment variables.
 	file_server off # Disables the built-in file_server directive.
+	file_server { # Configures the built-in file_server directive. Accepts all file_server options except root, e.g. `precompressed zstd br gzip`.
+		<options...>
+	}
 	request_body_timeout <duration> # Sets an idle timeout on request body reads: a stalled (slow POST) client is cut off while a steady upload of any size succeeds. Default: 60s. Set to 0 to disable.
 	worker { # Creates a worker specific to this server. Can be specified more than once for multiple workers.
 		file <path> # Sets the path to the worker script, can be relative to the php_server root
