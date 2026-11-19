@@ -123,19 +123,19 @@ jobs:
         run: |
           $webContent = Invoke-WebRequest -Uri $env:PHP_DOWNLOAD_BASE
           # Rebuilt binaries get a build number suffix, e.g. php-8.5.12-1-Win32-vs17-x64.zip
-          $links = $webContent.Links.Href | Where-Object { $_ -match "php-\d+\.\d+\.\d+(-\d+)?-Win32-vs17-x64\.zip$" }
+          $links = $webContent.Links.Href | Where-Object { $_ -match "php-\d+\.\d+\.\d+(-\d+)?-Win32-vs\d+-x64\.zip$" }
 
           if (-not $links) { throw "Could not find PHP zip files at $env:PHP_DOWNLOAD_BASE" }
 
           $latestFile = $links | Sort-Object { if ($_ -match '(\d+\.\d+\.\d+)(?:-(\d+))?-Win32') { [version]"$($matches[1]).$([int]$matches[2])" } } | Select-Object -Last 1
 
-          if ($latestFile -match '((\d+\.\d+\.\d+)(?:-\d+)?)-Win32') { $build = $matches[1]; $version = $matches[2] }
+          if ($latestFile -match '((\d+\.\d+\.\d+)(?:-\d+)?)-Win32-(vs\d+)') { $build = $matches[1]; $version = $matches[2]; $vs = $matches[3] }
           Write-Host "Detected latest PHP version: $version"
 
           "PHP_VERSION=$version" >> $env:GITHUB_ENV
 
-          $phpZip = "php-$build-Win32-vs17-x64.zip"
-          $develZip = "php-devel-pack-$build-Win32-vs17-x64.zip"
+          $phpZip = "php-$build-Win32-$vs-x64.zip"
+          $develZip = "php-devel-pack-$build-Win32-$vs-x64.zip"
 
           $dirName = "frankenphp-windows-x86_64"
 
