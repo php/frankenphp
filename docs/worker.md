@@ -243,7 +243,7 @@ Everything else is shared between the requests handled by the same thread, as in
 - **Global variables**: Variables in the global scope of the worker script persist between requests.
 - **In-memory caches**: Any data stored in memory (arrays, objects) outside the request handler persists.
 - **Runtime engine settings**: Changes made with `ini_set()`, `stream_context_set_default()`, `date_default_timezone_set()`, `chdir()`, `stream_wrapper_register()`, `set_error_handler()` or `set_exception_handler()` stay in effect for later requests. Never store request- or user-specific values there, such as credentials in the default stream context: pass an explicit context to each call instead.
-- **Engine and extension state**: `error_get_last()`, `libxml_get_errors()` and `libxml_get_last_error()` return the errors an earlier request left behind. `http_get_last_response_headers()` returns the response headers of the last HTTP call made on the thread, even by an earlier request. `strtok()` continues the string an earlier request gave it. After `mt_srand()` or `srand()` with a seed, `mt_rand()`, `rand()`, `shuffle()`, `str_shuffle()` and `array_rand()` continue that seeded sequence. The errors, headers and strings can contain another client's data, and a seeded sequence makes random values predictable: reset them as shown below.
+- **Engine and extension state**: `error_get_last()`, `libxml_get_errors()` and `libxml_get_last_error()` return the errors an earlier request left behind. `http_get_last_response_headers()` returns the response headers of the last HTTP call made on the thread, even by an earlier request. `strtok()` continues the string an earlier request gave it. `mt_rand()`, `rand()`, `shuffle()`, `str_shuffle()` and `array_rand()` share one generator, seeded at its first use or by `mt_srand()` or `srand()` and not reseeded between requests: later requests continue its sequence. `lcg_value()` also uses a generator seeded once per thread, which PHP code can't reseed. The errors, headers and strings can contain another client's data, and the random values a client sees can let it predict those generated later for other clients on the same thread: reset them as shown below.
 - **Objects in reference cycles**: The garbage collector destroys them when PHP triggers it, possibly while a later request is handled, so their destructors run in that request and their output goes to its client. Call `gc_collect_cycles()` after `frankenphp_handle_request()` returns, as in the example above.
 - **Shutdown functions**: Callbacks registered with `register_shutdown_function()` run when the worker script stops, not at the end of the request that registered them, and stay in memory until then. If a request stops the script (`exit()`, a fatal error, a timeout), they run inside that request and their output and headers go to its client. Register them once, outside the handler, and run per-request work at the end of the handler or after `frankenphp_handle_request()` returns.
 - **Process-wide settings**: `umask()` and `setlocale()` change the whole FrankenPHP process, not only the current thread. Worker mode doesn't restore them between requests, and in every mode they also affect requests running at the same time. Set them once at startup, or call `chmod()` on created files instead of changing the umask.
@@ -279,11 +279,12 @@ while (\frankenphp_handle_request($handler)) {
     error_clear_last();
     libxml_clear_errors(); // requires the libxml extension
     http_clear_last_response_headers(); // PHP 8.4+
-    mt_srand(); // reseeds randomly, needed only if the application seeds it
+    mt_srand(); // reseeds randomly, as outside worker mode
 }
 ```
 
 Pass the string to tokenize in the first call to `strtok()` of each request, instead of relying on an earlier call.
 Prefer a `Random\Randomizer` instance with its own engine over seeding the global generator.
+Generate security-sensitive values, such as tokens and passwords, with `random_int()`, `random_bytes()` or `Random\Randomizer` (its default engine is cryptographically secure), never with `mt_rand()`, `rand()` or `lcg_value()`.
 
 Frameworks like [Symfony](symfony.md) and [Laravel Octane](laravel.md) take care of resetting most state for you, but you may still need to reset your own services. With Symfony, services that hold request-specific state should implement [`Symfony\Contracts\Service\ResetInterface`](https://github.com/symfony/contracts/blob/main/Service/ResetInterface.php) so they're reset by the kernel between requests.
