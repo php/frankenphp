@@ -140,6 +140,7 @@ sudo systemctl start frankenphp
 - [Créer un build statique](static.md)
 - [Compiler depuis les sources](compile.md)
 - [Surveillance de FrankenPHP](metrics.md)
+- [Intégration Symfony](symfony.md)
 - [Intégration Laravel](laravel.md)
 - [Problèmes connus](known-issues.md)
 - [Application de démo (Symfony) et benchmarks](https://github.com/dunglas/frankenphp-demo)
@@ -148,7 +149,7 @@ sudo systemctl start frankenphp
 
 ## Exemples et squelettes
 
-- [Symfony](https://github.com/dunglas/symfony-docker)
+- [Symfony](symfony.md)
 - [API Platform](https://api-platform.com/docs/distribution/)
 - [Laravel](laravel.md)
 - [Sulu](https://sulu.io/blog/running-sulu-with-frankenphp)
