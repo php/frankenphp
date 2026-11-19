@@ -5,6 +5,7 @@ package frankenphp
 import (
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -38,7 +39,8 @@ func TestWatcherRestartSkippedDuringInitRunsAfterwards(t *testing.T) {
 		})),
 	))
 
-	assert.Equal(t, int32(2), m.starts.Load(), "the skipped restart must run once Init() releases startupMu")
+	// the reboot returns once threads are Ready, before they start the worker script
+	assert.Eventually(t, func() bool { return m.starts.Load() == 2 }, 5*time.Second, 10*time.Millisecond, "the skipped restart must run once Init() releases startupMu")
 	assert.False(t, restartWorkers.Load())
 
 	restartWorkers.Store(true)
@@ -67,6 +69,6 @@ func TestWatcherRestartSkippedDuringRestartRunsAfterwards(t *testing.T) {
 	assert.Equal(t, int32(1), m.starts.Load())
 
 	unlockStartup()
-	assert.Equal(t, int32(2), m.starts.Load(), "the skipped restart must run once startupMu is released")
+	assert.Eventually(t, func() bool { return m.starts.Load() == 2 }, 5*time.Second, 10*time.Millisecond, "the skipped restart must run once startupMu is released")
 	assert.False(t, restartWorkers.Load())
 }
