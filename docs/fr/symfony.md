@@ -8,7 +8,7 @@ Pour les projets [Symfony](https://symfony.com), nous recommandons d'utiliser [S
 
 Vous pouvez également exécuter vos projets Symfony avec FrankenPHP depuis votre machine locale :
 
-1. [Installez FrankenPHP](../#getting-started)
+1. [Installez FrankenPHP](README.md#pour-commencer)
 2. Ajoutez la configuration suivante dans un fichier nommé `Caddyfile` à la racine de votre projet Symfony :
 
    ```caddyfile
