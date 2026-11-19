@@ -94,7 +94,7 @@ main() {
 	METADATA="$(PHP_VERSION="${PHP_VERSION}" docker buildx bake --print | jq -c)"
 
 	# Collect the base images (docker-image:// contexts) of each variant. The variant key
-	# is derived from the php-base ref (e.g. "php:8.4.23-zts-trixie" -> "8.4.23-trixie") and
+	# is derived from the php-base ref minus its zts/cli variant (e.g. "php:8.4.23-zts-trixie" -> "8.4.23-trixie") and
 	# matches the "${php-version}-${os}" keys expected by docker-bake.hcl for BASE_FINGERPRINTS.
 	declare -A VARIANT_IMAGES=() VARIANT_NAMES=() VARIANT_PLATFORMS=() DIGEST_CACHE=() VARIANT_FINGERPRINTS=()
 	local target php_base images platforms image variant_key variant_name
@@ -102,6 +102,7 @@ main() {
 		[[ -z "${php_base}" ]] && continue
 		variant_key="${php_base#php:}"
 		variant_key="${variant_key/-zts/}"
+		variant_key="${variant_key/-cli/}"
 		variant_name="${target#builder-}"
 		variant_name="${variant_name#runner-}"
 		VARIANT_IMAGES["${variant_key}"]="${images}"

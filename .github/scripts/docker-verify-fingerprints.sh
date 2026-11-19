@@ -50,7 +50,11 @@ BASE_IMAGES=()
 for os in "${OS_LIST[@]}"; do
 	BASE_IMAGES+=("golang:${GO_VERSION}-${os}")
 	for pv in "${PHP_VERSIONS[@]}"; do
-		BASE_IMAGES+=("php:${pv}-zts-${os}")
+		# Official images are always ZTS since PHP 8.6, which dropped the zts variant
+		IFS=. read -r major minor _ <<<"${pv}"
+		variant=zts
+		((major * 100 + minor >= 806)) && variant=cli
+		BASE_IMAGES+=("php:${pv}-${variant}-${os}")
 	done
 done
 

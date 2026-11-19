@@ -93,6 +93,17 @@ function "_php_version" {
     result = "${m.major}.${m.minor}" == DEFAULT_PHP_VERSION ? [v, "${m.major}.${m.minor}", "${m.major}"] : [v, "${m.major}.${m.minor}"]
 }
 
+# Official images are always ZTS since PHP 8.6, which dropped the zts variant
+function "php_base_variant" {
+    params = [v]
+    result = _php_base_variant(regexall("(?P<major>\\d+)\\.(?P<minor>\\d+)", v)[0])
+}
+
+function "_php_base_variant" {
+    params = [m]
+    result = m.major * 100 + m.minor >= 806 ? "cli" : "zts"
+}
+
 target "default" {
     name = "${tgt}-php-${replace(php-version, ".", "-")}-${os}"
     matrix = {
@@ -101,7 +112,7 @@ target "default" {
         tgt = ["builder", "runner"]
     }
     contexts = {
-        php-base = "docker-image://php:${php-version}-zts-${os}"
+        php-base = "docker-image://php:${php-version}-${php_base_variant(php-version)}-${os}"
         golang-base = "docker-image://golang:${GO_VERSION}-${os}"
     }
     dockerfile = os == "alpine" ? "alpine.Dockerfile" : "Dockerfile"
