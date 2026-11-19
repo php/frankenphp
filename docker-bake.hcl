@@ -45,7 +45,7 @@ variable "CI" {
 }
 
 variable DEFAULT_PHP_VERSION {
-    default = "8.5"
+    default = "8.6"
 }
 
 function "tag" {
