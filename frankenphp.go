@@ -359,7 +359,7 @@ func Init(options ...Option) error {
 	}
 
 	startupMu.Lock()
-	defer startupMu.Unlock()
+	defer unlockStartup()
 
 	// Ignore all SIGPIPE signals to prevent weird issues with systemd: https://github.com/php/frankenphp/issues/1020
 	// Docker/Moby has a similar hack: https://github.com/moby/moby/blob/d828b032a87606ae34267e349bf7f7ccb1f6495a/cmd/dockerd/docker.go#L87-L90
@@ -899,9 +899,7 @@ func go_is_context_done(threadIndex C.uintptr_t) C.bool {
 
 //export go_schedule_opcache_reset
 func go_schedule_opcache_reset(threadIndex C.uintptr_t) {
-	if mainThread != nil {
-		go mainThread.rebootAllThreads()
-	}
+	go RestartWorkers()
 }
 
 // opcacheRestartHook tells whether this build reports the restarts opcache

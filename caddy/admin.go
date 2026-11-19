@@ -39,7 +39,9 @@ func (admin *FrankenPHPAdmin) restartWorkers(w http.ResponseWriter, r *http.Requ
 		return admin.error(http.StatusMethodNotAllowed, fmt.Errorf("method not allowed"))
 	}
 
-	frankenphp.RestartWorkers()
+	if !frankenphp.RestartWorkers() {
+		return admin.error(http.StatusServiceUnavailable, fmt.Errorf("workers not restarted: FrankenPHP is starting, stopping or already restarting them"))
+	}
 	caddy.Log().Info("workers restarted from admin api")
 
 	return admin.success(w, "workers restarted successfully\n")

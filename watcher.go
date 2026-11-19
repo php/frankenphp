@@ -3,8 +3,6 @@
 package frankenphp
 
 import (
-	"sync/atomic"
-
 	"github.com/dunglas/frankenphp/internal/watcher"
 	watcherGo "github.com/e-dant/watcher/watcher-go"
 )
@@ -12,8 +10,6 @@ import (
 type hotReloadOpt struct {
 	hotReload []*watcher.PatternGroup
 }
-
-var restartWorkers atomic.Bool
 
 // validateWatchers has nothing to refuse where the watcher is compiled in:
 // the patterns are only known to be good once the watcher took them
@@ -42,9 +38,7 @@ func initWatchers(o *opt) error {
 	if watcherIsEnabled {
 		watchPatterns = append(watchPatterns, &watcher.PatternGroup{
 			Callback: func(_ []*watcherGo.Event) {
-				if restartWorkers.Swap(false) {
-					RestartWorkers()
-				}
+				restartChangedWorkers()
 			},
 		})
 	}
@@ -52,6 +46,16 @@ func initWatchers(o *opt) error {
 	return watcher.InitWatcher(globalCtx, globalLogger, append(watchPatterns, o.hotReload...))
 }
 
+// restartChangedWorkers leaves a restart it can't run pending for whoever
+// holds startupMu to run once released.
+func restartChangedWorkers() {
+	if restartWorkers.Load() {
+		RestartWorkers()
+	}
+}
+
 func drainWatchers() {
 	watcher.DrainWatcher()
+	// the next Init() boots from fresh code
+	restartWorkers.Store(false)
 }

@@ -233,15 +233,47 @@ func newWorker(o workerOpt) (*worker, error) {
 	return w, nil
 }
 
+// restartWorkers is set when a watched file changed since the threads booted.
+var restartWorkers atomic.Bool
+
 // RestartWorkers attempts to restart all workers gracefully.
 // All workers must be restarted at the same time to prevent issues with
 // opcache resetting. Blocks until every worker thread has yielded;
 // force-kill is armed after a grace period to wake threads parked in
 // blocking syscalls so a stuck sleep doesn't make this hang for the
 // full duration of the syscall.
-func RestartWorkers() {
-	if mainThread != nil {
-		mainThread.rebootAllThreads()
+// It reports whether the threads were rebooted: it skips the restart while
+// FrankenPHP isn't running, Init() or Shutdown() runs, or another restart is
+// in progress.
+func RestartWorkers() bool {
+	// never wait for the lock: Shutdown() holds it while it waits for the
+	// watcher, whose callback may be the caller
+	if !startupMu.TryLock() {
+		return false
+	}
+
+	restarted := rebootThreads()
+	unlockStartup()
+
+	return restarted
+}
+
+// rebootThreads must be called with startupMu held.
+func rebootThreads() bool {
+	// the reboot loads every file changed so far
+	restartWorkers.Store(false)
+
+	return mainThread != nil && mainThread.rebootAllThreads()
+}
+
+// unlockStartup releases startupMu, then runs the file watcher restart
+// skipped while it was held.
+func unlockStartup() {
+	startupMu.Unlock()
+
+	for restartWorkers.Load() && startupMu.TryLock() {
+		rebootThreads()
+		startupMu.Unlock()
 	}
 }
 
