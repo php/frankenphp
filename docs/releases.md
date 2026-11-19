@@ -37,7 +37,10 @@ and [@withinboredom](https://github.com/sponsors/withinboredom).
 
 ## PHP and system dependencies
 
-The Docker images and static binaries are provided for convenience.
+The Docker images can be used in production.
+The static binaries are provided for convenience and are meant for development: they bundle many PHP extensions, which increases their size and attack surface.
+In production, use the Docker images, the deb, rpm or apk packages, or [build a static binary](static.md) containing only the extensions you need.
+
 A new version of PHP or of another system dependency doesn't lead to a new FrankenPHP release.
 Instead, the artifacts of the latest release are rebuilt:
 
