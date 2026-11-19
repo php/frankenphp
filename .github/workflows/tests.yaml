@@ -34,7 +34,6 @@ jobs:
           - php-versions: "8.4"
           - php-versions: "8.5"
           - php-versions: "8.6"
-            experimental: true
     env:
       GOMAXPROCS: 10
       LIBRARY_PATH: ${{ github.workspace }}/watcher/target/lib
@@ -104,7 +103,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        php-versions: ["8.3", "8.4", "8.5"]
+        php-versions: ["8.3", "8.4", "8.5", "8.6"]
     env:
       XCADDY_GO_BUILD_FLAGS: "-tags=nobadger,nomysql,nopgx,deprecated_topic,deprecated_claim"
     steps:
