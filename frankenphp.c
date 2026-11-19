@@ -69,7 +69,12 @@
 #endif
 
 #if defined(PHP_WIN32) && defined(ZTS)
-ZEND_TSRMLS_CACHE_DEFINE()
+/* php8embed.lib's objects are built with ZEND_ENABLE_STATIC_TSRMLS_CACHE and
+ * reference this per-binary TLS cache pointer. The pack headers leave
+ * ZEND_ENABLE_STATIC_TSRMLS_CACHE undefined for consumers, so
+ * ZEND_TSRMLS_CACHE_DEFINE() would expand to nothing and leave the symbol
+ * unresolved; define the cache the same way the PHP binary itself does. */
+TSRMLS_MAIN_CACHE_DEFINE()
 #endif
 
 /**
