@@ -26,12 +26,13 @@ build-options:
 download-options:
   parallel: 10
   retry: 5
-  # These extensions have no PHP 8.6 compatible release yet, build their fixed branches
+  # These extensions don't build with PHP 8.6 yet, use branches that fix them
   custom-git:
     - "ext-amqp:issue-php86a2:https://github.com/remicollet/php-amqp.git"
     - "ext-apcu:master:https://github.com/krakjoe/apcu.git"
     - "ext-igbinary:master:https://github.com/igbinary/igbinary.git"
     - "ext-imagick:master:https://github.com/Imagick/imagick.git"
+    - "ext-lz4:fix/static-zts-tsrm-cache:https://github.com/dunglas/php-ext-lz4.git"
     - "ext-memcached:master:https://github.com/php-memcached-dev/php-memcached.git"
     - "ext-msgpack:master:https://github.com/msgpack/msgpack-php.git"
     - "ext-redis:develop:https://github.com/phpredis/phpredis.git"
