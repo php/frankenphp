@@ -166,7 +166,7 @@ route {
 		file {path}/index.php
 		not path */
 	}
-	redir @canonicalPath {path}/ 308
+	redir @canonicalPath ./{http.request.orig_uri.path.file_escaped}/{http.request.orig_uri.prefixed_query} 308
 	# 要求されたファイルが存在しない場合は、indexファイルを試行
 	@indexFiles file {
 		try_files {path} {path}/index.php index.php
@@ -190,6 +190,9 @@ php_server [<matcher>] {
 	name <name> # このサーバーの名前を設定します。ワーカー、メトリクス、ログの紐付けに使用されます。デフォルト: 囲んでいるルートの最初のホストマッチャー、または最初のリスナーアドレス。
 	env <key> <value> # 追加の環境変数を指定された値に設定する。複数の環境変数を指定する場合は、複数回指定することができます。
 	file_server off # 組み込みのfile_serverディレクティブを無効にします。
+	file_server { # 組み込みのfile_serverディレクティブを設定します。rootを除くすべてのfile_serverオプション（例: `precompressed zstd br gzip`）を受け入れます。
+		<options...>
+	}
 	request_body_timeout <duration> # リクエストボディの読み取りにアイドルタイムアウトを設定します。失速した（低速なPOST）クライアントは切断されますが、安定したサイズのアップロードは成功します。デフォルト: 60秒。0に設定すると無効になります。
 	worker { # このサーバー固有のワーカーを作成します。複数のワーカーに対して複数回指定できます。
 		file <path> # ワーカースクリプトへのパスを設定します。php_serverのルートからの相対パスとなります。

@@ -166,7 +166,7 @@ route {
 		file {path}/index.php
 		not path */
 	}
-	redir @canonicalPath {path}/ 308
+	redir @canonicalPath ./{http.request.orig_uri.path.file_escaped}/{http.request.orig_uri.prefixed_query} 308
 	# Si le fichier demandé n'existe pas, essayer les fichiers index
 	@indexFiles file {
 		try_files {path} {path}/index.php index.php
@@ -190,6 +190,9 @@ php_server [<matcher>] {
 	name <name> # Définit le nom de ce serveur, utilisé pour attribuer les workers, les métriques et les logs. Par défaut : le premier matcher d'hôte de la route englobante, ou la première adresse d'écoute.
 	env <key> <value> # Définit une variable d'environnement supplémentaire avec la valeur donnée. Peut être spécifié plusieurs fois pour plusieurs variables d'environnement.
 	file_server off # Désactive la directive file_server intégrée.
+	file_server { # Configure la directive file_server intégrée. Accepte toutes les options de file_server sauf root, par exemple `precompressed zstd br gzip`.
+		<options...>
+	}
 	request_body_timeout <duration> # Définit un délai d'inactivité pour la lecture du corps de la requête : un client bloqué (POST lent) est coupé tandis qu'un téléversement stable de n'importe quelle taille réussit. Par défaut : 60s. Mettez à 0 pour désactiver.
 	worker { # Crée un worker spécifique à ce serveur. Peut être spécifié plusieurs fois pour plusieurs workers.
 		file <path> # Définit le chemin vers le script worker, peut être relatif à la racine du php_server

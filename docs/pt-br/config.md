@@ -155,7 +155,7 @@ other.example.com {
 Usar a diretiva `php_server` é geralmente o que você precisa,
 mas se precisar de controle total, você pode usar a diretiva `php` de mais baixo nível.
 A diretiva `php` passa toda a entrada para o PHP, em vez de primeiro verificar
-se é um arquivo PHP ou não. Leia mais sobre isso na [página de desempenho](desempenho.md#try_files).
+se é um arquivo PHP ou não. Leia mais sobre isso na [página de desempenho](performance.md#try_files).
 Uma requisição cujo caminho não contém nenhuma das extensões `split_path` resulta em um 404, a menos que um worker a manipule.
 
 Usar a diretiva `php_server` é equivalente a esta configuração:
@@ -167,7 +167,7 @@ route {
 		file {path}/index.php
 		not path */
 	}
-	redir @canonicalPath {path}/ 308
+	redir @canonicalPath ./{http.request.orig_uri.path.file_escaped}/{http.request.orig_uri.prefixed_query} 308
 	# Se o arquivo requisitado não existir, tenta os arquivos index
 	@indexFiles file {
 		try_files {path} {path}/index.php index.php
@@ -191,6 +191,9 @@ php_server [<matcher>] {
 	name <name> # Define o nome para este servidor, usado para atribuir workers, métricas e logs. Padrão: o primeiro host matcher da rota circundante, ou o primeiro endereço do listener.
 	env <key> <value> # Define uma variável de ambiente extra para o valor fornecido. Pode ser especificada mais de uma vez para múltiplas variáveis de ambiente.
 	file_server off # Desabilita a diretiva integrada file_server.
+	file_server { # Configura a diretiva integrada file_server. Aceita todas as opções de file_server, exceto root, por exemplo, `precompressed zstd br gzip`.
+		<options...>
+	}
 	request_body_timeout <duration> # Define um tempo limite de inatividade nas leituras do corpo da requisição: um cliente parado (POST lento) é desconectado enquanto um upload constante de qualquer tamanho é bem-sucedido. Padrão: 60s. Defina como 0 para desativar.
 	worker { # Cria um worker específico para este servidor. Pode ser especificada mais de uma vez para múltiplos workers.
 		file <path> # Define o caminho para o script do worker, pode ser relativo à raiz do php_server
@@ -206,8 +209,8 @@ php_server [<matcher>] {
 
 ### Monitorando alterações em arquivos
 
-Como os workers inicializam sua aplicação apenas uma vez e a mantêm na memória,
-quaisquer alterações nos seus arquivos PHP não serão refletidas imediatamente.
+Como os workers inicializam sua aplicação apenas uma vez e a mantêm na memória, quaisquer alterações
+nos seus arquivos PHP não serão refletidas imediatamente.
 
 Os workers podem ser reiniciados em caso de alterações em arquivos por meio da diretiva `watch`.
 Isso é útil para ambientes de desenvolvimento.
@@ -336,7 +339,7 @@ Se você quiser desabilitar o HTTPS (por exemplo, em um ambiente de desenvolvime
 
 Alternativamente, você pode usar todos os outros métodos descritos na [documentação do Caddy](https://caddyserver.com/docs/automatic-https#activation).
 
-Se você quiser usar HTTPS com o endereço IP `127.0.0.1` em vez do nome de host `localhost`, por favor, leia a seção de [problemas conhecidos](known-issues.md#usando-https127001-com-docker).
+Se você quiser usar HTTPS com o endereço IP `127.0.0.1` em vez do nome de host `localhost`, por favor, leia a seção de [problemas conhecidos](known-issues.md#using-https127001-com-docker).
 
 ### Full duplex (HTTP/1)
 

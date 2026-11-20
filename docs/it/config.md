@@ -167,7 +167,7 @@ route {
 		file {path}/index.php
 		not path */
 	}
-	redir @canonicalPath {path}/ 308
+	redir @canonicalPath ./{http.request.orig_uri.path.file_escaped}/{http.request.orig_uri.prefixed_query} 308
 	# Se il file richiesto non esiste, prova i file index
 	@indexFiles file {
 		try_files {path} {path}/index.php index.php
@@ -191,6 +191,9 @@ php_server [<matcher>] {
 	name <name> # Imposta il nome per questo server, usato per attribuire worker, metriche e log. Predefinito: il primo matcher host del percorso che lo racchiude, o il primo indirizzo del listener.
 	env <key> <value> # Imposta una variabile di ambiente aggiuntiva al valore specificato. Può essere specificata più volte per più variabili d'ambiente.
 	file_server off # Disabilita la direttiva file_server integrata.
+	file_server { # Configura la direttiva file_server integrata. Accetta tutte le opzioni di file_server eccetto root, es. `precompressed zstd br gzip`.
+		<options...>
+	}
 	request_body_timeout <duration> # Imposta un timeout di inattività sulle letture del corpo della richiesta: un client bloccato (slow POST) viene interrotto mentre un upload costante di qualsiasi dimensione ha successo. Predefinito: 60s. Impostare su 0 per disabilitare.
 	worker { # Crea un worker specifico per questo server. Può essere specificato più volte per più worker.
 		file <path> # Imposta il percorso dello script worker; può essere relativo alla root di php_server.
@@ -336,7 +339,7 @@ Se si desidera disabilitare HTTPS (ad esempio in un ambiente di sviluppo), si pu
 
 In alternativa, è possibile utilizzare tutti gli altri metodi descritti nella [documentazione Caddy](https://caddyserver.com/docs/automatic-https#activation).
 
-Se si vuole utilizzare HTTPS con l'indirizzo IP `127.0.0.1` invece del nome host `localhost`, leggere la sezione [problemi noti](problemi-noti.md#utilizzo-di-https-con-127001-con-docker).
+Se si vuole utilizzare HTTPS con l'indirizzo IP `127.0.0.1` invece del nome host `localhost`, leggere la sezione [problemi noti](known-issues.md#utilizzo-di-https-con-127001-con-docker).
 
 ### Duplex completo (HTTP/1)
 
