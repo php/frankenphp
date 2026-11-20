@@ -465,12 +465,25 @@ func parsePhpServer(h httpcaddyfile.Helper) ([]httpcaddyfile.ConfigValue, error)
 				tryFiles = args
 
 			case "file_server":
-				args := dispenser.RemainingArgs()
-				dispenser.DeleteN(len(args) + 1)
-				if len(args) < 1 || args[0] != "off" {
-					return nil, dispenser.ArgErr()
+				segment := dispenser.NextSegment()
+				dispenser.DeleteN(len(segment))
+				if len(segment) == 2 && segment[1].Text == "off" {
+					disableFsrv = true
+
+					break
 				}
-				disableFsrv = true
+
+				d := caddyfile.NewDispenser(segment)
+				parsed := fileserver.FileServer{}
+				if err := parsed.UnmarshalCaddyfile(d); err != nil {
+					return nil, err
+				}
+				// the PHP route and the file matchers share php_server's root
+				if parsed.Root != "" {
+					return nil, d.Errf("set root on php_server, not in its file_server block")
+				}
+				parsed.Root = fsrv.Root
+				fsrv = parsed
 			}
 		}
 	}

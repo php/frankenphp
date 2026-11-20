@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/caddyserver/caddy/v2"
+	"github.com/caddyserver/caddy/v2/caddyconfig"
 	"github.com/caddyserver/caddy/v2/caddytest"
 	"github.com/dunglas/frankenphp/internal/fastabs"
 	"github.com/prometheus/client_golang/prometheus/testutil"
@@ -609,6 +610,55 @@ func TestPHPServerDirectiveHidesCaddyfiles(t *testing.T) {
 		tester.AssertGetResponse("http://localhost:"+port+"/static.txt", http.StatusOK, "static")
 		tester.AssertGetResponse("http://localhost:"+port+"/imported.caddyfile", http.StatusNotFound, "")
 	}
+}
+
+func TestPHPServerDirectiveFileServerOptions(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "app.css"), []byte("body{}"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "app.css.zst"), []byte("zstd"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "secret.txt"), []byte("secret"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "index.php"), []byte("<?php echo 'php';"), 0644))
+
+	tester := caddytest.NewTester(t)
+	initServer(t, tester, `
+		{
+			skip_install_trust
+			admin localhost:2999
+		}
+
+		http://localhost:`+testPort+` {
+			php_server {
+				file_server {
+					precompressed zstd
+					hide secret.txt
+				}
+				root `+root+`
+			}
+		}
+		`, "caddyfile")
+
+	req, err := http.NewRequest(http.MethodGet, "http://localhost:"+testPort+"/app.css", nil)
+	require.NoError(t, err)
+	req.Header.Set("Accept-Encoding", "zstd")
+	resp, _ := tester.AssertResponse(req, http.StatusOK, "zstd")
+	require.Equal(t, "zstd", resp.Header.Get("Content-Encoding"))
+
+	tester.AssertGetResponse("http://localhost:"+testPort+"/app.css", http.StatusOK, "body{}")
+	tester.AssertGetResponse("http://localhost:"+testPort+"/secret.txt", http.StatusNotFound, "")
+	tester.AssertGetResponse("http://localhost:"+testPort+"/", http.StatusOK, "php")
+}
+
+func TestPHPServerDirectiveFileServerRejectsRoot(t *testing.T) {
+	_, _, err := caddyconfig.GetAdapter("caddyfile").Adapt([]byte(`
+		localhost {
+			php_server {
+				file_server {
+					root /srv
+				}
+			}
+		}
+	`), nil)
+	require.ErrorContains(t, err, "set root on php_server")
 }
 
 func TestPHPServerGlobals(t *testing.T) {
