@@ -9,7 +9,8 @@ description: Build custom FrankenPHP Docker images, install PHP extensions and C
 Debian and Alpine Linux variants are provided for popular architectures.
 Debian variants are recommended.
 
-Variants for PHP 8.2, 8.3, 8.4 and 8.5 are provided.
+Variants for PHP 8.2, 8.3, 8.4, 8.5 and 8.6 are provided.
+Like the official images, PHP 8.6 variants no longer ship the `mbstring` extension nor PECL: [install them](#how-to-install-more-php-extensions) with `install-php-extensions`.
 
 The tags follow this pattern: `dunglas/frankenphp:<frankenphp-version>-php<php-version>-<os>`
 
@@ -210,7 +211,7 @@ The Docker images are built:
 - when a new release is tagged
 - daily at 4 am UTC, if new versions of the official PHP images are available
 
-Tags such as `latest` or `1-php8.5` are moved to the new images, while digests never change.
+Tags such as `latest` or `1-php8.6` are moved to the new images, while digests never change.
 To pin an exact image, reference it by digest. The standalone binaries follow [a similar update policy](production.md#standalone-binary-updates).
 
 ## Hardening images

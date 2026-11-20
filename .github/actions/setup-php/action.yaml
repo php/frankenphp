@@ -2,9 +2,9 @@ name: setup-php
 description: Setup PHP in ZTS + debug mode with FrankenPHP's standard configuration
 inputs:
   php-version:
-    description: PHP version (e.g. "8.5")
+    description: PHP version (e.g. "8.6")
     required: false
-    default: "8.5"
+    default: "8.6"
 runs:
   using: composite
   steps:
