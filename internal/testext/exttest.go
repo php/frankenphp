@@ -63,18 +63,21 @@ func testRegisterExtension(t *testing.T) {
 
 	assertExtensionsLoaded(t, 1)
 
-	// ext2 fails the request startup and its output handler calls putenv() during the request shutdown
-	req, err := frankenphp.NewRequestWithContext(httptest.NewRequest("GET", "http://example.com/index.php?fail_startup", nil), frankenphp.WithRequestDocumentRoot("./testdata", false))
-	require.NoError(t, err)
-	w := httptest.NewRecorder()
-	_ = frankenphp.ServeHTTP(w, req)
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	// Broken on PHP 8.6 until https://github.com/php/php-src/pull/25157 ships
+	if C.PHP_VERSION_ID < 80600 {
+		// ext2 fails the request startup and its output handler calls putenv() during the request shutdown
+		req, err := frankenphp.NewRequestWithContext(httptest.NewRequest("GET", "http://example.com/index.php?fail_startup", nil), frankenphp.WithRequestDocumentRoot("./testdata", false))
+		require.NoError(t, err)
+		w := httptest.NewRecorder()
+		_ = frankenphp.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
 
-	req, err = frankenphp.NewRequestWithContext(httptest.NewRequest("GET", "http://example.com/getenv.php", nil), frankenphp.WithRequestDocumentRoot("./testdata", false))
-	require.NoError(t, err)
-	w = httptest.NewRecorder()
-	assert.NoError(t, frankenphp.ServeHTTP(w, req))
-	assert.Equal(t, "bool(false)\n", w.Body.String())
+		req, err = frankenphp.NewRequestWithContext(httptest.NewRequest("GET", "http://example.com/getenv.php", nil), frankenphp.WithRequestDocumentRoot("./testdata", false))
+		require.NoError(t, err)
+		w = httptest.NewRecorder()
+		assert.NoError(t, frankenphp.ServeHTTP(w, req))
+		assert.Equal(t, "bool(false)\n", w.Body.String())
+	}
 
 	// rebooting the main thread (file watcher, admin restart endpoint,
 	// opcache_reset()) starts the PHP modules again
