@@ -84,7 +84,6 @@ jobs:
             --disable-xmlwriter \
             --without-pcre-jit \
             --disable-opcache-jit \
-            --disable-cli \
             --disable-cgi \
             --disable-phpdbg \
             --without-pear \
