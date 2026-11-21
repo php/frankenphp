@@ -92,6 +92,45 @@ func TestModuleWorkerDuplicateFilenamesFail(t *testing.T) {
 	require.Contains(t, err.Error(), "must not have duplicate filenames", "Error message should mention duplicate filenames")
 }
 
+// two global background workers may share a script, like their php_server
+// counterparts and the Go API: they are not matched by path
+func TestGlobalBackgroundWorkersShareAFilename(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`
+	{
+		frankenphp {
+			worker {
+				name first
+				file ../testdata/worker-with-env.php
+				num 1
+				background
+			}
+			worker {
+				name second
+				file ../testdata/worker-with-env.php
+				num 1
+				background
+			}
+		}
+	}`)
+	app := &FrankenPHPApp{}
+
+	require.NoError(t, app.UnmarshalCaddyfile(d))
+	require.Len(t, app.Workers, 2)
+}
+
+func TestGlobalWorkerDuplicateFilenamesFail(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`
+	{
+		frankenphp {
+			worker ../testdata/worker-with-env.php
+			worker ../testdata/worker-with-env.php
+		}
+	}`)
+	app := &FrankenPHPApp{}
+
+	require.ErrorContains(t, app.UnmarshalCaddyfile(d), "must not have duplicate filenames")
+}
+
 func TestModuleWorkersWithDifferentFilenames(t *testing.T) {
 	// Create a test configuration with different worker filenames
 	configWithDifferentFilenames := `
@@ -294,4 +333,152 @@ func TestCreateUniqueWorkerNamesQualifiedByServer(t *testing.T) {
 	require.Equal(t, "queue_1", createUniqueWorkerName(usedWorkerNames, wc, "two.example.com"))
 	// workers without a server keep the numeric postfix behavior
 	require.Equal(t, "queue_2", createUniqueWorkerName(usedWorkerNames, wc, ""))
+}
+
+func TestWorkerBackgroundConfig(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`
+	{
+		php_server {
+			worker {
+				name jobs
+				file ../testdata/worker-with-env.php
+				num 2
+				background
+			}
+		}
+	}`)
+	module := &FrankenPHPModule{}
+
+	require.NoError(t, module.UnmarshalCaddyfile(d))
+	require.Len(t, module.Workers, 1)
+	require.True(t, module.Workers[0].Background)
+	require.Equal(t, "jobs", module.Workers[0].Name)
+}
+
+// the name is generated when the workers are collected, like for an HTTP worker
+func TestWorkerBackgroundNameIsOptional(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`
+	{
+		php_server {
+			worker {
+				file ../testdata/worker-with-env.php
+				background
+			}
+		}
+	}`)
+	module := &FrankenPHPModule{}
+
+	require.NoError(t, module.UnmarshalCaddyfile(d))
+	require.True(t, module.Workers[0].Background)
+	require.Empty(t, module.Workers[0].Name)
+}
+
+func TestWorkerBackgroundVars(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`
+	{
+		php_server {
+			worker {
+				file ../testdata/worker-with-env.php
+				background
+				vars redis feature_flags
+			}
+		}
+	}`)
+	module := &FrankenPHPModule{}
+
+	require.NoError(t, module.UnmarshalCaddyfile(d))
+	require.Equal(t, []string{"redis", "feature_flags"}, module.Workers[0].Vars)
+}
+
+func TestWorkerVarsRequireBackground(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`
+	{
+		php_server {
+			worker {
+				file ../testdata/worker-with-env.php
+				vars redis
+			}
+		}
+	}`)
+	module := &FrankenPHPModule{}
+
+	require.ErrorContains(t, module.UnmarshalCaddyfile(d), `"vars" is only supported for background workers`)
+}
+
+func TestWorkerBackgroundWithoutNumParses(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`
+	{
+		php_server {
+			worker {
+				name jobs
+				file ../testdata/worker-with-env.php
+				background
+			}
+		}
+	}`)
+	module := &FrankenPHPModule{}
+
+	// num is optional, it defaults to one thread when the workers start
+	require.NoError(t, module.UnmarshalCaddyfile(d))
+}
+
+func TestWorkerBootTimeout(t *testing.T) {
+	parse := func(t *testing.T, directives string) (*FrankenPHPModule, error) {
+		t.Helper()
+		module := &FrankenPHPModule{}
+		err := module.UnmarshalCaddyfile(caddyfile.NewTestDispenser(`
+	{
+		php_server {
+			worker {
+				file ../testdata/worker-with-env.php
+				` + directives + `
+			}
+		}
+	}`))
+
+		return module, err
+	}
+
+	module, err := parse(t, "background\nboot_timeout 5s")
+	require.NoError(t, err)
+	require.Equal(t, caddy.Duration(5*time.Second), *module.Workers[0].BootTimeout)
+
+	// zero waits forever
+	module, err = parse(t, "background\nboot_timeout 0")
+	require.NoError(t, err)
+	require.Equal(t, caddy.Duration(0), *module.Workers[0].BootTimeout)
+
+	_, err = parse(t, "boot_timeout 5s")
+	require.ErrorContains(t, err, `"boot_timeout" is only supported for background workers`)
+
+	_, err = parse(t, "background\nboot_timeout -1s")
+	require.ErrorContains(t, err, "boot_timeout must be >= 0")
+}
+
+func TestWorkerBackgroundRejectsMatch(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`
+	{
+		php_server {
+			worker {
+				name jobs
+				file ../testdata/worker-with-env.php
+				match /jobs/*
+				background
+			}
+		}
+	}`)
+	module := &FrankenPHPModule{}
+
+	err := module.UnmarshalCaddyfile(d)
+	require.ErrorContains(t, err, `"match" is not supported for background workers`)
+}
+
+// a JSON config skips the Caddyfile check: the core refuses vars on an HTTP
+// worker instead of the option being dropped
+func TestWorkerVarsReachTheCoreWithoutBackground(t *testing.T) {
+	wc := workerConfig{FileName: "../testdata/worker-with-env.php", Vars: []string{"cfg"}}
+	opts, err := wc.toWorkerOptions()
+	require.NoError(t, err)
+
+	require.ErrorContains(t, frankenphp.Validate(frankenphp.WithWorkers("http", wc.FileName, 1, opts...)), "only background workers publish them")
 }

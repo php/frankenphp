@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 57299a756b23c7443d6b09f759106ddf0ec8df20 */
+ * Stub hash: b7d45f1d97394a73b3026aa2e09a3d01914ab8d0 */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_handle_request, 0, 1, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, callback, IS_CALLABLE, 0)
@@ -41,6 +41,29 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_log, 0, 1, IS_VOID, 0
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, context, IS_ARRAY, 0, "[]")
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_get_vars, 0, 1, IS_ARRAY, 0)
+	ZEND_ARG_TYPE_INFO(0, namespace, IS_STRING, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_class_FrankenPHP_WorkerHandle___construct, 0, 0, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_FrankenPHP_WorkerHandle_getName, 0, 0, IS_STRING, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_FrankenPHP_WorkerHandle_tick, 0, 0, _IS_BOOL, 0)
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, timeout, IS_DOUBLE, 1, "0.0")
+ZEND_END_ARG_INFO()
+
+#define arginfo_class_FrankenPHP_WorkerHandle_getStream arginfo_class_FrankenPHP_WorkerHandle___construct
+
+#define arginfo_class_FrankenPHP_WorkerHandle_getNamespaces arginfo_frankenphp_request_headers
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_FrankenPHP_WorkerHandle_setVars, 0, 2, IS_VOID, 0)
+	ZEND_ARG_TYPE_INFO(0, namespace, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, vars, IS_ARRAY, 0)
+ZEND_END_ARG_INFO()
+
 ZEND_FUNCTION(frankenphp_handle_request);
 ZEND_FUNCTION(headers_send);
 ZEND_FUNCTION(frankenphp_finish_request);
@@ -48,6 +71,13 @@ ZEND_FUNCTION(frankenphp_request_headers);
 ZEND_FUNCTION(frankenphp_response_headers);
 ZEND_FUNCTION(mercure_publish);
 ZEND_FUNCTION(frankenphp_log);
+ZEND_FUNCTION(frankenphp_get_vars);
+ZEND_METHOD(FrankenPHP_WorkerHandle, __construct);
+ZEND_METHOD(FrankenPHP_WorkerHandle, getName);
+ZEND_METHOD(FrankenPHP_WorkerHandle, tick);
+ZEND_METHOD(FrankenPHP_WorkerHandle, getStream);
+ZEND_METHOD(FrankenPHP_WorkerHandle, getNamespaces);
+ZEND_METHOD(FrankenPHP_WorkerHandle, setVars);
 
 static const zend_function_entry ext_functions[] = {
 	ZEND_FE(frankenphp_handle_request, arginfo_frankenphp_handle_request)
@@ -77,6 +107,17 @@ static const zend_function_entry ext_functions[] = {
 #endif
 	ZEND_FE(mercure_publish, arginfo_mercure_publish)
 	ZEND_FE(frankenphp_log, arginfo_frankenphp_log)
+	ZEND_FE(frankenphp_get_vars, arginfo_frankenphp_get_vars)
+	ZEND_FE_END
+};
+
+static const zend_function_entry class_FrankenPHP_WorkerHandle_methods[] = {
+	ZEND_ME(FrankenPHP_WorkerHandle, __construct, arginfo_class_FrankenPHP_WorkerHandle___construct, ZEND_ACC_PUBLIC)
+	ZEND_ME(FrankenPHP_WorkerHandle, getName, arginfo_class_FrankenPHP_WorkerHandle_getName, ZEND_ACC_PUBLIC)
+	ZEND_ME(FrankenPHP_WorkerHandle, tick, arginfo_class_FrankenPHP_WorkerHandle_tick, ZEND_ACC_PUBLIC)
+	ZEND_ME(FrankenPHP_WorkerHandle, getStream, arginfo_class_FrankenPHP_WorkerHandle_getStream, ZEND_ACC_PUBLIC)
+	ZEND_ME(FrankenPHP_WorkerHandle, getNamespaces, arginfo_class_FrankenPHP_WorkerHandle_getNamespaces, ZEND_ACC_PUBLIC)
+	ZEND_ME(FrankenPHP_WorkerHandle, setVars, arginfo_class_FrankenPHP_WorkerHandle_setVars, ZEND_ACC_PUBLIC)
 	ZEND_FE_END
 };
 
@@ -97,6 +138,21 @@ static zend_class_entry *register_class_FrankenPHP_RequestBodyTooLargeException(
 	class_entry = zend_register_internal_class_with_flags(&ce, class_entry_Exception, 0);
 #else
 	class_entry = zend_register_internal_class_ex(&ce, class_entry_Exception);
+#endif
+
+	return class_entry;
+}
+
+static zend_class_entry *register_class_FrankenPHP_WorkerHandle(void)
+{
+	zend_class_entry ce, *class_entry;
+
+	INIT_NS_CLASS_ENTRY(ce, "FrankenPHP", "WorkerHandle", class_FrankenPHP_WorkerHandle_methods);
+#if (PHP_VERSION_ID >= 80400)
+	class_entry = zend_register_internal_class_with_flags(&ce, NULL, ZEND_ACC_FINAL|ZEND_ACC_NO_DYNAMIC_PROPERTIES|ZEND_ACC_NOT_SERIALIZABLE);
+#else
+	class_entry = zend_register_internal_class_ex(&ce, NULL);
+	class_entry->ce_flags |= ZEND_ACC_FINAL|ZEND_ACC_NO_DYNAMIC_PROPERTIES|ZEND_ACC_NOT_SERIALIZABLE;
 #endif
 
 	return class_entry;

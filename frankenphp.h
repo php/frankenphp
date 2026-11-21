@@ -235,6 +235,14 @@ typedef enum {
   FRANKENPHP_MERCURE_UNSUPPORTED = 4,
 } frankenphp_mercure_status;
 
+/* Background worker primitives. */
+intptr_t frankenphp_set_background_worker_and_get_stop_sock(const char *name,
+                                                            size_t name_len);
+void frankenphp_worker_close_stop_sock(intptr_t s);
+void frankenphp_vars_to_request(zval *return_value, HashTable *table);
+void frankenphp_vars_free(HashTable *table);
+void frankenphp_vars_release(HashTable *table);
+
 void register_extensions(zend_module_entry **m, int len);
 
 // This function is exported for use by extensions, as proposed in PR #2305

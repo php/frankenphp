@@ -58,9 +58,87 @@ namespace {
      * array<string, any> $context Values of the array will be converted to the corresponding Go type (if supported by FrankenPHP) and added to the context of the structured logs using https://pkg.go.dev/log/slog#Attr
      */
     function frankenphp_log(string $message, int $level = 0, array $context = []): void {}
+    /**
+     * EXPERIMENTAL: returns a copy of the snapshot last published in a vars
+     * namespace, resolved within the current php_server, then among global
+     * workers. Blocks until the publishing worker reached its ready point.
+     * Throws if no background worker publishes the namespace, or if
+     * background workers wait on each other in a cycle.
+     */
+    function frankenphp_get_vars(string $namespace): array {}
 }
 
 namespace FrankenPHP {
     /** Thrown when reading a request body larger than the configured limit */
     class RequestBodyTooLargeException extends \Exception {}
+
+    /**
+     * @strict-properties
+     * @not-serializable
+     *
+     * EXPERIMENTAL: the handle of the current background worker, the one
+     * point where the script and FrankenPHP meet. Constructing it outside
+     * a background worker throws. It implements Io\Poll\Handle, so an
+     * Io\Poll\Context waits on it directly, the one of PHP 8.6 or the one
+     * of symfony/polyfill-io-poll below that.
+     */
+    final class WorkerHandle
+    {
+        public function __construct() {}
+
+        /**
+         * The name of the worker, as declared or generated from the script
+         * path: what tells apart the workers running the same script.
+         */
+        public function getName(): string {}
+
+        /**
+         * The ready point and liveness check of a background worker, the
+         * background analog of frankenphp_handle_request(). The first call
+         * of a run marks the worker ready: the server start waits for it,
+         * and an exit before it counts as a failure. max_execution_time
+         * applies until that call and not after. It returns false once
+         * FrankenPHP drains the worker, on shutdown, reboot or restart, so
+         * the script can leave its loop, and true otherwise. It never
+         * hands out work. Given a timeout, in seconds, it waits that long
+         * at most for FrankenPHP to need the script, without a limit when
+         * null: all a script with nothing else to wait on needs. Without
+         * one it never waits: the script waits on the handle, or on the
+         * stream of getStream(), and calls this when it is readable, which
+         * also consumes whatever FrankenPHP wrote there.
+         */
+        public function tick(?float $timeout = 0.0): bool {}
+
+        /**
+         * The stream to wait on, alone or with the script's own streams: it
+         * becomes readable when FrankenPHP needs the script's attention,
+         * its drain included. Only waiting on it is supported, through
+         * stream_select() or a blocking read; what it carries is not part
+         * of the contract and tick() consumes it. Reading it steals those
+         * bytes from tick(), and throws before the first tick() when the
+         * read would block. Writing to it goes nowhere. Closing it is
+         * safe: a handle hands out one stream, a fresh one over the same
+         * socket once the script closed it.
+         *
+         * @return resource
+         */
+        public function getStream() {}
+
+        /**
+         * Returns the namespaces this background worker serves, as declared in
+         * its configuration.
+         *
+         * @return array{vars: list<string>}
+         */
+        public function getNamespaces(): array {}
+
+        /**
+         * Publishes a snapshot in one of the vars namespaces of this background
+         * worker: the array replaces the previous snapshot of that namespace,
+         * atomically for readers, which get copies. Values must be null,
+         * scalars, arrays or enums. Every declared namespace is published
+         * before the first tick() of a run.
+         */
+        public function setVars(string $namespace, array $vars): void {}
+    }
 }
