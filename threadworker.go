@@ -20,9 +20,13 @@ type workerThread struct {
 	worker                  *worker
 	dummyFrankenPHPContext  *frankenPHPContext
 	workerFrankenPHPContext *frankenPHPContext
-	isBootingScript         bool // true if the worker has not reached frankenphp_handle_request yet
-	failureCount            int  // number of consecutive startup failures
-	requestCount            int  // number of requests handled since last restart
+	isBootingScript         bool   // true if the worker has not reached frankenphp_handle_request yet
+	failureCount            int    // number of consecutive startup failures
+	requestCount            int    // number of requests handled since last restart
+	opcacheRound            uint64 // round of opcache restarts when the script started
+	opcacheStale            bool   // cached by opcache although a restart is pending
+	opcacheUncached         bool   // not cached by opcache because a restart was pending
+	opcacheRetried          bool   // started again because opcache did not cache it
 }
 
 func convertToWorkerThread(thread *phpThread, worker *worker) {
@@ -101,6 +105,7 @@ func setupWorkerScript(handler *workerThread, worker *worker) {
 	handler.dummyFrankenPHPContext = fc
 	handler.isBootingScript = true
 	handler.requestCount = 0
+	handler.opcacheRound = opcacheRestarts.round.Load()
 
 	if fc.logger.Enabled(fc.ctx, slog.LevelDebug) {
 		fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "starting", slog.String("worker", worker.name), slog.Int("thread", handler.thread.threadIndex))
@@ -196,6 +201,8 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 
 		// worker is truly ready only after reaching frankenphp_handle_request()
 		metrics.ReadyWorker(handler.worker.name)
+
+		handler.opcacheStarted()
 	}
 
 	// max_requests reached: signal reboot for full ZTS cleanup
@@ -217,18 +224,32 @@ func (handler *workerThread) waitForWorkerRequest() (bool, any) {
 		handler.state.Set(state.Ready)
 	}
 
+	// opcache schedules a restart of its memory: restart the script to let go of it
+	if handler.opcacheRestartNeeded() {
+		return false, nil
+	}
+
 	handler.state.MarkAsWaiting(true)
 
 	var fc *frankenPHPContext
-	select {
-	case <-handler.thread.drainChan:
-		if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
-			globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "shutting down", slog.String("worker", handler.worker.name), slog.Int("thread", handler.thread.threadIndex))
-		}
+	for wake := opcacheWakeChan(); fc == nil; {
+		select {
+		case <-handler.thread.drainChan:
+			if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
+				globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "shutting down", slog.String("worker", handler.worker.name), slog.Int("thread", handler.thread.threadIndex))
+			}
 
-		return false, nil
-	case fc = <-handler.thread.requestChan:
-	case fc = <-handler.worker.requestChan:
+			return false, nil
+		case <-wake:
+			if handler.opcacheRestartNeeded() {
+				handler.state.MarkAsWaiting(false)
+
+				return false, nil
+			}
+			wake = opcacheWakeChan()
+		case fc = <-handler.thread.requestChan:
+		case fc = <-handler.worker.requestChan:
+		}
 	}
 
 	handler.requestCount++

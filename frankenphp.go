@@ -917,26 +917,52 @@ func go_opcache_restart_scheduled(reason C.int) {
 	opcacheRestartScheduled(int(reason))
 }
 
-func opcacheRestartScheduled(reason int) {
-	reasonText := "unknown"
+//export go_opcache_restart_done
+func go_opcache_restart_done(reason C.int) {
+	opcacheRestartDone(int(reason))
+}
+
+func opcacheRestartReason(reason int) string {
 	if reason >= 0 && reason < len(opcacheRestartReasons) {
-		reasonText = opcacheRestartReasons[reason]
+		return opcacheRestartReasons[reason]
 	}
+
+	return "unknown"
+}
+
+func opcacheRestartScheduled(reason int) {
+	reasonText := opcacheRestartReason(reason)
+	opcacheRestarts.scheduled.Store(time.Now().UnixNano())
 
 	if m, ok := metrics.(OpcacheMetrics); ok {
 		m.OpcacheRestart(reasonText)
 	}
 
-	if !globalLogger.Enabled(globalCtx, slog.LevelWarn) {
-		return
+	if globalLogger.Enabled(globalCtx, slog.LevelWarn) {
+		// written synchronously, under opcache's lock: a line deferred to a
+		// goroutine is lost if the restart crashes the process
+		globalLogger.LogAttrs(globalCtx, slog.LevelWarn,
+			"opcache restart scheduled, caching stops until the next request start carries it out while other threads may still reference the old memory: raise opcache.memory_consumption, opcache.max_accelerated_files or opcache.max_wasted_percentage",
+			slog.String("reason", reasonText),
+		)
 	}
 
-	// written synchronously, under opcache's lock: a line deferred to a
-	// goroutine is lost if the restart crashes the process
-	globalLogger.LogAttrs(globalCtx, slog.LevelWarn,
-		"opcache restart scheduled, caching stops until the next request start carries it out while other threads may still reference the old memory: raise opcache.memory_consumption, opcache.max_accelerated_files or opcache.max_wasted_percentage",
-		slog.String("reason", reasonText),
-	)
+	// last, as opcache marks the restart as pending only once this returns
+	restartWorkersForOpcache()
+}
+
+func opcacheRestartDone(reason int) {
+	if globalLogger.Enabled(globalCtx, slog.LevelInfo) {
+		attrs := []slog.Attr{slog.String("reason", opcacheRestartReason(reason))}
+		if scheduled := opcacheRestarts.scheduled.Load(); scheduled != 0 {
+			attrs = append(attrs, slog.Duration("pending", time.Since(time.Unix(0, scheduled))))
+		}
+
+		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "opcache restart done, caching resumes", attrs...)
+	}
+
+	// the workers that started while the restart was pending start again
+	wakeWorkersForOpcache()
 }
 
 func convertArgs(args []string) (C.int, []*C.char) {
@@ -973,4 +999,5 @@ func resetGlobals() {
 	hotReloadEnabled = false
 	maxIdleTime = defaultMaxIdleTime
 	maxRequestsPerThread = 0
+	resetOpcacheRestarts()
 }
