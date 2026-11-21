@@ -396,7 +396,7 @@ func Init(options ...Option) error {
 		maxIdleTime = opt.maxIdleTime
 	}
 
-	registerServers(opt.servers)
+	run := newRunState(opt.servers)
 
 	workerThreadCount, err := calculateMaxThreads(opt)
 	if err != nil {
@@ -445,7 +445,7 @@ func Init(options ...Option) error {
 		convertToRegularThread(getInactivePHPThread())
 	}
 
-	if err := initWorkers(opt.workers); err != nil {
+	if err := initWorkers(run, opt.workers); err != nil {
 		shutdown()
 
 		return err
@@ -459,7 +459,8 @@ func Init(options ...Option) error {
 	initAutoScaling(mainThread)
 
 	// only now that the workers and threads are up may requests reach a server
-	activateServers()
+	currentRun = run
+	run.publish()
 
 	if globalLogger.Enabled(globalCtx, slog.LevelInfo) {
 		globalLogger.LogAttrs(globalCtx, slog.LevelInfo, "FrankenPHP started 🐘", slog.String("php_version", Version().Version), slog.Int("total_threads", mainThread.numThreads), slog.Int("worker_threads", workerThreadCount), slog.Int("max_threads", mainThread.maxThreads), slog.Int("max_requests", maxRequestsPerThread))
@@ -508,7 +509,10 @@ func shutdown() {
 
 	drainWatchers()
 	drainPHPThreads()
-	unregisterServers()
+	if currentRun != nil {
+		currentRun.unpublish()
+		currentRun = nil
+	}
 
 	metrics.Shutdown()
 
@@ -967,8 +971,6 @@ func resetGlobals() {
 	globalLogger = slog.Default()
 	workers = nil
 	workersByName = nil
-	globalWorkersByPath = nil
-	servers = nil
 	watcherIsEnabled = false
 	hotReloadEnabled = false
 	maxIdleTime = defaultMaxIdleTime

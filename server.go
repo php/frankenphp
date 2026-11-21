@@ -13,79 +13,116 @@ import (
 // Server represents a preconfigured server block
 // requests and workers can be scoped to a Server
 type Server struct {
-	idx int
-	// name passed to NewServer(), kept so re-registering resolves the default anew
-	configuredName            string
-	name                      string
-	root                      string
-	splitPath                 []string
-	env                       PreparedEnv
-	workers                   []*worker
-	workersByPath             map[string]*worker
-	workersWithRequestMatcher []*worker
+	// set by WithServerName(), a run names an unnamed server after its index
+	name      string
+	root      string
+	splitPath []string
+	env       PreparedEnv
+	logger    *slog.Logger
+	// set while FrankenPHP runs with this server; a request loads it once,
+	// so a reload cannot change it between the check and the worker lookup
+	state atomic.Pointer[serverState]
+}
 
-	// registered while FrankenPHP runs with this server; read by concurrent
-	// ServeHTTP calls while Init()/Shutdown() flip it, hence atomic
-	isRegistered atomic.Bool
-	logger       *slog.Logger
+// runState is what a run of FrankenPHP assigns to the servers.
+// Init() builds a new one and never modifies its server states once published.
+type runState struct {
+	servers             map[*Server]*serverState
+	globalWorkersByPath map[string]*worker
+}
+
+type serverState struct {
+	name                      string
+	logger                    *slog.Logger
+	workersByPath             map[string]*worker
+	globalWorkersByPath       map[string]*worker
+	workersWithRequestMatcher []*worker
 }
 
 var (
-	servers        []*Server
-	fallbackServer = newFallbackServer()
+	// nil while FrankenPHP is not running, only accessed under startupMu
+	currentRun     *runState
+	fallbackServer = &Server{env: make(map[string]string)}
 )
 
-func newFallbackServer() *Server {
-	s := &Server{
-		idx:           -1,
-		workersByPath: make(map[string]*worker),
-		env:           make(map[string]string),
-		logger:        globalLogger,
+// newRunState gives every server its identity for a run; initWorkers() then adds the workers
+func newRunState(servers []*Server) *runState {
+	r := &runState{
+		servers:             make(map[*Server]*serverState, len(servers)+1),
+		globalWorkersByPath: make(map[string]*worker),
 	}
 
-	return s
-}
-
-// registerServers assigns the identity of every server and clears the workers of a previous run,
-// so the same *Server can be passed to Init() again after a Shutdown()
-// servers do not accept requests yet at this point, see activateServers()
-func registerServers(newServers []*Server) {
-	servers = newServers
-	fallbackServer.logger = globalLogger
-	fallbackServer.resetWorkers()
-
+	r.servers[fallbackServer] = r.newServerState("", globalLogger)
 	for i, s := range servers {
-		s.idx = i
-		s.name = s.configuredName
-		if s.name == "" {
-			s.name = "server_" + strconv.Itoa(i)
+		name := s.name
+		if name == "" {
+			name = "server_" + strconv.Itoa(i)
 		}
-		s.resetWorkers()
+
+		r.servers[s] = r.newServerState(name, s.logger)
+	}
+
+	return r
+}
+
+func (r *runState) newServerState(name string, logger *slog.Logger) *serverState {
+	return &serverState{
+		name:                name,
+		logger:              logger,
+		workersByPath:       make(map[string]*worker),
+		globalWorkersByPath: r.globalWorkersByPath,
 	}
 }
 
-// activateServers lets registered servers accept requests
-// it runs once workers and threads are up, so a request cannot reach a server before them
-func activateServers() {
-	fallbackServer.isRegistered.Store(true)
-	for _, s := range servers {
-		s.isRegistered.Store(true)
+// publish lets the servers of the run accept requests
+func (r *runState) publish() {
+	for s, state := range r.servers {
+		s.state.Store(state)
 	}
 }
 
-func unregisterServers() {
-	fallbackServer.isRegistered.Store(false)
-	for _, server := range servers {
-		server.isRegistered.Store(false)
+func (r *runState) unpublish() {
+	for s := range r.servers {
+		s.state.Store(nil)
 	}
-	servers = nil
 }
 
-// resetWorkers drops the workers of a previous run; initWorkers() adds them back
-func (s *Server) resetWorkers() {
-	s.workers = nil
-	s.workersByPath = make(map[string]*worker)
-	s.workersWithRequestMatcher = nil
+func (r *runState) addWorker(w *worker) error {
+	if w.server == nil {
+		r.globalWorkersByPath[w.fileName] = w
+		r.globalWorkersByPath[w.declaredFileName] = w
+
+		return nil
+	}
+
+	// a server not passed to WithServer() never routes requests
+	s := r.servers[w.server]
+	if s == nil {
+		return nil
+	}
+
+	if w.matchRequest != nil {
+		s.workersWithRequestMatcher = append(s.workersWithRequestMatcher, w)
+		return nil
+	}
+
+	if _, exists := s.workersByPath[w.fileName]; exists {
+		return fmt.Errorf("two workers in a server cannot have the same filename: %q", w.fileName)
+	}
+	s.workersByPath[w.fileName] = w
+	// a document root whose symlinks are kept yields the declared path, not the resolved one
+	s.workersByPath[w.declaredFileName] = w
+
+	return nil
+}
+
+// workerByPath finds the worker of the server, or else the global one, running a script
+func (s *serverState) workerByPath(path string) *worker {
+	if w := s.workersByPath[path]; w != nil {
+		return w
+	}
+
+	return s.globalWorkersByPath[path]
 }
 
 // NewServer creates a Server that can be registered via WithServer().
@@ -98,10 +135,7 @@ func NewServer(root string, options ...ServerOption) (*Server, error) {
 		return nil, err
 	}
 
-	s := &Server{
-		root:          root,
-		workersByPath: make(map[string]*worker),
-	}
+	s := &Server{root: root}
 
 	for _, option := range options {
 		if err := option(s); err != nil {
@@ -125,33 +159,21 @@ func NewServer(root string, options ...ServerOption) (*Server, error) {
 }
 
 // Name returns the human-readable name of the server.
-// It is empty until registration if none was passed to NewServer().
+// It is empty while not running if none was passed to NewServer().
 func (s *Server) Name() string {
+	if state := s.state.Load(); state != nil {
+		return state.name
+	}
+
 	return s.name
-}
-
-func (s *Server) addWorker(w *worker) error {
-	s.workers = append(s.workers, w)
-	if w.matchRequest != nil {
-		s.workersWithRequestMatcher = append(s.workersWithRequestMatcher, w)
-		return nil
-	}
-
-	if _, exists := s.workersByPath[w.fileName]; exists {
-		return fmt.Errorf("two workers in a server cannot have the same filename: %q", w.fileName)
-	}
-	s.workersByPath[w.fileName] = w
-	// a document root whose symlinks are kept yields the declared path, not the resolved one
-	s.workersByPath[w.declaredFileName] = w
-
-	return nil
 }
 
 // ServeHTTP executes a PHP script on the registered server.
 // The request will be scoped to the server instance that was registered via WithServer().
 // Otherwise, it is equivalent to calling ServeHTTP.
 func (s *Server) ServeHTTP(responseWriter http.ResponseWriter, request *http.Request, opts ...RequestOption) error {
-	if !s.isRegistered.Load() {
+	state := s.state.Load()
+	if state == nil {
 		return ErrNotRunning
 	}
 
@@ -160,7 +182,7 @@ func (s *Server) ServeHTTP(responseWriter http.ResponseWriter, request *http.Req
 		h["Server"] = serverHeader
 	}
 
-	fc, err := newContextFromRequest(request, responseWriter, s, opts...)
+	fc, err := newContextFromRequest(request, responseWriter, s, state, opts...)
 	if err != nil {
 		return err
 	}
