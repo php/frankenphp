@@ -357,6 +357,13 @@ func TestCorrectThreadCalculation(t *testing.T) {
 	testThreadCalculation(t, 2, 5, &opt{maxThreads: 5, workers: []workerOpt{{num: 1, maxThreads: 3}}})
 	testThreadCalculation(t, 3, 5, &opt{maxThreads: 5, workers: []workerOpt{{num: 1, maxThreads: 4}, {num: 1, maxThreads: 4}}})
 
+	// a background worker counts like any worker, with one thread unless told otherwise
+	oneBackgroundWorker := []workerOpt{{isBackgroundWorker: true}}
+	testThreadCalculation(t, maxProcs, maxProcs, &opt{workers: oneBackgroundWorker})
+	testThreadCalculation(t, 2, 2, &opt{numThreads: 1, workers: oneBackgroundWorker})
+	testThreadCalculation(t, 2, 4, &opt{maxThreads: 4, workers: oneBackgroundWorker})
+	testThreadCalculationError(t, &opt{numThreads: 1, maxThreads: 1, workers: oneBackgroundWorker})
+
 	// a worker never eats into num_threads, so there is no floor to miss;
 	// max_threads still has to fit what starts
 	testThreadCalculationError(t, &opt{numThreads: 1, maxThreads: 1, workers: oneWorkerThread})
@@ -510,6 +517,31 @@ func TestRebootThreadCreationFailure(t *testing.T) {
 			Shutdown()
 		})
 	}
+}
+
+// a background worker gets its thread back too
+func TestRebootThreadCreationFailureBackgroundWorker(t *testing.T) {
+	assert.NoError(t, Init(WithNumThreads(1), WithWorkers("basic", filepath.Join(testDataPath, "bgworker", "basic.php"), 1, WithWorkerBackground())))
+
+	var failing atomic.Bool
+	failing.Store(true)
+	original := newCThread
+	newCThread = func(threadIndex int) bool { return !failing.Load() && original(threadIndex) }
+	t.Cleanup(func() { newCThread = original })
+	t.Cleanup(Shutdown)
+
+	w := workers[0]
+	thread := w.threadsSnapshot()[0]
+	RestartWorkers()
+	thread.state.WaitFor(state.Reserved)
+	assert.NotContains(t, w.threadsSnapshot(), thread)
+
+	failing.Store(false)
+	assert.Eventually(t, func() bool {
+		threads := w.threadsSnapshot()
+
+		return len(threads) == 1 && threads[0].state.Is(state.Ready)
+	}, 10*time.Second, 10*time.Millisecond, "the pool must get its thread back once threads can be created again")
 }
 
 func TestFailedRebootDoesNotBlockHandlerChange(t *testing.T) {

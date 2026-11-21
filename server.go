@@ -132,6 +132,12 @@ func (s *Server) Name() string {
 
 func (s *Server) addWorker(w *worker) error {
 	s.workers = append(s.workers, w)
+
+	// background workers never serve requests, so they are not matched at all
+	if w.isBackgroundWorker {
+		return nil
+	}
+
 	if w.matchRequest != nil {
 		s.workersWithRequestMatcher = append(s.workersWithRequestMatcher, w)
 		return nil
