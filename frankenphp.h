@@ -190,6 +190,11 @@ bool frankenphp_new_php_thread(uintptr_t thread_index);
 bool frankenphp_shutdown_dummy_request(void);
 void frankenphp_update_local_thread_context(bool is_worker);
 
+/* flags returned by frankenphp_opcache_state() */
+#define FRANKENPHP_OPCACHE_CACHED 1
+#define FRANKENPHP_OPCACHE_RESTART_PENDING 2
+int frankenphp_opcache_state(void);
+
 int frankenphp_execute_script_cli(char *script, int argc, char **argv,
                                   bool eval);
 

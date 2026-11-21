@@ -27,7 +27,7 @@ When [Caddy metrics](https://caddyserver.com/docs/metrics) are enabled, FrankenP
 
 For worker metrics, the `[worker_name]` placeholder is replaced by the worker name in the Caddyfile, otherwise the absolute path of the worker file will be used.
 
-opcache schedules a restart when its cache is full and more than `opcache.max_wasted_percentage` of it was wasted by invalidations. The restart runs at the next request start; caching is off until then, and running PHP threads may still reference the old memory, which can crash the process. The counter should stay at zero: raise `opcache.memory_consumption`, `opcache.max_accelerated_files` or `opcache.max_wasted_percentage`. `manual` should never appear, FrankenPHP overrides `opcache_reset()`. Each restart is also logged. This metric will be removed once opcache handles restarts safely under ZTS.
+opcache schedules a restart when its cache is full and more than `opcache.max_wasted_percentage` of it was wasted by invalidations. The restart runs at the next request start; caching is off until then, and running PHP threads may still reference the old memory, which can crash the process. A worker uses this memory for as long as its script runs, so FrankenPHP restarts the worker scripts when a restart is scheduled, at most once a minute. The counter should stay at zero: raise `opcache.memory_consumption`, `opcache.max_accelerated_files` or `opcache.max_wasted_percentage`. `manual` should never appear, FrankenPHP overrides `opcache_reset()`. Each restart is also logged.
 
 ## Threads State Endpoint
 

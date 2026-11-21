@@ -1222,6 +1222,53 @@ static void frankenphp_opcache_restart_hook(int reason) {
 }
 #endif
 
+/* Tells, through opcache_get_status(), whether opcache caches the scripts of
+ * the current request (FRANKENPHP_OPCACHE_CACHED) and whether a restart is
+ * pending or in progress (FRANKENPHP_OPCACHE_RESTART_PENDING), or -1 when
+ * opcache cannot tell */
+int frankenphp_opcache_state(void) {
+  zend_function *func = zend_hash_str_find_ptr(CG(function_table),
+                                               ZEND_STRL("opcache_get_status"));
+  if (func == NULL) {
+    return -1;
+  }
+
+  zval status, fetch_scripts;
+  ZVAL_FALSE(&fetch_scripts);
+
+  /* opcache.restrict_api makes opcache_get_status() raise a warning */
+  int error_reporting = EG(error_reporting);
+  EG(error_reporting) = 0;
+  zend_call_known_function(func, NULL, NULL, &status, 1, &fetch_scripts, NULL);
+  EG(error_reporting) = error_reporting;
+
+  if (Z_TYPE(status) != IS_ARRAY) {
+    zval_ptr_dtor(&status);
+
+    return -1;
+  }
+
+  int state = 0;
+  zval *value =
+      zend_hash_str_find(Z_ARRVAL(status), ZEND_STRL("opcache_enabled"));
+  if (value != NULL && zend_is_true(value)) {
+    state |= FRANKENPHP_OPCACHE_CACHED;
+  }
+  value = zend_hash_str_find(Z_ARRVAL(status), ZEND_STRL("restart_pending"));
+  if (value != NULL && zend_is_true(value)) {
+    state |= FRANKENPHP_OPCACHE_RESTART_PENDING;
+  }
+  value =
+      zend_hash_str_find(Z_ARRVAL(status), ZEND_STRL("restart_in_progress"));
+  if (value != NULL && zend_is_true(value)) {
+    state |= FRANKENPHP_OPCACHE_RESTART_PENDING;
+  }
+
+  zval_ptr_dtor(&status);
+
+  return state;
+}
+
 /* {{{ thread-safe opcache reset */
 PHP_FUNCTION(frankenphp_opcache_reset) {
   go_schedule_opcache_reset(frankenphp_thread_index());

@@ -257,7 +257,7 @@ func TestOpcacheRestartScheduledLogsAndCounts(t *testing.T) {
 	m := NewPrometheusMetrics(prometheus.NewRegistry())
 	prevLogger, prevMetrics := globalLogger, metrics
 	globalLogger, metrics = slog.New(slog.NewTextHandler(&buf, nil)), m
-	t.Cleanup(func() { globalLogger, metrics = prevLogger, prevMetrics })
+	t.Cleanup(func() { globalLogger, metrics = prevLogger, prevMetrics; resetOpcacheRestarts() })
 
 	opcacheRestartScheduled(1)
 	opcacheRestartScheduled(7)
@@ -278,7 +278,7 @@ func TestOpcacheRestartScheduledWithoutOpcacheMetrics(t *testing.T) {
 	var buf bytes.Buffer
 	prevLogger, prevMetrics := globalLogger, metrics
 	globalLogger, metrics = slog.New(slog.NewTextHandler(&buf, nil)), nullMetrics{}
-	t.Cleanup(func() { globalLogger, metrics = prevLogger, prevMetrics })
+	t.Cleanup(func() { globalLogger, metrics = prevLogger, prevMetrics; resetOpcacheRestarts() })
 
 	assert.NotPanics(t, func() { opcacheRestartScheduled(0) })
 	assert.Contains(t, buf.String(), "reason=oom")
