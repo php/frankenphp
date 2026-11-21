@@ -237,6 +237,10 @@ Windows services cannot be reloaded. To apply configuration changes gracefully, 
 
 ## Standalone binary updates
 
+The Linux and macOS binaries attached to releases are meant for development.
+They bundle many PHP extensions, which increases their size and attack surface.
+In production, use [the Docker images](docker.md), the deb, rpm or apk packages, or [build a static binary](static.md) containing only the extensions you need.
+
 To ship PHP and library security fixes without waiting for a new FrankenPHP release, the binaries attached to the latest release are rebuilt every day
 (at midnight UTC for Linux and macOS, at 8 am UTC for Windows) and replace the previous ones under the same name.
 Their checksums therefore change from one day to the next. Binaries attached to older releases are not rebuilt.

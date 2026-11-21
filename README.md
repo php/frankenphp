@@ -40,6 +40,11 @@ Linux binaries are statically linked, so they can be used on any Linux distribut
 They contain most popular PHP extensions.
 Windows archives contain the official PHP binary for Windows.
 
+> [!WARNING]
+> The Linux and macOS binaries are meant for development.
+> They bundle many PHP extensions, which increases their size and attack surface.
+> In production, use [the Docker images](https://frankenphp.dev/docs/docker/), the packages below, or [build a static binary](https://frankenphp.dev/docs/static/) containing only the extensions you need.
+
 [Download FrankenPHP](https://github.com/php/frankenphp/releases)
 
 The binaries of the latest release are rebuilt daily to include PHP security fixes. See [how to verify and pin them](https://frankenphp.dev/docs/production/#standalone-binary-updates).
@@ -177,6 +182,7 @@ Go to `https://localhost`, and enjoy!
 - [Laravel integration](https://frankenphp.dev/docs/laravel/)
 - [Yii3 integration](https://frankenphp.dev/docs/yii3/)
 - [Known issues](https://frankenphp.dev/docs/known-issues/)
+- [Release and support policy](https://frankenphp.dev/docs/releases/)
 - [Demo app (Symfony) and benchmarks](https://github.com/dunglas/frankenphp-demo)
 - [Use as a Go library](https://frankenphp.dev/docs/library/)
 - [Go library documentation](https://pkg.go.dev/github.com/dunglas/frankenphp)

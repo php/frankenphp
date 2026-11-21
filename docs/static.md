@@ -19,6 +19,9 @@ When possible, we recommend using glibc-based, mostly static builds.
 
 FrankenPHP also supports [embedding the PHP app in the static binary](embed.md).
 
+The binaries attached to FrankenPHP releases bundle many PHP extensions and are meant for development.
+For production, build your own binary containing only the extensions your app needs, to reduce its size and attack surface.
+
 ## Linux
 
 We provide Docker images to build static Linux binaries:

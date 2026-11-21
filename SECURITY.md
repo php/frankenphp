@@ -5,7 +5,8 @@
 Only the latest version is supported.
 Please ensure that you're always using the latest release.
 
-Binaries and Docker images are rebuilt nightly using the latest versions of dependencies.
+Binaries and Docker images of the latest release are rebuilt daily using the latest versions of dependencies.
+See the [release and support policy](docs/releases.md) for details.
 
 ## Security model
 

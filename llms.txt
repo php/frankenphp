@@ -47,6 +47,7 @@ This index points AI agents and crawlers at the canonical English documentation.
 
 - [Deploying FrankenPHP in Production](https://frankenphp.dev/docs/production/): Docker Compose deployments with TLS, reverse proxy, and multi-node setups.
 - [Known Issues](https://frankenphp.dev/docs/known-issues/): unsupported PHP extensions, musl caveats, Docker TLS gotchas.
+- [Release and Support Policy](https://frankenphp.dev/docs/releases/): versioning, supported versions, and how Docker images and binaries get PHP security fixes.
 - [Observability Overview](https://frankenphp.dev/docs/observability/): Prometheus metrics, structured logs, and the Ember TUI dashboard.
 - [Prometheus Metrics](https://frankenphp.dev/docs/metrics/): exposed metrics for threads, workers, queues, crashes, and restarts.
 - [Logging](https://frankenphp.dev/docs/logging/): structured logging with `frankenphp_log()` and `error_log()` routed through Caddy.
