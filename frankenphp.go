@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -56,6 +57,8 @@ var (
 	ErrInvalidContentLengthHeader = ErrRejected{"invalid Content-Length header", http.StatusBadRequest}
 	ErrMaxWaitTimeExceeded        = ErrRejected{"maximum request handling time exceeded", http.StatusServiceUnavailable}
 	ErrRequestBodyTooLarge        = ErrRejected{"request body too large", http.StatusRequestEntityTooLarge}
+	ErrRequestBodyIncomplete      = ErrRejected{"request body incomplete", http.StatusBadRequest}
+	ErrRequestBodyTimeout         = ErrRejected{"request body read timeout", http.StatusRequestTimeout}
 
 	contextKey   = contextKeyStruct{}
 	serverHeader = []string{"FrankenPHP"}
@@ -744,12 +747,12 @@ func go_sapi_flush(threadIndex C.uintptr_t) bool {
 }
 
 //export go_read_post
-func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (readBytes C.size_t, tooLarge C.bool) {
+func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (readBytes C.size_t, readError C.frankenphp_read_post_error) {
 	fc := phpThreads[threadIndex].handler.frankenPHPContext()
 
 	// net/http forbids reading the body after the handler returns; body wrappers may touch the dead stream
 	if fc.responseWriter == nil || fc.isDone {
-		return 0, false
+		return 0, C.FRANKENPHP_READ_POST_OK
 	}
 
 	var rc *http.ResponseController
@@ -773,18 +776,37 @@ func go_read_post(threadIndex C.uintptr_t, cBuf *C.char, countBytes C.size_t) (r
 		readBytes += C.size_t(n)
 	}
 
+	fc.requestBodyRead += int64(readBytes)
+	// some transports (HTTP/3) end a body shorter than its Content-Length without an error
+	if errors.Is(err, io.EOF) && fc.requestBodyRead < fc.request.ContentLength {
+		err = io.ErrUnexpectedEOF
+	}
+
 	// an expired deadline must stay: net/http drains the unread body before writing the response
 	if rc != nil && !errors.Is(err, os.ErrDeadlineExceeded) {
 		_ = rc.SetReadDeadline(time.Time{})
 	}
 
-	// PHP can't see read errors: fail the request rather than expose a truncated body
-	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-		if !fc.headersWritten {
-			fc.reject(ErrRequestBodyTooLarge)
+	// PHP can't see read errors: fail the request rather than expose a truncated body.
+	// io.EOF is the only normal end; a body cut short (client gone, read deadline, malformed
+	// chunked encoding, HTTP/2 stream reset) surfaces as any other error.
+	if err != nil && !errors.Is(err, io.EOF) {
+		rejection := ErrRequestBodyIncomplete
+		readError = C.FRANKENPHP_READ_POST_INCOMPLETE
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+			rejection = ErrRequestBodyTooLarge
+			readError = C.FRANKENPHP_READ_POST_TOO_LARGE
+		} else if errors.Is(err, os.ErrDeadlineExceeded) {
+			rejection = ErrRequestBodyTimeout
 		}
 
-		tooLarge = true
+		if fc.logger.Enabled(fc.ctx, slog.LevelDebug) {
+			fc.logger.LogAttrs(fc.ctx, slog.LevelDebug, "request body read failed", slog.Any("error", err))
+		}
+
+		if !fc.headersWritten {
+			fc.reject(rejection)
+		}
 	}
 
 	return
