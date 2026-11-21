@@ -121,6 +121,11 @@ xcaddy build \
 
 ```
 
+To build without Brotli, add `nobrotli` to `XCADDY_GO_BUILD_FLAGS` and remove
+`--with github.com/dunglas/caddy-cbrotli` from the command above.
+The build tag disables FrankenPHP's Brotli support, but does not remove explicitly included Caddy modules.
+Keeping the `caddy-cbrotli` module still requires the Brotli library, even with `nobrotli`.
+
 > [!TIP]
 >
 > If you're using musl libc (the default on Alpine Linux) and Symfony,
@@ -140,3 +145,6 @@ curl -L https://github.com/php/frankenphp/archive/refs/heads/main.tar.gz | tar x
 cd frankenphp-main/caddy/frankenphp
 CGO_CFLAGS=$(php-config --includes) CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)" go build -tags=nobadger,nomysql,nopgx,deprecated_topic,deprecated_claim
 ```
+
+To build without Brotli, add `nobrotli` to the `-tags` list above.
+This also excludes the Brotli Caddy module imported by the bundled command, so the Brotli library is not required.
