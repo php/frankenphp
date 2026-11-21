@@ -37,6 +37,8 @@ type opt struct {
 	maxIdleTime time.Duration
 	maxRequests int
 	servers     []*Server
+
+	goFormParser bool
 }
 
 type workerOpt struct {
@@ -181,6 +183,16 @@ func WithMaxIdleTime(maxIdleTime time.Duration) Option {
 func WithMaxRequests(maxRequests int) Option {
 	return func(o *opt) error {
 		o.maxRequests = maxRequests
+
+		return nil
+	}
+}
+
+// EXPERIMENTAL: WithGoFormParser parses multipart/form-data and application/x-www-form-urlencoded
+// request bodies with memory-safe Go parsers instead of PHP's C ones. See docs/config.md for the differences.
+func WithGoFormParser(enabled bool) Option {
+	return func(o *opt) error {
+		o.goFormParser = enabled
 
 		return nil
 	}

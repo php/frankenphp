@@ -36,6 +36,18 @@ func TestAppRejectsNegativeCounts(t *testing.T) {
 	}
 }
 
+func TestAppGoFormParser(t *testing.T) {
+	for directive, expected := range map[string]bool{"go_form_parser": true, "go_form_parser true": true, "go_form_parser false": false} {
+		app := &FrankenPHPApp{}
+		require.NoError(t, app.UnmarshalCaddyfile(caddyfile.NewTestDispenser("frankenphp {\n "+directive+"\n}")), directive)
+		require.Equal(t, expected, app.GoFormParser, directive)
+	}
+
+	for _, directive := range []string{"go_form_parser maybe", "go_form_parser false true"} {
+		require.Error(t, (&FrankenPHPApp{}).UnmarshalCaddyfile(caddyfile.NewTestDispenser("frankenphp {\n "+directive+"\n}")), directive)
+	}
+}
+
 func TestModuleRequestBodyTimeout(t *testing.T) {
 	d := caddyfile.NewTestDispenser(`
 	{

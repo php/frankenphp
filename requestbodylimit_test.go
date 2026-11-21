@@ -67,7 +67,11 @@ func waitForThread(t *testing.T, handler func(http.ResponseWriter, *http.Request
 }
 
 // The script must not run on a truncated body, whoever reads it.
-func TestRequestBodyTooLarge(t *testing.T) {
+func TestRequestBodyTooLarge(t *testing.T) { testRequestBodyTooLarge(t, false) }
+func TestRequestBodyTooLargeGoFormParser(t *testing.T) {
+	testRequestBodyTooLarge(t, true)
+}
+func testRequestBodyTooLarge(t *testing.T, goFormParser bool) {
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
 		handler = limitBody(1024, handler)
 
@@ -109,7 +113,7 @@ func TestRequestBodyTooLarge(t *testing.T) {
 				}
 			}
 		}
-	}, &testOptions{nbParallelRequests: 1, initOpts: []frankenphp.Option{frankenphp.WithNumThreads(1)}})
+	}, &testOptions{nbParallelRequests: 1, initOpts: []frankenphp.Option{frankenphp.WithNumThreads(1), frankenphp.WithGoFormParser(goFormParser)}})
 }
 
 func TestWorkerRequestBodyTooLarge(t *testing.T) {

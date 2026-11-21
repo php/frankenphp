@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -58,6 +59,8 @@ type FrankenPHPApp struct {
 	MaxIdleTime time.Duration `json:"max_idle_time,omitempty"`
 	// EXPERIMENTAL: MaxRequests sets the maximum number of requests a PHP thread handles before restarting (0 = unlimited)
 	MaxRequests int `json:"max_requests,omitempty"`
+	// EXPERIMENTAL: GoFormParser parses multipart/form-data and application/x-www-form-urlencoded bodies with memory-safe Go parsers instead of PHP's C ones
+	GoFormParser bool `json:"go_form_parser,omitempty"`
 
 	opts          []frankenphp.Option
 	provisionOpts []frankenphp.Option
@@ -122,7 +125,7 @@ func (f *FrankenPHPApp) Validate() error {
 func (f *FrankenPHPApp) collectOptions(repl *caddy.Replacer, keep bool) ([]frankenphp.Option, error) {
 	optionsMU.RLock()
 	// We have at least 9 hardcoded options
-	opts := make([]frankenphp.Option, 0, 9+len(options)+len(f.provisionOpts))
+	opts := make([]frankenphp.Option, 0, 10+len(options)+len(f.provisionOpts))
 	opts = append(opts, options...)
 	optionsMU.RUnlock()
 
@@ -138,6 +141,7 @@ func (f *FrankenPHPApp) collectOptions(repl *caddy.Replacer, keep bool) ([]frank
 		frankenphp.WithMaxWaitTime(f.MaxWaitTime),
 		frankenphp.WithMaxIdleTime(f.MaxIdleTime),
 		frankenphp.WithMaxRequests(f.MaxRequests),
+		frankenphp.WithGoFormParser(f.GoFormParser),
 	)
 
 	usedWorkerNames := make(map[string]bool, len(f.Workers))
@@ -362,6 +366,21 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				}
 
 				f.MaxRequests = v
+			case "go_form_parser":
+				f.GoFormParser = true
+				if !d.NextArg() {
+					continue
+				}
+
+				v, err := strconv.ParseBool(d.Val())
+				if err != nil {
+					return d.Errf("go_form_parser must be a boolean: %v", err)
+				}
+				if d.NextArg() {
+					return d.ArgErr()
+				}
+
+				f.GoFormParser = v
 			case "php_ini":
 				parseIniLine := func(d *caddyfile.Dispenser) error {
 					key := d.Val()
@@ -419,7 +438,7 @@ func (f *FrankenPHPApp) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 
 				f.Workers = append(f.Workers, wc)
 			default:
-				return wrongSubDirectiveError("frankenphp", "num_threads, max_threads, php_ini, worker, max_wait_time, max_idle_time, max_requests", d.Val())
+				return wrongSubDirectiveError("frankenphp", "num_threads, max_threads, php_ini, worker, max_wait_time, max_idle_time, max_requests, go_form_parser", d.Val())
 			}
 		}
 	}

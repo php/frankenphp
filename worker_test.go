@@ -47,6 +47,14 @@ func TestWorker(t *testing.T) {
 }
 
 func TestWorkerSurvivesRequestParseErrors(t *testing.T) {
+	for _, goFormParser := range []bool{false, true} {
+		t.Run(fmt.Sprintf("go form parser %t", goFormParser), func(t *testing.T) {
+			testWorkerSurvivesRequestParseErrors(t, goFormParser)
+		})
+	}
+}
+
+func testWorkerSurvivesRequestParseErrors(t *testing.T, goFormParser bool) {
 	runTest(t, func(handler func(http.ResponseWriter, *http.Request), _ *httptest.Server, _ int) {
 		// max_input_vars exceeded while the worker script has a throwing error
 		// handler installed (https://github.com/php/frankenphp/issues/2631)
@@ -64,15 +72,28 @@ func TestWorkerSurvivesRequestParseErrors(t *testing.T) {
 		req := httptest.NewRequest("POST", "http://example.com/request-parse-errors.php", strings.NewReader(strings.Repeat("a=1&", 600)))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		body2, resp2 := testRequest(req, handler, t)
-		assert.Equal(t, http.StatusBadRequest, resp2.StatusCode)
-		assert.Contains(t, body2, "requests:2")
-		assert.Contains(t, body2, "exceeds the limit")
+		requests := 3
+		if goFormParser {
+			// rejected before the worker callback runs
+			assert.Equal(t, http.StatusRequestEntityTooLarge, resp2.StatusCode)
+			requests = 2
+		} else {
+			assert.Equal(t, http.StatusBadRequest, resp2.StatusCode)
+			assert.Contains(t, body2, "requests:2")
+			assert.Contains(t, body2, "exceeds the limit")
+		}
 
 		// clean request: the script cleared the previous error itself
 		body3, resp3 := testGet("http://example.com/request-parse-errors.php", handler, t)
 		assert.Equal(t, http.StatusOK, resp3.StatusCode)
-		assert.Contains(t, body3, "requests:3")
-	}, &testOptions{workerScript: "request-parse-errors.php", nbWorkers: 1, nbParallelRequests: 1, phpIni: map[string]string{"max_input_vars": "10", "post_max_size": "1K", "display_errors": "0"}})
+		assert.Contains(t, body3, fmt.Sprintf("requests:%d", requests))
+	}, &testOptions{
+		workerScript:       "request-parse-errors.php",
+		nbWorkers:          1,
+		nbParallelRequests: 1,
+		phpIni:             map[string]string{"max_input_vars": "10", "post_max_size": "1K", "display_errors": "0"},
+		initOpts:           []frankenphp.Option{frankenphp.WithGoFormParser(goFormParser)},
+	})
 }
 
 func TestErrorHandlerPersistsAcrossRequests(t *testing.T) {

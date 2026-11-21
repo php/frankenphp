@@ -246,6 +246,13 @@ func (fc *frankenPHPContext) clientHasClosed() bool {
 	}
 }
 
+// rejectBodyTooLarge answers 413, unless the script already sent its headers
+func (fc *frankenPHPContext) rejectBodyTooLarge() {
+	if !fc.headersWritten {
+		fc.reject(ErrRequestBodyTooLarge)
+	}
+}
+
 // reject sends a response with the given status code and error
 func (fc *frankenPHPContext) reject(err error) {
 	if fc.isDone {
