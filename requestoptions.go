@@ -224,9 +224,14 @@ func WithWorkerName(name string) RequestOption {
 			return nil
 		}
 
-		if o.worker = workersByName[name]; o.worker == nil {
+		w := workersByName[name]
+		if w == nil {
 			return fmt.Errorf("%w: %q", ErrUnknownWorker, name)
 		}
+		if w.isBackgroundWorker {
+			return fmt.Errorf("background worker %q cannot handle requests", name)
+		}
+		o.worker = w
 
 		return nil
 	}
