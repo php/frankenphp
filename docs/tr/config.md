@@ -7,8 +7,6 @@ description: FrankenPHP ve Caddy'yi Caddyfile, JSON veya ortam değişkenleri ar
 
 FrankenPHP, Caddy'nin yanı sıra [Mercure](mercure.md) ve [Vulcain](https://vulcain.rocks) modülleri, [Caddy tarafından desteklenen formatlar](https://caddyserver.com/docs/getting-started#your-first-config) kullanılarak yapılandırılabilir.
 
-FrankenPHP, Caddy'nin yanı sıra [Mercure](mercure.md) ve [Vulcain](https://vulcain.rocks) modülleri, [Caddy tarafından desteklenen formatlar](https://caddyserver.com/docs/getting-started#your-first-config) kullanılarak yapılandırılabilir.
-
 En yaygın format, basit, insan tarafından okunabilir bir metin formatı olan `Caddyfile`'dır. Varsayılan olarak, FrankenPHP mevcut dizinde bir `Caddyfile` arayacaktır. Özel bir yol belirtmek için `-c` veya `--config` seçeneğini kullanabilirsiniz.
 
 Bir PHP uygulamasını sunmak için minimal bir `Caddyfile` aşağıda gösterilmiştir:
@@ -165,7 +163,7 @@ route {
 		file {path}/index.php
 		not path */
 	}
-	redir @canonicalPath {path}/ 308
+	redir @canonicalPath ./{http.request.orig_uri.path.file_escaped}/{http.request.orig_uri.prefixed_query} 308
 	# İstenen dosya mevcut değilse, dizin dosyalarını deneyin
 	@indexFiles file {
 		try_files {path} {path}/index.php index.php
@@ -189,6 +187,9 @@ php_server [<matcher>] {
 	name <name> # Bu sunucu için, işçileri, metrikleri ve günlükleri ilişkilendirmek için kullanılan adı ayarlar. Varsayılan: kapsayan rotanın ilk ana bilgisayar eşleştiricisi veya ilk dinleyici adresi.
 	env <key> <value> # Ek bir ortam değişkenini verilen değere ayarlar. Birden fazla ortam değişkeni için birden fazla kez belirtilebilir.
 	file_server off # Yerleşik file_server yönergesini devre dışı bırakır.
+	file_server { # Yerleşik file_server yönergesini yapılandırır. root hariç tüm file_server seçeneklerini kabul eder, örn. `precompressed zstd br gzip`.
+		<options...>
+	}
 	request_body_timeout <duration> # İstek gövdesi okumalarında bir boşta kalma zaman aşımı ayarlar: takılan (yavaş POST) bir istemci kesilirken, herhangi bir boyuttaki sürekli bir yükleme başarılı olur. Varsayılan: 60s. Devre dışı bırakmak için 0 olarak ayarlayın.
 	worker { # Bu sunucuya özgü bir işçi oluşturur. Birden fazla işçi için birden fazla kez belirtilebilir.
 		file <path> # İşçi betiğinin yolunu ayarlar, php_server köküne göre göreceli olabilir
@@ -315,11 +316,12 @@ PHP yapılandırmasını `Caddyfile` içindeki `php_ini` yönergesini kullanarak
 
 ### HTTPS'i devre dışı bırakma
 
-Varsayılan olarak, FrankenPHP tüm ana bilgisayar adları için (localhost dahil) HTTPS'i otomatik olarak etkinleştirir. HTTPS'i devre dışı bırakmak isterseniz (örneğin bir geliştirme ortamında), `SERVER_NAME` ortam değişkenini `http://` veya `:80` olarak ayarlayabilirsiniz:
+Varsayılan olarak, FrankenPHP tüm ana bilgisayar adları için (localhost dahil) HTTPS'i otomatik olarak etkinleştirir.
+Eğer HTTPS'i devre dışı bırakmak isterseniz (örneğin bir geliştirme ortamında), `SERVER_NAME` ortam değişkenini `http://` veya `:80` olarak ayarlayabilirsiniz:
 
 Alternatif olarak, [Caddy belgelerinde](https://caddyserver.com/docs/automatic-https#activation) açıklanan diğer tüm yöntemleri kullanabilirsiniz.
 
-Eğer `localhost` ana bilgisayar adı yerine `127.0.0.1` IP adresiyle HTTPS kullanmak isterseniz, lütfen [bilinen sorunlar](bilinen-sorunlar.md#using-https127001-with-docker) bölümünü okuyun.
+Eğer `localhost` ana bilgisayar adı yerine `127.0.0.1` IP adresiyle HTTPS kullanmak isterseniz, lütfen [bilinen sorunlar](known-issues.md#using-https127001-with-docker) bölümünü okuyun.
 
 ### Tam çift yönlü (HTTP/1)
 
@@ -358,7 +360,9 @@ request_body {
 }
 ```
 
-Daha büyük gövdeye sahip istekler `413 Request Entity Too Large` yanıtı alır. PHP, komut dosyası başlamadan önce gövdeyi okursa (formlar ve dosya yüklemeleri gibi `Content-Type` içeren `POST` istekleri), komut dosyası çalışmaz. Komut dosyası gövdeyi `php://input` veya `request_parse_body()` aracılığıyla kendisi okursa, sınıra ulaşıldığında okuma bir `FrankenPHP\RequestBodyTooLargeException` hatası fırlatır, böylece kesilen bir gövde asla tam olarak algılanmaz.
+Daha büyük gövdeye sahip istekler `413 Request Entity Too Large` yanıtı alır.
+PHP, komut dosyası başlamadan önce gövdeyi okursa (formlar ve dosya yüklemeleri gibi `Content-Type` içeren `POST` istekleri), komut dosyası çalışmaz.
+Komut dosyası gövdeyi `php://input` veya `request_parse_body()` aracılığıyla kendisi okursa, sınıra ulaşıldığında okuma bir `FrankenPHP\RequestBodyTooLargeException` hatası fırlatır, böylece kesilen bir gövde asla tam olarak algılanmaz.
 
 ## Hata ayıklama modunu etkinleştirin
 

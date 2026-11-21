@@ -95,7 +95,7 @@ localhost {
 ```caddyfile
 {
 	frankenphp {
-		num_threads <num_threads> # 设置用于处理非工作进程请求的 PHP 线程数量，工作进程线程在此基础上。默认：工作进程线程拥有其线程后，2 倍可用 CPU 数量中剩余的部分，至少一个。
+		num_threads <num_threads> # 设置用于处理非工作进程请求的 PHP 线程数量，工作进程线程在此基础上。默认：在工作进程拥有其线程后，2 倍可用 CPU 数量中剩余的部分，至少一个。
 		max_threads <num_threads> # 限制可以同时运行的 PHP 线程数量，包括工作进程线程。默认：启动时启动的线程数。可以设置为 'auto'。
 		max_wait_time <duration> # 设置请求在超时之前可以等待的最大时间，直到找到一个空闲的 PHP 线程。 默认：禁用。
 		max_idle_time <duration> # 设置一个自动扩展的线程在被停用之前可以空闲的最长时间。默认：5s。
@@ -164,7 +164,7 @@ route {
 		file {path}/index.php
 		not path */
 	}
-	redir @canonicalPath {path}/ 308
+	redir @canonicalPath ./{http.request.orig_uri.path.file_escaped}/{http.request.orig_uri.prefixed_query} 308
 	# 如果请求的文件不存在，则尝试索引文件
 	@indexFiles file {
 		try_files {path} {path}/index.php index.php
@@ -188,6 +188,9 @@ php_server [<matcher>] {
 	name <name> # 设置此服务器的名称，用于分配工作进程、指标和日志。默认：包含路由的第一个主机匹配器，或第一个监听地址。
 	env <key> <value> # 设置一个额外的环境变量为给定的值。可以多次指定以设置多个环境变量。
 	file_server off # 禁用内置的 file_server 指令。
+	file_server { # 配置内置的 file_server 指令。接受除 root 之外的所有 file_server 选项，例如 `precompressed zstd br gzip`。
+		<options...>
+	}
 	request_body_timeout <duration> # 设置请求体读取的空闲超时：在稳定的任意大小上传成功的同时，停止（慢速 POST）客户端会被切断。默认：60s。设置为 0 可禁用。
 	worker { # 为此服务器创建特定的工作进程。可以多次指定以创建多个工作进程。
 		file <path> # 设置工作进程脚本的路径，可以相对于 php_server 根目录
@@ -195,7 +198,7 @@ php_server [<matcher>] {
 		name <name> # 设置工作进程的名称，用于日志和指标。默认：工作进程文件的绝对路径。如果名称已被使用，则会附加数字。
 		watch <path> # 设置要监视文件更改的路径。可以为多个路径多次指定。
 		env <key> <value> # 设置一个额外的环境变量为给定值。可以多次指定以设置多个环境变量。此工作进程的环境变量也从 php_server 父进程继承，但可以在此处覆盖。
-		match <path> # 将工作进程匹配到路径模式。覆盖 try_files，并且只能在 php_server 指令中使用。
+		match <path> # 将工作进程匹配到路径模式。覆盖 try_files 并且只能在 php_server 指令中使用。
 	}
 	worker <other_file> <num> # 也可以像在全局 frankenphp 块中那样使用简短形式。
 }
@@ -327,7 +330,7 @@ FrankenPHP 可以在 PHP 线程处理完给定数量的请求后自动重启它�
 
 或者，你可以使用 [Caddy 文档](https://caddyserver.com/docs/automatic-https#activation) 中描述的所有其他方法。
 
-如果你想将 HTTPS 与 `127.0.0.1` IP 地址而不是 `localhost` 主机名一起使用，请阅读[已知问题](known-issues.md#使用-docker-和-https127001)部分。
+如果你想将 HTTPS 与 `127.0.0.1` IP 地址而不是 `localhost` 主机名一起使用，请阅读[已知问题](known-issues.md#使用-https-127001-和-docker)部分。
 
 ### 全双工 (HTTP/1)
 
