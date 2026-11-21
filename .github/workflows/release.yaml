@@ -371,7 +371,7 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: |
           failed=()
-          for wf in static.yaml docker.yaml windows.yaml; do
+          for wf in build-static.yaml build-docker.yaml build-windows.yaml; do
             if ! gh workflow run "${wf}" --repo "${REPO}" --ref "v${VERSION}" -f version="${VERSION}"; then
               failed+=("${wf}")
             fi

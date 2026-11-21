@@ -1,28 +1,15 @@
 ---
 name: Build binary releases
-concurrency:
-  cancel-in-progress: true
-  group: ${{ github.workflow }}-${{ github.ref }}
-
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, labeled]
-    branches:
-      - main
-  push:
-    branches:
-      - main
-    tags:
-      - v*.*.*
-  workflow_dispatch:
+  workflow_call:
     inputs:
-      #checkov:skip=CKV_GHA_7
       version:
         description: "FrankenPHP version"
         required: false
         type: string
-  schedule:
-    - cron: "0 0 * * *"
+    secrets:
+      DOCKERHUB_TOKEN:
+        required: false
 
 permissions:
   contents: read
@@ -78,9 +65,6 @@ jobs:
   build-linux-musl:
     permissions:
       contents: write
-      id-token: write
-      attestations: write
-      artifact-metadata: write
     strategy:
       fail-fast: false
       matrix:
@@ -202,7 +186,7 @@ jobs:
         env:
           BINARY: frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}
       - name: Upload artifact
-        if: ${{ !fromJson(needs.prepare.outputs.push) }}
+        if: ${{ !fromJson(needs.prepare.outputs.push) || needs.prepare.outputs.ref || github.ref_type == 'tag' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}${{ matrix.debug && '-debug' || '' }}${{ matrix.mimalloc && '-mimalloc' || '' }}
@@ -214,10 +198,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REF: ${{ (github.ref_type == 'tag' && github.ref_name) || needs.prepare.outputs.ref }}
-      - if: fromJson(needs.prepare.outputs.push) && (needs.prepare.outputs.ref || github.ref_type == 'tag')
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
-        with:
-          subject-path: ${{ github.workspace }}/frankenphp-linux-*
       - name: Run sanity checks
         run: |
           "${BINARY}" version
@@ -234,9 +214,6 @@ jobs:
   build-linux-gnu:
     permissions:
       contents: write
-      id-token: write
-      attestations: write
-      artifact-metadata: write
     strategy:
       fail-fast: false
       matrix:
@@ -376,7 +353,7 @@ jobs:
         env:
           BINARY: frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}
       - name: Upload artifact
-        if: ${{ !fromJson(needs.prepare.outputs.push) }}
+        if: ${{ !fromJson(needs.prepare.outputs.push) || needs.prepare.outputs.ref || github.ref_type == 'tag' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}-gnu-files
@@ -387,10 +364,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REF: ${{ (github.ref_type == 'tag' && github.ref_name) || needs.prepare.outputs.ref }}
-      - if: fromJson(needs.prepare.outputs.push) && (needs.prepare.outputs.ref || github.ref_type == 'tag')
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
-        with:
-          subject-path: ${{ github.workspace }}/gh-output/frankenphp-linux-*-gnu
       - name: Run sanity checks
         run: |
           "${BINARY}" version
@@ -464,9 +437,6 @@ jobs:
   build-mac:
     permissions:
       contents: write
-      id-token: write
-      attestations: write
-      artifact-metadata: write
     name: Build macOS arm64 binaries
     runs-on: macos-15
     needs: [prepare]
@@ -496,12 +466,7 @@ jobs:
         with:
           path: dist/log
           name: static-php-cli-log-arm64-${{ github.sha }}
-      - if: needs.prepare.outputs.ref || github.ref_type == 'tag'
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
-        with:
-          subject-path: ${{ github.workspace }}/dist/frankenphp-mac-*
       - name: Upload artifact
-        if: github.ref_type == 'branch'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: frankenphp-mac-arm64
@@ -519,3 +484,43 @@ jobs:
           "${BINARY}" php-cli -r "echo 'Sanity check passed';"
         env:
           BINARY: dist/frankenphp-mac-arm64
+
+  # Signs in its own job so build steps never get an OIDC token
+  attest:
+    if: ${{ !cancelled() && fromJson(needs.prepare.outputs.push) && (needs.prepare.outputs.ref || github.ref_type == 'tag') }}
+    needs: [prepare, build-linux-musl, build-linux-gnu, build-mac]
+    permissions:
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    strategy:
+      fail-fast: false
+      matrix:
+        binary:
+          - frankenphp-linux-x86_64
+          - frankenphp-linux-x86_64-debug
+          - frankenphp-linux-x86_64-mimalloc
+          - frankenphp-linux-aarch64
+          - frankenphp-linux-x86_64-gnu
+          - frankenphp-linux-aarch64-gnu
+          - frankenphp-mac-arm64
+    name: Attest ${{ matrix.binary }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ endsWith(matrix.binary, '-gnu') && format('{0}-files', matrix.binary) || matrix.binary }}
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: ${{ matrix.binary }}
+      - name: Generate SBOM
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          file: ${{ matrix.binary }}
+          output-file: sbom.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: ${{ matrix.binary }}
+          sbom-path: sbom.spdx.json

@@ -1,0 +1,3 @@
+# Release workflows sign attestations; changes need an admin's review
+/.github/workflows/ @php/frankenphp-admin
+/.github/actions/ @php/frankenphp-admin
