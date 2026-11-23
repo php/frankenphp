@@ -61,6 +61,12 @@ namespace {
 }
 
 namespace FrankenPHP {
+    /** Thrown when the request body cannot be read entirely */
+    class RequestBodyException extends \Exception {}
+
     /** Thrown when reading a request body larger than the configured limit */
-    class RequestBodyTooLargeException extends \Exception {}
+    class RequestBodyTooLargeException extends RequestBodyException {}
+
+    /** Thrown when reading a request body that ended before its announced length, or timed out */
+    class RequestBodyIncompleteException extends RequestBodyException {}
 }

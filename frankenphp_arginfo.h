@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 57299a756b23c7443d6b09f759106ddf0ec8df20 */
+ * Stub hash: 365946e844931918dbac9e66963b8b0cc4c3b9bd */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_frankenphp_handle_request, 0, 1, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, callback, IS_CALLABLE, 0)
@@ -88,15 +88,43 @@ static void register_frankenphp_symbols(int module_number)
 	REGISTER_LONG_CONSTANT("FRANKENPHP_LOG_LEVEL_ERROR", 8, CONST_PERSISTENT);
 }
 
-static zend_class_entry *register_class_FrankenPHP_RequestBodyTooLargeException(zend_class_entry *class_entry_Exception)
+static zend_class_entry *register_class_FrankenPHP_RequestBodyException(zend_class_entry *class_entry_Exception)
+{
+	zend_class_entry ce, *class_entry;
+
+	INIT_NS_CLASS_ENTRY(ce, "FrankenPHP", "RequestBodyException", NULL);
+#if (PHP_VERSION_ID >= 80400)
+	class_entry = zend_register_internal_class_with_flags(&ce, class_entry_Exception, 0);
+#else
+	class_entry = zend_register_internal_class_ex(&ce, class_entry_Exception);
+#endif
+
+	return class_entry;
+}
+
+static zend_class_entry *register_class_FrankenPHP_RequestBodyTooLargeException(zend_class_entry *class_entry_FrankenPHP_RequestBodyException)
 {
 	zend_class_entry ce, *class_entry;
 
 	INIT_NS_CLASS_ENTRY(ce, "FrankenPHP", "RequestBodyTooLargeException", NULL);
 #if (PHP_VERSION_ID >= 80400)
-	class_entry = zend_register_internal_class_with_flags(&ce, class_entry_Exception, 0);
+	class_entry = zend_register_internal_class_with_flags(&ce, class_entry_FrankenPHP_RequestBodyException, 0);
 #else
-	class_entry = zend_register_internal_class_ex(&ce, class_entry_Exception);
+	class_entry = zend_register_internal_class_ex(&ce, class_entry_FrankenPHP_RequestBodyException);
+#endif
+
+	return class_entry;
+}
+
+static zend_class_entry *register_class_FrankenPHP_RequestBodyIncompleteException(zend_class_entry *class_entry_FrankenPHP_RequestBodyException)
+{
+	zend_class_entry ce, *class_entry;
+
+	INIT_NS_CLASS_ENTRY(ce, "FrankenPHP", "RequestBodyIncompleteException", NULL);
+#if (PHP_VERSION_ID >= 80400)
+	class_entry = zend_register_internal_class_with_flags(&ce, class_entry_FrankenPHP_RequestBodyException, 0);
+#else
+	class_entry = zend_register_internal_class_ex(&ce, class_entry_FrankenPHP_RequestBodyException);
 #endif
 
 	return class_entry;

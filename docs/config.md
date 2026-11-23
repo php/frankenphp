@@ -194,7 +194,7 @@ php_server [<matcher>] {
 	file_server { # Configures the built-in file_server directive. Accepts all file_server options except root, e.g. `precompressed zstd br gzip`.
 		<options...>
 	}
-	request_body_timeout <duration> # Sets an idle timeout on request body reads: a stalled (slow POST) client is cut off while a steady upload of any size succeeds. Default: 60s. Set to 0 to disable.
+	request_body_timeout <duration> # Sets an idle timeout on request body reads: a stalled (slow POST) client is cut off with a 408 and the script does not run on the partial body, while a steady upload of any size succeeds. Default: 60s. Set to 0 to disable.
 	worker { # Creates a worker specific to this server. Can be specified more than once for multiple workers.
 		file <path> # Sets the path to the worker script, can be relative to the php_server root
 		num <num> # Sets the number of PHP threads to start, defaults to 2x the number of available
@@ -382,6 +382,13 @@ request_body {
 Requests with a larger body get a `413 Request Entity Too Large` response.
 If PHP reads the body before the script starts (`POST` requests with a `Content-Type`, such as forms and file uploads), the script doesn't run.
 If the script reads the body itself, through `php://input` or `request_parse_body()`, the read throws a `FrankenPHP\RequestBodyTooLargeException` once the limit is reached, so a truncated body is never mistaken for a complete one.
+
+### Incomplete request bodies
+
+If the body can't be read entirely (the client closes the connection before the end of the body, the body ends before its announced `Content-Length`, a chunked body isn't terminated, an HTTP/2 or HTTP/3 stream is reset, or `request_body_timeout` expires), FrankenPHP rejects the request with a `400 Bad Request` response, or `408 Request Timeout` on timeout.
+If PHP reads the body before the script starts, the script doesn't run.
+If the script reads the body itself, through `php://input` or `request_parse_body()`, the read throws a `FrankenPHP\RequestBodyIncompleteException`, so a truncated body is never mistaken for a complete one. If no header was sent yet, the 400 or 408 response replaces the output of the script.
+`FrankenPHP\RequestBodyIncompleteException` and `FrankenPHP\RequestBodyTooLargeException` both extend `FrankenPHP\RequestBodyException`, so a single `catch` handles both.
 
 ## Enable the debug mode
 
