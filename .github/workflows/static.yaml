@@ -400,6 +400,7 @@ jobs:
           "${BINARY}" list-modules | grep http.handlers.mercure
           "${BINARY}" list-modules | grep http.handlers.vulcain
           "${BINARY}" php-cli -r "echo 'Sanity check passed';"
+          "${BINARY}" php-cli -d ffi.enable=1 -r 'exit(FFI::cdef("int abs(int);", "libc.so.6")->abs(-42) === 42 ? 0 : 1);'
         env:
           BINARY: ./gh-output/frankenphp-linux-${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'aarch64' }}-gnu
 

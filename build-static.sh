@@ -13,7 +13,7 @@ set -o pipefail
 #
 # Supported variables:
 # - PHP_VERSION: PHP version to build (default: the one pinned in craft.yml)
-# - PHP_EXTENSIONS: comma-separated extensions (default: the list in craft.yml)
+# - PHP_EXTENSIONS: comma-separated extensions (default: the list in craft.yml, plus ffi on glibc Linux builds)
 # - PHP_EXTENSION_LIBS: comma-separated extra libraries (default: the list in craft.yml)
 # - XCADDY_ARGS: extra Caddy modules to pass to xcaddy (default: the list in craft.yml)
 # - FRANKENPHP_VERSION: FrankenPHP version (default: current Git commit)
@@ -168,7 +168,13 @@ while IFS= read -r line || [ -n "${line}" ]; do
 		[ -n "${PHP_VERSION}" ] && line="php-version: \"${PHP_VERSION}\""
 		;;
 	"extensions:"*)
-		[ -n "${PHP_EXTENSIONS}" ] && line="extensions: \"${PHP_EXTENSIONS}\""
+		if [ -n "${PHP_EXTENSIONS}" ]; then
+			line="extensions: \"${PHP_EXTENSIONS}\""
+		elif [[ "${bin_os}" == linux && "${line}" != *[\",]ffi[\",]* ]]; then
+			case "${SPC_TARGET:-${LIBC}}" in
+			gnu | *-linux-gnu*) line="${line%\"},ffi\"" ;;
+			esac
+		fi
 		;;
 	"packages:"*)
 		packages="${PHP_EXTENSION_LIBS}"
