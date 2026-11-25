@@ -596,7 +596,7 @@ func go_apache_request_headers(threadIndex C.uintptr_t) (*C.go_string, C.size_t)
 
 		headers = append(
 			headers,
-			C.go_string{4, (*C.char)(unsafe.Pointer(unsafe.StringData("Host")))},
+			C.go_string{C.size_t(len("Host")), toUnsafeChar("Host")},
 			C.go_string{C.size_t(len(fc.request.Host)), (*C.char)(unsafe.Pointer(hd))},
 		)
 	}
