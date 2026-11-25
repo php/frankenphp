@@ -918,6 +918,7 @@ func testRequestHeaders(t *testing.T, opts *testOptions) {
 
 		assert.Contains(t, body, "[Content-Type] => text/plain")
 		assert.Contains(t, body, fmt.Sprintf("[Frankenphp-I] => %d", i))
+		assert.Contains(t, body, "[Host] => example.com")
 	}, opts)
 }
 
