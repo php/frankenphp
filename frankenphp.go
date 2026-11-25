@@ -588,17 +588,28 @@ func go_apache_request_headers(threadIndex C.uintptr_t) (*C.go_string, C.size_t)
 		return nil, 0
 	}
 
-	headers := make([]C.go_string, 0, len(fc.request.Header)*2)
+	headers := make([]C.go_string, 0, (len(fc.request.Header)+1)*2)
+
+	if fc.request.Host != "" {
+		hd := unsafe.StringData(fc.request.Host)
+		thread.Pin(hd)
+
+		headers = append(
+			headers,
+			C.go_string{C.size_t(len("Host")), toUnsafeChar("Host")},
+			C.go_string{C.size_t(len(fc.request.Host)), (*C.char)(unsafe.Pointer(hd))},
+		)
+	}
 
 	for field, val := range fc.request.Header {
+		if field == "Host" {
+			continue
+		}
+
 		fd := unsafe.StringData(field)
 		thread.Pin(fd)
 
 		cv := strings.Join(val, ", ")
-		if field == "Host" {
-			cv = fc.request.Host
-		}
-
 		vd := unsafe.StringData(cv)
 		thread.Pin(vd)
 
@@ -612,7 +623,7 @@ func go_apache_request_headers(threadIndex C.uintptr_t) (*C.go_string, C.size_t)
 	sd := unsafe.SliceData(headers)
 	thread.Pin(sd)
 
-	return sd, C.size_t(len(fc.request.Header))
+	return sd, C.size_t(len(headers) / 2)
 }
 
 func addHeader(fc *frankenPHPContext, h *C.sapi_header_struct) {
