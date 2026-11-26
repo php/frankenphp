@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -386,6 +387,18 @@ func testThreadCalculationError(t *testing.T, o *opt) {
 
 	_, err := calculateMaxThreads(o)
 	assert.Error(t, err, "configuration must error")
+}
+
+// in a container, the memory of the host is not the memory FrankenPHP may use:
+// the memory limit of Go, which Caddy derives from the cgroup, caps it
+func TestAutomaticMaxThreadsHonorsTheGoMemoryLimit(t *testing.T) {
+	previous := debug.SetMemoryLimit(640 << 20)
+	t.Cleanup(func() { debug.SetMemoryLimit(previous) })
+
+	assert.NoError(t, Init(WithNumThreads(2), WithMaxThreads(-1), WithPhpIni(map[string]string{"memory_limit": "64M"})))
+	defer Shutdown()
+
+	assert.Equal(t, 10, mainThread.maxThreads, "640 MB for threads of 64 MB")
 }
 
 func TestContextAndLoggerMustNotBeNil(t *testing.T) {
