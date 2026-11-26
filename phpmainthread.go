@@ -272,23 +272,24 @@ func go_frankenphp_main_thread_is_ready() {
 }
 
 // max_threads = auto
-// setAutomaticMaxThreads estimates the amount of threads based on php.ini and system memory_limit
-// If unable to get the system's memory limit, simply double num_threads
+// setAutomaticMaxThreads estimates the amount of threads based on the memory_limit of php.ini and the memory
+// available: the system's, or the memory limit of Go when lower, which Caddy derives from the cgroup of a container.
+// If unable to get either, simply double num_threads
 func (mainThread *phpMainThread) setAutomaticMaxThreads() {
 	if mainThread.maxThreads >= 0 {
 		return
 	}
 	perThreadMemoryLimit := int64(C.frankenphp_get_current_memory_limit())
-	totalSysMemory := memory.TotalSysMemory()
-	if perThreadMemoryLimit <= 0 || totalSysMemory == 0 {
+	availableMemory := memory.Available()
+	if perThreadMemoryLimit <= 0 || availableMemory == 0 {
 		mainThread.maxThreads = mainThread.numThreads * 2
 		return
 	}
-	maxAllowedThreads := totalSysMemory / uint64(perThreadMemoryLimit)
+	maxAllowedThreads := availableMemory / uint64(perThreadMemoryLimit)
 	mainThread.maxThreads = int(maxAllowedThreads)
 
 	if globalLogger.Enabled(globalCtx, slog.LevelDebug) {
-		globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "Automatic thread limit", slog.Int("perThreadMemoryLimitMB", int(perThreadMemoryLimit/1024/1024)), slog.Int("maxThreads", mainThread.maxThreads))
+		globalLogger.LogAttrs(globalCtx, slog.LevelDebug, "Automatic thread limit", slog.Int("perThreadMemoryLimitMB", int(perThreadMemoryLimit/1024/1024)), slog.Int("availableMemoryMB", int(availableMemory/1024/1024)), slog.Int("maxThreads", mainThread.maxThreads))
 	}
 }
 
