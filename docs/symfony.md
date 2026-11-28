@@ -90,8 +90,8 @@ Then, add the following code to your `templates/base.html.twig` file:
 {# templates/base.html.twig #}
 {% if app.request.server.has('FRANKENPHP_HOT_RELOAD') %}
     <meta name="frankenphp-hot-reload:url" content="{{ app.request.server.get('FRANKENPHP_HOT_RELOAD') }}">
-    <script src="https://cdn.jsdelivr.net/npm/idiomorph/dist/idiomorph.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/frankenphp-hot-reload/+esm" type="module"></script>
+    <script src="https://cdn.jsdelivr.net/npm/idiomorph@0.8/dist/idiomorph.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/frankenphp-hot-reload@1/+esm" type="module"></script>
 {% endif %}
 ```
 
