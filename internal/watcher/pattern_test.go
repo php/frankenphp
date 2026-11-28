@@ -143,6 +143,7 @@ func TestValidNonRecursiveFilePatterns(t *testing.T) {
 		{"/path/file.php", "/path/file.php"},
 		{"*.php", relativeDir(t, "file.php")},
 		{"./*.php", relativeDir(t, "file.php")},
+		{"/path/*.{env,php}", "/path/.env"},
 	}
 
 	for _, d := range data {
@@ -219,6 +220,7 @@ func TestInvalidRecursiveFilePatterns(t *testing.T) {
 		{"/a/**/very/long/path.php", "/a/short.php"},
 		{"", ""},
 		{"/a/**/b/c/d/**/e.php", "/a/x/e.php"},
+		{"/path/src/**/*.php", "/path/vendor/acme/src/file.php"},
 	}
 
 	for _, d := range data {

@@ -158,7 +158,7 @@ func unmarshalWorker(d *caddyfile.Dispenser) (workerConfig, error) {
 func (wc *workerConfig) toWorkerOptions() ([]frankenphp.WorkerOption, error) {
 	opts := []frankenphp.WorkerOption{
 		frankenphp.WithWorkerEnv(wc.Env),
-		frankenphp.WithWorkerWatchMode(wc.Watch),
+		frankenphp.WithWorkerWatchMode(expandDefaultPattern(wc.Watch, defaultWatchPattern)),
 		frankenphp.WithWorkerMaxThreads(wc.MaxThreads),
 	}
 

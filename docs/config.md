@@ -230,7 +230,11 @@ This feature is often used in combination with [hot reload](hot-reload.md).
 
 If the `watch` directory is not specified, it will fall back to `./**/*.{env,php,twig,yaml,yml}`,
 which watches all `.env`, `.php`, `.twig`, `.yaml` and `.yml` files in the directory and subdirectories
-where the FrankenPHP process was started. You can instead also specify one or more directories via a
+where the FrankenPHP process was started.
+The default skips hidden directories and the `node_modules/`, `storage/` and `var/` directories,
+which hold front-end dependencies and generated files such as compiled templates.
+Directories created after FrankenPHP starts aren't watched until it restarts.
+You can instead also specify one or more directories via a
 [shell filename pattern](https://pkg.go.dev/path/filepath#Match):
 
 ```caddyfile
