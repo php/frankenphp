@@ -1,10 +1,23 @@
 ---
 rules:
+  # The lockfile pins these; super-linter's zizmor predates lockfile support (1.32)
+  unpinned-uses:
+    ignore:
+      - action.yaml
+      - codeql.yaml
+      - docker.yaml
+      - docs.yaml
+      - govulncheck.yaml
+      - lint.yaml
+      - release.yaml
+      - sanitizers.yaml
+      - static.yaml
+      - tests.yaml
+      - translate.yaml
+      - windows.yaml
+      - wrap-issue-details.yaml
   secrets-outside-env:
     config:
       allow:
         # TODO: re-enable the environment when the GitHub UI supports grouping or masking environment notifications (they pollute pull requests right now)
         - DOCKERHUB_TOKEN
-  # actionlint rejects the `$/` syntax: https://github.com/rhysd/actionlint/issues/711
-  self-repository:
-    disable: true

@@ -8,7 +8,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+    - uses: shivammathur/setup-php@2.40.0
       with:
         php-version: ${{ inputs.php-version }}
         ini-file: development

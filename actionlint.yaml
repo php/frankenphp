@@ -1,0 +1,5 @@
+paths:
+  .github/workflows/**/*.yaml:
+    ignore:
+      # $/ isn't supported yet: https://github.com/rhysd/actionlint/issues/711
+      - 'specifying action "\$/'

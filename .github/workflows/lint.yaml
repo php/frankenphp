@@ -20,16 +20,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
       - name: Lint Code Base
-        uses: super-linter/super-linter/slim@2da136927bd4a73596db63044b504547c62cb854 # v9.0.0
+        uses: super-linter/super-linter/slim@v9.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LINTER_RULES_PATH: /
           MARKDOWN_CONFIG_FILE: .markdown-lint.yaml
+          GITHUB_ACTIONS_CONFIG_FILE: actionlint.yaml
           # Dependabot rewrites vcpkg.json in its own style (expanded arrays, no final newline)
           FILTER_REGEX_EXCLUDE: (docs/(cn|es|fr|ja|pt-br|ru|tr)/|vcpkg\.json$)
           VALIDATE_CPP: false

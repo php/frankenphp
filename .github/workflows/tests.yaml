@@ -38,15 +38,15 @@ jobs:
       LIBRARY_PATH: ${{ github.workspace }}/watcher/target/lib
       GOFLAGS: "-tags=nobadger,nomysql,nopgx,deprecated_topic,deprecated_claim"
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup-go
-      - uses: ./.github/actions/setup-php
+      - uses: $/.github/actions/setup-go
+      - uses: $/.github/actions/setup-php
         with:
           php-version: ${{ matrix.php-versions }}
       - name: Install e-dant/watcher
-        uses: ./.github/actions/watcher
+        uses: $/.github/actions/watcher
       - name: Install libbrotli-dev
         run: sudo apt-get install -y libbrotli-dev
       - name: Set CGO flags
@@ -79,12 +79,12 @@ jobs:
       - name: Test graceful shutdown
         run: ./tests/shutdown_test.sh
       - name: Lint Go code
-        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        uses: golangci/golangci-lint-action@v9.3.0
         if: matrix.php-versions == '8.6'
         with:
           version: latest
       - name: Lint Caddy module Go code
-        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        uses: golangci/golangci-lint-action@v9.3.0
         if: matrix.php-versions == '8.6'
         with:
           version: latest
@@ -106,11 +106,11 @@ jobs:
     env:
       XCADDY_GO_BUILD_FLAGS: "-tags=nobadger,nomysql,nopgx,deprecated_topic,deprecated_claim"
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup-go
-      - uses: ./.github/actions/setup-php
+      - uses: $/.github/actions/setup-go
+      - uses: $/.github/actions/setup-php
         with:
           php-version: ${{ matrix.php-versions }}
       - name: Install PHP development libraries
@@ -139,11 +139,11 @@ jobs:
       HOMEBREW_NO_AUTO_UPDATE: 1
       GOFLAGS: "-tags=nowatcher,nobadger,nomysql,nopgx,deprecated_topic,deprecated_claim"
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup-go
-      - uses: ./.github/actions/setup-php
+      - uses: $/.github/actions/setup-go
+      - uses: $/.github/actions/setup-php
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@latest
       - name: Set CGO flags

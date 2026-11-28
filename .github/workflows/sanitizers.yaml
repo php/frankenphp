@@ -43,10 +43,10 @@ jobs:
         run: sudo apt-get remove --purge --autoremove 'php*' 'libmemcached*'
       - name: Install clang
         run: sudo apt-get update && sudo apt-get install -y "${CC}"
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup-go
+      - uses: $/.github/actions/setup-go
       - name: Determine PHP version
         id: determine-php-version
         run: |
@@ -55,7 +55,7 @@ jobs:
           echo archive="$(jq -r '.[] .source[] | select(.filename |endswith(".xz")) | "https://www.php.net/distributions/" + .filename' version.json)" >> "$GITHUB_OUTPUT"
       - name: Cache PHP
         id: cache-php
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: php/target
           key: php-sanitizers-${{ matrix.sanitizer }}-${{ runner.arch }}-${{ steps.determine-php-version.outputs.version }}-${{ hashFiles('.github/workflows/sanitizers.yaml') }}
@@ -98,7 +98,7 @@ jobs:
       - name: Add PHP to the PATH
         run: echo "$(pwd)/php/target/bin" >> "$GITHUB_PATH"
       - name: Install e-dant/watcher
-        uses: ./.github/actions/watcher
+        uses: $/.github/actions/watcher
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@latest
       - name: Set CGO flags

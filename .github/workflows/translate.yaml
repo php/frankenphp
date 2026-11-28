@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
           # zizmor: ignore[artipacked]
@@ -32,7 +32,7 @@ jobs:
           echo "files=$FILES" >> "$GITHUB_OUTPUT"
       - name: Set up PHP
         if: steps.md_files.outputs.found == 'true'
-        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        uses: shivammathur/setup-php@2.40.0
         with:
           php-version: "8.5"
       - name: run translation script
@@ -44,7 +44,7 @@ jobs:
           php ./docs/translate.php "$MD_FILES"
       - name: Run Linter
         if: steps.md_files.outputs.found == 'true'
-        uses: super-linter/super-linter/slim@2da136927bd4a73596db63044b504547c62cb854 # v9.0.0
+        uses: super-linter/super-linter/slim@v9.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LINTER_RULES_PATH: /
